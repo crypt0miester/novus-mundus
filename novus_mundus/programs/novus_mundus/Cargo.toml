@@ -1,0 +1,30 @@
+[package]
+name = "novus_mundus"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "novus_mundus"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+test-bpf = []
+
+[dependencies]
+anchor-lang = "0.25.0"
+fastrand = "1.8.0"
+
+[dev-dependencies]
+anchor-client = "0.25.0"
+shellexpand = "~2.1.0"
+serde_json = "~1.0"
+solana-program-test = "1.10.29"
+solana-sdk = "1.10.29"
+env_logger="~0.9.0" 
+console = "0.15.1"
