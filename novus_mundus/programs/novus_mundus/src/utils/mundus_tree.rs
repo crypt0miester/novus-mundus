@@ -1,6 +1,6 @@
 #[derive(Debug)]
-struct MondusTree<T: Ord> {
-    values: Vec<T>,
+pub struct MondusTree<T: Ord> {
+    pub values: Vec<T>,
 }
 
 impl<T: Ord + std::fmt::Display> MondusTree<T> {

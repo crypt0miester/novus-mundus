@@ -35,7 +35,7 @@ pub fn get_fib(n: usize) -> usize {
     b
 }
 
-fn is_fib(n: u64) -> bool {
+pub fn is_fib(n: u64) -> bool {
     let _ = n == 0 && return false;
     let n_squared = n.pow(2);
     let coefficient = 5_u64.checked_mul(n_squared).unwrap();

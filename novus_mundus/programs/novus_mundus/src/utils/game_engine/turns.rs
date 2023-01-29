@@ -1,6 +1,7 @@
+use crate::utils::fibonacci::*;
 use fastrand;
 
-fn consume_turns(turns: u64, luck: f32) -> u64 {
+pub fn consume_turns(turns: u64, luck: f32) -> u64 {
     let rand_1 = fastrand::u64(1000_u64..1750_u64);
     let rand_2 = fastrand::u64(1000_u64..1500_u64);
     let consuming =

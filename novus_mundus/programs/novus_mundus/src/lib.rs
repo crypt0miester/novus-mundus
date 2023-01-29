@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 // use fastrand;
 // use lz4_flex;
+mod utils;
+pub use utils::*;
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]

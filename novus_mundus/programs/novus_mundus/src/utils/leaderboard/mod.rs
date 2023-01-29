@@ -1,26 +1,26 @@
 use std::cmp::Ordering;
 
-struct Leaderboard<T> {
-    scores: Vec<Ranking<T>>,
+pub struct Leaderboard<T> {
+    pub scores: Vec<Ranking<T>>,
 }
 
-struct Ranking<T> {
-    score: u128,
-    player: T,
+pub struct Ranking<T> {
+    pub score: u128,
+    pub player: T,
 }
 
 impl<T: std::cmp::PartialEq> Leaderboard<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Leaderboard { scores: Vec::new() }
     }
 
-    fn add_player(&mut self, player: T, score: u128) {
+    pub fn add_player(&mut self, player: T, score: u128) {
         let ranking = Ranking { score, player };
         self.scores.push(ranking);
         self.scores.sort_by(|a, b| b.score.cmp(&a.score));
     }
 
-    fn update_score(&mut self, player: T, score: u128) {
+    pub fn update_score(&mut self, player: T, score: u128) {
         let index = self
             .scores
             .iter()
@@ -30,7 +30,7 @@ impl<T: std::cmp::PartialEq> Leaderboard<T> {
         self.scores.sort_by(|a, b| b.score.cmp(&a.score));
     }
 
-    fn remove_player(&mut self, player: T) {
+    pub fn remove_player(&mut self, player: T) {
         let index = self
             .scores
             .iter()
@@ -39,7 +39,7 @@ impl<T: std::cmp::PartialEq> Leaderboard<T> {
         self.scores.remove(index);
     }
 
-    fn top(&self, n: usize) -> Vec<Option<(&T, &u128)>> {
+    pub fn top(&self, n: usize) -> Vec<Option<(&T, &u128)>> {
         let mut result = Vec::new();
         for (i, r) in self.scores.iter().enumerate() {
             if i >= n {
@@ -52,7 +52,7 @@ impl<T: std::cmp::PartialEq> Leaderboard<T> {
         }
         result
     }
-    fn ranking(&self, player: T) -> Option<usize> {
+    pub fn ranking(&self, player: T) -> Option<usize> {
         let index = self
             .scores
             .iter()
