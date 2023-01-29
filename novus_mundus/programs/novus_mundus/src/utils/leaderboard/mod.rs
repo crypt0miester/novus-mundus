@@ -86,29 +86,3 @@ impl<T: Ord> Ord for Ranking<T> {
         other.score.cmp(&self.score)
     }
 }
-
-fn main() {
-    let mut leaderboard = Leaderboard::new();
-
-    // Add some players to the leaderboard
-    leaderboard.add_player("Alice", 100);
-    leaderboard.add_player("Bob", 90);
-    leaderboard.add_player("Charlie", 80);
-    leaderboard.add_player("Dave", 70);
-    leaderboard.add_player("Eve", 60);
-
-    // Print the top 3 players
-    println!("Top players: {:?}", leaderboard.top(3));
-
-    // Update the score for Bob
-    leaderboard.update_score("Bob", 102);
-
-    // Print the top 3 players again
-    println!("Top players: {:?}", leaderboard.top(3));
-
-    // Remove Dave from the leaderboard
-    leaderboard.remove_player("Charlie");
-
-    // Print the top 3 players again
-    println!("Top players: {:?}", leaderboard.top(8));
-}

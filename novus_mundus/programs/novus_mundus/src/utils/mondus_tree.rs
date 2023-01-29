@@ -4,11 +4,11 @@ struct MondusTree<T: Ord> {
 }
 
 impl<T: Ord + std::fmt::Display> MondusTree<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MondusTree { values: Vec::new() }
     }
 
-    fn insert(&mut self, value: T)
+    pub fn insert(&mut self, value: T)
     where
         T: Ord + Copy,
     {
@@ -25,7 +25,7 @@ impl<T: Ord + std::fmt::Display> MondusTree<T> {
         self.values.sort();
     }
 
-    fn remove_smallest(&mut self) -> T {
+    pub fn remove_smallest(&mut self) -> T {
         let mut i = 0;
         let result = self.values.swap_remove(i);
         if self.values.is_empty() {
@@ -50,7 +50,7 @@ impl<T: Ord + std::fmt::Display> MondusTree<T> {
         result
     }
 
-    fn remove(&mut self, value: T) -> bool
+    pub fn remove(&mut self, value: T) -> bool
     where
         T: Ord + Copy,
     {
@@ -69,7 +69,7 @@ impl<T: Ord + std::fmt::Display> MondusTree<T> {
         false
     }
 
-    fn search(&self, value: T) -> bool
+    pub fn search(&self, value: T) -> bool
     where
         T: Ord + Copy,
     {
@@ -94,27 +94,4 @@ impl<T: Ord + std::fmt::Display> MondusTree<T> {
         }
         false
     }
-}
-fn main() {
-    let mut tree = MondusTree::new();
-
-    // Insert some values into the tree
-    tree.insert(1_u128);
-    tree.insert(5_u128);
-    tree.insert(3_u128);
-    tree.insert(7_u128);
-    tree.insert(2_u128);
-    tree.insert(4_u128);
-    tree.insert(6_u128);
-    tree.insert(1000);
-    // println!("{:?}", tree);
-    // Remove the minimum value from the tree
-    // assert_eq!(tree.remove(), 2));    // Convert the tree back to a vector and sort it
-    // let mut values: Vec<i32> = tree.values.into_iter().flatten().collect();
-    // values.sort();
-    // println!("{:?}", values);
-    // Verify that the remaining values are sorted in ascending order
-    // assert_eq!(values, [3, 4, 5, 6, 7, 8]);
-    println!("{:?}", tree.search(1));
-    println!("{:?}", tree.values)
 }

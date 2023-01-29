@@ -23,7 +23,7 @@ struct MundusRoot {
 impl MundusRoot {
     // ...
 
-    fn remove(&mut self, key: &[u8]) -> Option<Vec<u8>> {
+    pub fn remove(&mut self, key: &[u8]) -> Option<Vec<u8>> {
         let mut current_node = &mut self.root;
         while current_node.is_some() {
             let current_key = &current_node.as_ref().unwrap().key;
@@ -66,22 +66,5 @@ impl MundusRoot {
             }
         }
         None
-    }
-}
-
-fn main() {
-    let mut bst = MundusRoot::new();
-    let key1 = b"key1".to_vec();
-    let key2 = b"key2".to_vec();
-    let key3 = b"key3".to_vec();
-    bst.insert(key1);
-    bst.insert(key2);
-    bst.insert(key3);
-    let search_key = b"key2";
-    let removed_key = bst.remove(search_key);
-    if let Some(key) = removed_key {
-        println!("The key was removed: {:?}", key);
-    } else {
-        println!("The key was not found");
     }
 }
