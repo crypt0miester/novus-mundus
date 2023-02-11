@@ -1,11 +1,9 @@
-# vig-internal
-
 # Novus Mundus
-Novi, the time-based token exclusive to the world of Novus Mundus, is the lifeblood of this fast-paced, thrilling game experience. In Novus Mundus, teams unite to participate in the ultimate competition, with a unique in-game economy that empowers players to recruit powerful units, gather resources, and enhance their strategies.
+In Novus Mundus, teams unite to participate in the ultimate competition, with a unique in-game economy that empowers players to recruit powerful units, gather resources, and enhance their strategies. Novi, the time-based token exclusive to the world of Novus Mundus, is the lifeblood of this fast-paced, thrilling game experience.
 
 The in-game economy revolves around the collection of in-game cash, which is accumulated through attacks on other players and collection from operative units such as Farmers, Miners, and Bankers. This in-game cash is a crucial component of the game, as players use it to rise up the ranks in Novus Mundus.
 
-In Novus Mundus, the ranking system is divided into four tiers: Legendary, Epic, Expert, and Rookie. These tiers are based on the amount of in-game cash players have accumulated and serve as a measure of a player's success in the game. The ultimate goal is to reach the Legendary tier and become the top-ranked player in Novus Mundus.
+In Novus Mundus, the ranking system is divided into four tiers: Legendary, Epic, Expert, and Rookie. These tiers are are ranked based on the amount of in-game cash players have accumulated and serve as a measure of a player's success in the game. In order to go from one rank to another the player must consume/deposit a specfic amount of Novi in the game. The ultimate goal is to reach the Legendary tier and become the top-ranked player in Novus Mundus.
 
 Each game cycle in Novus Mundus lasts 10 days and at the close of each cycle, the highest-ranked players in each tier are rewarded with Novi. This time-based token is not only a measure of success in the game but also serves as a currency that can be used within the game. Players can use Novi to purchase powerful units, upgrade their existing units, or perfect their strategies for the next game cycle.
 
@@ -67,6 +65,7 @@ Novi can be added to the round even if max Novi has been reached. but no more No
   	- Novi/Minute: 10 
 
  ### 2. Expert: Two stars
+ Activates through subscription or 20_001 novi deposit.
   	
   	- Networth $250_000_000
   	- DUs: 10_000, 10_000, 30_000
@@ -77,6 +76,7 @@ Novi can be added to the round even if max Novi has been reached. but no more No
   	- Novi/Minute: 20
   	
  ### 3. Epic: Three stars
+ Activates through subscription or 100_001 novi deposit.
   	
   	- Networth $1_000_000_000
   	- DUs: 25_000, 25_000, 50_000
@@ -87,6 +87,7 @@ Novi can be added to the round even if max Novi has been reached. but no more No
   	- Novi/Minute: 100
   	
  ### 4. Legendary: Four stars
+ Activates through subscription or 1_000_001 novi deposit.
   	
   	- Networth $5_000_000_000
   	- DUs: 50_000, 50_000, 400_000
@@ -99,16 +100,6 @@ Novi can be added to the round even if max Novi has been reached. but no more No
 
 
 ## NFTs (Techonology) in v0.5: 
- 	- Novus Tech: Nuclear (two versions, missile and MOAB)
-      * cost = 199 Sol 
-      * Nuke entire team 
-      * Burnt after use
-      * bonus novi: 3_000_000
-      * max kills = 10_000_000 Units per user (both DUs and OPs)	
-      * MOAB is 2x the max kills
-      * destruction of everything. basically zeroes across the board. 
-      * 10 max minted per round
-      * 100 max ever exist
  	
  	- Novus Tech: Fighter Jets (three versions, F16, F22, B2) 
       * cost = 50 Sol 
@@ -121,16 +112,6 @@ Novi can be added to the round even if max Novi has been reached. but no more No
       * destruction of units only. 
       * 20 max minted per round
       * 500 max ever exist
- 	
- 	- Novus Tech: Iron Dome
-      * cost = 30 Sol 
-      * defends against the nuclear and fighter jet
-      * Burnt after used or attacked
-      * bonus novi: 100_000
-      * only 50% of nuclear is effective
-      * only 80% of fighter jets is effective	
-      * 20 max minted per round
-      * 100 max ever exist
 
  	- Novus Tech: Bunker
    	  * cost = 20 Sol 
@@ -142,4 +123,26 @@ Novi can be added to the round even if max Novi has been reached. but no more No
       * only 90% of fighter jets is effective
       * 200 max minted per round
       * 1000 max ever exist
+
+## NFTs (Technology) in v0.7:
+
+ 	- Novus Tech: Nuclear (two versions, missile and MOAB)
+      * cost = 199 Sol 
+      * Nuke entire team 
+      * Burnt after use
+      * bonus novi: 3_000_000
+      * max kills = 10_000_000 Units per user (both DUs and OPs)	
+      * MOAB is 2x the max kills
+      * destruction of everything. basically zeroes across the board. 
+      * 10 max minted per round
+      * 100 max ever exist
  	
+ 	- Novus Tech: Iron Dome
+      * cost = 30 Sol 
+      * defends against the nuclear and fighter jet
+      * Burnt after used or attacked
+      * bonus novi: 100_000
+      * only 50% of nuclear is effective
+      * only 80% of fighter jets is effective	
+      * 20 max minted per round
+      * 100 max ever exist
