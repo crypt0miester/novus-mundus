@@ -115,7 +115,7 @@ Novi can be added to the round even if max Novi has been reached. but no more No
 
  	- Novus Tech: Bunker
    	  * cost = 20 Sol 
-      * defends produce and money in the deposit box and operative units against the nuclear and fighter 
+      * defends produce and cash in the safebox and operative units against the nuclear and fighter 
       * Burnt after used but does not burn on attack
       * does not protect defensive units
       * bonus novi: 50_000
