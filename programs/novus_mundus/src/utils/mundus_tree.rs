@@ -94,4 +94,20 @@ impl<T: Ord + std::fmt::Display> MondusTree<T> {
         }
         false
     }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn find_min(&self) -> Option<&T> {
+        self.values.first()
+    }
+
+    pub fn find_max(&self) -> Option<&T> {
+        self.values.last()
+    }
 }

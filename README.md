@@ -1,1 +1,39 @@
 # vig-internal
+
+# Novus Mundus
+Novi, the time-based token exclusive to the world of Novus Mundus, is the lifeblood of this fast-paced, thrilling game experience. In Novus Mundus, teams unite to participate in the ultimate competition, with a unique in-game economy that empowers players to recruit powerful units, gather resources, and enhance their strategies.
+
+The in-game economy revolves around the collection of in-game cash, which is accumulated through attacks on other players and collection from operative units such as Farmers, Miners, and Bankers. This in-game cash is a crucial component of the game, as players use it to rise up the ranks in Novus Mundus.
+
+In Novus Mundus, the ranking system is divided into four tiers: Legendary, Epic, Expert, and Rookie. These tiers are based on the amount of in-game cash players have accumulated and serve as a measure of a player's success in the game. The ultimate goal is to reach the Legendary tier and become the top-ranked player in Novus Mundus.
+
+Each game cycle in Novus Mundus lasts 10 days and at the close of each cycle, the highest-ranked players in each tier are rewarded with Novi. This time-based token is not only a measure of success in the game but also serves as a currency that can be used within the game. Players can use Novi to purchase powerful units, upgrade their existing units, or perfect their strategies for the next game cycle.
+
+But Novus Mundus is not just about the competition. It is also about teamwork and collaboration. Each team in the game will have a private forum for seamless communication and collaboration, allowing players to work together to reach their common goal. Teams will be led by a Leader, supported by a Deputy Leader, and overseen by a Coordinator. Apprentices and Novices complete the team, bringing their unique skills and energy to the table.
+
+With its fast-paced gameplay, in-depth strategy, and real-time interaction, Novus Mundus promises to be an exhilarating challenge for all players. Whether you're a seasoned gamer or a newcomer to the world of web3 games, Novus Mundus offers a unique and exciting experience that will keep you on the edge of your seat. Join us now and let the games begin!
+
+# Novi 
+The tokenomics of Novus Mundus have been carefully crafted to foster a vibrant, player-driven economy that encourages players to both use and hold Novi tokens. With a fixed rate of time generation and the option to purchase Novi tokens, the value of the token is driven by market demand, providing a strong foundation for the game's economy.
+
+Time Generation: Novi tokens are generated at a fixed rate per minute, with a maximum generation every 5 hours. This ensures a steady supply of Novi tokens in the system, while limiting its overall supply to prevent inflation.
+
+Purchasing Option: In addition to time generation, players can also purchase Novi tokens on the open market based on demand. This provides flexibility in acquiring tokens and can drive up the token's value.
+
+Token Burn: Novi tokens are burnt when used for actions such as hiring defensive units and operative units, collecting resources, and attacking, reducing the overall supply of Novi tokens and adding scarcity to the token.
+
+Incentivizes Action: The tokenomics design incentivizes players to engage in core gameplay mechanics, such as hiring soldiers and attacking, which drives demand for Novi. This creates a positive feedback loop, helping to maintain player engagement over time.
+
+Game Development: The founder of Novus Mundus also wants to encourage game development and reward developers who contribute to the game's growth. Novi tokens can be awarded to developers who contribute to game development and to those who report bugs through the bug bounty program. This not only incentivizes players to improve the game but also rewards their efforts, creating a collaborative and thriving community.
+
+## Game Rules:
+
+1. To play the game, players must pay a one-time fee of 0.1 SOL to avoid bot spamming.
+2. All new players (each round) start with a 24-hour protection program. During this time, the player's profile is protected and cannot be attacked.
+3. All players start with 100 Million Cash, 30,000 weapons, 10,000 Elites, 10,000 Mercenaries, 10,000 Militia, 10,000 Miners, 10,000 Farmers, 10,000 Bankers, and 6,000 vehicles.
+4. Free/Non-subscription players will start every round with 2,500 Novi.
+5. Players who are not in a team cannot transfer cash, but are allowed to deposit up to 75% of their cash into a safe box that is not lootable, so their networth remains the same when attacked.
+6. Accounts become active 24 hours after the player joins the round.
+7. Novi that has been deposited or generated in-game cannot be retrieved or withdrawn and has to be used in game. The novi is also transferred to the next round if the user did not use them up.
+8. All rewards, including Novi, will be claimed after the round ends and will be credited to the user's wallet.
+9. The game regularly updates its rules and regulations, and it is the player's responsibility to stay updated on changes to the game rules.
