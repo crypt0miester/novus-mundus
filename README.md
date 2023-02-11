@@ -37,7 +37,8 @@ Game Development: Novus Mundus also wants to encourage game development and rewa
 9. The game regularly updates its rules and regulations, and it is the player's responsibility to stay updated on changes to the game rules.
 
 ## Novi: Purchasing options
-- Purchase novi in Sols (limited amount of time then novi will exclusively be bought from defi markets)
+Purchase novi in Sols (limited amount of time then novi will exclusively be bought from defi markets)
+
     -      1,000 novi = 0.5 sol = 0.0005    novi/sol
     -      5,000 novi = 1.5 sol = 0.0003    novi/sol
     -     10,000 novi = 3   sol = 0.0003    novi/sol
