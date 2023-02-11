@@ -38,19 +38,19 @@ Game Development: Novus Mundus also wants to encourage game development and rewa
 
 ## Novi: Purchasing options
 - Purchase novi in Sols (limited amount of time then novi will exclusively be bought from defi markets)
-* 1,000 novi = 0.5 sol = 0.0005 novi/sol
-* 5,000 novi = 1.5 sol = 0.0003 novi/sol
-* 10,000 novi = 3 sol = 0.0003 novi/sol
-* 50,000 novi = 12 sol = 0.00024 novi/sol
-* 100,000 novi = 28 sol = 0.00028 novi/sol
-* 1_000_000 novi = 69 sol = 0.000069 novi/sol
-* 10_000_000 novi = 420 sol = 0.000042 novi/sol
+*      1,000 novi = 0.5 sol = 0.0005    novi/sol
+*      5,000 novi = 1.5 sol = 0.0003    novi/sol
+*     10,000 novi = 3   sol = 0.0003    novi/sol
+*     50,000 novi = 12  sol = 0.00024   novi/sol
+*    100,000 novi = 28  sol = 0.00028   novi/sol
+*  1_000_000 novi = 69  sol = 0.000069  novi/sol
+* 10_000_000 novi = 420 sol = 0.000042  novi/sol
 
  ## Subscriptions
     - cost is for one round. Subscriptions generate more Novi.
-    - Expert	: 2X 	Novi/Minute = 4 Sol
-    - Epic		: 10X	Novi/Minute = 10 Sol
-    - Legendary	: 50X    Novi/Minute = 39 Sol
+    - Expert	: 2X    Novi/Minute   = 4 Sol
+    - Epic		: 10X   Novi/Minute   = 10 Sol
+    - Legendary	: 50X   Novi/Minute = 39 Sol
 
 ## Novus Tiers (Initial Round Values)
 Novi can be added to the round even if max Novi has been reached. but no more Novi will be generated after the max amount has reached.
