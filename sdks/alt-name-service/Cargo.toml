@@ -1,0 +1,15 @@
+[package]
+name = "alt-name-service"
+version = "0.1.0"
+description = "CPI client for Alternative Name Service"
+edition = "2021"
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+pinocchio = "0.9.2"
+pinocchio-pubkey = "0.3.0"

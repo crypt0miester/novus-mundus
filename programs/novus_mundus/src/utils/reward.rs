@@ -28,7 +28,7 @@ fn calculate_rewards(players: &mut Vec<Player>, teams: &mut Vec<Team>, total_rew
             remaining_player_rewards -= players[i].rewards;
         } else {
             players[i].rewards = remaining_player_rewards
-                / ((NUM_TOP_PLAYERS * NUM_TIERS - i + 1) as f64).log2().ceil() as i64;
+                / libm::ceil(libm::log2((NUM_TOP_PLAYERS * NUM_TIERS - i + 1) as f64)) as i64;
             remaining_player_rewards -= players[i].rewards;
         }
     }
@@ -40,7 +40,7 @@ fn calculate_rewards(players: &mut Vec<Player>, teams: &mut Vec<Team>, total_rew
     let mut remaining_team_rewards = total_team_rewards;
     for i in 0..NUM_TOP_TEAMS {
         teams[i].rewards =
-            remaining_team_rewards / ((NUM_TOP_TEAMS - i + 1) as f64).log2().ceil() as i64;
+            remaining_team_rewards / libm::ceil(libm::log2((NUM_TOP_TEAMS - i + 1) as f64)) as i64;
         remaining_team_rewards -= teams[i].rewards;
     }
 }

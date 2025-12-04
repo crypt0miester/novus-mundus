@@ -1,0 +1,257 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvars::{Sysvar, clock::Clock},
+    ProgramResult,
+};
+
+use pinocchio_system::instructions::CreateAccount;
+
+use crate::{
+    error::GameError,
+    state::{PlayerAccount, CityAccount, LocationAccount, OCCUPANT_PLAYER},
+    constants::LOCATION_SEED,
+    helpers::close_account,
+    logic::location::calculate_distance,
+};
+
+/// Cancel intercity travel and return to origin city
+///
+/// When cancelled, player returns to origin city CENTER (not their original position).
+/// This instruction:
+/// 1. Closes the reserved destination cell (refunds rent to creator)
+/// 2. Reserves a cell at origin city center
+/// 3. Reverses travel direction with appropriate return time
+///
+/// No instruction data required
+///
+/// # Accounts
+/// 0. `[WRITE]` player_account - Traveling player
+/// 1. `[SIGNER, WRITE]` owner - Player's wallet (pays for return location)
+/// 2. `[WRITE]` origin_city - Original departure city (increment players_present)
+/// 3. `[]` destination_city - Original destination city (for distance calc)
+/// 4. `[WRITE]` dest_location - Current destination LocationAccount (to close)
+/// 5. `[WRITE]` dest_creator_refund - Account to receive destination location rent refund
+/// 6. `[WRITE]` return_location - LocationAccount for origin city center (to reserve)
+/// 7. `[]` system_program - For creating return location account
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    _instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+
+    let [
+        player_account,
+        owner,
+        origin_city_account,
+        destination_city_account,
+        dest_location_account,
+        dest_creator_refund,
+        return_location_account,
+        system_program,
+    ] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 2. Validate Signer
+
+    if !owner.is_signer() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 3. Load Accounts
+
+    let mut player_account_data = player_account.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let origin_city_data = unsafe { CityAccount::load_mut(origin_city_account)? };
+    let destination_city_data = unsafe { CityAccount::load(&destination_city_account)? };
+
+    // 4. Validate Player Ownership
+
+    if !player_data.is_owner(owner.key()) {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 5. Validate Currently Traveling Intercity
+
+    if !player_data.is_traveling_intercity() {
+        return Err(GameError::NotTraveling.into());
+    }
+
+    // 6. Validate Cities Match Travel State
+
+    if player_data.origin_city != origin_city_data.city_id {
+        return Err(GameError::CityNotFound.into());
+    }
+
+    if player_data.destination_city != destination_city_data.city_id {
+        return Err(GameError::CityNotFound.into());
+    }
+
+    // 7. Calculate Current Progress
+
+    let now = Clock::get()?.unix_timestamp;
+
+    let elapsed = now - player_data.departure_time;
+    let total_duration = player_data.arrival_time - player_data.departure_time;
+
+    // Prevent division by zero
+    if total_duration <= 0 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    let progress = elapsed as f64 / total_duration as f64;
+    let progress = progress.max(0.0).min(1.0); // Clamp to [0, 1]
+
+    // 8. Calculate Distance Already Traveled
+
+    let total_distance_km = calculate_distance(
+        origin_city_data.latitude,
+        origin_city_data.longitude,
+        destination_city_data.latitude,
+        destination_city_data.longitude,
+    );
+
+    let distance_traveled_km = total_distance_km * progress;
+
+    // 9. Calculate Return Travel Time (using locked speed)
+
+    let return_travel_time_seconds = ((distance_traveled_km / player_data.travel_speed_locked as f64) * 3600.0) as i64;
+
+    // 10. HANDLE DESTINATION LOCATION
+    //
+    // Two cases:
+    // A) We still own the destination - close it and refund
+    // B) We were bumped - destination is gone or owned by someone else
+
+    let dest_grid_lat = LocationAccount::to_grid(destination_city_data.latitude);
+    let dest_grid_long = LocationAccount::to_grid(destination_city_data.longitude);
+
+    let dest_city_bytes = player_data.destination_city.to_le_bytes();
+    let dest_lat_bytes = dest_grid_lat.to_le_bytes();
+    let dest_long_bytes = dest_grid_long.to_le_bytes();
+
+    let (expected_dest_pda, _) = pinocchio::pubkey::find_program_address(
+        &[LOCATION_SEED, &dest_city_bytes, &dest_lat_bytes, &dest_long_bytes],
+        program_id,
+    );
+
+    if dest_location_account.key() != &expected_dest_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    let dest_location_len = dest_location_account.data_len();
+
+    if dest_location_len > 0 {
+        // Destination exists - check if we own it
+        let dest_data = dest_location_account.try_borrow_data()?;
+        let dest_location = unsafe { LocationAccount::load(&dest_data) };
+
+        if dest_location.is_occupied_by(player_account.key()) {
+            // We own it - close and refund
+            let dest_creator = dest_location.location_creator;
+            drop(dest_data);
+
+            // Validate refund recipient
+            if dest_creator_refund.key() != &dest_creator {
+                return Err(GameError::InvalidParameter.into());
+            }
+
+            // Close destination location (refund rent to creator)
+            close_account(dest_location_account, dest_creator_refund)?;
+        }
+        // If we don't own it, we were bumped - skip closing (someone else owns it now)
+    }
+    // If destination doesn't exist, we were bumped - skip closing
+
+    // 11. RESERVE RETURN LOCATION (origin city center)
+
+    let return_grid_lat = LocationAccount::to_grid(origin_city_data.latitude);
+    let return_grid_long = LocationAccount::to_grid(origin_city_data.longitude);
+
+    let origin_city_bytes = player_data.origin_city.to_le_bytes();
+    let return_lat_bytes = return_grid_lat.to_le_bytes();
+    let return_long_bytes = return_grid_long.to_le_bytes();
+
+    let (expected_return_pda, return_bump) = pinocchio::pubkey::find_program_address(
+        &[LOCATION_SEED, &origin_city_bytes, &return_lat_bytes, &return_long_bytes],
+        program_id,
+    );
+
+    if return_location_account.key() != &expected_return_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    let return_location_len = return_location_account.data_len();
+
+    if return_location_len == 0 {
+        // Create new return location account
+        let rent = pinocchio::sysvars::rent::Rent::get()?;
+        let lamports = rent.minimum_balance(LocationAccount::LEN);
+
+        let bump_seed = [return_bump];
+        let location_seeds = pinocchio::seeds!(
+            LOCATION_SEED,
+            &origin_city_bytes,
+            &return_lat_bytes,
+            &return_long_bytes,
+            &bump_seed
+        );
+        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+
+        CreateAccount {
+            from: owner,
+            to: return_location_account,
+            lamports,
+            space: LocationAccount::LEN as u64,
+            owner: program_id,
+        }.invoke_signed(&[location_signer])?;
+
+        let mut return_data = return_location_account.try_borrow_mut_data()?;
+        let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
+
+        return_location.grid_lat = return_grid_lat;
+        return_location.grid_long = return_grid_long;
+        return_location.city_id = player_data.origin_city;
+        return_location.bump = return_bump;
+        return_location.occupant_type = OCCUPANT_PLAYER;
+        return_location.occupant = *player_account.key();
+        return_location.occupied_since = now;
+        return_location.location_creator = *owner.key();
+        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+    } else {
+        // Return location exists - check if available
+        let mut return_data = return_location_account.try_borrow_mut_data()?;
+        let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
+
+        if return_location.grid_lat != return_grid_lat || return_location.grid_long != return_grid_long {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        // Cell must be empty or already owned by this player
+        if return_location.is_occupied() && !return_location.is_occupied_by(player_account.key()) {
+            return Err(GameError::CellOccupied.into());
+        }
+
+        return_location.occupant_type = OCCUPANT_PLAYER;
+        return_location.occupant = *player_account.key();
+        return_location.occupied_since = now;
+        return_location.location_creator = *owner.key();
+        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+    }
+
+    // 12. Reverse the Travel
+
+    player_data.destination_city = player_data.origin_city; // Going back now
+    player_data.departure_time = now; // Reset departure to now
+    player_data.arrival_time = now + return_travel_time_seconds;
+
+    // 13. Increment origin city player count (they're coming back)
+
+    origin_city_data.players_present = origin_city_data.players_present
+        .saturating_add(1);
+
+    Ok(())
+}

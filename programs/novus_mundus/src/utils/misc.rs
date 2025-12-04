@@ -14,9 +14,11 @@ pub fn get_distance_between_to_locations(
     let delta_latitude = (current_loc_lat_degrees - destination_loc_lat_degrees).to_radians();
     let delta_longitude = (current_loc_long_degrees - destination_loc_long_degrees).to_radians();
 
-    let central_angle_inner = (delta_latitude / 2.0).sin().powi(2)
-        + paris_latitude.cos() * london_latitude.cos() * (delta_longitude / 2.0).sin().powi(2);
-    let central_angle = 2.0 * central_angle_inner.sqrt().asin();
+    let sin_dlat_half = libm::sin(delta_latitude / 2.0);
+    let sin_dlong_half = libm::sin(delta_longitude / 2.0);
+    let central_angle_inner = sin_dlat_half * sin_dlat_half
+        + libm::cos(paris_latitude) * libm::cos(london_latitude) * sin_dlong_half * sin_dlong_half;
+    let central_angle = 2.0 * libm::asin(libm::sqrt(central_angle_inner));
 
     earth_radius_kilometer * central_angle
 }

@@ -1,0 +1,139 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvars::{Sysvar, clock::Clock},
+    ProgramResult,
+};
+
+use crate::{
+    error::GameError,
+    state::{PlayerAccount, CityAccount, LocationAccount},
+    constants::LOCATION_SEED,
+    types::TravelType,
+};
+
+/// Complete intracity travel (arrive at coordinates within city)
+///
+/// The destination cell was already reserved at travel_start.
+/// This instruction just verifies the reservation and updates player coordinates.
+///
+/// No instruction data required
+///
+/// # Accounts
+/// 0. `[WRITE]` player_account - Traveling player
+/// 1. `[SIGNER]` owner - Player's wallet
+/// 2. `[]` current_city - City player is arriving in (for validation)
+/// 3. `[WRITE]` destination_location - LocationAccount for destination cell (already reserved)
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    _instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+
+    let [
+        player_account,
+        owner,
+        current_city_account,
+        destination_location_account,
+    ] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 2. Validate Signer
+
+    if !owner.is_signer() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 3. Load Player Data
+
+    let mut player_account_data = player_account.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+
+    // 4. Validate Player Ownership
+
+    if !player_data.is_owner(owner.key()) {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 5. Validate Intracity Travel In Progress
+
+    if player_data.travel_type != TravelType::Intracity as u8 {
+        return Err(GameError::NotTraveling.into());
+    }
+
+    // 6. Validate Arrival Time Reached
+
+    let now = Clock::get()?.unix_timestamp;
+    if now < player_data.arrival_time {
+        return Err(GameError::TravelNotComplete.into());
+    }
+
+    // 7. Validate City
+
+    let city_data = unsafe { CityAccount::load(&current_city_account)? };
+    if player_data.current_city != city_data.city_id {
+        return Err(GameError::PlayerNotInCity.into());
+    }
+
+    // 8. Quantize Destination to Grid Cell
+
+    let dest_grid_lat = LocationAccount::to_grid(player_data.traveling_to_lat);
+    let dest_grid_long = LocationAccount::to_grid(player_data.traveling_to_long);
+
+    // Convert grid back to cell center for actual coordinates
+    let cell_center_lat = LocationAccount::from_grid(dest_grid_lat);
+    let cell_center_long = LocationAccount::from_grid(dest_grid_long);
+
+    // 9. Validate Destination Location PDA
+
+    let city_bytes = player_data.current_city.to_le_bytes();
+    let lat_bytes = dest_grid_lat.to_le_bytes();
+    let long_bytes = dest_grid_long.to_le_bytes();
+
+    let (expected_location_pda, _) = pinocchio::pubkey::find_program_address(
+        &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
+        program_id,
+    );
+
+    if destination_location_account.key() != &expected_location_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // 10. Verify Player Already Owns Destination (reserved at travel_start)
+    {
+        let mut location_data = destination_location_account.try_borrow_mut_data()?;
+        let location = unsafe { LocationAccount::load_mut(&mut location_data) };
+
+        // Verify grid coordinates match
+        if location.grid_lat != dest_grid_lat || location.grid_long != dest_grid_long {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        // Verify player owns this cell (was reserved at start)
+        if !location.is_occupied_by(player_account.key()) {
+            return Err(GameError::NotCellOccupant.into());
+        }
+
+        // Update occupied_since to arrival time, clear reserved_arrival_time (arrived)
+        location.occupied_since = now;
+        location.reserved_arrival_time = 0;
+    }
+
+    // 11. Update Player Coordinates (to grid cell center)
+
+    player_data.current_lat = cell_center_lat;
+    player_data.current_long = cell_center_long;
+
+    // 12. Clear Travel State
+
+    player_data.travel_type = TravelType::None as u8;
+    player_data.traveling_to_lat = 0.0;
+    player_data.traveling_to_long = 0.0;
+    player_data.departure_time = 0;
+    player_data.arrival_time = -1;
+
+    Ok(())
+}
