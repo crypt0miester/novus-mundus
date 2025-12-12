@@ -1,4 +1,5 @@
 use pinocchio::pubkey::Pubkey;
+use pinocchio::program_error::ProgramError;
 
 use crate::constants::LOCATION_SEED;
 
@@ -116,19 +117,28 @@ impl LocationAccount {
     }
 
     /// Derive the PDA for a location cell
-    pub fn derive_pda(
-        city_id: u16,
-        grid_lat: i32,
-        grid_long: i32,
-        program_id: &Pubkey,
-    ) -> (Pubkey, u8) {
+    /// Seeds: [LOCATION_SEED, city_id, grid_lat, grid_long]
+    pub fn derive_pda(city_id: u16, grid_lat: i32, grid_long: i32) -> (Pubkey, u8) {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
 
         pinocchio::pubkey::find_program_address(
             &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
-            program_id,
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump
+    pub fn create_pda(city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Pubkey, ProgramError> {
+        let city_bytes = city_id.to_le_bytes();
+        let lat_bytes = grid_lat.to_le_bytes();
+        let long_bytes = grid_long.to_le_bytes();
+        let bump_seed = [bump];
+
+        pinocchio::pubkey::create_program_address(
+            &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes, &bump_seed],
+            &crate::ID,
         )
     }
 

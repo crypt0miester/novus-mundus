@@ -8,7 +8,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{
-        GameEngine, SeasonalSaleAccount, SeasonalSaleStatus,
+        SeasonalSaleAccount, SeasonalSaleStatus,
         DAOPromotionAccount, DAOPromotionStatus,
     },
     validation::{require_signer, require_writable},
@@ -37,7 +37,7 @@ const SALE_TYPE_DAO_PROMO: u8 = 1;
 ///   - Seasonal: event pubkey (32 bytes)
 ///   - DAO Promo: proposal_id (8 bytes)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -78,6 +78,7 @@ pub fn process(
                 sale_account,
                 instruction_data,
                 now,
+                program_id,
             )
         }
         SALE_TYPE_DAO_PROMO => {
@@ -86,6 +87,7 @@ pub fn process(
                 sale_account,
                 instruction_data,
                 now,
+                program_id,
             )
         }
         _ => Err(GameError::InvalidParameter.into()),
@@ -97,6 +99,7 @@ fn activate_seasonal_sale(
     sale_account: &AccountInfo,
     instruction_data: &[u8],
     now: i64,
+    program_id: &Pubkey,
 ) -> ProgramResult {
     // Need event pubkey (32 bytes)
     if instruction_data.len() < 33 {
@@ -112,6 +115,10 @@ fn activate_seasonal_sale(
         return Err(GameError::InvalidPDA.into());
     }
 
+    // SeasonalSaleAccount doesn't have load_checked - verify program ownership manually
+    if sale_account.owner() != program_id {
+        return Err(ProgramError::IllegalOwner.into());
+    }
     // Load and update status
     let mut sale_data_ref = sale_account.try_borrow_mut_data()?;
     let sale = unsafe { SeasonalSaleAccount::load_mut(&mut sale_data_ref) };
@@ -142,6 +149,7 @@ fn activate_dao_promotion(
     sale_account: &AccountInfo,
     instruction_data: &[u8],
     now: i64,
+    program_id: &Pubkey,
 ) -> ProgramResult {
     // Need proposal_id (8 bytes)
     if instruction_data.len() < 9 {
@@ -158,6 +166,10 @@ fn activate_dao_promotion(
         return Err(GameError::InvalidPDA.into());
     }
 
+    // DAOPromotionAccount doesn't have load_checked - verify program ownership manually
+    if sale_account.owner() != program_id {
+        return Err(ProgramError::IllegalOwner.into());
+    }
     // Load and update status
     let mut promo_data_ref = sale_account.try_borrow_mut_data()?;
     let promo = unsafe { DAOPromotionAccount::load_mut(&mut promo_data_ref) };

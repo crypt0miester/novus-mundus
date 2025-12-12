@@ -8,14 +8,16 @@ use pinocchio::{
 use pinocchio_system::instructions::Transfer;
 use crate::{
     error::GameError,
-    helpers::add_to_inventory,
+    helpers::{add_to_inventory, estate::{market_discount_bps, load_estate_for_player, require_market}},
     state::{
         GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus,
         ShopItemAccount, BundleAccount, PlayerAccount,
         unlock_extension_if_eligible, require_extension, EXT_HEROES, EXT_INVENTORY,
     },
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
     logic::safe_math::apply_bp_penalty,
+    emit,
+    events::shop::FlashSalePurchased,
 };
 
 /// Purchase from a flash sale
@@ -33,30 +35,36 @@ use crate::{
 /// - [writable] treasury: SOL treasury wallet
 /// - [writable] inventory: PlayerInventoryAccount (auto-created if needed)
 /// - [] system_program: System program
+/// - [] estate_account: EstateAccount PDA (for Market discount)
+///
+/// # Building Bonuses
+/// Market building provides shop discounts:
+/// - 1% discount per Market level (max 20% at level 20)
 ///
 /// # Instruction Data
 /// - sale_id: u64
 /// - quantity: u16 (usually 1 for flash sales)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
-        buyer,
-        player_account,
-        game_engine_account,
-        shop_config_account,
-        flash_sale_account,
-        item_or_bundle_account,
-        treasury,
-        inventory_account,
-        system_program,
-    ] = accounts else {
+    if accounts.len() < 10 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+
+    let buyer = &accounts[0];
+    let player_account = &accounts[1];
+    let game_engine_account = &accounts[2];
+    let shop_config_account = &accounts[3];
+    let flash_sale_account = &accounts[4];
+    let item_or_bundle_account = &accounts[5];
+    let treasury = &accounts[6];
+    let inventory_account = &accounts[7];
+    let system_program = &accounts[8];
+    let estate_account = &accounts[9];
 
     // 2. Validate Accounts
 
@@ -83,8 +91,7 @@ pub fn process(
 
     // 4. Load and Validate Game Engine / Treasury
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
 
     if treasury.key() != &game_engine.treasury_wallet {
         return Err(GameError::InvalidTreasury.into());
@@ -95,7 +102,7 @@ pub fn process(
     }
 
     // 5. Load Shop Config
-
+    require_owner(shop_config_account, program_id)?;
     let shop_config_data_ref = shop_config_account.try_borrow_data()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
 
@@ -106,6 +113,7 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
+    require_owner(flash_sale_account, program_id)?;
     let mut flash_sale_data_ref = flash_sale_account.try_borrow_mut_data()?;
     let flash_sale = unsafe { FlashSaleAccount::load_mut(&mut flash_sale_data_ref) };
 
@@ -134,15 +142,10 @@ pub fn process(
     // 7. Read Player for Validation and Discount Calculation
 
     let (fib_discount_bps, sub_discount_bps, milestone_discount_bps, streak_discount_bps) = {
-        let player_data_ref = player_account.try_borrow_data()?;
-        let player = unsafe { PlayerAccount::load(&player_data_ref) };
-
-        if player.owner != *buyer.key() {
-            return Err(GameError::NotOwner.into());
-        }
+        let player = PlayerAccount::load_checked(player_account, buyer.key(), program_id)?;
 
         // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
-        require_extension(player, EXT_HEROES)?;
+        require_extension(&*player, EXT_HEROES)?;
 
         // Get effective subscription tier (handles expiration)
         let effective_tier = player.get_effective_tier(now);
@@ -167,6 +170,7 @@ pub fn process(
             return Err(GameError::InvalidAccount.into());
         }
 
+        require_owner(item_or_bundle_account, program_id)?;
         let bundle_data_ref = item_or_bundle_account.try_borrow_data()?;
         let bundle = unsafe { BundleAccount::load(&bundle_data_ref) };
 
@@ -182,6 +186,7 @@ pub fn process(
             return Err(GameError::InvalidAccount.into());
         }
 
+        require_owner(item_or_bundle_account, program_id)?;
         let item_data_ref = item_or_bundle_account.try_borrow_data()?;
         let item = unsafe { ShopItemAccount::load(&item_data_ref) };
 
@@ -201,6 +206,18 @@ pub fn process(
     let total_base = base_price.saturating_mul(quantity);
     let flash_discount_bps = flash_sale.discount_bps;
 
+    // HARD GATE: Require Market building to use shop
+    // Need to load player again for estate ownership verification
+    let player_for_estate = PlayerAccount::load_checked(player_account, buyer.key(), program_id)?;
+    let estate = load_estate_for_player(estate_account, &*player_for_estate, program_id)?;
+    require_market(estate, 1)?;
+
+    // Calculate Market building discount (BUILDING BONUS) + daily mini-game discount
+    let building_discount = market_discount_bps(estate);
+    let daily_discount = estate.market_discount_bps;
+    let market_bonus_bps = building_discount.saturating_add(daily_discount);
+    drop(player_for_estate);
+
     let final_price = calculate_final_price(
         total_base,
         flash_discount_bps,  // base discount (flash sale discount)
@@ -209,6 +226,7 @@ pub fn process(
         sub_discount_bps,
         milestone_discount_bps,
         streak_discount_bps,
+        market_bonus_bps,
         shop_config.max_total_discount_bps,
     );
 
@@ -233,7 +251,7 @@ pub fn process(
         // Items that go to inventory (armor, cosmetics, event items)
         for _ in 0..total_items {
             add_to_inventory(
-                _program_id,
+                program_id,
                 buyer,
                 buyer.key(),
                 inventory_account,
@@ -247,9 +265,8 @@ pub fn process(
         }
     } else {
         // Items that go directly to PlayerAccount fields
-        let mut player_data_ref = player_account.try_borrow_mut_data()?;
-        let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-        fulfill_item(player, item_type, total_items)?;
+        let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+        fulfill_item(&mut *player, item_type, total_items)?;
     }
 
     // 12. Update Flash Sale Stats
@@ -264,13 +281,22 @@ pub fn process(
 
     // 13. Update Player Shop State
 
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+    let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
 
     // Unlock EXT_INVENTORY extension if not already unlocked
-    unlock_extension_if_eligible(player_account, buyer, player, EXT_INVENTORY)?;
+    unlock_extension_if_eligible(player_account, buyer, &mut *player, EXT_INVENTORY)?;
 
-    update_player_shop_state(player, final_price, now, shop_config);
+    update_player_shop_state(&mut *player, final_price, now, shop_config);
+
+    // Emit event
+    emit!(FlashSalePurchased {
+        player: *buyer.key(),
+        sale_id,
+        original_price: total_base,
+        price_paid: final_price,
+        currency: 0, // Flash sales are SOL only
+        timestamp: now,
+    });
 
     Ok(())
 }
@@ -400,6 +426,7 @@ fn calculate_final_price(
     sub_discount_bps: u16,
     milestone_discount_bps: u16,
     loyalty_discount_bps: u16,
+    market_discount_bps: u16,
     max_total_discount_bps: u16,
 ) -> u64 {
     // Multiplicative stacking with checked math
@@ -422,6 +449,9 @@ fn calculate_final_price(
 
     // Layer 6: Loyalty streak
     price = apply_bp_penalty(price, loyalty_discount_bps).unwrap_or(price);
+
+    // Layer 7: Market building discount
+    price = apply_bp_penalty(price, market_discount_bps).unwrap_or(price);
 
     // Enforce max discount
     let min_price = apply_bp_penalty(base_price, max_total_discount_bps).unwrap_or(0);

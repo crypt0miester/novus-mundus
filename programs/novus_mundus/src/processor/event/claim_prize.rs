@@ -3,16 +3,19 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use crate::{
     constants::PRIZE_DISTRIBUTION,
     error::GameError,
-    helpers::close_account,
+    helpers::{close_account, estate::{treasury_prize_bonus_bps, load_estate_for_player}},
     state::{EventAccount, EventParticipation, PlayerAccount},
     types::PrizeType,
     validation::{require_signer, require_writable},
     logic::safe_math::apply_bp,
+    emit,
+    events::progression::EventPrizeClaimed,
 };
 
 /// Claim event prize
@@ -35,19 +38,28 @@ use crate::{
 /// - [writable] novi_mint: NOVI mint (required for LockedNovi prizes)
 /// - [] game_engine: GameEngine PDA (required for LockedNovi mint authority)
 /// - [] token_program: Token program
+/// - [] winner_estate: EstateAccount PDA (for Treasury prize bonus)
 /// - [writable] event_vault: (optional, only for SPLToken prizes)
 /// - [writable] winner_spl_token_account: (optional, only for SPLToken prizes)
+///
+/// # Building Bonuses
+/// Treasury building provides prize bonus:
+/// - Lv 5-9: +10% prize bonus
+/// - Lv 10-14: +25% prize bonus
+/// - Lv 15-19: +40% prize bonus
+/// - Lv 20+: +50% prize bonus
 ///
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
+    // winner_estate is required (index 9), SPL token accounts are optional
 
-    let base_account_count = 9;
+    let base_account_count = 10;
 
     if accounts.len() < base_account_count {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -62,10 +74,11 @@ pub fn process(
     let novi_mint = &accounts[6];
     let game_engine = &accounts[7];
     let token_program = &accounts[8];
+    let winner_estate = &accounts[9];
 
     // Optional accounts for SPL token prizes
     let (event_vault, winner_spl_token_account) = if accounts.len() >= base_account_count + 2 {
-        (Some(&accounts[9]), Some(&accounts[10]))
+        (Some(&accounts[10]), Some(&accounts[11]))
     } else {
         (None, None)
     };
@@ -134,12 +147,24 @@ pub fn process(
 
     // 7. Calculate Prize Share (using basis points)
     let prize_bps = PRIZE_DISTRIBUTION[rank] as u64;
-    let prize_share = apply_bp(event_data.prize_amount, prize_bps)
+    let base_prize_share = apply_bp(event_data.prize_amount, prize_bps)
         .ok_or(GameError::MathOverflow)?;
 
-    if prize_share == 0 {
+    if base_prize_share == 0 {
         return Err(GameError::NothingToClaim.into());
     }
+
+    // 7a. Apply Treasury building prize bonus (BUILDING BONUS)
+    let estate = load_estate_for_player(winner_estate, winner_data, program_id)?;
+    let treasury_bonus_bps = treasury_prize_bonus_bps(estate);
+
+    // Apply bonus: prize × (10000 + bonus_bps) / 10000
+    let prize_share = if treasury_bonus_bps > 0 {
+        let bonus_multiplier = 10000u64.saturating_add(treasury_bonus_bps as u64);
+        base_prize_share.saturating_mul(bonus_multiplier) / 10000
+    } else {
+        base_prize_share
+    };
 
     // Check sufficient prize remaining
     if event_data.prize_remaining < prize_share {
@@ -220,6 +245,16 @@ pub fn process(
 
     // Close participation account (refund rent to winner)
     close_account(participation_account, winner_owner)?;
+
+    // Emit event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(EventPrizeClaimed {
+        player: *winner_owner.key(),
+        event: *event_account.key(),
+        rank: rank as u16,
+        prize_amount: prize_share,
+        timestamp: now,
+    });
 
     Ok(())
 }

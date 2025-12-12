@@ -4,6 +4,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use alt_name_service::instructions::Transfer;
@@ -14,6 +15,8 @@ use crate::{
     helpers::{compute_name_hash, validate_and_get_domain_name},
     state::PlayerAccount,
     validation::{require_key_match, require_signer, require_writable},
+    emit,
+    events::PlayerNameRemoved,
     NULL_PUBKEY,
 };
 
@@ -115,6 +118,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // Note: The player will need to re-call set_player_name to get a new name
     // or they can keep the default "Player #X" name
     player.clear_name();
+
+    // 10. Emit event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(PlayerNameRemoved {
+        player: *player_account.key(),
+        timestamp: now,
+    });
 
     Ok(())
 }

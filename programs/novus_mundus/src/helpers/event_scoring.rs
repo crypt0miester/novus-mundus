@@ -1,5 +1,4 @@
 use pinocchio::{
-    account_info::AccountInfo,
     pubkey::Pubkey,
     ProgramResult,
 };
@@ -25,20 +24,14 @@ use crate::{
 /// - EventParticipation score (accumulative or snapshot)
 /// - EventAccount leaderboard (maintains top 10, sorted)
 pub fn update_event_score(
-    event_participation_account: &AccountInfo,
-    event_account: &AccountInfo,
+    participation: &mut EventParticipation,
+    event: &mut EventAccount,
     player_key: &Pubkey,
     action_type: EventType,
     score_value: u64,
     now: i64,
 ) -> ProgramResult {
-    // 1. Load Accounts
-    let mut event_participation_account_ref = event_participation_account.try_borrow_mut_data()?;
-    let mut event_account_ref = event_account.try_borrow_mut_data()?;
-    let participation = unsafe { EventParticipation::load_mut(&mut event_participation_account_ref) };
-    let event = unsafe { EventAccount::load_mut(&mut event_account_ref) };
-
-    // 2. Validate Ownership
+    // 1. Validate data ownership (accounts already validated by caller via load_checked)
 
     if &participation.player != player_key {
         return Err(GameError::Unauthorized.into());
@@ -48,40 +41,45 @@ pub fn update_event_score(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 3. Ensure Event is Active (with auto-activation)
+    // 2. Ensure Event is Active (with auto-activation)
 
     ensure_event_active(event, now)?;
 
-    // 4. Check Event Type Matches Action
+    // 3. Check Event Type Matches Action
 
     if event.event_type != action_type as u8 {
         return Ok(()); // Wrong type, skip silently
     }
 
-    // 5. Check Time Window
+    // 4. Check Time Window
 
     if now < event.start_time || now >= event.end_time {
         return Ok(()); // Outside window, skip
     }
 
-    // 6. Update Score Based on Type
+    // 5. Update Score Based on Type
 
     let event_type = EventType::from_u8(event.event_type)
         .ok_or(GameError::InvalidParameter)?;
 
+    let old_score = participation.score;
+    let mut score_changed = false;
+
     if event_type.is_accumulative() {
         // Accumulative: add to score
         participation.score = participation.score.saturating_add(score_value);
+        score_changed = score_value > 0;
     } else {
         // Snapshot: replace if higher
         if score_value > participation.score {
             participation.score = score_value;
+            score_changed = true;
         }
     }
 
     participation.last_update = now;
 
-    // 7. Update Leaderboard (top 10, sorted descending)
+    // 6. Update Leaderboard (top 10, sorted descending)
 
     update_leaderboard(
         &mut event.leaderboard,
@@ -89,6 +87,9 @@ pub fn update_event_score(
         player_key,
         participation.score,
     );
+
+    // Note: EventScoreUpdated event could be emitted here but requires passing event_key
+    // TODO: Add event_key parameter and emit EventScoreUpdated when score_changed
 
     Ok(())
 }

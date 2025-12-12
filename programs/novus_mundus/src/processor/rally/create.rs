@@ -12,14 +12,17 @@ use crate::{
     error::GameError,
     state::{
         CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus,
-        game_engine::RallyCaps, player::NULL_PUBKEY,
+        TeamAccount, game_engine::RallyCaps, player::NULL_PUBKEY,
         unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_RALLY,
     },
     logic::{
         calculate_networth,
         location::calculate_intracity_travel_time,
     },
-    validation::{require_signer, require_writable, require_key_match},
+    helpers::estate::{require_citadel, citadel_rally_capacity_bps, load_estate_for_player},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
+    emit,
+    events::RallyCreated,
 };
 
 /// Create a new rally with the NEW architecture
@@ -38,8 +41,17 @@ use crate::{
 /// 4. `[]` game_engine: GameEngine PDA (for rally caps)
 /// 5. `[]` rally_city_account: CityAccount for rally city (for travel calculation)
 /// 6. `[]` system_program: System program
+/// 7. `[]` team_account: TeamAccount PDA (creator must be on a team)
+/// 8. `[]` estate_account: EstateAccount PDA (for Citadel requirement)
 ///
-/// # Instruction Data (99 bytes)
+/// # Building Requirements
+/// Requires Citadel (Estate Level 12+) to CREATE rallies.
+/// Joining rallies does NOT require any building.
+///
+/// # Building Bonuses
+/// Citadel provides rally capacity bonus: +2% per level (more participants allowed)
+///
+/// # Instruction Data (107 bytes)
 /// - rally_id: u64 (8 bytes)
 /// - target: Pubkey (32 bytes)
 /// - target_type: u8 (1 byte) - 0=player, 1=encounter
@@ -51,6 +63,7 @@ use crate::{
 /// - melee: u64 (8 bytes) - melee weapons to commit
 /// - ranged: u64 (8 bytes) - ranged weapons to commit
 /// - siege: u64 (8 bytes) - siege weapons to commit
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -65,6 +78,8 @@ pub fn process(
         game_engine,
         rally_city_account,
         system_program,
+        team_account,
+        estate_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -77,8 +92,8 @@ pub fn process(
     require_writable(participant_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Parse Instruction Data (99 bytes minimum)
-    if instruction_data.len() < 99 {
+    // 3. Parse Instruction Data (107 bytes minimum)
+    if instruction_data.len() < 107 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -124,6 +139,10 @@ pub fn process(
         instruction_data[91], instruction_data[92], instruction_data[93], instruction_data[94],
         instruction_data[95], instruction_data[96], instruction_data[97], instruction_data[98],
     ]);
+    let team_id = u64::from_le_bytes([
+        instruction_data[99], instruction_data[100], instruction_data[101], instruction_data[102],
+        instruction_data[103], instruction_data[104], instruction_data[105], instruction_data[106],
+    ]);
 
     // 4. Validate inputs
     if target == NULL_PUBKEY {
@@ -149,23 +168,44 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 6. Load Player and validate
-    let mut creator_data_ref = creator_player.try_borrow_mut_data()?;
-    let creator = unsafe { PlayerAccount::load_mut(&mut creator_data_ref) };
-
-    if &creator.owner != creator_owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut creator = PlayerAccount::load_checked_mut(creator_player, creator_owner.key(), program_id)?;
 
     // Player must not be traveling
     if creator.is_traveling_any() {
         return Err(GameError::PlayerTraveling.into());
     }
 
+    // 6a. Validate Team Membership
+    // Creator must be on a team to create a rally
+    if creator.team == NULL_PUBKEY {
+        return Err(GameError::NotOnTeam.into());
+    }
+
+    // Verify team account matches player's team
+    if team_account.key() != &creator.team {
+        return Err(GameError::InvalidTeam.into());
+    }
+
+    // Load team and verify not disbanded
+    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    if team.is_disbanded() {
+        return Err(GameError::TeamDisbanded.into());
+    }
+
+    // Store team pubkey for rally
+    let rally_team = creator.team;
+
     // Prerequisite: EXT_INVENTORY must be unlocked
-    require_extension(creator, EXT_INVENTORY)?;
+    require_extension(&*creator, EXT_INVENTORY)?;
 
     // Unlock EXT_RALLY if not already
-    unlock_extension_if_eligible(creator_player, creator_owner, creator, EXT_RALLY)?;
+    unlock_extension_if_eligible(creator_player, creator_owner, &mut *creator, EXT_RALLY)?;
+
+    // 6b. HARD GATE: Require Citadel to create rallies
+    // Creating a rally requires Citadel (Estate Level 12+)
+    // Joining rallies is free - no building required
+    let estate = load_estate_for_player(estate_account, &*creator, program_id)?;
+    require_citadel(estate, 1)?; // Minimum Citadel level 1
 
     // 7. Validate player has enough units and weapons
     if creator.defensive_unit_1 < units_1 {
@@ -188,19 +228,30 @@ pub fn process(
     }
 
     // 8. Load GameEngine for rally caps
-    let game_engine_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_ref) };
+    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
 
-    // 9. Calculate max participants based on tier + hero buff
+    // 9. Calculate max participants based on tier + hero buff + Citadel building
     let effective_tier = creator.get_effective_tier(now);
     let rally_caps = RallyCaps::for_tier(effective_tier);
-    let base_max = rally_caps.max_rally_size as u16;
+    let base_max = rally_caps.max_rally_size as u32;
 
-    let max_participants = if creator.hero_rally_capacity_bps > 0 {
-        let multiplier = 10000u16 + creator.hero_rally_capacity_bps;
-        ((base_max as u32 * multiplier as u32) / 10000).min(255) as u8
+    // Apply hero rally capacity buff
+    let hero_adjusted = if creator.hero_rally_capacity_bps > 0 {
+        let multiplier = 10000u32 + creator.hero_rally_capacity_bps as u32;
+        (base_max * multiplier) / 10000
     } else {
-        base_max as u8
+        base_max
+    };
+
+    // Apply Citadel building capacity bonus (BUILDING BONUS)
+    // +2% capacity per Citadel level (estate already loaded above)
+    let citadel_bonus_bps = citadel_rally_capacity_bps(estate);
+
+    let max_participants = if citadel_bonus_bps > 0 {
+        let multiplier = 10000u32 + citadel_bonus_bps as u32;
+        ((hero_adjusted * multiplier) / 10000).min(255) as u8
+    } else {
+        hero_adjusted.min(255) as u8
     };
 
     // Store rally city from player's current city
@@ -211,6 +262,7 @@ pub fn process(
     let leader_long = creator.current_long;
 
     // Load rally city account for travel calculation
+    require_owner(rally_city_account, program_id)?;
     let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
     if rally_city_data.city_id != rally_city {
         return Err(GameError::CityNotFound.into());
@@ -261,11 +313,11 @@ pub fn process(
         creator.rally_stats.total_rallies_created.saturating_add(1);
 
     // Update networth
-    creator.networth = calculate_networth(creator, &game_engine_data.economic_config)?;
+    creator.networth = calculate_networth(&*creator, &game_engine_data.economic_config)?;
 
     // Need to drop borrow before CPIs
-    drop(creator_data_ref);
-    drop(game_engine_ref);
+    drop(creator);
+    drop(game_engine_data);
 
     // 11. Verify and create Rally PDA
     let (expected_rally_pda, rally_bump) = RallyAccount::derive_pda(creator_owner.key(), rally_id);
@@ -328,7 +380,7 @@ pub fn process(
     *rally = RallyAccount {
         id: rally_id,
         creator: *creator_owner.key(),
-        team: NULL_PUBKEY, // Team-based rallies can set this later
+        team: rally_team, // All rallies require team membership
 
         rally_city,
         target_city,
@@ -461,6 +513,16 @@ pub fn process(
         bump: participant_bump,
         _padding6: [0; 5],
     };
+
+    // Emit RallyCreated event
+    emit!(RallyCreated {
+        rally: expected_rally_pda,
+        team: rally_team,
+        leader: *creator_owner.key(),
+        target,
+        gather_at: now + duration,
+        timestamp: now,
+    });
 
     Ok(())
 }

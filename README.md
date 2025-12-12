@@ -718,7 +718,5 @@ Game mechanics, events, and features will evolve based on:
 ---
 
 **Version:** 2.0
-**Last Updated:** 2025
 **Framework:** Pinocchio (Solana)
-**License:** MIT
 

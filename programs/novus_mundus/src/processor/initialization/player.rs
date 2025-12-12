@@ -13,6 +13,8 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
     token_helpers::get_or_create_associated_token_account,
     helpers::mint_tokens,
+    emit,
+    events::PlayerCreated,
 };
 
 /// Initialize a new player account and NOVI token account
@@ -314,6 +316,14 @@ pub fn process(
         STARTER_LOCKED_NOVI,
         &[signer],
     )?;
+
+    // Emit PlayerCreated event
+    emit!(PlayerCreated {
+        player: *player.key(),
+        user: *owner.key(),
+        city: *starting_city.key(),
+        timestamp: created_at,
+    });
 
     Ok(())
 }

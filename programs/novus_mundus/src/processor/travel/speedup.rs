@@ -7,22 +7,23 @@ use pinocchio::{
 };
 
 use crate::{
+    emit,
     error::GameError,
+    events::TravelSpeedup,
     state::{PlayerAccount, GameEngine},
+    types::TravelType,
 };
 
 /// Speed-up tiers for travel
-/// Each tier reduces remaining travel time by a percentage
-pub const SPEEDUP_TIER_1: u8 = 1;  // 50% time reduction (2x speed)
-pub const SPEEDUP_TIER_2: u8 = 2;  // 75% time reduction (4x speed)
-pub const SPEEDUP_TIER_3: u8 = 3;  // 87.5% time reduction (8x speed)
+/// Each tier reduces remaining travel time
+pub const SPEEDUP_TIER_1: u8 = 1;  // 50% of time remains
+pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
 
 /// Speed up current travel by spending gems
 ///
 /// Tiered speed-up system:
-/// - Tier 1: 50% time reduction (arrive in half the remaining time)
-/// - Tier 2: 75% time reduction (arrive in quarter of remaining time)
-/// - Tier 3: 87.5% time reduction (arrive in 1/8 of remaining time)
+/// - Tier 1: 50% of time remains (arrive in half the remaining time)
+/// - Tier 2: 25% of time remains (arrive in quarter of remaining time)
 ///
 /// Gem cost is calculated based on remaining time and tier:
 /// cost = (remaining_minutes * gems_per_minute * tier_multiplier)
@@ -37,7 +38,7 @@ pub const SPEEDUP_TIER_3: u8 = 3;  // 87.5% time reduction (8x speed)
 /// 1. `[SIGNER]` owner - Player's wallet
 /// 2. `[]` game_engine - For gem cost configuration
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -59,7 +60,7 @@ pub fn process(
 
     let speedup_tier = instruction_data[0];
 
-    if speedup_tier < SPEEDUP_TIER_1 || speedup_tier > SPEEDUP_TIER_3 {
+    if speedup_tier < SPEEDUP_TIER_1 || speedup_tier > SPEEDUP_TIER_2 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -71,17 +72,8 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    // 5. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 6. Validate Currently Traveling
 
@@ -108,14 +100,12 @@ pub fn process(
 
     // 8. Calculate Time Reduction Based on Tier
     //
-    // Tier 1: 50% reduction (multiply remaining by 0.5)
-    // Tier 2: 75% reduction (multiply remaining by 0.25)
-    // Tier 3: 87.5% reduction (multiply remaining by 0.125)
+    // Tier 1: 50% of time remains (multiply remaining by 0.5)
+    // Tier 2: 25% of time remains (multiply remaining by 0.25)
 
     let (time_multiplier, tier_cost_multiplier): (f64, u64) = match speedup_tier {
         SPEEDUP_TIER_1 => (0.5, 1),    // 50% of time remains, 1x gem cost
         SPEEDUP_TIER_2 => (0.25, 2),   // 25% of time remains, 2x gem cost
-        SPEEDUP_TIER_3 => (0.125, 4),  // 12.5% of time remains, 4x gem cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
@@ -154,6 +144,19 @@ pub fn process(
     //
     // If we wanted to update it, we'd need to add the destination_location account
     // and update its reserved_arrival_time field.
+
+    // 14. Emit Event
+
+    let is_intercity = player_data.travel_type == TravelType::Intercity as u8;
+
+    emit!(TravelSpeedup {
+        player: *player_account.key(),
+        is_intercity,
+        speedup_tier,
+        gems_spent: total_gem_cost,
+        new_eta: player_data.arrival_time,
+        timestamp: now,
+    });
 
     Ok(())
 }

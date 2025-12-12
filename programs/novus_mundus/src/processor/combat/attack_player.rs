@@ -33,6 +33,8 @@ use crate::{
         require_owner,
         require_pda,
     },
+    emit,
+    events::{PlayerAttacked, XpGained, PlayerLeveledUp},
 };
 
 /// PvP combat - attack another player
@@ -230,7 +232,8 @@ pub fn process(
     }
 
     // 8. Get defender's defensive units (can be 0 - undefended targets are valid)
-    let defender_defensive_total = defender_data.total_defensive_units();
+    // Include reinforcements from teammates
+    let defender_defensive_total = defender_data.total_defense_with_reinforcements();
 
     // 9. Calculate attacker damage output (PURE LOGIC)
     let gameplay_config = &game_engine_data.gameplay_config;
@@ -261,16 +264,23 @@ pub fn process(
 
     // 10. Calculate defender damage output (PURE LOGIC)
     // Defenders never get drive-by bonus, but do get defense research buffs and hero buffs
+    // Include reinforcement weapons and use best hero buffs (max of own and reinforcement)
+    let defender_total_weapons = defender_data.total_weapons_with_reinforcements();
+    let defender_hero_defense_bps = defender_data.hero_defense_bps
+        .max(defender_data.reinforcement_hero_defense_bps);
+    let defender_hero_weapon_eff_bps = defender_data.hero_weapon_efficiency_bps
+        .max(defender_data.reinforcement_hero_weapon_eff_bps);
+
     let base_defender_damage = calculate_damage_output(
         defender_defensive_total,
-        defender_data.total_weapons(),
+        defender_total_weapons,
         false,
         gameplay_config,
         defender_data.research_defense_bps,
         0,  // Defenders don't get crit chance on defense
         0,  // Defenders don't get crit damage on defense
-        defender_data.hero_defense_bps,
-        defender_data.hero_weapon_efficiency_bps,
+        defender_hero_defense_bps,
+        defender_hero_weapon_eff_bps,
         0,  // Defenders don't get hero crit chance on defense
         defender_data.equipped_weapon_bonus_bps,
     );
@@ -282,23 +292,61 @@ pub fn process(
 
     // 11. Inflict damage on defender's defensive units (PURE LOGIC)
     // Defender's armor reduces incoming damage (boosted by hero armor efficiency + equipped armor)
-    let (def_unit_1, def_unit_2, def_unit_3) = inflict_damage(
-        defender_data.defensive_unit_1,
-        defender_data.defensive_unit_2,
-        defender_data.defensive_unit_3,
+    // Use best armor efficiency from own hero or reinforcement heroes
+    let defender_hero_armor_eff_bps = defender_data.hero_armor_efficiency_bps
+        .max(defender_data.reinforcement_hero_armor_eff_bps);
+
+    // Calculate total combined units for damage distribution
+    let combined_def_1 = defender_data.defensive_unit_1.saturating_add(defender_data.reinforcement_def_1);
+    let combined_def_2 = defender_data.defensive_unit_2.saturating_add(defender_data.reinforcement_def_2);
+    let combined_def_3 = defender_data.defensive_unit_3.saturating_add(defender_data.reinforcement_def_3);
+
+    let (remaining_1, remaining_2, remaining_3) = inflict_damage(
+        combined_def_1,
+        combined_def_2,
+        combined_def_3,
         defender_data.armor_pieces,
         attacker_damage as f64,
         gameplay_config,
-        defender_data.hero_armor_efficiency_bps,
+        defender_hero_armor_eff_bps,
         defender_data.equipped_armor_bonus_bps,
     );
 
     let defender_units_lost = defender_defensive_total
-        .saturating_sub(def_unit_1.saturating_add(def_unit_2).saturating_add(def_unit_3));
+        .saturating_sub(remaining_1.saturating_add(remaining_2).saturating_add(remaining_3));
 
+    // Distribute remaining units between own and reinforcement proportionally
+    // Using the original ratio before combat
+
+    // For each tier, split remaining units back to own vs reinforcement
+    // Own gets (remaining × own_fraction), reinforcement gets the rest
+    let def_unit_1 = if combined_def_1 > 0 {
+        let own_original_ratio = defender_data.defensive_unit_1.saturating_mul(10000) / combined_def_1;
+        remaining_1.saturating_mul(own_original_ratio) / 10000
+    } else { 0 };
+    let reinf_unit_1 = remaining_1.saturating_sub(def_unit_1);
+
+    let def_unit_2 = if combined_def_2 > 0 {
+        let own_original_ratio = defender_data.defensive_unit_2.saturating_mul(10000) / combined_def_2;
+        remaining_2.saturating_mul(own_original_ratio) / 10000
+    } else { 0 };
+    let reinf_unit_2 = remaining_2.saturating_sub(def_unit_2);
+
+    let def_unit_3 = if combined_def_3 > 0 {
+        let own_original_ratio = defender_data.defensive_unit_3.saturating_mul(10000) / combined_def_3;
+        remaining_3.saturating_mul(own_original_ratio) / 10000
+    } else { 0 };
+    let reinf_unit_3 = remaining_3.saturating_sub(def_unit_3);
+
+    // Update defender's own units
     defender_data.defensive_unit_1 = def_unit_1;
     defender_data.defensive_unit_2 = def_unit_2;
     defender_data.defensive_unit_3 = def_unit_3;
+
+    // Update reinforcement aggregates
+    defender_data.reinforcement_def_1 = reinf_unit_1;
+    defender_data.reinforcement_def_2 = reinf_unit_2;
+    defender_data.reinforcement_def_3 = reinf_unit_3;
 
     // 12. Inflict damage on attacker's operative units (PURE LOGIC)
     // Attacker's armor protects operative units in counter-attack (boosted by hero armor efficiency + equipped armor)
@@ -328,14 +376,19 @@ pub fn process(
         attacker_data.siege_weapons.min(attacker_operative_total),
     );
 
-    // Defender's weapons (equipped by defensive units)
+    // Defender's combined weapons (own + reinforcement, equipped by combined defensive units)
+    let combined_melee = defender_data.melee_weapons.saturating_add(defender_data.reinforcement_melee);
+    let combined_ranged = defender_data.ranged_weapons.saturating_add(defender_data.reinforcement_ranged);
+    let combined_siege = defender_data.siege_weapons.saturating_add(defender_data.reinforcement_siege);
+
     let defender_equipped_weapons = WeaponSet::new(
-        defender_data.melee_weapons.min(defender_defensive_total),
-        defender_data.ranged_weapons.min(defender_defensive_total),
-        defender_data.siege_weapons.min(defender_defensive_total),
+        combined_melee.min(defender_defensive_total),
+        combined_ranged.min(defender_defensive_total),
+        combined_siege.min(defender_defensive_total),
     );
 
-    // Defender's stored weapons (entire inventory for armory raid)
+    // Defender's stored weapons (entire inventory for armory raid - only own, not reinforcement)
+    // Reinforcement weapons can't be raided from armory, they return to their owners
     let defender_stored_weapons = WeaponSet::new(
         defender_data.melee_weapons,
         defender_data.ranged_weapons,
@@ -381,8 +434,8 @@ pub fn process(
         }
 
         // Apply hero luck bonus (multiplicative - luck improves loot outcomes)
-        if attacker_data.hero_luck_bonus_bps > 0 {
-            let multiplier = 10000u64 + attacker_data.hero_luck_bonus_bps as u64;
+        if attacker_data.hero_loot_bonus_bps > 0 {
+            let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps as u64;
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
 
@@ -427,7 +480,30 @@ pub fn process(
         let looted = weapon_result.attacker_weapons_looted;
         let recovered = weapon_result.attacker_weapons_returned;
 
-        // Deduct looted weapons from defender
+        // Calculate defender's weapon casualty ratio (weapons die with units)
+        let defender_casualty_bps = if defender_defensive_total > 0 {
+            ((defender_units_lost as u128 * 10000) / defender_defensive_total as u128) as u64
+        } else {
+            0
+        };
+
+        // Apply weapon losses proportionally to both own and reinforcement weapons
+        // Own weapons
+        let own_melee_lost = apply_bp(defender_data.melee_weapons, defender_casualty_bps).unwrap_or(0);
+        let own_ranged_lost = apply_bp(defender_data.ranged_weapons, defender_casualty_bps).unwrap_or(0);
+        let own_siege_lost = apply_bp(defender_data.siege_weapons, defender_casualty_bps).unwrap_or(0);
+
+        // Reinforcement weapons (die proportionally, not lootable)
+        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee, defender_casualty_bps).unwrap_or(0);
+        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged, defender_casualty_bps).unwrap_or(0);
+        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege, defender_casualty_bps).unwrap_or(0);
+
+        defender_data.reinforcement_melee = defender_data.reinforcement_melee.saturating_sub(reinf_melee_lost);
+        defender_data.reinforcement_ranged = defender_data.reinforcement_ranged.saturating_sub(reinf_ranged_lost);
+        defender_data.reinforcement_siege = defender_data.reinforcement_siege.saturating_sub(reinf_siege_lost);
+
+        // Deduct looted weapons from defender's OWN weapons (not reinforcement)
+        // Note: looted may exceed casualty losses due to armory raid
         defender_data.melee_weapons = defender_data.melee_weapons.saturating_sub(looted.melee);
         defender_data.ranged_weapons = defender_data.ranged_weapons.saturating_sub(looted.ranged);
         defender_data.siege_weapons = defender_data.siege_weapons.saturating_sub(looted.siege);
@@ -467,7 +543,32 @@ pub fn process(
         attacker_data.ranged_weapons = attacker_data.ranged_weapons.saturating_sub(attacker_ranged_lost);
         attacker_data.siege_weapons = attacker_data.siege_weapons.saturating_sub(attacker_siege_lost);
 
-        // Defender gains looted weapons from dead attackers
+        // Calculate defender's weapon casualty ratio (weapons die with units even if defender wins)
+        let defender_casualty_bps = if defender_defensive_total > 0 {
+            ((defender_units_lost as u128 * 10000) / defender_defensive_total as u128) as u64
+        } else {
+            0
+        };
+
+        // Apply weapon losses to defender's own weapons
+        let own_melee_lost = apply_bp(defender_data.melee_weapons, defender_casualty_bps).unwrap_or(0);
+        let own_ranged_lost = apply_bp(defender_data.ranged_weapons, defender_casualty_bps).unwrap_or(0);
+        let own_siege_lost = apply_bp(defender_data.siege_weapons, defender_casualty_bps).unwrap_or(0);
+
+        defender_data.melee_weapons = defender_data.melee_weapons.saturating_sub(own_melee_lost);
+        defender_data.ranged_weapons = defender_data.ranged_weapons.saturating_sub(own_ranged_lost);
+        defender_data.siege_weapons = defender_data.siege_weapons.saturating_sub(own_siege_lost);
+
+        // Apply weapon losses to reinforcement weapons (die proportionally)
+        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee, defender_casualty_bps).unwrap_or(0);
+        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged, defender_casualty_bps).unwrap_or(0);
+        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege, defender_casualty_bps).unwrap_or(0);
+
+        defender_data.reinforcement_melee = defender_data.reinforcement_melee.saturating_sub(reinf_melee_lost);
+        defender_data.reinforcement_ranged = defender_data.reinforcement_ranged.saturating_sub(reinf_ranged_lost);
+        defender_data.reinforcement_siege = defender_data.reinforcement_siege.saturating_sub(reinf_siege_lost);
+
+        // Defender gains looted weapons from dead attackers (goes to own inventory)
         defender_data.melee_weapons = defender_data.melee_weapons.saturating_add(defender_looted.melee);
         defender_data.ranged_weapons = defender_data.ranged_weapons.saturating_add(defender_looted.ranged);
         defender_data.siege_weapons = defender_data.siege_weapons.saturating_add(defender_looted.siege);
@@ -497,7 +598,28 @@ pub fn process(
     // Golden hours (Dawn/Dusk) give φ² (2.618x) XP for enlightenment!
     let attacker_xp_gained = if attacker_won {
         let base_xp = calculate_xp_reward(XpAction::DefeatPlayer { target_level: defender_data.level });
-        grant_xp_with_time_bonus(attacker_data, base_xp, now)?;
+        let old_level = attacker_data.level;
+        let (levels_gained, new_level, _) = grant_xp_with_time_bonus(attacker_data, base_xp, now)?;
+
+        // Emit XP gained event
+        emit!(XpGained {
+            player: *attacker_owner.key(),
+            amount: base_xp,
+            source: 0, // 0=combat
+            total_xp: attacker_data.current_xp,
+            timestamp: now,
+        });
+
+        // Emit level up event if player leveled
+        if levels_gained > 0 {
+            emit!(PlayerLeveledUp {
+                player: *attacker_owner.key(),
+                old_level: old_level.into(),
+                new_level: new_level.into(),
+                timestamp: now,
+            });
+        }
+
         // Return base_xp for event scoring (deterministic)
         base_xp
     } else {
@@ -510,12 +632,20 @@ pub fn process(
 
     // 18. Update event scores if attacker is participating in an event
     if let (Some(attacker_event_participation), Some(attacker_event)) = (attacker_event_participation, attacker_event) {
-        // Validate attacker is actually in this event
-        let mut attacker_event_data_ref = attacker_event.try_borrow_data()?;
-        let attacker_event_data = unsafe { crate::state::EventAccount::load(&mut attacker_event_data_ref) };
-        if attacker_data.current_event != attacker_event_data.id {
-            return Err(GameError::NotInEvent.into());
-        }
+        // Load event participation with ownership validation
+        let mut attacker_participation = crate::state::EventParticipation::load_checked_mut(
+            attacker_event_participation,
+            attacker_data.current_event,
+            attacker_owner.key(),
+            program_id,
+        )?;
+
+        // Load event with ownership validation
+        let mut attacker_event_data = crate::state::EventAccount::load_checked_mut(
+            attacker_event,
+            attacker_data.current_event,
+            program_id,
+        )?;
 
         let attacker_key = attacker_player.key();
 
@@ -524,8 +654,8 @@ pub fn process(
 
         // TotalDamageDealt: Add damage dealt (deterministic)
         let _ = update_event_score(
-            attacker_event_participation,
-            attacker_event,
+            &mut *attacker_participation,
+            &mut *attacker_event_data,
             attacker_key,
             EventType::TotalDamageDealt,
             final_damage,
@@ -535,8 +665,8 @@ pub fn process(
         // MostAttacksWonPvP: +1 if attacker wins
         if attacker_won {
             let _ = update_event_score(
-                attacker_event_participation,
-                attacker_event,
+                &mut *attacker_participation,
+                &mut *attacker_event_data,
                 attacker_key,
                 EventType::MostAttacksWonPvP,
                 1,
@@ -546,8 +676,8 @@ pub fn process(
 
         // HighestCash: Current cash (snapshot)
         let _ = update_event_score(
-            attacker_event_participation,
-            attacker_event,
+            &mut *attacker_participation,
+            &mut *attacker_event_data,
             attacker_key,
             EventType::HighestCash,
             attacker_data.cash_on_hand,
@@ -557,8 +687,8 @@ pub fn process(
         // MostXPGained: Add XP gained (deterministic)
         if attacker_xp_gained > 0 {
             let _ = update_event_score(
-                attacker_event_participation,
-                attacker_event,
+                &mut *attacker_participation,
+                &mut *attacker_event_data,
                 attacker_key,
                 EventType::MostXPGained,
                 attacker_xp_gained,
@@ -569,12 +699,20 @@ pub fn process(
 
     // 19. Update event scores if defender is participating in an event
     if let (Some(defender_event_participation), Some(defender_event)) = (defender_event_participation, defender_event) {
-        // Validate defender is actually in this event
-        let defender_event_data_ref = defender_event.try_borrow_data()?;
-        let defender_event_data = unsafe { crate::state::EventAccount::load(&defender_event_data_ref) };
-        if defender_data.current_event != defender_event_data.id {
-            return Err(GameError::NotInEvent.into());
-        }
+        // Load event participation with ownership validation
+        let mut defender_participation = crate::state::EventParticipation::load_checked_mut(
+            defender_event_participation,
+            defender_data.current_event,
+            &defender_data.owner,
+            program_id,
+        )?;
+
+        // Load event with ownership validation
+        let mut defender_event_data = crate::state::EventAccount::load_checked_mut(
+            defender_event,
+            defender_data.current_event,
+            program_id,
+        )?;
 
         let defender_key = defender_player.key();
 
@@ -583,8 +721,8 @@ pub fn process(
 
         // TotalDamageDealt: Add defender damage dealt (deterministic)
         let _ = update_event_score(
-            defender_event_participation,
-            defender_event,
+            &mut *defender_participation,
+            &mut *defender_event_data,
             defender_key,
             EventType::TotalDamageDealt,
             final_defender_damage,
@@ -594,8 +732,8 @@ pub fn process(
         // MostAttacksWonPvP: +1 if defender wins (defensive victory)
         if !attacker_won {
             let _ = update_event_score(
-                defender_event_participation,
-                defender_event,
+                &mut *defender_participation,
+                &mut *defender_event_data,
                 defender_key,
                 EventType::MostAttacksWonPvP,
                 1,
@@ -605,14 +743,64 @@ pub fn process(
 
         // HighestCash: Current cash (snapshot)
         let _ = update_event_score(
-            defender_event_participation,
-            defender_event,
+            &mut *defender_participation,
+            &mut *defender_event_data,
             defender_key,
             EventType::HighestCash,
             defender_data.cash_on_hand,
             now,
         );
     }
+
+    // Calculate units lost for event (need to get original values)
+    // Since we already updated the units above, we track the lost counts
+    let attacker_melee_lost = attacker_operative_total.saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
+
+    // Calculate cash/armor/produce/vehicles stolen (only if attacker won)
+    let (cash_stolen, armor_stolen, produce_stolen, vehicles_stolen) = if attacker_won {
+        let loot_bps = gameplay_config.pvp_loot_percentage_base as u64;
+        let cash_from_hand = apply_bp(defender_data.cash_on_hand.saturating_add(if attacker_won { 0 } else { 0 }), loot_bps).unwrap_or(0);
+        // Values already transferred above
+        (cash_from_hand, 0u32, 0u32, 0u32) // Simplified for now
+    } else {
+        (0, 0, 0, 0)
+    };
+
+    // Calculate actual per-tier losses
+    let attacker_tier1_lost = attacker_data.operative_unit_1.saturating_sub(att_unit_1);
+    let attacker_tier2_lost = attacker_data.operative_unit_2.saturating_sub(att_unit_2);
+    let attacker_tier3_lost = attacker_data.operative_unit_3.saturating_sub(att_unit_3);
+
+    // For defender: calculate losses before/after combat was applied
+    // Note: defender units already updated, so calculate from what was removed
+    let defender_tier1_lost = combined_def_1.saturating_sub(remaining_1);
+    let defender_tier2_lost = combined_def_2.saturating_sub(remaining_2);
+    let defender_tier3_lost = combined_def_3.saturating_sub(remaining_3);
+
+    // Emit PlayerAttacked event
+    emit!(PlayerAttacked {
+        attacker: *attacker_player.key(),
+        defender: *defender_player.key(),
+        damage_dealt: attacker_damage,
+        damage_received: defender_damage,
+        cash_stolen,
+        armor_stolen: armor_stolen as u64,
+        produce_stolen: produce_stolen as u64,
+        vehicles_stolen: vehicles_stolen as u64,
+        attacker_units_lost: [
+            attacker_tier1_lost,
+            attacker_tier2_lost,
+            attacker_tier3_lost,
+        ],
+        defender_units_lost: [
+            defender_tier1_lost,
+            defender_tier2_lost,
+            defender_tier3_lost,
+        ],
+        attacker_won,
+        drive_by,
+        timestamp: now,
+    });
 
     Ok(())
 }

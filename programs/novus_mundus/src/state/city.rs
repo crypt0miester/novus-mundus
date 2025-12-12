@@ -59,12 +59,16 @@ pub struct CityAccount {
     /// PDA bump seed
     pub bump: u8,                           // 1 byte
 
-    /// Padding to align to 8 bytes
-    pub _padding: [u8; 5],                  // 5 bytes (was 3, now 5 to maintain alignment)
+    /// Padding for alignment
+    pub _padding1: [u8; 1],                 // 1 byte
+
+    /// Arena PvP - current season ID for this city (incremented on create_season)
+    /// Seasons 4+ behind this can be auto-finalized
+    pub arena_season_id: u32,               // 4 bytes
 }
 
 impl CityAccount {
-    /// Total size in bytes: 2 + 32 + 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8 + 1 + 1 + 1 + 5 = 91 bytes
+    /// Total size in bytes: 2 + 32 + 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 4 = 91 bytes
     pub const SIZE: usize = 91;
 
     /// Load city account with read-only access

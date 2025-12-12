@@ -17,6 +17,9 @@ pub struct GameEngine {
     /// Backend payment authority (verifies real-money subscription purchases)
     pub payment_authority: Pubkey,              // 32 bytes
 
+    /// Game server authority (co-signs mini-game completions, off-chain verified actions)
+    pub game_authority: Pubkey,                 // 32 bytes
+
     /// Treasury wallet (receives SOL subscription payments)
     pub treasury_wallet: Pubkey,                // 32 bytes
 
@@ -96,6 +99,58 @@ impl GameEngine {
         )
     }
 
+    /// Load and verify GameEngine immutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda();
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify GameEngine mutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked_mut<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda();
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
     /// Validate game engine account PDA using stored bump (fast)
     pub fn validate_pda(
         account: &AccountInfo,
@@ -107,6 +162,7 @@ impl GameEngine {
         }
         Ok(())
     }
+
 }
 
 #[repr(C)]
@@ -270,11 +326,11 @@ pub struct GameplayConfig {
     pub daily_produce_base: u64,                // e.g., 500
     pub daily_xp_base: u64,                     // e.g., 25
 
-    // Luck calculation bonuses (basis points: 10000 = 100%)
-    pub happiness_luck_max: u32,                // e.g., 2000 (20% max bonus from happiness)
-    pub level_luck_bonus_per_level: u32,        // e.g., 100 (1% per level, max 10000 at level 100)
-    // Reputation luck bonuses: [Novice, Skilled(1k), Veteran(5k), Elite(20k), Legendary(100k)]
-    pub reputation_luck_bonuses: [u32; 5],      // e.g., [0, 300, 500, 800, 1000] = [0%, 3%, 5%, 8%, 10%]
+    // Synchrony calculation bonuses (basis points: 10000 = 100%)
+    pub happiness_synchrony_max: u32,                // e.g., 2000 (20% max bonus from happiness)
+    pub level_synchrony_bonus_per_level: u32,        // e.g., 100 (1% per level, max 10000 at level 100)
+    // Reputation synchrony bonuses: [Novice, Skilled(1k), Veteran(5k), Elite(20k), Legendary(100k)]
+    pub reputation_synchrony_bonuses: [u32; 5],      // e.g., [0, 300, 500, 800, 1000] = [0%, 3%, 5%, 8%, 10%]
 
     // Encounter level system
     pub max_encounter_level_diff: u8,           // e.g., 10 (can attack encounters ±10 levels)
@@ -304,7 +360,7 @@ pub struct SubscriptionTier {
     pub generation_multiplier: u64,             // e.g., 1, 2, 10, 50 (daily NOVI generation multiplier)
     pub max_locked_novi: u64,                   // e.g., 3000, 6000, 30000, 150000 (max locked NOVI capacity)
     pub daily_reward_multiplier: u64,           // Basis points: 10000 = 1.0x, 15000 = 1.5x, 20000 = 2.0x, 30000 = 3.0x
-    pub luck_bonus: u32,                        // Basis points: e.g., 500 (5% luck bonus per tier level)
+    pub synchrony_bonus: u32,                        // Basis points: e.g., 500 (5% synchrony bonus per tier level)
 
     // Bonuses granted on EVERY purchase/renewal (NOT just starting!)
     pub novi: u64,                              // Reserved NOVI minted (withdrawable!)

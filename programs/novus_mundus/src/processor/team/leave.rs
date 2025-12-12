@@ -2,103 +2,140 @@ use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamAccount, player::NULL_PUBKEY, require_extension, EXT_TEAM},
-    validation::{require_signer, require_writable},
+    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
+    helpers::close_account,
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::TeamLeft,
 };
 
 /// Leave a team
 ///
-/// Player leaves their current team.
+/// Player leaves their current team by closing their TeamMemberSlot.
 /// Leader cannot leave (must transfer leadership first or disband team).
+/// Rent is refunded to the player.
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount (leaving member)
 /// - [writable] team: TeamAccount
-/// - [signer] owner: Player wallet
+/// - [writable] member_slot: Player's TeamMemberSlot (to be closed)
+/// - [signer, writable] owner: Player wallet (receives slot rent refund)
 ///
 /// # Instruction Data
-/// None
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
+/// - slot_index: u16 (2 bytes) - Player's slot index
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _instruction_data: &[u8],
+    instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 10 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+
+    // 2. Parse Accounts
 
     let [
         player_account,
         team_account,
+        member_slot_account,
         owner,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
+    // 3. Validate Accounts
 
     require_signer(owner)?;
+    require_writable(owner)?;
     require_writable(player_account)?;
     require_writable(team_account)?;
+    require_writable(member_slot_account)?;
 
-    // 3. Load Accounts
+    // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut team_account_data = team_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
+    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
 
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    // 4a. Require EXT_TEAM
+    require_extension(&*player, EXT_TEAM)?;
 
-    // 3a. Require EXT_TEAM
-    require_extension(player_data, EXT_TEAM)?;
-
-    // 4. Validate Player Can Leave
+    // 5. Validate Player Can Leave
 
     // Not in a team?
-    if !player_data.has_team {
+    if player.team == NULL_PUBKEY {
         return Err(GameError::NotInTeam.into());
     }
 
     // Verify player is in THIS team
-    if &player_data.team != team_account.key() {
+    if &player.team != team_account.key() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // Leader cannot leave (must transfer leadership first)
-    if &team_data.leader == owner.key() {
+    if &team.leader == player_account.key() {
         return Err(GameError::CannotLeaveAsLeader.into());
     }
 
-    // 5. Remove Player from Team
+    // 6. Verify Slot PDA
+    // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index]
 
-    let player_key = *owner.key();
-    let members = team_data.members();
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
 
-    // Find player index
-    let player_index = members.iter()
-        .position(|&member| member == player_key)
-        .ok_or(GameError::NotTeamMember)?;
-
-    // Remove by shifting remaining members left
-    for i in player_index..(team_data.member_count as usize - 1) {
-        team_data.members[i] = team_data.members[i + 1];
+    if member_slot_account.key() != &expected_slot {
+        return Err(GameError::InvalidPDA.into());
     }
 
-    // Clear last slot
-    team_data.members[(team_data.member_count - 1) as usize] = NULL_PUBKEY;
-    team_data.member_count -= 1;
+    // Verify slot account exists and belongs to this player
+    require_owner(member_slot_account, program_id)?;
 
-    // 6. Update Player Account
+    {
+        let slot_data = member_slot_account.try_borrow_data()?;
+        let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-    player_data.team = NULL_PUBKEY;
-    player_data.has_team = false;
+        if slot.player != *player_account.key() {
+            return Err(GameError::NotSlotOwner.into());
+        }
+
+        if &slot.team != team_account.key() {
+            return Err(GameError::InvalidParameter.into());
+        }
+    }
+
+    // 7. Close Slot Account (refund rent to player)
+
+    close_account(member_slot_account, owner)?;
+
+    // 8. Update Team
+
+    let now = Clock::get()?.unix_timestamp;
+    team.member_count = team.member_count.saturating_sub(1);
+    team.last_activity = now;
+
+    // 9. Update Player Account
+
+    player.team = NULL_PUBKEY;
+    player.team_slot_index = 0;
+
+    // 10. Emit Event
+
+    emit!(TeamLeft {
+        team: *team_account.key(),
+        player: *player_account.key(),
+        member_count: team.member_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

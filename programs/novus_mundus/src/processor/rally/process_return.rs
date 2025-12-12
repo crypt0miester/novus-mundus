@@ -18,7 +18,9 @@ use crate::{
         CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant,
         RallyStatus,
     },
-    validation::require_writable,
+    validation::{require_writable, require_owner},
+    emit,
+    events::RallyParticipantReturned,
 };
 
 /// Process return from a rally
@@ -46,7 +48,7 @@ use crate::{
 /// 5. `[]` rally_city_account - CityAccount for rally city (for return calculation)
 /// 6. `[]` home_city_account - CityAccount for home city (for return calculation)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
@@ -74,6 +76,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Rally Account
+    require_owner(rally_account, program_id)?;
     let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
@@ -84,6 +87,7 @@ pub fn process(
     let rally_city = rally.rally_city;
 
     // 5. Load RallyParticipant
+    require_owner(rally_participant_account, program_id)?;
     let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
@@ -145,10 +149,11 @@ pub fn process(
     // This also handles late joiners returning early during Gathering phase
     if !included_in_march && !is_early_leaver && participant.return_started_at == 0 {
         // Load city accounts for return calculation
+        require_owner(rally_city_account, program_id)?;
+        require_owner(home_city_account, program_id)?;
         let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
         let home_city_data = unsafe { CityAccount::load(home_city_account)? };
-        let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-        let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+        let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
         // Validate city accounts match
         if rally_city_data.city_id != rally_city {
@@ -188,7 +193,7 @@ pub fn process(
             time_spent.max(0)
         };
 
-        drop(game_engine_data_ref);
+        drop(game_engine_data);
 
         // For late joiners during Gathering, decrement rally counts (like leave.rs)
         if rally_status == RallyStatus::Gathering as u8 {
@@ -213,18 +218,14 @@ pub fn process(
         // If return_duration == 0 (exactly at home), continue processing
     }
 
-    // 9. Load PlayerAccount
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    // Validate player account belongs to participant (ensures correct account passed)
-    if !player.is_owner(participant_owner.key()) {
-        return Err(GameError::InvalidParameter.into());
-    }
+    // 9. Load PlayerAccount (using load_checked_mut with participant_owner validated above)
+    let mut player = PlayerAccount::load_checked_mut(player_account, participant_owner.key(), program_id)?;
 
     // 10. Load GameEngine for networth calculation
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+
+    // Track data for event
+    let (units_returned, loot_received): ([u64; 3], u64);
 
     // 11. Process return based on march participation
     if included_in_march {
@@ -235,6 +236,8 @@ pub fn process(
         player.defensive_unit_1 = player.defensive_unit_1.saturating_add(surviving_1);
         player.defensive_unit_2 = player.defensive_unit_2.saturating_add(surviving_2);
         player.defensive_unit_3 = player.defensive_unit_3.saturating_add(surviving_3);
+
+        units_returned = [surviving_1, surviving_2, surviving_3];
 
         // Return surviving weapons (proportional to troop survival)
         let (melee_returned, ranged_returned, _siege_returned) = participant.weapons_returned();
@@ -256,15 +259,18 @@ pub fn process(
             player.fragments = player.fragments.saturating_add(participant.loot_fragments);
             player.gems = player.gems.saturating_add(participant.loot_gems);
 
+            loot_received = participant.loot_cash
+                .saturating_add(participant.loot_produce)
+                .saturating_add(participant.loot_vehicles);
+
             player.rally_stats.total_rallies_won =
                 player.rally_stats.total_rallies_won.saturating_add(1);
             player.rally_stats.total_rally_loot_earned = player
                 .rally_stats
                 .total_rally_loot_earned
-                .saturating_add(participant.loot_cash)
-                .saturating_add(participant.loot_produce)
-                .saturating_add(participant.loot_vehicles);
+                .saturating_add(loot_received);
         } else {
+            loot_received = 0;
             player.rally_stats.total_rallies_lost =
                 player.rally_stats.total_rallies_lost.saturating_add(1);
         }
@@ -280,6 +286,13 @@ pub fn process(
         player.defensive_unit_3 = player
             .defensive_unit_3
             .saturating_add(participant.units_committed_3);
+
+        units_returned = [
+            participant.units_committed_1,
+            participant.units_committed_2,
+            participant.units_committed_3,
+        ];
+        loot_received = 0;
 
         player.melee_weapons = player
             .melee_weapons
@@ -307,16 +320,30 @@ pub fn process(
     }
 
     // Update networth
-    player.networth = calculate_networth(player, &game_engine.economic_config)?;
+    player.networth = calculate_networth(&*player, &game_engine.economic_config)?;
+
+    // Store keys for event before dropping borrows
+    let rally_key = *rally_account.key();
+    let player_key = *participant_owner.key();
 
     // Drop borrows before closing account
-    drop(player_data_ref);
+    drop(player);
     drop(participant_data_ref);
     drop(rally_data_ref);
-    drop(game_engine_data_ref);
+    drop(game_engine);
 
     // 13. Close RallyParticipant account (refund rent to participant)
     close_account(rally_participant_account, participant_owner)?;
+
+    // 14. Emit event
+    emit!(RallyParticipantReturned {
+        rally: rally_key,
+        player: player_key,
+        participated_in_combat: included_in_march,
+        units_returned,
+        loot_received,
+        timestamp: now,
+    });
 
     Ok(())
 }

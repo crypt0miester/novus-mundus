@@ -3,6 +3,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
 };
 
 use crate::{
@@ -12,6 +13,8 @@ use crate::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::ResearchCancelled,
 };
 
 /// Cancel active research (NO refund)
@@ -74,12 +77,22 @@ pub fn process(
     }
 
     // 7. Clear current research (no refunds)
+    let research_id = progress.current_research;
     progress.current_research = 255; // No active research
     progress.current_level = 0;
     progress.started_at = 0;
     progress.completes_at = 0;
 
     // Note: total_novi_spent remains unchanged - they still spent it
+
+    // 8. Emit ResearchCancelled event
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+    emit!(ResearchCancelled {
+        player: *player_owner.key(),
+        research_id: research_id as u16,
+        timestamp: now,
+    });
 
     Ok(())
 }

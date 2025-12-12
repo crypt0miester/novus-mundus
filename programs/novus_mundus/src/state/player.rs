@@ -28,26 +28,26 @@ pub const EXT_COSMETICS: u32  = 1 << 5;  // 0x0020 - Equipped cosmetics
 // ============================================================
 // NOTE: These values are verified by compile-time assertions at the end of this file.
 // If a struct changes, the build will fail until these constants are updated.
-pub const CORE_SIZE: usize = 968;       // PlayerCore size (verified by static assertion)
+pub const CORE_SIZE: usize = 1016;      // PlayerCore size (verified by static assertion) - includes reinforcement aggregates (72 bytes)
 pub const RESEARCH_SIZE: usize = 96;    // ResearchSection size
 pub const HEROES_SIZE: usize = 130;     // HeroesSection size
 pub const INVENTORY_SIZE: usize = 424;  // InventorySection size (verified by static assertion)
 pub const RALLY_SIZE: usize = 80;       // RallySection size
-pub const TEAM_SIZE: usize = 88;        // TeamSection size (verified by static assertion)
+pub const TEAM_SIZE: usize = 40;        // TeamSection size (verified by static assertion)
 pub const COSMETICS_SIZE: usize = 80;   // CosmeticsSection size
 
 // Fixed offsets (cumulative, in order)
 pub const CORE_OFFSET: usize = 0;
-pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 912
-pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1008
-pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1138
-pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1562
-pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1642
-pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1730
-pub const MAX_SIZE: usize = COSMETICS_OFFSET + COSMETICS_SIZE;          // 1810
+pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 1008
+pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1104
+pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1234
+pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1658
+pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1738
+pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1778
+pub const MAX_SIZE: usize = COSMETICS_OFFSET + COSMETICS_SIZE;          // 1858
 
 // ============================================================
-// PLAYER CORE (968 bytes) - Always present
+// PLAYER CORE (1008 bytes) - Always present
 // ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -165,7 +165,7 @@ pub struct PlayerCore {
     pub research_crit_damage_bps: u16,
     pub research_loot_bonus_bps: u16,
     pub research_encounter_success_bps: u16,
-    pub research_luck_bonus_bps: u16,
+    pub research_synchrony_bonus_bps: u16,
     pub research_reputation_bonus_bps: u16,
     pub research_stamina_bonus_bps: u16,
     pub research_collection_bonus_bps: u16,
@@ -187,7 +187,8 @@ pub struct PlayerCore {
     // Hero system (104 bytes) - mirrored from HeroesSection
     pub active_heroes: [Pubkey; 3],     // 96 bytes
     pub defensive_hero_slot: u8,        // 1 byte
-    pub _padding_hero: [u8; 7],         // 7 bytes
+    pub meditating_hero_slot: u8,       // 1 byte (0-2 = slot, 255 = none)
+    pub _padding_hero: [u8; 2],         // 2 bytes (reduced from 6 - used 4 for capacity buffs)
 
     // Hero buffs - mirrored from HeroesSection
     pub hero_attack_bps: u16,
@@ -195,7 +196,7 @@ pub struct PlayerCore {
     pub hero_economy_bps: u16,
     pub hero_xp_gain_bps: u16,
     pub hero_training_cost_reduction_bps: u16,
-    pub hero_collection_rate_bps: u16,
+    pub hero_collection_rate_bps: u16,      // Gems + fragment drops
     pub hero_rally_capacity_bps: u16,
     pub hero_stamina_regen_bps: u16,
     pub hero_produce_generation_bps: u16,
@@ -204,15 +205,19 @@ pub struct PlayerCore {
     pub hero_crit_chance_bps: u16,
     pub hero_encounter_damage_bps: u16,
     pub hero_loot_bonus_bps: u16,
-    pub hero_luck_bonus_bps: u16,
-    pub _padding_hero_buffs: [u8; 2],
+    pub hero_synchrony_bonus_bps: u16,
+    pub hero_resource_capacity_bps: u16,    // Vault deposit limit + protection
+    pub hero_unit_capacity_bps: u16,        // Rally contribution + reinforcement receive
+    pub blessed_hero_bonus_bps: u16,        // Daily bonus from Sanctuary blessing (+25% = 2500 bps)
 
-    // Team (48 bytes) - mirrored from TeamSection
-    pub team: Pubkey,                   // 32 bytes
-    pub has_team: bool,                 // 1 byte
-    pub _padding_team: [u8; 7],         // 7 bytes
-    pub pending_team_invite: Pubkey,    // 32 bytes (in practice this might go beyond)
-    pub team_invite_expires_at: i64,    // 8 bytes
+    // Location Synergy System (6 bytes)
+    // Tracks location bonus per hero slot - heroes get 1-10% buff boost when in their home city
+    pub slot_location_bonus: [u16; 3],      // Location bonus bps per active hero slot
+
+    // Team (40 bytes) - team reference and slot index
+    pub team: Pubkey,                   // 32 bytes - NULL_PUBKEY if no team
+    pub team_slot_index: u16,           // 2 bytes - slot index in team (0 = leader slot)
+    pub _padding_team: [u8; 6],         // 6 bytes for alignment
 
     // Transfer tracking (24 bytes) - mirrored from InventorySection
     pub daily_transfer_count: u16,
@@ -263,6 +268,26 @@ pub struct PlayerCore {
     pub last_purchase_day: u32,
     pub _padding_shop2: [u8; 4],
     pub last_daily_reset: i64,
+
+    // Sanctuary Meditation State (8 bytes)
+    pub meditation_started_at: i64,     // Unix timestamp when meditation began (0 = not meditating)
+
+    // Reinforcement System (72 bytes)
+    // Aggregated totals from all teammates - used in combat calculations
+    // Individual ReinforcementAccounts track who sent what for returns
+    pub reinforcement_def_1: u64,               // Tier 1 defensive units from teammates
+    pub reinforcement_def_2: u64,               // Tier 2 defensive units from teammates
+    pub reinforcement_def_3: u64,               // Tier 3 defensive units from teammates
+    pub reinforcement_melee: u64,               // Melee weapons from teammates
+    pub reinforcement_ranged: u64,              // Ranged weapons from teammates
+    pub reinforcement_siege: u64,               // Siege weapons from teammates
+    pub reinforcement_original_units: u64,      // Sum of original units from all sources (for survival ratio)
+    pub reinforcement_original_weapons: u64,    // Sum of original weapons from all sources (for survival ratio)
+    pub reinforcement_hero_defense_bps: u16,    // Best hero's defense buff (max, not sum)
+    pub reinforcement_hero_weapon_eff_bps: u16, // Best hero's weapon efficiency (max, not sum)
+    pub reinforcement_hero_armor_eff_bps: u16,  // Best hero's armor efficiency (max, not sum)
+    pub reinforcement_source_count: u8,         // How many teammates are reinforcing
+    pub _padding_reinforcement: [u8; 1],
 }
 
 // ============================================================
@@ -418,7 +443,7 @@ impl PlayerCore {
             research_crit_damage_bps: 0,
             research_loot_bonus_bps: 0,
             research_encounter_success_bps: 0,
-            research_luck_bonus_bps: 0,
+            research_synchrony_bonus_bps: 0,
             research_reputation_bonus_bps: 0,
             research_stamina_bonus_bps: 0,
             research_collection_bonus_bps: 0,
@@ -440,7 +465,8 @@ impl PlayerCore {
             // Hero system
             active_heroes: [NULL_PUBKEY; 3],
             defensive_hero_slot: 0,
-            _padding_hero: [0; 7],
+            meditating_hero_slot: 255, // No hero meditating
+            _padding_hero: [0; 2],
 
             // Hero buffs (all start at 0)
             hero_attack_bps: 0,
@@ -457,15 +483,18 @@ impl PlayerCore {
             hero_crit_chance_bps: 0,
             hero_encounter_damage_bps: 0,
             hero_loot_bonus_bps: 0,
-            hero_luck_bonus_bps: 0,
-            _padding_hero_buffs: [0; 2],
+            hero_synchrony_bonus_bps: 0,
+            hero_resource_capacity_bps: 0,
+            hero_unit_capacity_bps: 0,
+            blessed_hero_bonus_bps: 0,
+
+            // Location synergy (no bonuses initially)
+            slot_location_bonus: [0; 3],
 
             // Team (no team initially)
             team: NULL_PUBKEY,
-            has_team: false,
-            _padding_team: [0; 7],
-            pending_team_invite: NULL_PUBKEY,
-            team_invite_expires_at: 0,
+            team_slot_index: 0,
+            _padding_team: [0; 6],
 
             // Transfer tracking
             daily_transfer_count: 0,
@@ -512,6 +541,24 @@ impl PlayerCore {
             last_purchase_day: 0,
             _padding_shop2: [0; 4],
             last_daily_reset: 0,
+
+            // Sanctuary meditation
+            meditation_started_at: 0,
+
+            // Reinforcement system (all start at 0)
+            reinforcement_def_1: 0,
+            reinforcement_def_2: 0,
+            reinforcement_def_3: 0,
+            reinforcement_melee: 0,
+            reinforcement_ranged: 0,
+            reinforcement_siege: 0,
+            reinforcement_original_units: 0,
+            reinforcement_original_weapons: 0,
+            reinforcement_hero_defense_bps: 0,
+            reinforcement_hero_weapon_eff_bps: 0,
+            reinforcement_hero_armor_eff_bps: 0,
+            reinforcement_source_count: 0,
+            _padding_reinforcement: [0; 1],
         }
     }
 
@@ -630,7 +677,7 @@ impl PlayerCore {
             research_crit_damage_bps: 0,
             research_loot_bonus_bps: 0,
             research_encounter_success_bps: 0,
-            research_luck_bonus_bps: 0,
+            research_synchrony_bonus_bps: 0,
             research_reputation_bonus_bps: 0,
             research_stamina_bonus_bps: 0,
             research_collection_bonus_bps: 0,
@@ -652,7 +699,8 @@ impl PlayerCore {
             // Hero system
             active_heroes: [NULL_PUBKEY; 3],
             defensive_hero_slot: 0,
-            _padding_hero: [0; 7],
+            meditating_hero_slot: 255, // No hero meditating
+            _padding_hero: [0; 2],
 
             // Hero buffs (all start at 0)
             hero_attack_bps: 0,
@@ -669,15 +717,18 @@ impl PlayerCore {
             hero_crit_chance_bps: 0,
             hero_encounter_damage_bps: 0,
             hero_loot_bonus_bps: 0,
-            hero_luck_bonus_bps: 0,
-            _padding_hero_buffs: [0; 2],
+            hero_synchrony_bonus_bps: 0,
+            hero_resource_capacity_bps: 0,
+            hero_unit_capacity_bps: 0,
+            blessed_hero_bonus_bps: 0,
+
+            // Location synergy (no bonuses initially)
+            slot_location_bonus: [0; 3],
 
             // Team (no team initially)
             team: NULL_PUBKEY,
-            has_team: false,
-            _padding_team: [0; 7],
-            pending_team_invite: NULL_PUBKEY,
-            team_invite_expires_at: 0,
+            team_slot_index: 0,
+            _padding_team: [0; 6],
 
             // Transfer tracking
             daily_transfer_count: 0,
@@ -724,6 +775,24 @@ impl PlayerCore {
             last_purchase_day: 0,
             _padding_shop2: [0; 4],
             last_daily_reset: 0,
+
+            // Sanctuary meditation
+            meditation_started_at: 0,
+
+            // Reinforcement system (all start at 0)
+            reinforcement_def_1: 0,
+            reinforcement_def_2: 0,
+            reinforcement_def_3: 0,
+            reinforcement_melee: 0,
+            reinforcement_ranged: 0,
+            reinforcement_siege: 0,
+            reinforcement_original_units: 0,
+            reinforcement_original_weapons: 0,
+            reinforcement_hero_defense_bps: 0,
+            reinforcement_hero_weapon_eff_bps: 0,
+            reinforcement_hero_armor_eff_bps: 0,
+            reinforcement_source_count: 0,
+            _padding_reinforcement: [0; 1],
         }
     }
 }
@@ -743,7 +812,7 @@ pub struct ResearchSection {
     pub encounter_success_bps: u16,
 
     // Growth Buffs (12 bytes)
-    pub luck_bonus_bps: u16,
+    pub synchrony_bonus_bps: u16,
     pub reputation_bonus_bps: u16,
     pub stamina_bonus_bps: u16,
     pub collection_bonus_bps: u16,
@@ -782,7 +851,7 @@ impl ResearchSection {
             crit_damage_bps: 0,
             loot_bonus_bps: 0,
             encounter_success_bps: 0,
-            luck_bonus_bps: 0,
+            synchrony_bonus_bps: 0,
             reputation_bonus_bps: 0,
             stamina_bonus_bps: 0,
             collection_bonus_bps: 0,
@@ -1036,20 +1105,16 @@ impl RallySection {
 }
 
 // ============================================================
-// TEAM SECTION (+60 bytes)
+// TEAM SECTION (+40 bytes)
 // ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamSection {
-    // Team Reference (40 bytes)
-    pub team: Pubkey,
-    pub has_team: bool,
-    pub _padding1: [u8; 7],
+    // Team Reference (32 bytes)
+    pub team: Pubkey,               // Team account pubkey (NULL_PUBKEY if no team)
 
-    // Invite State (48 bytes for padding to 60)
-    pub pending_team_invite: Pubkey,
-    pub team_invite_expires_at: i64,
-    pub _reserved: [u8; 4],
+    // Reserved (8 bytes)
+    pub _reserved: [u8; 8],
 }
 
 impl TeamSection {
@@ -1058,12 +1123,14 @@ impl TeamSection {
     pub fn init() -> Self {
         Self {
             team: NULL_PUBKEY,
-            has_team: false,
-            _padding1: [0; 7],
-            pending_team_invite: NULL_PUBKEY,
-            team_invite_expires_at: 0,
-            _reserved: [0; 4],
+            _reserved: [0; 8],
         }
+    }
+
+    /// Check if player has a team
+    #[inline]
+    pub fn has_team(&self) -> bool {
+        self.team != NULL_PUBKEY
     }
 }
 
@@ -1333,6 +1400,78 @@ impl PlayerCore {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
+    /// Load and verify a PlayerAccount immutably.
+    /// Checks: program ownership, PDA derivation, owner field, bump field.
+    pub fn load_checked<'a>(
+        account: &'a AccountInfo,
+        expected_owner: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        // 1. Check account is owned by program
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        // 2. Derive PDA and verify
+        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        // 3. Load data
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // 4. Verify owner field matches
+        if &loaded.owner != expected_owner {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+
+        // 5. Verify bump matches
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a PlayerAccount mutably.
+    /// Checks: program ownership, PDA derivation, owner field, bump field.
+    pub fn load_checked_mut<'a>(
+        account: &'a AccountInfo,
+        expected_owner: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        // 1. Check account is owned by program
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        // 2. Derive PDA and verify
+        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        // 3. Load data
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // 4. Verify owner field matches
+        if &loaded.owner != expected_owner {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+
+        // 5. Verify bump matches
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
     /// Check if owner matches
     pub fn is_owner(&self, owner: &Pubkey) -> bool {
         &self.owner == owner
@@ -1455,11 +1594,61 @@ impl PlayerCore {
         }
     }
 
-    /// Get total defensive units
+    /// Get total defensive units (own garrison only)
     pub fn total_defensive_units(&self) -> u64 {
         self.defensive_unit_1
             .saturating_add(self.defensive_unit_2)
             .saturating_add(self.defensive_unit_3)
+    }
+
+    /// Get total reinforcement units received from teammates
+    pub fn total_reinforcement_units(&self) -> u64 {
+        self.reinforcement_def_1
+            .saturating_add(self.reinforcement_def_2)
+            .saturating_add(self.reinforcement_def_3)
+    }
+
+    /// Get combined defense (garrison + reinforcements)
+    pub fn total_defense_with_reinforcements(&self) -> u64 {
+        self.total_defensive_units()
+            .saturating_add(self.total_reinforcement_units())
+    }
+
+    /// Get total reinforcement weapons received from teammates
+    pub fn total_reinforcement_weapons(&self) -> u64 {
+        self.reinforcement_melee
+            .saturating_add(self.reinforcement_ranged)
+            .saturating_add(self.reinforcement_siege)
+    }
+
+    /// Get combined weapons (own + reinforcements)
+    pub fn total_weapons_with_reinforcements(&self) -> u64 {
+        self.total_weapons()
+            .saturating_add(self.total_reinforcement_weapons())
+    }
+
+    /// Calculate survival ratio for reinforcement returns
+    /// Returns (unit_ratio_bps, weapon_ratio_bps) where 10000 = 100%
+    pub fn reinforcement_survival_ratio(&self) -> (u64, u64) {
+        let unit_ratio = if self.reinforcement_original_units > 0 {
+            self.total_reinforcement_units()
+                .saturating_mul(10000)
+                .checked_div(self.reinforcement_original_units)
+                .unwrap_or(10000)
+        } else {
+            10000 // No casualties if nothing was sent
+        };
+
+        let weapon_ratio = if self.reinforcement_original_weapons > 0 {
+            self.total_reinforcement_weapons()
+                .saturating_mul(10000)
+                .checked_div(self.reinforcement_original_weapons)
+                .unwrap_or(10000)
+        } else {
+            10000
+        };
+
+        (unit_ratio, weapon_ratio)
     }
 
     /// Get total operative units
@@ -1505,6 +1694,61 @@ impl PlayerCore {
     /// Check if player is traveling at all
     pub fn is_traveling_any(&self) -> bool {
         self.travel_type != 0
+    }
+
+    // ============================================================
+    // MEDITATION METHODS
+    // ============================================================
+
+    /// Check if a hero is currently meditating
+    #[inline]
+    pub fn is_hero_meditating(&self) -> bool {
+        self.meditating_hero_slot != 255 && self.meditation_started_at > 0
+    }
+
+    /// Check if a specific hero slot is the one meditating
+    #[inline]
+    pub fn is_slot_meditating(&self, slot: u8) -> bool {
+        self.meditating_hero_slot == slot && self.meditation_started_at > 0
+    }
+
+    /// Get the pubkey of the meditating hero (if any)
+    pub fn get_meditating_hero(&self) -> Option<&Pubkey> {
+        if self.meditating_hero_slot < 3 && self.meditation_started_at > 0 {
+            Some(&self.active_heroes[self.meditating_hero_slot as usize])
+        } else {
+            None
+        }
+    }
+
+    /// Start meditation for a hero slot
+    /// Returns false if slot is invalid or hero is NULL_PUBKEY
+    pub fn start_meditation(&mut self, slot: u8, now: i64) -> bool {
+        if slot >= 3 {
+            return false;
+        }
+        if self.active_heroes[slot as usize] == NULL_PUBKEY {
+            return false;
+        }
+        self.meditating_hero_slot = slot;
+        self.meditation_started_at = now;
+        true
+    }
+
+    /// End meditation and return elapsed seconds (capped at max_duration)
+    /// Returns None if not meditating
+    pub fn end_meditation(&mut self, now: i64, max_duration_seconds: i64) -> Option<i64> {
+        if !self.is_hero_meditating() {
+            return None;
+        }
+        let elapsed = now.saturating_sub(self.meditation_started_at);
+        let capped_elapsed = elapsed.min(max_duration_seconds);
+
+        // Clear meditation state
+        self.meditating_hero_slot = 255;
+        self.meditation_started_at = 0;
+
+        Some(capped_elapsed)
     }
 
     /// Derive the PDA for a player account
@@ -1642,6 +1886,64 @@ impl UserAccount {
 
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
         &mut *(data.as_mut_ptr() as *mut Self)
+    }
+
+    /// Load and verify a UserAccount immutably.
+    pub fn load_checked<'a>(
+        account: &'a AccountInfo,
+        expected_owner: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if &loaded.owner != expected_owner {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a UserAccount mutably.
+    pub fn load_checked_mut<'a>(
+        account: &'a AccountInfo,
+        expected_owner: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if &loaded.owner != expected_owner {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }
 
     pub fn init(owner: Pubkey, player: Pubkey, bump: u8) -> Self {

@@ -11,6 +11,8 @@ use crate::{
     state::{UserAccount, PlayerAccount, GameEngine},
     validation::{require_signer, require_writable, require_key_match, derive_pda},
     token_helpers::get_or_create_associated_token_account,
+    emit,
+    events::UserCreated,
 };
 
 /// Initialize a new user account and NOVI token account
@@ -161,6 +163,13 @@ pub fn process(
         system_program,
         token_program,
     )?;
+
+    // Emit UserCreated event
+    emit!(UserCreated {
+        user: *user.key(),
+        wallet: *owner.key(),
+        timestamp: created_at,
+    });
 
     Ok(())
 }

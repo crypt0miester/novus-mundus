@@ -17,6 +17,8 @@ use crate::{
         require_pda,
         require_key_match,
     },
+    emit,
+    events::{SubscriptionPurchased, SubscriptionTierUpdated, XpGained, PlayerLeveledUp},
 };
 
 /// Purchase or renew a subscription tier
@@ -301,10 +303,31 @@ pub fn process(
     // 13g. Add XP - with time-of-day bonus!
     // Golden hours (Dawn/Dusk) grant φ² bonus, night grants √φ bonus
     if tier.xp > 0 {
-        grant_xp_with_time_bonus(player_data, tier.xp, now)?;
+        let old_level = player_data.level;
+        let (levels_gained, new_level, _) = grant_xp_with_time_bonus(player_data, tier.xp, now)?;
+
+        // Emit XP gained event
+        emit!(XpGained {
+            player: *owner.key(),
+            amount: tier.xp,
+            source: 4, // 4=subscription
+            total_xp: player_data.current_xp,
+            timestamp: now,
+        });
+
+        // Emit level up event if player leveled
+        if levels_gained > 0 {
+            emit!(PlayerLeveledUp {
+                player: *owner.key(),
+                old_level: old_level.into(),
+                new_level: new_level.into(),
+                timestamp: now,
+            });
+        }
     }
 
     // 14. Update subscription tier and expiration
+    let old_tier = player_data.subscription_tier;
     player_data.subscription_tier = new_tier_index;
     player_data.subscription_end = new_expiration;
 
@@ -314,6 +337,28 @@ pub fn process(
     // 16. Update networth
     let economic_config = &game_engine_data.economic_config;
     player_data.networth = calculate_networth(player_data, economic_config)?;
+
+    // 17. Emit Events
+
+    emit!(SubscriptionPurchased {
+        player: *player.key(),
+        tier: new_tier_index,
+        duration_days: tier.duration_days as u16,
+        novi_paid: tier.novi,
+        expires_at: new_expiration,
+        timestamp: now,
+    });
+
+    // If tier changed (not just renewal), emit tier update event
+    if old_tier != new_tier_index {
+        emit!(SubscriptionTierUpdated {
+            player: *player.key(),
+            old_tier,
+            new_tier: new_tier_index,
+            expires_at: new_expiration,
+            timestamp: now,
+        });
+    }
 
     Ok(())
 }

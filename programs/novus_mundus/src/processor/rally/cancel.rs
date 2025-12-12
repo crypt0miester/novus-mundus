@@ -9,9 +9,11 @@ use pinocchio::{
 use crate::{
     constants::INTRACITY_WALKING_SPEED_KMH,
     error::GameError,
-    state::{CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus, require_extension, EXT_RALLY},
+    state::{CityAccount, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus, require_extension, EXT_RALLY},
     logic::location::calculate_intracity_travel_time,
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::RallyCancelled,
 };
 
 /// Cancel a rally (NEW architecture)
@@ -37,7 +39,7 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
@@ -62,19 +64,15 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load and validate creator
-    let creator_data_ref = creator_player.try_borrow_data()?;
-    let creator = unsafe { PlayerAccount::load(&creator_data_ref) };
-
-    if &creator.owner != creator_owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    let creator = PlayerAccount::load_checked(creator_player, creator_owner.key(), program_id)?;
 
     // Require EXT_RALLY
-    require_extension(creator, EXT_RALLY)?;
+    require_extension(&*creator, EXT_RALLY)?;
 
-    drop(creator_data_ref);
+    drop(creator);
 
     // 5. Load Rally and validate
+    require_owner(rally_account, program_id)?;
     let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
@@ -101,6 +99,7 @@ pub fn process(
     rally.status = RallyStatus::Cancelled as u8;
 
     // 7. Load and update creator's RallyParticipant
+    require_owner(creator_participant, program_id)?;
     let mut participant_data_ref = creator_participant.try_borrow_mut_data()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
@@ -116,17 +115,18 @@ pub fn process(
     }
 
     // 8. Load rally city for return travel calculation
+    require_owner(rally_city_account, program_id)?;
     let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
     if rally_city_data.city_id != rally_city {
         return Err(GameError::CityNotFound.into());
     }
 
     // Re-borrow creator player to get their home coordinates
-    let creator_data_ref = creator_player.try_borrow_data()?;
-    let creator_data = unsafe { PlayerAccount::load(&creator_data_ref) };
+    // Already validated ownership above, just re-load
+    let creator_data = PlayerAccount::load_checked(creator_player, creator_owner.key(), program_id)?;
     let home_lat = creator_data.current_lat;
     let home_long = creator_data.current_long;
-    drop(creator_data_ref);
+    drop(creator_data);
 
     // 9. Calculate leader's return journey
     // Leader traveled from home to rally point (city center), now returns
@@ -150,6 +150,13 @@ pub fn process(
     participant.return_started_at = now;
     participant.return_duration = leader_return_duration;
     participant.included_in_march = false;
+
+    // Emit RallyCancelled event
+    emit!(RallyCancelled {
+        rally: *rally_account.key(),
+        cancelled_by: *creator_owner.key(),
+        timestamp: now,
+    });
 
     Ok(())
 }

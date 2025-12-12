@@ -1,0 +1,144 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    ProgramResult,
+};
+
+use pinocchio::sysvars::{Sysvar, clock::Clock};
+
+use crate::{
+    error::GameError,
+    state::{PlayerAccount, GameEngine},
+    helpers::estate::{load_estate_for_player, require_vault},
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::VaultTransfer,
+};
+
+/// Transfer cash between hand and vault
+///
+/// Allows players to deposit cash into their vault for raid protection,
+/// or withdraw for spending. Requires Vault building.
+///
+/// # Safebox System
+/// - Up to safebox_protection_percent (75%) of total cash can be stored in vault
+/// - At least 25% must remain on hand (lootable during attacks)
+/// - If deposit exceeds limit, only the allowed amount is deposited
+///
+/// # Accounts
+/// - [signer] owner: Player's wallet
+/// - [writable] player_account: PlayerAccount PDA
+/// - [] estate_account: EstateAccount PDA (for Vault requirement)
+/// - [] game_engine: GameEngine PDA (for safebox_protection_percent)
+///
+/// # Instruction Data
+/// - [0] direction: u8 (0 = deposit: hand→vault, 1 = withdraw: vault→hand)
+/// - [1..9] amount: u64 (little-endian)
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+    let [owner, player_account, estate_account, game_engine_account] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 2. Validate Accounts
+    require_signer(owner)?;
+    require_writable(player_account)?;
+    require_owner(player_account, program_id)?;
+
+    // 3. Parse Instruction Data
+    if instruction_data.len() < 9 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let direction = instruction_data[0];
+    let amount = u64::from_le_bytes(instruction_data[1..9].try_into().unwrap());
+
+    if amount == 0 {
+        return Err(GameError::InvalidAmount.into());
+    }
+
+    // Direction: 0 = deposit (hand→vault), 1 = withdraw (vault→hand)
+    if direction > 1 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // 4. Load Player Account
+    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+
+    // Verify ownership
+    if !player.is_owner(owner.key()) {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 5. Load Estate and Validate Vault Requirement
+    let estate = load_estate_for_player(estate_account, player, program_id)?;
+
+    // Vault Lv.1+ required for deposit/withdraw
+    require_vault(estate, 1)?;
+
+    // Get current timestamp
+    let now = Clock::get()?.unix_timestamp;
+
+    // 6. Execute Transfer
+    let (actual_amount, to_vault) = if direction == 0 {
+        // Deposit: hand → vault
+
+        // Load GameEngine for safebox limit
+        let game_engine_data = game_engine_account.try_borrow_data()?;
+        let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+
+        // Calculate max allowed in vault (e.g., 75% of total)
+        let total_cash = player.cash_on_hand.saturating_add(player.cash_in_vault);
+        let base_max_in_vault = total_cash
+            .saturating_mul(game_engine.gameplay_config.safebox_protection_percent as u64)
+            / 10000;
+
+        // Apply hero resource capacity buff (increases vault storage limit)
+        let max_in_vault = if player.hero_resource_capacity_bps > 0 {
+            let multiplier = 10000u64 + player.hero_resource_capacity_bps as u64;
+            base_max_in_vault.saturating_mul(multiplier) / 10000
+        } else {
+            base_max_in_vault
+        };
+
+        // How much room is left in vault?
+        let available_space = max_in_vault.saturating_sub(player.cash_in_vault);
+
+        // Cap deposit to available space and what player has on hand
+        let actual_deposit = amount.min(available_space).min(player.cash_on_hand);
+
+        if actual_deposit > 0 {
+            player.cash_on_hand = player.cash_on_hand.saturating_sub(actual_deposit);
+            player.cash_in_vault = player.cash_in_vault.saturating_add(actual_deposit);
+        }
+        (actual_deposit, true)
+    } else {
+        // Withdraw: vault → hand (no limit)
+        let actual_withdraw = amount.min(player.cash_in_vault);
+
+        if actual_withdraw > 0 {
+            player.cash_in_vault = player.cash_in_vault.saturating_sub(actual_withdraw);
+            player.cash_on_hand = player.cash_on_hand.saturating_add(actual_withdraw);
+        }
+        (actual_withdraw, false)
+    };
+
+    // Emit VaultTransfer event if actual transfer occurred
+    if actual_amount > 0 {
+        emit!(VaultTransfer {
+            player: *player_account.key(),
+            amount: actual_amount,
+            to_vault,
+            vault_balance: player.cash_in_vault,
+            timestamp: now,
+        });
+    }
+
+    Ok(())
+}

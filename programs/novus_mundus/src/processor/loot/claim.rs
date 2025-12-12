@@ -17,6 +17,8 @@ use crate::{
         require_owner,
         require_pda,
     },
+    emit,
+    events::LootClaimed,
 };
 
 /// Claim loot and transfer rewards to player
@@ -179,7 +181,37 @@ pub fn process(
     let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
     player_data.networth = calculate_networth(player_data, &game_engine_data.economic_config)?;
 
-    // 9. CLOSE ACCOUNT (rent reclamation)
+    // 9. Prepare event data before closing account
+    // Note: encounter field is Pubkey::default() as loot doesn't store encounter address
+    // respect and xp are 0 as they're granted instantly during combat, not via loot
+
+    // Encode top 4 reward types into items array (item_id << 8 | quantity, capped at 255)
+    let mut items = [0u16; 4];
+    let mut item_idx = 0;
+
+    // Encode rewards: 1=cash, 2=melee, 3=ranged, 4=siege, 5=produce, 6=vehicles, 7=fragments, 8=gems
+    if loot_data.melee_weapons > 0 && item_idx < 4 {
+        items[item_idx] = (2u16 << 8) | (loot_data.melee_weapons.min(255) as u16);
+        item_idx += 1;
+    }
+    if loot_data.ranged_weapons > 0 && item_idx < 4 {
+        items[item_idx] = (3u16 << 8) | (loot_data.ranged_weapons.min(255) as u16);
+        item_idx += 1;
+    }
+    if loot_data.siege_weapons > 0 && item_idx < 4 {
+        items[item_idx] = (4u16 << 8) | (loot_data.siege_weapons.min(255) as u16);
+        item_idx += 1;
+    }
+    if loot_data.produce > 0 && item_idx < 4 {
+        items[item_idx] = (5u16 << 8) | (loot_data.produce.min(255) as u16);
+        item_idx += 1;
+    }
+
+    // Save values for event
+    let event_cash = loot_data.cash;
+    let event_player = *owner.key();
+
+    // 10. CLOSE ACCOUNT (rent reclamation)
 
     // Drop borrows before closing account
     drop(loot_data_ref);
@@ -189,6 +221,17 @@ pub fn process(
 
     // Close loot account (refund rent to creator)
     close_account(loot, creator)?;
+
+    // 11. Emit LootClaimed event
+    emit!(LootClaimed {
+        player: event_player,
+        encounter: Pubkey::default(), // Loot doesn't store encounter address, only source_id
+        cash: event_cash,
+        respect: 0, // Respect is granted instantly during combat
+        xp: 0,      // XP is granted instantly during combat
+        items,
+        timestamp: now,
+    });
 
     Ok(())
 }

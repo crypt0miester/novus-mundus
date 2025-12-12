@@ -10,6 +10,8 @@ use crate::{
     error::GameError,
     state::EventAccount,
     validation::require_writable,
+    emit,
+    events::game_event::GameEventFinalized,
 };
 
 /// Finalize event
@@ -73,6 +75,14 @@ pub fn process(
 
     // Leaderboard is already populated from score updates
     // No additional processing needed
+
+    // Emit event
+    emit!(GameEventFinalized {
+        event: *event_account.key(),
+        total_participants: event_data.participant_count,
+        total_prizes: event_data.prize_amount,
+        timestamp: now,
+    });
 
     Ok(())
 }

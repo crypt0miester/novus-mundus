@@ -7,8 +7,10 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamAccount, player::NULL_PUBKEY, require_extension, EXT_TEAM},
+    state::{PlayerAccount, TeamAccount, NULL_PUBKEY, require_extension, EXT_TEAM},
     validation::{require_signer, require_writable},
+    emit,
+    events::TeamDisbanded,
 };
 
 /// Disband team
@@ -27,13 +29,21 @@ use crate::{
 /// - [signer] leader_owner: Leader's wallet
 ///
 /// # Instruction Data
-/// None
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _instruction_data: &[u8],
+    instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 8 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+
+    // 2. Parse Accounts
 
     let [
         leader_account,
@@ -43,66 +53,76 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
+    // 3. Validate Accounts
 
     require_signer(leader_owner)?;
     require_writable(leader_account)?;
     require_writable(team_account)?;
 
-    // 3. Load Accounts
+    // 4. Load Accounts
 
-    let mut leader_account_data = leader_account.try_borrow_mut_data()?;
-    let mut team_account_data = team_account.try_borrow_mut_data()?;
-    let leader_data = unsafe { PlayerAccount::load_mut(&mut leader_account_data) };
-    let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
+    let mut leader = PlayerAccount::load_checked_mut(leader_account, leader_owner.key(), program_id)?;
+    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
 
-    // Verify ownership
-    if &leader_data.owner != leader_owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    // 4a. Require EXT_TEAM
+    require_extension(&*leader, EXT_TEAM)?;
 
-    // 3a. Require EXT_TEAM
-    require_extension(leader_data, EXT_TEAM)?;
-
-    // 4. Validate Leader Authority
-
-    // Is signer the team leader?
-    if &team_data.leader != leader_owner.key() {
-        return Err(GameError::NotTeamLeader.into());
-    }
+    // 5. Validate Leader Authority
 
     // Leader in the team?
-    if !leader_data.has_team || &leader_data.team != team_account.key() {
+    if leader.team == NULL_PUBKEY || &leader.team != team_account.key() {
         return Err(GameError::NotTeamMember.into());
     }
 
-    // 5. Return Treasury to Leader
-
-    if team_data.treasury > 0 {
-        leader_data.cash_on_hand = leader_data.cash_on_hand
-            .saturating_add(team_data.treasury);
-        team_data.treasury = 0;
+    // Is caller the team leader? (leader is stored as player account pubkey)
+    if &team.leader != leader_account.key() {
+        return Err(GameError::NotTeamLeader.into());
     }
 
-    // 6. Mark Team as Disbanded
+    // Team must not have a domain name (use remove_team first to reclaim domain)
+    if team.name_len > 0 {
+        return Err(GameError::TeamHasDomain.into());
+    }
+
+    // 6. Return Treasury to Leader
+
+    let treasury_distributed = team.treasury;
+    if team.treasury > 0 {
+        leader.cash_on_hand = leader.cash_on_hand
+            .saturating_add(team.treasury);
+        team.treasury = 0;
+    }
+
+    // 7. Mark Team as Disbanded
 
     // Set disbanded flag (CRITICAL: prevents orphaned member issues)
-    team_data.disbanded = true;
+    team.disbanded = true;
 
     // Zero out member count
-    team_data.member_count = 0;
+    team.member_count = 0;
 
     // Clear leader
-    team_data.leader = NULL_PUBKEY;
+    team.leader = NULL_PUBKEY;
 
     // NOTE: Individual member accounts still reference this team.
-    // They will discover it's disbanded when they check team_data.disbanded
+    // They will discover it's disbanded when they check team.disbanded
     // and can then clear their own team reference.
 
-    // 7. Update Leader Account
+    // 8. Update Leader Account
 
-    leader_data.team = NULL_PUBKEY;
-    leader_data.has_team = false;
+    leader.team = NULL_PUBKEY;
+
+    // 9. Emit Event
+
+    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    let now = Clock::get()?.unix_timestamp;
+
+    emit!(TeamDisbanded {
+        team: *team_account.key(),
+        leader: *leader_account.key(),
+        treasury_distributed,
+        timestamp: now,
+    });
 
     Ok(())
 }

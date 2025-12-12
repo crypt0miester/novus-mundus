@@ -8,8 +8,10 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, GameEngine, team::TeamAccount},
-    constants::{PLAYER_SEED, GAME_ENGINE_SEED, TEAM_SEED},
+    state::{PlayerAccount, GameEngine, team::TeamAccount, NULL_PUBKEY},
+    helpers::estate::{vault_transfer_bonus_bps, require_vault, load_estate_for_player},
+    emit,
+    events::CashTransferred,
 };
 
 /// Transfer cash between team members
@@ -43,9 +45,18 @@ use crate::{
 /// - [writable] receiver_player: Receiver's PlayerAccount PDA
 /// - [] team: TeamAccount PDA (verifies both on same team)
 /// - [] game_engine: GameEngine PDA (for tier config)
+/// - [] estate_account: EstateAccount PDA (for Vault requirement)
+///
+/// # Building Requirements
+/// Vault building unlocks cash transfers and provides bonuses:
+/// - Lv 5+: Cash transfers unlocked
+/// - Lv 10-14: +100% daily transfer limit
+/// - Lv 15-19: +250% daily transfer limit
+/// - Lv 20+: Unlimited transfers
 ///
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Amount of cash to transfer
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -55,10 +66,11 @@ pub fn process(
     // 1. Parse Instruction Data
     // ============================================================
 
-    if data.len() < 8 {
+    if data.len() < 16 {
         return Err(ProgramError::InvalidInstructionData);
     }
     let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
+    let team_id = u64::from_le_bytes(data[8..16].try_into().unwrap());
 
     if amount == 0 {
         return Err(GameError::InvalidAmount.into());
@@ -74,6 +86,7 @@ pub fn process(
         receiver_player_account,
         team_account,
         game_engine_account,
+        estate_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -90,25 +103,22 @@ pub fn process(
     // 4. Load Accounts
     // ============================================================
 
-    let mut sender_data_ref = sender_player_account.try_borrow_mut_data()?;
-    let sender_player = unsafe { PlayerAccount::load_mut(&mut sender_data_ref) };
+    // Sender: load_checked (verifies PDA + ownership)
+    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, sender.key(), program_id)?;
 
+    // Receiver: manual load (we don't have receiver's wallet key in accounts)
+    // Must verify program ownership to prevent fake account attacks
+    if receiver_player_account.owner() != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
     let mut receiver_data_ref = receiver_player_account.try_borrow_mut_data()?;
     let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
 
-    let team_data_ref = team_account.try_borrow_data()?;
-    let team = unsafe { TeamAccount::load(&team_data_ref) };
+    // Team: load_checked (verifies PDA + ownership using team_id from instruction data)
+    let _team = TeamAccount::load_checked(team_account, team_id, program_id)?;
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    // ============================================================
-    // 5. Validate Ownership
-    // ============================================================
-
-    if !sender_player.is_owner(sender.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
+    // GameEngine: load_checked
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // ============================================================
     // 6. Get Current Time
@@ -134,7 +144,7 @@ pub fn process(
     // 8. Validate Same Team
     // ============================================================
 
-    if !sender_player.has_team || !receiver_player.has_team {
+    if sender_player.team == NULL_PUBKEY || receiver_player.team == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
     }
 
@@ -147,8 +157,26 @@ pub fn process(
         return Err(GameError::InvalidTeam.into());
     }
 
+    // Team disbanded? Cannot use same-team benefit on disbanded team
+    if _team.is_disbanded() {
+        return Err(GameError::TeamDisbanded.into());
+    }
+
     // ============================================================
-    // 9. Get Tier-Based Transfer Limits
+    // 9. Load Estate and Validate Vault Requirement
+    // ============================================================
+
+    // Load sender's estate to check Vault building
+    let estate = load_estate_for_player(estate_account, &*sender_player, program_id)?;
+
+    // Vault Lv.5+ required for cash transfers
+    require_vault(estate, 5)?;
+
+    // Get transfer limit bonus from Vault
+    let vault_bonus_bps = vault_transfer_bonus_bps(estate);
+
+    // ============================================================
+    // 10. Get Tier-Based Transfer Limits
     // ============================================================
 
     // Determine active tier (free tier 0 if expired)
@@ -166,7 +194,7 @@ pub fn process(
     }
 
     // ============================================================
-    // 10. Reset Daily Counters if New Day
+    // 11. Reset Daily Counters if New Day
     // ============================================================
 
     const SECONDS_PER_DAY: i64 = 86400;
@@ -180,12 +208,24 @@ pub fn process(
     }
 
     // ============================================================
-    // 11. Validate Transfer Limits
+    // 12. Validate Transfer Limits
     // ============================================================
+
+    // Calculate daily amount limit with Vault bonus
+    // u16::MAX from vault_transfer_bonus_bps means unlimited transfers
+    let daily_transfer_limit = if vault_bonus_bps == u16::MAX {
+        u64::MAX // Unlimited for Vault Lv.20+
+    } else if vault_bonus_bps > 0 {
+        // Apply bonus: limit × (10000 + bonus_bps) / 10000
+        let bonus_multiplier = 10000u64.saturating_add(vault_bonus_bps as u64);
+        tier.max_daily_transfer_amount.saturating_mul(bonus_multiplier) / 10000
+    } else {
+        tier.max_daily_transfer_amount
+    };
 
     // Check daily amount limit
     let new_daily_total = sender_player.daily_transferred.saturating_add(amount);
-    if new_daily_total > tier.max_daily_transfer_amount {
+    if new_daily_total > daily_transfer_limit {
         return Err(GameError::DailyTransferLimitExceeded.into());
     }
 
@@ -195,7 +235,7 @@ pub fn process(
     }
 
     // ============================================================
-    // 12. Validate Sufficient Balance
+    // 13. Validate Sufficient Balance
     // ============================================================
 
     if sender_player.cash_on_hand < amount {
@@ -203,7 +243,7 @@ pub fn process(
     }
 
     // ============================================================
-    // 13. Execute Transfer
+    // 14. Execute Transfer
     // ============================================================
 
     // Deduct from sender
@@ -213,7 +253,7 @@ pub fn process(
     receiver_player.cash_on_hand = receiver_player.cash_on_hand.saturating_add(amount);
 
     // ============================================================
-    // 14. Update Transfer Tracking
+    // 15. Update Transfer Tracking
     // ============================================================
 
     // Daily limits
@@ -223,6 +263,15 @@ pub fn process(
     // Lifetime tracking (for event eligibility anti-Sybil)
     sender_player.total_sent = sender_player.total_sent.saturating_add(amount);
     receiver_player.total_received = receiver_player.total_received.saturating_add(amount);
+
+    // Emit CashTransferred event
+    emit!(CashTransferred {
+        from: *sender_player_account.key(),
+        to: *receiver_player_account.key(),
+        amount,
+        fee: 0, // No transfer fee in current implementation
+        timestamp: now,
+    });
 
     Ok(())
 }

@@ -1,14 +1,16 @@
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address}
+    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address},
+    sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
-use pinocchio::sysvars::Sysvar;
 use crate::{
     constants::{EVENT_SEED, MIN_EVENT_NAME_LENGTH, MAX_EVENT_NAME_LENGTH},
     error::GameError,
     state::{EventAccount, GameEngine, LeaderboardEntry, player::NULL_PUBKEY},
     types::{EventType, PrizeType},
     validation::{require_signer, require_writable, require_key_match},
+    emit,
+    events::game_event::GameEventCreated,
 };
 
 /// Create a new event (DAO only)
@@ -175,6 +177,16 @@ pub fn process(
             score: 0,
         };
     }
+
+    // Emit event
+    emit!(GameEventCreated {
+        event: *event_account.key(),
+        event_type,
+        start_time,
+        end_time,
+        prize_pool: prize_amount,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }

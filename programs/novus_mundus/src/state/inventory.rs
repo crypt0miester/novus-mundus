@@ -1,4 +1,5 @@
 use pinocchio::pubkey::Pubkey;
+use pinocchio::program_error::ProgramError;
 use crate::constants::INVENTORY_SEED;
 
 /// Inventory item stored in player's inventory account
@@ -83,6 +84,24 @@ impl PlayerInventoryHeader {
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
+
+    /// Derive PDA for player inventory
+    /// Seeds: [INVENTORY_SEED, player]
+    pub fn derive_pda(player: &Pubkey) -> (Pubkey, u8) {
+        pinocchio::pubkey::find_program_address(
+            &[INVENTORY_SEED, player.as_ref()],
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump
+    pub fn create_pda(player: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+        let bump_seed = [bump];
+        pinocchio::pubkey::create_program_address(
+            &[INVENTORY_SEED, player.as_ref(), &bump_seed],
+            &crate::ID,
+        )
+    }
 }
 
 /// Helper struct for working with inventory data
@@ -152,10 +171,3 @@ impl<'a> PlayerInventory<'a> {
     }
 }
 
-/// Derive PDA for player inventory
-pub fn derive_inventory_pda(player: &Pubkey) -> (Pubkey, u8) {
-    pinocchio::pubkey::find_program_address(
-        &[INVENTORY_SEED, player.as_ref()],
-        &crate::ID,
-    )
-}

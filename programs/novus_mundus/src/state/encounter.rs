@@ -1,4 +1,6 @@
 use pinocchio::pubkey::Pubkey;
+use pinocchio::program_error::ProgramError;
+use crate::constants::ENCOUNTER_SEED;
 
 /// Encounter account with dynamic attacker list
 ///
@@ -31,7 +33,8 @@ pub struct EncounterAccount {
     pub _padding1: [u8; 4],                     // 4 bytes (alignment)
 
     pub attacker_count: u8,                     // 1 byte (actual count)
-    pub _padding2: [u8; 7],                     // 7 bytes
+    pub bump: u8,                               // 1 byte - PDA bump seed
+    pub _padding2: [u8; 6],                     // 6 bytes (reduced from 7)
 
     // NO FIXED ARRAY - attackers stored dynamically after this struct
 }
@@ -53,6 +56,84 @@ impl EncounterAccount {
     /// UNSAFE: Load mutable header from raw account data
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
         &mut *(data.as_mut_ptr() as *mut Self)
+    }
+
+    /// Derive PDA for an encounter account
+    /// Seeds: [ENCOUNTER_SEED, city_id, encounter_id]
+    pub fn derive_pda(city_id: u16, encounter_id: u64) -> (Pubkey, u8) {
+        let city_id_bytes = city_id.to_le_bytes();
+        let encounter_id_bytes = encounter_id.to_le_bytes();
+        pinocchio::pubkey::find_program_address(
+            &[ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes],
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump
+    pub fn create_pda(city_id: u16, encounter_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+        let city_id_bytes = city_id.to_le_bytes();
+        let encounter_id_bytes = encounter_id.to_le_bytes();
+        let bump_seed = [bump];
+        pinocchio::pubkey::create_program_address(
+            &[ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes, &bump_seed],
+            &crate::ID,
+        )
+    }
+
+    /// Load and verify an EncounterAccount immutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        city_id: u16,
+        encounter_id: u64,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(city_id, encounter_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify an EncounterAccount mutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked_mut<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        city_id: u16,
+        encounter_id: u64,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(city_id, encounter_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }
 
     /// Get immutable slice of attackers from account data

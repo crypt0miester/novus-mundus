@@ -5,13 +5,16 @@ use pinocchio::{
     ProgramResult,
 };
 
+use pinocchio::sysvars::{Sysvar, clock::Clock};
+
 use crate::{
     error::GameError,
     state::PlayerAccount,
-    constants::PLAYER_SEED,
     helpers::{burn_tokens},
     logic::{add_stamina, safe_math::apply_bp},
     validation::{require_signer, require_writable},
+    emit,
+    events::StaminaPurchased,
 };
 
 /// Purchase stamina refill (monetization)
@@ -145,6 +148,15 @@ pub fn process(
         // Still burned the Novi, just didn't gain stamina
         // This is by design - teach players not to buy when at cap
     }
+
+    // Emit StaminaPurchased event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(StaminaPurchased {
+        player: *player_account.key(),
+        stamina: actual_added,
+        gems_spent: 0, // This instruction uses NOVI, not gems
+        timestamp: now,
+    });
 
     Ok(())
 }

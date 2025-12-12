@@ -12,14 +12,16 @@ use crate::{
     error::GameError,
     state::{
         CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus,
-        player::NULL_PUBKEY,
+        TeamAccount, player::NULL_PUBKEY,
         unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_RALLY,
     },
     logic::{
         calculate_networth,
         location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
     },
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
+    emit,
+    events::RallyJoined,
 };
 
 /// Join an existing rally with the NEW architecture
@@ -38,14 +40,16 @@ use crate::{
 /// 4. `[]` game_engine: GameEngine PDA (for networth and theme speed)
 /// 5. `[]` rally_city_account: CityAccount for rally city (for travel calculation)
 /// 6. `[]` system_program: System program
+/// 7. `[]` team_account: TeamAccount PDA (must match rally's team)
 ///
-/// # Instruction Data (48 bytes)
+/// # Instruction Data (56 bytes)
 /// - units_1: u64 (8 bytes) - tier 1 units to commit
 /// - units_2: u64 (8 bytes) - tier 2 units to commit
 /// - units_3: u64 (8 bytes) - tier 3 units to commit
 /// - melee: u64 (8 bytes) - melee weapons to commit
 /// - ranged: u64 (8 bytes) - ranged weapons to commit
 /// - siege: u64 (8 bytes) - siege weapons to commit
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -60,6 +64,7 @@ pub fn process(
         game_engine,
         rally_city_account,
         system_program,
+        team_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -72,8 +77,8 @@ pub fn process(
     require_writable(participant_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Parse Instruction Data (48 bytes minimum)
-    if instruction_data.len() < 48 {
+    // 3. Parse Instruction Data (56 bytes minimum)
+    if instruction_data.len() < 56 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -101,6 +106,10 @@ pub fn process(
         instruction_data[40], instruction_data[41], instruction_data[42], instruction_data[43],
         instruction_data[44], instruction_data[45], instruction_data[46], instruction_data[47],
     ]);
+    let team_id = u64::from_le_bytes([
+        instruction_data[48], instruction_data[49], instruction_data[50], instruction_data[51],
+        instruction_data[52], instruction_data[53], instruction_data[54], instruction_data[55],
+    ]);
 
     // 4. Validate at least some units being committed
     let total_units = units_1.saturating_add(units_2).saturating_add(units_3);
@@ -113,6 +122,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 6. Load Rally and validate state
+    require_owner(rally_account, program_id)?;
     let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
@@ -135,14 +145,10 @@ pub fn process(
     let rally_id = rally.id;
     let rally_creator = rally.creator;
     let rally_city = rally.rally_city;
+    let rally_team = rally.team;
 
     // 7. Load Player and validate
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    if &player.owner != player_owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut player = PlayerAccount::load_checked_mut(player_account, player_owner.key(), program_id)?;
 
     // Cannot be the creator (they join automatically at create)
     if player_owner.key() == &rally_creator {
@@ -154,11 +160,32 @@ pub fn process(
         return Err(GameError::PlayerTraveling.into());
     }
 
+    // 7a. Validate Same Team
+    // Player must be on the same team as the rally
+    if player.team == NULL_PUBKEY {
+        return Err(GameError::NotOnTeam.into());
+    }
+
+    if player.team != rally_team {
+        return Err(GameError::NotSameTeam.into());
+    }
+
+    // Verify team account matches
+    if team_account.key() != &rally_team {
+        return Err(GameError::InvalidTeam.into());
+    }
+
+    // Load team and verify not disbanded
+    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    if team.is_disbanded() {
+        return Err(GameError::TeamDisbanded.into());
+    }
+
     // Prerequisite: EXT_INVENTORY must be unlocked
-    require_extension(player, EXT_INVENTORY)?;
+    require_extension(&*player, EXT_INVENTORY)?;
 
     // Unlock EXT_RALLY if not already
-    unlock_extension_if_eligible(player_account, player_owner, player, EXT_RALLY)?;
+    unlock_extension_if_eligible(player_account, player_owner, &mut *player, EXT_RALLY)?;
 
     // 8. Validate player has enough units and weapons
     if player.defensive_unit_1 < units_1 {
@@ -181,10 +208,10 @@ pub fn process(
     }
 
     // 9. Load GameEngine for networth and theme speed
-    let game_engine_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_ref) };
+    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
 
     // 10. Load rally city for travel calculation
+    require_owner(rally_city_account, program_id)?;
     let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
 
     // Validate rally city matches
@@ -244,7 +271,7 @@ pub fn process(
         player.rally_stats.current_rallies_joined.saturating_add(1);
 
     // Update networth
-    player.networth = calculate_networth(player, &game_engine_data.economic_config)?;
+    player.networth = calculate_networth(&*player, &game_engine_data.economic_config)?;
 
     // 11. Update rally totals
     rally.participant_count = rally.participant_count.saturating_add(1);
@@ -257,9 +284,9 @@ pub fn process(
     rally.total_siege_weapons = rally.total_siege_weapons.saturating_add(siege);
 
     // Need to drop borrows before CPIs
-    drop(player_data_ref);
+    drop(player);
     drop(rally_data_ref);
-    drop(game_engine_ref);
+    drop(game_engine_data);
 
     // 12. Verify and create RallyParticipant PDA
     let (expected_participant_pda, participant_bump) =
@@ -363,6 +390,21 @@ pub fn process(
         bump: participant_bump,
         _padding6: [0; 5],
     };
+
+    // Reload rally to get updated participant count for event
+    let rally_data_ref_for_event = rally_account.try_borrow_data()?;
+    let rally_for_event = unsafe { RallyAccount::load(&rally_data_ref_for_event) };
+    let final_participant_count = rally_for_event.participant_count;
+    drop(rally_data_ref_for_event);
+
+    // Emit RallyJoined event
+    emit!(RallyJoined {
+        rally: *rally_account.key(),
+        player: *player_owner.key(),
+        units: [units_1, units_2, units_3],
+        participant_count: final_participant_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

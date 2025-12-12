@@ -10,6 +10,8 @@ use crate::{
     constants::PLAYER_SEED,
     state::PlayerAccount,
     validation::{require_writable, require_owner, require_pda},
+    emit,
+    events::SubscriptionExpired,
 };
 
 /// Downgrade expired subscription to free tier
@@ -74,10 +76,19 @@ pub fn process(
     }
 
     // 7. Downgrade to free tier
+    let old_tier = player_data.subscription_tier;
     player_data.subscription_tier = 0;
 
     // Note: subscription_end is left as-is for historical record
     // It shows when the last subscription expired
+
+    // 8. Emit Event
+
+    emit!(SubscriptionExpired {
+        player: *player_account.key(),
+        old_tier,
+        timestamp: now,
+    });
 
     Ok(())
 }

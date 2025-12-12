@@ -2,7 +2,31 @@ use pinocchio::{
     pubkey::Pubkey,
     program_error::ProgramError,
 };
-use crate::constants::REINFORCEMENT_SEED;
+use crate::constants::{REINFORCEMENT_SEED, GARRISON_SEED};
+
+// ============================================================
+// Reinforcement Target (Player vs Castle)
+// ============================================================
+
+/// Destination type for reinforcement
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ReinforcementTarget {
+    /// Reinforcing a teammate's PlayerAccount
+    Player = 0,
+    /// Garrisoning a team's CastleAccount
+    Castle = 1,
+}
+
+impl ReinforcementTarget {
+    pub fn from_u8(val: u8) -> Self {
+        match val {
+            0 => Self::Player,
+            1 => Self::Castle,
+            _ => Self::Player,
+        }
+    }
+}
 
 // ============================================================
 // Reinforcement Status
@@ -12,9 +36,9 @@ use crate::constants::REINFORCEMENT_SEED;
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ReinforcementStatus {
-    /// Units traveling to receiver's city
+    /// Units traveling to destination
     Traveling = 0,
-    /// Units actively defending receiver
+    /// Units actively defending destination
     Active = 1,
     /// Units returning to sender
     Returning = 2,
@@ -35,71 +59,117 @@ impl ReinforcementStatus {
 }
 
 // ============================================================
-// Reinforcement Account
+// Reinforcement Account (Unified: Player + Castle)
 // ============================================================
 
-/// Reinforcement Account - Tracks defensive units sent to teammates
+/// Unified Reinforcement Account - Tracks units/weapons/hero sent to defend
+///
+/// Works for both:
+/// - Player reinforcement (teammate → teammate)
+/// - Castle garrison (team member → castle)
 ///
 /// # Lifecycle
-/// 1. SendReinforcement - Sender creates, pays rent, units deducted
-/// 2. ProcessReinforcementArrival - Mark as arrived (crank)
-/// 3. Active Defense - Units contribute to receiver's defense
-/// 4. RecallReinforcement OR RelieveReinforcement - Initiate return
-/// 5. ProcessReinforcementReturn - Return units to sender, close account
+/// 1. Send - Sender creates account, units/weapons deducted, hero locked
+/// 2. ProcessArrival - Crank: add to destination aggregates, mark Active
+/// 3. Active Defense - Contributes to destination's defense calculations
+/// 4. Recall OR Relieve - Sender or destination owner initiates return
+/// 5. ProcessReturn - Calculate proportional survival, return to sender, close
 ///
-/// # Key Design Decisions
-/// - Sender pays rent (gets refund on close)
-/// - Units belong to sender, defend receiver
-/// - Can be recalled by sender OR relieved by receiver
-/// - If all units die, account auto-closes (rent to sender)
+/// # Key Design
+/// - Units/weapons stored here are the ORIGINAL amounts sent
+/// - Current counts are tracked in destination aggregates
+/// - Survival ratio = destination_current / destination_original
+/// - Return amounts = original_sent × survival_ratio
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ReinforcementAccount {
-    // Identity (72 bytes)
-    pub sender: Pubkey,                     // Who sent the reinforcement
-    pub receiver: Pubkey,                   // Who is being reinforced
-    pub id: u64,                            // Unique ID (for multiple reinforcements)
+    // ============================================================
+    // Identity (64 bytes)
+    // ============================================================
+    /// Who sent the reinforcement (wallet pubkey)
+    pub sender: Pubkey,
+    /// Destination: PlayerAccount OR CastleAccount pubkey
+    pub destination: Pubkey,
 
-    // Location (4 bytes)
-    pub sender_city: u16,                   // Sender's home city (for return)
-    pub receiver_city: u16,                 // Where reinforcement is deployed
+    // ============================================================
+    // Type & Location (8 bytes)
+    // ============================================================
+    /// Destination type (0=Player, 1=Castle)
+    pub destination_type: u8,
+    /// PDA bump seed
+    pub bump: u8,
+    /// Sender's home city (for return travel time)
+    pub sender_city: u16,
+    /// Destination city
+    pub destination_city: u16,
+    /// Padding for alignment
+    pub _padding_loc: [u8; 2],
 
-    // Units (24 bytes) - Only defensive units can reinforce
+    // ============================================================
+    // Units - Original amounts sent (24 bytes)
+    // ============================================================
     pub units_def_1: u64,
     pub units_def_2: u64,
     pub units_def_3: u64,
 
-    // Overflow (border reserve queue) (24 bytes)
-    pub overflow_def_1: u64,                // Units in border reserve
-    pub overflow_def_2: u64,
-    pub overflow_def_3: u64,
+    // ============================================================
+    // Weapons - Original amounts sent (24 bytes)
+    // ============================================================
+    pub melee_weapons: u64,
+    pub ranged_weapons: u64,
+    pub siege_weapons: u64,
 
+    // ============================================================
     // Hero (40 bytes)
-    pub hero: Pubkey,                       // Committed hero (NULL_PUBKEY if none)
-    pub hero_power_contribution: u64,       // Hero's power contribution
+    // ============================================================
+    /// Committed hero (NULL_PUBKEY if none)
+    pub hero: Pubkey,
+    /// Hero's defense buff snapshot (bps)
+    pub hero_defense_bps: u16,
+    /// Hero's weapon efficiency buff snapshot (bps)
+    pub hero_weapon_eff_bps: u16,
+    /// Hero's armor efficiency buff snapshot (bps)
+    pub hero_armor_eff_bps: u16,
+    /// Padding
+    pub _padding_hero: [u8; 2],
 
-    // Travel timing (24 bytes)
-    pub sent_at: i64,                       // When reinforcement was sent
-    pub travel_duration: i32,               // Travel time to receiver
-    pub _padding1: [u8; 4],
-    pub arrives_at: i64,                    // When units arrive
+    // ============================================================
+    // Travel Timing (24 bytes)
+    // ============================================================
+    /// When reinforcement was sent (unix timestamp)
+    pub sent_at: i64,
+    /// Travel time to destination (seconds)
+    pub travel_duration: i32,
+    /// Padding
+    pub _padding_travel: [u8; 4],
+    /// When units arrive at destination
+    pub arrives_at: i64,
 
-    // Return timing (16 bytes)
-    pub return_started_at: i64,             // When return journey started (0 if not returning)
-    pub return_duration: i32,               // Return travel time
-    pub _padding2: [u8; 4],
+    // ============================================================
+    // Return Timing (16 bytes)
+    // ============================================================
+    /// When return journey started (0 if not returning)
+    pub return_started_at: i64,
+    /// Return travel time (seconds)
+    pub return_duration: i32,
+    /// Padding
+    pub _padding_return: [u8; 4],
 
+    // ============================================================
     // Status (8 bytes)
-    pub status: u8,                         // ReinforcementStatus enum
-    pub in_border_reserve: bool,            // Any units in overflow/border reserve?
-    pub recall_initiated_by_receiver: bool, // True if receiver relieved (vs sender recalled)
-    pub bump: u8,
-    pub _padding3: [u8; 4],
+    // ============================================================
+    /// Current status (ReinforcementStatus enum)
+    pub status: u8,
+    /// True if return was initiated by destination owner (relieve vs recall)
+    pub relieved_by_destination: bool,
+    /// Padding
+    pub _padding_status: [u8; 6],
 
-    // Combat stats (16 bytes)
-    pub total_casualties: u64,              // Units lost in defense
-    pub combats_participated: u32,          // Number of defenses participated
-    pub _padding4: [u8; 4],
+    // ============================================================
+    // Stats (8 bytes)
+    // ============================================================
+    /// Number of combats this reinforcement participated in
+    pub combats_participated: u64,
 }
 
 impl ReinforcementAccount {
@@ -115,46 +185,68 @@ impl ReinforcementAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    /// Get total active units (not including overflow)
-    pub fn total_active_units(&self) -> u64 {
+    // ============================================================
+    // Unit Helpers
+    // ============================================================
+
+    /// Get total units (original amount sent)
+    pub fn total_units(&self) -> u64 {
         self.units_def_1
             .saturating_add(self.units_def_2)
             .saturating_add(self.units_def_3)
     }
 
-    /// Get total overflow units (border reserve)
-    pub fn total_overflow_units(&self) -> u64 {
-        self.overflow_def_1
-            .saturating_add(self.overflow_def_2)
-            .saturating_add(self.overflow_def_3)
+    /// Get total weapons (original amount sent)
+    pub fn total_weapons(&self) -> u64 {
+        self.melee_weapons
+            .saturating_add(self.ranged_weapons)
+            .saturating_add(self.siege_weapons)
     }
 
-    /// Get total units (active + overflow)
-    pub fn total_units(&self) -> u64 {
-        self.total_active_units().saturating_add(self.total_overflow_units())
+    /// Check if a hero was committed
+    pub fn has_hero(&self) -> bool {
+        self.hero != Pubkey::default()
     }
 
-    /// Check if all units are dead
-    pub fn all_units_dead(&self) -> bool {
-        self.total_units() == 0
+    // ============================================================
+    // Status Helpers
+    // ============================================================
+
+    /// Get status as enum
+    pub fn get_status(&self) -> ReinforcementStatus {
+        ReinforcementStatus::from_u8(self.status)
     }
 
-    /// Check if reinforcement is active
-    pub fn is_active(&self) -> bool {
-        self.status == ReinforcementStatus::Active as u8
+    /// Get destination type as enum
+    pub fn get_destination_type(&self) -> ReinforcementTarget {
+        ReinforcementTarget::from_u8(self.destination_type)
     }
 
-    /// Check if reinforcement is traveling to receiver
+    /// Check if reinforcement is traveling to destination
     pub fn is_traveling(&self) -> bool {
         self.status == ReinforcementStatus::Traveling as u8
     }
 
-    /// Check if reinforcement is returning
+    /// Check if reinforcement is actively defending
+    pub fn is_active(&self) -> bool {
+        self.status == ReinforcementStatus::Active as u8
+    }
+
+    /// Check if reinforcement is returning to sender
     pub fn is_returning(&self) -> bool {
         self.status == ReinforcementStatus::Returning as u8
     }
 
-    /// Check if reinforcement has arrived at receiver
+    /// Check if reinforcement is completed (ready for closure)
+    pub fn is_completed(&self) -> bool {
+        self.status == ReinforcementStatus::Completed as u8
+    }
+
+    // ============================================================
+    // Timing Helpers
+    // ============================================================
+
+    /// Check if reinforcement has arrived at destination
     pub fn has_arrived(&self, now: i64) -> bool {
         now >= self.arrives_at
     }
@@ -167,86 +259,76 @@ impl ReinforcementAccount {
         now >= self.return_started_at + self.return_duration as i64
     }
 
-    /// Get status as enum
-    pub fn get_status(&self) -> ReinforcementStatus {
-        ReinforcementStatus::from_u8(self.status)
+    /// Get return completion timestamp
+    pub fn return_completes_at(&self) -> i64 {
+        self.return_started_at + self.return_duration as i64
     }
 
-    /// Move units from overflow to active (border reserve auto-fill)
-    /// Called when active units die and there's room
-    pub fn auto_fill_from_overflow(&mut self, casualties: u64) -> u64 {
-        if self.total_overflow_units() == 0 {
-            return 0;
-        }
+    // ============================================================
+    // PDA Derivation
+    // ============================================================
 
-        let mut remaining = casualties;
-        let mut filled = 0u64;
-
-        // Fill def_1 first
-        if remaining > 0 && self.overflow_def_1 > 0 {
-            let fill = remaining.min(self.overflow_def_1);
-            self.units_def_1 = self.units_def_1.saturating_add(fill);
-            self.overflow_def_1 = self.overflow_def_1.saturating_sub(fill);
-            remaining = remaining.saturating_sub(fill);
-            filled = filled.saturating_add(fill);
-        }
-
-        // Fill def_2
-        if remaining > 0 && self.overflow_def_2 > 0 {
-            let fill = remaining.min(self.overflow_def_2);
-            self.units_def_2 = self.units_def_2.saturating_add(fill);
-            self.overflow_def_2 = self.overflow_def_2.saturating_sub(fill);
-            remaining = remaining.saturating_sub(fill);
-            filled = filled.saturating_add(fill);
-        }
-
-        // Fill def_3
-        if remaining > 0 && self.overflow_def_3 > 0 {
-            let fill = remaining.min(self.overflow_def_3);
-            self.units_def_3 = self.units_def_3.saturating_add(fill);
-            self.overflow_def_3 = self.overflow_def_3.saturating_sub(fill);
-            filled = filled.saturating_add(fill);
-        }
-
-        // Update border reserve flag
-        self.in_border_reserve = self.total_overflow_units() > 0;
-
-        filled
-    }
-
-    /// Derive the PDA for a reinforcement account
-    pub fn derive_pda(sender: &Pubkey, receiver: &Pubkey, id: u64) -> (Pubkey, u8) {
+    /// Derive PDA for player reinforcement
+    /// Seeds: [REINFORCEMENT_SEED, sender, destination]
+    /// Only one reinforcement per sender→destination pair
+    pub fn derive_player_pda(sender: &Pubkey, destination: &Pubkey) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
             &[
                 REINFORCEMENT_SEED,
                 sender.as_ref(),
-                receiver.as_ref(),
-                &id.to_le_bytes(),
+                destination.as_ref(),
             ],
             &crate::ID,
         )
     }
 
-    /// Create PDA from known bump
-    pub fn create_pda(
+    /// Derive PDA for castle garrison
+    /// Seeds: [GARRISON_SEED, sender, castle]
+    /// Only one garrison per sender→castle pair
+    pub fn derive_castle_pda(sender: &Pubkey, castle: &Pubkey) -> (Pubkey, u8) {
+        pinocchio::pubkey::find_program_address(
+            &[
+                GARRISON_SEED,
+                sender.as_ref(),
+                castle.as_ref(),
+            ],
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump (player reinforcement)
+    pub fn create_player_pda(
         sender: &Pubkey,
-        receiver: &Pubkey,
-        id: u64,
+        destination: &Pubkey,
         bump: u8,
     ) -> Result<Pubkey, ProgramError> {
-        let id_bytes = id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
             &[
                 REINFORCEMENT_SEED,
                 sender.as_ref(),
-                receiver.as_ref(),
-                &id_bytes,
+                destination.as_ref(),
+                &bump_seed,
+            ],
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump (castle garrison)
+    pub fn create_castle_pda(
+        sender: &Pubkey,
+        castle: &Pubkey,
+        bump: u8,
+    ) -> Result<Pubkey, ProgramError> {
+        let bump_seed = [bump];
+        pinocchio::pubkey::create_program_address(
+            &[
+                GARRISON_SEED,
+                sender.as_ref(),
+                castle.as_ref(),
                 &bump_seed,
             ],
             &crate::ID,
         )
     }
 }
-
-// Size is computed at compile time via core::mem::size_of::<Self>()

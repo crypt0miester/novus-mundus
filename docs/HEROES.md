@@ -815,94 +815,189 @@ update_nft_attribute(hero_mint, "Power", hero.total_buff_power.to_string())?;
 
 ---
 
-## Hero Gallery Examples
+## Meditation City System
+
+Heroes may require meditation in their **origin city** - a sacred location tied to their lore. This creates:
+- Geographic pilgrimage for rare heroes
+- City-specific gatherings of hero owners
+- Travel gameplay and strategic depth
+- Deep lore integration
+
+**Implementation:**
+- `meditation_city_id: u16` in HeroTemplate
+- `0` = can meditate anywhere (common heroes)
+- Non-zero = MUST be in that specific city to meditate
+
+**Error:** `WrongCityForMeditation (7766)` - returned if player tries to meditate outside origin city
+
+---
+
+## Hero Gallery
+
+> **Legend:** 🏛️ = Origin city required for meditation | ⭐ = Can meditate anywhere
 
 ### Historical Warriors & Leaders
-- **Alexander the Great** (Offensive) - Conquered the known world
-- **Julius Caesar** (Hybrid) - Roman emperor and military genius
-- **Napoleon Bonaparte** (Offensive) - Master tactician
-- **Genghis Khan** (Offensive) - Mongol conqueror
-- **Joan of Arc** (Defensive) - French heroine
-- **Cleopatra** (Economic) - Egyptian queen and diplomat
-- **Sun Tzu** (Hybrid) - Art of War strategist
-- **Leonidas** (Defensive) - Spartan king of 300
-- **Hannibal Barca** (Offensive) - Crossed the Alps with elephants
-- **William Wallace** (Defensive) - Scottish freedom fighter
-- **Hercules** (Offensive) - Byzantine conqueror
-- **Attila the Hun** (Offensive) - Hun conqueror
+
+| Hero | Type | Origin City | Description |
+|------|------|-------------|-------------|
+| **Alexander the Great** | Offensive | 🏛️ Pella | Conquered the known world |
+| **Julius Caesar** | Hybrid | 🏛️ Rome | Roman emperor and military genius |
+| **Napoleon Bonaparte** | Offensive | 🏛️ Paris | Master tactician |
+| **Genghis Khan** | Offensive | 🏛️ Karakorum | Mongol conqueror |
+| **Joan of Arc** | Defensive | 🏛️ Orléans | French heroine |
+| **Cleopatra** | Economic | 🏛️ Alexandria | Egyptian queen and diplomat |
+| **Sun Tzu** | Hybrid | 🏛️ Suzhou | Art of War strategist |
+| **Leonidas** | Defensive | 🏛️ Sparta | Spartan king of 300 |
+| **Hannibal Barca** | Offensive | 🏛️ Carthage | Crossed the Alps with elephants |
+| **William Wallace** | Defensive | 🏛️ Edinburgh | Scottish freedom fighter |
+| **Heraclius** | Offensive | 🏛️ Constantinople | Byzantine conqueror |
+| **Attila the Hun** | Offensive | 🏛️ Budapest | Hun conqueror |
+
+### Mythological Heroes
+
+| Hero | Type | Origin City | Description |
+|------|------|-------------|-------------|
+| **Zeus** | Hybrid | 🏛️ Mount Olympus | King of the gods |
+| **Athena** | Defensive | 🏛️ Athens | Goddess of wisdom |
+| **Ares** | Offensive | 🏛️ Sparta | God of war |
+| **Poseidon** | Hybrid | 🏛️ Atlantis | God of the seas |
+| **Odin** | Hybrid | 🏛️ Uppsala | All-father of Norse gods |
+| **Thor** | Offensive | 🏛️ Asgard | God of thunder |
+| **Ra** | Economic | 🏛️ Heliopolis | Egyptian sun god |
+| **Anubis** | Defensive | 🏛️ Memphis | Guardian of the dead |
 
 ### Legends & Folk Heroes
 
-- **Merlin** (Hybrid) - Court wizard and prophet
-- **Nimue** (Defensive) - Lady of the Lake
-- **Mordred** (Offensive) - Dark knight
-- **Gawain** (Defensive) - Knight of the sun
-- **Robin Hood** (Economic) - Sherwood Forest outlaw
-- **Beowulf** (Offensive) - Geatish monster slayer
-- **El Cid** (Hybrid) - Castilian knight
-- **Sinbad** (Economic) - Sailor merchant of Baghdad
-- **Scheherazade** (Economic) - Thousand tales storyteller
-- **Baba Yaga** (Defensive) - Iron-toothed witch
-- **Koschei** (Offensive) - Deathless sorcerer
-- **Ilya Muromets** (Defensive) - Bogatyr champion
-- **Vasilisa** (Economic) - Clever merchant daughter
-- **Dobrynya Nikitich** (Hybrid) - Dragon slayer knight
-- **Sun Wukong** (Offensive) - Monkey King
-- **Hua Mulan** (Hybrid) - Warrior maiden
-- **Zhuge Liang** (Economic) - Sleeping dragon strategist
-- **Miyamoto Musashi** (Offensive) - Sword saint
-- **Tomoe Gozen** (Defensive) - Female samurai
-- **Aladdin** (Economic) - Lamp finder
-- **Ali Baba** (Economic) - Cave discoverer
-- **Rostam** (Offensive) - Persian champion
-- **Shirin** (Hybrid) - Mountain carver
+| Hero | Type | Origin City | Description |
+|------|------|-------------|-------------|
+| **Merlin** | Hybrid | 🏛️ Camelot | Court wizard and prophet |
+| **Nimue** | Defensive | 🏛️ Avalon | Lady of the Lake |
+| **Mordred** | Offensive | 🏛️ Camelot | Dark knight |
+| **Gawain** | Defensive | 🏛️ Camelot | Knight of the sun |
+| **Robin Hood** | Economic | 🏛️ Nottingham | Sherwood Forest outlaw |
+| **Beowulf** | Offensive | 🏛️ Copenhagen | Geatish monster slayer |
+| **El Cid** | Hybrid | 🏛️ Valencia | Castilian knight |
+| **Sinbad** | Economic | 🏛️ Baghdad | Sailor merchant |
+| **Scheherazade** | Economic | 🏛️ Baghdad | Thousand tales storyteller |
+| **Baba Yaga** | Defensive | 🏛️ Moscow | Iron-toothed witch |
+| **Koschei** | Offensive | 🏛️ Kiev | Deathless sorcerer |
+| **Ilya Muromets** | Defensive | 🏛️ Kiev | Bogatyr champion |
+| **Vasilisa** | Economic | 🏛️ Moscow | Clever merchant daughter |
+| **Dobrynya Nikitich** | Hybrid | 🏛️ Kiev | Dragon slayer knight |
+| **Sun Wukong** | Offensive | 🏛️ Flower Fruit Mountain | Monkey King |
+| **Hua Mulan** | Hybrid | 🏛️ Xi'an | Warrior maiden |
+| **Zhuge Liang** | Economic | 🏛️ Chengdu | Sleeping dragon strategist |
+| **Miyamoto Musashi** | Offensive | 🏛️ Kyoto | Sword saint |
+| **Tomoe Gozen** | Defensive | 🏛️ Kyoto | Female samurai |
+| **Aladdin** | Economic | 🏛️ Agrabah | Lamp finder |
+| **Ali Baba** | Economic | 🏛️ Baghdad | Cave discoverer |
+| **Rostam** | Offensive | 🏛️ Persepolis | Persian champion |
+| **Shirin** | Hybrid | 🏛️ Persepolis | Mountain carver |
 
 ### Crypto & Web3 Icons
-- **Satoshi Nakamoto** (Economic) - Bitcoin creator
-- **Bored Ape** (Economic) - BAYC reference
-- **Pepe** (Economic) - Meme lord
-- **Wojak** (Defensive) - Feels guy
-- **Diamond Hands** (Defensive) - HODLer supreme
-- **Paper Hands** (Economic) - Quick trader (negative defense)
+
+| Hero | Type | Origin City | Description |
+|------|------|-------------|-------------|
+| **Satoshi Nakamoto** | Economic | ⭐ Any | Bitcoin creator |
+| **Bored Ape** | Economic | ⭐ Any | BAYC reference |
+| **Pepe** | Economic | ⭐ Any | Meme lord |
+| **Wojak** | Defensive | ⭐ Any | Feels guy |
+| **Diamond Hands** | Defensive | ⭐ Any | HODLer supreme |
+| **Paper Hands** | Economic | ⭐ Any | Quick trader |
 
 ### Original Game Heroes
-- **Theophilos** (Economic) - Master builder of empires
-- **Kassandra** (Hybrid) - Oracle warrior priestess
-- **Nikephoros Ironside** (Defensive) - Unbreakable Byzantine guardian
-- **Chrysanthos the Golden** (Economic) - Legendary merchant prince
-- **Alexios Shadowblade** (Offensive) - Night stalker assassin
-- **Bjorn Ironforge** (Defensive) - Legendary shield wall commander
-- **Astrid Stormcaller** (Offensive) - Berserker queen
-- **Magnus Goldbeard** (Economic) - Wealthy trade jarl
-- **Sigrid the Wise** (Hybrid) - Seer and strategist
-- **Ragnar Bloodaxe** (Offensive) - Raid master
-- **Brennus the Bold** (Offensive) - Gallic war chief
-- **Maeve of Ulster** (Hybrid) - Warrior queen
-- **Cormac Silverhand** (Economic) - Druid merchant
-- **Brigid Flameheart** (Defensive) - Guardian of the hearth
-- **Finnegan the Lucky** (Economic) - Fortune's favorite
-- **Marcus Aurelius Maximus** (Hybrid) - Philosopher warrior
-- **Valentina the Vigilant** (Defensive) - Praetorian commander
-- **Lucius Prosperus** (Economic) - Senate's treasurer
-- **Octavia Shadowfoot** (Offensive) - Silent blade
-- **Titus** (Defensive) - Last centurion
-- **Akira Steelblossom** (Offensive) - Ronin master
-- **Li Wei the Prosperous** (Economic) - Silk road magnate
-- **Yamato Ironwall** (Defensive) - Samurai protector
-- **Mei Ling the Phoenix** (Hybrid) - Reborn from ashes
-- **Jin the Silent Storm** (Offensive) - Shadow ninja
-- **Darius the Magnificent** (Economic) - Persian trade lord
-- **Zara Moonblade** (Offensive) - Desert assassin
-- **Omar the Orator** (Hybrid) - Arabian caliph
-- **Khalid the Warrior** (Offensive) - Arabian conqueror
-- **Nefertari the Noble** (Hybrid) - Egyptian queen
-- **Layla Goldweaver** (Economic) - Bazaar queen
-- **Rashid the Defender** (Defensive) - Gate keeper
-- **Vladimir Ironheart** (Defensive) - Boyar protector
-- **Svetlana the Swift** (Offensive) - Cossack raider
-- **Dmitri Goldhands** (Economic) - Amber road trader
-- **Katarina Nightwhisper** (Offensive) - Silent hunter
-- **Boris the Mountain** (Defensive) - Immovable guardian
+
+| Hero | Type | Origin City | Description |
+|------|------|-------------|-------------|
+| **Theophilos** | Economic | 🏛️ Constantinople | Master builder of empires |
+| **Kassandra** | Hybrid | 🏛️ Delphi | Oracle warrior priestess |
+| **Nikephoros Ironside** | Defensive | 🏛️ Constantinople | Unbreakable Byzantine guardian |
+| **Chrysanthos the Golden** | Economic | 🏛️ Constantinople | Legendary merchant prince |
+| **Alexios Shadowblade** | Offensive | 🏛️ Constantinople | Night stalker assassin |
+| **Bjorn Ironforge** | Defensive | 🏛️ Stockholm | Legendary shield wall commander |
+| **Astrid Stormcaller** | Offensive | 🏛️ Oslo | Berserker queen |
+| **Magnus Goldbeard** | Economic | 🏛️ Bergen | Wealthy trade jarl |
+| **Sigrid the Wise** | Hybrid | 🏛️ Uppsala | Seer and strategist |
+| **Ragnar Bloodaxe** | Offensive | 🏛️ Copenhagen | Raid master |
+| **Brennus the Bold** | Offensive | 🏛️ Lyon | Gallic war chief |
+| **Maeve of Ulster** | Hybrid | 🏛️ Dublin | Warrior queen |
+| **Cormac Silverhand** | Economic | 🏛️ Dublin | Druid merchant |
+| **Brigid Flameheart** | Defensive | 🏛️ Dublin | Guardian of the hearth |
+| **Finnegan the Lucky** | Economic | 🏛️ Dublin | Fortune's favorite |
+| **Marcus Aurelius Maximus** | Hybrid | 🏛️ Rome | Philosopher warrior |
+| **Valentina the Vigilant** | Defensive | 🏛️ Rome | Praetorian commander |
+| **Lucius Prosperus** | Economic | 🏛️ Rome | Senate's treasurer |
+| **Octavia Shadowfoot** | Offensive | 🏛️ Rome | Silent blade |
+| **Titus** | Defensive | 🏛️ Rome | Last centurion |
+| **Akira Steelblossom** | Offensive | 🏛️ Tokyo | Ronin master |
+| **Li Wei the Prosperous** | Economic | 🏛️ Xi'an | Silk road magnate |
+| **Yamato Ironwall** | Defensive | 🏛️ Tokyo | Samurai protector |
+| **Mei Ling the Phoenix** | Hybrid | 🏛️ Beijing | Reborn from ashes |
+| **Jin the Silent Storm** | Offensive | 🏛️ Tokyo | Shadow ninja |
+| **Darius the Magnificent** | Economic | 🏛️ Persepolis | Persian trade lord |
+| **Zara Moonblade** | Offensive | 🏛️ Cairo | Desert assassin |
+| **Omar the Orator** | Hybrid | 🏛️ Baghdad | Arabian caliph |
+| **Khalid the Warrior** | Offensive | 🏛️ Mecca | Arabian conqueror |
+| **Nefertari the Noble** | Hybrid | 🏛️ Luxor | Egyptian queen |
+| **Layla Goldweaver** | Economic | 🏛️ Cairo | Bazaar queen |
+| **Rashid the Defender** | Defensive | 🏛️ Damascus | Gate keeper |
+| **Vladimir Ironheart** | Defensive | 🏛️ Moscow | Boyar protector |
+| **Svetlana the Swift** | Offensive | 🏛️ Kiev | Cossack raider |
+| **Dmitri Goldhands** | Economic | 🏛️ St. Petersburg | Amber road trader |
+| **Katarina Nightwhisper** | Offensive | 🏛️ Moscow | Silent hunter |
+| **Boris the Mountain** | Defensive | 🏛️ Moscow | Immovable guardian |
+
+### City Reference Table
+
+| City ID | City Name | Region | Notable Heroes |
+|---------|-----------|--------|----------------|
+| 1 | Rome | Europe | Caesar, Marcus Aurelius, Titus |
+| 2 | Athens | Europe | Athena |
+| 3 | Sparta | Europe | Leonidas, Ares |
+| 4 | Constantinople | Europe | Theophilos, Nikephoros, Heraclius |
+| 5 | Alexandria | Africa | Cleopatra |
+| 6 | Cairo | Africa | Zara, Layla |
+| 7 | Paris | Europe | Napoleon |
+| 8 | London | Europe | — |
+| 9 | Edinburgh | Europe | William Wallace |
+| 10 | Nottingham | Europe | Robin Hood |
+| 11 | Camelot | Europe | Merlin, Mordred, Gawain |
+| 12 | Avalon | Europe | Nimue |
+| 13 | Moscow | Europe | Baba Yaga, Vladimir, Boris, Katarina |
+| 14 | Kiev | Europe | Koschei, Ilya, Dobrynya, Svetlana |
+| 15 | Stockholm | Europe | Bjorn |
+| 16 | Oslo | Europe | Astrid |
+| 17 | Copenhagen | Europe | Beowulf, Ragnar |
+| 18 | Uppsala | Europe | Odin, Sigrid |
+| 19 | Dublin | Europe | Maeve, Cormac, Brigid, Finnegan |
+| 20 | Baghdad | Middle East | Sinbad, Scheherazade, Ali Baba, Omar |
+| 21 | Damascus | Middle East | Rashid |
+| 22 | Mecca | Middle East | Khalid |
+| 23 | Persepolis | Middle East | Rostam, Shirin, Darius |
+| 24 | Tokyo | Asia | Akira, Yamato, Jin |
+| 25 | Kyoto | Asia | Musashi, Tomoe |
+| 26 | Beijing | Asia | Mei Ling |
+| 27 | Xi'an | Asia | Mulan, Li Wei |
+| 28 | Chengdu | Asia | Zhuge Liang |
+| 29 | Suzhou | Asia | Sun Tzu |
+| 30 | Flower Fruit Mountain | Asia | Sun Wukong |
+| 31 | Pella | Europe | Alexander |
+| 32 | Carthage | Africa | Hannibal |
+| 33 | Karakorum | Asia | Genghis Khan |
+| 34 | Budapest | Europe | Attila |
+| 35 | Orléans | Europe | Joan of Arc |
+| 36 | Valencia | Europe | El Cid |
+| 37 | Lyon | Europe | Brennus |
+| 38 | Luxor | Africa | Nefertari |
+| 39 | Heliopolis | Africa | Ra |
+| 40 | Memphis | Africa | Anubis |
+| 41 | Mount Olympus | Europe | Zeus |
+| 42 | Asgard | Europe | Thor |
+| 43 | Atlantis | Europe | Poseidon |
+| 44 | Delphi | Europe | Kassandra |
+| 45 | Agrabah | Middle East | Aladdin |
+| 46 | St. Petersburg | Europe | Dmitri |
+| 47 | Bergen | Europe | Magnus |
 
 
 ---

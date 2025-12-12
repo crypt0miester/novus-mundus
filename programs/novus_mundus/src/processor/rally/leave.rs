@@ -11,7 +11,9 @@ use crate::{
     error::GameError,
     state::{CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus},
     logic::location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::RallyLeft,
 };
 
 /// Leave a rally during Gathering phase (NEW architecture)
@@ -38,7 +40,7 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
@@ -65,16 +67,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Player and validate ownership
-    let player_data_ref = player_account.try_borrow_data()?;
-    let player = unsafe { PlayerAccount::load(&player_data_ref) };
-
-    if &player.owner != player_owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    drop(player_data_ref);
+    let player = PlayerAccount::load_checked(player_account, player_owner.key(), program_id)?;
+    drop(player);
 
     // 5. Load Rally and validate state
+    require_owner(rally_account, program_id)?;
     let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
@@ -94,6 +91,7 @@ pub fn process(
     }
 
     // 6. Load RallyParticipant and validate
+    require_owner(participant_account, program_id)?;
     let mut participant_data_ref = participant_account.try_borrow_mut_data()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
@@ -118,10 +116,11 @@ pub fn process(
     }
 
     // 7. Load city accounts for return travel calculation
+    require_owner(rally_city_account, program_id)?;
+    require_owner(home_city_account, program_id)?;
     let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
     let home_city_data = unsafe { CityAccount::load(home_city_account)? };
-    let game_engine_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_ref) };
+    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // Validate city accounts match
     if rally_city_data.city_id != rally_city {
@@ -180,6 +179,19 @@ pub fn process(
     rally.total_melee_weapons = rally.total_melee_weapons.saturating_sub(participant.melee_weapons_committed);
     rally.total_ranged_weapons = rally.total_ranged_weapons.saturating_sub(participant.ranged_weapons_committed);
     rally.total_siege_weapons = rally.total_siege_weapons.saturating_sub(participant.siege_weapons_committed);
+
+    // 11. Emit event
+    emit!(RallyLeft {
+        rally: *rally_account.key(),
+        player: *player_owner.key(),
+        units: [
+            participant.units_committed_1,
+            participant.units_committed_2,
+            participant.units_committed_3,
+        ],
+        participant_count: rally.participant_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

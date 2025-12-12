@@ -11,6 +11,8 @@ use crate::{
     logic::{grant_xp_with_time_bonus, calculate_daily_rewards, safe_math::apply_bp_bonus},
     state::{PlayerAccount, GameEngine},
     validation::{require_signer, require_writable},
+    emit,
+    events::{DailyRewardClaimed, XpGained, PlayerLeveledUp},
 };
 
 /// Claim daily reward
@@ -120,12 +122,43 @@ pub fn process(
 
     // XP reward (also handles level-ups) - with time-of-day bonus!
     // Golden hours (Dawn/Dusk) grant φ² bonus, night grants √φ bonus
-    let (_levels_gained, _new_level, _overflow) = grant_xp_with_time_bonus(player_data, rewards.xp, now)?;
+    let old_level = player_data.level;
+    let (levels_gained, new_level, _) = grant_xp_with_time_bonus(player_data, rewards.xp, now)?;
+
+    // Emit XP gained event
+    emit!(XpGained {
+        player: *player_account.key(),
+        amount: rewards.xp,
+        source: 2, // 2=daily
+        total_xp: player_data.current_xp,
+        timestamp: now,
+    });
+
+    // Emit level up event if player leveled
+    if levels_gained > 0 {
+        emit!(PlayerLeveledUp {
+            player: *player_account.key(),
+            old_level: old_level.into(),
+            new_level: new_level.into(),
+            timestamp: now,
+        });
+    }
 
     // 10. Update Claim Timestamp
 
     // Update the research system's daily claim timestamp
     player_data.last_daily_claim = now;
+
+    // 11. Emit Event
+
+    emit!(DailyRewardClaimed {
+        player: *player_account.key(),
+        day: 0, // Note: We don't track streak currently, could enhance
+        cash: rewards.cash,
+        gems: 0, // Not implemented yet
+        bonus_type: 0, // Could track subscription tier here
+        timestamp: now,
+    });
 
     Ok(())
 }

@@ -1,129 +1,236 @@
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
-    pubkey::Pubkey,
+    pubkey::{Pubkey, find_program_address},
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
+use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamAccount, player::NULL_PUBKEY, require_extension, unlock_extension_if_eligible, EXT_RALLY, EXT_TEAM},
-    validation::{require_signer, require_writable},
+    state::{
+        PlayerAccount, TeamAccount, TeamMemberSlot, TeamInviteAccount, NULL_PUBKEY,
+        require_extension, unlock_extension_if_eligible, EXT_RALLY, EXT_TEAM,
+    },
+    constants::{TEAM_SLOT_SEED, TEAM_INVITE_SEED},
+    helpers::close_account,
+    validation::{require_signer, require_writable, require_key_match, require_owner},
+    emit,
+    events::InviteAccepted,
 };
 
 /// Accept a team invite
 ///
 /// Player accepts pending team invite and joins the team.
+/// Creates a TeamMemberSlot and closes the TeamInviteAccount.
 /// Invite must not be expired.
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount (accepting invite)
 /// - [writable] team: TeamAccount (team being joined)
-/// - [signer] owner: Player wallet
+/// - [writable] invite: TeamInviteAccount PDA (to be closed)
+/// - [writable] member_slot: TeamMemberSlot PDA (to be created)
+/// - [writable] invite_refund: Account to receive invite rent refund (usually inviter)
+/// - [signer, writable] owner: Player wallet (pays for slot rent)
+/// - [] system_program: System program
 ///
 /// # Instruction Data
-/// None
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
+/// - slot_index: u16 (2 bytes) - Slot index to occupy
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _instruction_data: &[u8],
+    instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 10 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+
+    // 2. Parse Accounts
 
     let [
         player_account,
         team_account,
+        invite_account,
+        member_slot_account,
+        invite_refund,
         owner,
+        system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
+    // 3. Validate Accounts
 
     require_signer(owner)?;
+    require_writable(owner)?;
     require_writable(player_account)?;
     require_writable(team_account)?;
+    require_writable(invite_account)?;
+    require_writable(member_slot_account)?;
+    require_writable(invite_refund)?;
+    require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Load Accounts
+    // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut team_account_data = team_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
+    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
 
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
+    // 4a. Require EXT_RALLY (prerequisite for teams)
+    require_extension(&*player, EXT_RALLY)?;
+
+    // 4b. Unlock EXT_TEAM on first team join via invite
+    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
+
+    // 5. Verify and Validate Invite
+
+    // Verify invite PDA
+    let (expected_invite, _) = find_program_address(
+        &[TEAM_INVITE_SEED, team_account.key().as_ref(), player_account.key().as_ref()],
+        program_id,
+    );
+
+    if invite_account.key() != &expected_invite {
+        return Err(GameError::InvalidPDA.into());
     }
 
-    // 3a. Require EXT_RALLY (prerequisite for teams)
-    require_extension(player_data, EXT_RALLY)?;
-
-    // 3b. Unlock EXT_TEAM on first team join via invite
-    unlock_extension_if_eligible(player_account, owner, player_data, EXT_TEAM)?;
-
-    // 4. Validate Player Has Pending Invite
-
-    // No pending invite?
-    if player_data.pending_team_invite == NULL_PUBKEY {
+    // Invite must exist
+    if invite_account.data_len() == 0 {
         return Err(GameError::InviteNotFound.into());
     }
 
-    // Invite for this team?
-    if &player_data.pending_team_invite != team_account.key() {
-        return Err(GameError::InviteNotFound.into());
-    }
+    require_owner(invite_account, program_id)?;
 
-    // Check expiration
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    if now >= player_data.team_invite_expires_at {
-        // Clear expired invite
-        player_data.pending_team_invite = NULL_PUBKEY;
-        player_data.team_invite_expires_at = 0;
-        return Err(GameError::InviteExpired.into());
+    // Load and validate invite data
+    {
+        let invite_data = invite_account.try_borrow_data()?;
+        let invite = unsafe { TeamInviteAccount::load(&invite_data) };
+
+        // Verify invite is for this team and player
+        if &invite.team != team_account.key() {
+            return Err(GameError::InviteNotFound.into());
+        }
+
+        if &invite.invitee != player_account.key() {
+            return Err(GameError::InviteNotFound.into());
+        }
+
+        // Check expiration
+        if invite.is_expired(now) {
+            // Close expired invite
+            drop(invite_data);
+            close_account(invite_account, invite_refund)?;
+            return Err(GameError::InviteExpired.into());
+        }
     }
 
-    // 5. Validate Player Can Join
+    // 6. Validate Player Can Join
 
     // Team disbanded?
-    if team_data.is_disbanded() {
-        // Clear invite (team no longer exists)
-        player_data.pending_team_invite = NULL_PUBKEY;
-        player_data.team_invite_expires_at = 0;
+    if team.is_disbanded() {
+        // Close invite (team no longer exists)
+        close_account(invite_account, invite_refund)?;
         return Err(GameError::TeamDisbanded.into());
     }
 
     // Already in a team?
-    if player_data.has_team {
-        // Clear invite
-        player_data.pending_team_invite = NULL_PUBKEY;
-        player_data.team_invite_expires_at = 0;
+    if player.team != NULL_PUBKEY {
+        // Close invite
+        close_account(invite_account, invite_refund)?;
         return Err(GameError::AlreadyInTeam.into());
     }
 
     // Team full?
-    if team_data.member_count >= TeamAccount::MAX_MEMBERS as u8 {
-        // Clear invite
-        player_data.pending_team_invite = NULL_PUBKEY;
-        player_data.team_invite_expires_at = 0;
+    if team.is_full() {
+        // Close invite
+        close_account(invite_account, invite_refund)?;
         return Err(GameError::TeamFull.into());
     }
 
-    // 6. Add Player to Team
+    // Slot index within bounds?
+    if slot_index >= team.max_members {
+        return Err(GameError::InvalidParameter.into());
+    }
 
-    team_data.add_member(*owner.key())?;
+    // 7. Verify Slot PDA and Availability
+    // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index]
 
-    // 7. Update Player Account
+    let (expected_slot, slot_bump) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
 
-    player_data.team = *team_account.key();
-    player_data.has_team = true;
+    if member_slot_account.key() != &expected_slot {
+        return Err(GameError::InvalidPDA.into());
+    }
 
-    // Clear invite
-    player_data.pending_team_invite = NULL_PUBKEY;
-    player_data.team_invite_expires_at = 0;
+    // Slot must not exist
+    if member_slot_account.data_len() > 0 {
+        return Err(GameError::SlotOccupied.into());
+    }
+
+    // 8. Close Invite Account (refund rent)
+
+    close_account(invite_account, invite_refund)?;
+
+    // 9. Create Member Slot Account
+
+    let slot_lamports = pinocchio::sysvars::rent::Rent::get()?
+        .minimum_balance(TeamMemberSlot::LEN);
+
+    let slot_bump_seed = [slot_bump];
+    let slot_index_bytes = slot_index.to_le_bytes();
+    let slot_seeds = pinocchio::seeds!(TEAM_SLOT_SEED, team_account.key().as_ref(), &slot_index_bytes, &slot_bump_seed);
+    let slot_signer = pinocchio::instruction::Signer::from(&slot_seeds);
+
+    CreateAccount {
+        from: owner,
+        to: member_slot_account,
+        lamports: slot_lamports,
+        space: TeamMemberSlot::LEN as u64,
+        owner: program_id,
+    }.invoke_signed(&[slot_signer])?;
+
+    // 10. Initialize Slot Data
+
+    let mut slot_data = member_slot_account.try_borrow_mut_data()?;
+    let slot = unsafe { TeamMemberSlot::load_mut(&mut slot_data) };
+
+    *slot = TeamMemberSlot::init(
+        *team_account.key(),
+        *player_account.key(),
+        now,
+        slot_index,
+        slot_bump,
+        TeamMemberSlot::RANK_3, // Invited members join at rank 3 (higher than public join)
+    );
+
+    drop(slot_data);
+
+    // 11. Update Team
+
+    team.member_count = team.member_count.saturating_add(1);
+    team.last_activity = now;
+
+    // 12. Update Player Account
+
+    player.team = *team_account.key();
+    player.team_slot_index = slot_index;
+
+    // 13. Emit Event
+
+    emit!(InviteAccepted {
+        team: *team_account.key(),
+        player: *player_account.key(),
+        member_count: team.member_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

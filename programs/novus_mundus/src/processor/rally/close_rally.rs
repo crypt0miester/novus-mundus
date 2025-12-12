@@ -5,11 +5,15 @@ use pinocchio::{
     ProgramResult,
 };
 
+use pinocchio::sysvars::{clock::Clock, Sysvar};
+
 use crate::{
     error::GameError,
     helpers::close_account,
     state::{RallyAccount, RallyStatus},
-    validation::require_writable,
+    validation::{require_writable, require_owner},
+    emit,
+    events::RallyClosed,
 };
 
 /// Close a completed or cancelled rally
@@ -29,7 +33,7 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
@@ -46,6 +50,7 @@ pub fn process(
     require_writable(leader_owner)?;
 
     // 3. Load Rally and validate
+    require_owner(rally_account, program_id)?;
     let rally_data_ref = rally_account.try_borrow_data()?;
     let rally = unsafe { RallyAccount::load(&rally_data_ref) };
 
@@ -66,10 +71,24 @@ pub fn process(
         return Err(GameError::RallyCannotBeClosed.into());
     }
 
+    // Store rally info for event
+    let rally_key = *rally_account.key();
+    let rally_id = rally.id;
+    let leader = rally.creator;
+
     drop(rally_data_ref);
 
     // 4. Close RallyAccount (refund rent to leader)
     close_account(rally_account, leader_owner)?;
+
+    // 5. Emit event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(RallyClosed {
+        rally: rally_key,
+        rally_id,
+        leader,
+        timestamp: now,
+    });
 
     Ok(())
 }

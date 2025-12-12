@@ -345,7 +345,7 @@ pub fn calculate_encounter_loot_pool(
 /// # Time-of-Day Bonus
 /// Golden hours (Dawn/Dusk) and DeepNight give better fragment drops.
 /// Uses LootDrop ActivityType multiplier.
-pub fn calculate_fragment_amount(level: u8, rarity: u8, luck_bonus_bps: u16, time_mult: f64) -> u64 {
+pub fn calculate_fragment_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16, time_mult: f64) -> u64 {
     // Base amounts using golden ratio family (deterministic)
     // These are close to Fibonacci sequence: 2, 3, 5, 8, 13
     let base = match rarity {
@@ -365,14 +365,14 @@ pub fn calculate_fragment_amount(level: u8, rarity: u8, luck_bonus_bps: u16, tim
     let level_mult = libm::pow(GOLDEN_ROOT, level_exponent);
     let level_mult_bp = (level_mult * 10000.0) as u64;
 
-    // Apply luck bonus
-    let luck_mult = 10000u64 + luck_bonus_bps as u64;
+    // Apply synchrony bonus
+    let synchrony_mult = 10000u64 + synchrony_bonus_bps as u64;
 
     // Apply time-of-day bonus
     let time_mult_bp = (time_mult * 10000.0) as u64;
 
     // Calculate final amount using interleaved multiply/divide (no u128!)
-    chain_bp(base as u64, &[level_mult_bp, luck_mult, time_mult_bp])
+    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp])
         .unwrap_or(base as u64)
 }
 
@@ -393,7 +393,7 @@ pub fn calculate_fragment_amount(level: u8, rarity: u8, luck_bonus_bps: u16, tim
 /// # Time-of-Day Bonus
 /// Golden hours (Dawn/Dusk) and DeepNight give better gem drops.
 /// Uses LootDrop ActivityType multiplier.
-pub fn calculate_gem_amount(level: u8, rarity: u8, luck_bonus_bps: u16, time_mult: f64) -> u64 {
+pub fn calculate_gem_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16, time_mult: f64) -> u64 {
     // Base amounts using Fibonacci sequence (deterministic)
     let base = match rarity {
         0 => 1,   // Common: Fibonacci 1
@@ -412,14 +412,14 @@ pub fn calculate_gem_amount(level: u8, rarity: u8, luck_bonus_bps: u16, time_mul
     let level_mult = libm::pow(GOLDEN_ROOT, level_exponent);
     let level_mult_bp = (level_mult * 10000.0) as u64;
 
-    // Apply luck bonus
-    let luck_mult = 10000u64 + luck_bonus_bps as u64;
+    // Apply synchrony bonus
+    let synchrony_mult = 10000u64 + synchrony_bonus_bps as u64;
 
     // Apply time-of-day bonus
     let time_mult_bp = (time_mult * 10000.0) as u64;
 
     // Calculate final amount using interleaved multiply/divide (no u128!)
-    chain_bp(base as u64, &[level_mult_bp, luck_mult, time_mult_bp])
+    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp])
         .unwrap_or(base as u64)
 }
 

@@ -11,6 +11,7 @@
 /// - 124: speed_up_research - Use gems to speed up
 /// - 125: cancel_research - Cancel and get partial refund
 /// - 126: update_template - DAO updates template
+/// - 127: ascend - Ascend a maxed research node (endgame)
 /// Note: claim_daily_reward at instruction 90 is updated to check research unlocks
 
 pub mod initialize_template;
@@ -20,3 +21,4 @@ pub mod complete_research;
 pub mod speed_up_research;
 pub mod cancel_research;
 pub mod update_template;
+pub mod ascend;

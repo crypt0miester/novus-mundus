@@ -8,6 +8,8 @@ use crate::{
     error::GameError,
     state::{EventAccount, EventParticipation, PlayerAccount, require_extension, EXT_RESEARCH},
     validation::{require_signer, require_writable, require_key_match},
+    emit,
+    events::game_event::GameEventJoined,
 };
 
 /// Join an event
@@ -150,12 +152,21 @@ pub fn process(
 
     let mut participation_account_data = event_participation_account.try_borrow_mut_data()?;
     let participation_data = unsafe { EventParticipation::load_mut(&mut participation_account_data) };
-    *participation_data = EventParticipation::new(event_data.id, *player_owner.key(), now);
+    *participation_data = EventParticipation::new(event_data.id, *player_owner.key(), now, bump);
 
     // 10. Update Player and Event
 
     player_data.current_event = event_data.id;
     event_data.participant_count = event_data.participant_count.saturating_add(1);
+
+    // Emit event
+    emit!(GameEventJoined {
+        event: *event_account.key(),
+        player: *player_owner.key(),
+        entry_fee: 0,
+        participant_count: event_data.participant_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

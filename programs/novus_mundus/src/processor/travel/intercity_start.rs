@@ -9,7 +9,9 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    emit,
     error::GameError,
+    events::IntercityTravelStarted,
     state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, OCCUPANT_PLAYER},
     constants::LOCATION_SEED,
     helpers::close_account,
@@ -20,6 +22,7 @@ use crate::{
         ActivityType,
     },
     types::TravelType,
+    validation::require_owner,
 };
 
 /// Start intercity travel (move between cities)
@@ -84,18 +87,13 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+
+    require_owner(origin_city_account, program_id)?;
+    require_owner(destination_city_account, program_id)?;
     let origin_city_data = unsafe { CityAccount::load_mut(origin_city_account)? };
     let destination_city_data = unsafe { CityAccount::load(&destination_city_account)? };
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    // 5. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
+    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 6. Validate Not Already Traveling
 
@@ -328,6 +326,16 @@ pub fn process(
 
     origin_city_data.players_present = origin_city_data.players_present
         .saturating_sub(1);
+
+    // 14. Emit Event
+
+    emit!(IntercityTravelStarted {
+        player: *player_account.key(),
+        from_city: *origin_city_account.key(),
+        to_city: *destination_city_account.key(),
+        arrival_at: arrival_time,
+        timestamp: now,
+    });
 
     Ok(())
 }

@@ -9,7 +9,9 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    emit,
     error::GameError,
+    events::IntracityTravelStarted,
     state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, OCCUPANT_PLAYER},
     constants::LOCATION_SEED,
     helpers::close_account,
@@ -20,6 +22,7 @@ use crate::{
         ActivityType,
     },
     types::TravelType,
+    validation::require_owner,
 };
 
 /// Start intracity travel (move within same city)
@@ -101,19 +104,12 @@ pub fn process(
 
     // 5. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
 
+    require_owner(current_city_account, program_id)?;
     let city_data = unsafe { CityAccount::load_mut(current_city_account)? };
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    // 6. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
+    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 7. Validate Not Already Traveling
 
@@ -346,6 +342,17 @@ pub fn process(
     player_data.departure_time = now;
     player_data.arrival_time = arrival_time;
     player_data.travel_speed_locked = effective_speed; // Lock speed for cancel calculations
+
+    // 14. Emit Event
+
+    emit!(IntracityTravelStarted {
+        player: *player_account.key(),
+        city: *current_city_account.key(),
+        dest_x: dest_grid_lat,
+        dest_y: dest_grid_long,
+        arrival_at: arrival_time,
+        timestamp: now,
+    });
 
     Ok(())
 }

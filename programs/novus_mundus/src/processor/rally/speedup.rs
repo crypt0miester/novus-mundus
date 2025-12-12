@@ -9,6 +9,9 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{PlayerAccount, GameEngine, RallyAccount, RallyParticipant, RallyStatus},
+    validation::require_owner,
+    emit,
+    events::RallySpeedup,
 };
 
 /// Speedup type constants - what phase/target to speed up
@@ -33,14 +36,13 @@ pub const SPEEDUP_RETURN: u8 = 2;
 ///   - Payer: ANYONE willing to pay gems
 ///
 /// # Tier System (same gem cost for all types)
-/// - Tier 1: 50% time reduction, 1x gem cost
-/// - Tier 2: 75% time reduction, 2x gem cost
-/// - Tier 3: 87.5% time reduction, 4x gem cost
+/// - Tier 1: 50% of time remains, 1x gem cost
+/// - Tier 2: 25% of time remains, 2x gem cost
 ///
 /// Instruction data format:
 /// ```text
 /// [0] speedup_type: u8 (0=Gather, 1=March, 2=Return)
-/// [1] speedup_tier: u8 (1, 2, or 3)
+/// [1] speedup_tier: u8 (1 or 2)
 /// ```
 ///
 /// # Accounts
@@ -50,7 +52,7 @@ pub const SPEEDUP_RETURN: u8 = 2;
 /// 3. `[SIGNER]` payer_owner - Payer's wallet
 /// 4. `[]` game_engine - For gem cost configuration
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -73,7 +75,7 @@ pub fn process(
     let speedup_type = instruction_data[0];
     let speedup_tier = instruction_data[1];
 
-    if speedup_tier < 1 || speedup_tier > 3 {
+    if speedup_tier < 1 || speedup_tier > 2 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -83,18 +85,10 @@ pub fn process(
     }
 
     // 4. Load Game Engine
-    let game_engine_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_ref) };
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 5. Load Payer (anyone can pay for speedup)
-    let mut payer_data_ref = payer_player_account.try_borrow_mut_data()?;
-    let payer_data = unsafe { PlayerAccount::load_mut(&mut payer_data_ref) };
-
-    // Validate payer_owner matches the PlayerAccount owner
-    // (ensures gems are deducted from the correct account)
-    if !payer_data.is_owner(payer_owner.key()) {
-        return Err(GameError::InvalidParameter.into());
-    }
+    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, payer_owner.key(), program_id)?;
 
     let now = Clock::get()?.unix_timestamp;
 
@@ -102,9 +96,11 @@ pub fn process(
     let (time_multiplier, tier_cost_multiplier): (f64, u64) = match speedup_tier {
         1 => (0.5, 1),    // 50% of time remains, 1x gem cost
         2 => (0.25, 2),   // 25% of time remains, 2x gem cost
-        3 => (0.125, 4),  // 12.5% of time remains, 4x gem cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
+
+    // Track gem cost for event
+    let mut total_gem_cost_spent: u64 = 0;
 
     // 7. Process based on speedup type
     match speedup_type {
@@ -112,9 +108,11 @@ pub fn process(
         // GATHER: Speed up participant's travel to rally point
         // ============================================================
         SPEEDUP_GATHER => {
+            require_owner(rally_account, program_id)?;
             let rally_data_ref = rally_account.try_borrow_data()?;
             let rally_data = unsafe { RallyAccount::load(&rally_data_ref) };
 
+            require_owner(rally_participant_account, program_id)?;
             let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
             let participant_data = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
@@ -156,6 +154,7 @@ pub fn process(
             }
 
             payer_data.gems = payer_data.gems.saturating_sub(total_gem_cost);
+            total_gem_cost_spent = total_gem_cost;
 
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i64;
             participant_data.arrives_at_rally = now + new_remaining;
@@ -165,6 +164,7 @@ pub fn process(
         // MARCH: Speed up entire army's march to target
         // ============================================================
         SPEEDUP_MARCH => {
+            require_owner(rally_account, program_id)?;
             let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
             let rally_data = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
@@ -195,6 +195,7 @@ pub fn process(
             }
 
             payer_data.gems = payer_data.gems.saturating_sub(total_gem_cost);
+            total_gem_cost_spent = total_gem_cost;
 
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i64;
             rally_data.arrive_at = now + new_remaining;
@@ -204,9 +205,11 @@ pub fn process(
         // RETURN: Speed up participant's return journey
         // ============================================================
         SPEEDUP_RETURN => {
+            require_owner(rally_account, program_id)?;
             let rally_data_ref = rally_account.try_borrow_data()?;
             let rally_data = unsafe { RallyAccount::load(&rally_data_ref) };
 
+            require_owner(rally_participant_account, program_id)?;
             let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
             let participant_data = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
@@ -256,6 +259,7 @@ pub fn process(
             }
 
             payer_data.gems = payer_data.gems.saturating_sub(total_gem_cost);
+            total_gem_cost_spent = total_gem_cost;
 
             // Reduce remaining duration
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i32;
@@ -265,6 +269,15 @@ pub fn process(
 
         _ => return Err(GameError::InvalidParameter.into()),
     }
+
+    // 8. Emit event
+    emit!(RallySpeedup {
+        rally: *rally_account.key(),
+        payer: *payer_owner.key(),
+        speedup_type,
+        gems_spent: total_gem_cost_spent,
+        timestamp: now,
+    });
 
     Ok(())
 }

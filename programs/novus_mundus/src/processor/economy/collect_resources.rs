@@ -7,12 +7,11 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, UserAccount, ResearchProgress},
-    constants::{PLAYER_SEED, USER_SEED, RESEARCH_SEED},
+    state::{PlayerAccount, UserAccount, GameEngine},
     types::{EventType, CollectionType},
     logic::{
         consume_novi_logic,
-        calculate_luck,
+        calculate_synchrony,
         consume_produce,
         update_happiness_operative,
         calculate_networth,
@@ -24,13 +23,13 @@ use crate::{
         ActivityType,
         safe_math::{sqrt_product, pow_three_quarters},
     },
-    helpers::event_scoring::update_event_score,
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
+    helpers::{
+        event_scoring::update_event_score,
+        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_workshop},
     },
+    validation::require_signer,
+    emit,
+    events::{ResourcesCollected, XpGained, PlayerLeveledUp},
 };
 
 /// Operative units collect resources (cash, gems, or produce)
@@ -55,9 +54,17 @@ use crate::{
 /// - [writable] novi_mint: NOVI token mint
 /// - [] game_engine: GameEngine PDA (for burn authority)
 /// - [] token_program: SPL Token program
+/// - [] estate_account: EstateAccount PDA (for Observatory bonus)
 /// - [writable] event_participation: (Optional) EventParticipation PDA for event scoring
 /// - [writable] event: (Optional) EventAccount PDA for event scoring
 /// - [] research_progress: (Optional) ResearchProgress PDA for economy buffs
+///
+/// # Building Bonuses
+/// Observatory provides collection bonus:
+/// - Lv 5-9: +10% collection output
+/// - Lv 10-14: +25% collection output
+/// - Lv 15-19: +40% collection output
+/// - Lv 20+: +60% collection output
 ///
 /// # Instruction Data
 /// - novi_amount: u64 (8 bytes) - Amount of locked Novi to consume
@@ -68,23 +75,17 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    let (player, user, owner, player_token_account, novi_mint, game_engine, token_program, event_participation, event) = if accounts.len() >= 9 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], Some(&accounts[7]), Some(&accounts[8]))
-    } else if accounts.len() >= 7 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], None, None)
+    // estate_account is required, event accounts are optional
+    let (player, user, owner, player_token_account, novi_mint, game_engine, token_program, estate_account, event_participation, event) = if accounts.len() >= 10 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], Some(&accounts[8]), Some(&accounts[9]))
+    } else if accounts.len() >= 8 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], None, None)
     } else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate accounts
+    // 2. Validate signer
     require_signer(owner)?;
-    require_writable(player)?;
-    require_writable(user)?;
-    require_owner(player, program_id)?;
-    require_owner(user, program_id)?;
-
-    let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
     // 3. Parse instruction data
     if data.len() != 9 {
@@ -98,31 +99,9 @@ pub fn process(
 
     let collection_type = CollectionType::try_from(data[8])?;
 
-    // 4. Load player and user data
-    let mut player_data = player.try_borrow_mut_data()?;
-    let mut user_data = user.try_borrow_mut_data()?;
-
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data)
-    };
-
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data)
-    };
-
-    // Verify ownership and bumps
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if player_data.bump != player_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
-    if &user_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if user_data.bump != user_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
+    // 4. Load and verify player/user accounts (PDA + ownership + bump in one call)
+    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
+    let mut user_data = UserAccount::load_checked_mut(user, owner.key(), program_id)?;
 
     // Validate player not traveling (can't collect while traveling)
     if player_data.is_traveling_any() {
@@ -130,8 +109,7 @@ pub fn process(
     }
 
     // Load GameEngine for config
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
+    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Validate sufficient locked Novi
@@ -151,6 +129,9 @@ pub fn process(
             if !player_data.has_mining {
                 return Err(GameError::FeatureLocked.into());
             }
+            // Mining requires Workshop building (minimum level 1)
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            require_workshop(estate, 1)?;
         },
         CollectionType::Fishing => {
             if !player_data.has_fishing {
@@ -165,13 +146,13 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 7a. Calculate power from NOVI consumption (PURE LOGIC)
-    let luck = calculate_luck(
-        player_data,
+    let synchrony = calculate_synchrony(
+        &*player_data,
         &game_engine_data.gameplay_config,
         &game_engine_data.subscription_tiers,
         now,
     );
-    let base_power = consume_novi_logic(novi_amount, luck, economic_config);
+    let base_power = consume_novi_logic(novi_amount, synchrony, economic_config);
 
     // 7b. Apply Consumption Time Bonus (DETERMINISTIC)
     // Consuming NOVI is more efficient during the day (peak business hours)
@@ -285,7 +266,20 @@ pub fn process(
         CollectionType::Fishing => ActivityType::Fishing,
     };
 
-    let base_output = apply_time_multiplier(base_output, time_of_day, time_activity);
+    let time_adjusted_output = apply_time_multiplier(base_output, time_of_day, time_activity);
+
+    // 8b. Apply Observatory building bonus (BUILDING BONUS)
+    // Observatory increases all collection output
+    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+    let loot_bonus_bps = observatory_loot_bonus_bps(estate);
+
+    // Apply bonus: output × (10000 + bonus_bps) / 10000
+    let base_output = if loot_bonus_bps > 0 {
+        let bonus_multiplier = 10000u64.saturating_add(loot_bonus_bps as u64);
+        time_adjusted_output.saturating_mul(bonus_multiplier) / 10000
+    } else {
+        time_adjusted_output
+    };
 
     // 9. Consume produce (1 per operative unit)
     let produce_consumed = consume_produce(total_operative, player_data.produce);
@@ -300,10 +294,7 @@ pub fn process(
     );
 
     // 10a. Calculate abandonment based on happiness (PURE LOGIC)
-    // Load GameEngine for abandonment rate config (loading early to use later)
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data_temp = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
-    let gameplay_config = &game_engine_data_temp.gameplay_config;
+    let gameplay_config = &game_engine_data.gameplay_config;
 
     let units_to_abandon = crate::logic::calculate_abandonment(
         total_operative,
@@ -330,11 +321,6 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 11a. Actually BURN the NOVI tokens (SPL Token CPI)
-    // Load GameEngine to get mint authority bump
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
-    let economic_config = &game_engine_data.economic_config;
-
     // Create PDA signer for GameEngine (mint/burn authority)
     let bump_seed = [game_engine_data.bump];
     let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
@@ -377,20 +363,31 @@ pub fn process(
         },
         CollectionType::Mining => {
             // Apply research buff for mining output
-            let buffed_output = if player_data.research_collection_bonus_bps > 0 {
+            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
                 let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
                 (base_output.saturating_mul(multiplier) / 10000)
             } else {
                 base_output
             };
 
+            // Apply hero collection rate buff (gems + fragments)
+            if player_data.hero_collection_rate_bps > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
+            }
+
             player_data.gems = player_data.gems
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
             // Deterministic fragment bonus (always award 2 fragments if unlocked)
+            // Hero collection_rate_bps also boosts fragment drops
             if player_data.has_fragment_drops {
-                let fragments = 2u64; // Deterministic: midpoint of old 1-3 range
+                let mut fragments = 2u64; // Deterministic: midpoint of old 1-3 range
+                if player_data.hero_collection_rate_bps > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                    fragments = fragments.saturating_mul(hero_multiplier) / 10000;
+                }
                 player_data.fragments = player_data.fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
@@ -417,8 +414,13 @@ pub fn process(
                 .ok_or(GameError::MathOverflow)?;
 
             // Deterministic fragment bonus (always award 1 fragment if unlocked)
+            // Hero collection_rate_bps also boosts fragment drops
             if player_data.has_fragment_drops {
-                let fragments = 1u64; // Deterministic: lower end of old 1-2 range (fishing less efficient)
+                let mut fragments = 1u64; // Deterministic: lower end of old 1-2 range (fishing less efficient)
+                if player_data.hero_collection_rate_bps > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                    fragments = fragments.saturating_mul(hero_multiplier) / 10000;
+                }
                 player_data.fragments = player_data.fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
@@ -430,27 +432,55 @@ pub fn process(
     // 13. Grant XP (1 XP per 1000 resources collected) - with time-of-day bonus!
     // Golden hours (Dawn/Dusk) grant φ² bonus, night grants √φ bonus
     let xp_amount = calculate_xp_reward(XpAction::CollectResources { amount: total_resources_collected });
-    grant_xp_with_time_bonus(player_data, xp_amount, now)?;
+    let old_level = player_data.level;
+    let (levels_gained, new_level, _) = grant_xp_with_time_bonus(&mut *player_data, xp_amount, now)?;
+
+    // Emit XP gained event
+    emit!(XpGained {
+        player: *owner.key(),
+        amount: xp_amount,
+        source: 1, // 1=collection
+        total_xp: player_data.current_xp,
+        timestamp: now,
+    });
+
+    // Emit level up event if player leveled
+    if levels_gained > 0 {
+        emit!(PlayerLeveledUp {
+            player: *owner.key(),
+            old_level: old_level.into(),
+            new_level: new_level.into(),
+            timestamp: now,
+        });
+    }
 
     // 14. Update networth (PURE LOGIC)
-    player_data.networth = calculate_networth(player_data, economic_config)?;
+    player_data.networth = calculate_networth(&*player_data, economic_config)?;
 
     // 14. Update event scores if player is participating in an event
     if let (Some(event_participation), Some(event)) = (event_participation, event) {
-        // Validate player is actually in this event
-        let event_data_ref = event.try_borrow_data()?;
-        let event_data = unsafe { crate::state::EventAccount::load(&event_data_ref) };
-        if player_data.current_event != event_data.id {
-            return Err(GameError::NotInEvent.into());
-        }
+        // Load event participation with ownership validation
+        let mut participation = crate::state::EventParticipation::load_checked_mut(
+            event_participation,
+            player_data.current_event,
+            owner.key(),
+            program_id,
+        )?;
+
+        // Load event with ownership validation
+        let mut event_data = crate::state::EventAccount::load_checked_mut(
+            event,
+            player_data.current_event,
+            program_id,
+        )?;
 
         let player_key = player.key();
 
         // DETERMINISTIC: Use exact resource value (no randomness)
         // MostResourcesCollected: Add resources collected (deterministic)
         let _ = update_event_score(
-            event_participation,
-            event,
+            &mut *participation,
+            &mut *event_data,
             player_key,
             EventType::MostResourcesCollected,
             total_resources_collected,
@@ -459,8 +489,8 @@ pub fn process(
 
         // HighestCash: Current cash (snapshot)
         let _ = update_event_score(
-            event_participation,
-            event,
+            &mut *participation,
+            &mut *event_data,
             player_key,
             EventType::HighestCash,
             player_data.cash_on_hand,
@@ -470,8 +500,8 @@ pub fn process(
         // MostXPGained: Add XP gained (deterministic)
         if xp_amount > 0 {
             let _ = update_event_score(
-                event_participation,
-                event,
+                &mut *participation,
+                &mut *event_data,
                 player_key,
                 EventType::MostXPGained,
                 xp_amount,
@@ -479,6 +509,33 @@ pub fn process(
             );
         }
     }
+
+    // Calculate gems and fragments earned for event
+    let (gems_earned, fragments_earned) = match collection_type {
+        CollectionType::Mining => {
+            let gems = total_resources_collected as u32;
+            let frags = if player_data.has_fragment_drops { 2u16 } else { 0 };
+            (gems, frags)
+        },
+        CollectionType::Fishing => {
+            let frags = if player_data.has_fragment_drops { 1u16 } else { 0 };
+            (0, frags)
+        },
+        CollectionType::Cash => (0, 0),
+    };
+
+    // Emit ResourcesCollected event
+    emit!(ResourcesCollected {
+        player: *player.key(),
+        collection_type: collection_type as u8,
+        novi_consumed: novi_amount,
+        base_output,
+        final_output: total_resources_collected,
+        gems_earned: gems_earned as u64,
+        fragments_earned: fragments_earned as u64,
+        xp_gained: xp_amount,
+        timestamp: now,
+    });
 
     Ok(())
 }

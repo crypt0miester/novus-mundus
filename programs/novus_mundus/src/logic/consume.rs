@@ -9,7 +9,7 @@ use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::Econo
 /// ```text
 /// base_multiplier = novi_consumption_base from config (13.75x = 137500 bp)
 /// secondary_multiplier = secondary_multiplier_base from config (√φ = 1.272x = 12720 bp)
-/// base = amount × base_multiplier × secondary_multiplier × luck
+/// base = amount × base_multiplier × secondary_multiplier × synchrony
 /// final = base × fibonacci_bonus_base if fibonacci amount, else base
 /// ```
 ///
@@ -21,7 +21,7 @@ use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::Econo
 ///
 /// # Arguments
 /// * `novi_amount` - Amount of NOVI to consume
-/// * `luck` - Luck multiplier (1.0 = no bonus)
+/// * `synchrony` - Synchrony multiplier (1.0 = no bonus)
 /// * `economic_config` - GameEngine economic configuration
 ///
 /// # Returns
@@ -32,7 +32,7 @@ use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::Econo
 /// let power = consume_novi_logic(100, 1.0, &economic_config);
 /// // power is fully deterministic
 /// ```
-pub fn consume_novi_logic(novi_amount: u64, luck: f32, economic_config: &EconomicConfig) -> u64 {
+pub fn consume_novi_logic(novi_amount: u64, synchrony: f32, economic_config: &EconomicConfig) -> u64 {
     // Base multiplier: Direct from config (deterministic, no min/max!)
     // Default: 137500 bp = 13.75x
     let base_mult_bp = economic_config.novi_consumption_base;
@@ -41,12 +41,12 @@ pub fn consume_novi_logic(novi_amount: u64, luck: f32, economic_config: &Economi
     // Default: 12720 bp = √φ = 1.272x (golden ratio harmony)
     let secondary_mult_bp = economic_config.secondary_multiplier_base as u64;
 
-    // Convert luck to basis points for integer math
-    let luck_bp = (luck * 10000.0) as u64;
+    // Convert synchrony to basis points for integer math
+    let synchrony_bp = (synchrony * 10000.0) as u64;
 
     // Calculate base consumption value using interleaved multiply/divide (no u128!)
-    // Formula: novi × base_mult / 10000 × secondary_mult / 10000 × luck / 10000
-    let base_value = chain_bp(novi_amount, &[base_mult_bp, secondary_mult_bp, luck_bp])
+    // Formula: novi × base_mult / 10000 × secondary_mult / 10000 × synchrony / 10000
+    let base_value = chain_bp(novi_amount, &[base_mult_bp, secondary_mult_bp, synchrony_bp])
         .unwrap_or(0);
 
     // Apply Fibonacci bonus deterministically using golden ratio from config
@@ -59,9 +59,9 @@ pub fn consume_novi_logic(novi_amount: u64, luck: f32, economic_config: &Economi
     }
 }
 
-/// Calculate luck factor for a player
+/// Calculate synchrony factor for a player
 ///
-/// Luck affects consumption efficiency and combat outcomes.
+/// Synchrony affects consumption efficiency and combat outcomes.
 ///
 /// All bonuses are configured via GameEngine (DAO-controlled, using basis points).
 ///
@@ -69,61 +69,58 @@ pub fn consume_novi_logic(novi_amount: u64, luck: f32, economic_config: &Economi
 /// ```text
 /// base = 10000 (100% = 1.0x)
 /// + subscription_tier_bonus (from SubscriptionTier config)
-/// + happiness_bonus (0 to happiness_luck_max based on average happiness)
-/// + reputation_bonus (from reputation_luck_bonuses array)
-/// + level_bonus (level * level_luck_bonus_per_level)
+/// + happiness_bonus (0 to happiness_synchrony_max based on average happiness)
+/// + reputation_bonus (from reputation_synchrony_bonuses array)
+/// + level_bonus (level * level_synchrony_bonus_per_level)
 /// ```
 ///
 /// # Arguments
 /// * `player` - Player account with stats
-/// * `gameplay_config` - GameplayConfig with luck bonus settings
-/// * `subscription_tiers` - Array of 4 subscription tiers with luck bonuses
+/// * `gameplay_config` - GameplayConfig with synchrony bonus settings
+/// * `subscription_tiers` - Array of 4 subscription tiers with synchrony bonuses
 /// * `now` - Current timestamp for subscription expiration check
 ///
 /// # Returns
-/// Luck multiplier (1.0 = base, higher = better)
-pub fn calculate_luck(
+/// Synchrony multiplier (1.0 = base, higher = better)
+pub fn calculate_synchrony(
     player: &crate::state::PlayerAccount,
     gameplay_config: &crate::state::GameplayConfig,
     subscription_tiers: &[crate::state::SubscriptionTier; 4],
     now: i64,
 ) -> f32 {
-    let mut luck_bp = 10000u32; // Start at 100% = 1.0x (in basis points)
+    let mut synchrony_bp = 10000u32; // Start at 100% = 1.0x (in basis points)
 
     // 1. Subscription tier bonus (from tier config, using effective tier for expiration)
     let tier_index = player.get_effective_tier(now) as usize;
-    luck_bp += subscription_tiers[tier_index].luck_bonus;
+    synchrony_bp += subscription_tiers[tier_index].synchrony_bonus;
 
-    // 2. Happiness bonus (0 to happiness_luck_max based on average happiness)
+    // 2. Happiness bonus (0 to happiness_synchrony_max based on average happiness)
     // Average both defensive and operative happiness (0.0-1.0 scale)
     let avg_happiness = (player.happiness_defensive + player.happiness_operative) / 2.0;
-    let happiness_bonus = ((avg_happiness * gameplay_config.happiness_luck_max as f32) as u32).min(gameplay_config.happiness_luck_max);
-    luck_bp += happiness_bonus;
+    let happiness_bonus = ((avg_happiness * gameplay_config.happiness_synchrony_max as f32) as u32).min(gameplay_config.happiness_synchrony_max);
+    synchrony_bp += happiness_bonus;
 
     // 3. Reputation bonus (from config array)
     // Reputation ranks: Novice(0), Skilled(1k), Veteran(5k), Elite(20k), Legendary(100k)
     let reputation_bonus = if player.reputation >= 100_000 {
-        gameplay_config.reputation_luck_bonuses[4] // Legendary
+        gameplay_config.reputation_synchrony_bonuses[4] // Legendary
     } else if player.reputation >= 20_000 {
-        gameplay_config.reputation_luck_bonuses[3] // Elite
+        gameplay_config.reputation_synchrony_bonuses[3] // Elite
     } else if player.reputation >= 5_000 {
-        gameplay_config.reputation_luck_bonuses[2] // Veteran
+        gameplay_config.reputation_synchrony_bonuses[2] // Veteran
     } else if player.reputation >= 1_000 {
-        gameplay_config.reputation_luck_bonuses[1] // Skilled
+        gameplay_config.reputation_synchrony_bonuses[1] // Skilled
     } else {
-        gameplay_config.reputation_luck_bonuses[0] // Novice
+        gameplay_config.reputation_synchrony_bonuses[0] // Novice
     };
-    luck_bp += reputation_bonus;
+    synchrony_bp += reputation_bonus;
 
-    // 4. Level bonus (level * level_luck_bonus_per_level)
+    // 4. Level bonus (level * level_synchrony_bonus_per_level)
     let level_bonus = (player.level as u32)
-        .saturating_mul(gameplay_config.level_luck_bonus_per_level);
-    luck_bp += level_bonus;
+        .saturating_mul(gameplay_config.level_synchrony_bonus_per_level);
+    synchrony_bp += level_bonus;
 
     // Convert from basis points to f32 multiplier
     // Example: 15000 basis points = 15000 / 10000 = 1.5x
-    luck_bp as f32 / 10000.0
+    synchrony_bp as f32 / 10000.0
 }
-
-// Tests removed - deterministic system doesn't need randomness tests
-// The consume_novi_logic function now uses deterministic golden ratio calculations

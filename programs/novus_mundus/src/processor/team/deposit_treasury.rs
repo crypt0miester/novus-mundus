@@ -7,8 +7,10 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamAccount, require_extension, EXT_TEAM},
+    state::{PlayerAccount, TeamAccount, require_extension, EXT_TEAM, NULL_PUBKEY},
     validation::{require_signer, require_writable},
+    emit,
+    events::TreasuryDeposit,
 };
 
 /// Deposit cash to team treasury
@@ -23,12 +25,26 @@ use crate::{
 ///
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Cash to deposit
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 16 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let amount = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let team_id = u64::from_le_bytes(instruction_data[8..16].try_into().unwrap());
+
+    if amount == 0 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    // 2. Parse Accounts
 
     let [
         player_account,
@@ -38,76 +54,61 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
+    // 3. Validate Accounts
 
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(team_account)?;
 
-    // 3. Parse Instruction Data
-
-    if instruction_data.len() < 8 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let amount = u64::from_le_bytes([
-        instruction_data[0],
-        instruction_data[1],
-        instruction_data[2],
-        instruction_data[3],
-        instruction_data[4],
-        instruction_data[5],
-        instruction_data[6],
-        instruction_data[7],
-    ]);
-
-    if amount == 0 {
-        return Err(GameError::InvalidParameter.into());
-    }
-
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut team_account_data = team_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
-
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
 
     // 4a. Require EXT_TEAM
-    require_extension(player_data, EXT_TEAM)?;
+    require_extension(&*player, EXT_TEAM)?;
 
     // 5. Validate Player Is Team Member
 
     // Team disbanded?
-    if team_data.is_disbanded() {
+    if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if !player_data.has_team {
+    if player.team == NULL_PUBKEY {
         return Err(GameError::NotInTeam.into());
     }
 
-    if &player_data.team != team_account.key() {
+    if &player.team != team_account.key() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Validate Player Has Sufficient Cash
 
-    if player_data.cash_on_hand < amount {
+    if player.cash_on_hand < amount {
         return Err(GameError::InsufficientCash.into());
     }
 
     // 7. Transfer Cash to Treasury
 
-    player_data.cash_on_hand = player_data.cash_on_hand
+    player.cash_on_hand = player.cash_on_hand
         .saturating_sub(amount);
 
-    team_data.treasury = team_data.treasury
+    team.treasury = team.treasury
         .saturating_add(amount);
+
+    // 8. Emit Event
+
+    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    let now = Clock::get()?.unix_timestamp;
+
+    emit!(TreasuryDeposit {
+        team: *team_account.key(),
+        depositor: *player_account.key(),
+        amount,
+        new_balance: team.treasury,
+        timestamp: now,
+    });
 
     Ok(())
 }

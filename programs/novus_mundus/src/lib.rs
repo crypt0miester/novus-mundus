@@ -10,6 +10,7 @@ mod validation;
 mod processor;
 mod helpers;
 mod token_helpers;
+pub mod events;
 
 // Re-exports
 pub use constants::*;
@@ -73,6 +74,7 @@ pub fn process_instruction(
         14 => processor::economy::mint_for_prize::process(program_id, accounts, instruction_data),
         17 => processor::economy::purchase_stamina::process(program_id, accounts, instruction_data),
         18 => processor::economy::transfer_cash::process(program_id, accounts, instruction_data),
+        19 => processor::economy::vault_transfer::process(program_id, accounts, instruction_data),
 
         // Token Operations (15-19)
         15 => processor::token::reserved_to_locked::process(program_id, accounts, instruction_data),
@@ -148,8 +150,9 @@ pub fn process_instruction(
         124 => processor::research::speed_up_research::process(program_id, accounts, instruction_data),
         125 => processor::research::cancel_research::process(program_id, accounts, instruction_data),
         126 => processor::research::update_template::process(program_id, accounts, instruction_data),
+        127 => processor::research::ascend::process(program_id, accounts, instruction_data),
 
-        // Hero System (130-139)
+        // Hero System (130-136)
         130 => processor::hero::create_template::process(program_id, accounts, instruction_data),
         131 => processor::hero::mint::process(program_id, accounts, instruction_data),
         132 => processor::hero::lock::process(program_id, accounts, instruction_data),
@@ -157,6 +160,10 @@ pub fn process_instruction(
         134 => processor::hero::level_up::process(program_id, accounts, instruction_data),
         135 => processor::hero::assign_defensive::process(program_id, accounts, instruction_data),
         136 => processor::hero::create_collection::process(program_id, accounts, instruction_data),
+
+        // Sanctuary Meditation (137-139)
+        137 => processor::sanctuary::start_meditation::process(program_id, accounts, instruction_data),
+        138 => processor::sanctuary::claim_meditation::process(program_id, accounts, instruction_data),
 
         // Shop System (140-159)
         140 => processor::shop::initialize_config::process(program_id, accounts, instruction_data),
@@ -176,6 +183,61 @@ pub fn process_instruction(
         154 => processor::shop::update_bundle::process(program_id, accounts, instruction_data),
         155 => processor::shop::update_config::process(program_id, accounts, instruction_data),
         156 => processor::shop::activate_sale::process(program_id, accounts, instruction_data),
+
+        // Estate System (160-179)
+        160 => processor::estate::create::process(program_id, accounts, instruction_data),
+        161 => processor::estate::build::process(program_id, accounts, instruction_data),
+        162 => processor::estate::upgrade::process(program_id, accounts, instruction_data),
+        163 => processor::estate::complete::process(program_id, accounts, instruction_data),
+        164 => processor::estate::buy_plot::process(program_id, accounts, instruction_data),
+        165 => processor::estate::daily_claim::process(program_id, accounts, instruction_data),
+        166 => processor::estate::daily_activity::process(program_id, accounts, instruction_data),
+        167 => processor::estate::convert_materials::process(program_id, accounts, instruction_data),
+
+        // Forge System (180-189) - Staged Tempering
+        180 => processor::forge::initialize::process(program_id, accounts, instruction_data),
+        181 => processor::forge::start_craft::process(program_id, accounts, instruction_data),
+        182 => processor::forge::strike::process(program_id, accounts, instruction_data),
+        183 => processor::forge::abandon_craft::process(program_id, accounts, instruction_data),
+        184 => processor::forge::equip::process(program_id, accounts, instruction_data),
+
+        // Reinforcement System (190-199)
+        190 => processor::reinforcement::send::process(program_id, accounts, instruction_data),
+        191 => processor::reinforcement::process_arrival::process(program_id, accounts, instruction_data),
+        192 => processor::reinforcement::recall::process(program_id, accounts, instruction_data),
+        193 => processor::reinforcement::relieve::process(program_id, accounts, instruction_data),
+        194 => processor::reinforcement::process_return::process(program_id, accounts, instruction_data),
+        195 => processor::reinforcement::speedup::process(program_id, accounts, instruction_data),
+
+        // Expedition System (200-209) - Mining/Fishing
+        200 => processor::expedition::start::process(program_id, accounts, instruction_data),
+        201 => processor::expedition::strike::process(program_id, accounts, instruction_data),
+        202 => processor::expedition::claim::process(program_id, accounts, instruction_data),
+        203 => processor::expedition::abort::process(program_id, accounts, instruction_data),
+        204 => processor::expedition::speedup::process(program_id, accounts, instruction_data),
+
+        // Team System Extended (210-229)
+        210 => processor::team::cancel_invite::process(program_id, accounts, instruction_data),
+        211 => processor::team::decline_invite::process(program_id, accounts, instruction_data),
+        212 => processor::team::set_motd::process(program_id, accounts, instruction_data),
+        213 => processor::team::update_settings::process(program_id, accounts, instruction_data),
+        214 => processor::team::treasury_request_withdraw::process(program_id, accounts, instruction_data),
+        215 => processor::team::treasury_approve_request::process(program_id, accounts, instruction_data),
+        216 => processor::team::treasury_reject_request::process(program_id, accounts, instruction_data),
+        217 => processor::team::treasury_execute_request::process(program_id, accounts, instruction_data),
+        218 => processor::team::treasury_cancel_request::process(program_id, accounts, instruction_data),
+        219 => processor::team::update_treasury_settings::process(program_id, accounts, instruction_data),
+        220 => processor::team::promote_member::process(program_id, accounts, instruction_data),
+        221 => processor::team::demote_member::process(program_id, accounts, instruction_data),
+
+        // Arena PvP System (230-236)
+        230 => processor::arena::create_season::process(program_id, accounts, instruction_data),
+        231 => processor::arena::join_season::process(program_id, accounts, instruction_data),
+        232 => processor::arena::update_loadout::process(program_id, accounts, instruction_data),
+        233 => processor::arena::challenge_player::process(program_id, accounts, instruction_data),
+        234 => processor::arena::claim_daily_reward::process(program_id, accounts, instruction_data),
+        235 => processor::arena::claim_master_reward::process(program_id, accounts, instruction_data),
+        236 => processor::arena::close_season::process(program_id, accounts, instruction_data),
 
         _ => Err(ProgramError::InvalidInstructionData),
     }

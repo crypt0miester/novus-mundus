@@ -1057,7 +1057,6 @@ MASTERY UNLOCKS:
 **Interactive Features**:
 - **Star Chart**: View encounter spawns in range
 - **Rare Alerts**: Get notified of valuable spawns
-- **Weather Prediction**: See upcoming time-of-day bonuses
 - **Celestial Events**: Special timed bonuses
 - **Telescope Upgrade**: Extend vision range
 
@@ -2498,6 +2497,562 @@ pub fn forge_start_craft(accounts: &[AccountInfo], data: &[u8]) -> ProgramResult
 
 ---
 
+## Hard Gating: Building Requirements
+
+**Philosophy**: Buildings are not optional bonuses - they are **gates** that unlock core game features. Players MUST build to access functionality.
+
+### Gating Rules
+
+1. **No Building = No Access**: Feature completely blocked without building
+2. **Building Level = Feature Tier**: Higher levels unlock advanced features
+3. **Active Status Required**: Building must be Active (not Upgrading/Damaged)
+4. **On-Chain Validation**: Processors check building ownership before execution
+
+---
+
+### Always Available (No Building Required)
+
+These features are baseline and never gated:
+
+| Feature | Processor | Rationale |
+|---------|-----------|-----------|
+| Player creation | `initialization/player.rs` | Onboarding |
+| User account | `initialization/user.rs` | Onboarding |
+| Travel (intercity/intracity) | `travel/*.rs` | Core exploration |
+| Basic encounters (PvE) | `combat/attack_encounter.rs` | Core gameplay |
+| Loot claiming | `loot/claim.rs` | Reward collection |
+| Team operations | `team/*.rs` | Social features |
+| Subscription purchase | `subscription/purchase.rs` | Monetization |
+| Event joining | `event/join.rs` | Criteria-based |
+
+---
+
+### 🏛️ MANSION (Tier 1) - Estate Core
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Login streak rewards | `progression/claim_daily_reward.rs` | Lv.1 |
+| Daily activity system | NEW: `estate/daily_activity.rs` | Lv.1 |
+| Estate visitor system | NEW: `estate/visit.rs` | Lv.5 |
+
+**Level Bonuses:**
+```
+Lv.1:  Unlock daily rewards
+Lv.5:  +10% daily reward base
+Lv.10: +25% daily reward base, visitor system
+Lv.15: +50% daily reward base
+Lv.20: +100% daily reward base, "Estate Lord" title
+```
+
+**Processor Modification:**
+```rust
+// claim_daily_reward.rs - ADD at start
+let estate_data = load_estate(player_data.estate)?;
+let mansion = get_building(&estate_data, BuildingType::Mansion)?;
+if mansion.is_none() || mansion.unwrap().status != BuildingStatus::Active {
+    return Err(GameError::BuildingRequired.into());
+}
+```
+
+---
+
+### ⚔️ BARRACKS (Tier 1) - Military
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Hire DefensiveUnit1 | `economy/hire_units.rs` | Lv.1 |
+| Hire DefensiveUnit2 | `economy/hire_units.rs` | Lv.5 |
+| Hire DefensiveUnit3 | `economy/hire_units.rs` | Lv.10 |
+| Hire OperativeUnit1 | `economy/hire_units.rs` | Lv.3 |
+| Hire OperativeUnit2 | `economy/hire_units.rs` | Lv.8 |
+| Hire OperativeUnit3 | `economy/hire_units.rs` | Lv.15 |
+| Assign defensive hero | `hero/assign_defensive.rs` | Lv.10 |
+
+**Level Bonuses:**
+```
+Lv.1:  Basic units available
+Lv.5:  +10% unit hire efficiency
+Lv.10: +20% efficiency, Tier 2 units, defensive hero slot
+Lv.15: +35% efficiency, Tier 3 units
+Lv.20: +50% efficiency, "Warlord" title
+```
+
+**Processor Modification:**
+```rust
+// hire_units.rs - ADD validation
+let barracks = get_building(&estate_data, BuildingType::Barracks)?;
+if barracks.is_none() {
+    return Err(GameError::BuildingRequired.into());
+}
+let barracks = barracks.unwrap();
+
+// Check unit tier requirements
+let required_level = match unit_type {
+    UnitType::DefensiveUnit1 => 1,
+    UnitType::DefensiveUnit2 => 5,
+    UnitType::DefensiveUnit3 => 10,
+    UnitType::OperativeUnit1 => 3,
+    UnitType::OperativeUnit2 => 8,
+    UnitType::OperativeUnit3 => 15,
+};
+
+if barracks.level < required_level {
+    return Err(GameError::BuildingLevelInsufficient.into());
+}
+```
+
+---
+
+### 🔧 WORKSHOP (Tier 1) - Materials
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Collect resources | `economy/collect_resources.rs` | Lv.1 |
+| Uncommon materials | `economy/collect_resources.rs` | Lv.5 |
+| Rare materials | `economy/collect_resources.rs` | Lv.10 |
+| Epic materials | `economy/collect_resources.rs` | Lv.15 |
+| Legendary materials | `economy/collect_resources.rs` | Lv.20 |
+
+**Level Bonuses:**
+```
+Lv.1:  Common materials only
+Lv.5:  +Uncommon, +15% generation
+Lv.10: +Rare, +30% generation
+Lv.15: +Epic, +50% generation
+Lv.20: +Legendary, +75% generation, "Master Craftsman" title
+```
+
+---
+
+### 🏦 VAULT (Tier 1) - Finance
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| NOVI generation (base cap) | `economy/update_locked_novi.rs` | Lv.1 |
+| NOVI cap +50% | `economy/update_locked_novi.rs` | Lv.5 |
+| NOVI cap +100% | `economy/update_locked_novi.rs` | Lv.10 |
+| Cash transfers | `economy/transfer_cash.rs` | Lv.5 |
+| Transfer limit +100% | `economy/transfer_cash.rs` | Lv.10 |
+| Transfer limit +250% | `economy/transfer_cash.rs` | Lv.15 |
+
+**Level Bonuses:**
+```
+Lv.1:  Base NOVI cap (from subscription)
+Lv.5:  +50% NOVI cap, cash transfers unlocked
+Lv.10: +100% NOVI cap, +100% transfer limit
+Lv.15: +150% NOVI cap, +250% transfer limit
+Lv.20: +200% NOVI cap, unlimited transfers, "Banker" title
+```
+
+**Processor Modification:**
+```rust
+// update_locked_novi.rs - MODIFY cap calculation
+let vault = get_building(&estate_data, BuildingType::Vault);
+let vault_bonus = match vault {
+    Some(v) if v.status == BuildingStatus::Active => {
+        match v.level {
+            1..=4 => 0,
+            5..=9 => 5000,   // +50%
+            10..=14 => 10000, // +100%
+            15..=19 => 15000, // +150%
+            _ => 20000,       // +200%
+        }
+    }
+    _ => 0, // No vault = no bonus (but still base cap)
+};
+
+let max_locked_novi = apply_bp_bonus(tier.max_locked_novi, vault_bonus)?;
+
+// transfer_cash.rs - ADD gate
+let vault = get_building(&estate_data, BuildingType::Vault)?;
+if vault.is_none() || vault.unwrap().level < 5 {
+    return Err(GameError::VaultRequired.into());
+}
+```
+
+---
+
+### ⚒️ FORGE (Tier 2) - Crafting
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Craft Refined (Tier 2) | NEW: `estate/craft_equipment.rs` | Lv.1 |
+| Craft Superior (Tier 3) | NEW: `estate/craft_equipment.rs` | Lv.5 |
+| Craft Elite (Tier 4) | NEW: `estate/craft_equipment.rs` | Lv.8 |
+| Craft Masterwork (Tier 5) | NEW: `estate/craft_equipment.rs` | Lv.12 |
+| Craft Legendary (Tier 6) | NEW: `estate/craft_equipment.rs` | Lv.16 |
+| Craft Mythic (Tier 7) | NEW: `estate/craft_equipment.rs` | Lv.18 |
+| Craft Divine (Tier 8) | NEW: `estate/craft_equipment.rs` | Lv.20 |
+
+**Note:** Forge is for CRAFTING quality upgrades. Buying basic equipment uses Market.
+
+**Level Bonuses:**
+```
+Lv.1:  Tier 2 crafting
+Lv.5:  Tier 3, +5% success rate
+Lv.8:  Tier 4, +10% success rate
+Lv.12: Tier 5, +15% success rate
+Lv.16: Tier 6, +20% success rate
+Lv.18: Tier 7, +25% success rate
+Lv.20: Tier 8, +30% success rate, "Master Smith" title
+```
+
+---
+
+### 🏪 MARKET (Tier 2) - Commerce
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Purchase equipment (basic) | `economy/purchase_equipment.rs` | Lv.1 |
+| Purchase stamina | `economy/purchase_stamina.rs` | Lv.1 |
+| Shop items | `shop/purchase_item.rs` | Lv.1 |
+| Shop bundles | `shop/purchase_bundle.rs` | Lv.5 |
+| Flash sales | `shop/purchase_flash_sale.rs` | Lv.10 |
+
+**Level Bonuses:**
+```
+Lv.1:  Basic shop access
+Lv.5:  5% discount, bundles unlocked
+Lv.10: 10% discount, flash sales
+Lv.15: 15% discount
+Lv.20: 20% discount, "Merchant Prince" title
+```
+
+**Processor Modification:**
+```rust
+// purchase_equipment.rs - ADD gate
+let market = get_building(&estate_data, BuildingType::Market)?;
+if market.is_none() {
+    return Err(GameError::MarketRequired.into());
+}
+
+// Apply discount from market level
+let discount_bps = market.unwrap().level as u16 * 100; // 1% per level, cap 20%
+let discounted_cost = apply_bp(total_cost, 10000 - discount_bps.min(2000))?;
+```
+
+---
+
+### 📚 ACADEMY (Tier 2) - Research
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Start research | `research/start_research.rs` | Lv.1 |
+| Speed up research | `research/speed_up_research.rs` | Lv.1 |
+| Research Battle tree | `research/start_research.rs` | Lv.1 |
+| Research Economy tree | `research/start_research.rs` | Lv.5 |
+| Research Growth tree | `research/start_research.rs` | Lv.10 |
+
+**Level Bonuses:**
+```
+Lv.1:  Battle research unlocked
+Lv.5:  Economy research, +10% research speed
+Lv.10: Growth research, +25% research speed
+Lv.15: +40% research speed
+Lv.20: +60% research speed, "Scholar" title
+```
+
+**Processor Modification:**
+```rust
+// start_research.rs - ADD gate
+let academy = get_building(&estate_data, BuildingType::Academy)?;
+if academy.is_none() {
+    return Err(GameError::AcademyRequired.into());
+}
+
+// Check research category requirements
+let template = load_research_template(research_type)?;
+let required_level = match template.category {
+    ResearchCategory::Battle => 1,
+    ResearchCategory::Economy => 5,
+    ResearchCategory::Growth => 10,
+};
+
+if academy.unwrap().level < required_level {
+    return Err(GameError::BuildingLevelInsufficient.into());
+}
+```
+
+---
+
+### 🏟️ ARENA (Tier 2) - PvP
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Attack players (PvP) | `combat/attack_player.rs` | Lv.1 |
+| Challenge specific player | `combat/attack_player.rs` | Lv.5 |
+| Ranked matches | NEW: `arena/ranked_match.rs` | Lv.10 |
+
+**Note:** PvE encounters (`attack_encounter.rs`) remain FREE. Arena gates PvP only.
+
+**Level Bonuses:**
+```
+Lv.1:  PvP unlocked (random matchmaking)
+Lv.5:  Targeted attacks, +5% PvP damage
+Lv.10: Ranked system, +10% PvP damage
+Lv.15: +15% PvP damage
+Lv.20: +25% PvP damage, "Champion" title
+```
+
+**Processor Modification:**
+```rust
+// attack_player.rs - ADD gate
+let arena = get_building(&estate_data, BuildingType::Arena)?;
+if arena.is_none() {
+    return Err(GameError::ArenaRequired.into());
+}
+
+// Apply damage bonus from arena level
+let arena_damage_bonus_bps = arena.unwrap().level as u16 * 50; // 0.5% per level
+```
+
+---
+
+### 🏛️ SANCTUARY (Tier 3) - Heroes
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Lock hero for buffs | `hero/lock.rs` | Lv.1 |
+| Unlock hero | `hero/unlock.rs` | Lv.1 |
+| Level up hero | `hero/level_up.rs` | Lv.5 |
+| Hero synergy (2 heroes) | Logic check | Lv.10 |
+| Hero synergy (3 heroes) | Logic check | Lv.15 |
+| Hero synergy (4 heroes) | Logic check | Lv.20 |
+
+**Level Bonuses:**
+```
+Lv.1:  Lock/unlock 1 hero
+Lv.5:  Hero leveling, lock 2 heroes
+Lv.10: Lock 3 heroes, synergy bonuses
+Lv.15: Lock 4 heroes, enhanced synergies
+Lv.20: Lock 5 heroes, "Hero Master" title
+```
+
+**Processor Modification:**
+```rust
+// hero/lock.rs - ADD gate
+let sanctuary = get_building(&estate_data, BuildingType::Sanctuary)?;
+if sanctuary.is_none() {
+    return Err(GameError::SanctuaryRequired.into());
+}
+
+// Check hero slot limits
+let max_locked_heroes = match sanctuary.unwrap().level {
+    1..=4 => 1,
+    5..=9 => 2,
+    10..=14 => 3,
+    15..=19 => 4,
+    _ => 5,
+};
+
+if player_data.locked_hero_count >= max_locked_heroes {
+    return Err(GameError::MaxHeroesLocked.into());
+}
+```
+
+---
+
+### 🔭 OBSERVATORY (Tier 3) - Vision
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| See encounters in city | `encounter/spawn.rs` | Lv.1 |
+| See encounters in region | `encounter/spawn.rs` | Lv.5 |
+| See encounter rarity | `encounter/spawn.rs` | Lv.10 |
+| Global encounter alerts | `encounter/spawn.rs` | Lv.15 |
+
+**Note:** Does NOT gate attacking encounters - gates VISION of what's available.
+
+**Level Bonuses:**
+```
+Lv.1:  Current city encounters
+Lv.5:  Adjacent cities, +10% loot bonus
+Lv.10: Rarity preview, +25% loot bonus
+Lv.15: 3-city radius, +40% loot bonus
+Lv.20: Global alerts, +60% loot bonus, "All-Seeing" title
+```
+
+---
+
+### 💰 TREASURY (Tier 3) - Wealth
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Claim event prizes | `event/claim_prize.rs` | Lv.1 |
+| Prize bonus +25% | `event/claim_prize.rs` | Lv.10 |
+| Prize bonus +50% | `event/claim_prize.rs` | Lv.20 |
+
+**Level Bonuses:**
+```
+Lv.1:  Claim prizes (no bonus)
+Lv.5:  +10% prize bonus
+Lv.10: +25% prize bonus
+Lv.15: +40% prize bonus
+Lv.20: +50% prize bonus, "Treasurer" title
+```
+
+**Processor Modification:**
+```rust
+// event/claim_prize.rs - ADD gate + bonus
+let treasury = get_building(&estate_data, BuildingType::Treasury)?;
+if treasury.is_none() {
+    return Err(GameError::TreasuryRequired.into());
+}
+
+let prize_bonus_bps = match treasury.unwrap().level {
+    1..=4 => 0,
+    5..=9 => 1000,   // +10%
+    10..=14 => 2500, // +25%
+    15..=19 => 4000, // +40%
+    _ => 5000,       // +50%
+};
+
+let final_prize = apply_bp_bonus(base_prize, prize_bonus_bps)?;
+```
+
+---
+
+### 🏰 CITADEL (Tier 3) - Defense & Rallies
+
+**Gates:**
+
+| Feature | Processor | Required Level |
+|---------|-----------|----------------|
+| Create rally | `rally/create.rs` | Lv.1 |
+| Join rally | `rally/join.rs` | Lv.1 |
+| Rally capacity +50% | `rally/create.rs` | Lv.10 |
+| Rally capacity +100% | `rally/create.rs` | Lv.20 |
+
+**Level Bonuses:**
+```
+Lv.1:  Basic rally (5 members max)
+Lv.5:  +25% rally capacity, +5% rally damage
+Lv.10: +50% rally capacity, +10% rally damage
+Lv.15: +75% rally capacity, +15% rally damage
+Lv.20: +100% rally capacity, +25% rally damage, "Castellan" title
+```
+
+**Processor Modification:**
+```rust
+// rally/create.rs - ADD gate
+let citadel = get_building(&estate_data, BuildingType::Citadel)?;
+if citadel.is_none() {
+    return Err(GameError::CitadelRequired.into());
+}
+
+// Calculate rally capacity
+let base_capacity = 5;
+let capacity_bonus_bps = citadel.unwrap().level as u16 * 500; // 5% per level
+let max_rally_members = apply_bp_bonus(base_capacity, capacity_bonus_bps)?;
+```
+
+---
+
+### Summary: Processor → Building Requirements
+
+| Processor | Required Building | Min Level |
+|-----------|-------------------|-----------|
+| `claim_daily_reward.rs` | Mansion | 1 |
+| `hire_units.rs` | Barracks | 1+ (by tier) |
+| `collect_resources.rs` | Workshop | 1+ (by tier) |
+| `update_locked_novi.rs` | Vault (bonus only) | - |
+| `transfer_cash.rs` | Vault | 5 |
+| `purchase_equipment.rs` | Market | 1 |
+| `purchase_stamina.rs` | Market | 1 |
+| `shop/purchase_*.rs` | Market | 1+ |
+| `research/*.rs` | Academy | 1+ |
+| `combat/attack_player.rs` | Arena | 1 |
+| `hero/lock.rs` | Sanctuary | 1 |
+| `hero/unlock.rs` | Sanctuary | 1 |
+| `hero/level_up.rs` | Sanctuary | 5 |
+| `rally/*.rs` | Citadel | 1 |
+| `event/claim_prize.rs` | Treasury | 1 |
+
+---
+
+### New Error Codes
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameError {
+    // ... existing ...
+
+    // Building requirement errors
+    BuildingRequired,           // Generic: need a building
+    BuildingLevelInsufficient,  // Have building, wrong level
+    BuildingNotActive,          // Building is upgrading/damaged
+    MansionRequired,
+    BarracksRequired,
+    WorkshopRequired,
+    VaultRequired,
+    ForgeRequired,
+    MarketRequired,
+    AcademyRequired,
+    ArenaRequired,
+    SanctuaryRequired,
+    ObservatoryRequired,
+    TreasuryRequired,
+    CitadelRequired,
+    MaxHeroesLocked,
+}
+```
+
+---
+
+### Helper Function
+
+```rust
+/// Load and validate building requirement
+pub fn require_building(
+    estate: &EstateAccount,
+    building_type: BuildingType,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
+    // Find building in estate
+    let building = estate.buildings.iter()
+        .find(|b| b.building_type == building_type as u8);
+
+    match building {
+        None => Err(GameError::BuildingRequired.into()),
+        Some(b) if b.status != BuildingStatus::Active as u8 => {
+            Err(GameError::BuildingNotActive.into())
+        }
+        Some(b) if b.level < min_level => {
+            Err(GameError::BuildingLevelInsufficient.into())
+        }
+        Some(b) => Ok(b),
+    }
+}
+
+// Usage in any processor:
+let barracks = require_building(&estate, BuildingType::Barracks, 10)?;
+// Now safe to proceed with Tier 3 unit hiring
+```
+
+---
+
 ## Integration Points
 
 ### With Player Account
@@ -3258,24 +3813,42 @@ Each building has a unique daily activity. Game specifics TBD at UI implementati
 
 ---
 
-**🏠 MANSION - "Daily Focus" (Dawn)**
+**🏠 MANSION - "Welcome Home" (Any Time)**
 ```
-Type: Strategic Choice
-Time: ~10 seconds
-Window: Dawn only
+Type: Login Claim
+Time: ~5 seconds
+Window: Any (once per day)
 
 Mechanic:
-├── Choose focus for the day: Combat | Economy | Crafting
-├── Chosen focus: +10% to related activities for 24h
-├── Can only choose once per day
-└── Skip: No focus bonus
+├── Visit your Mansion
+├── Claim daily presence reward
+├── Streak increments automatically
+└── That's it - just show up!
 
-Rewards:
-├── Combat focus: +10% attack/defense
-├── Economy focus: +10% cash/material gains
-├── Crafting focus: +10% craft success rate & mastery XP
+Base Rewards:
+├── 100 common materials
+├── 50 NOVI
+├── 10 XP
 
-On-chain: Store choice, apply buff modifier to calculations
+Streak Bonuses (multiplies base):
+├── Days 1-6: 1.0x
+├── Days 7-13: 1.25x
+├── Days 14-29: 1.5x
+├── Days 30-59: 2.0x
+├── Days 60-89: 2.5x
+├── Days 90+: 3.0x
+
+Streak Milestones:
+├── 7 days: 500 NOVI + 100 uncommon materials
+├── 14 days: 1,000 NOVI + 50 rare materials
+├── 30 days: 5,000 NOVI + 25 epic + "Dedicated" title
+├── 60 days: 15,000 NOVI + 10 legendary + cosmetic
+├── 90 days: 30,000 NOVI + exclusive artifact + "Unwavering" title
+├── 180 days: 100,000 NOVI + legendary artifact + permanent +5% all rewards
+
+Miss a day = streak resets to 0. No protection, no exceptions.
+
+On-chain: Check last_claim_date, grant rewards, update streak
 ```
 
 ---
@@ -3373,25 +3946,27 @@ On-chain: Receive signed score, store mastery buff
 
 ---
 
-**🏪 MARKET - "Price Prophet" (Midday)**
+**🏪 MARKET - "Deal Finder" (Midday)**
 ```
-Type: Prediction Game (Commit-Reveal)
+Type: Speed Selection Game
 Time: ~20 seconds
-Window: Midday (commit), Next day (reveal)
+Window: Midday
 
 Mechanic:
-├── 3 items shown with current prices
-├── Predict UP or DOWN for each
-├── Results checked next day
-└── Prices determined by game state/algorithm
+├── 9 items flash on screen with varying discounts
+├── Some are good deals (green), some are traps (red)
+├── Player must quickly tap/select the best deals
+├── Timer pressure, items shuffle/disappear
+└── Score = (good deals selected) - (traps selected)
 
-Next Day Rewards:
-├── 0/3 correct: Nothing
-├── 1/3 correct: 5% discount on that item
-├── 2/3 correct: 10% discount on those items
-├── 3/3 correct: 15% discount ALL items + "Oracle" badge
+Score → Reward:
+├── 0-2 points: No discount
+├── 3-4 points: 5% shop discount today
+├── 5-6 points: 10% shop discount today
+├── 7-8 points: 15% shop discount today
+├── 9 (perfect): 20% shop discount + "Bargain Hunter" badge
 
-On-chain: Store predictions (Day 1), verify & grant discounts (Day 2)
+On-chain: Receive signed score, apply discount modifier
 ```
 
 ---
@@ -3535,12 +4110,12 @@ On-chain: Display attack logs, store stance choice
 
 | Building | Window | Game Type | Time | Primary Reward |
 |----------|--------|-----------|------|----------------|
-| Mansion | Dawn | Choice | 10s | +10% focus buff |
+| Mansion | Any | Claim | 5s | Login streak rewards + NOVI/materials |
 | Barracks | Dawn | Timing | 15s | Unit effectiveness buff |
 | Workshop | Dawn/Mid | Sorting | 30s | 10-65 materials |
 | Vault | Dawn/Mid | Observation | 30s | 50-200+ materials |
 | Forge | Dawn/Mid | Precision | 10s | +25-100% mastery XP |
-| Market | Midday | Prediction | 20s | Tomorrow's discounts |
+| Market | Midday | Speed Select | 20s | 5-20% shop discount |
 | Academy | Midday | Quiz | 30s | 50-200 research XP |
 | Arena | Midday | Combat | 20s | +5-15% arena damage |
 | Sanctuary | Dusk | Choice | 10s | Hero +25% buff |
@@ -3548,11 +4123,42 @@ On-chain: Display attack logs, store stance choice
 | Treasury | Dusk | Memory | 45s | 100-900 NOVI |
 | Citadel | Dusk | Review | 30s | Defense stance |
 
-**Total daily time:** ~15-20 minutes across all windows
+**Total daily time:** ~15-20 minutes across all windows (mini-games are optional)
 
 ---
 
-#### Completion Bonuses
+#### Streak System
+
+**Login Streak (Mansion)**
+
+The primary streak is tied to the Mansion's "Welcome Home" claim. Just visit your Mansion daily to maintain streak.
+
+```
+LOGIN STREAK RULES:
+├── Visit Mansion = streak increments
+├── Miss a day = streak resets to 0
+├── No protection, no exceptions
+
+STREAK MULTIPLIER (applies to Mansion rewards):
+├── Days 1-6: 1.0x
+├── Days 7-13: 1.25x
+├── Days 14-29: 1.5x
+├── Days 30-59: 2.0x
+├── Days 60-89: 2.5x
+├── Days 90+: 3.0x
+
+MILESTONE REWARDS (one-time):
+├── 7 days: 500 NOVI + 100 uncommon
+├── 14 days: 1,000 NOVI + 50 rare
+├── 30 days: 5,000 NOVI + 25 epic + "Dedicated" title
+├── 60 days: 15,000 NOVI + 10 legendary + cosmetic
+├── 90 days: 30,000 NOVI + artifact + "Unwavering" title
+├── 180 days: 100,000 NOVI + legendary artifact + permanent +5% all rewards
+```
+
+**Window Completion Bonuses**
+
+Mini-game activities have optional window completion bonuses:
 
 ```
 WINDOW COMPLETION:
@@ -3561,38 +4167,7 @@ WINDOW COMPLETION:
 ├── Dusk complete (4 buildings): +10% to Dusk rewards
 ├── Full day (all 3 windows): +25% bonus to ALL rewards
 
-DAILY REWARDS SCALING:
-├── 1 window completed: 40% of max daily potential
-├── 2 windows completed: 70% of max daily potential
-├── 3 windows completed: 100% + streak bonus
-```
-
----
-
-#### Streak System
-
-```
-STREAK RULES:
-├── Full day (3 windows) = streak increments
-├── Miss any window = streak resets to 0
-├── No partial credit, no streak protection
-
-STREAK MILESTONES:
-├── 3 days: 100 common materials
-├── 7 days: 50 uncommon + 500 NOVI
-├── 14 days: 25 rare + 1,000 NOVI
-├── 30 days: 10 epic + 5,000 NOVI + "Dedicated" title
-├── 60 days: 5 legendary + 15,000 NOVI + cosmetic unlock
-├── 90 days: Exclusive artifact + "Unwavering" title
-├── 180 days: Legendary artifact + permanent +5% all rewards
-
-STREAK MULTIPLIER (applies to all rewards):
-├── Days 1-6: 1.0x
-├── Days 7-13: 1.1x
-├── Days 14-29: 1.25x
-├── Days 30-59: 1.5x
-├── Days 60-89: 1.75x
-├── Days 90+: 2.0x
+Note: These are bonus multipliers, NOT required for login streak
 ```
 
 ---
@@ -3602,8 +4177,14 @@ STREAK MULTIPLIER (applies to all rewards):
 ```rust
 /// Daily activity tracking - add to PlayerCore or EstateAccount
 pub struct DailyActivityState {
+    // Login streak (Mansion)
+    pub last_login_date: u16,         // Days since epoch
+    pub login_streak: u16,            // Current consecutive days
+    pub longest_login_streak: u16,    // Best ever
+    pub permanent_bonus_bps: u16,     // From 180-day milestone (+5%)
+
     // Window tracking
-    pub daily_date: u16,              // Days since epoch
+    pub daily_date: u16,              // Days since epoch (for mini-games)
     pub dawn_timestamp: i64,          // When player started today
     pub windows_completed: u8,        // Bitflags: 0b00000DML (Dawn/Midday/Dusk)
 
@@ -3612,23 +4193,14 @@ pub struct DailyActivityState {
     pub midday_buildings: u16,
     pub dusk_buildings: u16,
 
-    // Streak
-    pub current_streak: u16,
-    pub longest_streak: u16,
-
     // Active buffs (from mini-games, expire at next dawn)
-    pub daily_focus: u8,              // 0=none, 1=combat, 2=economy, 3=crafting
     pub unit_effectiveness_bps: u16,  // From Barracks
     pub mastery_bonus_bps: u16,       // From Forge
     pub arena_damage_bps: u16,        // From Arena
     pub loot_bonus_bps: u16,          // From Observatory
-    pub market_discount_bps: u16,     // From Market (next day)
+    pub market_discount_bps: u16,     // From Market (same day)
     pub blessed_hero: Pubkey,         // From Sanctuary
     pub citadel_stance: u8,           // From Citadel
-
-    // Market predictions (commit-reveal)
-    pub market_predictions: u8,       // Packed: 3 bits for 3 predictions
-    pub prediction_date: u16,         // When predictions were made
 }
 
 /// Instruction data for completing a daily activity
@@ -3755,9 +4327,41 @@ SEASONAL REWARDS:
 
 ---
 
-*Document Version: 1.4*
+*Document Version: 1.7*
 *Last Updated: December 2025*
 *Author: Game Design Team*
+
+**v1.7 Changes:**
+- Added **Hard Gating: Building Requirements** section
+  - Buildings now GATE access to features (not just bonuses)
+  - Mapped all existing processors to required buildings
+  - Defined level requirements for each feature tier
+  - Added processor modification code snippets
+  - New error codes for building requirements
+  - Helper function `require_building()` for validation
+- Key gates:
+  - Mansion → Daily rewards (`claim_daily_reward.rs`)
+  - Barracks → Unit hiring (`hire_units.rs`)
+  - Workshop → Material collection (`collect_resources.rs`)
+  - Vault → Cash transfers (`transfer_cash.rs`)
+  - Market → All purchases (`purchase_*.rs`)
+  - Academy → Research (`research/*.rs`)
+  - Arena → PvP combat (`attack_player.rs`)
+  - Sanctuary → Hero management (`hero/*.rs`)
+  - Citadel → Rally system (`rally/*.rs`)
+  - Treasury → Prize claiming (`claim_prize.rs`)
+
+**v1.6 Changes:**
+- Mansion → **Login Streak Claim** ("Welcome Home")
+  - Just visit and claim - no mini-game required
+  - Streak multipliers: 1.0x → 3.0x over 90 days
+  - Milestone rewards: NOVI + materials + titles
+  - Miss a day = reset to 0, no exceptions
+- Market → **Deal Finder** (replaces Price Prophet predictions)
+  - Speed selection game (identify good deals vs traps)
+  - Same-day shop discount rewards (no predictions)
+- Removed all prediction systems (not good)
+- State structure simplified (no prediction fields)
 
 **v1.5 Changes:**
 - Replaced boring daily claim with **Building Mini-Games**

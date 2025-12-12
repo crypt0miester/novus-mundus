@@ -7,8 +7,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::PlayerAccount,
-    constants::PLAYER_SEED,
+    state::{PlayerAccount, GameEngine},
     types::EventType,
     logic::{
         update_happiness_defensive,
@@ -18,13 +17,13 @@ use crate::{
         ActivityType,
         safe_math::apply_bp,
     },
-    helpers::event_scoring::update_event_score,
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
+    helpers::{
+        event_scoring::update_event_score,
+        estate::{market_discount_bps, load_estate_for_player, require_market},
     },
+    validation::require_signer,
+    emit,
+    events::EquipmentPurchased,
 };
 
 /// Equipment type for purchases
@@ -70,8 +69,13 @@ impl TryFrom<u8> for EquipmentType {
 /// - [writable] player: PlayerAccount PDA
 /// - [signer] owner: Wallet that owns the account
 /// - [] game_engine: GameEngine PDA (for cost config)
+/// - [] estate_account: EstateAccount PDA (for Market discount)
 /// - [writable] event_participation: (Optional) EventParticipation PDA for event scoring
 /// - [writable] event: (Optional) EventAccount PDA for event scoring
+///
+/// # Building Bonuses
+/// Market building provides discounts on equipment purchases:
+/// - 1% discount per Market level (max 20% at level 20)
 ///
 /// # Instruction Data
 /// - equipment_type: u8 (1 byte) - 0=Weapons, 1=Produce, 2=Vehicles
@@ -83,20 +87,17 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    let (player, owner, game_engine, event_participation, event) = if accounts.len() >= 5 {
-        (&accounts[0], &accounts[1], &accounts[2], Some(&accounts[3]), Some(&accounts[4]))
-    } else if accounts.len() >= 3 {
-        (&accounts[0], &accounts[1], &accounts[2], None, None)
+    // estate_account is required, event accounts are optional
+    let (player, owner, game_engine, estate_account, event_participation, event) = if accounts.len() >= 6 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], Some(&accounts[4]), Some(&accounts[5]))
+    } else if accounts.len() >= 4 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], None, None)
     } else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate accounts
+    // 2. Validate signer
     require_signer(owner)?;
-    require_writable(player)?;
-    require_owner(player, program_id)?;
-
-    let bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
 
     // 3. Parse instruction data
     if data.len() != 10 {
@@ -115,22 +116,10 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load player and game engine data
-    let mut player_data_ref = player.try_borrow_mut_data()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
+    // 4. Load and verify accounts
+    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
+    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
     let economic_config = &game_engine_data.economic_config;
-
-    // Verify ownership and bump
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if player_data.bump != bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
 
     // 5. Calculate total cost with DAO multiplier
     // Get base cost from GameEngine config (differentiated by type using φ ratios)
@@ -160,7 +149,23 @@ pub fn process(
     let cost_multiplier = get_time_multiplier(time_of_day, ActivityType::Purchasing);
 
     // Apply cost multiplier (lower multiplier = cheaper purchase)
-    let total_cost = ((base_total_cost as f64) * cost_multiplier) as u64;
+    let time_adjusted_cost = ((base_total_cost as f64) * cost_multiplier) as u64;
+
+    // 5b. HARD GATE: Require Market building for equipment purchases
+    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+    require_market(estate, 1)?;
+
+    // Apply Market building discount (BUILDING BONUS)
+    // Market level provides 1% discount per level, max 20%
+    let discount_bps = market_discount_bps(estate);
+
+    // Apply discount: cost × (10000 - discount_bps) / 10000
+    let total_cost = if discount_bps > 0 {
+        let cost_ratio = 10000u64.saturating_sub(discount_bps as u64);
+        time_adjusted_cost.saturating_mul(cost_ratio) / 10000
+    } else {
+        time_adjusted_cost
+    };
 
     // 6. Deduct cost from appropriate balance
     if pay_with_cash {
@@ -225,31 +230,50 @@ pub fn process(
     }
 
     // 9. Update networth (PURE LOGIC)
-    player_data.networth = calculate_networth(player_data, economic_config)?;
+    player_data.networth = calculate_networth(&*player_data, economic_config)?;
 
     // 10. Update event scores if player is participating (only if locked Novi used)
     if !pay_with_cash {
         if let (Some(event_participation), Some(event)) = (event_participation, event) {
-            // Validate player is actually in this event
-            let event_data_ref = event.try_borrow_data()?;
-            let event_data = unsafe { crate::state::EventAccount::load(&event_data_ref) };
-            if player_data.current_event != event_data.id {
-                return Err(GameError::NotInEvent.into());
-            }
+            // Load event participation with ownership validation
+            let mut participation = crate::state::EventParticipation::load_checked_mut(
+                event_participation,
+                player_data.current_event,
+                owner.key(),
+                program_id,
+            )?;
+
+            // Load event with ownership validation
+            let mut event_data = crate::state::EventAccount::load_checked_mut(
+                event,
+                player_data.current_event,
+                program_id,
+            )?;
 
             let player_key = player.key();
 
             // DETERMINISTIC: Use exact cost value (no randomness)
             // MostNoviConsumed: Add locked_novi spent (deterministic)
             let _ = update_event_score(
-                event_participation,
-                event,
+                &mut *participation,
+                &mut *event_data,
                 player_key,
                 EventType::MostNoviConsumed,
                 total_cost,
                 now,
             );
         }
+    }
+
+    // Emit EquipmentPurchased event (only for non-cash purchases since that burns NOVI)
+    if !pay_with_cash {
+        emit!(EquipmentPurchased {
+            player: *player.key(),
+            slot: equipment_type as u8,
+            tier: 1, // Base tier (no upgrade tiers in current implementation)
+            novi_burned: total_cost,
+            timestamp: now,
+        });
     }
 
     Ok(())

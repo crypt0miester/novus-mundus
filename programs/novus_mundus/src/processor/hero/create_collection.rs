@@ -8,7 +8,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::GameEngine,
-    constants::{HERO_COLLECTION_SEED, GAME_ENGINE_SEED},
+    constants::HERO_COLLECTION_SEED,
     validation::{
         require_signer,
         require_writable,

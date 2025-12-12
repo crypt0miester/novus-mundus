@@ -13,6 +13,8 @@ use crate::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::ResearchSpeedup,
 };
 
 /// Speed up research using gems
@@ -121,6 +123,16 @@ pub fn process(
 
     // 12. Track total gems spent
     progress.total_gems_spent = progress.total_gems_spent.saturating_add(gems_needed);
+
+    // 13. Emit ResearchSpeedup event
+    emit!(ResearchSpeedup {
+        player: *player_owner.key(),
+        research_id: progress.current_research as u16,
+        speedup_seconds: actual_speed_up,
+        gems_spent: gems_needed,
+        new_eta: progress.completes_at,
+        timestamp: now,
+    });
 
     Ok(())
 }

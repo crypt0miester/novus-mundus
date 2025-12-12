@@ -2,11 +2,14 @@ use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
 
 use crate::{
+    emit,
     error::GameError,
+    events::NoviReservedToLocked,
     state::{PlayerAccount, UserAccount},
     constants::{PLAYER_SEED, USER_SEED},
     validation::{require_signer, require_writable, require_owner, require_pda},
@@ -153,6 +156,17 @@ pub fn process(
     player_data.total_locked_novi_acquired = player_data.total_locked_novi_acquired
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
+
+    // 8. Emit Event
+
+    let clock = Clock::get()?;
+    emit!(NoviReservedToLocked {
+        player: *player.key(),
+        amount,
+        new_locked: player_data.locked_novi,
+        remaining_reserved: user_data.reserved_novi,
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

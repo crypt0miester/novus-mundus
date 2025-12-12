@@ -9,7 +9,6 @@ use pinocchio_system::instructions::CreateAccount;
 use pinocchio_token::instructions::InitializeMint;
 
 use crate::{
-    error::GameError,
     state::{
         GameEngine, GameCaps, EconomicConfig, GameplayConfig,
         SubscriptionTier, MintingConfig, ThemeModifierConfig,
@@ -24,6 +23,8 @@ use crate::{
         derive_pda,
     },
     constants::{GAME_ENGINE_SEED, NOVI_MINT_SEED},
+    emit,
+    events::GameEngineInitialized,
 };
 
 /// Initialize global game configuration and NOVI mint
@@ -132,6 +133,14 @@ pub fn process(
         novi_mint_bump,
     );
 
+    // Emit GameEngineInitialized event
+    let clock = pinocchio::sysvars::clock::Clock::get()?;
+    emit!(GameEngineInitialized {
+        game_engine: *game_engine.key(),
+        authority: *authority.key(),
+        timestamp: clock.unix_timestamp,
+    });
+
     Ok(())
 }
 
@@ -140,6 +149,7 @@ fn create_default_game_engine(authority: Pubkey, novi_mint: Pubkey, treasury_wal
     GameEngine {
         authority,
         payment_authority: authority,                   // Default to same as authority (can be changed later)
+        game_authority: authority,                      // Default to same as authority (can be changed later)
         treasury_wallet,                                // Wallet that receives SOL payments
         bump: game_engine_bump,
         _padding0: [0; 7],
@@ -273,10 +283,10 @@ fn create_default_game_engine(authority: Pubkey, novi_mint: Pubkey, treasury_wal
             daily_produce_base: 500,                    // Base produce reward
             daily_xp_base: 25,                          // Base XP reward
 
-            // Luck calculation bonuses (basis points: 10000 = 100%)
-            happiness_luck_max: 2000,                   // 20% max bonus from happiness
-            level_luck_bonus_per_level: 100,            // 1% per level (max 10000 at level 100)
-            reputation_luck_bonuses: [0, 300, 500, 800, 1000], // [0%, 3%, 5%, 8%, 10%]
+            // Synchrony calculation bonuses (basis points: 10000 = 100%)
+            happiness_synchrony_max: 2000,                   // 20% max bonus from happiness
+            level_synchrony_bonus_per_level: 100,            // 1% per level (max 10000 at level 100)
+            reputation_synchrony_bonuses: [0, 300, 500, 800, 1000], // [0%, 3%, 5%, 8%, 10%]
 
             // Encounter level system
             max_encounter_level_diff: 10,               // Can attack ±10 levels
@@ -342,7 +352,7 @@ fn create_rookie_tier() -> SubscriptionTier {
         generation_multiplier: 1,                       // 1x daily generation
         max_locked_novi: 3000,                          // 3k max locked NOVI
         daily_reward_multiplier: 10000,                 // 1.0x (no bonus for free tier)
-        luck_bonus: 0,                                  // 0% luck bonus (free tier)
+        synchrony_bonus: 0,                                  // 0% synchrony bonus (free tier)
 
         // Bonuses granted on purchase/renewal
         novi: 0,                                        // No reserved NOVI for free tier
@@ -391,7 +401,7 @@ fn create_expert_tier() -> SubscriptionTier {
         generation_multiplier: 2,                       // 2x daily generation
         max_locked_novi: 6000,                          // 6k max locked NOVI
         daily_reward_multiplier: 15000,                 // 1.5x (50% bonus!)
-        luck_bonus: 500,                                // 5% luck bonus (basis points)
+        synchrony_bonus: 500,                                // 5% synchrony bonus (basis points)
 
         // Bonuses granted on purchase/renewal
         novi: 1000,                                     // 1k reserved NOVI (withdrawable!)
@@ -440,7 +450,7 @@ fn create_epic_tier() -> SubscriptionTier {
         generation_multiplier: 10,                      // 10x daily generation
         max_locked_novi: 30_000,                        // 30k max locked NOVI
         daily_reward_multiplier: 20000,                 // 2.0x (100% bonus!)
-        luck_bonus: 1000,                               // 10% luck bonus (basis points)
+        synchrony_bonus: 1000,                               // 10% synchrony bonus (basis points)
 
         // Bonuses granted on purchase/renewal
         novi: 10_000,                                   // 10k reserved NOVI (withdrawable!)
@@ -489,7 +499,7 @@ fn create_legendary_tier() -> SubscriptionTier {
         generation_multiplier: 50,                      // 50x daily generation
         max_locked_novi: 150_000,                       // 150k max locked NOVI
         daily_reward_multiplier: 30000,                 // 3.0x (200% bonus!)
-        luck_bonus: 1500,                               // 15% luck bonus (basis points)
+        synchrony_bonus: 1500,                               // 15% synchrony bonus (basis points)
 
         // Bonuses granted on purchase/renewal
         novi: 50_000,                                   // 50k reserved NOVI (withdrawable!)

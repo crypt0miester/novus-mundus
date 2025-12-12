@@ -8,18 +8,21 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, HeroAccount, HeroTemplate, calculate_fragment_cost, require_extension, EXT_HEROES},
+    state::{PlayerAccount, HeroTemplate, calculate_fragment_cost, require_extension, EXT_HEROES},
     helpers::{
-        update_hero_power_on_level_up,
         add_buff_delta_to_player,
         HeroNftContext,
         HeroNftBuffers,
         build_hero_nft_attributes,
+        parse_hero_nft,
+        estate::{require_sanctuary, hero_level_cap, load_estate_for_player},
     },
     validation::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::HeroLeveledUp,
 };
 
 /// Level up a hero by consuming fragments (134) - Deterministic System
@@ -40,7 +43,6 @@ use crate::{
 /// # Accounts
 /// - [signer] owner: Player wallet
 /// - [writable] player_account: PlayerAccount
-/// - [writable] hero_account: HeroAccount PDA
 /// - [writable] hero_mint: Hero NFT mint account (for metadata update)
 /// - [] hero_template: HeroTemplate PDA
 /// - [] hero_collection: Hero collection PDA [b"hero_collection"]
@@ -48,23 +50,30 @@ use crate::{
 /// - [] system_program: System program
 /// - [] clock_sysvar: Clock sysvar
 /// - [] p_core_program: MPL Core program
+/// - [] estate_account: EstateAccount PDA (for Sanctuary requirement)
+///
+/// # Building Requirements
+/// Requires Sanctuary to level up heroes:
+/// - Sanctuary Lv 1-4:  Hero cap Lv 10
+/// - Sanctuary Lv 5-9:  Hero cap Lv 25
+/// - Sanctuary Lv 10-14: Hero cap Lv 50
+/// - Sanctuary Lv 15+:  Hero cap Lv 100 (max)
 ///
 /// # Instruction Data
 /// None (always levels up by 1)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [owner, player_account, hero_account, hero_mint, hero_template, hero_collection, game_engine, system_program, _clock_sysvar, _p_core_program] = accounts else {
+    let [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, _clock_sysvar, _p_core_program, estate_account] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
     // 2. Validate accounts
     require_signer(owner)?;
     require_writable(player_account)?;
-    require_writable(hero_account)?;
     require_writable(hero_mint)?;
 
     // 3. Load player account
@@ -79,28 +88,54 @@ pub fn process(
     // 4a. Require EXT_HEROES to be unlocked
     require_extension(player, EXT_HEROES)?;
 
-    // 5. Load hero account
-    let mut hero_data = hero_account.try_borrow_mut_data()?;
-    let hero = unsafe { HeroAccount::load_mut(&mut hero_data) };
+    // 4b. HARD GATE: Require Sanctuary to level heroes
+    let estate = load_estate_for_player(estate_account, player, program_id)?;
+    require_sanctuary(estate, 1)?; // Minimum Sanctuary level 1
+
+    // Get the hero level cap for this estate's Sanctuary
+    let level_cap = hero_level_cap(estate);
+
+    // 5. Parse hero data from NFT
+    // NFT-Only System: All hero state is stored in NFT attributes
+    let nft_data = hero_mint.try_borrow_data()?;
+    let parsed_hero = parse_hero_nft(&nft_data)
+        .ok_or(GameError::InvalidParameter)?;
+    drop(nft_data);
 
     // 6. Load template (read-only)
     let template_data = hero_template.try_borrow_data()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     // 7. SAFETY: Verify template matches hero
-    if hero.template_id != template.template_id {
+    if parsed_hero.template_id != template.template_id {
         return Err(GameError::InvalidParameter.into());
+    }
+
+    // 7a. HARD GATE: Check hero level cap from Sanctuary
+    // Hero cannot level beyond their Sanctuary's cap
+    if parsed_hero.level >= level_cap as u32 {
+        return Err(GameError::HeroLevelCapReached.into());
     }
 
     // 8. SAFETY: Verify hero ownership
     // Hero must be either in player's wallet or locked in player's active_heroes
-    let is_locked = player.active_heroes.iter().any(|&mint| mint == hero.mint);
+    let is_locked = player.active_heroes.iter().any(|&mint| mint == *hero_mint.key());
+
+    // If not locked, verify NFT is owned by the signer
+    if !is_locked {
+        let nft_data = hero_mint.try_borrow_data()?;
+        let asset = unsafe { p_core::state::AssetV1::load(&nft_data) };
+        if asset.owner != *owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        drop(nft_data);
+    }
 
     // 9. SAFETY: Calculate fragment cost (check overflow)
-    let fragment_cost = calculate_fragment_cost(hero.level);
+    let fragment_cost = calculate_fragment_cost(parsed_hero.level);
 
     // Edge case: If cost calculation overflowed to u64::MAX, reject
-    if fragment_cost == u64::MAX && hero.level > 0 {
+    if fragment_cost == u64::MAX && parsed_hero.level > 0 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -113,34 +148,24 @@ pub fn process(
     player.fragments = player.fragments.saturating_sub(fragment_cost);
 
     // 12. Save old level for delta calculation
-    let old_level = hero.level;
+    let old_level = parsed_hero.level;
 
-    // 13. Update hero state (deterministic - no RNG!)
-    let new_level = hero.level.saturating_add(1);
-    hero.level = new_level;
-    hero.total_fragments_invested = hero.total_fragments_invested.saturating_add(fragment_cost);
+    // 13. Calculate new level (deterministic - no RNG!)
+    let new_level = parsed_hero.level.saturating_add(1);
 
-    // Get current timestamp
-    let clock = Clock::get()?;
-    hero.last_leveled_at = clock.unix_timestamp;
-
-    // 14. Update cached power (deterministic calculation)
-    update_hero_power_on_level_up(hero, template);
-
-    // 15. IF hero is locked: Update cached buffs by delta
+    // 14. IF hero is locked: Update cached buffs by delta
     if is_locked {
         add_buff_delta_to_player(player, template, old_level, new_level);
     }
 
-    // 16. Capture context for NFT attributes
-    let ctx = HeroNftContext::new(hero, template, is_locked);
+    // 15. Capture context for NFT attributes with new level
+    let ctx = HeroNftContext::from_parsed(&parsed_hero, template).with_new_level(new_level, template);
 
     // Drop borrows before p-core CPI
     drop(template_data);
-    drop(hero_data);
     drop(player_data);
 
-    // 17. Update NFT metadata with all attributes using p-core UpdatePluginV1
+    // 16. Update NFT metadata with all attributes using p-core UpdatePluginV1
     let game_engine_data = game_engine.try_borrow_data()?;
     let ge = unsafe { crate::state::GameEngine::load(&game_engine_data) };
     let ge_bump = ge.bump;
@@ -148,7 +173,7 @@ pub fn process(
 
     // Build NFT attributes from context
     let mut buffers = HeroNftBuffers::new();
-    let mut attributes: [(&[u8], &[u8]); 7] = [(b"", b""); 7];
+    let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
     let attr_count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
 
     // Derive game_engine PDA signer
@@ -168,6 +193,17 @@ pub fn process(
             attributes: &attributes[..attr_count],
         },
     }.invoke_signed(&[ge_signer])?;
+
+    // 17. Emit HeroLeveledUp event
+    let clock = Clock::get()?;
+    emit!(HeroLeveledUp {
+        hero_mint: *hero_mint.key(),
+        player: *owner.key(),
+        old_level,
+        new_level,
+        xp_spent: fragment_cost,
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

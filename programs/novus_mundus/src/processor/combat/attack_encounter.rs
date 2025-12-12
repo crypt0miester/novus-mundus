@@ -9,8 +9,8 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, EncounterAccount, UserAccount, LootAccount, LootSourceType, ResearchProgress, LocationAccount, OCCUPANT_NONE},
-    constants::{PLAYER_SEED, USER_SEED, LOOT_SEED, RESEARCH_SEED, ENCOUNTER_ATTACK_RANGE_METERS, LOCATION_SEED, DAMAGE_PER_SIEGE_WEAPON},
+    state::{PlayerAccount, EncounterAccount, LootAccount, LootSourceType, LocationAccount, GameEngine},
+    constants::{LOOT_SEED, ENCOUNTER_ATTACK_RANGE_METERS, LOCATION_SEED, DAMAGE_PER_SIEGE_WEAPON},
     types::{EncounterType, EventType},
     logic::{
         calculate_damage_output,
@@ -32,14 +32,14 @@ use crate::{
         ActivityType,
         safe_math::{apply_bp, apply_bp_bonus},
     },
-    helpers::{close_account, event_scoring::update_event_score},
+    helpers::{close_account, event_scoring::update_event_score, estate::load_estate_for_player},
     validation::{
         require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
         require_key_match,
+        require_writable,
     },
+    emit,
+    events::{EncounterAttacked, EncounterDefeated, XpGained, PlayerLeveledUp},
 };
 
 /// PvE combat - attack an encounter (NPC enemy)
@@ -59,11 +59,11 @@ use crate::{
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount PDA
-/// - [writable] user: UserAccount PDA (for loot counter)
 /// - [writable] encounter: EncounterAccount PDA
 /// - [signer, writable] owner: Wallet that owns the PlayerAccount (pays for loot rent)
 /// - [] game_engine: GameEngine PDA (for networth value config)
 /// - [] system_program: System program (for creating loot account)
+/// - [] estate_account: EstateAccount PDA (for Barracks unit effectiveness + Observatory loot bonus)
 /// - [writable] event_participation: (Optional) EventParticipation PDA for event scoring
 /// - [writable] event: (Optional) EventAccount PDA for event scoring
 /// - [writable] loot: (Optional) LootAccount PDA - required if encounter will die
@@ -71,7 +71,7 @@ use crate::{
 /// - [writable] location_creator_refund: (Optional) Account to receive location rent refund - required if encounter will die
 ///
 /// # Instruction Data
-/// - drive_by: bool (1 byte) - True for drive-by attack (25% damage penalty)
+/// - encounter_id: u64 (8 bytes, little-endian) - ID of the encounter to attack
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -79,7 +79,7 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // Account layout:
-    // 0-5: Required (player, user, encounter, owner, game_engine, system_program)
+    // 0-5: Required (player, encounter, owner, game_engine, system_program, estate_account)
     // 6-7: Optional event accounts (event_participation, event) - must be paired
     // Death accounts (when encounter will die - must all be present together):
     //   - loot: LootAccount PDA to create
@@ -91,7 +91,7 @@ pub fn process(
     // 8: base + event
     // 9: base + death (loot + encounter_location + location_creator_refund)
     // 11: base + event + death
-    let (player, user, encounter, owner, game_engine, system_program, event_participation, event, loot, encounter_location, location_creator_refund) = match accounts.len() {
+    let (player, encounter, owner, game_engine, system_program, estate_account, event_participation, event, loot, encounter_location, location_creator_refund) = match accounts.len() {
         11 => (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5],
               Some(&accounts[6]), Some(&accounts[7]),
               Some(&accounts[8]), Some(&accounts[9]), Some(&accounts[10])),
@@ -107,60 +107,22 @@ pub fn process(
         _ => return Err(ProgramError::NotEnoughAccountKeys),
     };
 
-    // 2. Validate accounts
+    // 2. Validate signer
     require_signer(owner)?;
-    require_writable(player)?;
-    require_writable(user)?;
-    require_writable(encounter)?;
-    require_owner(player, program_id)?;
-    require_owner(user, program_id)?;
-    require_owner(encounter, program_id)?;
-
-    let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
     // 3. Parse instruction data
-    if data.is_empty() {
+    // Format: [encounter_id: u64]
+    if data.len() < 8 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let drive_by = data[0] != 0;
+    let encounter_id = u64::from_le_bytes(
+        data[0..8].try_into().map_err(|_| ProgramError::InvalidInstructionData)?
+    );
 
-    // 4. Load data
-    let mut player_data_ref = player.try_borrow_mut_data()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
-
-    let mut user_data_ref = user.try_borrow_mut_data()?;
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data_ref)
-    };
-
-    let mut encounter_data_ref = encounter.try_borrow_mut_data()?;
-    let encounter_data = unsafe {
-        EncounterAccount::load_mut(&mut encounter_data_ref)
-    };
-
-    // Load GameEngine for networth value config
-    let mut game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&mut game_engine_data_ref)};
-    let economic_config = &game_engine_data.economic_config;
-
-    // Verify ownership and bump
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if player_data.bump != player_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    if &user_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if user_data.bump != user_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
+    // 4. Load and verify accounts
+    // Load player first - we need current_city for encounter PDA validation
+    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
 
     // 4a. Validate player not traveling (can't fight while moving)
     if player_data.is_traveling_any() {
@@ -171,13 +133,26 @@ pub fn process(
     if player_data.rally_stats.current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
+    
+    // Load encounter with standardized validation
+    // Uses player's current_city - if encounter is in different city, PDA check fails
+    let mut encounter_data = EncounterAccount::load_checked_mut(
+        encounter,
+        player_data.current_city,
+        encounter_id,
+        program_id,
+    )?;
+
+    // GameEngine: load_checked
+    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    let economic_config = &game_engine_data.economic_config;
 
     // 5. Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
     // 6. Regenerate stamina based on time elapsed
-    regenerate_stamina(player_data, now)?;
+    regenerate_stamina(&mut *player_data, now)?;
 
     // 7. Validate encounter is alive
     if encounter_data.health == 0 {
@@ -187,11 +162,6 @@ pub fn process(
     // 8. Validate encounter not despawned
     if now >= encounter_data.despawn_at {
         return Err(GameError::EncounterDespawned.into());
-    }
-
-    // 9. Validate player is in same city as encounter
-    if player_data.current_city != encounter_data.city_id {
-        return Err(GameError::WrongCity.into());
     }
 
     // 10. Validate player is within attack range (10 meters)
@@ -210,7 +180,7 @@ pub fn process(
     let encounter_type = EncounterType::from_rarity(encounter_data.rarity)
         .ok_or(GameError::InvalidParameter)?;
 
-    consume_stamina(player_data, encounter_type)?;
+    consume_stamina(&mut *player_data, encounter_type)?;
 
     // 11a. Validate player level vs encounter level (NEW)
     let level_diff = if encounter_data.level >= player_data.level {
@@ -233,16 +203,24 @@ pub fn process(
     // 13. Calculate damage output (PURE LOGIC)
     let gameplay_config = &game_engine_data.gameplay_config;
 
+    // Apply blessed hero bonus (+25% to hero attack if active)
+    let boosted_hero_attack = if player_data.blessed_hero_bonus_bps > 0 {
+        apply_bp_bonus(player_data.hero_attack_bps as u64, player_data.blessed_hero_bonus_bps)
+            .unwrap_or(player_data.hero_attack_bps as u64) as u16
+    } else {
+        player_data.hero_attack_bps
+    };
+
     // Apply research buffs and hero buffs for attacking encounters
     let base_damage = calculate_damage_output(
         total_operative,
         player_data.total_weapons(),
-        drive_by,
+        false, // drive_by disabled
         gameplay_config,
         player_data.research_attack_bps,
         player_data.research_crit_chance_bps,
         player_data.research_crit_damage_bps,
-        player_data.hero_attack_bps,
+        boosted_hero_attack,
         player_data.hero_weapon_efficiency_bps,
         player_data.hero_crit_chance_bps,
         player_data.equipped_weapon_bonus_bps,
@@ -255,11 +233,21 @@ pub fn process(
 
     // 13b. Apply Hero EncounterDamage bonus (PvE-specific multiplier, no u128!)
     // Formula: damage × (10000 + hero_encounter_damage_bps) / 10000
-    let damage = if player_data.hero_encounter_damage_bps > 0 {
+    let hero_damage = if player_data.hero_encounter_damage_bps > 0 {
         apply_bp_bonus(time_damage, player_data.hero_encounter_damage_bps)
             .unwrap_or(time_damage)
     } else {
         time_damage
+    };
+
+    // 13c. Apply Barracks daily mini-game bonus (unit effectiveness)
+    // Barracks provides 5-15% unit effectiveness bonus
+    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+    let damage = if estate.unit_effectiveness_bps > 0 {
+        apply_bp_bonus(hero_damage, estate.unit_effectiveness_bps)
+            .unwrap_or(hero_damage)
+    } else {
+        hero_damage
     };
 
     if damage == 0 {
@@ -315,7 +303,11 @@ pub fn process(
     let player_key = *player.key();
     let old_attacker_count = encounter_data.attacker_count;
 
-    // Check if player already attacked (need immutable borrow for this)
+    // Drop encounter_data to release the RefMut before re-borrowing
+    // The health mutation above is already persisted to account data
+    drop(encounter_data);
+
+    // Check if player already attacked (now safe to borrow)
     let already_attacking = {
         let encounter_data_check = encounter.try_borrow_data()?;
         let encounter_header = unsafe { EncounterAccount::load(&encounter_data_check) };
@@ -365,6 +357,14 @@ pub fn process(
         encounter_data_mut.attacker_count = new_count;
     }
 
+    // Re-load encounter data for remaining operations (immutable is fine now)
+    let encounter_data = EncounterAccount::load_checked(
+        encounter,
+        player_data.current_city,
+        encounter_id,
+        program_id,
+    )?;
+
     // 17. Update player stats
     player_data.total_attacks += 1;
     player_data.total_attack_power = player_data.total_attack_power
@@ -378,7 +378,28 @@ pub fn process(
     // Golden hours (Dawn/Dusk) give φ² (2.618x) XP for enlightenment!
     let xp_gained = if encounter_data.health == 0 {
         let base_xp = calculate_xp_reward(XpAction::DefeatEncounter { rarity: encounter_data.rarity });
-        grant_xp_with_time_bonus(player_data, base_xp, now)?;
+        let old_level = player_data.level;
+        let (levels_gained, new_level, _) = grant_xp_with_time_bonus(&mut *player_data, base_xp, now)?;
+
+        // Emit XP gained event
+        emit!(XpGained {
+            player: *owner.key(),
+            amount: base_xp,
+            source: 0, // 0=combat
+            total_xp: player_data.current_xp,
+            timestamp: now,
+        });
+
+        // Emit level up event if player leveled
+        if levels_gained > 0 {
+            emit!(PlayerLeveledUp {
+                player: *owner.key(),
+                old_level: old_level.into(),
+                new_level: new_level.into(),
+                timestamp: now,
+            });
+        }
+
         // Return base_xp for event scoring (deterministic)
         base_xp
     } else {
@@ -390,7 +411,7 @@ pub fn process(
         // Calculate loot pool using oscillation + level scaling + time-of-day bonus
         // Night attacks = better loot (φ multiplier at DeepNight!)
         let mut loot_pool = calculate_encounter_loot_pool(
-            encounter_data,
+            &*encounter_data,
             now,
             player_data.current_long as f64,
             economic_config,
@@ -407,9 +428,19 @@ pub fn process(
             loot_pool.total_vehicles = loot_pool.total_vehicles.saturating_mul(multiplier) / 10000;
         }
 
-        // Apply hero luck bonus (multiplicative) - additional loot boost
-        if player_data.hero_luck_bonus_bps > 0 {
-            let multiplier = 10000u64 + player_data.hero_luck_bonus_bps as u64;
+        // Apply hero synchrony bonus (multiplicative) - additional loot boost
+        if player_data.hero_synchrony_bonus_bps > 0 {
+            let multiplier = 10000u64 + player_data.hero_synchrony_bonus_bps as u64;
+            loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
+            loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
+            loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
+            loot_pool.total_produce = loot_pool.total_produce.saturating_mul(multiplier) / 10000;
+            loot_pool.total_vehicles = loot_pool.total_vehicles.saturating_mul(multiplier) / 10000;
+        }
+
+        // Apply Observatory daily mini-game bonus (loot bonus 5-25%)
+        if estate.daily_loot_bonus_bps > 0 {
+            let multiplier = 10000u64 + estate.daily_loot_bonus_bps as u64;
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -481,7 +512,7 @@ pub fn process(
                     fragments = calculate_fragment_amount(
                         encounter_data.level,
                         encounter_data.rarity,
-                        player_data.research_luck_bonus_bps,
+                        player_data.research_synchrony_bonus_bps,
                         loot_time_mult,
                     );
                 }
@@ -499,7 +530,7 @@ pub fn process(
                     gems = calculate_gem_amount(
                         encounter_data.level,
                         encounter_data.rarity,
-                        player_data.research_luck_bonus_bps,
+                        player_data.research_synchrony_bonus_bps,
                         loot_time_mult,
                     );
                 }
@@ -508,8 +539,8 @@ pub fn process(
             // Apply loot magnetism research buff (increases all loot)
             if player_data.research_loot_magnetism_bps > 0 {
                 let multiplier = 10000u64 + player_data.research_loot_magnetism_bps as u64;
-                fragments = (fragments.saturating_mul(multiplier) / 10000);
-                gems = (gems.saturating_mul(multiplier) / 10000);
+                fragments = fragments.saturating_mul(multiplier) / 10000;
+                gems = gems.saturating_mul(multiplier) / 10000;
             }
 
             // Initialize loot data
@@ -576,7 +607,11 @@ pub fn process(
             return Err(GameError::InvalidPDA.into());
         }
 
-        // Validate location is occupied by this encounter
+        // Validate location account ownership and occupancy
+        if enc_location.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
         {
             let location_data = enc_location.try_borrow_data()?;
             let location = unsafe { LocationAccount::load(&location_data) };
@@ -596,16 +631,29 @@ pub fn process(
     }
 
     // 19. Update networth (PURE LOGIC)
-    player_data.networth = calculate_networth(player_data, economic_config)?;
+    player_data.networth = calculate_networth(&*player_data, economic_config)?;
 
     // 20. Update event scores if player is participating in an event
-    if let (Some(event_participation), Some(event)) = (event_participation, event) {
-        // Validate player is actually in this event
-        let event_data_ref = event.try_borrow_data()?;
-        let event_data = unsafe { crate::state::EventAccount::load(&event_data_ref) };
-        if player_data.current_event != event_data.id {
+    if let (Some(event_participation_acc), Some(event_acc)) = (event_participation, event) {
+        // Validate player is in an event
+        if player_data.current_event == 0 {
             return Err(GameError::NotInEvent.into());
         }
+
+        // Load event participation with ownership validation
+        let mut participation = crate::state::EventParticipation::load_checked_mut(
+            event_participation_acc,
+            player_data.current_event,
+            owner.key(),
+            program_id,
+        )?;
+
+        // Load event with ownership validation
+        let mut event_data = crate::state::EventAccount::load_checked_mut(
+            event_acc,
+            player_data.current_event,
+            program_id,
+        )?;
 
         let player_key = player.key();
 
@@ -614,8 +662,8 @@ pub fn process(
 
         // TotalDamageDealt: Add actual damage dealt (deterministic)
         let _ = update_event_score(
-            event_participation,
-            event,
+            &mut *participation,
+            &mut *event_data,
             player_key,
             EventType::TotalDamageDealt,
             final_damage,
@@ -625,8 +673,8 @@ pub fn process(
         // MostEncountersDefeated: +1 if encounter dies
         if encounter_data.health == 0 {
             let _ = update_event_score(
-                event_participation,
-                event,
+                &mut *participation,
+                &mut *event_data,
                 player_key,
                 EventType::MostEncountersDefeated,
                 1,
@@ -635,8 +683,8 @@ pub fn process(
 
             // MostAttacksWonPvE: +1 if encounter dies
             let _ = update_event_score(
-                event_participation,
-                event,
+                &mut *participation,
+                &mut *event_data,
                 player_key,
                 EventType::MostAttacksWonPvE,
                 1,
@@ -647,14 +695,50 @@ pub fn process(
         // MostXPGained: Add XP gained (deterministic)
         if xp_gained > 0 {
             let _ = update_event_score(
-                event_participation,
-                event,
+                &mut *participation,
+                &mut *event_data,
                 player_key,
                 EventType::MostXPGained,
                 xp_gained,
                 now,
             );
         }
+    }
+
+    // Get stamina consumed for the encounter type
+    let stamina_consumed = match encounter_type {
+        EncounterType::Common => 1,
+        EncounterType::Uncommon => 2,
+        EncounterType::Rare => 3,
+        EncounterType::Epic => 5,
+        EncounterType::Legendary => 8,
+        EncounterType::WorldEvent => 10,
+    };
+
+    // Emit EncounterAttacked event
+    emit!(EncounterAttacked {
+        player: player_key,
+        encounter: *encounter.key(),
+        damage_dealt: actual_damage,
+        health_remaining: encounter_data.health,
+        stamina_consumed,
+        novi_consumed: 0, // No NOVI consumed in encounter attacks
+        attacker_count: new_count,
+        timestamp: now,
+    });
+
+    // Emit EncounterDefeated event if encounter dies
+    if encounter_data.health == 0 {
+        emit!(EncounterDefeated {
+            encounter: *encounter.key(),
+            encounter_type: encounter_data.rarity,
+            level: encounter_data.level as u8,
+            total_attackers: new_count,
+            killing_blow_by: player_key,
+            loot_cash: instant_cash,
+            loot_novi: 0, // Loot NOVI is in LootAccount, not instant
+            timestamp: now,
+        });
     }
 
     Ok(())

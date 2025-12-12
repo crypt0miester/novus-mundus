@@ -14,3 +14,4 @@ pub mod purchase_equipment;
 pub mod mint_for_prize;
 pub mod purchase_stamina;
 pub mod transfer_cash;
+pub mod vault_transfer;

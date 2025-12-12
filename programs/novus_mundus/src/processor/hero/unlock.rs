@@ -1,24 +1,28 @@
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, HeroAccount, HeroTemplate, NULL_PUBKEY, require_extension, EXT_HEROES},
-    constants::{PLAYER_SEED, HERO_SEED},
+    state::{PlayerAccount, HeroTemplate, EstateAccount, NULL_PUBKEY, require_extension, EXT_HEROES},
+    constants::{PLAYER_SEED},
     helpers::{
-        subtract_hero_buffs_from_player,
+        subtract_hero_buffs_from_player_with_location,
         HeroNftContext,
         HeroNftBuffers,
         build_hero_nft_attributes,
+        parse_hero_nft,
     },
     validation::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::HeroUnlocked,
 };
 
 /// Unlock a hero NFT (transfer from PlayerAccount PDA back to wallet) (133)
@@ -43,11 +47,11 @@ use crate::{
 /// - [signer] owner: Player wallet
 /// - [writable] player_account: PlayerAccount PDA
 /// - [writable] hero_mint: Hero NFT mint account
-/// - [writable] hero_account: HeroAccount PDA [b"hero", mint]
 /// - [] hero_template: HeroTemplate for the hero being unlocked
 /// - [] hero_collection: Hero collection PDA [b"hero_collection"]
 /// - [] system_program: System program
 /// - [] p_core_program: MPL Core program
+/// - [writable] estate_account: EstateAccount PDA (to clear blessed_hero if needed)
 ///
 /// # Instruction Data
 /// - [0] slot_index: u8 (0-2)
@@ -57,7 +61,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [owner, player_account, hero_mint, hero_account, hero_template, hero_collection, system_program, _p_core_program] = accounts else {
+    let [owner, player_account, hero_mint, hero_template, hero_collection, system_program, _p_core_program, estate_account] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
@@ -65,7 +69,6 @@ pub fn process(
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(hero_mint)?;
-    require_writable(hero_account)?;
 
     // 3. Parse instruction data
     if instruction_data.is_empty() {
@@ -102,31 +105,7 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 9. SAFETY: Verify hero_account PDA derivation
-    let (expected_hero_pda, _hero_bump) = find_program_address(
-        &[HERO_SEED, hero_mint.key()],
-        program_id,
-    );
-
-    if hero_account.key() != &expected_hero_pda {
-        return Err(GameError::InvalidPDA.into());
-    }
-
-    // 10. SAFETY: Verify hero_account owner is this program
-    if hero_account.owner() != program_id {
-        return Err(GameError::InvalidAccount.into());
-    }
-
-    // 11. Load hero account to verify it exists
-    let hero_data = hero_account.try_borrow_data()?;
-    let hero = unsafe { HeroAccount::load(&hero_data) };
-
-    // 12. SAFETY: Verify hero.mint matches the NFT mint
-    if hero.mint != *hero_mint.key() {
-        return Err(GameError::InvalidParameter.into());
-    }
-
-    // 13. SAFETY: Verify NFT ownership via p-core
+    // 9. SAFETY: Verify NFT ownership via p-core
     let asset_data = hero_mint.try_borrow_data()?;
     let asset = unsafe { p_core::state::AssetV1::load(&asset_data) };
 
@@ -155,7 +134,6 @@ pub fn process(
 
     // Drop borrows before state mutation
     drop(asset_data);
-    drop(hero_data);
 
     // 16. CRITICAL: Update state ONLY AFTER successful transfer
     player.active_heroes[slot_index as usize] = NULL_PUBKEY;
@@ -171,30 +149,58 @@ pub fn process(
         }
     }
 
-    // 18. Subtract this hero's buffs + capture context (single load)
-    let hero_data = hero_account.try_borrow_data()?;
-    let hero = unsafe { HeroAccount::load(&hero_data) };
+    // 17a. IF unlocking blessed hero: Clear the blessing bonus
+    // Load estate and check if this hero was blessed
+    require_writable(estate_account)?;
+    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let estate = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+
+    // Verify estate ownership
+    if &estate.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // If this hero was the blessed hero, clear the blessing
+    // Note: blessed_hero now stores hero_mint (NFT-only system)
+    if &estate.blessed_hero == hero_mint.key() {
+        estate.blessed_hero = Pubkey::default();
+        player.blessed_hero_bonus_bps = 0;
+    }
+
+    drop(estate_data_ref);
+
+    // 18. Parse hero data from NFT and subtract buffs
+    // NFT-Only System: All hero state is stored in NFT attributes
+    let nft_data = hero_mint.try_borrow_data()?;
+    let parsed_hero = parse_hero_nft(&nft_data)
+        .ok_or(GameError::InvalidParameter)?;
+    drop(nft_data);
 
     let template_data = hero_template.try_borrow_data()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     // Verify template matches hero
-    if hero.template_id != template.template_id {
+    if parsed_hero.template_id != template.template_id {
         return Err(GameError::InvalidParameter.into());
     }
 
-    // Subtract buffs using helper
-    subtract_hero_buffs_from_player(player, hero, template);
+    // 18a. Location Synergy: Get stored location bonus and subtract with same bonus
+    let location_bonus_bps = player.slot_location_bonus[slot_index as usize];
+
+    // Subtract buffs using helper (with same location bonus applied during lock)
+    subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
+
+    // Clear location bonus for this slot
+    player.slot_location_bonus[slot_index as usize] = 0;
 
     // Capture context for NFT attributes
-    let ctx = HeroNftContext::new(hero, template, false);
+    let ctx = HeroNftContext::from_parsed(&parsed_hero, template);
 
-    drop(hero_data);
     drop(template_data);
 
-    // 19. Build NFT attributes with Locked = "false"
+    // 19. Build NFT attributes
     let mut buffers = HeroNftBuffers::new();
-    let mut attributes: [(&[u8], &[u8]); 7] = [(b"", b""); 7];
+    let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
     let attr_count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
 
     p_core::instructions::UpdatePluginV1 {
@@ -208,6 +214,14 @@ pub fn process(
             attributes: &attributes[..attr_count],
         },
     }.invoke()?;
+
+    // 20. Emit HeroUnlocked event
+    let clock = Clock::get()?;
+    emit!(HeroUnlocked {
+        hero_mint: *hero_mint.key(),
+        player: *owner.key(),
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

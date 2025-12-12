@@ -8,7 +8,6 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{UserAccount, GameEngine},
-    constants::{USER_SEED, GAME_ENGINE_SEED},
     logic::safe_math::apply_bp,
 };
 

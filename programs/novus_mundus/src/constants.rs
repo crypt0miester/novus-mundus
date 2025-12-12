@@ -268,6 +268,9 @@ pub const PLAYER_SEED: &[u8] = b"player";
 pub const USER_SEED: &[u8] = b"user";
 pub const CITY_SEED: &[u8] = b"city";
 pub const TEAM_SEED: &[u8] = b"team";
+pub const TEAM_SLOT_SEED: &[u8] = b"team_slot";
+pub const TEAM_INVITE_SEED: &[u8] = b"team_invite";
+pub const TREASURY_REQUEST_SEED: &[u8] = b"treasury_request";
 pub const LOCATION_SEED: &[u8] = b"location";
 pub const RALLY_SEED: &[u8] = b"rally";
 pub const ENCOUNTER_SEED: &[u8] = b"encounter";
@@ -279,11 +282,11 @@ pub const RESEARCH_SEED: &[u8] = b"research";
 pub const RESEARCH_TEMPLATE_SEED: &[u8] = b"research_template";
 pub const HERO_TEMPLATE_SEED: &[u8] = b"hero_template";
 pub const HERO_COLLECTION_SEED: &[u8] = b"hero_collection";
-pub const HERO_SEED: &[u8] = b"hero";
 
 // Strategic Combat System
 pub const RALLY_PARTICIPANT_SEED: &[u8] = b"rally_participant";
 pub const REINFORCEMENT_SEED: &[u8] = b"reinforcement";
+pub const GARRISON_SEED: &[u8] = b"garrison";
 
 // Shop System
 pub const SHOP_CONFIG_SEED: &[u8] = b"shop_config";
@@ -296,6 +299,10 @@ pub const SEASONAL_SALE_SEED: &[u8] = b"seasonal_sale";
 pub const DAO_PROMOTION_SEED: &[u8] = b"dao_promo";
 pub const PLAYER_PURCHASE_SEED: &[u8] = b"player_purchase";
 pub const INVENTORY_SEED: &[u8] = b"inventory";
+
+// Estate System
+pub const ESTATE_SEED: &[u8] = b"estate";
+pub const CRAFTED_EQUIPMENT_SEED: &[u8] = b"crafted_equipment";
 
 // ============================================================
 // Event System
@@ -496,3 +503,138 @@ pub const INITIAL_CITIES: [(u16, &str, f64, f64, f32, CityType); 50] = [
 
 /// Total number of initial cities
 pub const TOTAL_INITIAL_CITIES: usize = INITIAL_CITIES.len();
+
+// ============================================================
+// Expedition System Constants
+// ============================================================
+
+/// Expedition types
+pub const EXPEDITION_NONE: u8 = 0;
+pub const EXPEDITION_MINING: u8 = 1;
+pub const EXPEDITION_FISHING: u8 = 2;
+
+/// Maximum expedition tier (0-4)
+pub const EXPEDITION_MAX_TIER: u8 = 4;
+
+/// Mining expedition configuration per tier (0=Surface, 1=Shallow, 2=Deep, 3=Volcanic, 4=Abyssal)
+/// Duration in hours
+pub const MINING_DURATION_HOURS: [u8; 5] = [1, 2, 4, 8, 16];
+/// Gems generated per operative per hour (before bonuses)
+pub const MINING_GEMS_PER_OP_HOUR: [u64; 5] = [10, 18, 30, 50, 80];
+/// Rare find chance in basis points (100 = 1%, 2000 = 20%)
+pub const MINING_RARE_CHANCE_BPS: [u16; 5] = [100, 300, 500, 1000, 2000];
+/// Workshop level required for each tier
+pub const MINING_WORKSHOP_REQ: [u8; 5] = [1, 5, 10, 15, 20];
+/// Locked NOVI cost per expedition (scales with tier)
+pub const MINING_NOVI_COST: [u64; 5] = [100, 500, 2_000, 8_000, 30_000];
+/// Fragment bonus per expedition (guaranteed)
+pub const MINING_FRAGMENT_BONUS: [u64; 5] = [1, 3, 8, 20, 50];
+
+/// Fishing expedition configuration per tier (0=Shore, 1=River, 2=Lake, 3=DeepSea, 4=Abyss)
+/// Duration in hours
+pub const FISHING_DURATION_HOURS: [u8; 5] = [1, 2, 4, 8, 16];
+/// Produce generated per operative per hour (before bonuses)
+pub const FISHING_PRODUCE_PER_OP_HOUR: [u64; 5] = [15, 25, 40, 60, 100];
+/// Rare catch chance in basis points
+pub const FISHING_RARE_CHANCE_BPS: [u16; 5] = [100, 300, 500, 1000, 2000];
+/// Dock level required for each tier (parallel to MINING_WORKSHOP_REQ)
+pub const FISHING_DOCK_REQ: [u8; 5] = [1, 5, 10, 15, 20];
+/// Locked NOVI cost per expedition
+pub const FISHING_NOVI_COST: [u64; 5] = [100, 500, 2_000, 8_000, 30_000];
+/// Fragment bonus per expedition (guaranteed)
+pub const FISHING_FRAGMENT_BONUS: [u64; 5] = [1, 2, 5, 12, 30];
+
+/// Rare find multipliers (5x normal yield on rare find)
+pub const RARE_FIND_MULTIPLIER: u64 = 5;
+
+/// Strike/Cast system (Phase 2)
+/// Maximum strikes per hour of expedition
+pub const STRIKES_PER_HOUR: u8 = 1;
+/// Score threshold for "perfect" bonus (avg score 80+)
+pub const PERFECT_SCORE_THRESHOLD: u8 = 80;
+/// Perfect expedition bonus (25% extra yield)
+pub const PERFECT_EXPEDITION_BONUS_BPS: u16 = 2500;
+
+/// Operative tier multipliers for expedition yield (basis points)
+/// Higher-tier operatives provide better yields
+/// Tier 1: 100% (10000 bps), Tier 2: 150% (15000 bps), Tier 3: 200% (20000 bps)
+pub const OPERATIVE_TIER_1_MULTIPLIER_BPS: u64 = 10000; // 1.0x
+pub const OPERATIVE_TIER_2_MULTIPLIER_BPS: u64 = 15000; // 1.5x
+pub const OPERATIVE_TIER_3_MULTIPLIER_BPS: u64 = 20000; // 2.0x
+
+/// Expedition seeds
+pub const EXPEDITION_SEED: &[u8] = b"expedition";
+
+// ============================================================
+// Arena PvP System Constants
+// ============================================================
+
+/// Arena PDA seeds
+pub const ARENA_SEASON_SEED: &[u8] = b"arena_season";
+pub const ARENA_PARTICIPANT_SEED: &[u8] = b"arena_participant";
+pub const ARENA_LOADOUT_SEED: &[u8] = b"arena_loadout";
+
+/// Arena season duration (7 days)
+pub const ARENA_SEASON_DURATION: i64 = 7 * SECONDS_PER_DAY;
+
+/// Arena claim deadline after season ends (30 days)
+pub const ARENA_CLAIM_DEADLINE: i64 = 30 * SECONDS_PER_DAY;
+
+/// Maximum daily battles per player (rolling 24h window)
+pub const ARENA_MAX_DAILY_BATTLES: u8 = 10;
+
+/// Maximum battles against same opponent per day
+pub const ARENA_MAX_BATTLES_PER_OPPONENT: u8 = 2;
+
+/// Minimum battles required to claim daily reward
+pub const ARENA_MIN_BATTLES_FOR_DAILY_REWARD: u8 = 5;
+
+/// Match assignment expiry (5 minutes)
+pub const ARENA_MATCH_EXPIRY_SECONDS: i64 = 300;
+
+/// Loadout validation expiry (24 hours)
+pub const ARENA_LOADOUT_VALIDATION_EXPIRY: i64 = SECONDS_PER_DAY;
+
+/// Starting ELO rating
+pub const ARENA_STARTING_ELO: u32 = 1000;
+
+/// ELO K-factor (how much ratings change per match)
+pub const ARENA_ELO_K_FACTOR: u32 = 32;
+
+/// Base daily reward amount (NOVI, 1 decimal)
+pub const ARENA_DAILY_BASE_REWARD: u64 = 1000; // 100 NOVI
+
+/// Default minimum points to qualify for leaderboard
+pub const ARENA_MIN_POINTS_FOR_LEADERBOARD: u64 = 500;
+
+/// Arena combat power constants (matching existing combat system)
+pub const ARENA_MELEE_WEAPON_POWER: u64 = 10;
+pub const ARENA_RANGED_WEAPON_POWER: u64 = 16;  // phi ratio
+pub const ARENA_SIEGE_WEAPON_POWER: u64 = 26;   // phi^2 ratio
+pub const ARENA_ARMOR_POWER: u64 = 5;
+
+/// Points calculation constants
+/// Base points for winning
+pub const ARENA_BASE_WIN_POINTS: u64 = 100;
+/// Base points for losing (participation)
+pub const ARENA_BASE_LOSS_POINTS: u64 = 20;
+/// Draw points for both players
+pub const ARENA_DRAW_POINTS: u64 = 50;
+
+/// Underdog bonus: extra points when beating higher-power opponent
+/// Applied as percentage of base points per 10% power disadvantage
+pub const ARENA_UNDERDOG_BONUS_BPS: u64 = 500; // 5% per 10% disadvantage
+
+/// Prize distribution for top 10 leaderboard (basis points, must sum to 10000)
+pub const ARENA_PRIZE_DISTRIBUTION: [u16; 10] = [
+    3500,  // Rank 1:  35%
+    2500,  // Rank 2:  25%
+    1500,  // Rank 3:  15%
+    750,   // Rank 4:  7.5%
+    750,   // Rank 5:  7.5%
+    200,   // Rank 6:  2%
+    200,   // Rank 7:  2%
+    200,   // Rank 8:  2%
+    200,   // Rank 9:  2%
+    200,   // Rank 10: 2%
+];

@@ -4,6 +4,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use alt_name_service::instructions::Transfer;
@@ -15,6 +16,8 @@ use crate::{
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::PlayerAccount,
     validation::{require_key_match, require_signer, require_writable},
+    emit,
+    events::PlayerNameSet,
     NULL_PUBKEY,
 };
 
@@ -155,6 +158,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
 
     // 11. Store domain+tld name in player account
     player.set_name_from_domain(domain_name, tld);
+
+    // 12. Emit event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(PlayerNameSet {
+        player: *player_account.key(),
+        domain_hash: hashed_name,
+        timestamp: now,
+    });
 
     Ok(())
 }

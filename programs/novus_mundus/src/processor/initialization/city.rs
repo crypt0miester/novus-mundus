@@ -10,8 +10,10 @@ use pinocchio_system::instructions::CreateAccount;
 use crate::{
     error::GameError,
     state::{CityAccount, CityType, GameEngine},
-    constants::{GAME_ENGINE_SEED, CITY_SEED},
+    constants::CITY_SEED,
     logic::location::{is_valid_latitude, is_valid_longitude},
+    emit,
+    events::CityInitialized,
 };
 
 /// Create a new city (DAO only)
@@ -150,8 +152,18 @@ pub fn process(
     city_data.active_encounters = 0;
     city_data.total_encounters_spawned = 0;
     city_data.founded_at = now;
+    city_data.min_encounter_level = 1;
+    city_data.max_encounter_level = 100;
     city_data.bump = bump;
-    city_data._padding = [0; 5];
+    city_data._padding1 = [0; 1];
+    city_data.arena_season_id = 0;
+
+    // Emit CityInitialized event
+    emit!(CityInitialized {
+        city: *city_account.key(),
+        city_index: city_id,
+        timestamp: now,
+    });
 
     Ok(())
 }

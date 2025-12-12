@@ -7,10 +7,13 @@ use pinocchio::{
 };
 
 use crate::{
+    emit,
     error::GameError,
+    events::IntracityTravelCompleted,
     state::{PlayerAccount, CityAccount, LocationAccount},
     constants::LOCATION_SEED,
     types::TravelType,
+    validation::require_owner,
 };
 
 /// Complete intracity travel (arrive at coordinates within city)
@@ -49,14 +52,7 @@ pub fn process(
 
     // 3. Load Player Data
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-
-    // 4. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
 
     // 5. Validate Intracity Travel In Progress
 
@@ -72,7 +68,7 @@ pub fn process(
     }
 
     // 7. Validate City
-
+    require_owner(current_city_account, program_id)?;
     let city_data = unsafe { CityAccount::load(&current_city_account)? };
     if player_data.current_city != city_data.city_id {
         return Err(GameError::PlayerNotInCity.into());
@@ -134,6 +130,15 @@ pub fn process(
     player_data.traveling_to_long = 0.0;
     player_data.departure_time = 0;
     player_data.arrival_time = -1;
+
+    // 13. Emit Event
+
+    emit!(IntracityTravelCompleted {
+        player: *player_account.key(),
+        x: dest_grid_lat,
+        y: dest_grid_long,
+        timestamp: now,
+    });
 
     Ok(())
 }

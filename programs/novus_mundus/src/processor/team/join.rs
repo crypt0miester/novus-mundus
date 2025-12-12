@@ -2,96 +2,184 @@ use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
+use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
     state::{
-        PlayerAccount, TeamAccount,
+        PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY,
         unlock_extension_if_eligible, require_extension, EXT_RALLY, EXT_TEAM,
     },
-    validation::{require_signer, require_writable},
+    constants::TEAM_SLOT_SEED,
+    validation::{require_signer, require_writable, require_key_match},
+    emit,
+    events::TeamJoined,
 };
 
-/// Join a team (open teams - no invite required for MVP)
+/// Join a team (for public teams - no invite required)
 ///
 /// Player joins an existing team if there's space.
-/// Future: Add invite system for invite-only teams.
+/// For invite-only teams, use accept_invite instead.
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount (joiner)
 /// - [writable] team: TeamAccount to join
-/// - [signer] owner: Player wallet
+/// - [writable] member_slot: TeamMemberSlot PDA to be created
+/// - [signer, writable] owner: Player wallet (pays for slot rent)
+/// - [] system_program: System program
 ///
 /// # Instruction Data
-/// None
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
+/// - slot_index: u16 (2 bytes) - Slot index to occupy (client finds first empty slot)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _instruction_data: &[u8],
+    instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 10 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+
+    // 2. Parse Accounts
 
     let [
         player_account,
         team_account,
+        member_slot_account,
         owner,
+        system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
+    // 3. Validate Accounts
 
     require_signer(owner)?;
+    require_writable(owner)?;
     require_writable(player_account)?;
     require_writable(team_account)?;
+    require_writable(member_slot_account)?;
+    require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Load Accounts
+    // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut team_account_data = team_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
+    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
 
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    // 4a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
+    require_extension(&*player, EXT_RALLY)?;
 
-    // 3a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
-    // Player must create/join a rally before joining a team (user journey)
-    require_extension(player_data, EXT_RALLY)?;
+    // 4b. Unlock EXT_TEAM extension if not already unlocked
+    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
 
-    // 3b. Unlock EXT_TEAM extension if not already unlocked
-    // This is the fifth step in the user journey
-    unlock_extension_if_eligible(player_account, owner, player_data, EXT_TEAM)?;
-
-    // 4. Validate Player Can Join
+    // 5. Validate Player Can Join
 
     // Team disbanded?
-    if team_data.is_disbanded() {
+    if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
 
+    // Team must be public for direct join
+    if !team.is_public() {
+        return Err(GameError::TeamNotPublic.into());
+    }
+
     // Already in a team?
-    if player_data.has_team {
+    if player.team != NULL_PUBKEY {
         return Err(GameError::AlreadyInTeam.into());
     }
 
     // Team full?
-    if team_data.member_count >= TeamAccount::MAX_MEMBERS as u8 {
+    if team.is_full() {
         return Err(GameError::TeamFull.into());
     }
 
-    // 5. Add Player to Team
+    // Slot index within bounds?
+    if slot_index >= team.max_members {
+        return Err(GameError::InvalidParameter.into());
+    }
 
-    team_data.add_member(*owner.key())?;
+    // Check player meets minimum level requirement
+    if player.level < team.min_level_to_join {
+        return Err(GameError::LevelTooLow.into());
+    }
 
-    // 6. Update Player Account
+    // 6. Verify Slot PDA and Check Availability
+    // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index]
 
-    player_data.team = *team_account.key();
-    player_data.has_team = true;
+    let (expected_slot, slot_bump) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
+
+    if member_slot_account.key() != &expected_slot {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Slot must not exist (account must be empty)
+    if member_slot_account.data_len() > 0 {
+        return Err(GameError::SlotOccupied.into());
+    }
+
+    // 7. Create Member Slot Account
+
+    let now = Clock::get()?.unix_timestamp;
+
+    let slot_lamports = pinocchio::sysvars::rent::Rent::get()?
+        .minimum_balance(TeamMemberSlot::LEN);
+
+    let slot_bump_seed = [slot_bump];
+    let slot_index_bytes = slot_index.to_le_bytes();
+    let slot_seeds = pinocchio::seeds!(TEAM_SLOT_SEED, team_account.key().as_ref(), &slot_index_bytes, &slot_bump_seed);
+    let slot_signer = pinocchio::instruction::Signer::from(&slot_seeds);
+
+    CreateAccount {
+        from: owner,
+        to: member_slot_account,
+        lamports: slot_lamports,
+        space: TeamMemberSlot::LEN as u64,
+        owner: program_id,
+    }.invoke_signed(&[slot_signer])?;
+
+    // 8. Initialize Slot Data
+
+    let mut slot_data = member_slot_account.try_borrow_mut_data()?;
+    let slot = unsafe { TeamMemberSlot::load_mut(&mut slot_data) };
+
+    *slot = TeamMemberSlot::init(
+        *team_account.key(),
+        *player_account.key(),
+        now,
+        slot_index,
+        slot_bump,
+        TeamMemberSlot::RANK_4, // New members join at lowest rank
+    );
+
+    drop(slot_data);
+
+    // 9. Update Team Member Count
+
+    team.member_count = team.member_count.saturating_add(1);
+    team.last_activity = now;
+
+    // 10. Update Player Account
+
+    player.team = *team_account.key();
+    player.team_slot_index = slot_index;
+
+    // 11. Emit Event
+
+    emit!(TeamJoined {
+        team: *team_account.key(),
+        player: *player_account.key(),
+        member_count: team.member_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

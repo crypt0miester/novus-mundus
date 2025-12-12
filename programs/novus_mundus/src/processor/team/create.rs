@@ -6,23 +6,27 @@ use pinocchio_system::instructions::CreateAccount;
 use crate::{
     error::GameError,
     state::{
-        PlayerAccount, TeamAccount, GameEngine,
+        PlayerAccount, TeamAccount, TeamMemberSlot, GameEngine,
         unlock_extension_if_eligible, require_extension, EXT_RALLY, EXT_TEAM,
+        NULL_PUBKEY,
     },
-    constants::{PLAYER_SEED, TEAM_SEED},
-    helpers::{burn_tokens},
+    constants::{TEAM_SEED, TEAM_SLOT_SEED, MAX_TEAM_MEMBERS_BY_TIER, TIER_ROOKIE},
+    helpers::burn_tokens,
     validation::{require_signer, require_writable, require_key_match},
     logic::safe_math::apply_bp,
+    emit,
+    events::TeamCreated,
 };
 
 /// Create a new team
 ///
-/// Creates a team account with the player as leader.
+/// Creates a team account with the player as leader, and a TeamMemberSlot for the leader.
 /// Burns team_creation_cost Novi from player.
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount (team leader)
 /// - [writable] team: New TeamAccount (PDA to be created)
+/// - [writable] leader_slot: New TeamMemberSlot for leader (PDA to be created, slot 0)
 /// - [writable] player_token_account: Player's Novi tokens
 /// - [writable] novi_mint: NOVI mint
 /// - [] game_engine: GameEngine PDA
@@ -43,6 +47,7 @@ pub fn process(
     let [
         player_account,
         team_account,
+        leader_slot_account,
         player_token_account,
         novi_mint,
         game_engine_account,
@@ -59,6 +64,7 @@ pub fn process(
     require_writable(owner)?;
     require_writable(player_account)?;
     require_writable(team_account)?;
+    require_writable(leader_slot_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data
@@ -85,42 +91,35 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let game_engine_account_data = game_engine_account.try_borrow_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_account_data) };
-
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 4a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
     // Player must create/join a rally before creating a team (user journey)
-    require_extension(player_data, EXT_RALLY)?;
+    require_extension(&*player, EXT_RALLY)?;
 
     // 4b. Unlock EXT_TEAM extension if not already unlocked
     // This is the fifth step in the user journey
-    unlock_extension_if_eligible(player_account, owner, player_data, EXT_TEAM)?;
+    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
 
     // 5. Validate Player Can Create Team
 
     // Already in a team?
-    if player_data.has_team {
+    if player.team != NULL_PUBKEY {
         return Err(GameError::AlreadyInTeam.into());
     }
 
     // 6. Burn Team Creation Cost (with DAO multiplier)
 
-    let base_creation_cost = game_engine_data.gameplay_config.team_creation_cost;
+    let base_creation_cost = game_engine.gameplay_config.team_creation_cost;
 
     // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
-    let adjusted_creation_cost = apply_bp(base_creation_cost, game_engine_data.economic_config.cost_multiplier as u64)
+    let adjusted_creation_cost = apply_bp(base_creation_cost, game_engine.economic_config.cost_multiplier as u64)
         .ok_or(GameError::MathOverflow)?;
 
-    let bump_seed = [game_engine_data.bump];
+    let bump_seed = [game_engine.bump];
     let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::instruction::Signer::from(&seeds);
 
     burn_tokens(
         player_token_account,
@@ -150,7 +149,7 @@ pub fn process(
     // 8. Derive and Verify Team PDA
 
     let team_id_bytes = team_id.to_le_bytes();
-    let (expected_team, bump) = find_program_address(
+    let (expected_team, team_bump) = find_program_address(
         &[TEAM_SEED, &team_id_bytes],
         program_id,
     );
@@ -159,53 +158,100 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    // 9. Create Team Account
+    // 9. Derive and Verify Leader Slot PDA (slot index 0)
+    // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index]
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
+    let slot_index: u16 = 0;
+    let (expected_slot, slot_bump) = TeamMemberSlot::derive_pda(&expected_team, slot_index);
+
+    if leader_slot_account.key() != &expected_slot {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // 10. Create Team Account
+
+    let team_lamports = pinocchio::sysvars::rent::Rent::get()?
         .minimum_balance(TeamAccount::LEN);
 
-    let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(TEAM_SEED, &team_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let team_bump_seed = [team_bump];
+    let team_seeds = pinocchio::seeds!(TEAM_SEED, &team_id_bytes, &team_bump_seed);
+    let team_signer = pinocchio::instruction::Signer::from(&team_seeds);
 
     CreateAccount {
         from: owner,
         to: team_account,
-        lamports,
+        lamports: team_lamports,
         space: TeamAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }.invoke_signed(&[team_signer])?;
 
-    // 10. Initialize Team Data
+    // 11. Initialize Team Data
 
     let mut team_account_data = team_account.try_borrow_mut_data()?;
     let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
 
-    let mut name_array = [0u8; 32];
-    name_array[..name_len].copy_from_slice(name_bytes);
+    // Get max members for rookie tier
+    let max_members = MAX_TEAM_MEMBERS_BY_TIER[TIER_ROOKIE as usize] as u16;
 
-    *team_data = TeamAccount {
-        id: team_id,
-        leader: *owner.key(),
-        name: name_array,
-        name_len: name_len as u8,
-        disbanded: false,
-        _padding1: [0; 6],
-        members: [[0; 32]; 50],
-        member_count: 1, // Leader is first member
-        _padding2: [0; 7],
-        created_at: now,
-        treasury: 0,
-        _reserved: [0; 64],
-    };
+    *team_data = TeamAccount::init(
+        team_id,
+        *player_account.key(), // leader is the player account, not owner wallet
+        team_bump,
+        name_bytes,
+        max_members,
+        now,
+    );
 
-    // Add leader as first member
-    team_data.members[0] = *owner.key();
+    drop(team_account_data);
 
-    // 11. Update Player Account
+    // 12. Create Leader's TeamMemberSlot
+    // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index, bump]
 
-    player_data.team = *team_account.key();
-    player_data.has_team = true;
+    let slot_lamports = pinocchio::sysvars::rent::Rent::get()?
+        .minimum_balance(TeamMemberSlot::LEN);
+
+    let slot_bump_seed = [slot_bump];
+    let slot_index_bytes = slot_index.to_le_bytes();
+    let slot_seeds = pinocchio::seeds!(TEAM_SLOT_SEED, team_account.key().as_ref(), &slot_index_bytes, &slot_bump_seed);
+    let slot_signer = pinocchio::instruction::Signer::from(&slot_seeds);
+
+    CreateAccount {
+        from: owner,
+        to: leader_slot_account,
+        lamports: slot_lamports,
+        space: TeamMemberSlot::LEN as u64,
+        owner: program_id,
+    }.invoke_signed(&[slot_signer])?;
+
+    // 13. Initialize Leader Slot Data
+
+    let mut slot_data = leader_slot_account.try_borrow_mut_data()?;
+    let slot = unsafe { TeamMemberSlot::load_mut(&mut slot_data) };
+
+    *slot = TeamMemberSlot::init(
+        *team_account.key(),
+        *player_account.key(),
+        now,
+        slot_index,
+        slot_bump,
+        TeamMemberSlot::RANK_0, // Leader rank
+    );
+
+    drop(slot_data);
+
+    // 14. Update Player Account
+
+    player.team = *team_account.key();
+    player.team_slot_index = slot_index;
+
+    // 15. Emit Event
+
+    emit!(TeamCreated {
+        team: *team_account.key(),
+        founder: *player_account.key(),
+        novi_burned: adjusted_creation_cost,
+        timestamp: now,
+    });
 
     Ok(())
 }

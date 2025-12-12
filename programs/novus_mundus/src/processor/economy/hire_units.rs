@@ -9,14 +9,19 @@ use crate::{
     constants::PLAYER_SEED,
     error::GameError,
     logic::{
-        consume_novi_logic, calculate_luck, calculate_networth, update_happiness_defensive,
+        consume_novi_logic, calculate_synchrony, calculate_networth, update_happiness_defensive,
         get_time_of_day, apply_time_multiplier, ActivityType,
         safe_math::{apply_bp, mul_div},
     },
     state::PlayerAccount,
     types::{UnitType, EventType},
-    helpers::event_scoring::update_event_score,
+    helpers::{
+        event_scoring::update_event_score,
+        estate::{required_barracks_level_for_unit, load_estate_for_player, require_barracks},
+    },
     validation::{require_signer, require_writable, require_owner, require_pda},
+    emit,
+    events::UnitsHired,
 };
 
 /// Hire units by consuming locked NOVI
@@ -28,7 +33,7 @@ use crate::{
 ///
 /// # Flow
 /// 1. User specifies amount of locked NOVI to consume + unit type to hire
-/// 2. System generates power using `consume_novi_logic()` (DETERMINISTIC: 13.75x × √φ × luck × time bonus)
+/// 2. System generates power using `consume_novi_logic()` (DETERMINISTIC: 13.75x × √φ × synchrony × time bonus)
 /// 3. Power is converted to units based on power cost per unit type
 /// 4. Locked NOVI is deducted, units are added
 /// 5. Happiness and networth are recalculated
@@ -40,8 +45,15 @@ use crate::{
 /// 4. `[writable]` novi_mint - NOVI token mint
 /// 5. `[]` game_engine - GameEngine PDA (for burn authority)
 /// 6. `[]` token_program - SPL Token program
-/// 7. `[writable]` event_participation - (Optional) EventParticipation PDA for event scoring
-/// 8. `[writable]` event - (Optional) EventAccount PDA for event scoring
+/// 7. `[]` estate_account - EstateAccount PDA (for Barracks requirement)
+/// 8. `[writable]` event_participation - (Optional) EventParticipation PDA for event scoring
+/// 9. `[writable]` event - (Optional) EventAccount PDA for event scoring
+///
+/// # Building Requirements
+/// Requires Barracks at specific levels based on unit type:
+/// - Unit 1: Barracks Level 1
+/// - Unit 2: Barracks Level 5
+/// - Unit 3: Barracks Level 10
 ///
 /// # Instruction Data
 /// ```text
@@ -60,7 +72,7 @@ use crate::{
 /// # Example
 /// ```ignore
 /// // Consume 100 locked NOVI to hire DefensiveUnit1
-/// // Power generated: ~1750 (DETERMINISTIC: 100 × 13.75 × 1.272 = 1750 base, adjusted by luck & time)
+/// // Power generated: ~1750 (DETERMINISTIC: 100 × 13.75 × 1.272 = 1750 base, adjusted by synchrony & time)
 /// // Units hired: 17 units (power / 100)
 /// // Midday hiring gets φ bonus (best time for economic activity!)
 /// ```
@@ -75,10 +87,10 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    let (player, owner, player_token_account, novi_mint, game_engine, token_program, event_participation, event) = if accounts.len() >= 8 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], Some(&accounts[6]), Some(&accounts[7]))
-    } else if accounts.len() >= 6 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], None, None)
+    let (player, owner, player_token_account, novi_mint, game_engine, token_program, estate_account, event_participation, event) = if accounts.len() >= 9 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], Some(&accounts[7]), Some(&accounts[8]))
+    } else if accounts.len() >= 7 {
+        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], None, None)
     } else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -120,15 +132,24 @@ pub fn process(
         PlayerAccount::load_mut(&mut player_data_ref)
     };
 
-    // Load GameEngine for cost configuration
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
-    let economic_config = &game_engine_data.economic_config;
-
     // Verify owner matches
     if &player_data.owner != owner.key() {
         return Err(GameError::Unauthorized.into());
     }
+
+    // 3a. HARD GATE: Check Barracks Requirement
+    let estate = load_estate_for_player(estate_account, player_data, program_id)?;
+
+    // Get required Barracks level for this unit type
+    let required_level = required_barracks_level_for_unit(unit_type);
+
+    // Validate Barracks meets requirement
+    require_barracks(estate, required_level)?;
+
+    // Load GameEngine for cost configuration
+    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
+    let economic_config = &game_engine_data.economic_config;
 
     // Verify bump matches
     if player_data.bump != bump {
@@ -152,8 +173,8 @@ pub fn process(
 
     // 6a. Calculate Power from NOVI Consumption (PURE LOGIC)
 
-    // Calculate player's luck multiplier (using basis points from config)
-    let luck = calculate_luck(
+    // Calculate player's synchrony multiplier (using basis points from config)
+    let synchrony = calculate_synchrony(
         player_data,
         &game_engine_data.gameplay_config,
         &game_engine_data.subscription_tiers,
@@ -161,7 +182,7 @@ pub fn process(
     );
 
     // Generate base power from consuming NOVI
-    let base_power = consume_novi_logic(novi_amount, luck, economic_config);
+    let base_power = consume_novi_logic(novi_amount, synchrony, economic_config);
 
     // 6b. Apply Consumption Time Bonus (DETERMINISTIC)
     // Consuming NOVI is more efficient during the day (peak business hours)
@@ -308,26 +329,54 @@ pub fn process(
     // 10. Update Event Scores (if participating)
 
     if let (Some(event_participation), Some(event)) = (event_participation, event) {
-        // Validate player is actually in this event
-        let event_data_ref = event.try_borrow_data()?;
-        let event_data = unsafe { crate::state::EventAccount::load(&event_data_ref) };
-        if player_data.current_event != event_data.id {
-            return Err(GameError::NotInEvent.into());
-        }
+        // Load event participation with ownership validation
+        let mut participation = crate::state::EventParticipation::load_checked_mut(
+            event_participation,
+            player_data.current_event,
+            owner.key(),
+            program_id,
+        )?;
+
+        // Load event with ownership validation
+        let mut event_data = crate::state::EventAccount::load_checked_mut(
+            event,
+            player_data.current_event,
+            program_id,
+        )?;
 
         let player_key = player.key();
 
         // DETERMINISTIC: Use exact novi amount (no randomness)
         // MostNoviConsumed: Add novi_amount burned (deterministic)
         let _ = update_event_score(
-            event_participation,
-            event,
+            &mut *participation,
+            &mut *event_data,
             player_key,
             EventType::MostNoviConsumed,
             novi_amount,
             now,
         );
     }
+
+    // Calculate time bonus in basis points for event
+    let base_bp = 10000u64;
+    let time_bonus_bps = if units_with_time_bonus > units_to_hire {
+        let bonus_ratio = (units_with_time_bonus - units_to_hire) * 10000 / units_to_hire.max(1);
+        bonus_ratio as u16
+    } else {
+        0
+    };
+
+    // Emit UnitsHired event
+    emit!(UnitsHired {
+        player: *player.key(),
+        unit_type: unit_type as u8,
+        base_quantity: units_to_hire,
+        final_quantity: units_with_time_bonus,
+        novi_burned: novi_amount,
+        time_bonus_bps,
+        timestamp: now,
+    });
 
     Ok(())
 }

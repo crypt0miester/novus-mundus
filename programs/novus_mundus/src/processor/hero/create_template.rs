@@ -29,7 +29,7 @@ use crate::{
 /// - [] system_program
 ///
 /// # Instruction Data (Deterministic System)
-/// Layout (71 bytes total):
+/// Layout (73 bytes total):
 /// - [0..2]   template_id: u16
 /// - [2..34]  name: [u8; 32]
 /// - [34]     hero_type: u8
@@ -39,7 +39,8 @@ use crate::{
 /// - [48]     enabled: bool
 /// - [49]     event_exclusive: bool
 /// - [50]     required_player_level: u8
-/// - [51..71] buffs: [BuffConfig; 4] - 4 buffs × 5 bytes = 20 bytes
+/// - [51..53] meditation_city_id: u16 (0 = any city, else specific city required)
+/// - [53..73] buffs: [BuffConfig; 4] - 4 buffs × 5 bytes = 20 bytes
 ///
 /// Note: No buff_ranges needed - hero progression is deterministic using √φ scaling
 pub fn process(
@@ -66,7 +67,7 @@ pub fn process(
     }
 
     // 4. Parse instruction data (Deterministic System - no buff_ranges needed)
-    if instruction_data.len() != 71 {
+    if instruction_data.len() != 73 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -103,11 +104,17 @@ pub fn process(
     let event_exclusive = instruction_data[49] != 0;
     let required_player_level = instruction_data[50];
 
+    // Parse meditation_city_id (0 = any city, else specific city required for meditation)
+    let meditation_city_id = u16::from_le_bytes([
+        instruction_data[51],
+        instruction_data[52],
+    ]);
+
     // Parse buffs (4 × 5 bytes = 20 bytes) - Deterministic System
     // Each buff has: stat (u8), base_bps (u16), _reserved (2 bytes)
     let mut buffs = [BuffConfig::NONE; 4];
     for i in 0..4 {
-        let offset = 51 + (i * 5);
+        let offset = 53 + (i * 5);
         buffs[i] = BuffConfig {
             stat: instruction_data[offset],
             base_bps: u16::from_le_bytes([
@@ -156,10 +163,10 @@ pub fn process(
     template.enabled = enabled;
     template.event_exclusive = event_exclusive;
     template.required_player_level = required_player_level;
+    template.meditation_city_id = meditation_city_id; // 0 = any city, else specific city required
     template.buffs = buffs;
-    // Note: No buff_ranges - deterministic √φ scaling
     template.bump = bump;
-    template._padding = [0; 6];
+    template._padding = [0; 3];
 
     Ok(())
 }

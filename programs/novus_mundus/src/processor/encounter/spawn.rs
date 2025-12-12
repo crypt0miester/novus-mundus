@@ -11,6 +11,8 @@ use crate::{
     helpers::{burn_tokens},
     validation::{require_signer, require_writable, require_key_match},
     logic::{get_time_of_day, can_spawn_rarity_at_time, get_rarity_spawn_weight, safe_math::apply_bp},
+    emit,
+    events::EncounterSpawned,
 };
 
 /// Spawn an encounter in a city
@@ -374,13 +376,25 @@ pub fn process(
         defense,                                // NEW
         _padding1: [0; 4],
         attacker_count: 0,                      // Start with 0 attackers
-        _padding2: [0; 7],
+        bump: encounter_bump,
+        _padding2: [0; 6],
     };
 
     // 13. Update City Counters
 
     city_data.active_encounters = city_data.active_encounters.saturating_add(1);
     city_data.total_encounters_spawned = city_data.total_encounters_spawned.saturating_add(1);
+
+    // 14. Emit EncounterSpawned event
+    emit!(EncounterSpawned {
+        encounter: *encounter_account.key(),
+        city: *city_account.key(),
+        encounter_type: encounter_type as u8,
+        level: encounter_level,
+        x: random_lat as i32,  // Convert lat to i32 for event
+        y: random_long as i32, // Convert long to i32 for event
+        timestamp: now,
+    });
 
     Ok(())
 }

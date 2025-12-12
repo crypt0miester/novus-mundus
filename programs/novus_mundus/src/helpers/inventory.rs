@@ -16,7 +16,6 @@ use crate::{
     error::GameError,
     state::{
         PlayerInventoryHeader, InventoryItem, PlayerInventory,
-        inventory::derive_inventory_pda,
     },
 };
 
@@ -43,7 +42,7 @@ pub fn get_or_create_inventory(
     system_program: &AccountInfo,
 ) -> ProgramResult {
     // Verify PDA
-    let (expected_pda, bump) = derive_inventory_pda(owner);
+    let (expected_pda, bump) = PlayerInventoryHeader::derive_pda(owner);
     if inventory_account.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }

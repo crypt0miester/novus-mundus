@@ -7,16 +7,18 @@ use pinocchio::{
 };
 use pinocchio_system::instructions::{CreateAccount, Transfer};
 use crate::{
-    constants::PLAYER_PURCHASE_SEED,
+    constants::{PLAYER_PURCHASE_SEED, PLAYER_SEED},
     error::GameError,
-    helpers::add_to_inventory,
+    helpers::{add_to_inventory, burn_tokens, estate::{market_discount_bps, load_estate_for_player, require_market}},
     state::{
         GameEngine, ShopConfigAccount, ShopItemAccount, PlayerPurchaseAccount,
         PlayerAccount, DailyDealAccount, WeeklySaleAccount,
         unlock_extension_if_eligible, require_extension, EXT_HEROES, EXT_INVENTORY,
     },
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
     logic::safe_math::apply_bp_penalty,
+    emit,
+    events::shop::ItemPurchased,
 };
 
 /// Discount source flags for optional accounts
@@ -38,6 +40,14 @@ pub const DISCOUNT_WEEKLY_SALE: u8 = 2;
 /// - [writable] treasury: SOL treasury wallet
 /// - [] system_program: System program
 /// - [writable] inventory: PlayerInventoryAccount PDA (auto-created/expanded for inventory items)
+/// - [] estate_account: EstateAccount PDA (for Market discount)
+/// - [writable] player_token_account: Player's locked NOVI token account (for NOVI payment)
+/// - [writable] novi_mint: NOVI token mint (for NOVI payment)
+/// - [] token_program: SPL Token program (for NOVI payment)
+///
+/// # Building Bonuses
+/// Market building provides shop discounts:
+/// - 1% discount per Market level (max 20% at level 20)
 ///
 /// # Accounts (Optional, based on discount_flags)
 /// - [] daily_deal: DailyDealAccount (if DISCOUNT_DAILY_DEAL flag set)
@@ -57,19 +67,23 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
-        buyer,
-        player_account,
-        game_engine_account,
-        shop_config_account,
-        shop_item_account,
-        player_purchase_account,
-        treasury,
-        system_program,
-        inventory_account,
-    ] = accounts else {
+    if accounts.len() < 13 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+
+    let buyer = &accounts[0];
+    let player_account = &accounts[1];
+    let game_engine_account = &accounts[2];
+    let shop_config_account = &accounts[3];
+    let shop_item_account = &accounts[4];
+    let player_purchase_account = &accounts[5];
+    let treasury = &accounts[6];
+    let system_program = &accounts[7];
+    let inventory_account = &accounts[8];
+    let estate_account = &accounts[9];
+    let player_token_account = &accounts[10];
+    let novi_mint = &accounts[11];
+    let _token_program = &accounts[12];
 
     // 2. Validate Accounts
 
@@ -97,8 +111,7 @@ pub fn process(
 
     // 4. Load and Validate Game Engine / Treasury
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // Verify treasury matches
     if treasury.key() != &game_engine.treasury_wallet {
@@ -111,12 +124,12 @@ pub fn process(
     }
 
     // 5. Load Shop Config
-
+    require_owner(shop_config_account, program_id)?;
     let shop_config_data_ref = shop_config_account.try_borrow_data()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
 
     // 6. Load and Validate Shop Item
-
+    require_owner(shop_item_account, program_id)?;
     let mut shop_item_data_ref = shop_item_account.try_borrow_mut_data()?;
     let shop_item = unsafe { ShopItemAccount::load_mut(&mut shop_item_data_ref) };
 
@@ -173,21 +186,15 @@ pub fn process(
 
     // 8. Load Player and Calculate Discounts
 
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    // Verify player owns this account
-    if player.owner != *buyer.key() {
-        return Err(GameError::NotOwner.into());
-    }
+    let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
 
     // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
     // Player must lock a hero before using the shop (user journey)
-    require_extension(player, EXT_HEROES)?;
+    require_extension(&*player, EXT_HEROES)?;
 
     // Unlock EXT_INVENTORY extension if not already unlocked
     // This is the third step in the user journey
-    unlock_extension_if_eligible(player_account, buyer, player, EXT_INVENTORY)?;
+    unlock_extension_if_eligible(player_account, buyer, &mut *player, EXT_INVENTORY)?;
 
     // Calculate subscription discount (using effective tier to handle expiration)
     let effective_tier = player.get_effective_tier(now);
@@ -205,12 +212,21 @@ pub fn process(
     // Calculate base discount from optional discount sources (daily deal, weekly sale)
     let base_discount_bps = calculate_optional_discounts(
         instruction_data,
-        &accounts[9..], // Optional accounts start after inventory_account
+        &accounts[10..], // Optional accounts start after estate_account
         game_engine_account.key(),
         item_id,
         shop_item.category,
         now,
     );
+
+    // HARD GATE: Require Market building to use shop
+    let estate = load_estate_for_player(estate_account, &*player, program_id)?;
+    require_market(estate, 1)?;
+
+    // Calculate Market discount (BUILDING BONUS + DAILY MINI-GAME BONUS)
+    let building_discount = market_discount_bps(estate);
+    let daily_discount = estate.market_discount_bps;
+    let market_bonus_bps = building_discount.saturating_add(daily_discount);
 
     // Calculate final price (multiplicative stacking)
     let final_price = calculate_final_price(
@@ -221,6 +237,7 @@ pub fn process(
         sub_discount_bps,
         milestone_discount_bps,
         streak_discount_bps,
+        market_bonus_bps,
         shop_config.max_total_discount_bps,
     );
 
@@ -309,10 +326,25 @@ pub fn process(
         }
         1 => {
             // NOVI payment - burn tokens
-            // For now, deduct from player's locked_novi
             if player.locked_novi < final_price {
                 return Err(GameError::InsufficientFunds.into());
             }
+
+            // Burn NOVI tokens
+            let player_bump = player.bump;
+            let bump_seed = [player_bump];
+            let player_seeds = pinocchio::seeds!(PLAYER_SEED, buyer.key().as_ref(), &bump_seed);
+            let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+
+            burn_tokens(
+                player_token_account,
+                novi_mint,
+                player_account,
+                final_price,
+                &[player_signer],
+            )?;
+
+            // Update soft balance tracker
             player.locked_novi = player.locked_novi.saturating_sub(final_price);
         }
         2 => {
@@ -350,7 +382,7 @@ pub fn process(
         }
     } else {
         // Add directly to PlayerAccount fields
-        fulfill_item(player, shop_item.item_type, items_to_add)?;
+        fulfill_item(&mut *player, shop_item.item_type, items_to_add)?;
     }
 
     // 12. Update Stats
@@ -396,6 +428,16 @@ pub fn process(
     player.daily_purchase_count = player.daily_purchase_count.saturating_add(1);
     player.last_purchase_day = current_day;
     player.last_daily_reset = now;
+
+    // Emit event
+    emit!(ItemPurchased {
+        player: *buyer.key(),
+        item_id,
+        quantity: quantity as u16,
+        price: final_price,
+        currency: payment_type,
+        timestamp: now,
+    });
 
     Ok(())
 }
@@ -480,6 +522,7 @@ fn calculate_final_price(
     sub_discount_bps: u16,
     milestone_discount_bps: u16,
     loyalty_discount_bps: u16,
+    market_discount_bps: u16,
     max_total_discount_bps: u16,
 ) -> u64 {
     // Multiplicative stacking with checked math
@@ -502,6 +545,9 @@ fn calculate_final_price(
 
     // Layer 6: Loyalty streak
     price = apply_bp_penalty(price, loyalty_discount_bps).unwrap_or(price);
+
+    // Layer 7: Market building discount
+    price = apply_bp_penalty(price, market_discount_bps).unwrap_or(price);
 
     // Enforce max discount
     let min_price = apply_bp_penalty(base_price, max_total_discount_bps).unwrap_or(0);

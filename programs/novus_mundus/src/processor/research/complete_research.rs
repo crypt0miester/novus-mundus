@@ -16,6 +16,8 @@ use crate::{
         require_owner,
         require_pda,
     },
+    emit,
+    events::ResearchCompleted,
 };
 
 /// Complete research and claim buffs
@@ -146,7 +148,7 @@ pub fn process(
         23 => player.research_loot_magnetism_bps = total_buff,
         24 => player.research_reputation_bonus_bps = total_buff,
         25 => player.research_stamina_bonus_bps = total_buff,
-        26 => player.research_luck_bonus_bps = total_buff,
+        26 => player.research_synchrony_bonus_bps = total_buff,
         27 => {
             // Fragment Discovery - unlocks feature
             if new_level == 1 {
@@ -177,6 +179,14 @@ pub fn process(
     player.research_buff_version = player.research_buff_version.wrapping_add(1);
 
     // 11. Update total NOVI spent (already done in start_research)
+
+    // 12. Emit ResearchCompleted event
+    emit!(ResearchCompleted {
+        player: *player_account.key(),
+        research_id: research_type as u16,
+        level: new_level,
+        timestamp: now,
+    });
 
     Ok(())
 }

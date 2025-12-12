@@ -9,11 +9,14 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    emit,
     error::GameError,
+    events::TravelCancelled,
     state::{PlayerAccount, CityAccount, LocationAccount, OCCUPANT_PLAYER},
     constants::LOCATION_SEED,
     helpers::close_account,
     logic::location::calculate_distance,
+    validation::require_owner,
 };
 
 /// Cancel intercity travel and return to origin city
@@ -63,16 +66,12 @@ pub fn process(
 
     // 3. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+
+    require_owner(origin_city_account, program_id)?;
+    require_owner(destination_city_account, program_id)?;
     let origin_city_data = unsafe { CityAccount::load_mut(origin_city_account)? };
     let destination_city_data = unsafe { CityAccount::load(&destination_city_account)? };
-
-    // 4. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
 
     // 5. Validate Currently Traveling Intercity
 
@@ -252,6 +251,14 @@ pub fn process(
 
     origin_city_data.players_present = origin_city_data.players_present
         .saturating_add(1);
+
+    // 14. Emit Event
+
+    emit!(TravelCancelled {
+        player: *player_account.key(),
+        is_intercity: true,
+        timestamp: now,
+    });
 
     Ok(())
 }

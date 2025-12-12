@@ -9,6 +9,9 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{PlayerAccount, UserAccount, GameEngine},
+    helpers::estate::{vault_novi_cap_bonus_bps, load_estate_for_player},
+    emit,
+    events::NoviLocked,
 };
 
 /// Update locked NOVI balance based on time elapsed since last update
@@ -45,6 +48,14 @@ use crate::{
 /// - [writable] novi_mint: NOVI token mint
 /// - [] game_engine: GameEngine PDA (mint authority)
 /// - [] token_program: SPL Token program
+/// - [] estate_account: EstateAccount PDA (for Vault cap bonus)
+///
+/// # Building Bonuses
+/// Vault building increases max NOVI cap:
+/// - Lv 5-9: +50% cap
+/// - Lv 10-14: +100% cap
+/// - Lv 15-19: +150% cap
+/// - Lv 20+: +200% cap
 ///
 /// # Instruction Data
 /// None
@@ -63,6 +74,7 @@ pub fn process(
         novi_mint,
         game_engine_account,
         _token_program,
+        estate_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -124,14 +136,29 @@ pub fn process(
     let tier = &game_engine_data.subscription_tiers[tier_index as usize];
     let generation_rate = tier.generation_multiplier;
 
-    // 8. Calculate Max Cap
+    // 8. Calculate Max Cap (with Vault bonus)
 
-    let max_locked_novi = tier.max_locked_novi;
+    let base_max_locked_novi = tier.max_locked_novi;
+
+    // Apply Vault building bonus (BUILDING BONUS)
+    // Vault increases max NOVI cap by percentage
+    let estate = load_estate_for_player(estate_account, player_data, program_id)?;
+    let vault_bonus_bps = vault_novi_cap_bonus_bps(estate);
+
+    // Apply bonus: cap × (10000 + bonus_bps) / 10000
+    let max_locked_novi = if vault_bonus_bps > 0 {
+        let bonus_multiplier = 10000u64.saturating_add(vault_bonus_bps as u64);
+        base_max_locked_novi.saturating_mul(bonus_multiplier) / 10000
+    } else {
+        base_max_locked_novi
+    };
 
     // If already at cap, nothing to update
     if player_data.locked_novi >= max_locked_novi {
         // Still update timestamp to prevent overflow
-        player_data.last_updated_tokens_at = now;
+        // player_data.last_updated_tokens_at = now;
+        // TODO: Update timestamp to prevent overflow does it make sense to add this?
+        // the player will then have to wait 5 minutes to update again
         return Ok(());
     }
 
@@ -175,6 +202,14 @@ pub fn process(
             actual_tokens_generated,
             &[signer],
         )?;
+
+        // Emit NoviLocked event
+        emit!(NoviLocked {
+            player: *player_account.key(),
+            amount: actual_tokens_generated,
+            total_locked: player_data.locked_novi,
+            timestamp: now,
+        });
     }
 
     Ok(())

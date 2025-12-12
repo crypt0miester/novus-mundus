@@ -23,8 +23,12 @@ use crate::{
         RallyParticipant,
         RallyStatus,
         EncounterAccount,
+        EstateAccount,
     },
-    validation::{require_writable, require_key_match},
+    helpers::estate::citadel_rally_damage_bps,
+    validation::require_writable,
+    emit,
+    events::RallyExecuted,
 };
 
 /// Execute a rally
@@ -42,7 +46,12 @@ use crate::{
 /// - [writable] rally: RallyAccount
 /// - [writable] target: PlayerAccount or EncounterAccount
 /// - [] game_engine: GameEngine PDA (for gameplay config)
+/// - [] leader_estate: EstateAccount PDA (leader's estate for Citadel bonus)
 /// - [0..N] rally_participants: RallyParticipant accounts (writable)
+///
+/// # Building Bonuses
+/// Leader's Citadel provides rally damage bonus:
+/// - 0.5% damage bonus per Citadel level
 ///
 /// # Instruction Data
 /// None (target_type stored in RallyAccount)
@@ -53,15 +62,20 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Fixed Accounts
 
-    if accounts.len() < 3 {
+    if accounts.len() < 4 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
     let rally_account = &accounts[0];
     let target_account = &accounts[1];
     let game_engine_account = &accounts[2];
+    let leader_estate_account = &accounts[3];
 
     // Load rally to get participant count
+    // RallyAccount doesn't have load_checked - verify program ownership manually
+    if rally_account.owner() != _program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
     let rally_data_check = rally_account.try_borrow_data()?;
     let rally_header = unsafe { RallyAccount::load(&rally_data_check) };
     let participant_count = rally_header.participant_count as usize;
@@ -69,14 +83,14 @@ pub fn process(
     let rally_id = rally_header.id;
     drop(rally_data_check);
 
-    // Calculate expected account count: 3 fixed + N rally_participants
-    let expected_accounts = 3 + participant_count;
+    // Calculate expected account count: 4 fixed + N rally_participants
+    let expected_accounts = 4 + participant_count;
     if accounts.len() < expected_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
     // Parse variable accounts
-    let rally_participant_accounts = &accounts[3..3 + participant_count];
+    let rally_participant_accounts = &accounts[4..4 + participant_count];
 
     // 2. Validate Accounts
 
@@ -85,6 +99,10 @@ pub fn process(
 
     for rp_account in rally_participant_accounts.iter() {
         require_writable(rp_account)?;
+        // RallyParticipant doesn't have load_checked - verify program ownership
+        if rp_account.owner() != _program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
     }
 
     // 3. Load Clock
@@ -94,10 +112,13 @@ pub fn process(
 
     // 4. Load Rally Account and GameEngine
 
+    // RallyAccount doesn't have load_checked - verify program ownership manually
+    if rally_account.owner() != _program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
     let rally_data_check = rally_account.try_borrow_data()?;
     let rally_data = unsafe { RallyAccount::load(&rally_data_check) };
-    let game_engine_data_check = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_check) };
+    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, _program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
     let economic_config = &game_engine_data.economic_config;
 
@@ -208,7 +229,7 @@ pub fn process(
 
     // 7. Calculate Total Damage Output
 
-    let total_damage = calculate_damage_output(
+    let base_total_damage = calculate_damage_output(
         total_units,
         total_weapons,
         true, // drive-by rally attack
@@ -221,6 +242,25 @@ pub fn process(
         leader_hero_crit_chance_bps,
         leader_equipped_weapon_bonus_bps,
     );
+
+    // 7a. Apply Citadel rally damage bonus (BUILDING BONUS)
+    // Leader's Citadel provides 0.5% damage bonus per level
+    // EstateAccount doesn't have load_checked - verify program ownership manually
+    if leader_estate_account.owner() != _program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+    let leader_estate_data = leader_estate_account.try_borrow_data()?;
+    let leader_estate = unsafe { EstateAccount::load(&leader_estate_data) };
+    let citadel_bonus_bps = citadel_rally_damage_bps(leader_estate);
+    drop(leader_estate_data);
+
+    // Apply bonus: damage × (10000 + bonus_bps) / 10000
+    let total_damage = if citadel_bonus_bps > 0 {
+        let bonus_multiplier = 10000u64.saturating_add(citadel_bonus_bps as u64);
+        base_total_damage.saturating_mul(bonus_multiplier) / 10000
+    } else {
+        base_total_damage
+    };
 
     // 8. Execute Attack Based on Target Type
 
@@ -243,6 +283,10 @@ pub fn process(
             // ============================================================
             // PvP Rally Attack - Full Weapon Combat Mechanics
             // ============================================================
+            // Target PlayerAccount - verify program ownership (not signer, so can't use load_checked)
+            if target_account.owner() != _program_id {
+                return Err(ProgramError::IllegalOwner);
+            }
             let mut target_account_data = target_account.try_borrow_mut_data()?;
             let target_player = unsafe { PlayerAccount::load_mut(&mut target_account_data) };
 
@@ -391,6 +435,10 @@ pub fn process(
             // ============================================================
             // Encounter Rally Attack
             // ============================================================
+            // EncounterAccount - verify program ownership
+            if target_account.owner() != _program_id {
+                return Err(ProgramError::IllegalOwner);
+            }
             let mut target_account_data = target_account.try_borrow_mut_data()?;
             let encounter = unsafe { EncounterAccount::load_mut(&mut target_account_data) };
 
@@ -511,6 +559,19 @@ pub fn process(
     rally.fallback_triggered = fallback_triggered;
     rally.attacker_won = attacker_won;
     rally.status = RallyStatus::Returning as u8;
+
+    // Emit RallyExecuted event
+    emit!(RallyExecuted {
+        rally: *rally_account.key(),
+        target: rally.target,
+        damage_dealt: total_damage,
+        damage_received: attacker_casualties,
+        loot_captured: total_loot_cash
+            .saturating_add(total_loot_produce)
+            .saturating_add(total_loot_vehicles),
+        participant_count: marched_count,
+        timestamp: now,
+    });
 
     Ok(())
 }

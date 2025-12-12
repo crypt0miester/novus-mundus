@@ -10,7 +10,7 @@ use pinocchio::{
 };
 use pinocchio_token::instructions::*;
 
-use crate::{error::GameError, constants::GAME_ENGINE_SEED};
+use crate::error::GameError;
 
 /// Burn tokens from a token account
 ///

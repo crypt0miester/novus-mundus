@@ -5,53 +5,52 @@ use pinocchio::{
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
-use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, HeroAccount, HeroTemplate, GameEngine},
-    constants::{HERO_SEED, HERO_TEMPLATE_SEED},
+    state::{PlayerAccount, HeroTemplate, GameEngine},
+    constants::HERO_TEMPLATE_SEED,
     helpers::{HeroNftContext, HeroNftBuffers, build_hero_nft_attributes},
     validation::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::HeroMinted,
 };
 
-/// Mint a new hero NFT (131) - Deterministic System
+/// Mint a new hero NFT (131) - Deterministic System (NFT-Only)
 ///
 /// Creates a new hero NFT. Hero progression is fully deterministic
 /// using golden root (√φ) scaling - no random seed needed.
+///
+/// All hero state is stored directly in the NFT's Attributes plugin.
 ///
 /// Creates a new hero NFT by:
 /// 1. Validating template (enabled, supply cap, event requirements)
 /// 2. Validating player (level requirement)
 /// 3. Collecting SOL payment
-/// 4. Creating HeroAccount PDA
-/// 5. Minting NFT via p-core
-/// 6. Updating template minted_count
+/// 4. Minting NFT via p-core with all hero attributes
+/// 5. Updating template minted_count
 ///
 /// # Safety Requirements (ULTRA-CRITICAL!)
 /// 1. Verify template enabled
 /// 2. Verify supply cap not exceeded
 /// 3. Verify player level requirement
 /// 4. Collect SOL payment BEFORE any state changes
-/// 5. Create HeroAccount PDA
-/// 6. Mint NFT via p-core (with proper authority)
-/// 7. Update template.minted_count ONLY AFTER success
+/// 5. Mint NFT via p-core (with proper authority)
+/// 6. Update template.minted_count ONLY AFTER success
 ///
 /// # Accounts
 /// - [signer, writable] minter: Player wallet (pays SOL)
 /// - [writable] player_account: PlayerAccount PDA
 /// - [] hero_template: HeroTemplate PDA
 /// - [writable] hero_template_writable: Same as hero_template (for update)
-/// - [writable] hero_account: HeroAccount PDA [b"hero", mint] (to create)
 /// - [writable] hero_mint: Hero NFT mint (Keypair, signer)
 /// - [] hero_collection: Hero collection PDA [b"hero_collection"]
 /// - [writable] treasury: Game treasury (receives SOL payment)
 /// - [] game_engine: GameEngine PDA (for authority)
 /// - [] system_program: System program
-/// - [] clock_sysvar: Clock sysvar
 /// - [] p_core_program: MPL Core program (for NFT creation)
 ///
 /// # Instruction Data
@@ -67,13 +66,11 @@ pub fn process(
         player_account,
         hero_template,
         hero_template_writable,
-        hero_account,
         hero_mint,
         hero_collection,
         treasury,
         game_engine,
         system_program,
-        _clock_sysvar,
         _p_core_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -83,7 +80,6 @@ pub fn process(
     require_signer(minter)?;
     require_writable(minter)?;
     require_writable(hero_template_writable)?;
-    require_writable(hero_account)?;
     require_writable(hero_mint)?;
     require_signer(hero_mint)?;
     require_writable(treasury)?;
@@ -169,62 +165,13 @@ pub fn process(
         lamports: mint_cost,
     }.invoke()?;
 
-    // 15. Get current timestamp
-    let clock = Clock::get()?;
-
-    // 16. Derive HeroAccount PDA (no random seed needed - deterministic system)
-    let (expected_hero_pda, hero_bump) = find_program_address(
-        &[HERO_SEED, hero_mint.key()],
-        program_id,
-    );
-
-    if hero_account.key() != &expected_hero_pda {
-        return Err(GameError::InvalidPDA.into());
-    }
-
-    // 18. Create HeroAccount PDA
-    let bump_seed = [hero_bump];
-    let hero_seeds = pinocchio::seeds!(HERO_SEED, hero_mint.key(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&hero_seeds);
-
-    CreateAccount {
-        from: minter,
-        to: hero_account,
-        lamports: pinocchio::sysvars::rent::Rent::get()?
-            .minimum_balance(HeroAccount::LEN),
-        space: HeroAccount::LEN as u64,
-        owner: program_id,
-    }.invoke_signed(&[signer])?;
-
-    // 19. Initialize HeroAccount
-    let mut hero_data = hero_account.try_borrow_mut_data()?;
-    let hero = unsafe { HeroAccount::load_mut(&mut hero_data) };
-
-    // Get current minted_count for serial number (BEFORE incrementing!)
+    // 15. Get serial number from template (BEFORE incrementing!)
     let template_data = hero_template.try_borrow_data()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
     let serial_number = template.minted_count;
     drop(template_data);
 
-    hero.mint = *hero_mint.key();
-    hero.template_id = template_id;
-    hero.serial_number = serial_number;
-    hero.level = 1;
-    hero.total_fragments_invested = 0;
-    hero.last_leveled_at = clock.unix_timestamp;
-    hero.bump = hero_bump;
-    hero._padding = [0; 7];
-
-    // Calculate weighted power from template's base buffs
-    let template_data = hero_template.try_borrow_data()?;
-    let template = unsafe { HeroTemplate::load(&template_data) };
-    hero.total_buff_power = crate::state::calculate_weighted_power(hero, template);
-    let initial_power = hero.total_buff_power;
-    drop(template_data);
-
-    drop(hero_data);
-
-    // 20. Create NFT using p-core CreateV1
+    // 16. Create NFT using p-core CreateV1 (NFT-Only System)
     let game_engine_data = game_engine.try_borrow_data()?;
     let ge = unsafe { GameEngine::load(&game_engine_data) };
     let ge_bump = ge.bump;
@@ -256,11 +203,12 @@ pub fn process(
     let ge_signer2 = pinocchio::instruction::Signer::from(&game_engine_seeds);
 
     // Build NFT attributes using HeroNftContext::new_mint()
-    let ctx = HeroNftContext::new_mint(template, initial_power);
+    // NFT-Only System: All hero state is stored in NFT attributes
+    let ctx = HeroNftContext::new_mint(template, serial_number);
     drop(template_data);
 
     let mut buffers = HeroNftBuffers::new();
-    let mut attributes: [(&[u8], &[u8]); 7] = [(b"", b""); 7];
+    let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
     let attr_count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
 
     p_core::instructions::AddPluginV1 {
@@ -281,6 +229,21 @@ pub fn process(
     let template_mut = unsafe { HeroTemplate::load_mut(&mut template_data) };
 
     template_mut.minted_count = template_mut.minted_count.saturating_add(1);
+
+    drop(template_data);
+
+    // 23. Emit HeroMinted event
+    let clock = Clock::get()?;
+    let template_data = hero_template.try_borrow_data()?;
+    let template = unsafe { HeroTemplate::load(&template_data) };
+
+    emit!(HeroMinted {
+        hero_mint: *hero_mint.key(),
+        player: *minter.key(),
+        template_id,
+        rarity: template.hero_type,
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

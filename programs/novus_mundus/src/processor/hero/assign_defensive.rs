@@ -3,6 +3,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use crate::{
@@ -12,6 +13,8 @@ use crate::{
         require_signer,
         require_writable,
     },
+    emit,
+    events::HeroAssignedDefensive,
 };
 
 /// Assign which locked hero is used for defense (135)
@@ -75,6 +78,16 @@ pub fn process(
 
     // 8. Update defensive hero slot
     player.defensive_hero_slot = slot_index;
+
+    // 9. Emit HeroAssignedDefensive event
+    let hero_mint = player.active_heroes[slot_index as usize];
+    let clock = Clock::get()?;
+    emit!(HeroAssignedDefensive {
+        hero_mint,
+        player: *owner.key(),
+        assigned: true,
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

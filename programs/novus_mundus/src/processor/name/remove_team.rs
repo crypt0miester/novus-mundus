@@ -4,6 +4,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
+    sysvars::{Sysvar, clock::Clock},
 };
 
 use alt_name_service::instructions::Transfer;
@@ -14,6 +15,8 @@ use crate::{
     helpers::{compute_name_hash, validate_and_get_domain_name},
     state::{PlayerAccount, TeamAccount},
     validation::{require_key_match, require_signer, require_writable},
+    emit,
+    events::TeamNameRemoved,
     NULL_PUBKEY,
 };
 
@@ -83,6 +86,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     let mut team_data = team_account.try_borrow_mut_data()?;
     let team = unsafe { TeamAccount::load_mut(&mut team_data) };
 
+    // Team disbanded?
+    if team.disbanded {
+        return Err(GameError::TeamDisbanded.into());
+    }
+
     if &team.leader != player_account.key() {
         return Err(GameError::NotTeamLeader.into());
     }
@@ -131,6 +139,13 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 10. Clear team name
     team.name = [0u8; 32];
     team.name_len = 0;
+
+    // 11. Emit event
+    let now = Clock::get()?.unix_timestamp;
+    emit!(TeamNameRemoved {
+        team: *team_account.key(),
+        timestamp: now,
+    });
 
     Ok(())
 }

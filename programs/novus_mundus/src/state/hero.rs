@@ -38,7 +38,7 @@ pub enum BuffStat {
     TrainingCostReduction = 5,
     RallyCapacity = 6,
     CriticalHitChance = 7,
-    LuckBonus = 8,
+    SynchronyBonus = 8,
     ResourceCapacity = 9,
     WeaponEfficiency = 10,
     StaminaRegen = 11,
@@ -47,6 +47,8 @@ pub enum BuffStat {
     EncounterDamage = 14,
     LootBonus = 15,
     ArmorEfficiency = 16,
+    MiningAffinity = 17,               // Bonus yield from mining expeditions
+    FishingAffinity = 18,              // Bonus yield from fishing expeditions
 }
 
 impl BuffStat {
@@ -61,7 +63,7 @@ impl BuffStat {
             5 => Self::TrainingCostReduction,
             6 => Self::RallyCapacity,
             7 => Self::CriticalHitChance,
-            8 => Self::LuckBonus,
+            8 => Self::SynchronyBonus,
             9 => Self::ResourceCapacity,
             10 => Self::WeaponEfficiency,
             11 => Self::StaminaRegen,
@@ -70,6 +72,8 @@ impl BuffStat {
             14 => Self::EncounterDamage,
             15 => Self::LootBonus,
             16 => Self::ArmorEfficiency,
+            17 => Self::MiningAffinity,
+            18 => Self::FishingAffinity,
             _ => Self::None,
         }
     }
@@ -129,12 +133,17 @@ pub struct HeroTemplate {
     pub event_exclusive: bool,         // Only during events?
     pub required_player_level: u8,     // Min player level
 
+    // Meditation requirements
+    // 0 = can meditate anywhere, non-zero = MUST be in specific city
+    // Links heroes to their origin/sacred cities for thematic immersion
+    pub meditation_city_id: u16,       // City ID required for meditation
+
     // Buff configuration (up to 4 buffs)
     // Each buff scales as: base_bps × (√φ)^level
     pub buffs: [BuffConfig; 4],
 
     pub bump: u8,
-    pub _padding: [u8; 6],
+    pub _padding: [u8; 3],             // Reduced from 6 to 3 (added 2 bytes for city_id, 1 for alignment)
 }
 
 impl HeroTemplate {
@@ -167,66 +176,6 @@ impl HeroTemplate {
             &[HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed],
             &crate::ID,
         )
-    }
-}
-
-/// Hero Account - Per NFT progression state (Deterministic System)
-///
-/// Hero progression is fully deterministic using golden root (√φ) scaling.
-/// Buff values are calculated on-demand from level + template, not stored.
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct HeroAccount {
-    // Identity
-    pub mint: Pubkey,                  // NFT mint address
-    pub template_id: u16,              // Which template
-    pub serial_number: u32,            // Nth mint of this template
-
-    // Progression
-    pub level: u32,                    // Current level (unlimited, u32::MAX)
-    pub total_fragments_invested: u64, // Lifetime fragment investment
-    pub last_leveled_at: i64,          // Unix timestamp
-
-    // Cached power (updated on level-up for NFT metadata display)
-    pub total_buff_power: u32,         // Sum of weighted buffs (for NFT metadata)
-
-    pub bump: u8,
-    pub _padding: [u8; 7],
-}
-
-impl HeroAccount {
-    pub const LEN: usize = core::mem::size_of::<Self>();
-
-    /// UNSAFE: Load from raw account data
-    pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
-    }
-
-    /// UNSAFE: Load mutable from raw account data
-    pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
-    }
-
-    /// Derive the PDA for a hero account
-    pub fn derive_pda(mint: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
-            &[b"hero", mint.as_ref()],
-            &crate::ID,
-        )
-    }
-
-    /// Create PDA from known bump
-    pub fn create_pda(mint: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
-        let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
-            &[b"hero", mint.as_ref(), &bump_seed],
-            &crate::ID,
-        )
-    }
-
-    /// Calculate fragment cost for next level
-    pub fn calculate_next_level_cost(&self) -> u64 {
-        calculate_fragment_cost(self.level)
     }
 }
 
@@ -273,7 +222,7 @@ pub fn calculate_fragment_cost(current_level: u32) -> u64 {
 ///
 /// **TIER 5 (3000 = 30%): Utility - Convenience & capacity**
 /// - UnitCapacity (13), ResourceCapacity (9), WeaponEfficiency (10), ArmorEfficiency (16)
-/// - StaminaRegen (11), LuckBonus (8)
+/// - StaminaRegen (11), SynchronyBonus (8)
 /// - Quality of life improvements, doesn't change fundamental power
 ///
 /// # Formula
@@ -315,7 +264,7 @@ pub const fn get_buff_stat_name(stat: u8) -> &'static str {
         5 => "Training",
         6 => "Rally",
         7 => "Crit",
-        8 => "Luck",
+        8 => "Synchrony",
         9 => "Storage",
         10 => "Weapon",
         11 => "Stamina",
@@ -337,14 +286,14 @@ pub const fn get_buff_stat_name(stat: u8) -> &'static str {
 /// - Each buff_value is u64 to handle intermediate calculations
 /// - Weight multiplication checked before division
 /// - Final result saturates to u32::MAX if overflow
-pub fn calculate_weighted_power(hero: &HeroAccount, template: &HeroTemplate) -> u32 {
+pub fn calculate_weighted_power_for_level(level: u32, template: &HeroTemplate) -> u32 {
     let mut total: u64 = 0;
 
     for buff_config in template.buffs.iter() {
         if buff_config.stat == 0 { continue; }
 
         // Calculate buff value deterministically: base × (√φ)^level
-        let buff_value = buff_config.value_at_level(hero.level);
+        let buff_value = buff_config.value_at_level(level);
 
         // Apply weight: (buff_value * weight) / 10000
         let weight = get_power_weight(buff_config.stat) as u64;
@@ -367,9 +316,109 @@ pub fn calculate_weighted_power(hero: &HeroAccount, template: &HeroTemplate) -> 
     }
 }
 
-/// Legacy function - kept for backward compatibility
-/// Use calculate_weighted_power instead
-#[deprecated(note = "Use calculate_weighted_power for proper tier-based weighting")]
-pub fn calculate_total_power(hero: &HeroAccount, template: &HeroTemplate) -> u32 {
-    calculate_weighted_power(hero, template)
+// ============================================================
+// Location Synergy System
+// ============================================================
+
+/// Hero tier for location bonus calculation
+/// Determines the percentage bonus (1-10%) when hero is in their home city
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum HeroTier {
+    Common = 0,      // 1% location bonus
+    Uncommon = 1,    // 2% location bonus
+    Rare = 2,        // 4% location bonus
+    Epic = 3,        // 6% location bonus
+    Legendary = 4,   // 8% location bonus
+    Mythic = 5,      // 10% location bonus
+}
+
+impl HeroTier {
+    /// Convert from u8 to HeroTier
+    #[inline]
+    pub const fn from_u8(val: u8) -> Self {
+        match val {
+            0 => Self::Common,
+            1 => Self::Uncommon,
+            2 => Self::Rare,
+            3 => Self::Epic,
+            4 => Self::Legendary,
+            5 => Self::Mythic,
+            _ => Self::Common, // Default to common for invalid values
+        }
+    }
+
+    /// Get location bonus in basis points for this tier
+    #[inline]
+    pub const fn location_bonus_bps(self) -> u16 {
+        match self {
+            Self::Common => 100,      // 1%
+            Self::Uncommon => 200,    // 2%
+            Self::Rare => 400,        // 4%
+            Self::Epic => 600,        // 6%
+            Self::Legendary => 800,   // 8%
+            Self::Mythic => 1000,     // 10%
+        }
+    }
+}
+
+/// Get location bonus in basis points for a tier value
+///
+/// # Arguments
+/// * `tier` - Hero tier (0=Common, 1=Uncommon, 2=Rare, 3=Epic, 4=Legendary, 5=Mythic)
+///
+/// # Returns
+/// Bonus in basis points (100-1000, i.e., 1%-10%)
+#[inline]
+pub const fn location_bonus_for_tier(tier: u8) -> u16 {
+    match tier {
+        0 => 100,   // Common: 1%
+        1 => 200,   // Uncommon: 2%
+        2 => 400,   // Rare: 4%
+        3 => 600,   // Epic: 6%
+        4 => 800,   // Legendary: 8%
+        5 => 1000,  // Mythic: 10%
+        _ => 0,     // Invalid tier
+    }
+}
+
+/// Check if a hero is "at home" (in their meditation city)
+///
+/// # Arguments
+/// * `hero_city` - Hero's meditation_city_id (0 = everywhere/crypto icons)
+/// * `player_city` - Player's current city
+///
+/// # Returns
+/// true if hero gets location bonus in this city
+#[inline]
+pub const fn is_hero_at_home(hero_city: u16, player_city: u16) -> bool {
+    // City 0 means "everywhere" - crypto icons are always at home
+    hero_city == 0 || hero_city == player_city
+}
+
+/// Derive tier from mint cost (in lamports)
+///
+/// Used during mint to determine hero tier from template's mint_cost_sol
+#[inline]
+pub const fn tier_from_mint_cost(mint_cost_lamports: u64) -> u8 {
+    // Thresholds based on HERO_GALLERY.md tier pricing:
+    // Common: 0.05 SOL = 50_000_000 lamports
+    // Uncommon: 0.15 SOL = 150_000_000 lamports
+    // Rare: 0.25 SOL = 250_000_000 lamports
+    // Epic: 1.0 SOL = 1_000_000_000 lamports
+    // Legendary: 5.0 SOL = 5_000_000_000 lamports
+    // Mythic: 10.0 SOL = 10_000_000_000 lamports
+    if mint_cost_lamports >= 10_000_000_000 {
+        5 // Mythic
+    } else if mint_cost_lamports >= 5_000_000_000 {
+        4 // Legendary
+    } else if mint_cost_lamports >= 1_000_000_000 {
+        3 // Epic
+    } else if mint_cost_lamports >= 250_000_000 {
+        2 // Rare
+    } else if mint_cost_lamports >= 150_000_000 {
+        1 // Uncommon
+    } else {
+        0 // Common
+    }
 }

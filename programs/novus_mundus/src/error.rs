@@ -68,6 +68,20 @@ pub enum GameError {
     TooManyPendingInvites = 6217,
     NewLeaderNotMember = 6218,
     TeamDisbanded = 6219,
+    TeamNotPublic = 6220,
+    LevelTooLow = 6221,
+    SlotOccupied = 6222,
+    NotSlotOwner = 6223,
+    TreasuryWithdrawExceedsLimit = 6224,  // Amount exceeds instant limit or daily cap
+    TreasuryRequestPending = 6225,        // Already has a pending treasury request
+    TreasuryRequestNotFound = 6226,       // No pending treasury request
+    TreasuryRequestNotExecutable = 6227,  // Cooldown not yet passed
+    TreasuryRequestExpired = 6228,        // Request expired (>7 days old)
+    CannotPromoteToHigherRank = 6229,     // Cannot promote to equal or higher rank than self
+    CannotDemoteHigherRank = 6230,        // Cannot demote someone of higher rank
+    AlreadyAtRank = 6231,                 // Member already at target rank
+    InvalidCooldownHours = 6232,          // Cooldown hours out of valid range
+    TeamHasDomain = 6233,                 // Must remove domain before disbanding
 
     // Rally Errors (300-399)
     RallyNotFound = 6300,
@@ -286,6 +300,104 @@ pub enum GameError {
     InventoryNeedsExpansion = 7614,
     AccountNotInitialized = 7615,
     AccountAlreadyExists = 7616,
+
+    // Estate System Errors (1700-1799)
+    EstateNotFound = 7700,
+    EstateAlreadyExists = 7701,
+    BuildingRequired = 7702,
+    BuildingLevelInsufficient = 7703,
+    BuildingNotActive = 7704,
+    BuildingSlotFull = 7705,
+    BuildingAlreadyExists = 7706,
+    BuildingUnderConstruction = 7707,
+    ConstructionNotComplete = 7708,
+    InsufficientEstatePlots = 7709,
+    EstateLevelInsufficient = 7710,
+    MansionRequired = 7711,
+    BarracksRequired = 7712,
+    WorkshopRequired = 7713,
+    VaultRequired = 7714,
+    DockRequired = 7715,        // Dock building required for fishing
+    ForgeRequired = 7716,
+    MarketRequired = 7717,
+    AcademyRequired = 7718,
+    ArenaRequired = 7719,
+    SanctuaryRequired = 7720,
+    ObservatoryRequired = 7721,
+    TreasuryRequired = 7722,
+    CitadelRequired = 7723,
+    MaxHeroesLocked = 7724,
+    HeroLevelCapReached = 7725,
+    CraftingInProgress = 7726,
+    NoCraftingInProgress = 7727,
+    CraftNotComplete = 7728,
+    MasteryLevelInsufficient = 7729,
+    InsufficientMaterials = 7730,
+    AlreadyClaimedToday = 7731,
+    DailyActivityNotAvailable = 7732,
+    DailyWindowExpired = 7733,      // All time windows have passed for today
+    WrongTimeWindow = 7734,         // Building's mini-game not available in current window
+
+    // Staged Tempering Errors (1740-1759)
+    StrikeTooEarly = 7740,          // Metal not ready - window hasn't opened yet
+    CraftWindowMissed = 7741,       // Metal cooled - window has closed, craft failed
+    InvalidQualityTier = 7742,      // Cannot craft Common tier (tier 0)
+    InsufficientCraftedItems = 7743, // Player doesn't have this crafted item to equip
+
+    // Hero & Meditation Errors (1760-1779)
+    HeroAlreadyMeditating = 7760,   // A hero is already meditating
+    HeroNotMeditating = 7761,       // No hero is currently meditating
+    HeroNotInSlot = 7762,           // No hero in the specified active_heroes slot
+    HeroMismatch = 7763,            // Hero account doesn't match expected hero
+    HeroLocked = 7764,              // Hero is locked (already in use elsewhere)
+    HeroAtMeditationCap = 7765,     // Hero at meditation cap - must use fragments
+    WrongCityForMeditation = 7766,  // Hero requires meditation in specific origin city
+
+    // Expedition System Errors (1800-1819)
+    ExpeditionInProgress = 7800,    // Already on an expedition
+    NoExpeditionInProgress = 7801,  // No active expedition to claim/strike
+    ExpeditionNotComplete = 7802,   // Expedition duration not elapsed
+    InvalidExpeditionType = 7803,   // Must be Mining (1) or Fishing (2)
+    InvalidExpeditionTier = 7804,   // Tier must be 0-4
+    InsufficientOperatives = 7805,  // Not enough available operatives
+    WorkshopLevelTooLow = 7806,     // Workshop level insufficient for mining tier
+    PlayerLevelTooLow = 7807,       // Player level insufficient for fishing tier
+    ExpeditionStrikeLimitReached = 7808, // Already performed max strikes for this expedition
+    ExpeditionStrikeNotReady = 7809,     // Strike window not open yet (1 per hour)
+    MiningNotUnlocked = 7810,       // Player hasn't unlocked mining (has_mining = false)
+    FishingNotUnlocked = 7811,      // Player hasn't unlocked fishing (has_fishing = false)
+    ExpeditionAlreadyComplete = 7812,    // Expedition is complete, cannot strike (claim instead)
+
+    // Arena PvP System Errors (7900-7930)
+    ArenaSeasonNotActive = 7900,          // Season is not in Active status
+    ArenaSeasonExpired = 7901,            // Season has ended
+    ArenaSeasonNotFinalized = 7902,       // Season must be finalized first
+    ArenaCannotChallengeYourself = 7903,  // Cannot challenge yourself
+    ArenaNotInSeason = 7904,              // Player not registered for this season
+    ArenaOpponentNotInSeason = 7905,      // Opponent not registered for this season
+    // 7906 removed - loadout validation now inline in challenge_player
+    ArenaDailyBattleLimitReached = 7907,  // Max 10 battles per rolling 24h
+    ArenaOpponentCooldownActive = 7908,   // Max 2 battles vs same opponent per 24h
+    ArenaHeroAccountRequired = 7909,      // Hero account required when loadout has arena_hero set
+    ArenaHeroMismatch = 7910,             // Hero account doesn't match loadout
+    ArenaHeroLocked = 7911,               // Hero is locked (in use elsewhere)
+    ArenaMatchExpired = 7912,             // Match assignment expired (>5 min)
+    ArenaMatchTimestampInvalid = 7913,    // Match timestamp is in the future
+    ArenaMatchAlreadyUsed = 7914,         // Match ID already used (replay attack)
+    ArenaDailyRewardAlreadyClaimed = 7915,// Daily reward already claimed today
+    ArenaMinBattlesNotMet = 7916,         // Need minimum battles to claim daily reward
+    ArenaDailyPoolExhausted = 7917,       // Daily prize pool exhausted for today
+    ArenaMasterRewardAlreadyClaimed = 7918, // Master reward already claimed
+    ArenaNotOnLeaderboard = 7919,         // Player not on leaderboard
+    ArenaClaimDeadlinePassed = 7920,      // Claim deadline has passed
+    ArenaSeasonAlreadyExists = 7921,      // Season already exists
+    ArenaSeasonNotPending = 7922,         // Season must be in Pending status
+    ArenaLoadoutAlreadyExists = 7923,     // Loadout account already exists
+    // 7924-7926 removed - no loadout validation (arena is non-lethal, loadout trusted)
+    ArenaUnclaimedRedistributionTooEarly = 7927, // Cannot redistribute before claim deadline
+    ArenaNoUnclaimedPrizes = 7928,        // No unclaimed prizes to redistribute
+    ArenaSeasonAlreadyActive = 7929,      // Season is already active
+    ArenaParticipantAlreadyExists = 7930, // Already joined this season
 }
 
 impl From<GameError> for ProgramError {

@@ -1,0 +1,152 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::{Pubkey, find_program_address},
+    ProgramResult,
+};
+
+use crate::{
+    error::GameError,
+    state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
+    constants::TEAM_INVITE_SEED,
+    helpers::close_account,
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::InviteCancelled,
+};
+
+/// Cancel a pending team invite
+///
+/// Member with PERM_INVITE can cancel an invite.
+/// Closes the TeamInviteAccount and refunds rent to caller.
+///
+/// # Accounts
+/// - [] member_player: PlayerAccount (member with invite permission)
+/// - [] member_slot: TeamMemberSlot (for rank verification)
+/// - [] team: TeamAccount
+/// - [writable] invite: TeamInviteAccount PDA (to be closed)
+/// - [] invitee_player: PlayerAccount of invitee (for PDA derivation)
+/// - [signer, writable] member_owner: Member's wallet (receives rent refund)
+///
+/// # Instruction Data
+/// - team_id: u64 (8 bytes) - Team ID for PDA validation
+/// - slot_index: u16 (2 bytes) - Member's slot index
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Instruction Data
+
+    if instruction_data.len() < 10 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+
+    // 2. Parse Accounts
+
+    let [
+        member_account,
+        member_slot_account,
+        team_account,
+        invite_account,
+        invitee_account,
+        member_owner,
+    ] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 3. Validate Accounts
+
+    require_signer(member_owner)?;
+    require_writable(member_owner)?;
+    require_writable(invite_account)?;
+
+    // 4. Load Accounts
+
+    let member = PlayerAccount::load_checked(member_account, member_owner.key(), program_id)?;
+    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+
+    // 4a. Require EXT_TEAM
+    require_extension(&*member, EXT_TEAM)?;
+
+    // 5. Validate Member Is In Team
+
+    if member.team == NULL_PUBKEY || &member.team != team_account.key() {
+        return Err(GameError::NotTeamMember.into());
+    }
+
+    // 5a. Verify Member Slot and Check Permission
+
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
+    if member_slot_account.key() != &expected_slot {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    require_owner(member_slot_account, program_id)?;
+
+    {
+        let slot_data = member_slot_account.try_borrow_data()?;
+        let slot = unsafe { TeamMemberSlot::load(&slot_data) };
+
+        if slot.player != *member_account.key() {
+            return Err(GameError::NotSlotOwner.into());
+        }
+
+        // Check PERM_INVITE permission
+        if !team.rank_has_permission(slot.rank, TeamAccount::PERM_INVITE) {
+            return Err(GameError::InsufficientTeamPermissions.into());
+        }
+    }
+
+    // 6. Verify Invite PDA
+
+    let (expected_invite, _) = find_program_address(
+        &[TEAM_INVITE_SEED, team_account.key().as_ref(), invitee_account.key().as_ref()],
+        program_id,
+    );
+
+    if invite_account.key() != &expected_invite {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Invite must exist
+    if invite_account.data_len() == 0 {
+        return Err(GameError::InviteNotFound.into());
+    }
+
+    require_owner(invite_account, program_id)?;
+
+    // Verify invite is for this team
+    let invitee_pubkey: pinocchio::pubkey::Pubkey;
+    {
+        let invite_data = invite_account.try_borrow_data()?;
+        let invite = unsafe { TeamInviteAccount::load(&invite_data) };
+
+        if &invite.team != team_account.key() {
+            return Err(GameError::InviteNotFound.into());
+        }
+
+        invitee_pubkey = invite.invitee;
+    }
+
+    // 7. Close Invite Account (refund rent to caller)
+
+    close_account(invite_account, member_owner)?;
+
+    // 8. Emit Event
+
+    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    let now = Clock::get()?.unix_timestamp;
+
+    emit!(InviteCancelled {
+        team: *team_account.key(),
+        invitee: invitee_pubkey,
+        cancelled_by: *member_account.key(),
+        timestamp: now,
+    });
+
+    Ok(())
+}

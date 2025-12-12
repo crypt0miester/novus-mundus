@@ -7,7 +7,9 @@ use pinocchio::{
 };
 
 use crate::{
+    emit,
     error::GameError,
+    events::NoviWithdrawn,
     state::UserAccount,
     constants::{USER_SEED, RESERVED_NOVI_VESTING_PERIOD},
     validation::{require_signer, require_writable, require_owner, require_pda},
@@ -143,6 +145,15 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     user_data.last_withdrawal = now;
+
+    // 9. Emit Event
+
+    emit!(NoviWithdrawn {
+        player: *owner.key(),
+        amount,
+        remaining_reserved: user_data.reserved_novi,
+        timestamp: now,
+    });
 
     Ok(())
 }

@@ -1,0 +1,212 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvars::{clock::Clock, Sysvar},
+    ProgramResult,
+};
+
+use crate::{
+    error::GameError,
+    state::{EstateAccount, PlayerAccount},
+    helpers::estate::require_mansion,
+    validation::{require_signer, require_writable},
+    logic::safe_math::apply_bp_bonus,
+    emit,
+    events::estate::EstateDailyClaimed,
+};
+
+/// Daily Login Claim (Mansion)
+///
+/// Claims daily login rewards from the Mansion.
+/// Rewards scale with login streak multiplier.
+/// Miss a day = streak resets to 0.
+///
+/// # Rewards (Base)
+/// - 100 common materials
+/// - 50 NOVI (added to locked_novi)
+/// - 10 XP
+///
+/// # Streak Multipliers
+/// - Days 1-6: 1.0x
+/// - Days 7-13: 1.25x
+/// - Days 14-29: 1.5x
+/// - Days 30-59: 2.0x
+/// - Days 60-89: 2.5x
+/// - Days 90+: 3.0x
+///
+/// # Milestone Rewards (One-time)
+/// - 7 days: 500 NOVI + 100 uncommon
+/// - 14 days: 1,000 NOVI + 50 rare
+/// - 30 days: 5,000 NOVI + 25 epic + "Dedicated" title
+/// - 60 days: 15,000 NOVI + 10 legendary + cosmetic
+/// - 90 days: 30,000 NOVI + artifact + "Unwavering" title
+/// - 180 days: 100,000 NOVI + legendary artifact + permanent +5%
+///
+/// # Accounts
+/// - [writable, signer] owner: Player's wallet
+/// - [writable] player_account: PlayerAccount PDA
+/// - [writable] estate_account: EstateAccount PDA
+///
+/// # Instruction Data
+/// None
+pub fn process(
+    _program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    _instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+    let [
+        owner,
+        player_account,
+        estate_account,
+    ] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 2. Validate Accounts
+    require_signer(owner)?;
+    require_writable(player_account)?;
+    require_writable(estate_account)?;
+
+    // 3. Load Accounts
+    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+
+    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+
+    // 4. Verify ownership
+    if &player_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    if &estate_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 5. HARD GATE: Require Mansion (any level) and extract level
+    // Extract mansion level immediately to avoid borrow conflict
+    let mansion_level = {
+        let mansion = require_mansion(estate_data, 1)?;
+        mansion.level
+    };
+
+    // 6. Get current time
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    // 7. Check/update login streak
+    let is_new_day = estate_data.check_login_streak(now);
+    if !is_new_day {
+        // Already claimed today
+        return Err(GameError::AlreadyClaimedToday.into());
+    }
+
+    // 8. Get streak multiplier
+    let streak_multiplier_bps = estate_data.get_streak_multiplier_bps();
+
+    // 9. Calculate base rewards (scaled by Mansion level)
+    // Mansion bonus: +5% per level
+    let mansion_bonus_bps = (mansion_level as u16) * 500;
+
+    // Base rewards
+    let base_materials: u64 = 100;
+    let base_novi: u64 = 50;
+    let base_xp: u64 = 10;
+
+    // Apply mansion bonus then streak multiplier
+    let materials_with_mansion = apply_bp_bonus(base_materials, mansion_bonus_bps)
+        .unwrap_or(base_materials);
+    let novi_with_mansion = apply_bp_bonus(base_novi, mansion_bonus_bps)
+        .unwrap_or(base_novi);
+    let xp_with_mansion = apply_bp_bonus(base_xp, mansion_bonus_bps)
+        .unwrap_or(base_xp);
+
+    // Apply streak multiplier (already in bps where 10000 = 1.0x)
+    let final_materials = materials_with_mansion
+        .saturating_mul(streak_multiplier_bps as u64) / 10000;
+    let final_novi = novi_with_mansion
+        .saturating_mul(streak_multiplier_bps as u64) / 10000;
+    let final_xp = xp_with_mansion
+        .saturating_mul(streak_multiplier_bps as u64) / 10000;
+
+    // Apply permanent bonus from 180-day milestone
+    let final_materials = if estate_data.permanent_bonus_bps > 0 {
+        apply_bp_bonus(final_materials, estate_data.permanent_bonus_bps)
+            .unwrap_or(final_materials)
+    } else {
+        final_materials
+    };
+    let final_novi = if estate_data.permanent_bonus_bps > 0 {
+        apply_bp_bonus(final_novi, estate_data.permanent_bonus_bps)
+            .unwrap_or(final_novi)
+    } else {
+        final_novi
+    };
+    let final_xp = if estate_data.permanent_bonus_bps > 0 {
+        apply_bp_bonus(final_xp, estate_data.permanent_bonus_bps)
+            .unwrap_or(final_xp)
+    } else {
+        final_xp
+    };
+
+    // 10. Grant rewards
+    player_data.common_materials = player_data.common_materials
+        .saturating_add(final_materials);
+    player_data.locked_novi = player_data.locked_novi
+        .saturating_add(final_novi);
+    player_data.current_xp = player_data.current_xp
+        .saturating_add(final_xp);
+
+    // 11. Check for milestone rewards (one-time)
+    let streak = estate_data.login_streak;
+    grant_milestone_rewards(player_data, streak);
+
+    // 12. Update activity timestamp
+    estate_data.last_activity = now;
+
+    // 13. Emit EstateDailyClaimed event
+    emit!(EstateDailyClaimed {
+        player: *owner.key(),
+        materials: final_materials,
+        streak: estate_data.login_streak,
+        timestamp: now,
+    });
+
+    Ok(())
+}
+
+/// Grant one-time milestone rewards based on streak
+fn grant_milestone_rewards(player: &mut PlayerAccount, streak: u16) {
+    // Check exact streak values for milestones
+    // These are one-time grants, not cumulative
+    match streak {
+        7 => {
+            player.locked_novi = player.locked_novi.saturating_add(500);
+            player.uncommon_materials = player.uncommon_materials.saturating_add(100);
+        }
+        14 => {
+            player.locked_novi = player.locked_novi.saturating_add(1_000);
+            player.rare_materials = player.rare_materials.saturating_add(50);
+        }
+        30 => {
+            player.locked_novi = player.locked_novi.saturating_add(5_000);
+            player.epic_materials = player.epic_materials.saturating_add(25);
+            // Title: "Dedicated" - would be stored in a separate system
+        }
+        60 => {
+            player.locked_novi = player.locked_novi.saturating_add(15_000);
+            player.legendary_materials = player.legendary_materials.saturating_add(10);
+            // Cosmetic unlock - would be stored in inventory
+        }
+        90 => {
+            player.locked_novi = player.locked_novi.saturating_add(30_000);
+            // Artifact + "Unwavering" title - separate systems
+        }
+        180 => {
+            player.locked_novi = player.locked_novi.saturating_add(100_000);
+            // Legendary artifact + permanent +5% - permanent_bonus_bps set in check_login_streak
+        }
+        _ => {}
+    }
+}

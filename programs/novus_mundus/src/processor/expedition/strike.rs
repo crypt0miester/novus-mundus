@@ -1,0 +1,147 @@
+//! Expedition Strike/Cast Processor (Phase 2)
+//!
+//! During an active expedition, players can perform "strikes" (mining) or
+//! "casts" (fishing) to earn bonus rewards. This is an active engagement
+//! mechanic similar to the forge's staged tempering system.
+//!
+//! # Mechanics
+//! - 1 strike/cast allowed per hour of expedition duration
+//! - Score (0-100) is validated by game server co-signature
+//! - Higher average score = bonus multiplier on final yield
+//! - Strikes are optional - base yield is still earned without them
+//!
+//! # Phase 2 Feature
+//! This instruction is prepared for Phase 2 implementation.
+//! Phase 1 expeditions work without strikes (time-based yield only).
+
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvars::{clock::Clock, Sysvar},
+    ProgramResult,
+};
+
+use crate::{
+    constants::EXPEDITION_SEED,
+    error::GameError,
+    state::{PlayerAccount, ExpeditionAccount, GameEngine},
+    validation::{require_signer, require_writable, require_owner},
+    emit,
+    events::ExpeditionStrike,
+};
+
+/// Perform a Strike/Cast during an active expedition
+///
+/// Game server must co-sign to validate the score from the mini-game.
+/// Each expedition allows 1 strike per hour of duration.
+///
+/// # Accounts
+/// 0. `[signer]` owner - Player's wallet
+/// 1. `[signer]` game_authority - Game server (validates score)
+/// 2. `[]` player_account - PlayerAccount PDA (for ownership verification)
+/// 3. `[writable]` expedition_account - ExpeditionAccount PDA
+/// 4. `[]` game_engine - GameEngine (for game_authority validation)
+///
+/// # Instruction Data
+/// - score: u8 (1 byte) - Score from mini-game (0-100)
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+    if accounts.len() < 5 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let owner = &accounts[0];
+    let game_authority = &accounts[1];
+    let player_account = &accounts[2];
+    let expedition_account = &accounts[3];
+    let game_engine_account = &accounts[4];
+
+    // 2. Validate Accounts
+    require_signer(owner)?;
+    require_signer(game_authority)?;
+    require_writable(expedition_account)?;
+    require_owner(expedition_account, program_id)?;
+
+    // 3. Parse Instruction Data
+    if instruction_data.is_empty() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let score = instruction_data[0].min(100); // Cap at 100
+
+    // 4. Validate game_authority against GameEngine
+    let game_engine_data = game_engine_account.try_borrow_data()?;
+    let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+
+    if game_authority.key() != &game_engine.game_authority {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 5. Load Player Data (for ownership verification)
+    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
+
+    if !player_data.is_owner(owner.key()) {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 6. Validate ExpeditionAccount PDA
+    let (expected_expedition_pda, _) = pinocchio::pubkey::find_program_address(
+        &[EXPEDITION_SEED, owner.key().as_ref()],
+        program_id,
+    );
+
+    if expedition_account.key() != &expected_expedition_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // 7. Check expedition exists
+    if expedition_account.data_len() == 0 {
+        return Err(GameError::NoExpeditionInProgress.into());
+    }
+
+    // 8. Load Expedition Data
+    let mut expedition_data = expedition_account.try_borrow_mut_data()?;
+    let expedition = unsafe { ExpeditionAccount::load_mut(&mut expedition_data) };
+
+    // 9. Verify expedition belongs to this player
+    if &expedition.player != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 10. Get current time
+    let now = Clock::get()?.unix_timestamp;
+
+    // 11. Check if expedition is complete (can't strike after completion)
+    if expedition.is_complete(now) {
+        return Err(GameError::ExpeditionAlreadyComplete.into());
+    }
+
+    // 12. Check if strike limit reached
+    if !expedition.can_strike() {
+        return Err(GameError::ExpeditionStrikeLimitReached.into());
+    }
+
+    // 13. Check if strike window is ready (1 per hour)
+    if !expedition.is_strike_ready(now) {
+        return Err(GameError::ExpeditionStrikeNotReady.into());
+    }
+
+    // 14. Record the strike
+    expedition.record_strike(score);
+
+    // 15. Emit event
+    emit!(ExpeditionStrike {
+        player: *owner.key(),
+        strike_num: expedition.strikes,
+        yield_amount: 0, // Yield is calculated at claim time, not during strike
+        quality: score,
+        timestamp: now,
+    });
+
+    Ok(())
+}

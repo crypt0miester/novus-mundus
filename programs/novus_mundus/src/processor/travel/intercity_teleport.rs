@@ -9,12 +9,15 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    emit,
     error::GameError,
-    state::{PlayerAccount, CityAccount, LocationAccount, require_extension, EXT_INVENTORY},
+    events::PlayerTeleported,
+    state::{PlayerAccount, CityAccount, LocationAccount, HeroTemplate, NULL_PUBKEY, require_extension, EXT_INVENTORY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
     constants::LOCATION_SEED,
-    helpers::close_account,
-    logic::location::{calculate_distance, calculate_teleport_cost},
+    helpers::{close_account, clear_hero_buffs, parse_hero_nft, add_hero_buffs_to_player_with_location},
+    logic::location::calculate_distance,
     logic::safe_math::apply_bp,
+    validation::require_owner,
 };
 
 /// Teleport instantly to another city (costs Locked Novi)
@@ -33,6 +36,13 @@ use crate::{
 /// 5. `[WRITE]` origin_location - LocationAccount for current cell (to vacate)
 /// 6. `[WRITE]` destination_location - LocationAccount for destination cell (to occupy)
 /// 7. `[]` system_program - For creating location account
+///
+/// # Optional Hero Accounts (for location synergy recalculation)
+/// For each locked hero slot (0-2), if slot is occupied, include:
+/// 8+2n. `[]` hero_nft_n - Hero NFT mint account for slot n
+/// 9+2n. `[]` hero_template_n - HeroTemplate PDA for slot n (for tier calculation)
+///
+/// Total: 8 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -69,19 +79,15 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+
+    require_owner(origin_city_account, program_id)?;
+    require_owner(destination_city_account, program_id)?;
     let origin_city_data = unsafe { CityAccount::load_mut(origin_city_account)? };
     let destination_city_data = unsafe { CityAccount::load_mut(destination_city_account)? };
 
-    // 5. Validate Player Ownership
-
-    if !player_data.is_owner(owner.key()) {
-        return Err(GameError::Unauthorized.into());
-    }
-
     // 5a. Require EXT_INVENTORY for teleportation (premium feature)
-    require_extension(player_data, EXT_INVENTORY)?;
+    require_extension(&*player_data, EXT_INVENTORY)?;
 
     // 6. Validate Not Currently Traveling
 
@@ -113,8 +119,7 @@ pub fn process(
     // 9. Calculate Teleport Cost (with DAO multiplier)
 
     // Load GameEngine for cost configuration
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref) };
+    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
 
     let distance_km = calculate_distance(
@@ -278,6 +283,87 @@ pub fn process(
 
     destination_city_data.players_present = destination_city_data.players_present
         .saturating_add(1);
+
+    // 19. Location Synergy: Recalculate hero buffs for new city
+    // Only if player has locked heroes and hero accounts were provided
+
+    let has_locked_heroes = player_data.active_heroes.iter().any(|h| *h != NULL_PUBKEY);
+
+    if has_locked_heroes && accounts.len() > 8 {
+        // Clear all existing hero buffs before recalculating
+        clear_hero_buffs(&mut *player_data);
+
+        // Parse hero accounts from remaining accounts (2 per locked hero: NFT + Template)
+        // NFT-Only System: All hero state is stored in NFT attributes
+        let hero_accounts = &accounts[8..];
+        let mut hero_idx = 0;
+
+        for slot in 0..3 {
+            if player_data.active_heroes[slot] == NULL_PUBKEY {
+                continue;
+            }
+
+            // Each locked hero needs 2 accounts: Hero NFT + HeroTemplate
+            if hero_idx + 1 < hero_accounts.len() {
+                let hero_nft_info = &hero_accounts[hero_idx];
+                let hero_template_info = &hero_accounts[hero_idx + 1];
+
+                // Verify NFT matches the locked hero mint
+                if hero_nft_info.key() == &player_data.active_heroes[slot] {
+                    // Parse hero data from NFT
+                    let nft_data = hero_nft_info.try_borrow_data()?;
+                    if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
+                        drop(nft_data);
+
+                        // Load template for tier calculation
+                        let template_data = hero_template_info.try_borrow_data()?;
+                        let template = unsafe { HeroTemplate::load(&template_data) };
+
+                        // Verify template matches hero
+                        if template.template_id == parsed_hero.template_id {
+                            // Derive tier from template mint cost
+                            let tier = tier_from_mint_cost(template.mint_cost_sol);
+
+                            // Check if hero is at home in the new city
+                            let is_at_home = is_hero_at_home(parsed_hero.origin_city, destination_city_id);
+                            let location_bonus_bps = if is_at_home {
+                                location_bonus_for_tier(tier)
+                            } else {
+                                0
+                            };
+
+                            // Store location bonus for this slot
+                            player_data.slot_location_bonus[slot] = location_bonus_bps;
+
+                            // Add buffs with location bonus
+                            add_hero_buffs_to_player_with_location(
+                                &mut *player_data,
+                                parsed_hero.level,
+                                template,
+                                location_bonus_bps,
+                            );
+                        }
+
+                        drop(template_data);
+                    } else {
+                        drop(nft_data);
+                    }
+                }
+
+                hero_idx += 2;
+            }
+        }
+    }
+
+    // 20. Emit Event
+
+    emit!(PlayerTeleported {
+        player: *player_account.key(),
+        from_city: *origin_city_account.key(),
+        to_city: *destination_city_account.key(),
+        gems_spent: adjusted_cost,
+        timestamp: now,
+    });
 
     Ok(())
 }

@@ -52,7 +52,7 @@ pub enum ResearchBuffType {
     LootMagnetism = 23,
     ReputationMastery = 24,
     StaminaVitality = 25,
-    LuckyStreak = 26,
+    SynchronyyStreak = 26,
     FragmentDiscovery = 27,
     GemProspecting = 28,
     CollectionMastery = 29,
@@ -173,8 +173,14 @@ pub struct ResearchProgress {
     pub fragment_drop_rate_bps: u16,
     pub gem_drop_rate_bps: u16,
 
+    // Ascension System (endgame)
+    // Bitfield: bit N = research node N is ascended (max 30 nodes)
+    // Ascended nodes get +25% buff effectiveness
+    pub ascended_nodes: u32,
+    pub total_ascensions: u8,              // Count of ascended nodes
+
     pub bump: u8,
-    pub _padding: [u8; 6],
+    pub _padding: [u8; 1],
 }
 
 impl ResearchProgress {
@@ -218,8 +224,12 @@ impl ResearchProgress {
             fragment_drop_rate_bps: 0,
             gem_drop_rate_bps: 0,
 
+            // Ascension
+            ascended_nodes: 0,
+            total_ascensions: 0,
+
             bump,
-            _padding: [0; 6],
+            _padding: [0; 1],
         }
     }
 
@@ -252,6 +262,48 @@ impl ResearchProgress {
         prereq_level >= template.prerequisite_level
     }
 
+    // ============================================================
+    // Ascension System
+    // ============================================================
+
+    /// Check if a research node is ascended
+    pub fn is_ascended(&self, research_type: u8) -> bool {
+        if research_type >= 30 {
+            return false;
+        }
+        (self.ascended_nodes & (1u32 << research_type)) != 0
+    }
+
+    /// Check if a research node can be ascended (at max level)
+    pub fn can_ascend(&self, research_type: u8, max_level: u8) -> bool {
+        if research_type >= 30 {
+            return false;
+        }
+        // Must be at max level and not already ascended
+        self.get_level(research_type) >= max_level && !self.is_ascended(research_type)
+    }
+
+    /// Ascend a research node (mark as ascended)
+    /// Returns true if successful, false if already ascended or invalid
+    pub fn ascend(&mut self, research_type: u8) -> bool {
+        if research_type >= 30 || self.is_ascended(research_type) {
+            return false;
+        }
+        self.ascended_nodes |= 1u32 << research_type;
+        self.total_ascensions = self.total_ascensions.saturating_add(1);
+        true
+    }
+
+    /// Get ascension bonus multiplier for a research node (basis points)
+    /// Ascended nodes get +25% (2500 bps) bonus to their buff
+    pub fn ascension_bonus_bps(&self, research_type: u8) -> u16 {
+        if self.is_ascended(research_type) {
+            2500 // +25%
+        } else {
+            0
+        }
+    }
+
     /// Recalculate all buffs based on completed research
     pub fn recalculate_buffs(&mut self, templates: &[ResearchTemplate]) {
         // Reset all buffs
@@ -276,7 +328,17 @@ impl ResearchProgress {
                 continue;
             }
 
-            let total_buff = (template.buff_per_level_bps as u32 * level as u32) as u16;
+            // Base buff from levels
+            let base_buff = template.buff_per_level_bps as u32 * level as u32;
+
+            // Apply ascension bonus (+25% if ascended)
+            let ascension_bonus = self.ascension_bonus_bps(i as u8) as u32;
+            let total_buff = if ascension_bonus > 0 {
+                // buff × (10000 + 2500) / 10000 = buff × 1.25
+                (base_buff * (10000 + ascension_bonus) / 10000) as u16
+            } else {
+                base_buff as u16
+            };
 
             // Apply to appropriate buff field based on buff_type
             match template.buff_type {

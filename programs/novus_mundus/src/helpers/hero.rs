@@ -1,4 +1,4 @@
-use crate::state::{PlayerAccount, HeroAccount, HeroTemplate, BuffConfig, BuffStat, get_buff_stat_name, calculate_weighted_power};
+use crate::state::{PlayerAccount, HeroTemplate, BuffConfig, BuffStat, get_buff_stat_name};
 use crate::logic::calculate_buff_at_level;
 
 // // ========================================================// ========================================================// ========================================================// ========================================================// ========================================================// ========================================================
@@ -29,47 +29,102 @@ pub fn format_u32_to_bytes(value: u32, buf: &mut [u8; 10]) -> &[u8] {
 }
 
 // ========================================================
-// Buff Delta Operations (Deterministic System)
+// Location Synergy - Buff Operations with Location Bonus
 // ========================================================
 
-/// Add one hero's buffs to player's cached totals
+/// Add one hero's buffs to player's cached totals with location bonus applied
 ///
-/// Used when locking a hero. Buff values are calculated deterministically
-/// from level and template using golden root (√φ) scaling.
+/// NFT-Only System: Level comes from parsed NFT attributes.
+/// If the hero is "at home", buffs are boosted by 1-10% based on tier.
+///
+/// # Arguments
+/// * `player` - Player account to update
+/// * `level` - Hero level (from parsed NFT)
+/// * `template` - Hero's template
+/// * `location_bonus_bps` - Location bonus in basis points (0 if not at home, 100-1000 if at home)
 #[inline]
-pub fn add_hero_buffs_to_player(
+pub fn add_hero_buffs_to_player_with_location(
     player: &mut PlayerAccount,
-    hero: &HeroAccount,
+    level: u32,
     template: &HeroTemplate,
+    location_bonus_bps: u16,
 ) {
     for buff_config in template.buffs.iter() {
         let stat = BuffStat::from_u8(buff_config.stat);
         if matches!(stat, BuffStat::None) { continue; }
 
-        // Calculate buff value deterministically: base × (√φ)^level
-        let buff_value = calculate_buff_at_level(buff_config.base_bps as u64, hero.level);
-        apply_buff_to_player(player, stat, buff_value as u16, true);
+        // Calculate base buff value deterministically: base × (√φ)^level
+        let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
+
+        // Apply location bonus: value × (10000 + bonus) / 10000
+        let boosted_value = if location_bonus_bps > 0 {
+            let multiplier = 10000u64 + location_bonus_bps as u64;
+            (base_value * multiplier / 10000) as u16
+        } else {
+            base_value as u16
+        };
+
+        apply_buff_to_player(player, stat, boosted_value, true);
     }
 }
 
-/// Subtract one hero's buffs from player's cached totals
+/// Subtract one hero's buffs from player's cached totals with location bonus applied
 ///
-/// Used when unlocking a hero. Buff values are calculated deterministically
-/// from level and template using golden root (√φ) scaling.
+/// NFT-Only System: Level comes from parsed NFT attributes.
+/// Must use the same location bonus that was applied during lock.
+///
+/// # Arguments
+/// * `player` - Player account to update
+/// * `level` - Hero level (from parsed NFT)
+/// * `template` - Hero's template
+/// * `location_bonus_bps` - Location bonus that was applied during lock
 #[inline]
-pub fn subtract_hero_buffs_from_player(
+pub fn subtract_hero_buffs_from_player_with_location(
     player: &mut PlayerAccount,
-    hero: &HeroAccount,
+    level: u32,
     template: &HeroTemplate,
+    location_bonus_bps: u16,
 ) {
     for buff_config in template.buffs.iter() {
         let stat = BuffStat::from_u8(buff_config.stat);
         if matches!(stat, BuffStat::None) { continue; }
 
-        // Calculate buff value deterministically: base × (√φ)^level
-        let buff_value = calculate_buff_at_level(buff_config.base_bps as u64, hero.level);
-        apply_buff_to_player(player, stat, buff_value as u16, false);
+        // Calculate base buff value deterministically: base × (√φ)^level
+        let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
+
+        // Apply same location bonus that was used during lock
+        let boosted_value = if location_bonus_bps > 0 {
+            let multiplier = 10000u64 + location_bonus_bps as u64;
+            (base_value * multiplier / 10000) as u16
+        } else {
+            base_value as u16
+        };
+
+        apply_buff_to_player(player, stat, boosted_value, false);
     }
+}
+
+/// Clear all hero buff fields on player (used before recalculation)
+#[inline]
+pub fn clear_hero_buffs(player: &mut PlayerAccount) {
+    player.hero_attack_bps = 0;
+    player.hero_defense_bps = 0;
+    player.hero_economy_bps = 0;
+    player.hero_xp_gain_bps = 0;
+    player.hero_training_cost_reduction_bps = 0;
+    player.hero_rally_capacity_bps = 0;
+    player.hero_crit_chance_bps = 0;
+    player.hero_synchrony_bonus_bps = 0;
+    player.hero_weapon_efficiency_bps = 0;
+    player.hero_stamina_regen_bps = 0;
+    player.hero_produce_generation_bps = 0;
+    player.hero_encounter_damage_bps = 0;
+    player.hero_loot_bonus_bps = 0;
+    player.hero_armor_efficiency_bps = 0;
+    player.hero_resource_capacity_bps = 0;
+    player.hero_unit_capacity_bps = 0;
+    // Also clear location bonuses
+    player.slot_location_bonus = [0; 3];
 }
 
 /// Add buff deltas from level-up to player's cached totals
@@ -109,15 +164,18 @@ fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, 
         BuffStat::TrainingCostReduction => &mut player.hero_training_cost_reduction_bps,
         BuffStat::RallyCapacity => &mut player.hero_rally_capacity_bps,
         BuffStat::CriticalHitChance => &mut player.hero_crit_chance_bps,
-        BuffStat::LuckBonus => &mut player.hero_luck_bonus_bps,
+        BuffStat::SynchronyBonus => &mut player.hero_synchrony_bonus_bps,
         BuffStat::WeaponEfficiency => &mut player.hero_weapon_efficiency_bps,
         BuffStat::StaminaRegen => &mut player.hero_stamina_regen_bps,
         BuffStat::ProduceGeneration => &mut player.hero_produce_generation_bps,
         BuffStat::EncounterDamage => &mut player.hero_encounter_damage_bps,
         BuffStat::LootBonus => &mut player.hero_loot_bonus_bps,
         BuffStat::ArmorEfficiency => &mut player.hero_armor_efficiency_bps,
-        // ResourceCapacity and UnitCapacity not currently tracked (no caps in system)
-        BuffStat::ResourceCapacity | BuffStat::UnitCapacity | BuffStat::None => return,
+        BuffStat::ResourceCapacity => &mut player.hero_resource_capacity_bps,
+        BuffStat::UnitCapacity => &mut player.hero_unit_capacity_bps,
+        // Expedition-specific buffs - not cached on player, applied at expedition time
+        BuffStat::MiningAffinity | BuffStat::FishingAffinity => return,
+        BuffStat::None => return,
     };
 
     if add {
@@ -127,24 +185,6 @@ fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, 
     }
 }
 
-// ========================================================
-// Level-Up (Deterministic System)
-// ========================================================
-
-/// Update hero's cached power after level-up
-///
-/// In the deterministic system, buff values are calculated on-demand from
-/// level + template. This function just updates the cached total_buff_power
-/// for NFT metadata display.
-///
-/// No RNG - buff values are: base × (√φ)^level
-#[inline]
-pub fn update_hero_power_on_level_up(
-    hero: &mut HeroAccount,
-    template: &HeroTemplate,
-) {
-    hero.total_buff_power = calculate_weighted_power(hero, template);
-}
 
 // ========================================================
 // NFT Attribute Building
@@ -155,39 +195,106 @@ pub fn update_hero_power_on_level_up(
 /// Captures all computed values from hero+template in one pass,
 /// allowing account borrows to be dropped before attribute building.
 /// All buff values are calculated deterministically: base × (√φ)^level
+///
+/// NFT-Only System: All hero state is stored in NFT attributes.
+///
+/// # Attributes (9 max, within MPL Core limit of 10)
+/// - Level, XP (mutable state)
+/// - Template, Serial, Origin (immutable identity)
+/// - Up to 4 buff values
+///
+/// Note: Tier is NOT stored - derived from template.mint_cost_sol when needed.
 #[derive(Clone)]
 pub struct HeroNftContext {
+    // Mutable state (updated during gameplay)
     pub level: u32,
-    pub power: u32,
+    pub meditation_xp: u32,
+
+    // Immutable identity (set at mint, never changes)
+    pub template_id: u16,
+    pub serial_number: u32,
+    pub origin_city: u16,
+
+    // Buff configuration and values
     pub buff_values: [u64; 4],
     pub buff_configs: [BuffConfig; 4],
-    pub is_locked: bool,
 }
 
 impl HeroNftContext {
-    /// Create from loaded hero and template
+    /// Create for newly minted hero (level 1)
     ///
-    /// Buff values are calculated deterministically: base × (√φ)^level
+    /// NFT-Only System: All hero state comes from template at mint time.
     #[inline]
-    pub fn new(hero: &HeroAccount, template: &HeroTemplate, is_locked: bool) -> Self {
+    pub fn new_mint(template: &HeroTemplate, serial_number: u32) -> Self {
         Self {
-            level: hero.level,
-            power: calculate_weighted_power(hero, template),
-            buff_values: compute_buff_values(hero.level, template),
+            // Mutable state - initial values
+            level: 1,
+            meditation_xp: 0,
+
+            // Immutable identity - from template
+            template_id: template.template_id,
+            serial_number,
+            origin_city: template.meditation_city_id,
+
+            // Buff configuration and values at level 1
+            buff_values: compute_buff_values(1, template),
             buff_configs: template.buffs,
-            is_locked,
         }
     }
 
-    /// Create for newly minted hero (level 1)
+    /// Create from parsed NFT data for updates
+    ///
+    /// NFT-Only System: Used when updating an existing hero's NFT.
+    /// Reads current state from NFT, applies changes, writes back.
     #[inline]
-    pub fn new_mint(template: &HeroTemplate, initial_power: u32) -> Self {
+    pub fn from_parsed(
+        parsed: &super::nft_parser::ParsedHeroNft,
+        template: &HeroTemplate,
+    ) -> Self {
         Self {
-            level: 1,
-            power: initial_power,
-            buff_values: compute_buff_values(1, template),
+            level: parsed.level,
+            meditation_xp: parsed.meditation_xp,
+
+            template_id: parsed.template_id,
+            serial_number: parsed.serial_number,
+            origin_city: parsed.origin_city,
+
+            buff_values: compute_buff_values(parsed.level, template),
             buff_configs: template.buffs,
-            is_locked: false,
+        }
+    }
+
+    /// Create with updated level (for level-up)
+    #[inline]
+    pub fn with_new_level(&self, new_level: u32, template: &HeroTemplate) -> Self {
+        Self {
+            level: new_level,
+            meditation_xp: self.meditation_xp,
+            template_id: self.template_id,
+            serial_number: self.serial_number,
+            origin_city: self.origin_city,
+            buff_values: compute_buff_values(new_level, template),
+            buff_configs: template.buffs,
+        }
+    }
+
+    /// Create with updated meditation XP and optionally level
+    #[inline]
+    pub fn with_meditation_update(
+        &self,
+        new_xp: u32,
+        new_level: Option<u32>,
+        template: &HeroTemplate,
+    ) -> Self {
+        let level = new_level.unwrap_or(self.level);
+        Self {
+            level,
+            meditation_xp: new_xp,
+            template_id: self.template_id,
+            serial_number: self.serial_number,
+            origin_city: self.origin_city,
+            buff_values: compute_buff_values(level, template),
+            buff_configs: template.buffs,
         }
     }
 }
@@ -196,9 +303,20 @@ impl HeroNftContext {
 ///
 /// Create on the stack, pass to `build_hero_nft_attributes`.
 /// Buffers must outlive the p-core CPI call.
+///
+/// NFT-Only System: Buffers for all 9 possible attributes.
+/// (Level, XP, Template, Serial, Origin, + up to 4 buffs)
 pub struct HeroNftBuffers {
+    // Mutable state
     pub level: [u8; 10],
-    pub power: [u8; 10],
+    pub xp: [u8; 10],
+
+    // Immutable identity
+    pub template: [u8; 10],
+    pub serial: [u8; 10],
+    pub origin: [u8; 10],
+
+    // Buff values
     pub buff0: [u8; 10],
     pub buff1: [u8; 10],
     pub buff2: [u8; 10],
@@ -210,7 +328,10 @@ impl HeroNftBuffers {
     pub const fn new() -> Self {
         Self {
             level: [0u8; 10],
-            power: [0u8; 10],
+            xp: [0u8; 10],
+            template: [0u8; 10],
+            serial: [0u8; 10],
+            origin: [0u8; 10],
             buff0: [0u8; 10],
             buff1: [0u8; 10],
             buff2: [0u8; 10],
@@ -221,47 +342,56 @@ impl HeroNftBuffers {
 
 /// Build hero NFT attributes for p-core UpdatePluginV1/AddPluginV1
 ///
-/// Returns the number of attributes written to the array.
+/// NFT-Only System: All hero state is stored as NFT attributes.
+/// Returns the number of attributes written to the array (max 9).
+///
+/// # Attributes
+/// - Level, XP (mutable state)
+/// - Template, Serial, Origin (immutable identity)
+/// - Up to 4 buff values (e.g., "Defense": "500")
 ///
 /// # Arguments
 /// - `buffers`: Pre-allocated buffers (must outlive CPI call)
-/// - `attributes`: Output array to fill
-/// - `ctx`: Captured hero data from `HeroNftContext::new()`
+/// - `attributes`: Output array to fill (size 9)
+/// - `ctx`: Captured hero data from `HeroNftContext`
 ///
 /// # Example
 /// ```ignore
-/// // Load once, capture context
-/// let hero_data = hero_account.try_borrow_data()?;
-/// let hero = unsafe { HeroAccount::load(&hero_data) };
-/// let template_data = hero_template.try_borrow_data()?;
-/// let template = unsafe { HeroTemplate::load(&template_data) };
-/// let ctx = HeroNftContext::new(hero, template, is_locked);
-/// drop(hero_data);
-/// drop(template_data);
-///
-/// // Build attributes without re-loading
+/// let ctx = HeroNftContext::new_mint(template, serial_number);
 /// let mut buffers = HeroNftBuffers::new();
-/// let mut attributes: [(&[u8], &[u8]); 7] = [(b"", b""); 7];
+/// let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
 /// let count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
 /// ```
 pub fn build_hero_nft_attributes<'a>(
     buffers: &'a mut HeroNftBuffers,
-    attributes: &mut [(&'a [u8], &'a [u8]); 7],
+    attributes: &mut [(&'a [u8], &'a [u8]); 9],
     ctx: &HeroNftContext,
 ) -> usize {
     let mut idx = 0;
 
-    // Level
+    // Mutable state
     let level_str = format_u32_to_bytes(ctx.level, &mut buffers.level);
     attributes[idx] = (b"Level", level_str);
     idx += 1;
 
-    // Power
-    let power_str = format_u32_to_bytes(ctx.power, &mut buffers.power);
-    attributes[idx] = (b"Power", power_str);
+    let xp_str = format_u32_to_bytes(ctx.meditation_xp, &mut buffers.xp);
+    attributes[idx] = (b"XP", xp_str);
     idx += 1;
 
-    // Individual buffs - unrolled to satisfy borrow checker
+    // Immutable identity
+    let template_str = format_u32_to_bytes(ctx.template_id as u32, &mut buffers.template);
+    attributes[idx] = (b"Template", template_str);
+    idx += 1;
+
+    let serial_str = format_u32_to_bytes(ctx.serial_number, &mut buffers.serial);
+    attributes[idx] = (b"Serial", serial_str);
+    idx += 1;
+
+    let origin_str = format_u32_to_bytes(ctx.origin_city as u32, &mut buffers.origin);
+    attributes[idx] = (b"Origin", origin_str);
+    idx += 1;
+
+    // Buff values - unrolled to satisfy borrow checker
     // Values are capped to u32::MAX for display (high-level heroes may exceed)
     if ctx.buff_configs[0].stat != 0 {
         let name = get_buff_stat_name(ctx.buff_configs[0].stat).as_bytes();
@@ -294,10 +424,6 @@ pub fn build_hero_nft_attributes<'a>(
         attributes[idx] = (name, value_str);
         idx += 1;
     }
-
-    // Locked status
-    attributes[idx] = (b"Locked", if ctx.is_locked { b"true" } else { b"false" });
-    idx += 1;
 
     idx
 }

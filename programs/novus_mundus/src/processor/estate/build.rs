@@ -1,0 +1,163 @@
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    sysvars::{clock::Clock, Sysvar},
+    ProgramResult,
+};
+
+use crate::{
+    error::GameError,
+    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot},
+    constants::PLAYER_SEED,
+    helpers::burn_tokens,
+    validation::{require_signer, require_writable},
+    emit,
+    events::estate::BuildingStarted,
+};
+
+/// Build Building
+///
+/// Starts construction of a new building in an empty slot.
+/// Requires NOVI payment and available building slot.
+///
+/// # Accounts
+/// - [writable, signer] owner: Player's wallet
+/// - [writable] player_account: PlayerAccount PDA
+/// - [writable] estate_account: EstateAccount PDA
+/// - [writable] player_token_account: Player's locked NOVI token account
+/// - [writable] novi_mint: NOVI token mint
+/// - [] token_program: SPL Token program
+///
+/// # Instruction Data
+/// - building_type: u8 (1 byte) - BuildingType enum
+pub fn process(
+    _program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    // 1. Parse Accounts
+    let [
+        owner,
+        player_account,
+        estate_account,
+        player_token_account,
+        novi_mint,
+        _token_program,
+    ] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+
+    // 2. Validate Accounts
+    require_signer(owner)?;
+    require_writable(player_account)?;
+    require_writable(estate_account)?;
+    require_writable(player_token_account)?;
+    require_writable(novi_mint)?;
+
+    // 3. Parse Instruction Data
+    if instruction_data.is_empty() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let building_type = BuildingType::from_u8(instruction_data[0])
+        .ok_or(ProgramError::InvalidInstructionData)?;
+
+    // 4. Load Accounts
+    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+
+    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+
+    // 5. Verify ownership
+    if &player_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    if &estate_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // 6. Check estate level requirement for this building tier
+    let required_level = building_type.required_estate_level();
+    if estate_data.estate_level < required_level {
+        return Err(GameError::EstateLevelInsufficient.into());
+    }
+
+    // 7. Check building doesn't already exist
+    if estate_data.find_building(building_type).is_some() {
+        return Err(GameError::BuildingAlreadyExists.into());
+    }
+
+    // 8. Find empty slot
+    let slot_index = estate_data.find_empty_slot()
+        .ok_or(GameError::BuildingSlotFull)?;
+
+    // 9. Calculate cost (base cost for level 1)
+    let base_cost = match building_type.tier() {
+        1 => 10_000u64,    // Tier 1: 10k NOVI
+        2 => 50_000u64,    // Tier 2: 50k NOVI
+        3 => 200_000u64,   // Tier 3: 200k NOVI
+        _ => 10_000u64,
+    };
+
+    // 10. Check player has enough balance
+    if player_data.locked_novi < base_cost {
+        return Err(GameError::InsufficientLockedNovi.into());
+    }
+
+    // 11. Burn NOVI tokens
+    let player_bump = player_data.bump;
+    let bump_seed = [player_bump];
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+
+    burn_tokens(
+        player_token_account,
+        novi_mint,
+        player_account,
+        base_cost,
+        &[player_signer],
+    )?;
+
+    // Update soft balance tracker
+    player_data.locked_novi = player_data.locked_novi.saturating_sub(base_cost);
+
+    // 12. Get current time and calculate construction end
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    let construction_time = match building_type.tier() {
+        1 => 4 * 3600i64,    // Tier 1: 4 hours
+        2 => 12 * 3600i64,   // Tier 2: 12 hours
+        3 => 24 * 3600i64,   // Tier 3: 24 hours
+        _ => 4 * 3600i64,
+    };
+
+    // 13. Initialize building slot
+    estate_data.buildings[slot_index] = BuildingSlot {
+        building_type: building_type as u8,
+        status: BuildingStatus::Building as u8,
+        level: 0, // Level 0 during construction, becomes 1 on completion
+        mastery_level: 0,
+        mastery_xp: 0,
+        construction_started: now,
+        construction_ends: now + construction_time,
+        total_novi_invested: base_cost,
+        _padding: [0; 4],
+    };
+
+    // 14. Update estate stats
+    estate_data.total_buildings = estate_data.total_buildings.saturating_add(1);
+    estate_data.last_activity = now;
+
+    // 15. Emit BuildingStarted event
+    emit!(BuildingStarted {
+        player: *owner.key(),
+        building_type: building_type as u8,
+        plot: slot_index as u8,
+        completes_at: now + construction_time,
+        timestamp: now,
+    });
+
+    Ok(())
+}
