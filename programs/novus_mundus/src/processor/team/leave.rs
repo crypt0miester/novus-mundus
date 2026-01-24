@@ -132,6 +132,7 @@ pub fn process(
 
     emit!(TeamLeft {
         team: *team_account.key(),
+        team_name: team.name,
         player: *player_account.key(),
         member_count: team.member_count,
         timestamp: now,

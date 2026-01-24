@@ -9,7 +9,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{EstateAccount, PlayerAccount, BuildingType, GameEngine, ResearchProgress, NULL_PUBKEY},
-    helpers::{estate::{has_building, academy_daily_time_reduction}, mint_tokens},
+    helpers::{estate::{has_building, academy_daily_time_reduction}, mint_tokens, validate_token_account_owner},
     constants::GAME_ENGINE_SEED,
     validation::{require_signer, require_writable},
 };
@@ -236,6 +236,7 @@ pub fn process(
         building_type,
         score,
         hero_mint,
+        player_account,
         game_engine_account,
         player_token_account,
         novi_mint,
@@ -287,6 +288,7 @@ fn grant_building_rewards(
     building_type: BuildingType,
     score: u8,
     hero_mint: &AccountInfo,
+    player_account: &AccountInfo,
     game_engine_account: &AccountInfo,
     player_token_account: Option<&AccountInfo>,
     novi_mint: Option<&AccountInfo>,
@@ -406,6 +408,15 @@ fn grant_building_rewards(
                 return Err(GameError::Unauthorized.into());
             }
 
+            // SECURITY: Verify NFT is actually owned by player's PlayerAccount PDA
+            // This prevents passing arbitrary pubkeys that happen to be in active_heroes
+            let asset_data = hero_mint.try_borrow_data()?;
+            let asset = unsafe { p_core::state::AssetV1::load(&asset_data) };
+            if &asset.owner != player_account.key() {
+                return Err(GameError::Unauthorized.into());
+            }
+            drop(asset_data);
+
             // Grant +25% hero effectiveness bonus for the day
             // This applies as a multiplier to all hero buffs in combat
             player.blessed_hero_bonus_bps = 2500; // +25%
@@ -432,6 +443,9 @@ fn grant_building_rewards(
                 .ok_or(GameError::MissingRequiredAccount)?;
             let mint = novi_mint
                 .ok_or(GameError::MissingRequiredAccount)?;
+
+            // SECURITY: Verify token account belongs to the PlayerAccount PDA
+            validate_token_account_owner(token_account, player_account.key())?;
 
             // Load GameEngine to get bump for PDA signer
             let game_engine_data = game_engine_account.try_borrow_data()?;

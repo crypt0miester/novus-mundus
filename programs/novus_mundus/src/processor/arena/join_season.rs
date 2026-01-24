@@ -26,7 +26,7 @@ use crate::{
         ArenaSeasonAccount, ArenaParticipantAccount, ArenaLoadoutAccount, ArenaStatus,
         PlayerAccount, ARENA_PARTICIPANT_ACCOUNT_SIZE, ARENA_LOADOUT_ACCOUNT_SIZE,
     },
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match, require_owner, require_data_len},
 };
 
 /// Instruction data for join_season
@@ -79,10 +79,8 @@ pub fn process(
 
     // 6. Load and validate Arena Season
     require_owner(arena_season, program_id)?;
+    require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
     let season_data = arena_season.try_borrow_data()?;
-    if season_data.len() < ArenaSeasonAccount::LEN {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
     let season_ptr = season_data.as_ptr() as *const ArenaSeasonAccount;
     let season = unsafe { &*season_ptr };
 

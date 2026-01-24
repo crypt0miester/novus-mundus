@@ -123,6 +123,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameRemoved {
         player: *player_account.key(),
+        player_name: [0u8; 48], // Name was just cleared
         timestamp: now,
     });
 

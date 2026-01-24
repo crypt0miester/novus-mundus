@@ -39,7 +39,7 @@ pub fn process(
         owner,
         player_account,
         estate_account,
-        system_program,
+        _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -112,7 +112,8 @@ pub fn process(
     // 12. Emit EstateCreated event
     emit!(EstateCreated {
         estate: *estate_account.key(),
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         timestamp: now,
     });
 

@@ -167,7 +167,8 @@ pub fn process(
 
     // 13. Emit EstateDailyClaimed event
     emit!(EstateDailyClaimed {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         materials: final_materials,
         streak: estate_data.login_streak,
         timestamp: now,

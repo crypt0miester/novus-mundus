@@ -336,8 +336,10 @@ pub fn process(
     close_account(rally_participant_account, participant_owner)?;
 
     // 14. Emit event
+    // Note: team_name not available here - would need to pass team account
     emit!(RallyParticipantReturned {
         rally: rally_key,
+        team_name: [0u8; 32], // Team name not available, lookup via rally.team
         player: player_key,
         participated_in_combat: included_in_march,
         units_returned,

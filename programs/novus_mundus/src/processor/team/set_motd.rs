@@ -132,6 +132,7 @@ pub fn process(
 
     emit!(MotdUpdated {
         team: *team_account.key(),
+        team_name: team.name,
         updated_by: *member_account.key(),
         timestamp: now,
     });

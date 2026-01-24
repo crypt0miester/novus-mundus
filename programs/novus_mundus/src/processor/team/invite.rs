@@ -11,7 +11,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM, EXT_RALLY},
     constants::{TEAM_INVITE_SEED, TEAM_INVITE_EXPIRY},
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
     emit,
     events::InviteSent,
 };
@@ -161,9 +161,7 @@ pub fn process(
     }
 
     // Invite must not already exist
-    if invite_account.data_len() > 0 {
-        return Err(GameError::AlreadyInvited.into());
-    }
+    require_empty(invite_account).map_err(|_| GameError::AlreadyInvited)?;
 
     // 8. Create Invite Account
 
@@ -214,6 +212,7 @@ pub fn process(
 
     emit!(InviteSent {
         team: *team_account.key(),
+        team_name: team.name,
         invitee: *invitee_player_account.key(),
         inviter: *inviter_player_account.key(),
         timestamp: now,

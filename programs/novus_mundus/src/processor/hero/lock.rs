@@ -190,6 +190,8 @@ pub fn process(
 
     // Capture context for NFT attributes
     let ctx = HeroNftContext::from_parsed(&parsed_hero, template);
+    let hero_name = template.name;
+    let player_name = player.name;
 
     drop(template_data);
 
@@ -216,7 +218,9 @@ pub fn process(
     let clock = Clock::get()?;
     emit!(HeroLocked {
         hero_mint: *hero_mint.key(),
-        player: *owner.key(),
+        hero_name,
+        player: *player_account.key(),
+        player_name,
         slot: slot_index,
         timestamp: clock.unix_timestamp,
     });

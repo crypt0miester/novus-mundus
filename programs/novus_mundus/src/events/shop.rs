@@ -5,8 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a shop item is purchased
 pub struct ItemPurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Item ID
     pub item_id: u32,
     /// Quantity purchased
@@ -25,6 +27,7 @@ impl Event for ItemPurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.item_id.pack(&mut buf[offset..]);
         offset += self.quantity.pack(&mut buf[offset..]);
         offset += self.price.pack(&mut buf[offset..]);
@@ -36,8 +39,10 @@ impl Event for ItemPurchased {
 
 /// Emitted when a bundle is purchased
 pub struct BundlePurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Bundle ID
     pub bundle_id: u32,
     /// Price paid
@@ -54,6 +59,7 @@ impl Event for BundlePurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.bundle_id.pack(&mut buf[offset..]);
         offset += self.price.pack(&mut buf[offset..]);
         offset += self.currency.pack(&mut buf[offset..]);
@@ -64,8 +70,10 @@ impl Event for BundlePurchased {
 
 /// Emitted when a flash sale item is purchased
 pub struct FlashSalePurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Sale ID
     pub sale_id: u64,
     /// Original price
@@ -84,6 +92,7 @@ impl Event for FlashSalePurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.sale_id.pack(&mut buf[offset..]);
         offset += self.original_price.pack(&mut buf[offset..]);
         offset += self.price_paid.pack(&mut buf[offset..]);

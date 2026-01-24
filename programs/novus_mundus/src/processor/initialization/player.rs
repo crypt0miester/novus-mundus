@@ -82,7 +82,7 @@ pub fn process(
         spawn_location,
         system_program,
         token_program,
-        associated_token_program,
+        _associated_token_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };

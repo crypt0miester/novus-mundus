@@ -23,7 +23,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{ArenaSeasonAccount, CityAccount},
-    validation::{require_owner, require_writable},
+    validation::{require_owner, require_writable, require_data_len},
     helpers::close_account,
 };
 
@@ -80,10 +80,8 @@ pub fn process(
     let current_city_season = city.arena_season_id;
 
     // 6. Load Arena Season
+    require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
     let season_data = arena_season.try_borrow_data()?;
-    if season_data.len() < ArenaSeasonAccount::LEN {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
     let season = unsafe { &*(season_data.as_ptr() as *const ArenaSeasonAccount) };
 
     // Verify season_id and city_id match

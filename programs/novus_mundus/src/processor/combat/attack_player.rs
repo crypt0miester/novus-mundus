@@ -487,12 +487,6 @@ pub fn process(
             0
         };
 
-        // Apply weapon losses proportionally to both own and reinforcement weapons
-        // Own weapons
-        let own_melee_lost = apply_bp(defender_data.melee_weapons, defender_casualty_bps).unwrap_or(0);
-        let own_ranged_lost = apply_bp(defender_data.ranged_weapons, defender_casualty_bps).unwrap_or(0);
-        let own_siege_lost = apply_bp(defender_data.siege_weapons, defender_casualty_bps).unwrap_or(0);
-
         // Reinforcement weapons (die proportionally, not lootable)
         let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee, defender_casualty_bps).unwrap_or(0);
         let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged, defender_casualty_bps).unwrap_or(0);
@@ -603,7 +597,8 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *attacker_owner.key(),
+            player: *attacker_player.key(),
+            player_name: attacker_data.name,
             amount: base_xp,
             source: 0, // 0=combat
             total_xp: attacker_data.current_xp,
@@ -613,7 +608,8 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *attacker_owner.key(),
+                player: *attacker_player.key(),
+                player_name: attacker_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
                 timestamp: now,
@@ -648,6 +644,7 @@ pub fn process(
         )?;
 
         let attacker_key = attacker_player.key();
+        let attacker_event_key = attacker_event.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_damage = attacker_damage;
@@ -656,7 +653,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *attacker_participation,
             &mut *attacker_event_data,
+            attacker_event_key,
             attacker_key,
+            attacker_data.name,
             EventType::TotalDamageDealt,
             final_damage,
             now,
@@ -667,7 +666,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *attacker_participation,
                 &mut *attacker_event_data,
+                attacker_event_key,
                 attacker_key,
+                attacker_data.name,
                 EventType::MostAttacksWonPvP,
                 1,
                 now,
@@ -678,7 +679,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *attacker_participation,
             &mut *attacker_event_data,
+            attacker_event_key,
             attacker_key,
+            attacker_data.name,
             EventType::HighestCash,
             attacker_data.cash_on_hand,
             now,
@@ -689,7 +692,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *attacker_participation,
                 &mut *attacker_event_data,
+                attacker_event_key,
                 attacker_key,
+                attacker_data.name,
                 EventType::MostXPGained,
                 attacker_xp_gained,
                 now,
@@ -715,6 +720,7 @@ pub fn process(
         )?;
 
         let defender_key = defender_player.key();
+        let defender_event_key = defender_event.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_defender_damage = defender_damage;
@@ -723,7 +729,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *defender_participation,
             &mut *defender_event_data,
+            defender_event_key,
             defender_key,
+            defender_data.name,
             EventType::TotalDamageDealt,
             final_defender_damage,
             now,
@@ -734,7 +742,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *defender_participation,
                 &mut *defender_event_data,
+                defender_event_key,
                 defender_key,
+                defender_data.name,
                 EventType::MostAttacksWonPvP,
                 1,
                 now,
@@ -745,7 +755,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *defender_participation,
             &mut *defender_event_data,
+            defender_event_key,
             defender_key,
+            defender_data.name,
             EventType::HighestCash,
             defender_data.cash_on_hand,
             now,
@@ -754,7 +766,7 @@ pub fn process(
 
     // Calculate units lost for event (need to get original values)
     // Since we already updated the units above, we track the lost counts
-    let attacker_melee_lost = attacker_operative_total.saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
+    let _attacker_melee_lost = attacker_operative_total.saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
 
     // Calculate cash/armor/produce/vehicles stolen (only if attacker won)
     let (cash_stolen, armor_stolen, produce_stolen, vehicles_stolen) = if attacker_won {
@@ -780,7 +792,9 @@ pub fn process(
     // Emit PlayerAttacked event
     emit!(PlayerAttacked {
         attacker: *attacker_player.key(),
+        attacker_name: attacker_data.name,
         defender: *defender_player.key(),
+        defender_name: defender_data.name,
         damage_dealt: attacker_damage,
         damage_received: defender_damage,
         cash_stolen,

@@ -40,7 +40,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
     helpers::estate::{load_estate_for_player, require_workshop, require_dock},
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_empty},
     emit,
     events::ExpeditionStarted,
 };
@@ -218,9 +218,7 @@ pub fn process(
     }
 
     // 15. Check if expedition account already exists (player already on expedition)
-    if expedition_account.data_len() > 0 {
-        return Err(GameError::ExpeditionInProgress.into());
-    }
+    require_empty(expedition_account).map_err(|_| GameError::ExpeditionInProgress)?;
 
     // 16. Get current timestamp and calculate duration
     let now = Clock::get()?.unix_timestamp;
@@ -336,7 +334,8 @@ pub fn process(
 
     // 21. Emit event
     emit!(ExpeditionStarted {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         expedition_type,
         node_id: tier,
         duration: duration_seconds as u32,

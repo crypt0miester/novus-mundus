@@ -228,6 +228,7 @@ pub fn process(
 
     emit!(CraftStarted {
         player: *player_account.key(),
+        player_name: player.name,
         item_type: equipment_type as u8,
         quality_tier: quality_tier as u8,
         materials_used: total_materials,

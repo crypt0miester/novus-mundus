@@ -237,9 +237,15 @@ pub fn process(
     let template_data = hero_template.try_borrow_data()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
+    // Re-borrow player data for event
+    let player_data_for_event = player_account.try_borrow_data()?;
+    let player_for_event = unsafe { PlayerAccount::load(&player_data_for_event) };
+
     emit!(HeroMinted {
         hero_mint: *hero_mint.key(),
-        player: *minter.key(),
+        hero_name: template.name,
+        player: *player_account.key(),
+        player_name: player_for_event.name,
         template_id,
         rarity: template.hero_type,
         timestamp: clock.unix_timestamp,

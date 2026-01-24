@@ -46,7 +46,7 @@ use crate::{
 /// - Purchase 50 stamina → Burn 5,000 Novi
 /// - Purchase 100 stamina → Burn 10,000 Novi
 pub fn process(
-    program_id: &Pubkey,
+    _program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -58,7 +58,7 @@ pub fn process(
         novi_mint,
         game_engine_account,
         owner,
-        token_program,
+        _token_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -153,6 +153,7 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
     emit!(StaminaPurchased {
         player: *player_account.key(),
+        player_name: player_data.name,
         stamina: actual_added,
         gems_spent: 0, // This instruction uses NOVI, not gems
         timestamp: now,

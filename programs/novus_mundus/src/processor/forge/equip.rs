@@ -130,7 +130,9 @@ pub fn process(
 
     emit!(ItemEquipped {
         player: *player_account.key(),
+        player_name: player.name,
         hero_mint: Pubkey::default(), // No hero involved in this equip system
+        hero_name: [0u8; 32], // No hero involved in this equip system
         slot: equipment_type as u8,
         quality: quality_tier,
         from_inventory: quality_tier, // Using quality tier as inventory identifier

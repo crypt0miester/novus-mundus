@@ -90,8 +90,9 @@ pub fn process(
         return Err(GameError::TravelNotComplete.into()); // Reusing error - already at destination
     }
 
-    let remaining_seconds = player_data.arrival_time - now;
-    let remaining_minutes = (remaining_seconds as f64 / 60.0).ceil() as u64;
+    let remaining_seconds = (player_data.arrival_time - now) as u64;
+    // Integer ceiling division: (a + b - 1) / b
+    let remaining_minutes = (remaining_seconds + 59) / 60;
 
     if remaining_minutes == 0 {
         // Less than a minute remaining, no need to speed up
@@ -151,6 +152,7 @@ pub fn process(
 
     emit!(TravelSpeedup {
         player: *player_account.key(),
+        player_name: player_data.name,
         is_intercity,
         speedup_tier,
         gems_spent: total_gem_cost,

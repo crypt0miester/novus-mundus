@@ -153,7 +153,8 @@ pub fn process(
     let new_ascension_level = 1u8; // Simplified - research can be ascended once based on the ascend() logic
 
     emit!(ResearchAscended {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         research_tree: research_type as u16,
         new_ascension_level,
         mastery_cost: mastery_cost as u16,

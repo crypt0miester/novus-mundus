@@ -82,10 +82,12 @@ pub fn process(
     close_account(rally_account, leader_owner)?;
 
     // 5. Emit event
+    // Note: team_name not available here - would need to pass team account
     let now = Clock::get()?.unix_timestamp;
     emit!(RallyClosed {
         rally: rally_key,
         rally_id,
+        team_name: [0u8; 32], // Team name not available, lookup via rally.team
         leader,
         timestamp: now,
     });

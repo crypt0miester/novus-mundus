@@ -170,6 +170,7 @@ pub fn process(
 
     emit!(LeadershipTransferred {
         team: *team_account.key(),
+        team_name: team.name,
         old_leader,
         new_leader: *new_leader_account.key(),
         timestamp: clock.unix_timestamp,

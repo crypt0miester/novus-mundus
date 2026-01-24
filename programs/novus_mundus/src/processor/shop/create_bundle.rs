@@ -32,7 +32,6 @@ use crate::{
 /// - requires_subscription: u8
 /// - savings_bps: u16
 /// - price_sol_lamports: u64
-/// - price_novi: u64
 /// - available_from: i64
 /// - available_until: i64
 /// - is_active: bool
@@ -65,8 +64,8 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // Header: bundle_id(4) + tier(1) + category(1) + item_count(1) + req_sub(1) +
-    //         savings(2) + sol(8) + novi(8) + from(8) + until(8) + active(1) = 43 bytes
-    if instruction_data.len() < 43 {
+    //         savings(2) + sol(8) + from(8) + until(8) + active(1) = 35 bytes
+    if instruction_data.len() < 35 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -77,13 +76,12 @@ pub fn process(
     let requires_subscription = instruction_data[7];
     let savings_bps = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
     let price_sol_lamports = u64::from_le_bytes(instruction_data[10..18].try_into().unwrap());
-    let price_novi = u64::from_le_bytes(instruction_data[18..26].try_into().unwrap());
-    let available_from = i64::from_le_bytes(instruction_data[26..34].try_into().unwrap());
-    let available_until = i64::from_le_bytes(instruction_data[34..42].try_into().unwrap());
-    let is_active = instruction_data[42] != 0;
+    let available_from = i64::from_le_bytes(instruction_data[18..26].try_into().unwrap());
+    let available_until = i64::from_le_bytes(instruction_data[26..34].try_into().unwrap());
+    let is_active = instruction_data[34] != 0;
 
     // Parse items (8 bytes each: item_id(4) + quantity(4))
-    let items_offset = 43;
+    let items_offset = 35;
     let items_size = item_count * 8;
 
     if instruction_data.len() < items_offset + items_size {
@@ -108,8 +106,8 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // Must have at least one price
-    if price_sol_lamports == 0 && price_novi == 0 {
+    // Must have SOL price (bundles are SOL only)
+    if price_sol_lamports == 0 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -189,7 +187,6 @@ pub fn process(
     }
 
     bundle.price_sol_lamports = price_sol_lamports;
-    bundle.price_novi = price_novi;
 
     bundle.available_from = available_from;
     bundle.available_until = available_until;

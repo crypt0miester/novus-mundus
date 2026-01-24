@@ -5,8 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when research starts
 pub struct ResearchStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Research ID
     pub research_id: u16,
     /// Target level
@@ -23,6 +25,7 @@ impl Event for ResearchStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.research_id.pack(&mut buf[offset..]);
         offset += self.level.pack(&mut buf[offset..]);
         offset += self.completes_at.pack(&mut buf[offset..]);
@@ -33,8 +36,10 @@ impl Event for ResearchStarted {
 
 /// Emitted when research completes
 pub struct ResearchCompleted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Research ID
     pub research_id: u16,
     /// Level achieved
@@ -49,6 +54,7 @@ impl Event for ResearchCompleted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.research_id.pack(&mut buf[offset..]);
         offset += self.level.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -58,8 +64,10 @@ impl Event for ResearchCompleted {
 
 /// Emitted when research is cancelled
 pub struct ResearchCancelled {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Research ID that was cancelled
     pub research_id: u16,
     /// Unix timestamp
@@ -72,6 +80,7 @@ impl Event for ResearchCancelled {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.research_id.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
@@ -80,8 +89,10 @@ impl Event for ResearchCancelled {
 
 /// Emitted when research is sped up using gems
 pub struct ResearchSpeedup {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Research ID being sped up
     pub research_id: u16,
     /// Speedup seconds
@@ -100,6 +111,7 @@ impl Event for ResearchSpeedup {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.research_id.pack(&mut buf[offset..]);
         offset += self.speedup_seconds.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);
@@ -111,8 +123,10 @@ impl Event for ResearchSpeedup {
 
 /// Emitted when a research node is ascended
 pub struct ResearchAscended {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Research tree (research ID)
     pub research_tree: u16,
     /// New ascension level
@@ -129,6 +143,7 @@ impl Event for ResearchAscended {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.research_tree.pack(&mut buf[offset..]);
         offset += self.new_ascension_level.pack(&mut buf[offset..]);
         offset += self.mastery_cost.pack(&mut buf[offset..]);
@@ -139,8 +154,10 @@ impl Event for ResearchAscended {
 
 /// Emitted when a player ascends
 pub struct PlayerAscended {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// New ascension level
     pub ascension_level: u8,
     /// Mastery points gained
@@ -155,6 +172,7 @@ impl Event for PlayerAscended {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.ascension_level.pack(&mut buf[offset..]);
         offset += self.mastery_gained.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);

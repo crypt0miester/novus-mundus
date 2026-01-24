@@ -152,7 +152,8 @@ pub fn process(
 
     // 15. Emit BuildingStarted event
     emit!(BuildingStarted {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         building_type: building_type as u8,
         plot: slot_index as u8,
         completes_at: now + construction_time,

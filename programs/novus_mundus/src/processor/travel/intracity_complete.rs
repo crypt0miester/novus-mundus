@@ -135,6 +135,7 @@ pub fn process(
 
     emit!(IntracityTravelCompleted {
         player: *player_account.key(),
+        player_name: player_data.name,
         x: dest_grid_lat,
         y: dest_grid_long,
         timestamp: now,

@@ -2,10 +2,11 @@ use pinocchio::{
     pubkey::Pubkey,
     program_error::ProgramError,
 };
+use pinocchio::account_info::AccountInfo;
 use crate::constants::{
     SHOP_CONFIG_SEED, SHOP_ITEM_SEED, BUNDLE_SEED, DAILY_DEAL_SEED,
     FLASH_SALE_SEED, WEEKLY_SALE_SEED, SEASONAL_SALE_SEED,
-    DAO_PROMOTION_SEED, PLAYER_PURCHASE_SEED,
+    DAO_PROMOTION_SEED, PLAYER_PURCHASE_SEED, ALLOWED_TOKEN_SEED,
 };
 
 
@@ -58,11 +59,18 @@ pub struct ShopConfigAccount {
     // State (8 bytes)
     pub next_flash_sale_id: u64,         // Incrementing ID for flash sales
 
-    // Reserved (16 bytes)
-    pub _reserved: [u8; 16],
+    // ===== SOL Oracle Configuration (68 bytes) =====
+    // Used for token payments: convert token USD price to SOL amount
+    pub sol_pyth_feed: Pubkey,           // Pyth SOL/USD price feed (32 bytes)
+    pub sol_switchboard_feed: Pubkey,    // Switchboard SOL/USD feed (32 bytes)
+    pub sol_max_staleness_slots: u16,    // Max age in slots before rejection
+    pub sol_confidence_threshold_bps: u16, // Max confidence interval for Pyth
 
-    // Alignment padding (6 bytes to reach 120)
-    pub _padding2: [u8; 6],
+    // Reserved (8 bytes)
+    pub _reserved: [u8; 8],
+
+    // Alignment padding (3 bytes)
+    pub _padding2: [u8; 3],
 
     pub bump: u8,
 }
@@ -111,10 +119,9 @@ pub struct ShopItemAccount {
     pub quantity_per_purchase: u16,      // Units received per purchase
     pub base_stats_bps: u16,             // Bonus stats in basis points
 
-    // Pricing (24 bytes)
+    // Pricing (16 bytes)
     pub price_sol_lamports: u64,         // 0 = not sold for SOL
-    pub price_novi: u64,                 // 0 = not sold for NOVI
-    pub price_gems: u64,                 // 0 = not sold for gems
+    pub _reserved_price: [u8; 8],        // Previously price_gems, now reserved
 
     // Availability (16 bytes)
     pub available_from: i64,             // 0 = always available
@@ -206,9 +213,8 @@ pub struct BundleAccount {
     // Items (80 bytes) - up to 10 items
     pub items: [BundleItem; MAX_BUNDLE_ITEMS], // 10 * 8 = 80 bytes
 
-    // Pricing (16 bytes)
+    // Pricing (8 bytes)
     pub price_sol_lamports: u64,
-    pub price_novi: u64,                 // 0 = SOL only
 
     // Availability (16 bytes)
     pub available_from: i64,
@@ -811,5 +817,136 @@ impl BundleTier {
             Self::Explorer => 2500,  // 25%
             Self::Supreme => 3500,   // 35%
         }
+    }
+}
+
+
+// ALLOWED TOKEN ACCOUNT (Token Payment Whitelist)
+
+// PDA: ["allowed_token", game_engine, token_mint]
+// Lifecycle: CLOSABLE (DAO controls token support)
+
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct AllowedTokenAccount {
+    // ===== Token Identity (32 bytes) =====
+    pub mint: Pubkey,
+
+    // ===== Dual Oracle Configuration (64 bytes) =====
+    pub pyth_feed: Pubkey,                 // Pyth TOKEN/USD price account
+    pub switchboard_feed: Pubkey,          // Switchboard TOKEN/USD quote account
+
+    // ===== Pricing Parameters (8 bytes) =====
+    pub max_staleness_slots: u16,          // Max age in SLOTS before rejection
+    pub confidence_threshold_bps: u16,     // Max confidence interval (Pyth only)
+    pub discount_bps: u16,                 // Discount for using this token
+    pub _padding: [u8; 2],
+
+    // ===== Reserved + Bump (16 bytes) =====
+    pub _reserved: [u8; 15],
+    pub bump: u8,
+}
+
+impl AllowedTokenAccount {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    /// UNSAFE: Load from raw account data
+    pub unsafe fn load(data: &[u8]) -> &Self {
+        &*(data.as_ptr() as *const Self)
+    }
+
+    /// UNSAFE: Load mutable from raw account data
+    pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
+        &mut *(data.as_mut_ptr() as *mut Self)
+    }
+
+    /// Derive the PDA for the allowed token account (finds bump - slower)
+    /// Use this only during account creation
+    pub fn derive_pda(game_engine: &Pubkey, token_mint: &Pubkey) -> (Pubkey, u8) {
+        pinocchio::pubkey::find_program_address(
+            &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref()],
+            &crate::ID,
+        )
+    }
+
+    /// Create PDA from known bump (fast validation)
+    /// Use this for validation when bump is already stored
+    pub fn create_pda(game_engine: &Pubkey, token_mint: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+        let bump_seed = [bump];
+        pinocchio::pubkey::create_program_address(
+            &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref(), &bump_seed],
+            &crate::ID,
+        )
+    }
+
+    /// Load and verify AllowedTokenAccount immutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked<'a>(
+        account: &'a AccountInfo,
+        game_engine: &Pubkey,
+        token_mint: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify AllowedTokenAccount mutably.
+    /// Checks: program ownership, PDA derivation, bump field.
+    pub fn load_checked_mut<'a>(
+        account: &'a AccountInfo,
+        game_engine: &Pubkey,
+        token_mint: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Validate allowed token account PDA using stored bump (fast)
+    pub fn validate_pda(
+        account: &AccountInfo,
+        game_engine: &Pubkey,
+        token_mint: &Pubkey,
+        bump: u8,
+    ) -> Result<(), ProgramError> {
+        let expected_address = Self::create_pda(game_engine, token_mint, bump)?;
+        if account.key() != &expected_address {
+            return Err(ProgramError::InvalidSeeds);
+        }
+        Ok(())
     }
 }

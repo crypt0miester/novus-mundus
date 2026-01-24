@@ -34,7 +34,6 @@ pub fn process(
 
     let [
         event_account,
-        clock_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };

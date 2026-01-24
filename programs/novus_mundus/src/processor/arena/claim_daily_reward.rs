@@ -28,8 +28,8 @@ use crate::{
     },
     error::GameError,
     state::{ArenaSeasonAccount, ArenaParticipantAccount, ArenaStatus, PlayerAccount, GameEngine},
-    validation::{require_owner, require_writable, require_key_match},
-    helpers::mint_tokens,
+    validation::{require_owner, require_writable, require_key_match, require_data_len},
+    helpers::{mint_tokens, validate_token_account_owner},
 };
 
 /// Instruction data for claim_daily_reward
@@ -59,6 +59,9 @@ pub fn process(
     require_writable(novi_mint)?;
     require_key_match(token_program, &pinocchio_token::ID)?;
 
+    // SECURITY: Verify token account belongs to the PlayerAccount PDA
+    validate_token_account_owner(player_novi_ata, player_account.key())?;
+
     // 3. Parse Instruction Data (4 bytes minimum)
     if instruction_data.len() < 4 {
         return Err(ProgramError::InvalidInstructionData);
@@ -76,10 +79,8 @@ pub fn process(
 
     // 5. Load Arena Season
     require_owner(arena_season, program_id)?;
+    require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
     let mut season_data = arena_season.try_borrow_mut_data()?;
-    if season_data.len() < ArenaSeasonAccount::LEN {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
     let season = unsafe { &mut *(season_data.as_mut_ptr() as *mut ArenaSeasonAccount) };
 
     // Verify season_id

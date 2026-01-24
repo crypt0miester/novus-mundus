@@ -158,10 +158,17 @@ pub fn process(
     // State
     config.next_flash_sale_id = 0;
 
+    // SOL Oracle Configuration
+    // These should be set via update_config before enabling token payments
+    config.sol_pyth_feed = Pubkey::default();           // Set via update_config
+    config.sol_switchboard_feed = Pubkey::default();    // Set via update_config
+    config.sol_max_staleness_slots = 30;                // ~12 seconds at 400ms slots
+    config.sol_confidence_threshold_bps = 100;          // 1% max confidence interval
+
     // Reserved/padding
     config._padding1 = [0; 2];
-    config._reserved = [0; 16];
-    config._padding2 = [0; 6];
+    config._reserved = [0; 8];
+    config._padding2 = [0; 3];
 
     config.bump = bump;
 

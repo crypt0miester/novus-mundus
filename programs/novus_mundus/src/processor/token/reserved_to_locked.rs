@@ -162,6 +162,7 @@ pub fn process(
     let clock = Clock::get()?;
     emit!(NoviReservedToLocked {
         player: *player.key(),
+        player_name: player_data.name,
         amount,
         new_locked: player_data.locked_novi,
         remaining_reserved: user_data.reserved_novi,

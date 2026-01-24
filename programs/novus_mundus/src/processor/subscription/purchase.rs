@@ -7,8 +7,8 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, UserAccount, GameEngine, require_extension, EXT_RESEARCH},
-    constants::{PLAYER_SEED, USER_SEED},
+    state::{PlayerAccount, UserAccount, GameEngine, ShopConfigAccount, require_extension, EXT_RESEARCH},
+    constants::{PLAYER_SEED, USER_SEED, SHOP_CONFIG_SEED},
     logic::{grant_xp_with_time_bonus, calculate_networth, safe_math::mul_div},
     validation::{
         require_signer,
@@ -17,34 +17,41 @@ use crate::{
         require_pda,
         require_key_match,
     },
+    helpers::process_token_payment_flow,
     emit,
     events::{SubscriptionPurchased, SubscriptionTierUpdated, XpGained, PlayerLeveledUp},
 };
 
 /// Purchase or renew a subscription tier
 ///
-/// Supports two payment modes:
-/// 1. ONCHAIN (default): Transfers SOL from player to treasury
-/// 2. OFFCHAIN (optional): Backend verifies real-money payment (Stripe/PayPal)
+/// Supports three payment modes:
+/// 1. ONCHAIN SOL (payment_type=0): Transfers SOL from player to treasury
+/// 2. OFFCHAIN (payment_type=1): Backend verifies real-money payment (Stripe/PayPal)
+/// 3. TOKEN (payment_type=2): Pay with whitelisted token using oracle price conversion
 ///
 /// # Flow
 /// 1. Validate tier upgrade (or renewal)
-/// 2. If ONCHAIN:
+/// 2. If ONCHAIN SOL:
 ///    - Calculate SOL cost from tier.cost_in_usd_cents and game_engine.usd_price_cents
 ///    - Transfer SOL from player to treasury_wallet
 /// 3. If OFFCHAIN:
 ///    - Verify payment_authority signature
 ///    - Check game_engine.allow_offchain_payments == true
-/// 4. Grant all subscription bonuses:
+/// 4. If TOKEN:
+///    - Load ShopConfigAccount for SOL oracle settings
+///    - Load AllowedTokenAccount to verify token is whitelisted
+///    - Use Pyth or Switchboard oracle to calculate token amount
+///    - Transfer tokens from buyer to treasury
+/// 5. Grant all subscription bonuses:
 ///    - Mint reserved NOVI (withdrawable!)
 ///    - Add cash on hand
 ///    - Add defensive and operative units
 ///    - Add weapons, produce, vehicles
 ///    - Add reputation and XP
-/// 5. Calculate expiration timestamp from tier.duration_days
-/// 6. Update subscription tier and expiration
+/// 6. Calculate expiration timestamp from tier.duration_days
+/// 7. Update subscription tier and expiration
 ///
-/// # Accounts
+/// # Accounts (base - 10 accounts)
 /// - [writable] player: PlayerAccount PDA
 /// - [writable] user: UserAccount PDA
 /// - [signer] owner: Player wallet (pays SOL for onchain)
@@ -56,8 +63,20 @@ use crate::{
 /// - [] token_program: SPL Token program
 /// - [] system_program: System program (for SOL transfers)
 ///
+/// # Additional accounts for TOKEN payment (payment_type=2):
+/// - [] shop_config: ShopConfigAccount PDA (for SOL oracle settings)
+/// - [] allowed_token: AllowedTokenAccount PDA
+/// - [] token_mint: SPL Token mint for payment
+/// - [writable] buyer_token_ata: Buyer's token account
+/// - [writable] treasury_token_ata: Treasury's token account
+/// - [] sol_oracle_feed: SOL/USD oracle (Pyth or Switchboard)
+/// - [] token_oracle_feed: TOKEN/USD oracle
+/// - (Switchboard only) [] switchboard_queue
+/// - (Switchboard only) [] slothashes_sysvar
+/// - (Switchboard only) [] instructions_sysvar
+///
 /// # Instruction Data
-/// - payment_type: u8 (0 = ONCHAIN, 1 = OFFCHAIN)
+/// - payment_type: u8 (0 = ONCHAIN SOL, 1 = OFFCHAIN, 2 = TOKEN)
 /// - new_tier_index: u8 (0-3: Rookie, Expert, Epic, Legendary)
 pub fn process(
     program_id: &Pubkey,
@@ -80,6 +99,9 @@ pub fn process(
     require_key_match(token_program, &pinocchio_token::ID)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
+    // SECURITY: Verify token account belongs to the UserAccount PDA
+    crate::helpers::validate_token_account_owner(user_novi_ata, user.key())?;
+
     let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
     let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
@@ -91,8 +113,8 @@ pub fn process(
     let payment_type = data[0];
     let new_tier_index = data[1];
 
-    // 4. Validate payment type
-    if payment_type > 1 {
+    // 4. Validate payment type (0=SOL, 1=OFFCHAIN, 2=TOKEN)
+    if payment_type > 2 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -108,8 +130,9 @@ pub fn process(
     };
 
     // 7. Payment type validation
-    let is_onchain = payment_type == 0;
+    let is_onchain_sol = payment_type == 0;
     let is_offchain = payment_type == 1;
+    let is_token = payment_type == 2;
 
     if is_offchain {
         // Offchain requires payment_authority signature
@@ -126,13 +149,20 @@ pub fn process(
         }
     }
 
-    if is_onchain {
+    if is_onchain_sol {
         // Onchain requires treasury_wallet to be writable (receives SOL)
         require_writable(treasury_wallet)?;
 
         // Verify treasury wallet matches game engine config
         if treasury_wallet.key() != &game_engine_data.treasury_wallet {
             return Err(GameError::InvalidAccount.into());
+        }
+    }
+
+    if is_token {
+        // Token payment requires additional accounts starting at index 10
+        if accounts.len() < 17 {
+            return Err(ProgramError::NotEnoughAccountKeys);
         }
     }
 
@@ -191,25 +221,26 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 12. Process payment
-    if is_onchain {
-        // Calculate SOL cost
-        // Formula: sol_cost_lamports = (cost_in_usd_cents * 1_000_000_000) / usd_price_cents
-        // Example: ($10.00 * 1B lamports) / 10000 cents = 1_000_000 lamports = 0.001 SOL
-        let cost_usd_cents = tier.cost_in_usd_cents;
-        let usd_price = game_engine_data.usd_price_cents;
+    // Calculate SOL cost (used for both SOL and token payments)
+    // Formula: sol_cost_lamports = (cost_in_usd_cents * 1_000_000_000) / usd_price_cents
+    // Example: ($10.00 * 1B lamports) / 10000 cents = 1_000_000 lamports = 0.001 SOL
+    let cost_usd_cents = tier.cost_in_usd_cents;
+    let usd_price = game_engine_data.usd_price_cents;
 
-        if usd_price == 0 {
-            return Err(GameError::InvalidParameter.into());
-        }
+    if usd_price == 0 && (is_onchain_sol || is_token) {
+        return Err(GameError::InvalidParameter.into());
+    }
 
-        // Calculate SOL cost (no u128! - cost_usd_cents * 10^9 fits in u64)
-        // Formula: sol_cost_lamports = cost_usd_cents * 1_000_000_000 / usd_price_cents
-        let sol_cost_lamports = mul_div(cost_usd_cents, 1_000_000_000, usd_price)
-            .ok_or(GameError::MathOverflow)?;
+    let sol_cost_lamports = if is_onchain_sol || is_token {
+        mul_div(cost_usd_cents, 1_000_000_000, usd_price)
+            .ok_or(GameError::MathOverflow)?
+    } else {
+        0
+    };
 
+    if is_onchain_sol {
         // Transfer SOL from player to treasury
         if sol_cost_lamports > 0 {
-            // Transfer using system program
             let transfer_ix = pinocchio_system::instructions::Transfer {
                 from: owner,
                 to: treasury_wallet,
@@ -217,6 +248,32 @@ pub fn process(
             };
             transfer_ix.invoke()?;
         }
+    } else if is_token {
+        // Token payment - use oracle-based price conversion
+        // Additional accounts: [10]=shop_config, [11..]=token_payment_accounts
+        let shop_config_account = &accounts[10];
+
+        // Validate shop_config PDA
+        require_pda(shop_config_account, &[SHOP_CONFIG_SEED, game_engine.key()], program_id)?;
+        require_owner(shop_config_account, program_id)?;
+
+        // Load shop config for SOL oracle settings
+        let shop_config_data = shop_config_account.try_borrow_data()?;
+        let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data) };
+
+        // Token payment accounts start at index 11
+        let token_accounts = &accounts[11..];
+
+        // Process token payment using the unified helper
+        process_token_payment_flow(
+            token_accounts,
+            game_engine.key(),
+            program_id,
+            shop_config,
+            owner,
+            sol_cost_lamports,
+            clock.slot,
+        )?;
     }
     // For offchain, payment already verified by backend (payment_authority signed)
 
@@ -308,7 +365,8 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *owner.key(),
+            player: *player.key(),
+            player_name: player_data.name,
             amount: tier.xp,
             source: 4, // 4=subscription
             total_xp: player_data.current_xp,
@@ -318,7 +376,8 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *owner.key(),
+                player: *player.key(),
+                player_name: player_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
                 timestamp: now,
@@ -342,6 +401,7 @@ pub fn process(
 
     emit!(SubscriptionPurchased {
         player: *player.key(),
+        player_name: player_data.name,
         tier: new_tier_index,
         duration_days: tier.duration_days as u16,
         novi_paid: tier.novi,
@@ -353,6 +413,7 @@ pub fn process(
     if old_tier != new_tier_index {
         emit!(SubscriptionTierUpdated {
             player: *player.key(),
+            player_name: player_data.name,
             old_tier,
             new_tier: new_tier_index,
             expires_at: new_expiration,

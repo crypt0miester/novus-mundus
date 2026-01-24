@@ -5,10 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when loot is claimed from an encounter
 pub struct LootClaimed {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
-    /// Encounter account pubkey
-    pub encounter: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Cash earned
     pub cash: u64,
     /// Respect earned
@@ -27,7 +27,7 @@ impl Event for LootClaimed {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
-        offset += self.encounter.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.cash.pack(&mut buf[offset..]);
         offset += self.respect.pack(&mut buf[offset..]);
         offset += self.xp.pack(&mut buf[offset..]);

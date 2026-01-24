@@ -164,6 +164,7 @@ pub fn process(
 
     emit!(MemberRankChanged {
         team: *team_account.key(),
+        team_name: team.name,
         member: member_pubkey,
         old_rank,
         new_rank,

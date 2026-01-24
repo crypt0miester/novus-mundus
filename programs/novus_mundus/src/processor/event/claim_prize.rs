@@ -9,11 +9,17 @@ use pinocchio::{
 use crate::{
     constants::PRIZE_DISTRIBUTION,
     error::GameError,
-    helpers::{close_account, estate::{treasury_prize_bonus_bps, load_estate_for_player}},
+    helpers::{close_account, estate::{treasury_prize_bonus_bps, load_estate_for_player}, validate_token_account_owner},
     state::{EventAccount, EventParticipation, PlayerAccount},
     types::PrizeType,
     validation::{require_signer, require_writable},
-    logic::safe_math::apply_bp,
+    logic::{
+        safe_math::apply_bp,
+        eligibility::{
+            check_transfer_ratio, check_account_age, check_activity_requirement,
+            get_transfer_ratio_for_prize, get_min_age_for_prize, get_min_attacks_for_prize,
+        },
+    },
     emit,
     events::progression::EventPrizeClaimed,
 };
@@ -97,6 +103,9 @@ pub fn process(
     use crate::validation::require_key_match;
     require_key_match(token_program, &pinocchio_token::ID)?;
 
+    // SECURITY: Verify token account belongs to the winner's PlayerAccount PDA
+    validate_token_account_owner(winner_novi_ata, winner_account.key())?;
+
     // 3. Load Accounts
 
     let mut winner_data_ref = winner_account.try_borrow_mut_data()?;
@@ -128,6 +137,33 @@ pub fn process(
     if event_data.status != 2 {
         return Err(GameError::EventNotCompleted.into());
     }
+
+    // 4a. Anti-Sybil Eligibility Checks (tiered by prize value)
+    // These checks prevent bots from farming event prizes
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    // Get tier-based requirements from prize amount
+    let max_transfer_ratio = get_transfer_ratio_for_prize(event_data.prize_amount);
+    let min_account_age = get_min_age_for_prize(event_data.prize_amount);
+    let min_attacks = get_min_attacks_for_prize(event_data.prize_amount);
+
+    // Check 1: Transfer ratio (detects consolidation bots)
+    // Legitimate players have balanced sent/received; bots consolidate to main accounts
+    // Requirement scales: <25K=10:1, 25K-100K=3:1, 100K+=2:1
+    check_transfer_ratio(
+        winner_data.total_received,
+        winner_data.total_sent,
+        max_transfer_ratio,
+    )?;
+
+    // Check 2: Account age (prevents newly created bot accounts)
+    // Requirement scales with prize: <25K=7d, 25K-100K=30d, 100K+=60d
+    check_account_age(winner_data.created_at, now, min_account_age)?;
+
+    // Check 3: Activity requirement (prevents passive farming)
+    // Requirement scales with prize: <25K=5 attacks, 25K-100K=20, 100K+=50
+    check_activity_requirement(winner_data.total_attacks, min_attacks)?;
 
     // 5. Check Already Claimed (account should have lamports if not claimed)
 
@@ -238,6 +274,13 @@ pub fn process(
 
     // 11. Close Participation Account (Rent Refund)
 
+    // Save values for event before dropping borrows
+    let event_player = *winner_account.key();
+    let event_player_name = winner_data.name;
+    let event_event = *event_account.key();
+    let event_rank = rank as u16;
+    let event_prize = prize_share;
+
     // Drop borrows before closing account
     drop(participation_data_ref);
     drop(winner_data_ref);
@@ -246,13 +289,13 @@ pub fn process(
     // Close participation account (refund rent to winner)
     close_account(participation_account, winner_owner)?;
 
-    // Emit event
-    let now = Clock::get()?.unix_timestamp;
+    // Emit event (reuse `now` from eligibility checks above)
     emit!(EventPrizeClaimed {
-        player: *winner_owner.key(),
-        event: *event_account.key(),
-        rank: rank as u16,
-        prize_amount: prize_share,
+        player: event_player,
+        player_name: event_player_name,
+        event: event_event,
+        rank: event_rank,
+        prize_amount: event_prize,
         timestamp: now,
     });
 

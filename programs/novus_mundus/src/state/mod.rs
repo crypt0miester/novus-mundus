@@ -16,6 +16,8 @@ pub mod inventory;
 pub mod estate;
 pub mod expedition;
 pub mod arena;
+pub mod dungeon;
+pub mod castle;
 
 use pinocchio::account_info::{Ref, RefMut};
 
@@ -93,3 +95,5 @@ pub use inventory::*;
 pub use estate::*;
 pub use expedition::*;
 pub use arena::*;
+pub use dungeon::*;
+pub use castle::*;

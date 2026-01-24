@@ -81,23 +81,6 @@ pub fn regenerate_stamina(
     Ok(actual_gained)
 }
 
-/// Check if player has enough stamina for encounter attack
-///
-/// # Arguments
-/// * `player` - PlayerAccount to check
-/// * `encounter_type` - Type of encounter being attacked
-///
-/// # Returns
-/// true if player has sufficient stamina, false otherwise
-#[inline]
-pub fn has_stamina_for_encounter(
-    player: &PlayerAccount,
-    encounter_type: EncounterType,
-) -> bool {
-    let cost = ENCOUNTER_STAMINA_COSTS[encounter_type as usize];
-    player.encounter_stamina >= cost
-}
-
 /// Consume stamina for encounter attack
 ///
 /// Call this AFTER regenerate_stamina() to ensure up-to-date stamina.

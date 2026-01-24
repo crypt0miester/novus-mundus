@@ -207,6 +207,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     }
 
     // 14. Update team name
+    let old_team_name = team.name;
     let total_len = new_domain_name.len() + tld.len();
     let name_len = total_len.min(32);
     team.name = [0u8; 32];
@@ -220,11 +221,14 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     }
 
     team.name_len = name_len as u8;
+    let new_team_name = team.name;
 
     // 15. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(TeamNameUpdated {
         team: *team_account.key(),
+        old_name: old_team_name,
+        new_name: new_team_name,
         new_domain_hash: new_hashed_name,
         timestamp: now,
     });

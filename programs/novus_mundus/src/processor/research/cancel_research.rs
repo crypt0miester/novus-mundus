@@ -89,7 +89,8 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
     emit!(ResearchCancelled {
-        player: *player_owner.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         research_id: research_id as u16,
         timestamp: now,
     });

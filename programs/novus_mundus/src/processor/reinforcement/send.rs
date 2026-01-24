@@ -286,10 +286,12 @@ pub fn process(
         return Err(GameError::WrongCity.into());
     }
 
-    // Store values for later
+    // Store values for later (including names for event emission)
     let sender_city_id = sender.current_city;
     let dest_city_id = destination.current_city;
     let dest_owner = destination.owner;
+    let sender_name = sender.name;
+    let receiver_name = destination.name;
 
     // 13. Calculate Travel Time
     let game_engine_data_ref = game_engine.try_borrow_data()?;
@@ -421,7 +423,9 @@ pub fn process(
     // Emit event
     emit!(ReinforcementSent {
         sender: *sender_owner.key(),
+        sender_name,
         receiver: dest_owner,
+        receiver_name,
         units: [units_def_1, units_def_2, units_def_3],
         arrives_at,
         timestamp: now,

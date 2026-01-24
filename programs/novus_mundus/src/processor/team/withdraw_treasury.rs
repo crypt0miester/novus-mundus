@@ -157,6 +157,7 @@ pub fn process(
 
     emit!(TreasuryWithdraw {
         team: *team_account.key(),
+        team_name: team.name,
         withdrawer: *player_account.key(),
         amount,
         new_balance: team.treasury,

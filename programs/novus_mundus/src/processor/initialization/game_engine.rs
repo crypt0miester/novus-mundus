@@ -239,6 +239,14 @@ fn create_default_game_engine(authority: Pubkey, novi_mint: Pubkey, treasury_wal
             // Oscillation amplitude (±variance in basis points)
             // Common: ±20%, Legendary: ±75%
             encounter_oscillation_amp: [2000, 3000, 4000, 5000, 7500],
+
+            // Expedition config (DAO-controlled)
+            // Cap at 10k operatives, then diminishing returns via sqrt(excess)
+            max_operatives_per_expedition: 10_000,
+            // Mining: gems × 100 per op per hour [Tier 0-4]: 0.01, 0.02, 0.05, 0.08, 0.10 gems/op/hr
+            mining_gems_per_op_hour: [1, 2, 5, 8, 10],
+            // Fishing: produce × 100 per op per hour [Tier 0-4]: 0.015, 0.03, 0.075, 0.12, 0.15 produce/op/hr
+            fishing_produce_per_op_hour: [2, 3, 8, 12, 15],
         },
 
         gameplay_config: GameplayConfig {

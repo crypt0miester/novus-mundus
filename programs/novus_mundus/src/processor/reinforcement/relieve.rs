@@ -165,7 +165,9 @@ pub fn process(
     emit!(ReinforcementRelieved {
         reinforcement: *reinforcement_account.key(),
         sender: reinf.sender,
+        sender_name: [0u8; 48], // Sender player account not loaded
         receiver: reinf.destination,
+        receiver_name: dest.name,
         units: [reinf.units_def_1, reinf.units_def_2, reinf.units_def_3],
         timestamp: now,
     });

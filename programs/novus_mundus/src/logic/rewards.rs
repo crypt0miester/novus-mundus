@@ -1,7 +1,7 @@
 use crate::state::{EconomicConfig, GameplayConfig, EncounterAccount};
 use crate::constants::GOLDEN_ROOT;
 use crate::logic::{get_time_of_day, get_time_multiplier, ActivityType};
-use crate::logic::safe_math::{apply_bp, chain_bp, calculate_share as safe_calculate_share};
+use crate::logic::safe_math::{apply_bp, chain_bp};
 
 /// Calculate oscillating multiplier for encounter rewards
 ///
@@ -450,43 +450,6 @@ impl EncounterLootPool {
             || self.total_fragments > 0
             || self.total_gems > 0
     }
-
-    /// Calculate proportional share for a player (based on damage contribution)
-    ///
-    /// # Arguments
-    /// - damage_dealt: Player's damage contribution
-    /// - total_damage: Total damage dealt by all players
-    ///
-    /// # Returns
-    /// Player's share of each resource
-    pub fn calculate_share(&self, damage_dealt: u64, total_damage: u64) -> PlayerLootShare {
-        if total_damage == 0 {
-            return PlayerLootShare::default();
-        }
-
-        // Use safe_math calculate_share (no u128!)
-        PlayerLootShare {
-            cash: safe_calculate_share(self.total_cash, damage_dealt, total_damage).unwrap_or(0),
-            reserved_novi: safe_calculate_share(self.total_novi, damage_dealt, total_damage).unwrap_or(0),
-            weapons: safe_calculate_share(self.total_weapons, damage_dealt, total_damage).unwrap_or(0),
-            produce: safe_calculate_share(self.total_produce, damage_dealt, total_damage).unwrap_or(0),
-            vehicles: safe_calculate_share(self.total_vehicles, damage_dealt, total_damage).unwrap_or(0),
-            fragments: safe_calculate_share(self.total_fragments, damage_dealt, total_damage).unwrap_or(0),
-            gems: safe_calculate_share(self.total_gems, damage_dealt, total_damage).unwrap_or(0),
-        }
-    }
-}
-
-/// Individual player's share of loot
-#[derive(Default)]
-pub struct PlayerLootShare {
-    pub cash: u64,
-    pub reserved_novi: u64,
-    pub weapons: u64,
-    pub produce: u64,
-    pub vehicles: u64,
-    pub fragments: u64,
-    pub gems: u64,
 }
 
 #[cfg(test)]

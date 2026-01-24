@@ -15,7 +15,7 @@ use crate::{
     },
     constants::{TEAM_SLOT_SEED, TEAM_INVITE_SEED},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match, require_owner, require_empty, require_initialized},
     emit,
     events::InviteAccepted,
 };
@@ -101,10 +101,7 @@ pub fn process(
     }
 
     // Invite must exist
-    if invite_account.data_len() == 0 {
-        return Err(GameError::InviteNotFound.into());
-    }
-
+    require_initialized(invite_account).map_err(|_| GameError::InviteNotFound)?;
     require_owner(invite_account, program_id)?;
 
     let clock = Clock::get()?;
@@ -171,9 +168,7 @@ pub fn process(
     }
 
     // Slot must not exist
-    if member_slot_account.data_len() > 0 {
-        return Err(GameError::SlotOccupied.into());
-    }
+    require_empty(member_slot_account).map_err(|_| GameError::SlotOccupied)?;
 
     // 8. Close Invite Account (refund rent)
 
@@ -227,6 +222,7 @@ pub fn process(
 
     emit!(InviteAccepted {
         team: *team_account.key(),
+        team_name: team.name,
         player: *player_account.key(),
         member_count: team.member_count,
         timestamp: now,

@@ -12,10 +12,9 @@ use crate::{
 
 /// Update field flags
 pub const UPDATE_PRICE_SOL: u8 = 1;
-pub const UPDATE_PRICE_NOVI: u8 = 2;
-pub const UPDATE_IS_ACTIVE: u8 = 4;
-pub const UPDATE_AVAILABILITY: u8 = 8;
-pub const UPDATE_SAVINGS_BPS: u8 = 16;
+pub const UPDATE_IS_ACTIVE: u8 = 2;
+pub const UPDATE_AVAILABILITY: u8 = 4;
+pub const UPDATE_SAVINGS_BPS: u8 = 8;
 
 /// Update a bundle (DAO only)
 ///
@@ -30,7 +29,6 @@ pub const UPDATE_SAVINGS_BPS: u8 = 16;
 /// - bundle_id: u32 (for PDA verification)
 /// - update_flags: u8 (bitmask)
 /// - price_sol_lamports: u64 (if flag set)
-/// - price_novi: u64 (if flag set)
 /// - is_active: u8 (if flag set)
 /// - available_from: i64 (if availability flag)
 /// - available_until: i64 (if availability flag)
@@ -92,16 +90,6 @@ pub fn process(
             return Err(ProgramError::InvalidInstructionData);
         }
         bundle.price_sol_lamports = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
-        offset += 8;
-    }
-
-    if update_flags & UPDATE_PRICE_NOVI != 0 {
-        if instruction_data.len() < offset + 8 {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        bundle.price_novi = u64::from_le_bytes(
             instruction_data[offset..offset + 8].try_into().unwrap()
         );
         offset += 8;

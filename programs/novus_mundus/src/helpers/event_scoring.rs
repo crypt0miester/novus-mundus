@@ -7,6 +7,8 @@ use crate::{
     error::GameError,
     state::{EventAccount, EventParticipation, LeaderboardEntry},
     types::EventType,
+    emit,
+    events::EventScoreUpdated,
 };
 
 /// Update event score from game actions
@@ -26,7 +28,9 @@ use crate::{
 pub fn update_event_score(
     participation: &mut EventParticipation,
     event: &mut EventAccount,
+    event_key: &Pubkey,
     player_key: &Pubkey,
+    player_name: [u8; 48],
     action_type: EventType,
     score_value: u64,
     now: i64,
@@ -88,8 +92,18 @@ pub fn update_event_score(
         participation.score,
     );
 
-    // Note: EventScoreUpdated event could be emitted here but requires passing event_key
-    // TODO: Add event_key parameter and emit EventScoreUpdated when score_changed
+    // 7. Emit event if score changed
+    if score_changed {
+        let score_delta = participation.score as i64 - old_score as i64;
+        emit!(EventScoreUpdated {
+            event: *event_key,
+            player: *player_key,
+            player_name,
+            score_delta,
+            new_score: participation.score,
+            timestamp: now,
+        });
+    }
 
     Ok(())
 }

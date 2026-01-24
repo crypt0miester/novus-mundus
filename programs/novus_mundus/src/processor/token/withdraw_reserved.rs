@@ -147,9 +147,10 @@ pub fn process(
     user_data.last_withdrawal = now;
 
     // 9. Emit Event
-
+    // Note: This is a user-level operation, player account not passed in
     emit!(NoviWithdrawn {
-        player: *owner.key(),
+        player: *user.key(), // Using UserAccount PDA instead
+        player_name: [0u8; 48], // User account doesn't have name, lookup via owner
         amount,
         remaining_reserved: user_data.reserved_novi,
         timestamp: now,

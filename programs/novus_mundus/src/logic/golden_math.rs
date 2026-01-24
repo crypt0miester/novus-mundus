@@ -13,7 +13,7 @@
 /// - φ × (1/φ) = 1 — Inverse relationships for diminishing returns
 /// - φ² = φ + 1 — Self-similar scaling for legendary tiers
 
-use crate::constants::{PHI, GOLDEN_ROOT, PHI_SQUARED, PHI_INVERSE, GOLDEN_ANGLE};
+use crate::constants::{PHI, GOLDEN_ROOT, GOLDEN_ANGLE};
 
 /// Calculate √φ raised to power n (golden root power)
 ///
@@ -36,27 +36,6 @@ pub fn golden_root_power(n: u32) -> f64 {
         return 1.0;
     }
     libm::pow(GOLDEN_ROOT, n as f64)
-}
-
-/// Calculate φ raised to power n (golden ratio power)
-///
-/// Used for Fibonacci bonuses and tier scaling.
-/// - n=0: 1.0x
-/// - n=1: 1.618x (φ)
-/// - n=2: 2.618x (φ²)
-/// - n=3: 4.236x (φ³)
-///
-/// # Arguments
-/// * `n` - Power
-///
-/// # Returns
-/// The multiplier as f64
-#[inline]
-pub fn phi_power(n: u32) -> f64 {
-    if n == 0 {
-        return 1.0;
-    }
-    libm::pow(PHI, n as f64)
 }
 
 /// Calculate buff value at a given level using golden root scaling
@@ -84,110 +63,6 @@ pub fn calculate_buff_at_level(base: u64, level: u32) -> u64 {
     } else {
         result as u64
     }
-}
-
-/// Calculate deterministic level-up buff increase
-///
-/// Each level grants a fixed increase based on golden root.
-/// The increase is: base × ((√φ)^level - (√φ)^(level-1))
-///
-/// This is the DELTA between levels, not the total.
-///
-/// # Arguments
-/// * `base` - Base buff value from template
-/// * `level` - Level being attained (1-based)
-///
-/// # Returns
-/// The buff increase for this level
-#[inline]
-pub fn calculate_level_up_increase(base: u64, level: u32) -> u64 {
-    if level <= 1 || base == 0 {
-        return 0; // No increase at level 1 or below
-    }
-
-    let current_total = calculate_buff_at_level(base, level);
-    let previous_total = calculate_buff_at_level(base, level - 1);
-
-    current_total.saturating_sub(previous_total)
-}
-
-/// Get rarity multiplier using golden ratio family
-///
-/// - Common: 1/φ ≈ 0.618x (below average)
-/// - Uncommon: 1.0x (baseline)
-/// - Rare: √φ ≈ 1.272x
-/// - Epic: φ ≈ 1.618x
-/// - Legendary: φ² ≈ 2.618x
-///
-/// # Arguments
-/// * `rarity` - Rarity index (0-4)
-///
-/// # Returns
-/// Multiplier as f64
-#[inline]
-pub fn rarity_multiplier(rarity: u8) -> f64 {
-    match rarity {
-        0 => PHI_INVERSE,  // Common: 0.618x
-        1 => 1.0,          // Uncommon: 1.0x (baseline)
-        2 => GOLDEN_ROOT,  // Rare: 1.272x
-        3 => PHI,          // Epic: 1.618x
-        4 => PHI_SQUARED,  // Legendary: 2.618x
-        _ => 1.0,
-    }
-}
-
-/// Get city type multiplier for a specific stat category
-///
-/// City types provide bonuses to different activities:
-/// - Capital (0): Balanced - 1.0x all
-/// - Resource (1): Collection bonus - √φ for economy
-/// - Combat (2): Attack/Defense bonus - √φ for combat
-/// - Trade (3): Economy bonus - φ for trade operations
-///
-/// # Arguments
-/// * `city_type` - City type (0-3)
-/// * `stat_category` - 0=combat, 1=economy, 2=collection
-///
-/// # Returns
-/// Multiplier as f64
-#[inline]
-pub fn city_type_multiplier(city_type: u8, stat_category: u8) -> f64 {
-    match (city_type, stat_category) {
-        // Capital: balanced
-        (0, _) => 1.0,
-        // Resource: collection bonus
-        (1, 2) => GOLDEN_ROOT, // Collection: √φ
-        (1, _) => 1.0,
-        // Combat: attack/defense bonus
-        (2, 0) => GOLDEN_ROOT, // Combat: √φ
-        (2, _) => 1.0,
-        // Trade: economy bonus
-        (3, 1) => PHI, // Economy: φ
-        (3, _) => 1.0,
-        // Unknown
-        _ => 1.0,
-    }
-}
-
-/// Calculate level scaling multiplier (exponential growth)
-///
-/// Uses golden root for smooth exponential progression:
-/// multiplier = (√φ)^(level / divisor)
-///
-/// # Arguments
-/// * `level` - Entity level
-/// * `divisor` - Scales the growth rate (higher = slower growth)
-///
-/// # Returns
-/// Multiplier as f64
-#[inline]
-pub fn level_scaling_multiplier(level: u8, divisor: u8) -> f64 {
-    if level == 0 || divisor == 0 {
-        return 1.0;
-    }
-
-    let exponent = level as f64 / divisor as f64;
-    libm::pow(GOLDEN_ROOT, exponent)
 }
 
 /// Calculate golden spiral position for deterministic spawning
@@ -272,22 +147,10 @@ pub fn apply_multiplier(base: u64, multiplier: f64) -> u64 {
     }
 }
 
-/// Apply multiplier and return u32 (for basis point style values)
-#[inline]
-pub fn apply_multiplier_u32(base: u32, multiplier: f64) -> u32 {
-    let result = base as f64 * multiplier;
-    if result >= u32::MAX as f64 {
-        u32::MAX
-    } else if result < 0.0 {
-        0
-    } else {
-        result as u32
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::PHI_SQUARED;
 
     #[test]
     fn test_golden_root_power() {
@@ -305,15 +168,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rarity_multiplier() {
-        assert!((rarity_multiplier(0) - PHI_INVERSE).abs() < 0.0001);
-        assert!((rarity_multiplier(1) - 1.0).abs() < 0.0001);
-        assert!((rarity_multiplier(2) - GOLDEN_ROOT).abs() < 0.0001);
-        assert!((rarity_multiplier(3) - PHI).abs() < 0.0001);
-        assert!((rarity_multiplier(4) - PHI_SQUARED).abs() < 0.0001);
-    }
-
-    #[test]
     fn test_calculate_buff_at_level() {
         let base = 1000u64;
 
@@ -328,15 +182,5 @@ mod tests {
         // Level 10: base × (√φ)^10 ≈ 10.86
         let level10 = calculate_buff_at_level(base, 10);
         assert!(level10 > 10000 && level10 < 11000);
-    }
-
-    #[test]
-    fn test_level_up_increase() {
-        let base = 1000u64;
-
-        // Level 1→2 increase
-        let inc2 = calculate_level_up_increase(base, 2);
-        let expected = calculate_buff_at_level(base, 2) - calculate_buff_at_level(base, 1);
-        assert_eq!(inc2, expected);
     }
 }

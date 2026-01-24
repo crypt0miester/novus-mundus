@@ -144,6 +144,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     let now = Clock::get()?.unix_timestamp;
     emit!(TeamNameRemoved {
         team: *team_account.key(),
+        team_name: [0u8; 32], // Name was just cleared
         timestamp: now,
     });
 

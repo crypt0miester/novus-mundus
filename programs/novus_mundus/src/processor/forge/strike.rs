@@ -70,6 +70,9 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
+    // Capture player name before dropping borrow
+    let player_name = player.name;
+
     // 4. Load Estate for Forge level (read-only initially, will reload mutable on success)
     let estate = load_estate_for_player(estate_account, player, program_id)?;
     let forge_level = get_forge_level(estate);
@@ -130,6 +133,7 @@ pub fn process(
     // Emit strike event
     emit!(CraftStrike {
         player: *player_account.key(),
+        player_name,
         stage: crafted.current_stage,
         quality: (precision / 2000) as u8, // Map 0-10000 precision to 0-5 quality
         score: crafted.precision_score,
@@ -156,7 +160,7 @@ pub fn process(
         let counts = crafted.get_quality_counts_mut(equipment_type);
         let inventory_slot = counts.counts[quality_tier as usize];
         counts.counts[quality_tier as usize] = counts.counts[quality_tier as usize].saturating_add(1);
-        drop(counts); // Explicitly drop the mutable borrow
+        // Mutable borrow of counts ends here naturally
 
         // Update stats
         crafted.successful_crafts = crafted.successful_crafts.saturating_add(1);
@@ -196,6 +200,7 @@ pub fn process(
         // Emit craft completed event before clearing state
         emit!(CraftCompleted {
             player: *player_account.key(),
+            player_name,
             item_type: equipment_type as u8,
             quality: quality_tier as u8,
             score: final_avg_precision,

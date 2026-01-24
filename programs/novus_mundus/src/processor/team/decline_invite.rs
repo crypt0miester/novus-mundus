@@ -10,7 +10,7 @@ use crate::{
     state::{PlayerAccount, TeamInviteAccount, require_extension, EXT_RALLY},
     constants::TEAM_INVITE_SEED,
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::InviteDeclined,
 };
@@ -71,14 +71,12 @@ pub fn process(
     }
 
     // Invite must exist
-    if invite_account.data_len() == 0 {
-        return Err(GameError::InviteNotFound.into());
-    }
-
+    require_initialized(invite_account).map_err(|_| GameError::InviteNotFound)?;
     require_owner(invite_account, program_id)?;
 
-    // Verify invite is for this player
+    // Verify invite is for this player and get team name
     let team_pubkey: pinocchio::pubkey::Pubkey;
+    let team_name: [u8; 32];
     {
         let invite_data = invite_account.try_borrow_data()?;
         let invite = unsafe { TeamInviteAccount::load(&invite_data) };
@@ -94,6 +92,13 @@ pub fn process(
         team_pubkey = invite.team;
     }
 
+    // Load team name for event
+    {
+        let team_data = team_account.try_borrow_data()?;
+        let team = unsafe { crate::state::TeamAccount::load(&team_data) };
+        team_name = team.name;
+    }
+
     // 5. Close Invite Account (refund rent to inviter)
 
     close_account(invite_account, inviter_refund)?;
@@ -105,6 +110,7 @@ pub fn process(
 
     emit!(InviteDeclined {
         team: team_pubkey,
+        team_name,
         player: *player_account.key(),
         timestamp: now,
     });

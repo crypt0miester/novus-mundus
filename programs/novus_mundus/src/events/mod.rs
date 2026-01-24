@@ -42,6 +42,8 @@ pub mod token;
 pub mod name;
 pub mod initialization;
 pub mod game_event;
+pub mod dungeon;
+pub mod castle;
 
 // Re-export all events for convenience
 pub use combat::*;
@@ -63,6 +65,8 @@ pub use token::*;
 pub use name::*;
 pub use initialization::*;
 pub use game_event::*;
+pub use dungeon::*;
+pub use castle::*;
 
 // ============================================================================
 // Compile-time SHA256 for discriminator generation
@@ -222,8 +226,8 @@ pub trait Event {
     fn serialize(&self, buf: &mut [u8]) -> usize;
 }
 
-/// Maximum event buffer size
-pub const MAX_EVENT_SIZE: usize = 256;
+/// Maximum event buffer size (increased for name fields)
+pub const MAX_EVENT_SIZE: usize = 512;
 
 /// Emit an event via sol_log_data
 #[inline]
@@ -330,5 +334,57 @@ impl PackBytes for u128 {
     fn pack(&self, buf: &mut [u8]) -> usize {
         buf[..16].copy_from_slice(&self.to_le_bytes());
         16
+    }
+}
+
+// Fixed-size byte arrays for names
+// Note: [u8; 32] is handled by the Pubkey impl since Pubkey derefs to [u8; 32]
+// We use a newtype wrapper for name fields to avoid conflicts
+
+/// 32-byte name field (team names, hero names)
+#[derive(Copy, Clone)]
+pub struct Name32(pub [u8; 32]);
+
+impl PackBytes for Name32 {
+    const SIZE: usize = 32;
+    #[inline]
+    fn pack(&self, buf: &mut [u8]) -> usize {
+        buf[..32].copy_from_slice(&self.0);
+        32
+    }
+}
+
+impl From<[u8; 32]> for Name32 {
+    fn from(arr: [u8; 32]) -> Self {
+        Name32(arr)
+    }
+}
+
+/// 48-byte name field (player names)
+#[derive(Copy, Clone)]
+pub struct Name48(pub [u8; 48]);
+
+impl PackBytes for Name48 {
+    const SIZE: usize = 48;
+    #[inline]
+    fn pack(&self, buf: &mut [u8]) -> usize {
+        buf[..48].copy_from_slice(&self.0);
+        48
+    }
+}
+
+impl From<[u8; 48]> for Name48 {
+    fn from(arr: [u8; 48]) -> Self {
+        Name48(arr)
+    }
+}
+
+// Direct implementation for 48-byte arrays (for player name fields)
+impl PackBytes for [u8; 48] {
+    const SIZE: usize = 48;
+    #[inline]
+    fn pack(&self, buf: &mut [u8]) -> usize {
+        buf[..48].copy_from_slice(self);
+        48
     }
 }

@@ -61,6 +61,9 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
+    // Capture player name before dropping borrow
+    let player_name = player.name;
+
     drop(player_data_ref);
 
     // 4. Load Crafted Equipment Account
@@ -90,6 +93,7 @@ pub fn process(
     // 8. Emit event before clearing craft state
     emit!(CraftAbandoned {
         player: *player_account.key(),
+        player_name,
         item_type,
         stage_reached,
         timestamp: now,

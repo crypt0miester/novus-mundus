@@ -6,12 +6,6 @@
 /// Earth radius in kilometers for Haversine formula
 pub const EARTH_RADIUS_KM: f64 = 6371.0;
 
-/// Base travel speed in km/h
-pub const TRAVEL_SPEED_KMH: f64 = 100.0;
-
-/// Base teleport cost (Novi per 100km)
-pub const TELEPORT_COST_PER_100KM: u64 = 1000;
-
 /// Calculate distance between two coordinates using Haversine formula
 ///
 /// # Arguments
@@ -96,80 +90,6 @@ pub fn calculate_distance_meters(
     distance_km * 1000.0  // Convert to meters
 }
 
-/// Calculate travel time in seconds based on distance
-///
-/// # Arguments
-/// * `distance_km` - Distance in kilometers
-///
-/// # Returns
-/// Travel time in seconds
-///
-/// # Formula
-/// ```text
-/// travel_time_seconds = (distance_km / TRAVEL_SPEED_KMH) * 3600
-/// ```
-///
-/// # Examples
-/// ```ignore
-/// let time = calculate_travel_time(500.0);
-/// // time = 18000 seconds (5 hours)
-/// ```
-pub fn calculate_travel_time(distance_km: f64) -> i64 {
-    let travel_hours = distance_km / TRAVEL_SPEED_KMH;
-    (travel_hours * 3600.0) as i64
-}
-
-/// Calculate teleport cost in Novi based on distance
-///
-/// # Arguments
-/// * `distance_km` - Distance in kilometers
-///
-/// # Returns
-/// Novi cost for instant teleport
-///
-/// # Formula
-/// ```text
-/// cost = TELEPORT_COST_PER_100KM * ceil(distance_km / 100)
-/// ```
-///
-/// # Examples
-/// ```ignore
-/// calculate_teleport_cost(250.0)  // Returns 3000 (3 × 1000)
-/// calculate_teleport_cost(500.0)  // Returns 5000 (5 × 1000)
-/// calculate_teleport_cost(99.0)   // Returns 1000 (1 × 1000)
-/// ```
-pub fn calculate_teleport_cost(distance_km: f64) -> u64 {
-    let segments = libm::ceil(distance_km / 100.0) as u64;
-    TELEPORT_COST_PER_100KM * segments
-}
-
-/// Check if two locations are within tolerance (same location)
-///
-/// # Arguments
-/// * `lat1` - First latitude
-/// * `long1` - First longitude
-/// * `lat2` - Second latitude
-/// * `long2` - Second longitude
-/// * `tolerance` - Maximum difference (default: 0.0001 degrees ≈ 11 meters)
-///
-/// # Returns
-/// `true` if locations are considered the same
-///
-/// # Examples
-/// ```ignore
-/// is_same_location(40.7128, -74.0060, 40.7128, -74.0060, 0.0001)  // true
-/// is_same_location(40.7128, -74.0060, 40.8000, -74.0060, 0.0001)  // false
-/// ```
-pub fn is_same_location(
-    lat1: f64,
-    long1: f64,
-    lat2: f64,
-    long2: f64,
-    tolerance: f64,
-) -> bool {
-    libm::fabs(lat1 - lat2) < tolerance && libm::fabs(long1 - long2) < tolerance
-}
-
 /// Validate latitude is within valid range
 ///
 /// # Arguments
@@ -190,42 +110,6 @@ pub fn is_valid_latitude(latitude: f64) -> bool {
 /// `true` if longitude is valid (-180 to 180)
 pub fn is_valid_longitude(longitude: f64) -> bool {
     longitude >= -180.0 && longitude <= 180.0
-}
-
-/// Convert coordinates to i64 for deterministic PDA derivation
-///
-/// Uses 6 decimal precision (1 meter accuracy)
-///
-/// # Arguments
-/// * `coordinate` - Latitude or longitude
-///
-/// # Returns
-/// Integer representation with 6 decimal precision
-///
-/// # Examples
-/// ```ignore
-/// coordinate_to_i64(40.712800)  // Returns 40712800
-/// coordinate_to_i64(-74.006000) // Returns -74006000
-/// ```
-pub fn coordinate_to_i64(coordinate: f64) -> i64 {
-    (coordinate * 1_000_000.0) as i64
-}
-
-/// Convert i64 back to f64 coordinate
-///
-/// # Arguments
-/// * `coordinate_i64` - Integer coordinate (6 decimal precision)
-///
-/// # Returns
-/// Float coordinate
-///
-/// # Examples
-/// ```ignore
-/// i64_to_coordinate(40712800)  // Returns 40.712800
-/// i64_to_coordinate(-74006000) // Returns -74.006000
-/// ```
-pub fn i64_to_coordinate(coordinate_i64: i64) -> f64 {
-    coordinate_i64 as f64 / 1_000_000.0
 }
 
 /// Check if coordinates are within city bounds
@@ -379,35 +263,6 @@ pub fn apply_travel_speed_bonuses(
     base_speed_kmh * multiplier
 }
 
-/// Get research travel speed bonus from player's research section
-///
-/// # Arguments
-/// * `research_levels` - Array of research levels (0-30 for each research type)
-/// * `travel_speed_buff_per_level_bps` - Basis points per research level (from ResearchTemplate)
-///
-/// # Returns
-/// Total travel speed bonus in basis points
-///
-/// # Examples
-/// ```ignore
-/// // Level 5 TravelSpeed research with 200 bps per level = 1000 bps (10%)
-/// get_research_travel_bonus(&levels, 200)  // 1000
-/// ```
-pub fn get_research_travel_bonus(
-    research_levels: &[u8],
-    travel_speed_buff_per_level_bps: u16,
-) -> u32 {
-    // TravelSpeed is research type 30
-    const TRAVEL_SPEED_RESEARCH_TYPE: usize = 30;
-
-    if research_levels.len() > TRAVEL_SPEED_RESEARCH_TYPE {
-        let level = research_levels[TRAVEL_SPEED_RESEARCH_TYPE] as u32;
-        level * travel_speed_buff_per_level_bps as u32
-    } else {
-        0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,30 +279,6 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_travel_time() {
-        // 500 km = 5 hours = 18000 seconds
-        assert_eq!(calculate_travel_time(500.0), 18000);
-
-        // 100 km = 1 hour = 3600 seconds
-        assert_eq!(calculate_travel_time(100.0), 3600);
-    }
-
-    #[test]
-    fn test_calculate_teleport_cost() {
-        assert_eq!(calculate_teleport_cost(99.0), 1000);    // 1 segment
-        assert_eq!(calculate_teleport_cost(100.0), 1000);   // 1 segment
-        assert_eq!(calculate_teleport_cost(101.0), 2000);   // 2 segments
-        assert_eq!(calculate_teleport_cost(500.0), 5000);   // 5 segments
-    }
-
-    #[test]
-    fn test_is_same_location() {
-        assert!(is_same_location(40.7128, -74.0060, 40.7128, -74.0060, 0.0001));
-        assert!(is_same_location(40.7128, -74.0060, 40.71281, -74.00601, 0.0001));
-        assert!(!is_same_location(40.7128, -74.0060, 40.8000, -74.0060, 0.0001));
-    }
-
-    #[test]
     fn test_coordinate_validation() {
         assert!(is_valid_latitude(0.0));
         assert!(is_valid_latitude(90.0));
@@ -460,14 +291,5 @@ mod tests {
         assert!(is_valid_longitude(-180.0));
         assert!(!is_valid_longitude(181.0));
         assert!(!is_valid_longitude(-181.0));
-    }
-
-    #[test]
-    fn test_coordinate_conversion() {
-        assert_eq!(coordinate_to_i64(40.712800), 40712800);
-        assert_eq!(coordinate_to_i64(-74.006000), -74006000);
-
-        assert!((i64_to_coordinate(40712800) - 40.712800).abs() < 0.000001);
-        assert!((i64_to_coordinate(-74006000) - (-74.006000)).abs() < 0.000001);
     }
 }

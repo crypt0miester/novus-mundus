@@ -112,7 +112,8 @@ pub fn process(
         return_arrival - now
     };
 
-    let remaining_minutes = (remaining_seconds as f64 / 60.0).ceil() as u64;
+    // Integer ceiling division: (a + b - 1) / b
+    let remaining_minutes = (remaining_seconds as u64 + 59) / 60;
     if remaining_minutes == 0 {
         // Less than a minute remaining
         return Err(GameError::InvalidParameter.into());
@@ -163,6 +164,7 @@ pub fn process(
     emit!(ReinforcementSpeedup {
         reinforcement: *reinforcement_account.key(),
         sender: reinf.sender,
+        sender_name: sender.name,
         receiver: reinf.destination,
         speedup_type: speedup_type_value,
         gems_spent: total_gem_cost,

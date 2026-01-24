@@ -2,7 +2,8 @@
 members = [
     "programs/*",
     "sdks/p-core",
-    "sdks/alt-name-service"
+    "sdks/alt-name-service",
+    "sdks/p-pyth"
 ]
 resolver = "2"
 
@@ -11,3 +12,9 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[workspace.lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    'cfg(target_os, values("solana"))',
+]

@@ -163,6 +163,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameSet {
         player: *player_account.key(),
+        player_name: player.name,
         domain_hash: hashed_name,
         timestamp: now,
     });

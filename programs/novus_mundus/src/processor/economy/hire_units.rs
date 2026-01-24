@@ -87,7 +87,7 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    let (player, owner, player_token_account, novi_mint, game_engine, token_program, estate_account, event_participation, event) = if accounts.len() >= 9 {
+    let (player, owner, player_token_account, novi_mint, game_engine, _token_program, estate_account, event_participation, event) = if accounts.len() >= 9 {
         (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], Some(&accounts[7]), Some(&accounts[8]))
     } else if accounts.len() >= 7 {
         (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], None, None)
@@ -345,13 +345,16 @@ pub fn process(
         )?;
 
         let player_key = player.key();
+        let event_key = event.key();
 
         // DETERMINISTIC: Use exact novi amount (no randomness)
         // MostNoviConsumed: Add novi_amount burned (deterministic)
         let _ = update_event_score(
             &mut *participation,
             &mut *event_data,
+            event_key,
             player_key,
+            player_data.name,
             EventType::MostNoviConsumed,
             novi_amount,
             now,
@@ -359,7 +362,7 @@ pub fn process(
     }
 
     // Calculate time bonus in basis points for event
-    let base_bp = 10000u64;
+    let _base_bp = 10000u64;
     let time_bonus_bps = if units_with_time_bonus > units_to_hire {
         let bonus_ratio = (units_with_time_bonus - units_to_hire) * 10000 / units_to_hire.max(1);
         bonus_ratio as u16
@@ -370,6 +373,7 @@ pub fn process(
     // Emit UnitsHired event
     emit!(UnitsHired {
         player: *player.key(),
+        player_name: player_data.name,
         unit_type: unit_type as u8,
         base_quantity: units_to_hire,
         final_quantity: units_with_time_bonus,

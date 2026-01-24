@@ -148,7 +148,8 @@ pub fn process(
     if target == NULL_PUBKEY {
         return Err(GameError::InvalidParameter.into());
     }
-    if target_type > 1 {
+    // target_type: 0=player, 1=encounter, 2=castle
+    if target_type > 2 {
         return Err(GameError::InvalidParameter.into());
     }
     let total_units = units_1.saturating_add(units_2).saturating_add(units_3);
@@ -518,7 +519,8 @@ pub fn process(
     emit!(RallyCreated {
         rally: expected_rally_pda,
         team: rally_team,
-        leader: *creator_owner.key(),
+        team_name: team.name,
+        leader: *creator_player.key(),
         target,
         gather_at: now + duration,
         timestamp: now,

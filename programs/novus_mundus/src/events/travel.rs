@@ -5,8 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player starts traveling between cities
 pub struct IntercityTravelStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Origin city
     pub from_city: Pubkey,
     /// Destination city
@@ -23,6 +25,7 @@ impl Event for IntercityTravelStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.from_city.pack(&mut buf[offset..]);
         offset += self.to_city.pack(&mut buf[offset..]);
         offset += self.arrival_at.pack(&mut buf[offset..]);
@@ -33,8 +36,10 @@ impl Event for IntercityTravelStarted {
 
 /// Emitted when a player completes intercity travel
 pub struct IntercityTravelCompleted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// City arrived at
     pub city: Pubkey,
     /// Unix timestamp
@@ -47,6 +52,7 @@ impl Event for IntercityTravelCompleted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.city.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
@@ -55,8 +61,10 @@ impl Event for IntercityTravelCompleted {
 
 /// Emitted when a player teleports instantly
 pub struct PlayerTeleported {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Origin city
     pub from_city: Pubkey,
     /// Destination city
@@ -73,6 +81,7 @@ impl Event for PlayerTeleported {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.from_city.pack(&mut buf[offset..]);
         offset += self.to_city.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);
@@ -83,8 +92,10 @@ impl Event for PlayerTeleported {
 
 /// Emitted when a player starts moving within a city
 pub struct IntracityTravelStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// City pubkey
     pub city: Pubkey,
     /// Destination X coordinate
@@ -103,6 +114,7 @@ impl Event for IntracityTravelStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.city.pack(&mut buf[offset..]);
         offset += self.dest_x.pack(&mut buf[offset..]);
         offset += self.dest_y.pack(&mut buf[offset..]);
@@ -114,8 +126,10 @@ impl Event for IntracityTravelStarted {
 
 /// Emitted when intracity travel completes
 pub struct IntracityTravelCompleted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Final X coordinate
     pub x: i32,
     /// Final Y coordinate
@@ -130,6 +144,7 @@ impl Event for IntracityTravelCompleted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.x.pack(&mut buf[offset..]);
         offset += self.y.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -139,10 +154,14 @@ impl Event for IntracityTravelCompleted {
 
 /// Emitted when travel is cancelled
 pub struct TravelCancelled {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Whether this was intercity travel
     pub is_intercity: bool,
+    /// Whether the player was bumped by a faster player stealing their reservation
+    pub was_bumped: bool,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -153,7 +172,9 @@ impl Event for TravelCancelled {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.is_intercity.pack(&mut buf[offset..]);
+        offset += self.was_bumped.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
     }
@@ -161,8 +182,10 @@ impl Event for TravelCancelled {
 
 /// Emitted when a player speeds up travel
 pub struct TravelSpeedup {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Whether this was intercity travel
     pub is_intercity: bool,
     /// Speedup tier used (1 or 2)
@@ -181,6 +204,7 @@ impl Event for TravelSpeedup {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.is_intercity.pack(&mut buf[offset..]);
         offset += self.speedup_tier.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);

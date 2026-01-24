@@ -44,7 +44,7 @@ pub fn process(
         dao_authority,
         city_account,
         game_engine_account,
-        system_program,
+        _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };

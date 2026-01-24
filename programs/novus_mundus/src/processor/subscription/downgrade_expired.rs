@@ -86,6 +86,7 @@ pub fn process(
 
     emit!(SubscriptionExpired {
         player: *player_account.key(),
+        player_name: player_data.name,
         old_tier,
         timestamp: now,
     });

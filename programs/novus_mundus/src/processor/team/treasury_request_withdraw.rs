@@ -11,7 +11,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     constants::TREASURY_REQUEST_SEED,
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
     emit,
     events::TreasuryWithdrawRequested,
 };
@@ -134,9 +134,7 @@ pub fn process(
     }
 
     // Request account must not exist (only one pending request per member)
-    if request_account.data_len() > 0 {
-        return Err(GameError::TreasuryRequestPending.into());
-    }
+    require_empty(request_account).map_err(|_| GameError::TreasuryRequestPending)?;
 
     // 10. Create Request Account
 
@@ -182,6 +180,7 @@ pub fn process(
 
     emit!(TreasuryWithdrawRequested {
         team: *team_account.key(),
+        team_name: team.name,
         requester: *player_account.key(),
         amount,
         timestamp: now,

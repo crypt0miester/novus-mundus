@@ -7,7 +7,7 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::MIN_RALLY_PARTICIPANTS,
+    constants::{MIN_RALLY_PARTICIPANTS, CASTLE_STATUS_TRANSITIONING, CASTLE_CONTEST_DURATION},
     error::GameError,
     logic::{
         calculate_damage_output,
@@ -24,11 +24,13 @@ use crate::{
         RallyStatus,
         EncounterAccount,
         EstateAccount,
+        CastleAccount,
+        GarrisonContributionAccount,
     },
     helpers::estate::citadel_rally_damage_bps,
-    validation::require_writable,
+    validation::{require_writable, require_owner},
     emit,
-    events::RallyExecuted,
+    events::{RallyExecuted, CastleConquered, CastleDefended},
 };
 
 /// Execute a rally
@@ -56,7 +58,7 @@ use crate::{
 /// # Instruction Data
 /// None (target_type stored in RallyAccount)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
@@ -73,14 +75,13 @@ pub fn process(
 
     // Load rally to get participant count
     // RallyAccount doesn't have load_checked - verify program ownership manually
-    if rally_account.owner() != _program_id {
-        return Err(ProgramError::IllegalOwner);
-    }
+    require_owner(rally_account, program_id)?;
     let rally_data_check = rally_account.try_borrow_data()?;
     let rally_header = unsafe { RallyAccount::load(&rally_data_check) };
     let participant_count = rally_header.participant_count as usize;
     let rally_creator = rally_header.creator;
     let rally_id = rally_header.id;
+    let rally_team = rally_header.team;
     drop(rally_data_check);
 
     // Calculate expected account count: 4 fixed + N rally_participants
@@ -100,7 +101,7 @@ pub fn process(
     for rp_account in rally_participant_accounts.iter() {
         require_writable(rp_account)?;
         // RallyParticipant doesn't have load_checked - verify program ownership
-        if rp_account.owner() != _program_id {
+        if rp_account.owner() != program_id {
             return Err(ProgramError::IllegalOwner);
         }
     }
@@ -113,12 +114,10 @@ pub fn process(
     // 4. Load Rally Account and GameEngine
 
     // RallyAccount doesn't have load_checked - verify program ownership manually
-    if rally_account.owner() != _program_id {
-        return Err(ProgramError::IllegalOwner);
-    }
+    require_owner(rally_account, program_id)?;
     let rally_data_check = rally_account.try_borrow_data()?;
     let rally_data = unsafe { RallyAccount::load(&rally_data_check) };
-    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, _program_id)?;
+    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
     let economic_config = &game_engine_data.economic_config;
 
@@ -246,9 +245,7 @@ pub fn process(
     // 7a. Apply Citadel rally damage bonus (BUILDING BONUS)
     // Leader's Citadel provides 0.5% damage bonus per level
     // EstateAccount doesn't have load_checked - verify program ownership manually
-    if leader_estate_account.owner() != _program_id {
-        return Err(ProgramError::IllegalOwner);
-    }
+    require_owner(leader_estate_account, program_id)?;
     let leader_estate_data = leader_estate_account.try_borrow_data()?;
     let leader_estate = unsafe { EstateAccount::load(&leader_estate_data) };
     let citadel_bonus_bps = citadel_rally_damage_bps(leader_estate);
@@ -284,9 +281,7 @@ pub fn process(
             // PvP Rally Attack - Full Weapon Combat Mechanics
             // ============================================================
             // Target PlayerAccount - verify program ownership (not signer, so can't use load_checked)
-            if target_account.owner() != _program_id {
-                return Err(ProgramError::IllegalOwner);
-            }
+            require_owner(target_account, program_id)?;
             let mut target_account_data = target_account.try_borrow_mut_data()?;
             let target_player = unsafe { PlayerAccount::load_mut(&mut target_account_data) };
 
@@ -436,9 +431,7 @@ pub fn process(
             // Encounter Rally Attack
             // ============================================================
             // EncounterAccount - verify program ownership
-            if target_account.owner() != _program_id {
-                return Err(ProgramError::IllegalOwner);
-            }
+            require_owner(target_account, program_id)?;
             let mut target_account_data = target_account.try_borrow_mut_data()?;
             let encounter = unsafe { EncounterAccount::load_mut(&mut target_account_data) };
 
@@ -468,6 +461,213 @@ pub fn process(
                 total_loot_vehicles = loot_pool.total_vehicles;
                 total_loot_fragments = loot_pool.total_fragments;
                 total_loot_gems = loot_pool.total_gems;
+            }
+        },
+        2 => {
+            // ============================================================
+            // Castle Rally Attack - Siege the garrison
+            // ============================================================
+            // Target CastleAccount - verify program ownership
+            require_owner(target_account, program_id)?;
+
+            // Load castle - extract city_id and castle_id from the account data
+            let mut target_account_data = target_account.try_borrow_mut_data()?;
+            let castle = unsafe { CastleAccount::load_mut(&mut target_account_data) };
+
+            // Verify castle can be attacked
+            if !castle.can_be_attacked(now) {
+                return Err(GameError::CastleNotAttackable.into());
+            }
+
+            // For rally castle attacks, garrison accounts are expected after rally participant accounts
+            // Account indices: 4 + participant_count .. end are garrison accounts
+            let garrison_start_index = 4 + participant_count;
+            let garrison_accounts = if accounts.len() > garrison_start_index {
+                &accounts[garrison_start_index..]
+            } else {
+                &accounts[0..0] // Empty slice if no garrison accounts provided
+            };
+
+            // Aggregate garrison strength
+            let mut total_garrison_units: u64 = 0;
+            let mut total_garrison_melee: u64 = 0;
+            let mut total_garrison_ranged: u64 = 0;
+            let mut total_garrison_siege: u64 = 0;
+            let mut best_hero_defense_bps: u16 = 0;
+            let mut best_hero_weapon_eff_bps: u16 = 0;
+
+            for garrison_account in garrison_accounts.iter() {
+                if garrison_account.owner() != program_id || garrison_account.data_len() == 0 {
+                    continue;
+                }
+
+                let garrison_data = garrison_account.try_borrow_data()?;
+                let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
+
+                // Verify garrison belongs to this castle
+                if garrison.castle != *target_account.key() {
+                    continue;
+                }
+
+                total_garrison_units = total_garrison_units
+                    .saturating_add(garrison.units_1)
+                    .saturating_add(garrison.units_2)
+                    .saturating_add(garrison.units_3);
+
+                total_garrison_melee = total_garrison_melee.saturating_add(garrison.melee_weapons);
+                total_garrison_ranged = total_garrison_ranged.saturating_add(garrison.ranged_weapons);
+                total_garrison_siege = total_garrison_siege.saturating_add(garrison.siege_weapons);
+
+                best_hero_defense_bps = best_hero_defense_bps.max(garrison.hero_defense_bps);
+                best_hero_weapon_eff_bps = best_hero_weapon_eff_bps.max(garrison.hero_weapon_eff_bps);
+            }
+
+            let total_garrison_weapons = total_garrison_melee
+                .saturating_add(total_garrison_ranged)
+                .saturating_add(total_garrison_siege);
+
+            // No garrison = fallback mode
+            fallback_triggered = total_garrison_units == 0;
+
+            // Calculate garrison damage output
+            let base_garrison_damage = if total_garrison_units > 0 {
+                calculate_damage_output(
+                    total_garrison_units,
+                    total_garrison_weapons,
+                    false, // not drive-by
+                    gameplay_config,
+                    0, // No research buffs for aggregated garrison
+                    0,
+                    0,
+                    best_hero_defense_bps,
+                    best_hero_weapon_eff_bps,
+                    0,
+                    0,
+                )
+            } else {
+                0
+            };
+
+            // Apply castle armory bonus to boost garrison damage
+            // Higher armory = more damage output from garrison
+            let armory_bonus = castle.armory_bonus_bps();
+            let garrison_damage = if armory_bonus > 0 {
+                (base_garrison_damage as u128 * (10000 + armory_bonus as u128) / 10000) as u64
+            } else {
+                base_garrison_damage
+            };
+
+            // Calculate attacker casualties
+            attacker_casualties = if total_units > 0 && garrison_damage > 0 {
+                let casualty_ratio = garrison_damage.min(total_units * 100) / total_units.max(1);
+                (total_units as u128 * casualty_ratio as u128 / 100) as u64
+            } else {
+                0
+            };
+
+            // Apply castle fortification bonus to reduce effective attacker damage
+            // Higher fortification = more damage reduction
+            // Formula: effective_damage = base_damage * 10000 / (10000 + fortification_bonus_bps)
+            let fortification_bonus = castle.fortification_bonus_bps();
+            let effective_total_damage = if fortification_bonus > 0 {
+                (total_damage as u128 * 10000 / (10000 + fortification_bonus as u128)) as u64
+            } else {
+                total_damage
+            };
+
+            // Calculate garrison casualties
+            let garrison_casualty_ratio = if total_garrison_units > 0 && effective_total_damage > 0 {
+                ((effective_total_damage as u128 * 10000) / (total_garrison_units as u128 * 10)).min(10000) as u64
+            } else {
+                0
+            };
+
+            let garrison_casualties = if total_garrison_units > 0 {
+                (total_garrison_units as u128 * garrison_casualty_ratio as u128 / 10000) as u64
+            } else {
+                0
+            };
+
+            // Weapon combat resolution
+            let attacker_weapons = WeaponSet::new(total_melee, total_ranged, total_siege);
+
+            let garrison_equipped_weapons = WeaponSet::new(
+                total_garrison_melee.min(total_garrison_units),
+                total_garrison_ranged.min(total_garrison_units),
+                total_garrison_siege.min(total_garrison_units),
+            );
+
+            let garrison_stored_weapons = WeaponSet::new(
+                total_garrison_melee,
+                total_garrison_ranged,
+                total_garrison_siege,
+            );
+
+            let weapon_result = resolve_weapon_combat(
+                total_units,
+                attacker_casualties,
+                attacker_weapons,
+                total_damage,
+                total_garrison_units,
+                garrison_casualties,
+                garrison_equipped_weapons,
+                garrison_stored_weapons,
+                false,
+            );
+
+            attacker_won = weapon_result.attacker_won;
+
+            // Capture looted weapons if attackers win
+            if attacker_won {
+                total_loot_melee = weapon_result.attacker_weapons_looted.melee;
+                total_loot_ranged = weapon_result.attacker_weapons_looted.ranged;
+                total_loot_siege = weapon_result.attacker_weapons_looted.siege;
+
+                // Check if garrison is defeated enough to trigger conquest
+                // Conquest requires wiping out 90%+ of garrison or empty garrison
+                let remaining_garrison = total_garrison_units.saturating_sub(garrison_casualties);
+                if remaining_garrison < total_garrison_units / 10 || total_garrison_units == 0 {
+                    // Initiate ownership transition (or update if already transitioning)
+                    let defending_king = castle.king;
+
+                    if castle.status != CASTLE_STATUS_TRANSITIONING {
+                        castle.status = CASTLE_STATUS_TRANSITIONING;
+                    }
+
+                    // Set/reset transition fields - rally creator claims the pending throne
+                    castle.transition_new_king = rally_creator;
+                    // Start/reset 2-hour contest window for others to challenge
+                    castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
+                    castle.failed_defenses = castle.failed_defenses.saturating_add(1);
+
+                    // Leader name not available in execute - will be filled during transition finalize
+                    let new_king_name = [0u8; 48];
+
+                    // Emit conquest event
+                    emit!(CastleConquered {
+                        castle: *target_account.key(),
+                        castle_name: castle.name,
+                        previous_king: defending_king,
+                        new_king: rally_creator,
+                        new_king_name,
+                        new_team: rally_team,
+                        rally_id,
+                        timestamp: now,
+                    });
+                }
+            } else {
+                castle.successful_defenses = castle.successful_defenses.saturating_add(1);
+
+                // Emit defense event
+                emit!(CastleDefended {
+                    castle: *target_account.key(),
+                    castle_name: castle.name,
+                    king: castle.king,
+                    rally_id,
+                    damage_dealt: garrison_damage,
+                    weapons_captured: weapon_result.defender_weapons_looted.total(),
+                    timestamp: now,
+                });
             }
         },
         _ => return Err(GameError::InvalidParameter.into()),
@@ -561,8 +761,10 @@ pub fn process(
     rally.status = RallyStatus::Returning as u8;
 
     // Emit RallyExecuted event
+    // Note: team_name not available here - would need to pass team account
     emit!(RallyExecuted {
         rally: *rally_account.key(),
+        team_name: [0u8; 32], // Team name not available in execute, lookup via rally.team
         target: rally.target,
         damage_dealt: total_damage,
         damage_received: attacker_casualties,

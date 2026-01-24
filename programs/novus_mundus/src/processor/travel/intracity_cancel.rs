@@ -50,7 +50,7 @@ pub fn process(
         dest_location_account,
         dest_creator_refund,
         return_location_account,
-        system_program,
+        _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -251,7 +251,9 @@ pub fn process(
 
     emit!(TravelCancelled {
         player: *player_account.key(),
+        player_name: player_data.name,
         is_intercity: false,
+        was_bumped,
         timestamp: now,
     });
 

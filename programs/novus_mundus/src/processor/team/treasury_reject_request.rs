@@ -9,7 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::TreasuryRequestRejected,
 };
@@ -71,7 +71,7 @@ pub fn process(
     // 4. Load Accounts
 
     let rejecter = PlayerAccount::load_checked(rejecter_account, rejecter_owner.key(), program_id)?;
-    let _team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
 
     // 4a. Require EXT_TEAM
     require_extension(&*rejecter, EXT_TEAM)?;
@@ -116,10 +116,7 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    if request_account.data_len() == 0 {
-        return Err(GameError::TreasuryRequestNotFound.into());
-    }
-
+    require_initialized(request_account).map_err(|_| GameError::TreasuryRequestNotFound)?;
     require_owner(request_account, program_id)?;
 
     // Validate request belongs to this team
@@ -147,6 +144,7 @@ pub fn process(
 
     emit!(TreasuryRequestRejected {
         team: *team_account.key(),
+        team_name: team.name,
         rejector: *rejecter_account.key(),
         requester: requester_pubkey,
         timestamp: now,

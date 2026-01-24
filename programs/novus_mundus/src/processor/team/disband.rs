@@ -119,6 +119,7 @@ pub fn process(
 
     emit!(TeamDisbanded {
         team: *team_account.key(),
+        team_name: team.name,
         leader: *leader_account.key(),
         treasury_distributed,
         timestamp: now,

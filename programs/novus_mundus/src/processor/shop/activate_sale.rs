@@ -11,7 +11,7 @@ use crate::{
         SeasonalSaleAccount, SeasonalSaleStatus,
         DAOPromotionAccount, DAOPromotionStatus,
     },
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_owner},
 };
 
 /// Sale type for activation
@@ -116,9 +116,7 @@ fn activate_seasonal_sale(
     }
 
     // SeasonalSaleAccount doesn't have load_checked - verify program ownership manually
-    if sale_account.owner() != program_id {
-        return Err(ProgramError::IllegalOwner.into());
-    }
+    require_owner(sale_account, program_id)?;
     // Load and update status
     let mut sale_data_ref = sale_account.try_borrow_mut_data()?;
     let sale = unsafe { SeasonalSaleAccount::load_mut(&mut sale_data_ref) };
@@ -167,9 +165,7 @@ fn activate_dao_promotion(
     }
 
     // DAOPromotionAccount doesn't have load_checked - verify program ownership manually
-    if sale_account.owner() != program_id {
-        return Err(ProgramError::IllegalOwner.into());
-    }
+    require_owner(sale_account, program_id)?;
     // Load and update status
     let mut promo_data_ref = sale_account.try_borrow_mut_data()?;
     let promo = unsafe { DAOPromotionAccount::load_mut(&mut promo_data_ref) };

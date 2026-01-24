@@ -400,7 +400,8 @@ pub fn process(
     // Emit RallyJoined event
     emit!(RallyJoined {
         rally: *rally_account.key(),
-        player: *player_owner.key(),
+        team_name: team.name,
+        player: *player_account.key(),
         units: [units_1, units_2, units_3],
         participant_count: final_participant_count,
         timestamp: now,

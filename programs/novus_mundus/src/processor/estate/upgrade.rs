@@ -139,7 +139,8 @@ pub fn process(
 
     // 16. Emit BuildingUpgradeStarted event
     emit!(BuildingUpgradeStarted {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         building_type: building_type as u8,
         from_level,
         to_level,

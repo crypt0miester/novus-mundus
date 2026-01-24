@@ -126,7 +126,8 @@ pub fn process(
 
     // 13. Emit ResearchSpeedup event
     emit!(ResearchSpeedup {
-        player: *player_owner.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         research_id: progress.current_research as u16,
         speedup_seconds: actual_speed_up,
         gems_spent: gems_needed,

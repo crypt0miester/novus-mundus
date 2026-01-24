@@ -5,10 +5,14 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player attacks another player (PvP)
 pub struct PlayerAttacked {
-    /// Attacker's player account pubkey
+    /// Attacker's player account pubkey (not wallet)
     pub attacker: Pubkey,
-    /// Defender's player account pubkey
+    /// Attacker's name (48 bytes UTF-8)
+    pub attacker_name: [u8; 48],
+    /// Defender's player account pubkey (not wallet)
     pub defender: Pubkey,
+    /// Defender's name (48 bytes UTF-8)
+    pub defender_name: [u8; 48],
     /// Damage dealt to defender
     pub damage_dealt: u64,
     /// Damage received from defender
@@ -21,9 +25,9 @@ pub struct PlayerAttacked {
     pub produce_stolen: u64,
     /// Vehicles stolen
     pub vehicles_stolen: u64,
-    /// Attacker's units lost (melee, ranged, siege)
+    /// Attacker's units lost (defensive_1, defensive_2, defensive_3)
     pub attacker_units_lost: [u64; 3],
-    /// Defender's units lost (melee, ranged, siege)
+    /// Defender's units lost (defensive_1, defensive_2, defensive_3)
     pub defender_units_lost: [u64; 3],
     /// Whether attacker won
     pub attacker_won: bool,
@@ -39,7 +43,9 @@ impl Event for PlayerAttacked {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.attacker.pack(&mut buf[offset..]);
+        offset += self.attacker_name.pack(&mut buf[offset..]);
         offset += self.defender.pack(&mut buf[offset..]);
+        offset += self.defender_name.pack(&mut buf[offset..]);
         offset += self.damage_dealt.pack(&mut buf[offset..]);
         offset += self.damage_received.pack(&mut buf[offset..]);
         offset += self.cash_stolen.pack(&mut buf[offset..]);
@@ -61,8 +67,10 @@ impl Event for PlayerAttacked {
 
 /// Emitted when a player attacks an encounter (PvE) - fires on each attack
 pub struct EncounterAttacked {
-    /// Player who attacked
+    /// Player account who attacked (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Encounter account pubkey
     pub encounter: Pubkey,
     /// Damage dealt this attack
@@ -85,6 +93,7 @@ impl Event for EncounterAttacked {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.encounter.pack(&mut buf[offset..]);
         offset += self.damage_dealt.pack(&mut buf[offset..]);
         offset += self.health_remaining.pack(&mut buf[offset..]);
@@ -106,8 +115,10 @@ pub struct EncounterDefeated {
     pub level: u8,
     /// Total attackers who contributed
     pub total_attackers: u8,
-    /// Player who dealt killing blow
+    /// Player account who dealt killing blow (not wallet)
     pub killing_blow_by: Pubkey,
+    /// Killing blow player's name (48 bytes UTF-8)
+    pub killing_blow_name: [u8; 48],
     /// Total loot cash generated
     pub loot_cash: u64,
     /// Total loot NOVI generated
@@ -126,6 +137,7 @@ impl Event for EncounterDefeated {
         offset += self.level.pack(&mut buf[offset..]);
         offset += self.total_attackers.pack(&mut buf[offset..]);
         offset += self.killing_blow_by.pack(&mut buf[offset..]);
+        offset += self.killing_blow_name.pack(&mut buf[offset..]);
         offset += self.loot_cash.pack(&mut buf[offset..]);
         offset += self.loot_novi.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);

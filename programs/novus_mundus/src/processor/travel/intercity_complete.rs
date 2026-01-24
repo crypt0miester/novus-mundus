@@ -114,7 +114,8 @@ pub fn process(
 
     // Emit XP gained event
     emit!(XpGained {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         amount: xp_amount,
         source: 3, // 3=travel
         total_xp: player_data.current_xp,
@@ -124,7 +125,8 @@ pub fn process(
     // Emit level up event if player leveled
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
-            player: *owner.key(),
+            player: *player_account.key(),
+            player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
             timestamp: now,
@@ -270,6 +272,7 @@ pub fn process(
 
     emit!(IntercityTravelCompleted {
         player: *player_account.key(),
+        player_name: player_data.name,
         city: *destination_city_account.key(),
         timestamp: now,
     });

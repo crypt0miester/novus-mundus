@@ -20,7 +20,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::ExpeditionAborted,
 };
@@ -77,9 +77,7 @@ pub fn process(
     }
 
     // 4. Check expedition exists
-    if expedition_account.data_len() == 0 {
-        return Err(GameError::NoExpeditionInProgress.into());
-    }
+    require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 5. Load Expedition Data (before closing)
     let (op_unit_1, op_unit_2, op_unit_3, hero_mint_key, expedition_type) = {
@@ -169,8 +167,14 @@ pub fn process(
 
     // 11. Emit event
     let now = Clock::get()?.unix_timestamp;
+
+    // Re-borrow player_data to access name field
+    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
+
     emit!(ExpeditionAborted {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         expedition_type,
         partial_yield: 0, // No partial yield on abort
         timestamp: now,

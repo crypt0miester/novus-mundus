@@ -5,8 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when an expedition starts
 pub struct ExpeditionStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Expedition type (0=mining, 1=fishing, etc.)
     pub expedition_type: u8,
     /// Location/node ID
@@ -23,6 +25,7 @@ impl Event for ExpeditionStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.expedition_type.pack(&mut buf[offset..]);
         offset += self.node_id.pack(&mut buf[offset..]);
         offset += self.duration.pack(&mut buf[offset..]);
@@ -33,8 +36,10 @@ impl Event for ExpeditionStarted {
 
 /// Emitted when an expedition action/strike occurs
 pub struct ExpeditionStrike {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Strike number
     pub strike_num: u8,
     /// Yield from this strike
@@ -51,6 +56,7 @@ impl Event for ExpeditionStrike {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.strike_num.pack(&mut buf[offset..]);
         offset += self.yield_amount.pack(&mut buf[offset..]);
         offset += self.quality.pack(&mut buf[offset..]);
@@ -61,8 +67,10 @@ impl Event for ExpeditionStrike {
 
 /// Emitted when expedition rewards are claimed
 pub struct ExpeditionClaimed {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Expedition type
     pub expedition_type: u8,
     /// Total resources gathered
@@ -81,6 +89,7 @@ impl Event for ExpeditionClaimed {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.expedition_type.pack(&mut buf[offset..]);
         offset += self.total_yield.pack(&mut buf[offset..]);
         offset += self.bonus_yield.pack(&mut buf[offset..]);
@@ -92,8 +101,10 @@ impl Event for ExpeditionClaimed {
 
 /// Emitted when an expedition is aborted early
 pub struct ExpeditionAborted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Expedition type
     pub expedition_type: u8,
     /// Partial yield received
@@ -108,6 +119,7 @@ impl Event for ExpeditionAborted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.expedition_type.pack(&mut buf[offset..]);
         offset += self.partial_yield.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -117,8 +129,10 @@ impl Event for ExpeditionAborted {
 
 /// Emitted when an expedition is sped up using gems
 pub struct ExpeditionSpeedup {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Seconds reduced from remaining time
     pub speedup_seconds: u64,
     /// Gems spent on speedup
@@ -135,6 +149,7 @@ impl Event for ExpeditionSpeedup {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.speedup_seconds.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);
         offset += self.new_eta.pack(&mut buf[offset..]);

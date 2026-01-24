@@ -7,8 +7,12 @@ use super::{Event, PackBytes, discriminator};
 pub struct HeroMinted {
     /// Hero NFT mint pubkey
     pub hero_mint: Pubkey,
-    /// Player who minted
+    /// Hero name (32 bytes UTF-8)
+    pub hero_name: [u8; 32],
+    /// Player account who minted (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Hero template ID
     pub template_id: u16,
     /// Hero rarity
@@ -23,7 +27,9 @@ impl Event for HeroMinted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.template_id.pack(&mut buf[offset..]);
         offset += self.rarity.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -35,8 +41,12 @@ impl Event for HeroMinted {
 pub struct HeroLocked {
     /// Hero NFT mint pubkey
     pub hero_mint: Pubkey,
-    /// Player who locked the hero
+    /// Hero name (32 bytes UTF-8)
+    pub hero_name: [u8; 32],
+    /// Player account who locked the hero (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Hero slot index
     pub slot: u8,
     /// Unix timestamp
@@ -49,7 +59,9 @@ impl Event for HeroLocked {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.slot.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
@@ -60,8 +72,12 @@ impl Event for HeroLocked {
 pub struct HeroUnlocked {
     /// Hero NFT mint pubkey
     pub hero_mint: Pubkey,
-    /// Player who unlocked
+    /// Hero name (32 bytes UTF-8)
+    pub hero_name: [u8; 32],
+    /// Player account who unlocked (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -72,7 +88,9 @@ impl Event for HeroUnlocked {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
     }
@@ -82,8 +100,12 @@ impl Event for HeroUnlocked {
 pub struct HeroLeveledUp {
     /// Hero NFT mint pubkey
     pub hero_mint: Pubkey,
-    /// Player who owns the hero
+    /// Hero name (32 bytes UTF-8)
+    pub hero_name: [u8; 32],
+    /// Player account who owns the hero (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Previous level
     pub old_level: u32,
     /// New level
@@ -100,7 +122,9 @@ impl Event for HeroLeveledUp {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.old_level.pack(&mut buf[offset..]);
         offset += self.new_level.pack(&mut buf[offset..]);
         offset += self.xp_spent.pack(&mut buf[offset..]);
@@ -113,8 +137,12 @@ impl Event for HeroLeveledUp {
 pub struct HeroAssignedDefensive {
     /// Hero NFT mint pubkey
     pub hero_mint: Pubkey,
-    /// Player who assigned
+    /// Hero name (32 bytes UTF-8)
+    pub hero_name: [u8; 32],
+    /// Player account who assigned (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Whether assigned (true) or unassigned (false)
     pub assigned: bool,
     /// Unix timestamp
@@ -127,7 +155,9 @@ impl Event for HeroAssignedDefensive {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.assigned.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset

@@ -22,7 +22,6 @@ use pinocchio::{
     account_info::AccountInfo,
     program_entrypoint,
     default_allocator,
-    nostd_panic_handler,
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
@@ -38,7 +37,6 @@ pub const ID: Pubkey = [
 
 program_entrypoint!(process_instruction);
 default_allocator!();
-nostd_panic_handler!();
 
 pub fn process_instruction(
     program_id: &Pubkey,
@@ -89,10 +87,12 @@ pub fn process_instruction(
         31 => processor::travel::intercity_complete::process(program_id, accounts, instruction_data),
         32 => processor::travel::intercity_cancel::process(program_id, accounts, instruction_data),
         33 => processor::travel::intercity_teleport::process(program_id, accounts, instruction_data),
+        34 => processor::travel::speedup::process(program_id, accounts, instruction_data),
 
         // Travel - Intracity (40-49)
         40 => processor::travel::intracity_start::process(program_id, accounts, instruction_data),
         41 => processor::travel::intracity_complete::process(program_id, accounts, instruction_data),
+        42 => processor::travel::intracity_cancel::process(program_id, accounts, instruction_data),
 
         // Team System (50-59)
         50 => processor::team::create::process(program_id, accounts, instruction_data),
@@ -183,6 +183,9 @@ pub fn process_instruction(
         154 => processor::shop::update_bundle::process(program_id, accounts, instruction_data),
         155 => processor::shop::update_config::process(program_id, accounts, instruction_data),
         156 => processor::shop::activate_sale::process(program_id, accounts, instruction_data),
+        157 => processor::shop::create_allowed_token::process(program_id, accounts, instruction_data),
+        158 => processor::shop::update_allowed_token::process(program_id, accounts, instruction_data),
+        159 => processor::shop::close_allowed_token::process(program_id, accounts, instruction_data),
 
         // Estate System (160-179)
         160 => processor::estate::create::process(program_id, accounts, instruction_data),
@@ -238,6 +241,42 @@ pub fn process_instruction(
         234 => processor::arena::claim_daily_reward::process(program_id, accounts, instruction_data),
         235 => processor::arena::claim_master_reward::process(program_id, accounts, instruction_data),
         236 => processor::arena::close_season::process(program_id, accounts, instruction_data),
+
+        // Dungeon System (250-269) - The Catacombs roguelike PvE
+        250 => processor::dungeon::enter::process(program_id, accounts, instruction_data),
+        251 => processor::dungeon::attack::process(program_id, accounts, instruction_data),
+        252 => processor::dungeon::attack_multi::process(program_id, accounts, instruction_data),
+        253 => processor::dungeon::interact::process(program_id, accounts, instruction_data),
+        254 => processor::dungeon::choose_relic::process(program_id, accounts, instruction_data),
+        255 => processor::dungeon::flee::process(program_id, accounts, instruction_data),
+        256 => processor::dungeon::claim::process(program_id, accounts, instruction_data),
+        257 => processor::dungeon::resume::process(program_id, accounts, instruction_data),
+        258 => processor::dungeon::create_template::process(program_id, accounts, instruction_data),
+        259 => processor::dungeon::claim_leaderboard_prize::process(program_id, accounts, instruction_data),
+        260 => processor::dungeon::create_leaderboard::process(program_id, accounts, instruction_data),
+
+        // King's Castle System (270-299)
+        270 => processor::castle::create_castle::process(program_id, accounts, instruction_data),
+        271 => processor::castle::claim_vacant_castle::process(program_id, accounts, instruction_data),
+        272 => processor::castle::appoint_court::process(program_id, accounts, instruction_data),
+        273 => processor::castle::dismiss_court::process(program_id, accounts, instruction_data),
+        274 => processor::castle::resign_court::process(program_id, accounts, instruction_data),
+        275 => processor::castle::initiate_upgrade::process(program_id, accounts, instruction_data),
+        276 => processor::castle::cancel_upgrade::process(program_id, accounts, instruction_data),
+        277 => processor::castle::join_garrison::process(program_id, accounts, instruction_data),
+        278 => processor::castle::leave_garrison::process(program_id, accounts, instruction_data),
+        279 => processor::castle::relieve_garrison::process(program_id, accounts, instruction_data),
+        280 => processor::castle::claim_castle_rewards::process(program_id, accounts, instruction_data),
+        281 => processor::castle::claim_garrison_loot::process(program_id, accounts, instruction_data),
+        282 => processor::castle::garrison_cleanup::process(program_id, accounts, instruction_data),
+        283 => processor::castle::court_cleanup::process(program_id, accounts, instruction_data),
+        284 => processor::castle::rewards_cleanup::process(program_id, accounts, instruction_data),
+        285 => processor::castle::finalize_transition::process(program_id, accounts, instruction_data),
+        286 => processor::castle::update_castle_config::process(program_id, accounts, instruction_data),
+        287 => processor::castle::force_remove_king::process(program_id, accounts, instruction_data),
+        288 => processor::castle::attack_castle::process(program_id, accounts, instruction_data),
+        289 => processor::castle::update_castle_status::process(program_id, accounts, instruction_data),
+        290 => processor::castle::complete_upgrade::process(program_id, accounts, instruction_data),
 
         _ => Err(ProgramError::InvalidInstructionData),
     }

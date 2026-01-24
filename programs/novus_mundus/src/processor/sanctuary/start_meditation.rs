@@ -141,6 +141,9 @@ pub fn process(
         }
     }
 
+    // Save template name for event emission
+    let hero_name = template.name;
+
     drop(template_data);
 
     // 12. Load Estate and verify Sanctuary
@@ -171,7 +174,9 @@ pub fn process(
     // 14. Emit event
     emit!(MeditationStarted {
         player: *player_account.key(),
+        player_name: player.name,
         hero_mint: *hero_mint.key(),
+        hero_name,
         duration_hours,
         completes_at,
         timestamp: now,

@@ -204,12 +204,12 @@ pub fn process(
     }
     if loot_data.produce > 0 && item_idx < 4 {
         items[item_idx] = (5u16 << 8) | (loot_data.produce.min(255) as u16);
-        item_idx += 1;
     }
 
     // Save values for event
     let event_cash = loot_data.cash;
-    let event_player = *owner.key();
+    let event_player = *player.key();
+    let event_player_name = player_data.name;
 
     // 10. CLOSE ACCOUNT (rent reclamation)
 
@@ -225,7 +225,7 @@ pub fn process(
     // 11. Emit LootClaimed event
     emit!(LootClaimed {
         player: event_player,
-        encounter: Pubkey::default(), // Loot doesn't store encounter address, only source_id
+        player_name: event_player_name,
         cash: event_cash,
         respect: 0, // Respect is granted instantly during combat
         xp: 0,      // XP is granted instantly during combat

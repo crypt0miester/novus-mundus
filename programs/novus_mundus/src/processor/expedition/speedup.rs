@@ -22,7 +22,7 @@ use crate::{
     constants::EXPEDITION_SEED,
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount},
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::ExpeditionSpeedup,
 };
@@ -88,9 +88,7 @@ pub fn process(
     }
 
     // 5. Check expedition exists
-    if expedition_account.data_len() == 0 {
-        return Err(GameError::NoExpeditionInProgress.into());
-    }
+    require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 6. Load Player Data
     let mut player_data_ref = player_account.try_borrow_mut_data()?;
@@ -121,8 +119,9 @@ pub fn process(
         return Err(GameError::ExpeditionAlreadyComplete.into());
     }
 
-    let remaining_seconds = end_time - now;
-    let remaining_minutes = ((remaining_seconds as f64) / 60.0).ceil() as u64;
+    let remaining_seconds = (end_time - now) as u64;
+    // Integer ceiling division: (a + b - 1) / b
+    let remaining_minutes = (remaining_seconds + 59) / 60;
 
     if remaining_minutes == 0 {
         return Err(GameError::InvalidParameter.into());
@@ -168,7 +167,8 @@ pub fn process(
 
     // 16. Emit event
     emit!(ExpeditionSpeedup {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         speedup_seconds: time_saved,
         gems_spent: gem_cost,
         new_eta: new_end_time,

@@ -8,7 +8,11 @@ use pinocchio::{
 use pinocchio_system::instructions::Transfer;
 use crate::{
     error::GameError,
-    helpers::{add_to_inventory, estate::{market_discount_bps, load_estate_for_player, require_market}},
+    helpers::{
+        add_to_inventory,
+        estate::{market_discount_bps, load_estate_for_player, require_market},
+        process_token_payment_flow,
+    },
     state::{
         GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus,
         ShopItemAccount, BundleAccount, PlayerAccount,
@@ -41,9 +45,19 @@ use crate::{
 /// Market building provides shop discounts:
 /// - 1% discount per Market level (max 20% at level 20)
 ///
+/// # Accounts (Required for Token Payment, payment_type >= 2)
+/// - [] allowed_token: AllowedTokenAccount PDA
+/// - [] token_mint: SPL Token mint (for decimals)
+/// - [writable] buyer_token_ata: Buyer's token account
+/// - [writable] treasury_token_ata: Treasury's token account
+/// - [] token_program: SPL Token program
+/// - [] sol_oracle_feed: SOL/USD price feed (Pyth or Switchboard)
+/// - [] token_oracle_feed: TOKEN/USD price feed (Pyth or Switchboard)
+///
 /// # Instruction Data
 /// - sale_id: u64
 /// - quantity: u16 (usually 1 for flash sales)
+/// - payment_type: u8 (optional, 0 = SOL, 2+ = Token via AllowedToken)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -84,6 +98,14 @@ pub fn process(
 
     let sale_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
     let quantity = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap()) as u64;
+
+    // Optional payment_type (default 0 = SOL, 2+ = Token)
+    let payment_type = if instruction_data.len() >= 11 { instruction_data[10] } else { 0 };
+
+    // Payment type 1 (formerly Gems) is no longer supported
+    if payment_type == 1 {
+        return Err(GameError::PaymentTypeNotSupported.into());
+    }
 
     if quantity == 0 {
         return Err(GameError::InvalidParameter.into());
@@ -230,13 +252,31 @@ pub fn process(
         shop_config.max_total_discount_bps,
     );
 
-    // 10. Process SOL Payment
+    // 10. Process Payment
 
-    Transfer {
-        from: buyer,
-        to: treasury,
-        lamports: final_price,
-    }.invoke()?;
+    if payment_type == 0 {
+        // SOL payment - direct transfer to treasury
+        Transfer {
+            from: buyer,
+            to: treasury,
+            lamports: final_price,
+        }.invoke()?;
+    } else {
+        // Token payment (payment_type >= 2)
+        // Token accounts come after the base 10 accounts
+        let token_offset = 10;
+
+        // Use unified token payment helper
+        process_token_payment_flow(
+            &accounts[token_offset..],
+            game_engine_account.key(),
+            program_id,
+            shop_config,
+            buyer,
+            final_price,
+            clock.slot,
+        )?;
+    }
 
     // 11. Fulfill Items
 
@@ -244,9 +284,56 @@ pub fn process(
     let total_items = items_per_purchase.saturating_mul(quantity);
 
     if flash_sale.is_bundle {
-        // For bundles in flash sales, we'd need to load each item
-        // Simplified: just acknowledge the bundle purchase
-        // Full implementation would iterate bundle.items
+        // Load bundle for fulfillment (was loaded earlier for pricing, borrow dropped)
+        let bundle_data_ref = item_or_bundle_account.try_borrow_data()?;
+        let bundle = unsafe { BundleAccount::load(&bundle_data_ref) };
+        let item_count = bundle.item_count as usize;
+
+        // Two-pass fulfillment to avoid borrow conflicts:
+        // Pass 1: Fulfill non-inventory items (needs mutable player)
+        {
+            let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+            for i in 0..item_count {
+                let bundle_item = &bundle.items[i];
+                if bundle_item.quantity == 0 {
+                    continue;
+                }
+
+                // Use item_id % 1000 as item_type proxy (simplified fulfillment)
+                let item_type = (bundle_item.item_id % 1000) as u16;
+                if !is_inventory_item_type(item_type) {
+                    let amount = (bundle_item.quantity as u64).saturating_mul(quantity);
+                    fulfill_item(&mut *player, item_type, amount)?;
+                }
+            }
+        } // player borrow dropped
+
+        // Pass 2: Fulfill inventory items (armor, cosmetics, event items)
+        for i in 0..item_count {
+            let bundle_item = &bundle.items[i];
+            if bundle_item.quantity == 0 {
+                continue;
+            }
+
+            let item_type = (bundle_item.item_id % 1000) as u16;
+            if is_inventory_item_type(item_type) {
+                let amount = (bundle_item.quantity as u64).saturating_mul(quantity);
+                for _ in 0..amount {
+                    add_to_inventory(
+                        program_id,
+                        buyer,
+                        buyer.key(),
+                        inventory_account,
+                        system_program,
+                        item_type,
+                        1,
+                        0,
+                        bundle_item.item_id,
+                        now as u32,
+                    )?;
+                }
+            }
+        }
     } else if is_inventory {
         // Items that go to inventory (armor, cosmetics, event items)
         for _ in 0..total_items {
@@ -290,11 +377,12 @@ pub fn process(
 
     // Emit event
     emit!(FlashSalePurchased {
-        player: *buyer.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         sale_id,
         original_price: total_base,
         price_paid: final_price,
-        currency: 0, // Flash sales are SOL only
+        currency: payment_type,
         timestamp: now,
     });
 
@@ -460,7 +548,7 @@ fn calculate_final_price(
 
 fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> ProgramResult {
     let amount_u16 = amount.min(u16::MAX as u64) as u16;
-    let amount_u32 = amount.min(u32::MAX as u64) as u32;
+    let _amount_u32 = amount.min(u32::MAX as u64) as u32;
 
     match item_type {
         // Equipment - Weapons by type

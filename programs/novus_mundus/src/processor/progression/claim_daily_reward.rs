@@ -128,6 +128,7 @@ pub fn process(
     // Emit XP gained event
     emit!(XpGained {
         player: *player_account.key(),
+        player_name: player_data.name,
         amount: rewards.xp,
         source: 2, // 2=daily
         total_xp: player_data.current_xp,
@@ -138,6 +139,7 @@ pub fn process(
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
             player: *player_account.key(),
+            player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
             timestamp: now,
@@ -153,6 +155,7 @@ pub fn process(
 
     emit!(DailyRewardClaimed {
         player: *player_account.key(),
+        player_name: player_data.name,
         day: 0, // Note: We don't track streak currently, could enhance
         cash: rewards.cash,
         gems: 0, // Not implemented yet

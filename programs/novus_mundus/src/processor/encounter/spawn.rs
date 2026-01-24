@@ -422,15 +422,6 @@ fn generate_deterministic_location_in_city(
     crate::logic::golden_spiral_position(spawn_index, city_lat, city_long, radius_km)
 }
 
-/// Legacy function for backward compatibility - now uses deterministic positioning
-fn generate_random_location_in_city(
-    city_lat: f64,
-    city_long: f64,
-    radius_km: f32,
-) -> (f64, f64) {
-    // Default to spawn_index 0 - callers should use generate_deterministic_location_in_city
-    generate_deterministic_location_in_city(city_lat, city_long, radius_km, 0)
-}
 
 /// Calculate encounter level based on city, rarity, and nearby players (DETERMINISTIC)
 ///
@@ -450,7 +441,7 @@ fn generate_random_location_in_city(
 /// Encounter level (1-100)
 fn calculate_encounter_level(
     city_data: &CityAccount,
-    encounter_type: EncounterType,
+    _encounter_type: EncounterType,
     player_account: &AccountInfo,
     is_auto_spawn: bool,
 ) -> Result<u8, ProgramError> {

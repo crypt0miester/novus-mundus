@@ -22,6 +22,7 @@ pub const EXT_INVENTORY: u32  = 1 << 2;  // 0x0004 - Inventory + Shop state
 pub const EXT_RALLY: u32      = 1 << 3;  // 0x0008 - Rally caps & stats
 pub const EXT_TEAM: u32       = 1 << 4;  // 0x0010 - Team membership
 pub const EXT_COSMETICS: u32  = 1 << 5;  // 0x0020 - Equipped cosmetics
+pub const EXT_COURT: u32      = 1 << 6;  // 0x0040 - Castle court membership
 
 // ============================================================
 // SECTION SIZES & OFFSETS
@@ -35,16 +36,18 @@ pub const INVENTORY_SIZE: usize = 424;  // InventorySection size (verified by st
 pub const RALLY_SIZE: usize = 80;       // RallySection size
 pub const TEAM_SIZE: usize = 40;        // TeamSection size (verified by static assertion)
 pub const COSMETICS_SIZE: usize = 80;   // CosmeticsSection size
+pub const COURT_SIZE: usize = 48;       // CourtSection size (castle court membership)
 
 // Fixed offsets (cumulative, in order)
 pub const CORE_OFFSET: usize = 0;
-pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 1008
-pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1104
-pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1234
-pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1658
-pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1738
-pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1778
-pub const MAX_SIZE: usize = COSMETICS_OFFSET + COSMETICS_SIZE;          // 1858
+pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 1016
+pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1112
+pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1242
+pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1666
+pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1746
+pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1786
+pub const COURT_OFFSET: usize = COSMETICS_OFFSET + COSMETICS_SIZE;      // 1866
+pub const MAX_SIZE: usize = COURT_OFFSET + COURT_SIZE;                  // 1914
 
 // ============================================================
 // PLAYER CORE (1008 bytes) - Always present
@@ -1185,6 +1188,68 @@ impl CosmeticsSection {
 }
 
 // ============================================================
+// COURT SECTION (48 bytes) - Castle court membership
+// ============================================================
+
+/// Tracks player's court position in a castle with buffs
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CourtSection {
+    /// Castle where player holds court position (NULL_PUBKEY if none)
+    pub castle: Pubkey,                // 32 bytes
+    /// Position type (0=Chancellor, 1=Marshal, 2=Steward, 3=Sentinel)
+    pub position_type: u8,             // 1 byte
+    /// Padding for alignment
+    pub _padding: [u8; 7],             // 7 bytes
+    /// Attack bonus from court position (BPS)
+    pub court_attack_bps: u16,         // 2 bytes
+    /// Research speed bonus from court position (BPS)
+    pub court_research_speed_bps: u16, // 2 bytes
+    /// Defense bonus from court position (BPS)
+    pub court_defense_bps: u16,        // 2 bytes
+    /// Economy bonus from court position (BPS)
+    pub court_economy_bps: u16,        // 2 bytes
+}
+
+impl CourtSection {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub fn init() -> Self {
+        Self {
+            castle: NULL_PUBKEY,
+            position_type: 0,
+            _padding: [0; 7],
+            court_attack_bps: 0,
+            court_research_speed_bps: 0,
+            court_defense_bps: 0,
+            court_economy_bps: 0,
+        }
+    }
+
+    /// Check if player currently holds a court position
+    pub fn is_holding_position(&self) -> bool {
+        self.castle != NULL_PUBKEY
+    }
+
+    /// Set player's court position
+    pub fn set_position(&mut self, castle: Pubkey, position_type: u8) {
+        self.castle = castle;
+        self.position_type = position_type;
+        // Buffs are set based on position type by the appointing processor
+    }
+
+    /// Clear player's court position and buffs
+    pub fn clear(&mut self) {
+        self.castle = NULL_PUBKEY;
+        self.position_type = 0;
+        self.court_attack_bps = 0;
+        self.court_research_speed_bps = 0;
+        self.court_defense_bps = 0;
+        self.court_economy_bps = 0;
+    }
+}
+
+// ============================================================
 // HELPER FUNCTIONS
 // ============================================================
 
@@ -1210,6 +1275,9 @@ pub fn size_for_extensions(ext: u32) -> usize {
     }
     if ext & EXT_COSMETICS != 0 {
         size = COSMETICS_OFFSET + COSMETICS_SIZE;
+    }
+    if ext & EXT_COURT != 0 {
+        size = COURT_OFFSET + COURT_SIZE;
     }
 
     size
@@ -1266,27 +1334,33 @@ pub fn ensure_extension(
     // Extensions must be unlocked in order
     if extension & EXT_RESEARCH != 0 || extension & EXT_HEROES != 0 ||
        extension & EXT_INVENTORY != 0 || extension & EXT_RALLY != 0 ||
-       extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 {
+       extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 ||
+       extension & EXT_COURT != 0 {
         new_extensions |= EXT_RESEARCH;
     }
     if extension & EXT_HEROES != 0 || extension & EXT_INVENTORY != 0 ||
        extension & EXT_RALLY != 0 || extension & EXT_TEAM != 0 ||
-       extension & EXT_COSMETICS != 0 {
+       extension & EXT_COSMETICS != 0 || extension & EXT_COURT != 0 {
         new_extensions |= EXT_HEROES;
     }
     if extension & EXT_INVENTORY != 0 || extension & EXT_RALLY != 0 ||
-       extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 {
+       extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 ||
+       extension & EXT_COURT != 0 {
         new_extensions |= EXT_INVENTORY;
     }
     if extension & EXT_RALLY != 0 || extension & EXT_TEAM != 0 ||
-       extension & EXT_COSMETICS != 0 {
+       extension & EXT_COSMETICS != 0 || extension & EXT_COURT != 0 {
         new_extensions |= EXT_RALLY;
     }
-    if extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 {
+    if extension & EXT_TEAM != 0 || extension & EXT_COSMETICS != 0 ||
+       extension & EXT_COURT != 0 {
         new_extensions |= EXT_TEAM;
     }
-    if extension & EXT_COSMETICS != 0 {
+    if extension & EXT_COSMETICS != 0 || extension & EXT_COURT != 0 {
         new_extensions |= EXT_COSMETICS;
+    }
+    if extension & EXT_COURT != 0 {
+        new_extensions |= EXT_COURT;
     }
 
     let new_size = size_for_extensions(new_extensions);
@@ -1312,6 +1386,7 @@ pub fn prerequisite_for_extension(ext: u32) -> Option<u32> {
         EXT_RALLY => Some(EXT_INVENTORY),  // Must have inventory first
         EXT_TEAM => Some(EXT_RALLY),       // Must have rally first
         EXT_COSMETICS => Some(EXT_TEAM),   // Must have team first
+        EXT_COURT => Some(EXT_COSMETICS),  // Must have cosmetics first
         _ => None,
     }
 }
@@ -1326,6 +1401,7 @@ pub fn extension_prerequisite_error(ext: u32) -> crate::error::GameError {
         EXT_RALLY => GameError::InventoryNotUnlocked,
         EXT_TEAM => GameError::RallyNotUnlocked,
         EXT_COSMETICS => GameError::TeamNotUnlocked,
+        EXT_COURT => GameError::CosmeticsNotUnlocked,
         _ => GameError::ExtensionPrerequisiteNotMet,
     }
 }
@@ -1571,6 +1647,18 @@ impl PlayerCore {
     pub fn cosmetics_mut<'a>(&self, data: &'a mut [u8]) -> Option<&'a mut CosmeticsSection> {
         if self.extensions & EXT_COSMETICS == 0 { return None; }
         unsafe { Some(&mut *(data[COSMETICS_OFFSET..].as_mut_ptr() as *mut CosmeticsSection)) }
+    }
+
+    /// Get court section (if unlocked)
+    pub fn court<'a>(&self, data: &'a [u8]) -> Option<&'a CourtSection> {
+        if self.extensions & EXT_COURT == 0 { return None; }
+        unsafe { Some(&*(data[COURT_OFFSET..].as_ptr() as *const CourtSection)) }
+    }
+
+    /// Get mutable court section (if unlocked)
+    pub fn court_mut<'a>(&self, data: &'a mut [u8]) -> Option<&'a mut CourtSection> {
+        if self.extensions & EXT_COURT == 0 { return None; }
+        unsafe { Some(&mut *(data[COURT_OFFSET..].as_mut_ptr() as *mut CourtSection)) }
     }
 
     // Compatibility methods
@@ -2000,6 +2088,7 @@ const _: [(); INVENTORY_SIZE] = [(); core::mem::size_of::<InventorySection>()];
 const _: [(); RALLY_SIZE] = [(); core::mem::size_of::<RallySection>()];
 const _: [(); TEAM_SIZE] = [(); core::mem::size_of::<TeamSection>()];
 const _: [(); COSMETICS_SIZE] = [(); core::mem::size_of::<CosmeticsSection>()];
+const _: [(); COURT_SIZE] = [(); core::mem::size_of::<CourtSection>()];
 
 // Verify offsets are cumulative (prevents gaps/overlaps)
 const _: () = assert!(RESEARCH_OFFSET == CORE_SIZE);
@@ -2008,6 +2097,7 @@ const _: () = assert!(INVENTORY_OFFSET == HEROES_OFFSET + HEROES_SIZE);
 const _: () = assert!(RALLY_OFFSET == INVENTORY_OFFSET + INVENTORY_SIZE);
 const _: () = assert!(TEAM_OFFSET == RALLY_OFFSET + RALLY_SIZE);
 const _: () = assert!(COSMETICS_OFFSET == TEAM_OFFSET + TEAM_SIZE);
-const _: () = assert!(MAX_SIZE == COSMETICS_OFFSET + COSMETICS_SIZE);
+const _: () = assert!(COURT_OFFSET == COSMETICS_OFFSET + COSMETICS_SIZE);
+const _: () = assert!(MAX_SIZE == COURT_OFFSET + COURT_SIZE);
 
 

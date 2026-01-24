@@ -192,6 +192,9 @@ pub fn process(
     let ctx = HeroNftContext::from_parsed(&parsed_hero, template)
         .with_meditation_update(final_meditation_xp, level_changed, template);
 
+    // Save template name for event emission
+    let hero_name = template.name;
+
     drop(template_data);
 
     // 17. Award Sanctuary mastery XP (1 per hour of meditation)
@@ -213,6 +216,9 @@ pub fn process(
     // 18. Clear meditation state on player
     player.meditating_hero_slot = 255;
     player.meditation_started_at = 0;
+
+    // Save player name for event emission
+    let player_name = player.name;
 
     drop(player_data);
 
@@ -248,7 +254,9 @@ pub fn process(
     // 20. Emit event
     emit!(MeditationClaimed {
         player: *player_account.key(),
+        player_name,
         hero_mint: *hero_mint.key(),
+        hero_name,
         xp_earned,
         levels_gained: levels_to_grant as u8,
         timestamp: now,

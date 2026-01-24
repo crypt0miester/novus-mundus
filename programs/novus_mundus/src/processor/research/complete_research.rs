@@ -183,6 +183,7 @@ pub fn process(
     // 12. Emit ResearchCompleted event
     emit!(ResearchCompleted {
         player: *player_account.key(),
+        player_name: player.name,
         research_id: research_type as u16,
         level: new_level,
         timestamp: now,

@@ -32,8 +32,6 @@ use crate::{
 /// - quantity_per_purchase: u16
 /// - base_stats_bps: u16
 /// - price_sol_lamports: u64
-/// - price_novi: u64
-/// - price_gems: u64
 /// - available_from: i64 (0 = now)
 /// - available_until: i64 (0 = forever)
 /// - max_global_stock: u64 (0 = unlimited)
@@ -69,8 +67,8 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // Minimum required: item_id(4) + item_type(2) + category(1) + rarity(1) +
-    //                   qty(2) + stats(2) + sol(8) + novi(8) + gems(8) = 36 bytes
-    if instruction_data.len() < 36 {
+    //                   qty(2) + stats(2) + sol(8) = 20 bytes
+    if instruction_data.len() < 20 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -81,36 +79,34 @@ pub fn process(
     let quantity_per_purchase = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
     let base_stats_bps = u16::from_le_bytes(instruction_data[10..12].try_into().unwrap());
     let price_sol_lamports = u64::from_le_bytes(instruction_data[12..20].try_into().unwrap());
-    let price_novi = u64::from_le_bytes(instruction_data[20..28].try_into().unwrap());
-    let price_gems = u64::from_le_bytes(instruction_data[28..36].try_into().unwrap());
 
     // Optional fields with defaults
-    let available_from = if instruction_data.len() >= 44 {
-        i64::from_le_bytes(instruction_data[36..44].try_into().unwrap())
+    let available_from = if instruction_data.len() >= 28 {
+        i64::from_le_bytes(instruction_data[20..28].try_into().unwrap())
     } else { 0 };
 
-    let available_until = if instruction_data.len() >= 52 {
-        i64::from_le_bytes(instruction_data[44..52].try_into().unwrap())
+    let available_until = if instruction_data.len() >= 36 {
+        i64::from_le_bytes(instruction_data[28..36].try_into().unwrap())
     } else { 0 };
 
-    let max_global_stock = if instruction_data.len() >= 60 {
-        u64::from_le_bytes(instruction_data[52..60].try_into().unwrap())
+    let max_global_stock = if instruction_data.len() >= 44 {
+        u64::from_le_bytes(instruction_data[36..44].try_into().unwrap())
     } else { 0 };
 
-    let max_per_player = if instruction_data.len() >= 64 {
-        u32::from_le_bytes(instruction_data[60..64].try_into().unwrap())
+    let max_per_player = if instruction_data.len() >= 48 {
+        u32::from_le_bytes(instruction_data[44..48].try_into().unwrap())
     } else { 0 };
 
-    let max_per_day = if instruction_data.len() >= 66 {
-        u16::from_le_bytes(instruction_data[64..66].try_into().unwrap())
+    let max_per_day = if instruction_data.len() >= 50 {
+        u16::from_le_bytes(instruction_data[48..50].try_into().unwrap())
     } else { 0 };
 
-    let is_active = if instruction_data.len() >= 67 {
-        instruction_data[66] != 0
+    let is_active = if instruction_data.len() >= 51 {
+        instruction_data[50] != 0
     } else { true };
 
-    let is_featured = if instruction_data.len() >= 68 {
-        instruction_data[67] != 0
+    let is_featured = if instruction_data.len() >= 52 {
+        instruction_data[51] != 0
     } else { false };
 
     // 4. Validate Data
@@ -123,8 +119,8 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // Must have at least one price
-    if price_sol_lamports == 0 && price_novi == 0 && price_gems == 0 {
+    // Must have a SOL price
+    if price_sol_lamports == 0 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -185,8 +181,7 @@ pub fn process(
     item.base_stats_bps = base_stats_bps;
 
     item.price_sol_lamports = price_sol_lamports;
-    item.price_novi = price_novi;
-    item.price_gems = price_gems;
+    item._reserved_price = [0; 8];
 
     item.available_from = available_from;
     item.available_until = available_until;

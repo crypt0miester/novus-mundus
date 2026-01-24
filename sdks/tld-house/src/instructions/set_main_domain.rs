@@ -38,7 +38,7 @@ pub struct SetMainDomain<'a> {
     pub name: &'a [u8],
     /// SHA256("ALT Name Service" + name)
     pub hashed_name: [u8; 32],
-    /// TLD string including dot (e.g., ".alldomains")
+    /// TLD string including dot (e.g., ".all")
     pub tld: &'a [u8],
     /// SHA256("ALT Name Service" + name_account.key().to_base58())
     pub reverse_acc_hashed_name: [u8; 32],
@@ -112,7 +112,6 @@ impl<'a> SetMainDomain<'a> {
         data[offset..offset + 4].copy_from_slice(&32u32.to_le_bytes());
         offset += 4;
         data[offset..offset + 32].copy_from_slice(&self.reverse_acc_hashed_name);
-        offset += 32;
 
         let instruction = Instruction {
             program_id: &crate::ID,

@@ -251,13 +251,16 @@ pub fn process(
             )?;
 
             let player_key = player.key();
+            let event_key = event.key();
 
             // DETERMINISTIC: Use exact cost value (no randomness)
             // MostNoviConsumed: Add locked_novi spent (deterministic)
             let _ = update_event_score(
                 &mut *participation,
                 &mut *event_data,
+                event_key,
                 player_key,
+                player_data.name,
                 EventType::MostNoviConsumed,
                 total_cost,
                 now,
@@ -269,6 +272,7 @@ pub fn process(
     if !pay_with_cash {
         emit!(EquipmentPurchased {
             player: *player.key(),
+            player_name: player_data.name,
             slot: equipment_type as u8,
             tier: 1, // Base tier (no upgrade tiers in current implementation)
             novi_burned: total_cost,

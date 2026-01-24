@@ -7,11 +7,13 @@ use super::{Event, PackBytes, discriminator};
 pub struct RallyCreated {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Team that created the rally
+    /// Team account pubkey
     pub team: Pubkey,
-    /// Rally leader
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Rally leader's player account (not wallet)
     pub leader: Pubkey,
-    /// Target player pubkey
+    /// Target player account pubkey
     pub target: Pubkey,
     /// Gather deadline timestamp
     pub gather_at: i64,
@@ -26,6 +28,7 @@ impl Event for RallyCreated {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
         offset += self.team.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.leader.pack(&mut buf[offset..]);
         offset += self.target.pack(&mut buf[offset..]);
         offset += self.gather_at.pack(&mut buf[offset..]);
@@ -38,9 +41,11 @@ impl Event for RallyCreated {
 pub struct RallyJoined {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Player who joined
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Player account who joined (not wallet)
     pub player: Pubkey,
-    /// Units committed (melee, ranged, siege)
+    /// Units committed (defensive_1, defensive_2, defensive_3)
     pub units: [u64; 3],
     /// Current participant count
     pub participant_count: u8,
@@ -54,6 +59,7 @@ impl Event for RallyJoined {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
@@ -68,7 +74,9 @@ impl Event for RallyJoined {
 pub struct RallyExecuted {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Target player
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Target player account
     pub target: Pubkey,
     /// Total damage dealt to target
     pub damage_dealt: u64,
@@ -88,6 +96,7 @@ impl Event for RallyExecuted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.target.pack(&mut buf[offset..]);
         offset += self.damage_dealt.pack(&mut buf[offset..]);
         offset += self.damage_received.pack(&mut buf[offset..]);
@@ -102,7 +111,9 @@ impl Event for RallyExecuted {
 pub struct RallyCancelled {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Player who cancelled (leader)
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Player account who cancelled (leader) (not wallet)
     pub cancelled_by: Pubkey,
     /// Unix timestamp
     pub timestamp: i64,
@@ -114,6 +125,7 @@ impl Event for RallyCancelled {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.cancelled_by.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
@@ -124,7 +136,9 @@ impl Event for RallyCancelled {
 pub struct RallyLeft {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Player who left
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Player account who left (not wallet)
     pub player: Pubkey,
     /// Units refunded to return journey
     pub units: [u64; 3],
@@ -140,6 +154,7 @@ impl Event for RallyLeft {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
@@ -156,7 +171,9 @@ pub struct RallyClosed {
     pub rally: Pubkey,
     /// Rally ID
     pub rally_id: u64,
-    /// Leader who received rent
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Leader's player account who received rent (not wallet)
     pub leader: Pubkey,
     /// Unix timestamp
     pub timestamp: i64,
@@ -169,6 +186,7 @@ impl Event for RallyClosed {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
         offset += self.rally_id.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.leader.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
@@ -179,7 +197,9 @@ impl Event for RallyClosed {
 pub struct RallySpeedup {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Player who paid for speedup
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Player account who paid for speedup (not wallet)
     pub payer: Pubkey,
     /// Speedup type (0=Gather, 1=March, 2=Return)
     pub speedup_type: u8,
@@ -195,6 +215,7 @@ impl Event for RallySpeedup {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.payer.pack(&mut buf[offset..]);
         offset += self.speedup_type.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);
@@ -207,7 +228,9 @@ impl Event for RallySpeedup {
 pub struct RallyParticipantReturned {
     /// Rally account pubkey
     pub rally: Pubkey,
-    /// Player who returned
+    /// Team name (32 bytes UTF-8)
+    pub team_name: [u8; 32],
+    /// Player account who returned (not wallet)
     pub player: Pubkey,
     /// Whether they participated in combat
     pub participated_in_combat: bool,
@@ -225,6 +248,7 @@ impl Event for RallyParticipantReturned {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.rally.pack(&mut buf[offset..]);
+        offset += self.team_name.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
         offset += self.participated_in_combat.pack(&mut buf[offset..]);
         offset += self.units_returned[0].pack(&mut buf[offset..]);

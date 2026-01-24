@@ -14,7 +14,7 @@ use crate::{
         unlock_extension_if_eligible, require_extension, EXT_RALLY, EXT_TEAM,
     },
     constants::TEAM_SLOT_SEED,
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_signer, require_writable, require_key_match, require_empty},
     emit,
     events::TeamJoined,
 };
@@ -122,9 +122,7 @@ pub fn process(
     }
 
     // Slot must not exist (account must be empty)
-    if member_slot_account.data_len() > 0 {
-        return Err(GameError::SlotOccupied.into());
-    }
+    require_empty(member_slot_account).map_err(|_| GameError::SlotOccupied)?;
 
     // 7. Create Member Slot Account
 
@@ -176,6 +174,7 @@ pub fn process(
 
     emit!(TeamJoined {
         team: *team_account.key(),
+        team_name: team.name,
         player: *player_account.key(),
         member_count: team.member_count,
         timestamp: now,

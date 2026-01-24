@@ -23,15 +23,6 @@ pub fn xp_required_for_level(level: u8) -> u64 {
     (base * libm::pow(multiplier, exponent)) as u64
 }
 
-/// Total XP required to reach a given level from level 1
-pub fn total_xp_for_level(target_level: u8) -> u64 {
-    let mut total = 0u64;
-    for level in 2..=target_level {
-        total = total.saturating_add(xp_required_for_level(level));
-    }
-    total
-}
-
 /// Grant XP to player with time-of-day bonus and handle level-ups
 ///
 /// Golden hours (Dawn/Dusk) provide φ² (2.618x) XP bonus for enlightenment!
@@ -128,10 +119,6 @@ pub fn calculate_xp_reward(action: XpAction) -> u64 {
             // 1 XP per 1000 resources collected
             amount / 1000
         },
-        XpAction::DailyReward => {
-            // Fixed daily login XP
-            25
-        },
     }
 }
 
@@ -141,7 +128,6 @@ pub enum XpAction {
     DefeatEncounter { rarity: u8 },
     CompleteTravel { distance_km: u32 },
     CollectResources { amount: u64 },
-    DailyReward,
 }
 
 /// Daily reward amounts (calculated with subscription tier multipliers)
@@ -202,11 +188,4 @@ mod tests {
         assert_eq!(xp_required_for_level(4), 625);
     }
 
-    #[test]
-    fn test_total_xp() {
-        assert_eq!(total_xp_for_level(1), 0);
-        assert_eq!(total_xp_for_level(2), 100);
-        assert_eq!(total_xp_for_level(3), 350);
-        assert_eq!(total_xp_for_level(4), 975);
-    }
 }

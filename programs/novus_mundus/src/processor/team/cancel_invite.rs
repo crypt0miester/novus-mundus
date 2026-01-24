@@ -10,7 +10,7 @@ use crate::{
     state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
     constants::TEAM_INVITE_SEED,
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::InviteCancelled,
 };
@@ -113,10 +113,7 @@ pub fn process(
     }
 
     // Invite must exist
-    if invite_account.data_len() == 0 {
-        return Err(GameError::InviteNotFound.into());
-    }
-
+    require_initialized(invite_account).map_err(|_| GameError::InviteNotFound)?;
     require_owner(invite_account, program_id)?;
 
     // Verify invite is for this team
@@ -143,6 +140,7 @@ pub fn process(
 
     emit!(InviteCancelled {
         team: *team_account.key(),
+        team_name: team.name,
         invitee: invitee_pubkey,
         cancelled_by: *member_account.key(),
         timestamp: now,

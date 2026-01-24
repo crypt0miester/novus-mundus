@@ -181,6 +181,7 @@ pub fn process(
 
     emit!(MemberKicked {
         team: *team_account.key(),
+        team_name: team.name,
         kicked: *kicked_account.key(),
         kicked_by: *kicker_account.key(),
         timestamp: now,

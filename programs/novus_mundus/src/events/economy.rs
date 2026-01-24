@@ -5,8 +5,10 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player collects resources (cash/mining/fishing)
 pub struct ResourcesCollected {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Collection type (0=cash, 1=mining, 2=fishing)
     pub collection_type: u8,
     /// NOVI consumed for collection
@@ -31,6 +33,7 @@ impl Event for ResourcesCollected {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.collection_type.pack(&mut buf[offset..]);
         offset += self.novi_consumed.pack(&mut buf[offset..]);
         offset += self.base_output.pack(&mut buf[offset..]);
@@ -45,9 +48,11 @@ impl Event for ResourcesCollected {
 
 /// Emitted when a player hires units
 pub struct UnitsHired {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
-    /// Unit type (0=melee, 1=ranged, 2=siege)
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
+    /// Unit type (0=DefensiveUnit1, 1=DefensiveUnit2, etc.)
     pub unit_type: u8,
     /// Base quantity before bonuses
     pub base_quantity: u64,
@@ -67,6 +72,7 @@ impl Event for UnitsHired {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.unit_type.pack(&mut buf[offset..]);
         offset += self.base_quantity.pack(&mut buf[offset..]);
         offset += self.final_quantity.pack(&mut buf[offset..]);
@@ -79,10 +85,14 @@ impl Event for UnitsHired {
 
 /// Emitted when cash is transferred between players
 pub struct CashTransferred {
-    /// Sender player pubkey
+    /// Sender player account pubkey (not wallet)
     pub from: Pubkey,
-    /// Receiver player pubkey
+    /// Sender's name (48 bytes UTF-8)
+    pub from_name: [u8; 48],
+    /// Receiver player account pubkey (not wallet)
     pub to: Pubkey,
+    /// Receiver's name (48 bytes UTF-8)
+    pub to_name: [u8; 48],
     /// Amount transferred
     pub amount: u64,
     /// Fee charged (if any)
@@ -97,7 +107,9 @@ impl Event for CashTransferred {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.from.pack(&mut buf[offset..]);
+        offset += self.from_name.pack(&mut buf[offset..]);
         offset += self.to.pack(&mut buf[offset..]);
+        offset += self.to_name.pack(&mut buf[offset..]);
         offset += self.amount.pack(&mut buf[offset..]);
         offset += self.fee.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -107,8 +119,10 @@ impl Event for CashTransferred {
 
 /// Emitted when NOVI is locked/staked
 pub struct NoviLocked {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Amount locked
     pub amount: u64,
     /// New total locked balance
@@ -123,6 +137,7 @@ impl Event for NoviLocked {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.amount.pack(&mut buf[offset..]);
         offset += self.total_locked.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -132,8 +147,10 @@ impl Event for NoviLocked {
 
 /// Emitted when equipment is purchased
 pub struct EquipmentPurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Equipment slot
     pub slot: u8,
     /// Equipment tier/level
@@ -150,6 +167,7 @@ impl Event for EquipmentPurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.slot.pack(&mut buf[offset..]);
         offset += self.tier.pack(&mut buf[offset..]);
         offset += self.novi_burned.pack(&mut buf[offset..]);
@@ -160,8 +178,10 @@ impl Event for EquipmentPurchased {
 
 /// Emitted when stamina is purchased
 pub struct StaminaPurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Stamina amount purchased
     pub stamina: u64,
     /// Gems spent
@@ -176,6 +196,7 @@ impl Event for StaminaPurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.stamina.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -185,8 +206,10 @@ impl Event for StaminaPurchased {
 
 /// Emitted when vault transfer occurs
 pub struct VaultTransfer {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Amount transferred
     pub amount: u64,
     /// Direction (true = to vault, false = from vault)
@@ -203,6 +226,7 @@ impl Event for VaultTransfer {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.amount.pack(&mut buf[offset..]);
         offset += self.to_vault.pack(&mut buf[offset..]);
         offset += self.vault_balance.pack(&mut buf[offset..]);

@@ -39,16 +39,16 @@ use pinocchio::{
 use crate::{
     constants::{
         EXPEDITION_SEED, EXPEDITION_MINING,
-        MINING_DURATION_HOURS, MINING_GEMS_PER_OP_HOUR, MINING_RARE_CHANCE_BPS, MINING_FRAGMENT_BONUS,
-        FISHING_DURATION_HOURS, FISHING_PRODUCE_PER_OP_HOUR, FISHING_RARE_CHANCE_BPS, FISHING_FRAGMENT_BONUS,
+        MINING_DURATION_HOURS, MINING_RARE_CHANCE_BPS, MINING_FRAGMENT_BONUS,
+        FISHING_DURATION_HOURS, FISHING_RARE_CHANCE_BPS, FISHING_FRAGMENT_BONUS,
         RARE_FIND_MULTIPLIER, PERFECT_SCORE_THRESHOLD, PERFECT_EXPEDITION_BONUS_BPS,
         OPERATIVE_TIER_1_MULTIPLIER_BPS, OPERATIVE_TIER_2_MULTIPLIER_BPS, OPERATIVE_TIER_3_MULTIPLIER_BPS,
     },
     error::GameError,
-    state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY, is_hero_at_home},
+    state::{PlayerAccount, ExpeditionAccount, GameEngine, NULL_PUBKEY, is_hero_at_home},
     helpers::{close_account, estate::{load_estate_for_player, observatory_loot_bonus_bps}, parse_hero_nft},
-    validation::{require_signer, require_writable, require_owner},
-    logic::{get_time_of_day, apply_time_multiplier, ActivityType},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
+    logic::{get_time_of_day, apply_time_multiplier, ActivityType, safe_math::isqrt},
     emit,
     events::ExpeditionClaimed,
 };
@@ -73,12 +73,13 @@ pub const ORIGIN_CITY_BONUS_BPS: u64 = 2500;
 /// 1. `[writable]` player_account - PlayerAccount PDA
 /// 2. `[writable]` expedition_account - ExpeditionAccount PDA (to be closed)
 /// 3. `[]` estate_account - EstateAccount PDA (for Observatory bonus)
+/// 4. `[]` game_engine - GameEngine PDA (for expedition config)
 ///
 /// ## Optional Hero Accounts (if hero was on expedition):
-/// 4. `[writable]` hero_mint - Hero NFT (MPL Core asset)
-/// 5. `[]` hero_collection - Hero collection (MPL Core)
-/// 6. `[]` system_program - System program (for transfer)
-/// 7. `[]` p_core_program - MPL Core program
+/// 5. `[writable]` hero_mint - Hero NFT (MPL Core asset)
+/// 6. `[]` hero_collection - Hero collection (MPL Core)
+/// 7. `[]` system_program - System program (for transfer)
+/// 8. `[]` p_core_program - MPL Core program
 ///
 /// # Instruction Data
 /// None required
@@ -87,8 +88,8 @@ pub fn process(
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts (minimum 4, up to 8 with hero)
-    if accounts.len() < 4 {
+    // 1. Parse Accounts (minimum 5, up to 9 with hero)
+    if accounts.len() < 5 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -96,6 +97,7 @@ pub fn process(
     let player_account = &accounts[1];
     let expedition_account = &accounts[2];
     let estate_account = &accounts[3];
+    let game_engine_account = &accounts[4];
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -115,9 +117,7 @@ pub fn process(
     }
 
     // 4. Check expedition exists
-    if expedition_account.data_len() == 0 {
-        return Err(GameError::NoExpeditionInProgress.into());
-    }
+    require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 5. Load Expedition Data (before closing)
     let (expedition_type, tier, strikes, score, start_time, op_unit_1, op_unit_2, op_unit_3, hero_mint_key, expedition_city) = {
@@ -146,16 +146,33 @@ pub fn process(
     // Check if expedition had a hero
     let has_hero = hero_mint_key != NULL_PUBKEY;
 
+    // 6. Load GameEngine for expedition config
+    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    let max_ops = game_engine.economic_config.max_operatives_per_expedition;
+    let mining_rates = game_engine.economic_config.mining_gems_per_op_hour;
+    let fishing_rates = game_engine.economic_config.fishing_produce_per_op_hour;
+    drop(game_engine);
+
     // Calculate weighted operatives for reward calculation
     // Higher-tier operatives provide better yields:
     // Tier 1: 1.0x (10000 bps), Tier 2: 1.5x (15000 bps), Tier 3: 2.0x (20000 bps)
-    let weighted_operatives = op_unit_1
+    let raw_weighted_operatives = op_unit_1
         .saturating_mul(OPERATIVE_TIER_1_MULTIPLIER_BPS)
         .saturating_add(op_unit_2.saturating_mul(OPERATIVE_TIER_2_MULTIPLIER_BPS))
         .saturating_add(op_unit_3.saturating_mul(OPERATIVE_TIER_3_MULTIPLIER_BPS))
         / 10000; // Convert from basis points to actual multiplier
 
-    // 6. Load Player Data
+    // Apply diminishing returns after max_operatives cap
+    // effective = min(ops, cap) + sqrt(max(0, ops - cap))
+    let weighted_operatives = if raw_weighted_operatives <= max_ops {
+        raw_weighted_operatives
+    } else {
+        let excess = raw_weighted_operatives.saturating_sub(max_ops);
+        let sqrt_excess = isqrt(excess);
+        max_ops.saturating_add(sqrt_excess)
+    };
+
+    // 7. Load Player Data
     let mut player_data_ref = player_account.try_borrow_mut_data()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
@@ -180,18 +197,21 @@ pub fn process(
         return Err(GameError::ExpeditionNotComplete.into());
     }
 
-    // 9. Calculate base yield (based on weighted operatives)
-    // Higher-tier operatives provide better yields via weighted_operatives
+    // 10. Calculate base yield (based on weighted operatives with diminishing returns)
+    // Rates are stored as value × 100 (e.g., 10 = 0.10 gems/op/hour)
+    // Formula: operatives × hours × rate / 100
     let base_yield = if expedition_type == EXPEDITION_MINING {
-        let gems_per_op_hour = MINING_GEMS_PER_OP_HOUR.get(tier as usize).copied().unwrap_or(10);
+        let rate = mining_rates.get(tier as usize).copied().unwrap_or(10) as u64;
         weighted_operatives
             .saturating_mul(duration_hours as u64)
-            .saturating_mul(gems_per_op_hour)
+            .saturating_mul(rate)
+            / 100
     } else {
-        let produce_per_op_hour = FISHING_PRODUCE_PER_OP_HOUR.get(tier as usize).copied().unwrap_or(15);
+        let rate = fishing_rates.get(tier as usize).copied().unwrap_or(15) as u64;
         weighted_operatives
             .saturating_mul(duration_hours as u64)
-            .saturating_mul(produce_per_op_hour)
+            .saturating_mul(rate)
+            / 100
     };
 
     // 10. Apply time-of-day bonus (based on claim time)
@@ -325,7 +345,7 @@ pub fn process(
     };
 
     // 15. Grant rewards
-    let fragment_bonus = if expedition_type == EXPEDITION_MINING {
+    let _fragment_bonus = if expedition_type == EXPEDITION_MINING {
         player_data.gems = player_data.gems
             .checked_add(final_yield)
             .ok_or(GameError::MathOverflow)?;
@@ -404,8 +424,13 @@ pub fn process(
     close_account(expedition_account, owner)?;
 
     // 19. Emit event
+    // Re-borrow player_data to access name field
+    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
+
     emit!(ExpeditionClaimed {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         expedition_type,
         total_yield: final_yield,
         bonus_yield: affinity_adjusted.saturating_sub(base_yield),

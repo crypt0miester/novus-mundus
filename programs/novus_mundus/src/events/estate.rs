@@ -7,8 +7,10 @@ use super::{Event, PackBytes, discriminator};
 pub struct EstateCreated {
     /// Estate account pubkey
     pub estate: Pubkey,
-    /// Player who created
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -20,6 +22,7 @@ impl Event for EstateCreated {
         let mut offset = 0;
         offset += self.estate.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
     }
@@ -27,8 +30,10 @@ impl Event for EstateCreated {
 
 /// Emitted when building construction starts
 pub struct BuildingStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Building type
     pub building_type: u8,
     /// Plot index
@@ -45,6 +50,7 @@ impl Event for BuildingStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.building_type.pack(&mut buf[offset..]);
         offset += self.plot.pack(&mut buf[offset..]);
         offset += self.completes_at.pack(&mut buf[offset..]);
@@ -55,8 +61,10 @@ impl Event for BuildingStarted {
 
 /// Emitted when a building is completed
 pub struct BuildingCompleted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Building type
     pub building_type: u8,
     /// Building level
@@ -73,6 +81,7 @@ impl Event for BuildingCompleted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.building_type.pack(&mut buf[offset..]);
         offset += self.level.pack(&mut buf[offset..]);
         offset += self.plot.pack(&mut buf[offset..]);
@@ -83,8 +92,10 @@ impl Event for BuildingCompleted {
 
 /// Emitted when a building upgrade starts
 pub struct BuildingUpgradeStarted {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Building type
     pub building_type: u8,
     /// Current level
@@ -103,6 +114,7 @@ impl Event for BuildingUpgradeStarted {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.building_type.pack(&mut buf[offset..]);
         offset += self.from_level.pack(&mut buf[offset..]);
         offset += self.to_level.pack(&mut buf[offset..]);
@@ -114,8 +126,10 @@ impl Event for BuildingUpgradeStarted {
 
 /// Emitted when a plot is purchased
 pub struct PlotPurchased {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Plot index
     pub plot: u8,
     /// Cost paid (cash)
@@ -132,6 +146,7 @@ impl Event for PlotPurchased {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.plot.pack(&mut buf[offset..]);
         offset += self.cost.pack(&mut buf[offset..]);
         offset += self.total_plots.pack(&mut buf[offset..]);
@@ -142,8 +157,10 @@ impl Event for PlotPurchased {
 
 /// Emitted when daily estate rewards are claimed
 pub struct EstateDailyClaimed {
-    /// Player account pubkey
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Materials earned
     pub materials: u64,
     /// Consecutive days streak
@@ -158,6 +175,7 @@ impl Event for EstateDailyClaimed {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.materials.pack(&mut buf[offset..]);
         offset += self.streak.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);

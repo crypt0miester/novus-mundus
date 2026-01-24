@@ -16,6 +16,7 @@ pub const UPDATE_SALE_LIMITS: u8 = 2;
 pub const UPDATE_MILESTONES: u8 = 4;
 pub const UPDATE_MILESTONE_DISCOUNTS: u8 = 8;
 pub const UPDATE_STREAK_DISCOUNTS: u8 = 16;
+pub const UPDATE_SOL_ORACLE: u8 = 32;
 
 /// Update shop config (DAO only)
 ///
@@ -176,7 +177,27 @@ pub fn process(
         config.streak_day_7_bps = u16::from_le_bytes(
             instruction_data[offset + 6..offset + 8].try_into().unwrap()
         );
-        // offset += 8;
+        offset += 8;
+    }
+
+    // Update SOL oracle configuration (68 bytes: 2 x Pubkey + 2 x u16)
+    if update_flags & UPDATE_SOL_ORACLE != 0 {
+        if instruction_data.len() < offset + 68 {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+        let pyth_bytes: [u8; 32] = instruction_data[offset..offset + 32].try_into().unwrap();
+        config.sol_pyth_feed = Pubkey::from(pyth_bytes);
+
+        let sb_bytes: [u8; 32] = instruction_data[offset + 32..offset + 64].try_into().unwrap();
+        config.sol_switchboard_feed = Pubkey::from(sb_bytes);
+
+        config.sol_max_staleness_slots = u16::from_le_bytes(
+            instruction_data[offset + 64..offset + 66].try_into().unwrap()
+        );
+        config.sol_confidence_threshold_bps = u16::from_le_bytes(
+            instruction_data[offset + 66..offset + 68].try_into().unwrap()
+        );
+        // offset += 68;
     }
 
     Ok(())

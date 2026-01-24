@@ -43,7 +43,6 @@ pub fn process(
         event_participation_account,
         player_owner,
         system_program,
-        clock_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -162,7 +161,8 @@ pub fn process(
     // Emit event
     emit!(GameEventJoined {
         event: *event_account.key(),
-        player: *player_owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         entry_fee: 0,
         participant_count: event_data.participant_count,
         timestamp: now,

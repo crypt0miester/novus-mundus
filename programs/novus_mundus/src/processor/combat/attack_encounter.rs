@@ -37,6 +37,7 @@ use crate::{
         require_signer,
         require_key_match,
         require_writable,
+        require_owner,
     },
     emit,
     events::{EncounterAttacked, EncounterDefeated, XpGained, PlayerLeveledUp},
@@ -383,7 +384,8 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *owner.key(),
+            player: *player.key(),
+            player_name: player_data.name,
             amount: base_xp,
             source: 0, // 0=combat
             total_xp: player_data.current_xp,
@@ -393,7 +395,8 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *owner.key(),
+                player: *player.key(),
+                player_name: player_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
                 timestamp: now,
@@ -608,9 +611,7 @@ pub fn process(
         }
 
         // Validate location account ownership and occupancy
-        if enc_location.owner() != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+        require_owner(enc_location, program_id)?;
 
         {
             let location_data = enc_location.try_borrow_data()?;
@@ -656,6 +657,7 @@ pub fn process(
         )?;
 
         let player_key = player.key();
+        let event_key = event_acc.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_damage = actual_damage;
@@ -664,7 +666,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *participation,
             &mut *event_data,
+            event_key,
             player_key,
+            player_data.name,
             EventType::TotalDamageDealt,
             final_damage,
             now,
@@ -675,7 +679,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *participation,
                 &mut *event_data,
+                event_key,
                 player_key,
+                player_data.name,
                 EventType::MostEncountersDefeated,
                 1,
                 now,
@@ -685,7 +691,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *participation,
                 &mut *event_data,
+                event_key,
                 player_key,
+                player_data.name,
                 EventType::MostAttacksWonPvE,
                 1,
                 now,
@@ -697,7 +705,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *participation,
                 &mut *event_data,
+                event_key,
                 player_key,
+                player_data.name,
                 EventType::MostXPGained,
                 xp_gained,
                 now,
@@ -718,6 +728,7 @@ pub fn process(
     // Emit EncounterAttacked event
     emit!(EncounterAttacked {
         player: player_key,
+        player_name: player_data.name,
         encounter: *encounter.key(),
         damage_dealt: actual_damage,
         health_remaining: encounter_data.health,
@@ -735,6 +746,7 @@ pub fn process(
             level: encounter_data.level as u8,
             total_attackers: new_count,
             killing_blow_by: player_key,
+            killing_blow_name: player_data.name,
             loot_cash: instant_cash,
             loot_novi: 0, // Loot NOVI is in LootAccount, not instant
             timestamp: now,

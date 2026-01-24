@@ -133,28 +133,10 @@ pub fn require_academy(estate: &EstateAccount, min_level: u8) -> Result<&Buildin
     require_building(estate, BuildingType::Academy, min_level)
 }
 
-/// Require Arena at minimum level
-#[inline]
-pub fn require_arena(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Arena, min_level)
-}
-
 /// Require Sanctuary at minimum level
 #[inline]
 pub fn require_sanctuary(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Sanctuary, min_level)
-}
-
-/// Require Observatory at minimum level
-#[inline]
-pub fn require_observatory(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Observatory, min_level)
-}
-
-/// Require Treasury at minimum level
-#[inline]
-pub fn require_treasury(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Treasury, min_level)
 }
 
 /// Require Citadel at minimum level
@@ -424,11 +406,6 @@ pub fn meditation_levels_from_xp(current_level: u32, current_xp: u32) -> (u32, u
     (levels_gained, xp)
 }
 
-/// Check if hero can still gain levels via meditation
-pub fn can_gain_meditation_levels(hero_level: u32, sanctuary_level: u8) -> bool {
-    hero_level < meditation_level_cap(sanctuary_level)
-}
-
 /// Get Sanctuary building level from estate (0 if not found/not active)
 pub fn get_sanctuary_level(estate: &EstateAccount) -> u8 {
     if let Some(sanctuary) = estate.find_building(BuildingType::Sanctuary) {
@@ -511,19 +488,6 @@ pub fn can_craft_quality_tier(estate: &EstateAccount, tier: QualityTier) -> bool
     has_building_at_level(estate, BuildingType::Forge, required)
 }
 
-/// Get craft success bonus from Forge level (basis points)
-/// NOTE: This is now superseded by the staged tempering system
-/// but kept for backwards compatibility
-pub fn forge_success_bonus_bps(estate: &EstateAccount) -> u16 {
-    if let Some(forge) = estate.find_building(BuildingType::Forge) {
-        if forge.is_active() {
-            // +1.5% per level, max +30%
-            return (forge.level as u16 * 150).min(3000);
-        }
-    }
-    0
-}
-
 // ============================================================
 // Staged Tempering Helpers (Forge bonuses)
 // ============================================================
@@ -580,19 +544,35 @@ pub fn get_forge_level(estate: &EstateAccount) -> u8 {
 }
 
 // ============================================================
-// Arena PvP Bonuses
+// Workshop Mining Bonus
 // ============================================================
 
-/// Get PvP damage bonus from Arena level (basis points)
-pub fn arena_pvp_damage_bps(estate: &EstateAccount) -> u16 {
-    if let Some(arena) = estate.find_building(BuildingType::Arena) {
-        if arena.is_active() {
-            // 0.5% per level
-            return arena.level as u16 * 50;
+/// Get mining output bonus from Workshop level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+pub fn workshop_mining_bonus_bps(estate: &EstateAccount) -> u16 {
+    if let Some(workshop) = estate.find_building(BuildingType::Workshop) {
+        if workshop.is_active() {
+            return workshop.level as u16 * 50;
         }
     }
     0
 }
+
+// ============================================================
+// Dock Fishing Bonus
+// ============================================================
+
+/// Get fishing output bonus from Dock level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
+    if let Some(dock) = estate.find_building(BuildingType::Dock) {
+        if dock.is_active() {
+            return dock.level as u16 * 50;
+        }
+    }
+    0
+}
+
 
 // ============================================================
 // Treasury Prize Bonuses
@@ -687,17 +667,6 @@ pub fn academy_research_speed_bps(estate: &EstateAccount) -> u16 {
         }
     }
     0
-}
-
-/// Get Academy building level and mastery level
-/// Returns (building_level, mastery_level) or (0, 0) if not found
-pub fn get_academy_levels(estate: &EstateAccount) -> (u8, u8) {
-    if let Some(academy) = estate.find_building(BuildingType::Academy) {
-        if academy.is_active() {
-            return (academy.level, academy.mastery_level);
-        }
-    }
-    (0, 0)
 }
 
 /// Get Academy mastery level (0-100)

@@ -1,7 +1,6 @@
 use crate::logic::safe_math::{apply_bp, apply_bp_bonus, chain_bp, mul_div};
 use crate::constants::{
-    OPERATIVE_FALLBACK_PENALTY_BPS, FALLBACK_LOOT_BONUS_BPS,
-    WEAPON_LOOT_RATE_BPS, WEAPON_RECOVERY_RATE_BPS,
+    WEAPON_LOOT_RATE_BPS,
     ARMORY_RAID_WITH_OPERATIVES_BPS, ARMORY_RAID_UNDEFENDED_BPS,
     DAMAGE_PER_SIEGE_WEAPON, SIEGE_CAPTURE_RATE_BPS,
 };
@@ -32,11 +31,6 @@ impl WeaponSet {
             .saturating_add(self.siege)
     }
 
-    /// Check if empty (no weapons)
-    pub fn is_empty(&self) -> bool {
-        self.melee == 0 && self.ranged == 0 && self.siege == 0
-    }
-
     /// Apply a basis point rate to all weapon types
     /// Returns: weapons × rate / 10000
     pub fn apply_rate_bps(&self, rate_bps: u16) -> Self {
@@ -47,23 +41,6 @@ impl WeaponSet {
         }
     }
 
-    /// Add another weapon set to this one
-    pub fn add(&self, other: &Self) -> Self {
-        Self {
-            melee: self.melee.saturating_add(other.melee),
-            ranged: self.ranged.saturating_add(other.ranged),
-            siege: self.siege.saturating_add(other.siege),
-        }
-    }
-
-    /// Subtract another weapon set from this one (saturating)
-    pub fn sub(&self, other: &Self) -> Self {
-        Self {
-            melee: self.melee.saturating_sub(other.melee),
-            ranged: self.ranged.saturating_sub(other.ranged),
-            siege: self.siege.saturating_sub(other.siege),
-        }
-    }
 }
 
 // ============================================================
@@ -77,14 +54,10 @@ pub struct CombatWeaponResult {
     pub attacker_weapons_returned: WeaponSet,
     /// Weapons the attacker looted from dead defenders
     pub attacker_weapons_looted: WeaponSet,
-    /// Weapons the defender has remaining after combat
-    pub defender_weapons_remaining: WeaponSet,
     /// Weapons the defender looted from dead attackers (if defender won)
     pub defender_weapons_looted: WeaponSet,
     /// Whether the attacker won the battle
     pub attacker_won: bool,
-    /// Whether defender was in fallback mode (no garrison)
-    pub fallback_mode: bool,
 }
 
 // ============================================================
@@ -132,7 +105,6 @@ pub fn resolve_weapon_combat(
     // Determine winner
     let attacker_wiped = attacker_casualties >= attacker_troops;
     let defender_wiped = defender_casualties >= defender_troops || defender_troops == 0;
-    let fallback_mode = defender_troops == 0;
 
     // Attacker wins if:
     // 1. Defender is wiped out, OR
@@ -208,9 +180,6 @@ pub fn resolve_weapon_combat(
             siege: attacker_siege_after_firing.saturating_sub(attacker_dropped.siege),
         };
 
-        // Defender's remaining weapons (after drops)
-        let defender_remaining = defender_equipped_weapons.sub(&defender_dropped);
-
         // Total looted by attacker (including captured siege)
         let attacker_looted = WeaponSet {
             melee: looted_from_defender.melee,
@@ -221,10 +190,8 @@ pub fn resolve_weapon_combat(
         CombatWeaponResult {
             attacker_weapons_returned: attacker_surviving,
             attacker_weapons_looted: attacker_looted,
-            defender_weapons_remaining: defender_remaining,
             defender_weapons_looted: WeaponSet::default(), // Lost
             attacker_won: true,
-            fallback_mode,
         }
     } else {
         // ============================================================
@@ -233,14 +200,6 @@ pub fn resolve_weapon_combat(
 
         // Defender loots from dead attackers (60%)
         let looted_from_attacker = attacker_dropped.apply_rate_bps(WEAPON_LOOT_RATE_BPS);
-
-        // Defender recovers own dropped weapons (80%)
-        let recovered = defender_dropped.apply_rate_bps(WEAPON_RECOVERY_RATE_BPS);
-
-        // Defender's remaining after recovery
-        let defender_remaining = defender_equipped_weapons
-            .sub(&defender_dropped)
-            .add(&recovered);
 
         // Attacker keeps only surviving troops' weapons (if any survivors)
         let attacker_surviving = if attacker_wiped {
@@ -256,49 +215,10 @@ pub fn resolve_weapon_combat(
         CombatWeaponResult {
             attacker_weapons_returned: attacker_surviving,
             attacker_weapons_looted: WeaponSet::default(), // Lost - no loot for loser
-            defender_weapons_remaining: defender_remaining,
             defender_weapons_looted: looted_from_attacker,
             attacker_won: false,
-            fallback_mode,
         }
     }
-}
-
-/// Calculate weapon drops from casualties
-///
-/// # Arguments
-/// * `committed_weapons` - Weapons that troops carried
-/// * `troops` - Total troops
-/// * `casualties` - Troops that died
-///
-/// # Returns
-/// Weapons dropped by dead troops
-pub fn calculate_weapon_drops(
-    committed_weapons: WeaponSet,
-    troops: u64,
-    casualties: u64,
-) -> WeaponSet {
-    if troops == 0 || casualties == 0 {
-        return WeaponSet::default();
-    }
-
-    let casualty_ratio_bps = (mul_div(casualties, 10000, troops).unwrap_or(0) as u16).min(10000);
-    committed_weapons.apply_rate_bps(casualty_ratio_bps)
-}
-
-/// Calculate siege weapons consumed based on damage dealt
-///
-/// Siege weapons are artillery - they get consumed when firing,
-/// not based on casualties.
-///
-/// # Arguments
-/// * `siege_committed` - Siege weapons committed to battle
-/// * `damage_dealt` - Total damage dealt by the attacker
-///
-/// # Returns
-/// Number of siege weapons consumed
-pub fn calculate_siege_consumed(siege_committed: u64, damage_dealt: u64) -> u64 {
-    siege_committed.min(damage_dealt / DAMAGE_PER_SIEGE_WEAPON.max(1))
 }
 
 /// Calculate unit abandonment based on happiness (Deterministic System)
@@ -488,59 +408,6 @@ pub fn calculate_damage_output(
     chain_bp(sum_of_units, &[weapon_coeff as u64, coeff as u64]).unwrap_or(0)
 }
 
-/// Calculate units in vehicles (used for drive-by attacks and protection)
-/// Returns (unit_1_in_vehicle, unit_2_in_vehicle, unit_3_in_vehicle)
-///
-/// # Arguments
-/// * `unit_1` - Total unit_1 count
-/// * `unit_2` - Total unit_2 count
-/// * `unit_3` - Total unit_3 count
-/// * `vehicles` - Total vehicles available
-/// * `gameplay_config` - GameEngine gameplay configuration
-///
-/// Priority for vehicle slots: unit_3 > unit_2 > unit_1 (highest tier gets priority)
-pub fn units_in_vehicle(
-    unit_1: u64,
-    unit_2: u64,
-    unit_3: u64,
-    vehicles: u64,
-    gameplay_config: &crate::state::GameplayConfig,
-) -> (u64, u64, u64) {
-    let total_units = unit_1 + unit_2 + unit_3;
-    let total_capacity = gameplay_config.vehicle_capacity * vehicles;
-
-    // If all units fit, everyone gets a vehicle
-    if total_capacity >= total_units {
-        return (unit_1, unit_2, unit_3);
-    }
-
-    let mut in_vehicle_1 = 0;
-    let mut in_vehicle_2 = 0;
-    let mut in_vehicle_3 = 0;
-    let mut remaining_capacity = total_capacity;
-
-    // Priority: unit_3 (highest tier) > unit_2 > unit_1 (lowest tier)
-    if remaining_capacity >= unit_3 {
-        in_vehicle_3 = unit_3;
-        remaining_capacity -= unit_3;
-    } else {
-        in_vehicle_3 = remaining_capacity;
-        remaining_capacity = 0;
-    }
-
-    if remaining_capacity >= unit_2 {
-        in_vehicle_2 = unit_2;
-        remaining_capacity -= unit_2;
-    } else {
-        in_vehicle_2 = remaining_capacity;
-        remaining_capacity = 0;
-    }
-
-    in_vehicle_1 = remaining_capacity.min(unit_1);
-
-    (in_vehicle_1, in_vehicle_2, in_vehicle_3)
-}
-
 /// Inflict damage on units with armor damage reduction
 /// Damage distribution controlled by GameplayConfig (using basis points)
 /// Returns (remaining_unit_1, remaining_unit_2, remaining_unit_3)
@@ -656,210 +523,3 @@ pub fn inflict_damage(
     (unit_1, unit_2, unit_3)
 }
 
-/// Calculate total units with weapons equipped
-/// Returns (total_armed_units, weapons_used)
-pub fn units_with_weapons(
-    unit_1: u64,
-    unit_2: u64,
-    unit_3: u64,
-    weapons: u64,
-) -> (u64, u64) {
-    let total_units = unit_1 + unit_2 + unit_3;
-
-    if weapons >= total_units {
-        (total_units, total_units)
-    } else {
-        // weapons < total_units, so we have weapons armed units
-        (weapons, weapons)
-    }
-}
-
-// ============================================================
-// Strategic Combat System - Operative Fallback
-// ============================================================
-
-/// Calculate defense power with operative fallback
-///
-/// If no defensive garrison and no reinforcements exist, operatives defend
-/// at 50% effectiveness. This is a punishment for over-deploying offensive
-/// forces, but prevents players from being completely defenseless.
-///
-/// # Arguments
-/// * `garrison_power` - Power from defensive units (garrison)
-/// * `reinforcement_power` - Power from reinforcements
-/// * `operative_unit_1` - Count of operative unit type 1
-/// * `operative_unit_2` - Count of operative unit type 2
-/// * `operative_unit_3` - Count of operative unit type 3
-///
-/// # Returns
-/// * (total_defense_power, is_fallback_mode)
-/// * is_fallback_mode = true means operatives are defending (economy at risk!)
-pub fn calculate_defense_with_fallback(
-    garrison_power: u64,
-    reinforcement_power: u64,
-    operative_unit_1: u64,
-    operative_unit_2: u64,
-    operative_unit_3: u64,
-) -> (u64, bool) {
-    // Check if we have any real defenders
-    let total_defense = garrison_power.saturating_add(reinforcement_power);
-
-    if total_defense > 0 {
-        // Normal defense - no fallback needed
-        return (total_defense, false);
-    }
-
-    // FALLBACK: Use operatives at 50% effectiveness
-    // Operative power calculation: unit_1 × 1 + unit_2 × 2 + unit_3 × 3
-    let operative_base_power: u64 = operative_unit_1
-        .saturating_add(operative_unit_2.saturating_mul(2))
-        .saturating_add(operative_unit_3.saturating_mul(3));
-
-    if operative_base_power == 0 {
-        // Truly defenseless - no units at all
-        return (0, false);
-    }
-
-    // Apply 50% penalty (OPERATIVE_FALLBACK_PENALTY_BPS = 5000)
-    let fallback_power = apply_bp(operative_base_power, OPERATIVE_FALLBACK_PENALTY_BPS as u64)
-        .unwrap_or(0);
-
-    (fallback_power, true) // true = fallback mode active
-}
-
-/// Inflict damage on operative units during fallback defense
-///
-/// Uses same tier distribution as defensive units.
-/// This damages the player's economy since operatives generate resources!
-///
-/// # Arguments
-/// * `op_1` - Current operative unit 1 count
-/// * `op_2` - Current operative unit 2 count
-/// * `op_3` - Current operative unit 3 count
-/// * `armor_pieces` - Armor still helps reduce damage
-/// * `total_damage` - Total damage to inflict
-/// * `gameplay_config` - Game configuration for damage distribution
-/// * `hero_armor_efficiency_bps` - Hero armor buff
-/// * `equipped_armor_bonus_bps` - Equipped armor buff
-///
-/// # Returns
-/// (new_op_1, new_op_2, new_op_3, total_casualties)
-pub fn inflict_damage_on_operatives(
-    op_1: u64,
-    op_2: u64,
-    op_3: u64,
-    armor_pieces: u64,
-    total_damage: f64,
-    gameplay_config: &crate::state::GameplayConfig,
-    hero_armor_efficiency_bps: u16,
-    equipped_armor_bonus_bps: u16,
-) -> (u64, u64, u64, u64) {
-    let total_operatives = op_1.saturating_add(op_2).saturating_add(op_3);
-    if total_operatives == 0 || total_damage <= 0.0 {
-        return (op_1, op_2, op_3, 0);
-    }
-
-    // Use same damage distribution as defensive units (armor still helps)
-    let (new_op_1, new_op_2, new_op_3) = inflict_damage(
-        op_1,
-        op_2,
-        op_3,
-        armor_pieces,
-        total_damage,
-        gameplay_config,
-        hero_armor_efficiency_bps,
-        equipped_armor_bonus_bps,
-    );
-
-    let casualties = total_operatives
-        .saturating_sub(new_op_1.saturating_add(new_op_2).saturating_add(new_op_3));
-
-    (new_op_1, new_op_2, new_op_3, casualties)
-}
-
-/// Calculate loot with fallback bonus
-///
-/// In fallback mode, attacker gets φ (1.618x) bonus on cash loot.
-/// This represents raiding unprotected operations/treasury.
-///
-/// # Arguments
-/// * `base_cash_loot` - Base cash loot before bonus
-/// * `is_fallback_mode` - Whether operative fallback was triggered
-///
-/// # Returns
-/// Final cash loot (with φ bonus if fallback mode)
-pub fn calculate_loot_with_fallback(
-    base_cash_loot: u64,
-    is_fallback_mode: bool,
-) -> u64 {
-    if !is_fallback_mode {
-        return base_cash_loot;
-    }
-
-    // Apply φ multiplier: cash × 16180 / 10000
-    // Using mul_div to prevent overflow
-    mul_div(base_cash_loot, FALLBACK_LOOT_BONUS_BPS as u64, 10000)
-        .unwrap_or(base_cash_loot)
-}
-
-/// Calculate total defensive power for a player (used in Strategic Combat)
-///
-/// Includes:
-/// - Garrison (own defensive units)
-/// - Reinforcements (teammates' defensive units)
-/// - All applicable buffs (research, hero, equipment, city, monument)
-///
-/// # Arguments
-/// * `def_1`, `def_2`, `def_3` - Defensive unit counts
-/// * `weapons` - Total weapons available
-/// * `research_buff_bps` - Research defense buff in basis points
-/// * `hero_defense_bps` - Hero defense buff in basis points
-/// * `hero_armor_efficiency_bps` - Hero armor efficiency buff
-/// * `equipped_armor_bonus_bps` - Equipped armor item bonus
-/// * `gameplay_config` - Game configuration
-///
-/// # Returns
-/// Total defensive power
-pub fn calculate_total_defensive_power(
-    def_1: u64,
-    def_2: u64,
-    def_3: u64,
-    weapons: u64,
-    research_buff_bps: u16,
-    hero_defense_bps: u16,
-    _hero_armor_efficiency_bps: u16,
-    _equipped_armor_bonus_bps: u16,
-    _gameplay_config: &crate::state::GameplayConfig,
-) -> u64 {
-    // Base power: unit_1 × 1 + unit_2 × 2 + unit_3 × 3
-    let total_units = def_1.saturating_add(def_2).saturating_add(def_3);
-    if total_units == 0 {
-        return 0;
-    }
-
-    let base_power = def_1
-        .saturating_add(def_2.saturating_mul(2))
-        .saturating_add(def_3.saturating_mul(3));
-
-    // Weapon coverage bonus (10000 bp = 100% coverage)
-    let weapon_coverage_bp = if weapons >= total_units {
-        10000u64
-    } else {
-        mul_div(weapons, 10000, total_units).unwrap_or(0)
-    };
-
-    // Apply weapon coverage
-    let mut power = apply_bp(base_power, weapon_coverage_bp).unwrap_or(base_power);
-
-    // Apply research buff (additive to base)
-    if research_buff_bps > 0 {
-        power = apply_bp_bonus(power, research_buff_bps).unwrap_or(power);
-    }
-
-    // Apply hero defense buff (multiplicative)
-    if hero_defense_bps > 0 {
-        power = apply_bp_bonus(power, hero_defense_bps).unwrap_or(power);
-    }
-
-    power
-}

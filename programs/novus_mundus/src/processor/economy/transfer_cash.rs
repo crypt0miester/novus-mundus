@@ -12,6 +12,7 @@ use crate::{
     helpers::estate::{vault_transfer_bonus_bps, require_vault, load_estate_for_player},
     emit,
     events::CashTransferred,
+    validation::require_owner,
 };
 
 /// Transfer cash between team members
@@ -108,9 +109,7 @@ pub fn process(
 
     // Receiver: manual load (we don't have receiver's wallet key in accounts)
     // Must verify program ownership to prevent fake account attacks
-    if receiver_player_account.owner() != program_id {
-        return Err(ProgramError::IllegalOwner);
-    }
+    require_owner(receiver_player_account, program_id)?;
     let mut receiver_data_ref = receiver_player_account.try_borrow_mut_data()?;
     let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
 
@@ -267,7 +266,9 @@ pub fn process(
     // Emit CashTransferred event
     emit!(CashTransferred {
         from: *sender_player_account.key(),
+        from_name: sender_player.name,
         to: *receiver_player_account.key(),
+        to_name: receiver_player.name,
         amount,
         fee: 0, // No transfer fee in current implementation
         timestamp: now,

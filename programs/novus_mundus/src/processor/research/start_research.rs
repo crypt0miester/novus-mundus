@@ -216,7 +216,8 @@ pub fn process(
 
     // 15. Emit ResearchStarted event
     emit!(ResearchStarted {
-        player: *player_owner.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         research_id: research_type as u16,
         level: next_level,
         completes_at,

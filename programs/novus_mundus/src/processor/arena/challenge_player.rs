@@ -41,7 +41,7 @@ use crate::{
         ArenaSeasonAccount, ArenaParticipantAccount, ArenaLoadoutAccount, ArenaStatus,
         PlayerAccount, EstateAccount, GameEngine, BuffStat,
     },
-    validation::{require_signer, require_owner},
+    validation::{require_signer, require_owner, require_data_len},
     helpers::parse_hero_nft,
 };
 
@@ -112,10 +112,8 @@ pub fn process(
 
     // 6. Load Arena Season and validate
     require_owner(arena_season, program_id)?;
+    require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
     let mut season_data = arena_season.try_borrow_mut_data()?;
-    if season_data.len() < ArenaSeasonAccount::LEN {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
     let season = unsafe { &mut *(season_data.as_mut_ptr() as *mut ArenaSeasonAccount) };
 
     // Verify season_id
@@ -144,10 +142,8 @@ pub fn process(
 
     // Get defender authority from their player account
     require_owner(defender_player, program_id)?;
+    require_data_len(defender_player, crate::state::CORE_SIZE)?;
     let defender_player_raw = defender_player.try_borrow_data()?;
-    if defender_player_raw.len() < crate::state::CORE_SIZE {
-        return Err(ProgramError::AccountDataTooSmall);
-    }
     let defender_player_data = unsafe { &*(defender_player_raw.as_ptr() as *const PlayerAccount) };
     let defender_authority_key = defender_player_data.owner;
     drop(defender_player_raw);

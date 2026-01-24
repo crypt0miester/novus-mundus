@@ -1,0 +1,143 @@
+//! Claim Garrison Loot - Claim weapons captured from attackers
+//!
+//! Instruction 281
+//!
+//! Garrison members can claim their share of weapons captured
+//! during successful castle defenses.
+
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::Pubkey,
+    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+};
+
+use crate::{
+    emit,
+    error::GameError,
+    events::GarrisonLootClaimed,
+    state::{
+        CastleAccount, GarrisonContributionAccount, PlayerAccount,
+    },
+    validation::{require_owner, require_initialized},
+};
+
+/// Claim Garrison Loot instruction data
+/// - city_id: u16 (bytes 2-3)
+/// - castle_id: u16 (bytes 4-5)
+
+/// Accounts:
+/// 0. [signer] Player wallet
+/// 1. [writable] Player account
+/// 2. [] Castle account
+/// 3. [writable] Garrison contribution account
+
+pub fn process(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    instruction_data: &[u8],
+) -> ProgramResult {
+    // Parse accounts
+    if accounts.len() < 4 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let player_wallet = &accounts[0];
+    let player_account = &accounts[1];
+    let castle_account = &accounts[2];
+    let garrison_account = &accounts[3];
+
+    // Verify signer
+    if !player_wallet.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Parse instruction data
+    if instruction_data.len() < 6 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
+
+    // Load player
+    require_owner(player_account, program_id)?;
+    let mut player_data = player_account.try_borrow_mut_data()?;
+    let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
+
+    if &player.owner != player_wallet.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    // Load castle (for verification and event)
+    let castle = CastleAccount::load_checked(castle_account, city_id, castle_id, program_id)?;
+
+    // Load garrison contribution
+    require_owner(garrison_account, program_id)?;
+
+    let (expected_garrison_pda, _) = GarrisonContributionAccount::derive_pda(
+        castle_account.key(),
+        player_account.key(),
+    );
+    if garrison_account.key() != &expected_garrison_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    require_initialized(garrison_account).map_err(|_| GameError::NotInGarrison)?;
+
+    let mut garrison_data = garrison_account.try_borrow_mut_data()?;
+    let garrison = unsafe { GarrisonContributionAccount::load_mut(&mut garrison_data) };
+
+    // Verify contributor matches
+    if garrison.contributor != *player_account.key() {
+        return Err(GameError::NotInGarrison.into());
+    }
+
+    // Verify has loot to claim
+    if garrison.loot_melee == 0 && garrison.loot_ranged == 0 && garrison.loot_siege == 0 {
+        return Err(GameError::GarrisonNoLoot.into());
+    }
+
+    // Verify loot not already claimed
+    if garrison.loot_claimed {
+        return Err(GameError::GarrisonLootAlreadyClaimed.into());
+    }
+
+    // Transfer loot to player
+    let melee = garrison.loot_melee;
+    let ranged = garrison.loot_ranged;
+    let siege = garrison.loot_siege;
+
+    player.melee_weapons = player.melee_weapons.saturating_add(melee);
+    player.ranged_weapons = player.ranged_weapons.saturating_add(ranged);
+    player.siege_weapons = player.siege_weapons.saturating_add(siege);
+
+    // Clear loot and mark as claimed
+    garrison.loot_melee = 0;
+    garrison.loot_ranged = 0;
+    garrison.loot_siege = 0;
+    garrison.loot_claimed = true;
+
+    // Get current timestamp
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    // Copy player name for event
+    let mut player_name = [0u8; 48];
+    player_name.copy_from_slice(&player.name);
+
+    // Emit event
+    emit!(GarrisonLootClaimed {
+        castle: *castle_account.key(),
+        castle_name: castle.name,
+        claimer: *player_account.key(),
+        claimer_name: player_name,
+        melee,
+        ranged,
+        siege,
+        timestamp: now,
+    });
+
+    Ok(())
+}

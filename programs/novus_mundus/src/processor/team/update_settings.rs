@@ -125,6 +125,7 @@ pub fn process(
 
     emit!(TeamSettingsUpdated {
         team: *team_account.key(),
+        team_name: team.name,
         updated_by: *member_account.key(),
         timestamp: now,
     });

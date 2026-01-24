@@ -85,6 +85,9 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
+    // SECURITY: Verify token account belongs to the PlayerAccount PDA
+    crate::helpers::validate_token_account_owner(player_token_account, player_account.key())?;
+
     // 3. Load Accounts
 
     let mut player_data_ref = player_account.try_borrow_mut_data()?;
@@ -108,8 +111,7 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     // 6. Calculate Time Elapsed
-
-    const TIME_INTERVAL: i64 = 5 * 60; // 5 minutes in seconds
+    const TIME_INTERVAL: i64 = 300; // 5 minutes in seconds
 
     let time_since_last_update = now.saturating_sub(player_data.last_updated_tokens_at);
 
@@ -206,6 +208,7 @@ pub fn process(
         // Emit NoviLocked event
         emit!(NoviLocked {
             player: *player_account.key(),
+            player_name: player_data.name,
             amount: actual_tokens_generated,
             total_locked: player_data.locked_novi,
             timestamp: now,

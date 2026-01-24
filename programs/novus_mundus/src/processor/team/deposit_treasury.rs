@@ -104,6 +104,7 @@ pub fn process(
 
     emit!(TreasuryDeposit {
         team: *team_account.key(),
+        team_name: team.name,
         depositor: *player_account.key(),
         amount,
         new_balance: team.treasury,

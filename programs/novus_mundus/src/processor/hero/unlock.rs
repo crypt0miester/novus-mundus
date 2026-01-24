@@ -56,7 +56,7 @@ use crate::{
 /// # Instruction Data
 /// - [0] slot_index: u8 (0-2)
 pub fn process(
-    program_id: &Pubkey,
+    _program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -195,6 +195,8 @@ pub fn process(
 
     // Capture context for NFT attributes
     let ctx = HeroNftContext::from_parsed(&parsed_hero, template);
+    let hero_name = template.name;
+    let player_name = player.name;
 
     drop(template_data);
 
@@ -219,7 +221,9 @@ pub fn process(
     let clock = Clock::get()?;
     emit!(HeroUnlocked {
         hero_mint: *hero_mint.key(),
-        player: *owner.key(),
+        hero_name,
+        player: *player_account.key(),
+        player_name,
         timestamp: clock.unix_timestamp,
     });
 

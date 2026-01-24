@@ -916,12 +916,10 @@ impl EstateAccount {
                     self.training_speed_bps = self.training_speed_bps.saturating_add(level * buff_per_level / 2);
                 }
                 Some(BuildingType::Workshop) => {
-                    // Workshop: Resource generation
-                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                    // Workshop: Mining bonus calculated dynamically via workshop_mining_bonus_bps()
                 }
                 Some(BuildingType::Dock) => {
-                    // Dock: Produce generation (parallel to Workshop)
-                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                    // Dock: Fishing bonus calculated dynamically via dock_fishing_bonus_bps()
                 }
                 Some(BuildingType::Vault) => {
                     // Vault: Storage and NOVI cap

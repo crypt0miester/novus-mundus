@@ -152,9 +152,11 @@ pub fn process(
     participant.included_in_march = false;
 
     // Emit RallyCancelled event
+    // Note: team_name not available here - would need to pass team account
     emit!(RallyCancelled {
         rally: *rally_account.key(),
-        cancelled_by: *creator_owner.key(),
+        team_name: [0u8; 32], // Team name not available, lookup via rally.team
+        cancelled_by: *creator_player.key(),
         timestamp: now,
     });
 

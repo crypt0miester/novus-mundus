@@ -188,12 +188,16 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     }
 
     // 13. Update domain name in player account
+    let old_player_name = player.name;
     player.set_name_from_domain(new_domain_name, tld);
+    let new_player_name = player.name;
 
     // 14. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameUpdated {
         player: *player_account.key(),
+        old_name: old_player_name,
+        new_name: new_player_name,
         new_domain_hash: new_hashed_name,
         timestamp: now,
     });

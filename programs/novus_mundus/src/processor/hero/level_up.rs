@@ -160,6 +160,8 @@ pub fn process(
 
     // 15. Capture context for NFT attributes with new level
     let ctx = HeroNftContext::from_parsed(&parsed_hero, template).with_new_level(new_level, template);
+    let hero_name = template.name;
+    let player_name = player.name;
 
     // Drop borrows before p-core CPI
     drop(template_data);
@@ -198,7 +200,9 @@ pub fn process(
     let clock = Clock::get()?;
     emit!(HeroLeveledUp {
         hero_mint: *hero_mint.key(),
-        player: *owner.key(),
+        hero_name,
+        player: *player_account.key(),
+        player_name,
         old_level,
         new_level,
         xp_spent: fragment_cost,

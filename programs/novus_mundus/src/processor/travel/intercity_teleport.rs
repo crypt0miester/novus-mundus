@@ -58,7 +58,7 @@ pub fn process(
         game_engine_account,
         origin_location_account,
         destination_location_account,
-        system_program,
+        _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -359,6 +359,7 @@ pub fn process(
 
     emit!(PlayerTeleported {
         player: *player_account.key(),
+        player_name: player_data.name,
         from_city: *origin_city_account.key(),
         to_city: *destination_city_account.key(),
         gems_spent: adjusted_cost,

@@ -5,11 +5,15 @@ use super::{Event, PackBytes, discriminator};
 
 /// Emitted when reinforcements are sent
 pub struct ReinforcementSent {
-    /// Sender player pubkey
+    /// Sender player account pubkey (not wallet)
     pub sender: Pubkey,
-    /// Receiver player pubkey
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
+    /// Receiver player account pubkey (not wallet)
     pub receiver: Pubkey,
-    /// Units sent (melee, ranged, siege)
+    /// Receiver's name (48 bytes UTF-8)
+    pub receiver_name: [u8; 48],
+    /// Units sent (defensive_1, defensive_2, defensive_3)
     pub units: [u64; 3],
     /// Estimated arrival timestamp
     pub arrives_at: i64,
@@ -23,7 +27,9 @@ impl Event for ReinforcementSent {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.receiver.pack(&mut buf[offset..]);
+        offset += self.receiver_name.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
         offset += self.units[2].pack(&mut buf[offset..]);
@@ -37,10 +43,14 @@ impl Event for ReinforcementSent {
 pub struct ReinforcementArrived {
     /// Reinforcement account pubkey
     pub reinforcement: Pubkey,
-    /// Sender player pubkey
+    /// Sender player account pubkey (not wallet)
     pub sender: Pubkey,
-    /// Receiver player pubkey
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
+    /// Receiver player account pubkey (not wallet)
     pub receiver: Pubkey,
+    /// Receiver's name (48 bytes UTF-8)
+    pub receiver_name: [u8; 48],
     /// Units that arrived
     pub units: [u64; 3],
     /// Unix timestamp
@@ -54,7 +64,9 @@ impl Event for ReinforcementArrived {
         let mut offset = 0;
         offset += self.reinforcement.pack(&mut buf[offset..]);
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.receiver.pack(&mut buf[offset..]);
+        offset += self.receiver_name.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
         offset += self.units[2].pack(&mut buf[offset..]);
@@ -67,10 +79,14 @@ impl Event for ReinforcementArrived {
 pub struct ReinforcementRecalled {
     /// Reinforcement account pubkey
     pub reinforcement: Pubkey,
-    /// Sender who recalled
+    /// Sender player account who recalled (not wallet)
     pub sender: Pubkey,
-    /// Receiver who was being helped
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
+    /// Receiver player account who was being helped (not wallet)
     pub receiver: Pubkey,
+    /// Receiver's name (48 bytes UTF-8)
+    pub receiver_name: [u8; 48],
     /// Units being recalled
     pub units: [u64; 3],
     /// Unix timestamp
@@ -84,7 +100,9 @@ impl Event for ReinforcementRecalled {
         let mut offset = 0;
         offset += self.reinforcement.pack(&mut buf[offset..]);
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.receiver.pack(&mut buf[offset..]);
+        offset += self.receiver_name.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
         offset += self.units[2].pack(&mut buf[offset..]);
@@ -97,10 +115,14 @@ impl Event for ReinforcementRecalled {
 pub struct ReinforcementRelieved {
     /// Reinforcement account pubkey
     pub reinforcement: Pubkey,
-    /// Sender who sent the reinforcement
+    /// Sender player account who sent the reinforcement (not wallet)
     pub sender: Pubkey,
-    /// Receiver who relieved the reinforcement
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
+    /// Receiver player account who relieved the reinforcement (not wallet)
     pub receiver: Pubkey,
+    /// Receiver's name (48 bytes UTF-8)
+    pub receiver_name: [u8; 48],
     /// Units being sent back
     pub units: [u64; 3],
     /// Unix timestamp
@@ -114,7 +136,9 @@ impl Event for ReinforcementRelieved {
         let mut offset = 0;
         offset += self.reinforcement.pack(&mut buf[offset..]);
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.receiver.pack(&mut buf[offset..]);
+        offset += self.receiver_name.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
         offset += self.units[2].pack(&mut buf[offset..]);
@@ -125,8 +149,10 @@ impl Event for ReinforcementRelieved {
 
 /// Emitted when reinforcements return home
 pub struct ReinforcementReturned {
-    /// Sender player pubkey (troops returning to)
+    /// Sender player account pubkey (troops returning to) (not wallet)
     pub sender: Pubkey,
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
     /// Units that returned
     pub units: [u64; 3],
     /// Unix timestamp
@@ -139,6 +165,7 @@ impl Event for ReinforcementReturned {
     fn serialize(&self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.units[0].pack(&mut buf[offset..]);
         offset += self.units[1].pack(&mut buf[offset..]);
         offset += self.units[2].pack(&mut buf[offset..]);
@@ -151,9 +178,11 @@ impl Event for ReinforcementReturned {
 pub struct ReinforcementSpeedup {
     /// Reinforcement account pubkey
     pub reinforcement: Pubkey,
-    /// Sender who paid for speedup
+    /// Sender player account who paid for speedup (not wallet)
     pub sender: Pubkey,
-    /// Receiver destination
+    /// Sender's name (48 bytes UTF-8)
+    pub sender_name: [u8; 48],
+    /// Receiver player account destination (not wallet)
     pub receiver: Pubkey,
     /// Speedup type (1=Traveling, 2=Returning)
     pub speedup_type: u8,
@@ -172,6 +201,7 @@ impl Event for ReinforcementSpeedup {
         let mut offset = 0;
         offset += self.reinforcement.pack(&mut buf[offset..]);
         offset += self.sender.pack(&mut buf[offset..]);
+        offset += self.sender_name.pack(&mut buf[offset..]);
         offset += self.receiver.pack(&mut buf[offset..]);
         offset += self.speedup_type.pack(&mut buf[offset..]);
         offset += self.gems_spent.pack(&mut buf[offset..]);

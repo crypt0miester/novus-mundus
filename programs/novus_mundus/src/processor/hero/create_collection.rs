@@ -12,6 +12,7 @@ use crate::{
     validation::{
         require_signer,
         require_writable,
+        require_empty,
     },
 };
 
@@ -60,7 +61,6 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    let ge_bump = ge.bump;
     drop(game_engine_data);
 
     // 4. SAFETY: Verify hero_collection PDA derivation
@@ -74,9 +74,7 @@ pub fn process(
     }
 
     // 5. Check if collection already exists
-    if hero_collection.data_len() > 0 {
-        return Err(GameError::InvalidParameter.into());
-    }
+    require_empty(hero_collection).map_err(|_| GameError::HeroCollectionExists)?;
 
     // 6. Create collection using p-core CreateCollectionV1
     // Collection PDA must sign, and game_engine is update_authority

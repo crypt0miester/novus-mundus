@@ -26,7 +26,7 @@ use crate::{
     constants::EXPEDITION_SEED,
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, GameEngine},
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::ExpeditionStrike,
 };
@@ -100,9 +100,7 @@ pub fn process(
     }
 
     // 7. Check expedition exists
-    if expedition_account.data_len() == 0 {
-        return Err(GameError::NoExpeditionInProgress.into());
-    }
+    require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 8. Load Expedition Data
     let mut expedition_data = expedition_account.try_borrow_mut_data()?;
@@ -136,7 +134,8 @@ pub fn process(
 
     // 15. Emit event
     emit!(ExpeditionStrike {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         strike_num: expedition.strikes,
         yield_amount: 0, // Yield is calculated at claim time, not during strike
         quality: score,

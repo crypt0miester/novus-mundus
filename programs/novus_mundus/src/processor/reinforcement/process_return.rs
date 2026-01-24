@@ -127,6 +127,7 @@ pub fn process(
     // Emit event
     emit!(ReinforcementReturned {
         sender: sender_key,
+        sender_name: sender.name,
         units: [return_units_1, return_units_2, return_units_3],
         timestamp: now,
     });

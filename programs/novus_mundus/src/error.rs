@@ -187,6 +187,11 @@ pub enum GameError {
     BurnFailed = 6805,
     MintFailed = 6806,
     InvalidTokenAccount = 6807,
+    OracleOverflow = 6808,
+    OracleUnavailable = 6809,
+    OraclePriceStale = 6810,
+    OracleConfidenceTooWide = 6811,
+    TokenNotAllowed = 6812,
 
     // Governance/DAO Errors (900-999)
     ProposalNotFound = 6900,
@@ -352,6 +357,7 @@ pub enum GameError {
     HeroLocked = 7764,              // Hero is locked (already in use elsewhere)
     HeroAtMeditationCap = 7765,     // Hero at meditation cap - must use fragments
     WrongCityForMeditation = 7766,  // Hero requires meditation in specific origin city
+    HeroCollectionExists = 7767,    // Hero collection already created
 
     // Expedition System Errors (1800-1819)
     ExpeditionInProgress = 7800,    // Already on an expedition
@@ -398,6 +404,65 @@ pub enum GameError {
     ArenaNoUnclaimedPrizes = 7928,        // No unclaimed prizes to redistribute
     ArenaSeasonAlreadyActive = 7929,      // Season is already active
     ArenaParticipantAlreadyExists = 7930, // Already joined this season
+
+    // Dungeon System Errors (8000-8049)
+    DungeonNotActive = 8000,              // Dungeon run is not in active state
+    DungeonStillActive = 8001,            // Cannot claim - dungeon run still active
+    DungeonNotFailed = 8002,              // Cannot resume - dungeon run didn't fail
+    DungeonAlreadyEnded = 8003,           // Run already completed/failed/fled
+    InvalidRoomType = 8004,               // Room type doesn't match expected action
+    NotCombatRoom = 8005,                 // Attack requires combat room
+    NotAwaitingRelic = 8006,              // Not in relic selection phase
+    InvalidRelicId = 8007,                // Relic ID out of range (0-19)
+    RelicAlreadyOwned = 8008,             // Player already has this relic
+    EnemyAlreadyDead = 8009,              // Cannot attack dead enemy
+    NoCheckpoint = 8010,                  // No checkpoint to resume from
+    DungeonRunExists = 8011,              // Player already has active dungeon run
+    CatacombsRequired = 8012,             // Catacombs building required
+    InvalidRelicChoice = 8013,            // Chosen relic not in offered options
+    NotOnLeaderboard = 8014,              // Player not on dungeon leaderboard
+    LeaderboardPrizeAlreadyClaimed = 8015, // Leaderboard prize already claimed
+    LeaderboardWeekNotEnded = 8016,       // Cannot claim prize for current/future week
+    DungeonTimeLimitExceeded = 8017,      // Dungeon run exceeded time limit
+
+    // Castle System Errors (8100-8199)
+    CastleNotFound = 8100,                // Castle account doesn't exist
+    CastleNotVacant = 8101,               // Castle already has a king
+    CastleInContest = 8102,               // Castle is in contest period
+    CastleProtected = 8103,               // Castle is in protection period
+    CastleTransitioning = 8104,           // Castle is transitioning ownership
+    CastleNotAttackable = 8105,           // Castle cannot be attacked in current state
+    NotKing = 8106,                       // Player is not the castle king
+    NotOnKingsTeam = 8107,                // Player is not on the king's team
+    MaxCastlesReached = 8108,             // King already rules maximum castles
+    KingRegistryNotFound = 8109,          // King registry account doesn't exist
+    CastleUpgradeInProgress = 8110,       // Upgrade already in progress
+    CastleNoUpgradeInProgress = 8111,     // No upgrade to cancel
+    CastleUpgradeLevelMax = 8112,         // Already at max upgrade level
+    InvalidUpgradeType = 8113,            // Invalid upgrade type specified
+    CastleNeedsChambersUpgrade = 8114,    // Need Chambers upgrade for more court
+    CourtPositionTaken = 8115,            // Court position already filled
+    CourtPositionVacant = 8116,           // Court position is vacant (can't dismiss)
+    NotCourtMember = 8117,                // Player is not in court (can't resign)
+    AlreadyInCourt = 8118,                // Player already holds a court position
+    KingCannotHoldCourt = 8119,           // King cannot hold their own court
+    GarrisonFull = 8120,                  // Castle garrison at capacity
+    AlreadyInGarrison = 8121,             // Player already in this garrison
+    NotInGarrison = 8122,                 // Player not in this garrison
+    GarrisonNoLoot = 8123,                // No loot to claim from garrison
+    GarrisonLootAlreadyClaimed = 8124,    // Loot already claimed
+    CastleIneligible = 8125,              // Player doesn't meet castle eligibility
+    NoRewardsToClaim = 8126,              // No rewards available to claim
+    CourtAppointmentCooldown = 8127,      // Court appointment cooldown active
+    TransitionNotComplete = 8128,         // Castle transition not yet complete
+    InvalidCastleTier = 8129,             // Invalid castle tier specified
+    CastleTierNoGarrison = 8130,          // Castle tier doesn't support garrison
+    CastleTierNoCourt = 8131,             // Castle tier doesn't support court
+    HeroAlreadyInGarrison = 8132,         // Hero is already committed to a garrison
+    CastleAlreadyExists = 8133,           // Castle with this ID already exists
+    InvalidCastleStatus = 8134,           // Castle status doesn't support this transition
+    ContestNotEnded = 8135,               // Contest period has not ended yet
+    CastleUpgradeNotReady = 8136,         // Upgrade timer has not expired yet
 }
 
 impl From<GameError> for ProgramError {

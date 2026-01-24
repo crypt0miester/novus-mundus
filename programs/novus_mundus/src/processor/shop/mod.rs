@@ -15,3 +15,6 @@ pub mod create_dao_promotion;
 pub mod update_bundle;
 pub mod update_config;
 pub mod activate_sale;
+pub mod create_allowed_token;
+pub mod update_allowed_token;
+pub mod close_allowed_token;

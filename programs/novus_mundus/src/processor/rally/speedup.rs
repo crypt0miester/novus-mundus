@@ -99,8 +99,8 @@ pub fn process(
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
-    // Track gem cost for event
-    let mut total_gem_cost_spent: u64 = 0;
+    // Track gem cost for event (assigned in each match arm)
+    let total_gem_cost_spent: u64;
 
     // 7. Process based on speedup type
     match speedup_type {
@@ -137,8 +137,9 @@ pub fn process(
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = participant_data.arrives_at_rally - now;
-            let remaining_minutes = ((remaining_seconds as f64) / 60.0).ceil() as u64;
+            let remaining_seconds = (participant_data.arrives_at_rally - now) as u64;
+            // Integer ceiling division: (a + b - 1) / b
+            let remaining_minutes = (remaining_seconds + 59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -178,8 +179,9 @@ pub fn process(
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = rally_data.arrive_at - now;
-            let remaining_minutes = ((remaining_seconds as f64) / 60.0).ceil() as u64;
+            let remaining_seconds = (rally_data.arrive_at - now) as u64;
+            // Integer ceiling division: (a + b - 1) / b
+            let remaining_minutes = (remaining_seconds + 59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -242,8 +244,9 @@ pub fn process(
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = return_completes_at - now;
-            let remaining_minutes = ((remaining_seconds as f64) / 60.0).ceil() as u64;
+            let remaining_seconds = (return_completes_at - now) as u64;
+            // Integer ceiling division: (a + b - 1) / b
+            let remaining_minutes = (remaining_seconds + 59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -271,9 +274,11 @@ pub fn process(
     }
 
     // 8. Emit event
+    // Note: team_name not available here - would need to pass team account
     emit!(RallySpeedup {
         rally: *rally_account.key(),
-        payer: *payer_owner.key(),
+        team_name: [0u8; 32], // Team name not available, lookup via rally.team
+        payer: *payer_player_account.key(),
         speedup_type,
         gems_spent: total_gem_cost_spent,
         timestamp: now,

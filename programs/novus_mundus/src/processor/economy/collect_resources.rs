@@ -25,7 +25,7 @@ use crate::{
     },
     helpers::{
         event_scoring::update_event_score,
-        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_workshop},
+        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_workshop, require_dock, workshop_mining_bonus_bps, dock_fishing_bonus_bps},
     },
     validation::require_signer,
     emit,
@@ -76,7 +76,7 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // estate_account is required, event accounts are optional
-    let (player, user, owner, player_token_account, novi_mint, game_engine, token_program, estate_account, event_participation, event) = if accounts.len() >= 10 {
+    let (player, user, owner, player_token_account, novi_mint, game_engine, _token_program, estate_account, event_participation, event) = if accounts.len() >= 10 {
         (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], Some(&accounts[8]), Some(&accounts[9]))
     } else if accounts.len() >= 8 {
         (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], None, None)
@@ -137,6 +137,9 @@ pub fn process(
             if !player_data.has_fishing {
                 return Err(GameError::FeatureLocked.into());
             }
+            // Fishing requires Dock building (minimum level 1)
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            require_dock(estate, 1)?;
         },
         CollectionType::Cash => {}, // Always unlocked
     }
@@ -365,7 +368,7 @@ pub fn process(
             // Apply research buff for mining output
             let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
                 let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
-                (base_output.saturating_mul(multiplier) / 10000)
+                base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
             };
@@ -374,6 +377,14 @@ pub fn process(
             if player_data.hero_collection_rate_bps > 0 {
                 let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
+            }
+
+            // Apply Workshop building bonus
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            let workshop_bonus = workshop_mining_bonus_bps(estate);
+            if workshop_bonus > 0 {
+                let workshop_multiplier = 10000u64 + workshop_bonus as u64;
+                buffed_output = buffed_output.saturating_mul(workshop_multiplier) / 10000;
             }
 
             player_data.gems = player_data.gems
@@ -409,6 +420,14 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
+            // Apply Dock building bonus
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            let dock_bonus = dock_fishing_bonus_bps(estate);
+            if dock_bonus > 0 {
+                let dock_multiplier = 10000u64 + dock_bonus as u64;
+                buffed_output = buffed_output.saturating_mul(dock_multiplier) / 10000;
+            }
+
             player_data.produce = player_data.produce
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
@@ -437,7 +456,8 @@ pub fn process(
 
     // Emit XP gained event
     emit!(XpGained {
-        player: *owner.key(),
+        player: *player.key(),
+        player_name: player_data.name,
         amount: xp_amount,
         source: 1, // 1=collection
         total_xp: player_data.current_xp,
@@ -447,7 +467,8 @@ pub fn process(
     // Emit level up event if player leveled
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
-            player: *owner.key(),
+            player: *player.key(),
+            player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
             timestamp: now,
@@ -475,13 +496,16 @@ pub fn process(
         )?;
 
         let player_key = player.key();
+        let event_key = event.key();
 
         // DETERMINISTIC: Use exact resource value (no randomness)
         // MostResourcesCollected: Add resources collected (deterministic)
         let _ = update_event_score(
             &mut *participation,
             &mut *event_data,
+            event_key,
             player_key,
+            player_data.name,
             EventType::MostResourcesCollected,
             total_resources_collected,
             now,
@@ -491,7 +515,9 @@ pub fn process(
         let _ = update_event_score(
             &mut *participation,
             &mut *event_data,
+            event_key,
             player_key,
+            player_data.name,
             EventType::HighestCash,
             player_data.cash_on_hand,
             now,
@@ -502,7 +528,9 @@ pub fn process(
             let _ = update_event_score(
                 &mut *participation,
                 &mut *event_data,
+                event_key,
                 player_key,
+                player_data.name,
                 EventType::MostXPGained,
                 xp_amount,
                 now,
@@ -527,6 +555,7 @@ pub fn process(
     // Emit ResourcesCollected event
     emit!(ResourcesCollected {
         player: *player.key(),
+        player_name: player_data.name,
         collection_type: collection_type as u8,
         novi_consumed: novi_amount,
         base_output,

@@ -7,9 +7,13 @@ use pinocchio::{
 };
 use pinocchio_system::instructions::{CreateAccount, Transfer};
 use crate::{
-    constants::{PLAYER_PURCHASE_SEED, PLAYER_SEED},
+    constants::PLAYER_PURCHASE_SEED,
     error::GameError,
-    helpers::{add_to_inventory, burn_tokens, estate::{market_discount_bps, load_estate_for_player, require_market}},
+    helpers::{
+        add_to_inventory,
+        estate::{market_discount_bps, load_estate_for_player, require_market},
+        process_token_payment_flow,
+    },
     state::{
         GameEngine, ShopConfigAccount, ShopItemAccount, PlayerPurchaseAccount,
         PlayerAccount, DailyDealAccount, WeeklySaleAccount,
@@ -41,9 +45,6 @@ pub const DISCOUNT_WEEKLY_SALE: u8 = 2;
 /// - [] system_program: System program
 /// - [writable] inventory: PlayerInventoryAccount PDA (auto-created/expanded for inventory items)
 /// - [] estate_account: EstateAccount PDA (for Market discount)
-/// - [writable] player_token_account: Player's locked NOVI token account (for NOVI payment)
-/// - [writable] novi_mint: NOVI token mint (for NOVI payment)
-/// - [] token_program: SPL Token program (for NOVI payment)
 ///
 /// # Building Bonuses
 /// Market building provides shop discounts:
@@ -53,10 +54,19 @@ pub const DISCOUNT_WEEKLY_SALE: u8 = 2;
 /// - [] daily_deal: DailyDealAccount (if DISCOUNT_DAILY_DEAL flag set)
 /// - [] weekly_sale: WeeklySaleAccount (if DISCOUNT_WEEKLY_SALE flag set)
 ///
+/// # Accounts (Required for Token Payment, payment_type >= 2)
+/// - [] allowed_token: AllowedTokenAccount PDA
+/// - [] token_mint: SPL Token mint (for decimals)
+/// - [writable] buyer_token_ata: Buyer's token account
+/// - [writable] treasury_token_ata: Treasury's token account
+/// - [] token_program: SPL Token program
+/// - [] sol_oracle_feed: SOL/USD price feed (Pyth or Switchboard)
+/// - [] token_oracle_feed: TOKEN/USD price feed (Pyth or Switchboard)
+///
 /// # Instruction Data
 /// - item_id: u32
 /// - quantity: u16 (how many purchases, each gives quantity_per_purchase items)
-/// - payment_type: u8 (0 = SOL, 1 = NOVI, 2 = Gems)
+/// - payment_type: u8 (0 = SOL, 2+ = Token via AllowedToken)
 /// - discount_flags: u8 (optional, bitmask: 1=daily_deal, 2=weekly_sale)
 /// - daily_deal_slot: u8 (if daily_deal flag, slot index 0-2)
 /// - weekly_sale_week: u64 (if weekly_sale flag, week number)
@@ -67,7 +77,7 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    if accounts.len() < 13 {
+    if accounts.len() < 10 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -81,9 +91,6 @@ pub fn process(
     let system_program = &accounts[7];
     let inventory_account = &accounts[8];
     let estate_account = &accounts[9];
-    let player_token_account = &accounts[10];
-    let novi_mint = &accounts[11];
-    let _token_program = &accounts[12];
 
     // 2. Validate Accounts
 
@@ -159,26 +166,17 @@ pub fn process(
 
     // 7. Determine Price
 
-    let base_price = match payment_type {
-        0 => { // SOL
-            if shop_item.price_sol_lamports == 0 {
-                return Err(GameError::PaymentTypeNotSupported.into());
-            }
-            shop_item.price_sol_lamports
-        }
-        1 => { // NOVI
-            if shop_item.price_novi == 0 {
-                return Err(GameError::PaymentTypeNotSupported.into());
-            }
-            shop_item.price_novi
-        }
-        2 => { // Gems
-            if shop_item.price_gems == 0 {
-                return Err(GameError::PaymentTypeNotSupported.into());
-            }
-            shop_item.price_gems
-        }
-        _ => return Err(GameError::InvalidParameter.into()),
+    // Payment type 0 = SOL, 2+ = Token via AllowedToken
+    // Type 1 (formerly Gems) is no longer supported
+    if payment_type == 1 {
+        return Err(GameError::PaymentTypeNotSupported.into());
+    }
+
+    // For both SOL and token payments, we need the SOL price as the base
+    let base_price = if shop_item.price_sol_lamports == 0 {
+        return Err(GameError::PaymentTypeNotSupported.into());
+    } else {
+        shop_item.price_sol_lamports
     };
 
     // Total before discounts
@@ -315,46 +313,31 @@ pub fn process(
 
     // 10. Process Payment
 
-    match payment_type {
-        0 => {
-            // SOL payment - transfer to treasury
-            Transfer {
-                from: buyer,
-                to: treasury,
-                lamports: final_price,
-            }.invoke()?;
-        }
-        1 => {
-            // NOVI payment - burn tokens
-            if player.locked_novi < final_price {
-                return Err(GameError::InsufficientFunds.into());
-            }
+    if payment_type == 0 {
+        // SOL payment - direct transfer to treasury
+        Transfer {
+            from: buyer,
+            to: treasury,
+            lamports: final_price,
+        }.invoke()?;
+    } else {
+        // Token payment (payment_type >= 2)
+        // Calculate offset for token accounts (after base + optional discount accounts)
+        let discount_flags = if instruction_data.len() >= 8 { instruction_data[7] } else { 0 };
+        let discount_accounts = (discount_flags & DISCOUNT_DAILY_DEAL != 0) as usize
+            + (discount_flags & DISCOUNT_WEEKLY_SALE != 0) as usize;
+        let token_offset = 10 + discount_accounts;
 
-            // Burn NOVI tokens
-            let player_bump = player.bump;
-            let bump_seed = [player_bump];
-            let player_seeds = pinocchio::seeds!(PLAYER_SEED, buyer.key().as_ref(), &bump_seed);
-            let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
-
-            burn_tokens(
-                player_token_account,
-                novi_mint,
-                player_account,
-                final_price,
-                &[player_signer],
-            )?;
-
-            // Update soft balance tracker
-            player.locked_novi = player.locked_novi.saturating_sub(final_price);
-        }
-        2 => {
-            // Gems payment
-            if player.gems < final_price {
-                return Err(GameError::InsufficientFunds.into());
-            }
-            player.gems = player.gems.saturating_sub(final_price);
-        }
-        _ => unreachable!(),
+        // Use unified token payment helper
+        process_token_payment_flow(
+            &accounts[token_offset..],
+            game_engine_account.key(),
+            program_id,
+            shop_config,
+            buyer,
+            final_price,
+            clock.slot,
+        )?;
     }
 
     // 11. Fulfill Order - Add Items to Player
@@ -431,7 +414,8 @@ pub fn process(
 
     // Emit event
     emit!(ItemPurchased {
-        player: *buyer.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         item_id,
         quantity: quantity as u16,
         price: final_price,
@@ -568,7 +552,7 @@ fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> Prog
     // 1000+: Event items (inventory)
 
     let amount_u16 = amount.min(u16::MAX as u64) as u16;
-    let amount_u32 = amount.min(u32::MAX as u64) as u32;
+    let _amount_u32 = amount.min(u32::MAX as u64) as u32;
 
     match item_type {
         // Equipment - Weapons by type

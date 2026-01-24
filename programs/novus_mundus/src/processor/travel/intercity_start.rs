@@ -331,6 +331,7 @@ pub fn process(
 
     emit!(IntercityTravelStarted {
         player: *player_account.key(),
+        player_name: player_data.name,
         from_city: *origin_city_account.key(),
         to_city: *destination_city_account.key(),
         arrival_at: arrival_time,

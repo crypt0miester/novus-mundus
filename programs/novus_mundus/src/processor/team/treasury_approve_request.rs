@@ -10,7 +10,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::TreasuryRequestApproved,
 };
@@ -116,10 +116,7 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    if request_account.data_len() == 0 {
-        return Err(GameError::TreasuryRequestNotFound.into());
-    }
-
+    require_initialized(request_account).map_err(|_| GameError::TreasuryRequestNotFound)?;
     require_owner(request_account, program_id)?;
 
     let amount: u64;
@@ -152,7 +149,6 @@ pub fn process(
     // Manual load since we don't have requester's wallet
     require_owner(requester_account, program_id)?;
 
-    let requester_rank: u8;
     let requester_slot_index: u16;
     {
         let requester_data = requester_account.try_borrow_data()?;
@@ -168,8 +164,8 @@ pub fn process(
         requester_slot_index = requester.team_slot_index;
     }
 
-    // Get requester's rank from their slot
-    let (requester_slot_pda, _) = TeamMemberSlot::derive_pda(team_account.key(), requester_slot_index);
+    // Get requester's rank from their slot (for future rank-based approval validation)
+    let (_requester_slot_pda, _) = TeamMemberSlot::derive_pda(team_account.key(), requester_slot_index);
     // We don't have the requester slot account passed in, so we need to trust the request
     // The request was created when they had permission, but we should verify they still do
     // For simplicity, we'll allow approval if approver outranks based on the request being valid
@@ -215,6 +211,7 @@ pub fn process(
 
     emit!(TreasuryRequestApproved {
         team: *team_account.key(),
+        team_name: team.name,
         approver: *approver_account.key(),
         requester: *requester_account.key(),
         timestamp: clock.unix_timestamp,

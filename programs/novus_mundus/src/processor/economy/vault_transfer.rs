@@ -133,6 +133,7 @@ pub fn process(
     if actual_amount > 0 {
         emit!(VaultTransfer {
             player: *player_account.key(),
+            player_name: player.name,
             amount: actual_amount,
             to_vault,
             vault_balance: player.cash_in_vault,

@@ -44,7 +44,7 @@ pub struct GameEngine {
     pub max_players: u64,                       // 8 bytes - Maximum players allowed (0 = unlimited)
 
     /// Subscription payment configuration
-    pub allow_offchain_payments: bool,          // Allow real-money purchases (requires payment_authority)
+    pub allow_offchain_payments: bool,          // Allow fiat purchases (requires payment_authority)
     pub _padding3: [u8; 7],                     // 7 bytes
     pub usd_price_cents: u64,                   // Price in USD cents for conversion (e.g., 10000 = $100.00)
 
@@ -257,6 +257,13 @@ pub struct EconomicConfig {
     // Oscillation settings per rarity (adds time-based variance)
     pub encounter_oscillation_freq: [f32; 5],   // Hz: [0.001, 0.0005, 0.0002, 0.0001, 0.00005]
     pub encounter_oscillation_amp: [u32; 5],    // Basis points: [2000, 3000, 4000, 5000, 7500] (±20%-75%)
+
+    // Expedition config (DAO-controlled)
+    // Mining: gems = min(operatives, max_operatives_per_expedition) × hours × gems_per_op_hour / 100
+    // After cap, diminishing returns: effective = cap + sqrt(excess)
+    pub max_operatives_per_expedition: u64,     // Cap before diminishing returns (e.g., 10000)
+    pub mining_gems_per_op_hour: [u16; 5],      // Gems × 100 per op per hour by tier (e.g., [1, 2, 5, 8, 10] = 0.01-0.10)
+    pub fishing_produce_per_op_hour: [u16; 5],  // Produce × 100 per op per hour by tier
 }
 
 #[repr(C)]

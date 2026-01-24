@@ -53,7 +53,7 @@ pub fn process(
         game_engine_account,
         owner,
         system_program,
-        token_program,
+        _token_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -246,8 +246,15 @@ pub fn process(
 
     // 15. Emit Event
 
+    // Get team name for event
+    let team_account_data = team_account.try_borrow_data()?;
+    let team_data = unsafe { TeamAccount::load(&team_account_data) };
+    let event_team_name = team_data.name;
+    drop(team_account_data);
+
     emit!(TeamCreated {
         team: *team_account.key(),
+        team_name: event_team_name,
         founder: *player_account.key(),
         novi_burned: adjusted_creation_cost,
         timestamp: now,

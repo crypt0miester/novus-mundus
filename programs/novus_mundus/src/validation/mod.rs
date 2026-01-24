@@ -49,6 +49,15 @@ pub fn require_empty(account: &AccountInfo) -> Result<(), ProgramError> {
     Ok(())
 }
 
+/// Require account is initialized (has data)
+#[inline(always)]
+pub fn require_initialized(account: &AccountInfo) -> Result<(), ProgramError> {
+    if account.data_len() == 0 {
+        return Err(ProgramError::UninitializedAccount);
+    }
+    Ok(())
+}
+
 /// Derive PDA
 pub fn derive_pda(seeds: &[&[u8]], program_id: &Pubkey) -> (Pubkey, u8) {
     pinocchio::pubkey::find_program_address(seeds, program_id)
@@ -65,15 +74,6 @@ pub fn require_pda(
         return Err(ProgramError::InvalidSeeds);
     }
     Ok(bump)
-}
-
-/// Require two accounts have same owner
-#[inline(always)]
-pub fn require_same_owner(acc1: &AccountInfo, acc2: &AccountInfo) -> Result<(), ProgramError> {
-    if acc1.owner() != acc2.owner() {
-        return Err(ProgramError::IllegalOwner);
-    }
-    Ok(())
 }
 
 /// Require account key matches expected

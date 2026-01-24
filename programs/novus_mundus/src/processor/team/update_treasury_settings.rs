@@ -141,6 +141,7 @@ pub fn process(
 
     emit!(TreasurySettingsUpdated {
         team: *team_account.key(),
+        team_name: team.name,
         updated_by: *leader_account.key(),
         timestamp: clock.unix_timestamp,
     });

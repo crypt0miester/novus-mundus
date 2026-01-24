@@ -10,7 +10,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::TreasuryRequestExecuted,
 };
@@ -121,10 +121,7 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    if request_account.data_len() == 0 {
-        return Err(GameError::TreasuryRequestNotFound.into());
-    }
-
+    require_initialized(request_account).map_err(|_| GameError::TreasuryRequestNotFound)?;
     require_owner(request_account, program_id)?;
 
     let amount: u64;
@@ -173,6 +170,7 @@ pub fn process(
     player.cash_on_hand = player.cash_on_hand.saturating_add(amount);
 
     let new_balance = team.treasury;
+    let event_team_name = team.name;
 
     // 11. Close Request Account (rent to owner)
 
@@ -188,6 +186,7 @@ pub fn process(
 
     emit!(TreasuryRequestExecuted {
         team: *team_account.key(),
+        team_name: event_team_name,
         executor: *player_account.key(),
         requester: *player_account.key(),
         amount,

@@ -66,7 +66,7 @@ pub fn process(
         novi_mint,
         system_program,
         token_program,
-        associated_token_program,
+        _associated_token_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };

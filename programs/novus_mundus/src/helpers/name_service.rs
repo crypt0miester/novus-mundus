@@ -278,32 +278,3 @@ pub fn validate_and_get_domain_name<'a>(
 
     Ok(domain_name)
 }
-
-/// Extracts the domain name from a name account's data region.
-///
-/// Returns the raw bytes after the 200-byte header, trimmed of trailing zeros.
-#[inline]
-pub fn get_domain_name(name_account: &AccountInfo) -> Result<&[u8], ProgramError> {
-    let data = name_account.try_borrow_data()?;
-    if data.len() < NameRecordHeader::LEN {
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // SAFETY: We need to return a reference that outlives the borrow.
-    // The account data is valid for the duration of the instruction.
-    let data_ptr = data.as_ptr();
-    let data_len = data.len();
-    drop(data);
-
-    let full_slice = unsafe { core::slice::from_raw_parts(data_ptr, data_len) };
-    let name_bytes = get_name_bytes(full_slice);
-
-    // Trim trailing zeros
-    let end = name_bytes
-        .iter()
-        .rposition(|&b| b != 0)
-        .map(|i| i + 1)
-        .unwrap_or(0);
-
-    Ok(&name_bytes[..end])
-}

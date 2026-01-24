@@ -84,7 +84,9 @@ pub fn process(
     let clock = Clock::get()?;
     emit!(HeroAssignedDefensive {
         hero_mint,
-        player: *owner.key(),
+        hero_name: [0u8; 32], // No template loaded in assign - name unavailable
+        player: *player_account.key(),
+        player_name: player.name,
         assigned: true,
         timestamp: clock.unix_timestamp,
     });

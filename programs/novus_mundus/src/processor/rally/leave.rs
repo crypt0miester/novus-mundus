@@ -181,9 +181,11 @@ pub fn process(
     rally.total_siege_weapons = rally.total_siege_weapons.saturating_sub(participant.siege_weapons_committed);
 
     // 11. Emit event
+    // Note: team_name not available here - would need to pass team account
     emit!(RallyLeft {
         rally: *rally_account.key(),
-        player: *player_owner.key(),
+        team_name: [0u8; 32], // Team name not available, lookup via rally.team
+        player: *player_account.key(),
         units: [
             participant.units_committed_1,
             participant.units_committed_2,

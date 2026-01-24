@@ -35,3 +35,5 @@ pub mod sanctuary;
 pub mod reinforcement;
 pub mod expedition;
 pub mod arena;
+pub mod dungeon;
+pub mod castle;

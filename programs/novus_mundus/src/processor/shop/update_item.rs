@@ -14,13 +14,12 @@ use crate::{
 #[repr(u8)]
 pub enum UpdateField {
     PriceSol = 1,
-    PriceNovi = 2,
-    PriceGems = 4,
-    IsActive = 8,
-    IsFeatured = 16,
-    AvailableFrom = 32,
-    AvailableUntil = 64,
-    Stock = 128,
+    // PriceGems = 2, // Removed - use token payments instead
+    IsActive = 4,
+    IsFeatured = 8,
+    AvailableFrom = 16,
+    AvailableUntil = 32,
+    Stock = 64,
 }
 
 /// Update a shop item (DAO only)
@@ -36,8 +35,6 @@ pub enum UpdateField {
 /// - item_id: u32 (for PDA verification)
 /// - update_flags: u8 (bitmask of UpdateField)
 /// - price_sol_lamports: u64 (if flag set)
-/// - price_novi: u64 (if flag set)
-/// - price_gems: u64 (if flag set)
 /// - is_active: u8 (if flag set)
 /// - is_featured: u8 (if flag set)
 /// - available_from: i64 (if flag set)
@@ -104,28 +101,6 @@ pub fn process(
             return Err(ProgramError::InvalidInstructionData);
         }
         shop_item.price_sol_lamports = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
-        offset += 8;
-    }
-
-    // Update price_novi if flag set
-    if update_flags & (UpdateField::PriceNovi as u8) != 0 {
-        if instruction_data.len() < offset + 8 {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        shop_item.price_novi = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
-        offset += 8;
-    }
-
-    // Update price_gems if flag set
-    if update_flags & (UpdateField::PriceGems as u8) != 0 {
-        if instruction_data.len() < offset + 8 {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        shop_item.price_gems = u64::from_le_bytes(
             instruction_data[offset..offset + 8].try_into().unwrap()
         );
         offset += 8;

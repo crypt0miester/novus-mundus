@@ -38,8 +38,10 @@ impl Event for GameEventCreated {
 pub struct GameEventJoined {
     /// Event account pubkey
     pub event: Pubkey,
-    /// Player who joined
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Entry fee paid (if any)
     pub entry_fee: u64,
     /// Total participants after joining
@@ -55,6 +57,7 @@ impl Event for GameEventJoined {
         let mut offset = 0;
         offset += self.event.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.entry_fee.pack(&mut buf[offset..]);
         offset += self.participant_count.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
@@ -91,8 +94,10 @@ impl Event for GameEventFinalized {
 pub struct EventScoreUpdated {
     /// Event account pubkey
     pub event: Pubkey,
-    /// Player whose score updated
+    /// Player account pubkey (not wallet)
     pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
     /// Score delta (positive = increase)
     pub score_delta: i64,
     /// New total score
@@ -108,6 +113,7 @@ impl Event for EventScoreUpdated {
         let mut offset = 0;
         offset += self.event.pack(&mut buf[offset..]);
         offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.score_delta.pack(&mut buf[offset..]);
         offset += self.new_score.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);

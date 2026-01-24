@@ -7,9 +7,12 @@ use pinocchio::{
 };
 use pinocchio_system::instructions::Transfer;
 use crate::{
-    constants::PLAYER_SEED,
     error::GameError,
-    helpers::{add_to_inventory, burn_tokens, estate::{market_discount_bps, load_estate_for_player, require_market}},
+    helpers::{
+        add_to_inventory,
+        estate::{market_discount_bps, load_estate_for_player, require_market},
+        process_token_payment_flow,
+    },
     state::{
         GameEngine, ShopConfigAccount, BundleAccount, ShopItemAccount,
         PlayerAccount, BundleTier,
@@ -36,9 +39,6 @@ use crate::{
 /// - [] system_program: System program
 /// - [writable] inventory: PlayerInventoryAccount PDA (auto-created/expanded for inventory items)
 /// - [] estate_account: EstateAccount PDA (for Market discount)
-/// - [writable] player_token_account: Player's locked NOVI token account (for NOVI payment)
-/// - [writable] novi_mint: NOVI token mint (for NOVI payment)
-/// - [] token_program: SPL Token program (for NOVI payment)
 /// - [] shop_items[]: ShopItemAccount for each item in bundle (for fulfillment validation)
 ///
 /// # Building Bonuses
@@ -47,7 +47,7 @@ use crate::{
 ///
 /// # Instruction Data
 /// - bundle_id: u32
-/// - payment_type: u8 (0 = SOL, 1 = NOVI)
+/// - payment_type: u8 (0 = SOL, 2+ = Token via AllowedToken - future)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -55,8 +55,8 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    // Minimum accounts: buyer, player, game_engine, shop_config, bundle, treasury, system, inventory, estate, token accounts
-    if accounts.len() < 12 {
+    // Minimum accounts: buyer, player, game_engine, shop_config, bundle, treasury, system, inventory, estate
+    if accounts.len() < 9 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -69,12 +69,9 @@ pub fn process(
     let system_program = &accounts[6];
     let inventory_account = &accounts[7];
     let estate_account = &accounts[8];
-    let player_token_account = &accounts[9];
-    let novi_mint = &accounts[10];
-    let _token_program = &accounts[11];
 
     // Remaining accounts are shop items for fulfillment reference
-    let shop_item_accounts = &accounts[12..];
+    let shop_item_accounts = &accounts[9..];
 
     // 2. Validate Accounts
 
@@ -171,21 +168,16 @@ pub fn process(
 
     // 8. Determine Price
 
-    let base_price = match payment_type {
-        0 => { // SOL
-            if bundle.price_sol_lamports == 0 {
-                return Err(GameError::PaymentTypeNotSupported.into());
-            }
-            bundle.price_sol_lamports
-        }
-        1 => { // NOVI
-            if bundle.price_novi == 0 {
-                return Err(GameError::PaymentTypeNotSupported.into());
-            }
-            bundle.price_novi
-        }
-        _ => return Err(GameError::InvalidParameter.into()),
-    };
+    // Payment type 1 (formerly Gems) is no longer supported
+    if payment_type == 1 {
+        return Err(GameError::PaymentTypeNotSupported.into());
+    }
+
+    if bundle.price_sol_lamports == 0 {
+        return Err(GameError::PaymentTypeNotSupported.into());
+    }
+
+    let base_price = bundle.price_sol_lamports;
 
     // 9. Calculate Final Price with Discounts
 
@@ -223,39 +215,28 @@ pub fn process(
 
     // 10. Process Payment
 
-    match payment_type {
-        0 => {
-            // SOL payment - transfer to treasury
-            Transfer {
-                from: buyer,
-                to: treasury,
-                lamports: final_price,
-            }.invoke()?;
-        }
-        1 => {
-            // NOVI payment - burn tokens
-            if player.locked_novi < final_price {
-                return Err(GameError::InsufficientFunds.into());
-            }
+    if payment_type == 0 {
+        // SOL payment - direct transfer to treasury
+        Transfer {
+            from: buyer,
+            to: treasury,
+            lamports: final_price,
+        }.invoke()?;
+    } else {
+        // Token payment (payment_type >= 2)
+        // Token accounts come after shop_item_accounts
+        let token_offset = 9 + shop_item_accounts.len();
 
-            // Burn NOVI tokens
-            let player_bump = player.bump;
-            let bump_seed = [player_bump];
-            let player_seeds = pinocchio::seeds!(PLAYER_SEED, buyer.key().as_ref(), &bump_seed);
-            let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
-
-            burn_tokens(
-                player_token_account,
-                novi_mint,
-                player_account,
-                final_price,
-                &[player_signer],
-            )?;
-
-            // Update soft balance tracker
-            player.locked_novi = player.locked_novi.saturating_sub(final_price);
-        }
-        _ => unreachable!(),
+        // Use unified token payment helper
+        process_token_payment_flow(
+            &accounts[token_offset..],
+            game_engine_account.key(),
+            program_id,
+            shop_config,
+            buyer,
+            final_price,
+            clock.slot,
+        )?;
     }
 
     // 11. Fulfill Bundle Items
@@ -346,20 +327,13 @@ pub fn process(
     // 12. Update Bundle Stats
 
     bundle.total_purchases = bundle.total_purchases.saturating_add(1);
-
-    if payment_type == 0 {
-        bundle.total_revenue_lamports = bundle.total_revenue_lamports.saturating_add(final_price);
-    }
+    bundle.total_revenue_lamports = bundle.total_revenue_lamports.saturating_add(final_price);
 
     // 13. Update Player Shop State
 
-    // Track total spending (SOL only for milestone tracking)
-    if payment_type == 0 {
-        player.total_shop_spent = player.total_shop_spent.saturating_add(final_price);
-
-        // Update milestone tier if threshold reached
-        player.milestone_tier = calculate_milestone_tier(player.total_shop_spent, shop_config);
-    }
+    // Track total spending for milestone tracking
+    player.total_shop_spent = player.total_shop_spent.saturating_add(final_price);
+    player.milestone_tier = calculate_milestone_tier(player.total_shop_spent, shop_config);
 
     // Calculate current day for streak tracking
     let current_day = (now / 86400) as u32;
@@ -390,7 +364,8 @@ pub fn process(
 
     // Emit event
     emit!(BundlePurchased {
-        player: *buyer.key(),
+        player: *player_account.key(),
+        player_name: player.name,
         bundle_id,
         price: final_price,
         currency: payment_type,
@@ -524,7 +499,7 @@ fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> Prog
     // 1000+: Event items (inventory)
 
     let amount_u16 = amount.min(u16::MAX as u64) as u16;
-    let amount_u32 = amount.min(u32::MAX as u64) as u32;
+    let _amount_u32 = amount.min(u32::MAX as u64) as u32;
 
     match item_type {
         // Equipment - Weapons by type

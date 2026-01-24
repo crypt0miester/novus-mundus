@@ -347,6 +347,7 @@ pub fn process(
 
     emit!(IntracityTravelStarted {
         player: *player_account.key(),
+        player_name: player_data.name,
         city: *current_city_account.key(),
         dest_x: dest_grid_lat,
         dest_y: dest_grid_long,

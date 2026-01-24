@@ -51,31 +51,41 @@ pub enum TimeOfDay {
 
 impl TimeOfDay {
     /// Check if this is a golden hour (dawn or dusk)
+    /// Used for XP bonuses and special encounter spawns
     #[inline]
+    #[allow(dead_code)]
     pub fn is_golden_hour(&self) -> bool {
         matches!(self, TimeOfDay::Dawn | TimeOfDay::Dusk)
     }
 
     /// Check if this is night time (evening, deep night, or dawn)
+    /// Used for stealth bonuses and night-specific mechanics
     #[inline]
+    #[allow(dead_code)]
     pub fn is_night(&self) -> bool {
         matches!(self, TimeOfDay::Evening | TimeOfDay::DeepNight | TimeOfDay::Dawn)
     }
 
     /// Check if this is day time (morning, midday, afternoon)
+    /// Used for day-only activities and resource collection bonuses
     #[inline]
+    #[allow(dead_code)]
     pub fn is_day(&self) -> bool {
         matches!(self, TimeOfDay::Morning | TimeOfDay::Midday | TimeOfDay::Afternoon)
     }
 
     /// Check if this is peak day (midday only)
+    /// Used for dungeon High Noon (nullifies darkness)
     #[inline]
+    #[allow(dead_code)]
     pub fn is_peak_day(&self) -> bool {
         matches!(self, TimeOfDay::Midday)
     }
 
     /// Check if this is deep night (best for legendary encounters)
+    /// Used for dungeon Witching Hour and rare spawns
     #[inline]
+    #[allow(dead_code)]
     pub fn is_deep_night(&self) -> bool {
         matches!(self, TimeOfDay::DeepNight)
     }
@@ -102,9 +112,6 @@ pub enum ActivityType {
 
     // Movement
     Traveling = 7,     // Intercity/intracity travel (faster at night - empty roads)
-
-    // Encounter
-    EncounterSpawn = 10, // Used for spawn rate calculations
 
     // Consumption & Production
     Consuming = 11,    // NOVI → Power conversion (best during day - peak efficiency)
@@ -172,12 +179,6 @@ pub fn get_time_of_day(timestamp: i64, longitude: f64) -> TimeOfDay {
         750..=874 => TimeOfDay::Dusk,        // 18:00-21:00 (Golden Hour)
         _ => TimeOfDay::Evening,             // 21:00-00:00
     }
-}
-
-/// Simple daytime check (true for day, false for night)
-#[inline]
-pub fn is_daytime(timestamp: i64, longitude: f64) -> bool {
-    get_time_of_day(timestamp, longitude).is_day()
 }
 
 // ========================================================
@@ -254,15 +255,6 @@ pub fn get_time_multiplier(time: TimeOfDay, activity: ActivityType) -> f64 {
             _ => 1.0,
         },
 
-        // ENCOUNTER SPAWNING - Rate modifier for different times
-        ActivityType::EncounterSpawn => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - More spawns (dangerous!)
-            TimeOfDay::Dawn => PHI_SQUARED,       // 2.618x - Golden hour spawns!
-            TimeOfDay::Midday => PHI_INVERSE,     // 0.618x - Fewer spawns (safe)
-            TimeOfDay::Evening => GOLDEN_ROOT,    // 1.272x - More spawns begin
-            _ => 1.0,
-        },
-
         // CONSUMPTION - NOVI → Power conversion (best during day - peak efficiency)
         ActivityType::Consuming => match time {
             TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x - Underground operations less efficient
@@ -310,14 +302,6 @@ pub fn get_time_multiplier(time: TimeOfDay, activity: ActivityType) -> f64 {
     }
 }
 
-/// Convert multiplier to basis points for integer calculations
-///
-/// Example: PHI (1.618) -> 16180 basis points
-#[inline]
-pub fn multiplier_to_bps(multiplier: f64) -> u32 {
-    (multiplier * 10000.0) as u32
-}
-
 /// Apply a time multiplier to a base value (u64)
 ///
 /// Uses the golden ratio multiplier for the given time and activity.
@@ -325,13 +309,6 @@ pub fn multiplier_to_bps(multiplier: f64) -> u32 {
 pub fn apply_time_multiplier(base: u64, time: TimeOfDay, activity: ActivityType) -> u64 {
     let multiplier = get_time_multiplier(time, activity);
     crate::logic::apply_multiplier(base, multiplier)
-}
-
-/// Apply a time multiplier to a base value (u32)
-#[inline]
-pub fn apply_time_multiplier_u32(base: u32, time: TimeOfDay, activity: ActivityType) -> u32 {
-    let multiplier = get_time_multiplier(time, activity);
-    crate::logic::apply_multiplier_u32(base, multiplier)
 }
 
 // ========================================================
@@ -397,46 +374,6 @@ pub fn can_spawn_rarity_at_time(time: TimeOfDay, rarity: u8) -> bool {
 }
 
 // ========================================================
-// Utility Functions
-// ========================================================
-
-/// Get a human-readable name for the time period
-pub fn get_time_name(time: TimeOfDay) -> &'static str {
-    match time {
-        TimeOfDay::DeepNight => "Deep Night",
-        TimeOfDay::Dawn => "Dawn",
-        TimeOfDay::Morning => "Morning",
-        TimeOfDay::Midday => "Midday",
-        TimeOfDay::Afternoon => "Afternoon",
-        TimeOfDay::Dusk => "Dusk",
-        TimeOfDay::Evening => "Evening",
-    }
-}
-
-/// Get seconds until a specific time of day
-pub fn seconds_until_time(timestamp: i64, longitude: f64, target: TimeOfDay) -> i64 {
-    let local_time = calculate_local_time(timestamp, longitude);
-
-    let target_start = match target {
-        TimeOfDay::DeepNight => 0,
-        TimeOfDay::Dawn => 125,
-        TimeOfDay::Morning => 250,
-        TimeOfDay::Midday => 375,
-        TimeOfDay::Afternoon => 625,
-        TimeOfDay::Dusk => 750,
-        TimeOfDay::Evening => 875,
-    };
-
-    let remaining = if target_start > local_time {
-        target_start - local_time
-    } else {
-        TIME_PRECISION - local_time + target_start
-    };
-
-    (remaining * CYCLE_LENGTH) / TIME_PRECISION
-}
-
-// ========================================================
 // Tests
 // ========================================================
 
@@ -481,22 +418,17 @@ mod tests {
     #[test]
     fn test_multipliers_are_golden_ratio() {
         // Verify all multipliers use golden ratio family
-        let phi = PHI;
-        let golden_root = GOLDEN_ROOT;
-        let phi_sq = PHI_SQUARED;
-        let phi_inv = PHI_INVERSE;
-
         // Attacking at night should give φ bonus
         let attack_night = get_time_multiplier(TimeOfDay::DeepNight, ActivityType::Attacking);
-        assert!((attack_night - phi).abs() < 0.0001);
+        assert!((attack_night - PHI).abs() < 0.0001);
 
         // Defending at midday should give φ bonus
         let defend_day = get_time_multiplier(TimeOfDay::Midday, ActivityType::Defending);
-        assert!((defend_day - phi).abs() < 0.0001);
+        assert!((defend_day - PHI).abs() < 0.0001);
 
         // Collection at dawn (golden hour) should give φ² bonus
         let collect_dawn = get_time_multiplier(TimeOfDay::Dawn, ActivityType::Collecting);
-        assert!((collect_dawn - phi_sq).abs() < 0.0001);
+        assert!((collect_dawn - PHI_SQUARED).abs() < 0.0001);
     }
 
     #[test]

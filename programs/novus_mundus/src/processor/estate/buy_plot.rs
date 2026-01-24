@@ -115,7 +115,8 @@ pub fn process(
 
     // 10. Emit PlotPurchased event
     emit!(PlotPurchased {
-        player: *owner.key(),
+        player: *player_account.key(),
+        player_name: player_data.name,
         plot: plot_index,
         cost,
         total_plots: estate_data.plots_owned,

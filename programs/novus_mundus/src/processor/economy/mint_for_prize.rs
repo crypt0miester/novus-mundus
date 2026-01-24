@@ -61,7 +61,7 @@ pub fn process(
         game_engine_account,
         user_token_account,
         novi_mint,
-        token_program,
+        _token_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -97,6 +97,9 @@ pub fn process(
     if dao_authority.key() != &game_engine_data.authority {
         return Err(GameError::DaoRequired.into());
     }
+
+    // SECURITY: Verify token account belongs to the UserAccount PDA
+    crate::helpers::validate_token_account_owner(user_token_account, recipient_user.key())?;
 
     // 4. Load Recipient User Account
 

@@ -9,7 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TreasuryRequest, require_extension, EXT_TEAM},
     helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::TreasuryRequestCancelled,
 };
@@ -60,7 +60,7 @@ pub fn process(
     // 4. Load Accounts
 
     let player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
-    let _team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
 
     // 4a. Require EXT_TEAM
     require_extension(&*player, EXT_TEAM)?;
@@ -77,10 +77,7 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    if request_account.data_len() == 0 {
-        return Err(GameError::TreasuryRequestNotFound.into());
-    }
-
+    require_initialized(request_account).map_err(|_| GameError::TreasuryRequestNotFound)?;
     require_owner(request_account, program_id)?;
 
     // Validate request belongs to this player and team
@@ -108,6 +105,7 @@ pub fn process(
 
     emit!(TreasuryRequestCancelled {
         team: *team_account.key(),
+        team_name: team.name,
         requester: *player_account.key(),
         timestamp: now,
     });
