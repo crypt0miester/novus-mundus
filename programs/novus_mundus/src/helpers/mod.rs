@@ -7,12 +7,14 @@
 /// - Hero buff calculation and leveling
 /// - NFT attribute building
 /// - Estate building requirements
+/// - Kingdom validation (cross-kingdom checks)
 pub mod account;
 pub mod dungeon;
 pub mod estate;
 pub mod event_scoring;
 pub mod hero;
 pub mod inventory;
+pub mod kingdom;
 pub mod name_service;
 pub mod nft_parser;
 pub mod token_ops;
@@ -22,6 +24,8 @@ pub use account::close_account;
 pub use token_ops::{
     burn_tokens, mint_tokens, process_token_payment_flow, transfer_tokens,
     validate_token_account_owner,
+    // Oracle helpers
+    detect_oracle_type, get_pyth_price, OracleType,
 };
 
 // Hero helpers (NFT-Only System)
@@ -46,3 +50,14 @@ pub use inventory::add_to_inventory;
 
 // Name service validation
 pub use name_service::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name};
+
+// Kingdom validation helpers (will be used in integration tests and future cross-entity validation)
+#[allow(unused_imports)]
+pub use kingdom::{
+    validate_player_kingdom,
+    validate_same_kingdom,
+    validate_entity_kingdom,
+    validate_city_kingdom,
+    validate_group_membership,
+    validate_all_same_kingdom,
+};

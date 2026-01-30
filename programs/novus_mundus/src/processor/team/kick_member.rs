@@ -71,18 +71,29 @@ pub fn process(
     require_writable(kicked_slot_account)?;
     require_writable(kicked_owner)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    // Kicker: use load_checked (read-only, has signer)
-    let kicker = PlayerAccount::load_checked(kicker_account, kicker_owner.key(), program_id)?;
+    // Kicker: use load_checked_by_key (read-only, has signer)
+    let kicker = PlayerAccount::load_checked_by_key(kicker_account, program_id)?;
+    if &kicker.owner != kicker_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // Kicked player: manual load (we don't have kicked player's wallet key)
     require_owner(kicked_account, program_id)?;
     let mut kicked_data_ref = kicked_account.try_borrow_mut_data()?;
     let kicked = unsafe { PlayerAccount::load_mut(&mut kicked_data_ref) };
 
-    // Team: use load_checked_mut
-    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
+    // Team: use load_checked_mut_by_key
+    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom
+    if kicker.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM for kicker
     require_extension(&*kicker, EXT_TEAM)?;

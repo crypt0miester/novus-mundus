@@ -168,15 +168,18 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 6. Load Player and validate
-    let mut creator = PlayerAccount::load_checked_mut(creator_player, creator_owner.key(), program_id)?;
+    // 6. Load GameEngine first (kingdom-scoped, needed for all subsequent loads)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+
+    // 6a. Load Player and validate (kingdom-scoped)
+    let mut creator = PlayerAccount::load_checked_mut(creator_player, game_engine.key(), creator_owner.key(), program_id)?;
 
     // Player must not be traveling
     if creator.is_traveling_any() {
         return Err(GameError::PlayerTraveling.into());
     }
 
-    // 6a. Validate Team Membership
+    // 6b. Validate Team Membership
     // Creator must be on a team to create a rally
     if creator.team == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
@@ -187,8 +190,8 @@ pub fn process(
         return Err(GameError::InvalidTeam.into());
     }
 
-    // Load team and verify not disbanded
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    // Load team and verify not disbanded (kingdom-scoped)
+    let team = TeamAccount::load_checked(team_account, game_engine.key(), team_id, program_id)?;
     if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
@@ -228,8 +231,7 @@ pub fn process(
         return Err(GameError::InsufficientWeapons.into());
     }
 
-    // 8. Load GameEngine for rally caps
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 8. GameEngine already loaded above for kingdom scoping
 
     // 9. Calculate max participants based on tier + hero buff + Citadel building
     let effective_tier = creator.get_effective_tier(now);
@@ -320,8 +322,8 @@ pub fn process(
     drop(creator);
     drop(game_engine_data);
 
-    // 11. Verify and create Rally PDA
-    let (expected_rally_pda, rally_bump) = RallyAccount::derive_pda(creator_owner.key(), rally_id);
+    // 11. Verify and create Rally PDA (kingdom-scoped)
+    let (expected_rally_pda, rally_bump) = RallyAccount::derive_pda(game_engine.key(), creator_owner.key(), rally_id);
     if rally_account.key() != &expected_rally_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -333,6 +335,7 @@ pub fn process(
     let rally_id_bytes = rally_id.to_le_bytes();
     let rally_seeds = pinocchio::seeds!(
         RALLY_SEED,
+        game_engine.key().as_ref(),
         creator_owner.key().as_ref(),
         &rally_id_bytes,
         &rally_bump_seed
@@ -347,9 +350,9 @@ pub fn process(
         owner: program_id,
     }.invoke_signed(&[rally_signer])?;
 
-    // 12. Verify and create RallyParticipant PDA for leader
+    // 12. Verify and create RallyParticipant PDA for leader (kingdom-scoped)
     let (expected_participant_pda, participant_bump) =
-        RallyParticipant::derive_pda(creator_owner.key(), rally_id, creator_owner.key());
+        RallyParticipant::derive_pda(game_engine.key(), creator_owner.key(), rally_id, creator_owner.key());
     if participant_account.key() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -359,6 +362,7 @@ pub fn process(
     let participant_bump_seed = [participant_bump];
     let participant_seeds = pinocchio::seeds!(
         RALLY_PARTICIPANT_SEED,
+        game_engine.key().as_ref(),
         creator_owner.key().as_ref(),
         &rally_id_bytes,
         creator_owner.key().as_ref(),
@@ -379,6 +383,9 @@ pub fn process(
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     *rally = RallyAccount {
+        // Kingdom reference
+        game_engine: *game_engine.key(),
+
         id: rally_id,
         creator: *creator_owner.key(),
         team: rally_team, // All rallies require team membership

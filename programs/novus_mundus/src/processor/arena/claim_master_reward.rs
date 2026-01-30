@@ -95,12 +95,12 @@ pub fn process(
         return Err(GameError::ArenaClaimDeadlinePassed.into());
     }
 
-    let season_authority = season.authority;
+    let _season_authority = season.authority;
 
-    // 6. Load Participant using player_account PDA for derivation
+    // 6. Load Participant using player_account PDA for derivation (kingdom-scoped)
     let mut participant = ArenaParticipantAccount::load_checked_mut(
         participant_account,
-        &season_authority,
+        game_engine.key(),
         season_id,
         player_account.key(),
         program_id,
@@ -151,10 +151,11 @@ pub fn process(
 
     drop(season_data);
 
-    // 11. Load GameEngine for mint authority
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 11. Load GameEngine for mint authority (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &bump_seed);
+    let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
     drop(game_engine_data);
 
@@ -167,8 +168,8 @@ pub fn process(
         &[signer],
     )?;
 
-    // 13. Update player's locked_novi balance
-    let mut player = PlayerAccount::load_checked_mut(player_account, player_owner.key(), program_id)?;
+    // 13. Update player's locked_novi balance (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.key(), player_owner.key(), program_id)?;
     player.locked_novi = player.locked_novi.saturating_add(reward);
 
     Ok(())

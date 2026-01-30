@@ -69,10 +69,21 @@ pub fn process(
     require_writable(request_account)?;
     require_writable(requester_refund)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let approver = PlayerAccount::load_checked(approver_account, approver_owner.key(), program_id)?;
-    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
+    let approver = PlayerAccount::load_checked_by_key(approver_account, program_id)?;
+    if &approver.owner != approver_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom
+    if approver.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM
     require_extension(&*approver, EXT_TEAM)?;

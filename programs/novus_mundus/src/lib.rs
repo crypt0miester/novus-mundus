@@ -63,6 +63,8 @@ pub fn process_instruction(
         1 => processor::initialization::player::process(program_id, accounts, instruction_data),
         2 => processor::initialization::user::process(program_id, accounts, instruction_data),
         3 => processor::initialization::city::process(program_id, accounts, instruction_data),
+        4 => processor::initialization::close_registration::process(program_id, accounts, instruction_data),
+        5 => processor::initialization::batch_cities::process(program_id, accounts, instruction_data),
 
         // Economy (10-19)
         10 => processor::economy::update_locked_novi::process(program_id, accounts, instruction_data),
@@ -277,6 +279,9 @@ pub fn process_instruction(
         288 => processor::castle::attack_castle::process(program_id, accounts, instruction_data),
         289 => processor::castle::update_castle_status::process(program_id, accounts, instruction_data),
         290 => processor::castle::complete_upgrade::process(program_id, accounts, instruction_data),
+
+        // Token Economy (300-309) - NOVI Purchases
+        300 => processor::shop::purchase_novi::process(program_id, accounts, instruction_data),
 
         _ => Err(ProgramError::InvalidInstructionData),
     }

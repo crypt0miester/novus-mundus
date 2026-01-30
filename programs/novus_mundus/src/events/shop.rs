@@ -101,3 +101,46 @@ impl Event for FlashSalePurchased {
         offset
     }
 }
+
+/// Emitted when NOVI is purchased from the shop
+pub struct NoviPurchased {
+    /// Buyer wallet pubkey
+    pub buyer: Pubkey,
+    /// User account pubkey
+    pub user: Pubkey,
+    /// Package index purchased (0-4)
+    pub package_index: u8,
+    /// Base NOVI amount (before bonuses, with 1 decimal)
+    pub base_amount: u64,
+    /// Bonus NOVI received (with 1 decimal)
+    pub bonus_amount: u64,
+    /// Total NOVI received (base + bonus, with 1 decimal)
+    pub total_received: u64,
+    /// SOL cost paid (in lamports)
+    pub cost_lamports: u64,
+    /// Current streak day (1-7+)
+    pub streak_day: u16,
+    /// Buyer's subscription tier (0-3)
+    pub subscription_tier: u8,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for NoviPurchased {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:NoviPurchased");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.buyer.pack(&mut buf[offset..]);
+        offset += self.user.pack(&mut buf[offset..]);
+        offset += self.package_index.pack(&mut buf[offset..]);
+        offset += self.base_amount.pack(&mut buf[offset..]);
+        offset += self.bonus_amount.pack(&mut buf[offset..]);
+        offset += self.total_received.pack(&mut buf[offset..]);
+        offset += self.cost_lamports.pack(&mut buf[offset..]);
+        offset += self.streak_day.pack(&mut buf[offset..]);
+        offset += self.subscription_tier.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}

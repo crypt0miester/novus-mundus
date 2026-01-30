@@ -1,0 +1,1541 @@
+/**
+ * Shop Instructions
+ *
+ * Instructions for shop system:
+ * - Initialize config (admin)
+ * - Create/update/purchase items
+ * - Create/update/purchase bundles
+ * - Flash sales, daily deals, weekly sales
+ * - Seasonal sales, DAO promotions
+ * - Allowed token management
+ */
+
+import {
+  PublicKey,
+  TransactionInstruction,
+  SystemProgram,
+  SYSVAR_SLOT_HASHES_PUBKEY,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+} from '@solana/web3.js';
+import BN from 'bn.js';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
+import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import {
+  deriveGameEnginePda,
+  derivePlayerPda,
+  deriveEstatePda,
+  deriveShopConfigPda,
+  deriveShopItemPda,
+  deriveBundlePda,
+  deriveFlashSalePda,
+  deriveDailyDealPda,
+  deriveWeeklySalePda,
+  deriveSeasonalSalePda,
+  deriveDaoPromotionPda,
+  derivePlayerPurchasePda,
+  deriveInventoryPda,
+  deriveAllowedTokenPda,
+  deriveUserPda,
+} from '../pda.ts';
+import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID } from '../utils/token.ts';
+
+// ============================================================
+// Initialize Config (Admin)
+// ============================================================
+
+export interface InitializeConfigAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface InitializeConfigParams {
+  /** Max base discount in basis points */
+  maxBaseDiscountBps?: number;
+  /** Max bundle discount in basis points */
+  maxBundleDiscountBps?: number;
+  /** Max fibonacci discount in basis points */
+  maxFibDiscountBps?: number;
+  /** Max total discount in basis points */
+  maxTotalDiscountBps?: number;
+}
+
+/**
+ * Initialize shop configuration.
+ *
+ * Admin-only. Creates global shop config with discount caps.
+ */
+export function createInitializeConfigInstruction(
+  accounts: InitializeConfigAccounts,
+  params: InitializeConfigParams = {}
+): TransactionInstruction {
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // Optional overrides (zeros use defaults)
+  const writer = new BufferWriter(8);
+  writer.writeU16(params.maxBaseDiscountBps ?? 0);
+  writer.writeU16(params.maxBundleDiscountBps ?? 0);
+  writer.writeU16(params.maxFibDiscountBps ?? 0);
+  writer.writeU16(params.maxTotalDiscountBps ?? 0);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_INIT_CONFIG, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Item (Admin)
+// ============================================================
+
+export interface CreateItemAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateItemParams {
+  /** Unique item ID */
+  itemId: number;
+  /** Item type (0-99=equipment, 100-199=consumables, etc.) */
+  itemType: number;
+  /** Category (0=Equipment, 1=Consumable, 2=Material, 3=Cosmetic, 4=Currency) */
+  category: number;
+  /** Rarity (0-4) */
+  rarity: number;
+  /** Items received per purchase */
+  quantityPerPurchase: number;
+  /** Base stats bonus in basis points */
+  baseStatsBps: number;
+  /** Price in SOL lamports */
+  priceSolLamports: BN | number | bigint;
+  /** Available from timestamp (0=now) */
+  availableFrom?: BN | number | bigint;
+  /** Available until timestamp (0=forever) */
+  availableUntil?: BN | number | bigint;
+  /** Max global stock (0=unlimited) */
+  maxGlobalStock?: BN | number | bigint;
+  /** Max per player (0=unlimited) */
+  maxPerPlayer?: number;
+  /** Max per day (0=unlimited) */
+  maxPerDay?: number;
+  /** Is item active */
+  isActive?: boolean;
+  /** Is item featured */
+  isFeatured?: boolean;
+}
+
+/**
+ * Create a shop item.
+ *
+ * Admin-only. Creates a purchasable item in the shop.
+ */
+export function createCreateItemInstruction(
+  accounts: CreateItemAccounts,
+  params: CreateItemParams
+): TransactionInstruction {
+    const [shopItem] = deriveShopItemPda(accounts.gameEngine, params.itemId);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: shopItem, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // Instruction data
+  const writer = new BufferWriter(52);
+  writer.writeU32(params.itemId);
+  writer.writeU16(params.itemType);
+  writer.writeU8(params.category);
+  writer.writeU8(params.rarity);
+  writer.writeU16(params.quantityPerPurchase);
+  writer.writeU16(params.baseStatsBps);
+  writer.writeU64(params.priceSolLamports);
+  writer.writeI64(params.availableFrom ?? 0);
+  writer.writeI64(params.availableUntil ?? 0);
+  writer.writeU64(params.maxGlobalStock ?? 0);
+  writer.writeU32(params.maxPerPlayer ?? 0);
+  writer.writeU16(params.maxPerDay ?? 0);
+  writer.writeBool(params.isActive ?? true);
+  writer.writeBool(params.isFeatured ?? false);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_ITEM, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Item (Admin)
+// ============================================================
+
+export interface UpdateItemAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Item ID to update */
+  itemId: number;
+}
+
+/** Update field flags - which fields to update */
+export enum UpdateItemField {
+  PriceSol = 1,
+  IsActive = 4,
+  IsFeatured = 8,
+  AvailableFrom = 16,
+  AvailableUntil = 32,
+  Stock = 64,
+}
+
+export interface UpdateItemParams {
+  /** New price in lamports (requires PriceSol flag) */
+  priceSolLamports?: BN | number | bigint;
+  /** Is active (requires IsActive flag) */
+  isActive?: boolean;
+  /** Is featured (requires IsFeatured flag) */
+  isFeatured?: boolean;
+  /** Available from timestamp (requires AvailableFrom flag) */
+  availableFrom?: BN | number | bigint;
+  /** Available until timestamp (requires AvailableUntil flag) */
+  availableUntil?: BN | number | bigint;
+  /** Max global stock (requires Stock flag) */
+  maxGlobalStock?: BN | number | bigint;
+  /** Current global stock (requires Stock flag) */
+  currentGlobalStock?: BN | number | bigint;
+}
+
+/**
+ * Update a shop item.
+ *
+ * Admin-only. Updates item properties using bitmask flags.
+ * Only fields with their flag set will be updated.
+ */
+export function createUpdateItemInstruction(
+  accounts: UpdateItemAccounts,
+  params: UpdateItemParams = {}
+): TransactionInstruction {
+    const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
+
+  // Rust account order: dao_authority, game_engine, shop_item
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: shopItem, isSigner: false, isWritable: true },
+  ];
+
+  // Build update_flags bitmask and conditional data
+  let updateFlags = 0;
+
+  // Calculate data size: item_id(4) + update_flags(1) + conditional fields
+  let dataSize = 5;
+  if (params.priceSolLamports !== undefined) {
+    updateFlags |= UpdateItemField.PriceSol;
+    dataSize += 8;
+  }
+  if (params.isActive !== undefined) {
+    updateFlags |= UpdateItemField.IsActive;
+    dataSize += 1;
+  }
+  if (params.isFeatured !== undefined) {
+    updateFlags |= UpdateItemField.IsFeatured;
+    dataSize += 1;
+  }
+  if (params.availableFrom !== undefined) {
+    updateFlags |= UpdateItemField.AvailableFrom;
+    dataSize += 8;
+  }
+  if (params.availableUntil !== undefined) {
+    updateFlags |= UpdateItemField.AvailableUntil;
+    dataSize += 8;
+  }
+  if (params.maxGlobalStock !== undefined || params.currentGlobalStock !== undefined) {
+    updateFlags |= UpdateItemField.Stock;
+    dataSize += 16; // max_global_stock + current_global_stock
+  }
+
+  const writer = new BufferWriter(dataSize);
+  writer.writeU32(accounts.itemId);
+  writer.writeU8(updateFlags);
+
+  // Write conditional fields in flag order
+  if (updateFlags & UpdateItemField.PriceSol) {
+    writer.writeU64(params.priceSolLamports!);
+  }
+  if (updateFlags & UpdateItemField.IsActive) {
+    writer.writeBool(params.isActive!);
+  }
+  if (updateFlags & UpdateItemField.IsFeatured) {
+    writer.writeBool(params.isFeatured!);
+  }
+  if (updateFlags & UpdateItemField.AvailableFrom) {
+    writer.writeI64(params.availableFrom!);
+  }
+  if (updateFlags & UpdateItemField.AvailableUntil) {
+    writer.writeI64(params.availableUntil!);
+  }
+  if (updateFlags & UpdateItemField.Stock) {
+    writer.writeU64(params.maxGlobalStock ?? 0);
+    writer.writeU64(params.currentGlobalStock ?? 0);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ITEM, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Purchase Item
+// ============================================================
+
+export interface PurchaseItemAccounts {
+  /** Buyer's wallet (signer) */
+  buyer: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Item ID to purchase */
+  itemId: number;
+  /** Treasury wallet to receive payment */
+  treasury: PublicKey;
+}
+
+export interface PurchaseItemParams {
+  /** Quantity of purchases (each gives quantityPerPurchase items) */
+  quantity: number;
+  /** Payment type (0=SOL, 2+=Token) */
+  paymentType?: number;
+  /** Discount flags bitmask (1=daily_deal, 2=weekly_sale) */
+  discountFlags?: number;
+  /** Daily deal slot index (if using daily deal) */
+  dailyDealSlot?: number;
+  /** Weekly sale week number (if using weekly sale) */
+  weeklySaleWeek?: BN | number | bigint;
+}
+
+/**
+ * Purchase an item from the shop.
+ *
+ * Handles payment and inventory fulfillment.
+ */
+export function createPurchaseItemInstruction(
+  accounts: PurchaseItemAccounts,
+  params: PurchaseItemParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+  const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
+  const [playerPurchase] = derivePlayerPurchasePda(accounts.buyer, accounts.itemId);
+  const [inventory] = deriveInventoryPda(player);
+  const [estate] = deriveEstatePda(accounts.buyer);
+
+  const keys = [
+    { pubkey: accounts.buyer, isSigner: true, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: false },
+    { pubkey: shopItem, isSigner: false, isWritable: true },
+    { pubkey: playerPurchase, isSigner: false, isWritable: true },
+    { pubkey: accounts.treasury, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: inventory, isSigner: false, isWritable: true },
+    { pubkey: estate, isSigner: false, isWritable: false },
+  ];
+
+  // Add optional discount accounts
+  if (params.discountFlags && (params.discountFlags & 1) !== 0 && params.dailyDealSlot !== undefined) {
+    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, params.dailyDealSlot);
+    keys.push({ pubkey: dailyDeal, isSigner: false, isWritable: false });
+  }
+  if (params.discountFlags && (params.discountFlags & 2) !== 0 && params.weeklySaleWeek !== undefined) {
+    const weekNum = BN.isBN(params.weeklySaleWeek) ? params.weeklySaleWeek.toNumber() : params.weeklySaleWeek;
+    const [weeklySale] = deriveWeeklySalePda(accounts.gameEngine, weekNum);
+    keys.push({ pubkey: weeklySale, isSigner: false, isWritable: false });
+  }
+
+  // Instruction data
+  const writer = new BufferWriter(16);
+  writer.writeU32(accounts.itemId);
+  writer.writeU16(params.quantity);
+  writer.writeU8(params.paymentType ?? 0);
+  writer.writeU8(params.discountFlags ?? 0);
+  if (params.discountFlags && (params.discountFlags & 1) !== 0) {
+    writer.writeU8(params.dailyDealSlot ?? 0);
+  }
+  if (params.discountFlags && (params.discountFlags & 2) !== 0) {
+    writer.writeU64(params.weeklySaleWeek ?? 0);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_PURCHASE_ITEM, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Bundle (Admin)
+// ============================================================
+
+export interface CreateBundleItemInput {
+  /** Item ID */
+  itemId: number;
+  /** Quantity of this item in bundle */
+  quantity: number;
+}
+
+export interface CreateBundleAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateBundleParams {
+  /** Unique bundle ID */
+  bundleId: number;
+  /** Bundle tier (0-4) */
+  tier: number;
+  /** Category */
+  category: number;
+  /** Subscription tier required (0=none) */
+  requiresSubscription: number;
+  /** Savings in basis points (for display) */
+  savingsBps: number;
+  /** Price in SOL lamports */
+  priceSolLamports: BN | number | bigint;
+  /** Available from timestamp */
+  availableFrom: BN | number | bigint;
+  /** Available until timestamp */
+  availableUntil: BN | number | bigint;
+  /** Is active */
+  isActive: boolean;
+  /** Items in bundle (2-10 items) */
+  items: CreateBundleItemInput[];
+}
+
+/**
+ * Create a bundle.
+ *
+ * Admin-only. Creates a pre-built bundle of items.
+ */
+export function createCreateBundleInstruction(
+  accounts: CreateBundleAccounts,
+  params: CreateBundleParams
+): TransactionInstruction {
+    const [bundle] = deriveBundlePda(accounts.gameEngine, params.bundleId);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: bundle, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // Header: 35 bytes + items (8 bytes each)
+  const writer = new BufferWriter(35 + params.items.length * 8);
+  writer.writeU32(params.bundleId);
+  writer.writeU8(params.tier);
+  writer.writeU8(params.category);
+  writer.writeU8(params.items.length);
+  writer.writeU8(params.requiresSubscription);
+  writer.writeU16(params.savingsBps);
+  writer.writeU64(params.priceSolLamports);
+  writer.writeI64(params.availableFrom);
+  writer.writeI64(params.availableUntil);
+  writer.writeBool(params.isActive);
+
+  // Items
+  for (const item of params.items) {
+    writer.writeU32(item.itemId);
+    writer.writeU32(item.quantity);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_BUNDLE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Bundle (Admin)
+// ============================================================
+
+export interface UpdateBundleAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Bundle ID to update */
+  bundleId: number;
+}
+
+/** Update field flags for bundles */
+export const UPDATE_BUNDLE_PRICE_SOL = 1;
+export const UPDATE_BUNDLE_IS_ACTIVE = 2;
+export const UPDATE_BUNDLE_AVAILABILITY = 4;
+export const UPDATE_BUNDLE_SAVINGS_BPS = 8;
+
+export interface UpdateBundleParams {
+  /** New price in lamports */
+  priceSolLamports?: BN | number | bigint;
+  /** Is active */
+  isActive?: boolean;
+  /** Available from timestamp */
+  availableFrom?: BN | number | bigint;
+  /** Available until timestamp */
+  availableUntil?: BN | number | bigint;
+  /** Savings in basis points */
+  savingsBps?: number;
+}
+
+/**
+ * Update a bundle.
+ *
+ * Admin-only. Updates bundle properties using bitmask flags.
+ * Only fields with their flag set will be updated.
+ */
+export function createUpdateBundleInstruction(
+  accounts: UpdateBundleAccounts,
+  params: UpdateBundleParams = {}
+): TransactionInstruction {
+    const [bundle] = deriveBundlePda(accounts.gameEngine, accounts.bundleId);
+
+  // Rust account order: dao_authority, game_engine, bundle
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: bundle, isSigner: false, isWritable: true },
+  ];
+
+  // Build update_flags bitmask and conditional data
+  let updateFlags = 0;
+
+  // Calculate data size: bundle_id(4) + update_flags(1) + conditional fields
+  let dataSize = 5;
+  if (params.priceSolLamports !== undefined) {
+    updateFlags |= UPDATE_BUNDLE_PRICE_SOL;
+    dataSize += 8;
+  }
+  if (params.isActive !== undefined) {
+    updateFlags |= UPDATE_BUNDLE_IS_ACTIVE;
+    dataSize += 1;
+  }
+  if (params.availableFrom !== undefined || params.availableUntil !== undefined) {
+    updateFlags |= UPDATE_BUNDLE_AVAILABILITY;
+    dataSize += 16; // available_from + available_until
+  }
+  if (params.savingsBps !== undefined) {
+    updateFlags |= UPDATE_BUNDLE_SAVINGS_BPS;
+    dataSize += 2;
+  }
+
+  const writer = new BufferWriter(dataSize);
+  writer.writeU32(accounts.bundleId);
+  writer.writeU8(updateFlags);
+
+  // Write conditional fields in flag order
+  if (updateFlags & UPDATE_BUNDLE_PRICE_SOL) {
+    writer.writeU64(params.priceSolLamports!);
+  }
+  if (updateFlags & UPDATE_BUNDLE_IS_ACTIVE) {
+    writer.writeBool(params.isActive!);
+  }
+  if (updateFlags & UPDATE_BUNDLE_AVAILABILITY) {
+    writer.writeI64(params.availableFrom ?? 0);
+    writer.writeI64(params.availableUntil ?? 0);
+  }
+  if (updateFlags & UPDATE_BUNDLE_SAVINGS_BPS) {
+    writer.writeU16(params.savingsBps!);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_BUNDLE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Purchase Bundle
+// ============================================================
+
+export interface PurchaseBundleAccounts {
+  /** Buyer's wallet (signer) */
+  buyer: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Bundle ID to purchase */
+  bundleId: number;
+  /** Treasury wallet */
+  treasury: PublicKey;
+  /** Shop item accounts for each item in bundle */
+  shopItemAccounts: PublicKey[];
+}
+
+export interface PurchaseBundleParams {
+  /** Payment type (0=SOL, 2+=Token) */
+  paymentType?: number;
+}
+
+/**
+ * Purchase a bundle.
+ *
+ * Handles bundled payment and fulfillment.
+ */
+export function createPurchaseBundleInstruction(
+  accounts: PurchaseBundleAccounts,
+  params: PurchaseBundleParams = {}
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+  const [bundle] = deriveBundlePda(accounts.gameEngine, accounts.bundleId);
+  const [inventory] = deriveInventoryPda(player);
+  const [estate] = deriveEstatePda(accounts.buyer);
+
+  const keys = [
+    { pubkey: accounts.buyer, isSigner: true, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: false },
+    { pubkey: bundle, isSigner: false, isWritable: true },
+    { pubkey: accounts.treasury, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: inventory, isSigner: false, isWritable: true },
+    { pubkey: estate, isSigner: false, isWritable: false },
+  ];
+
+  // Add shop item accounts
+  for (const itemAccount of accounts.shopItemAccounts) {
+    keys.push({ pubkey: itemAccount, isSigner: false, isWritable: false });
+  }
+
+  const writer = new BufferWriter(5);
+  writer.writeU32(accounts.bundleId);
+  writer.writeU8(params.paymentType ?? 0);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_PURCHASE_BUNDLE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Flash Sale (Admin)
+// ============================================================
+
+export interface CreateFlashSaleAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateFlashSaleParams {
+  /** Item or bundle ID */
+  itemId: number;
+  /** Is this a bundle (vs item) */
+  isBundle: boolean;
+  /** Discount in basis points (max 50%) */
+  discountBps: number;
+  /** Start timestamp */
+  startsAt: BN | number | bigint;
+  /** Duration in seconds */
+  durationSecs: number;
+  /** Max stock available */
+  maxStock: BN | number | bigint;
+}
+
+/**
+ * Create a flash sale.
+ *
+ * Admin-only. Time-limited sale with limited stock.
+ */
+export function createCreateFlashSaleInstruction(
+  accounts: CreateFlashSaleAccounts,
+  params: CreateFlashSaleParams
+): TransactionInstruction {
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+  // Note: Flash sale PDA uses next_flash_sale_id from shopConfig, created at runtime
+  // For now, we pass a placeholder that will be created
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: true },
+    // Flash sale account will be added by caller
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(27);
+  writer.writeU32(params.itemId);
+  writer.writeBool(params.isBundle);
+  writer.writeU16(params.discountBps);
+  writer.writeI64(params.startsAt);
+  writer.writeU32(params.durationSecs);
+  writer.writeU64(params.maxStock);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_FLASH_SALE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Purchase Flash Sale
+// ============================================================
+
+export interface PurchaseFlashSaleAccounts {
+  /** Buyer's wallet (signer) */
+  buyer: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Flash sale ID */
+  saleId: bigint | number;
+  /** Item or bundle account being purchased (ShopItemAccount or BundleAccount) */
+  itemOrBundle: PublicKey;
+  /** Treasury wallet */
+  treasury: PublicKey;
+}
+
+export interface PurchaseFlashSaleParams {
+  /** Quantity to purchase (usually 1 for flash sales) */
+  quantity: number;
+  /** Payment type (0=SOL, 2+=Token via AllowedToken) */
+  paymentType?: number;
+}
+
+/**
+ * Purchase from a flash sale.
+ *
+ * Flash sales have limited stock and time. Applies flash sale discount
+ * plus subscription tier discount.
+ */
+export function createPurchaseFlashSaleInstruction(
+  accounts: PurchaseFlashSaleAccounts,
+  params: PurchaseFlashSaleParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+  const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+  const [inventory] = deriveInventoryPda(player);
+  const [estate] = deriveEstatePda(accounts.buyer);
+
+  // Rust account order: buyer, player, game_engine, shop_config, flash_sale,
+  //                     item_or_bundle, treasury, inventory, system_program, estate
+  const keys = [
+    { pubkey: accounts.buyer, isSigner: true, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: false },
+    { pubkey: flashSale, isSigner: false, isWritable: true },
+    { pubkey: accounts.itemOrBundle, isSigner: false, isWritable: false },
+    { pubkey: accounts.treasury, isSigner: false, isWritable: true },
+    { pubkey: inventory, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: estate, isSigner: false, isWritable: false },
+  ];
+
+  // Instruction data: sale_id (u64) + quantity (u16) + payment_type (u8)
+  const saleIdBN = typeof accounts.saleId === 'bigint'
+    ? new BN(accounts.saleId.toString())
+    : new BN(accounts.saleId);
+
+  const writer = new BufferWriter(11);
+  writer.writeU64(saleIdBN);
+  writer.writeU16(params.quantity);
+  writer.writeU8(params.paymentType ?? 0);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_PURCHASE_FLASH_SALE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Close Sale (Admin)
+// ============================================================
+
+export interface CloseSaleAccounts {
+  /** Rent recipient */
+  rentRecipient: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Flash sale ID to close */
+  saleId: bigint | number;
+}
+
+/**
+ * Close a flash sale.
+ *
+ * Admin-only. Reclaims rent after sale ends.
+ */
+export function createCloseSaleInstruction(
+  accounts: CloseSaleAccounts
+): TransactionInstruction {
+    const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+
+  const keys = [
+    { pubkey: accounts.rentRecipient, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: flashSale, isSigner: false, isWritable: true },
+  ];
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CLOSE_SALE);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Daily Deal (Admin)
+// ============================================================
+
+export interface CreateDailyDealAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateDailyDealParams {
+  /** Slot index (0-2) */
+  slotIndex: number;
+  /** Item ID for this deal */
+  itemId: number;
+  /** Discount in basis points */
+  discountBps: number;
+}
+
+/**
+ * Create a daily deal.
+ *
+ * Admin-only. Creates rotating daily deals.
+ */
+export function createCreateDailyDealInstruction(
+  accounts: CreateDailyDealAccounts,
+  params: CreateDailyDealParams
+): TransactionInstruction {
+    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, params.slotIndex);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: dailyDeal, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(7);
+  writer.writeU8(params.slotIndex);
+  writer.writeU32(params.itemId);
+  writer.writeU16(params.discountBps);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_DAILY_DEAL, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Rotate Daily Deal (Admin)
+// ============================================================
+
+export interface RotateDailyDealAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Slot index to rotate */
+  slotIndex: number;
+}
+
+export interface RotateDailyDealParams {
+  /** New item ID */
+  newItemId: number;
+  /** New discount in basis points */
+  newDiscountBps: number;
+}
+
+/**
+ * Rotate a daily deal to a new item.
+ *
+ * Admin-only. Updates an existing daily deal slot.
+ */
+export function createRotateDailyDealInstruction(
+  accounts: RotateDailyDealAccounts,
+  params: RotateDailyDealParams
+): TransactionInstruction {
+    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, accounts.slotIndex);
+
+  const keys = [
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: dailyDeal, isSigner: false, isWritable: true },
+  ];
+
+  const writer = new BufferWriter(6);
+  writer.writeU32(params.newItemId);
+  writer.writeU16(params.newDiscountBps);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_ROTATE_DAILY_DEAL, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Weekly Sale (Admin)
+// ============================================================
+
+export interface CreateWeeklySaleAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateWeeklySaleParams {
+  /** Week number */
+  weekNumber: BN | number | bigint;
+  /** Start timestamp */
+  startsAt: BN | number | bigint;
+  /** End timestamp */
+  endsAt: BN | number | bigint;
+  /** Category discounts [Equipment, Consumable, Material, Cosmetic] in bps */
+  categoryDiscounts: [number, number, number, number];
+}
+
+/**
+ * Create a weekly sale.
+ *
+ * Admin-only. Category-wide discounts for a week.
+ */
+export function createCreateWeeklySaleInstruction(
+  accounts: CreateWeeklySaleAccounts,
+  params: CreateWeeklySaleParams
+): TransactionInstruction {
+    const weekNum = BN.isBN(params.weekNumber) ? params.weekNumber.toNumber() : params.weekNumber;
+  const [weeklySale] = deriveWeeklySalePda(accounts.gameEngine, weekNum);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: weeklySale, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(32);
+  writer.writeU64(params.weekNumber);
+  writer.writeI64(params.startsAt);
+  writer.writeI64(params.endsAt);
+  for (const discount of params.categoryDiscounts) {
+    writer.writeU16(discount);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_WEEKLY_SALE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Seasonal Sale (Admin)
+// ============================================================
+
+export interface CreateSeasonalSaleAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Event to link to */
+  event: PublicKey;
+}
+
+export interface CreateSeasonalSaleParams {
+  /** Global discount in basis points */
+  globalDiscountBps: number;
+  /** Featured item IDs */
+  featuredItemIds: number[];
+  /** Featured bundle IDs */
+  featuredBundleIds: number[];
+}
+
+/**
+ * Create a seasonal sale.
+ *
+ * Admin-only. Event-linked promotional sale.
+ */
+export function createCreateSeasonalSaleInstruction(
+  accounts: CreateSeasonalSaleAccounts,
+  params: CreateSeasonalSaleParams
+): TransactionInstruction {
+    const [seasonalSale] = deriveSeasonalSalePda(accounts.gameEngine, accounts.event);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.event, isSigner: false, isWritable: false },
+    { pubkey: seasonalSale, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(4 + params.featuredItemIds.length * 4 + params.featuredBundleIds.length * 4);
+  writer.writeU16(params.globalDiscountBps);
+  writer.writeU8(params.featuredItemIds.length);
+  for (const itemId of params.featuredItemIds) {
+    writer.writeU32(itemId);
+  }
+  writer.writeU8(params.featuredBundleIds.length);
+  for (const bundleId of params.featuredBundleIds) {
+    writer.writeU32(bundleId);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_SEASONAL_SALE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create DAO Promotion (Admin)
+// ============================================================
+
+export interface CreateDaoPromotionAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface CreateDaoPromotionParams {
+  /** Governance proposal ID */
+  proposalId: BN | number | bigint;
+  /** Promotion type */
+  promotionType: number;
+  /** Discount in basis points */
+  discountBps: number;
+  /** Target item/bundle ID */
+  targetId: number;
+  /** Start timestamp */
+  startsAt: BN | number | bigint;
+  /** End timestamp */
+  endsAt: BN | number | bigint;
+}
+
+/**
+ * Create a DAO promotion.
+ *
+ * Admin-only. Governance-approved promotional campaign.
+ */
+export function createCreateDaoPromotionInstruction(
+  accounts: CreateDaoPromotionAccounts,
+  params: CreateDaoPromotionParams
+): TransactionInstruction {
+    const proposalNum = BN.isBN(params.proposalId) ? params.proposalId.toNumber() : params.proposalId;
+  const [daoPromotion] = deriveDaoPromotionPda(accounts.gameEngine, proposalNum);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: daoPromotion, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(31);
+  writer.writeU64(params.proposalId);
+  writer.writeU8(params.promotionType);
+  writer.writeU16(params.discountBps);
+  writer.writeU32(params.targetId);
+  writer.writeI64(params.startsAt);
+  writer.writeI64(params.endsAt);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_DAO_PROMOTION, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Config (Admin)
+// ============================================================
+
+export interface UpdateConfigAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+}
+
+export interface UpdateConfigParams {
+  /** SOL Pyth price feed */
+  solPythFeed?: PublicKey;
+  /** SOL Switchboard price feed */
+  solSwitchboardFeed?: PublicKey;
+  /** Max staleness in slots */
+  solMaxStalenessSlots?: number;
+  /** Confidence threshold in basis points */
+  solConfidenceThresholdBps?: number;
+}
+
+/**
+ * Update shop config.
+ *
+ * Admin-only. Updates oracle configuration.
+ */
+export function createUpdateConfigInstruction(
+  accounts: UpdateConfigAccounts,
+  params: UpdateConfigParams = {}
+): TransactionInstruction {
+    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+
+  const keys = [
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: shopConfig, isSigner: false, isWritable: true },
+  ];
+
+  const writer = new BufferWriter(72);
+  // Write optional pubkeys (32 bytes each, zero if not provided)
+  if (params.solPythFeed) {
+    writer.writePubkey(params.solPythFeed);
+  } else {
+    writer.writeZeros(32);
+  }
+  if (params.solSwitchboardFeed) {
+    writer.writePubkey(params.solSwitchboardFeed);
+  } else {
+    writer.writeZeros(32);
+  }
+  writer.writeU32(params.solMaxStalenessSlots ?? 0);
+  writer.writeU16(params.solConfidenceThresholdBps ?? 0);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_CONFIG, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Activate Sale (Admin)
+// ============================================================
+
+export interface ActivateSaleAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Flash sale ID to activate */
+  saleId: bigint | number;
+}
+
+/**
+ * Activate a flash sale.
+ *
+ * Admin-only. Manually activates a pending sale.
+ */
+export function createActivateSaleInstruction(
+  accounts: ActivateSaleAccounts
+): TransactionInstruction {
+    const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+
+  const keys = [
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: flashSale, isSigner: false, isWritable: true },
+  ];
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_ACTIVATE_SALE);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Create Allowed Token (Admin)
+// ============================================================
+
+export interface CreateAllowedTokenAccounts {
+  /** Payer for account creation */
+  payer: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Token mint to allow */
+  tokenMint: PublicKey;
+}
+
+export interface CreateAllowedTokenParams {
+  /** Pyth price feed for this token */
+  pythFeed: PublicKey;
+  /** Switchboard price feed (optional) */
+  switchboardFeed?: PublicKey;
+  /** Max staleness in slots */
+  maxStalenessSlots: number;
+  /** Confidence threshold in basis points */
+  confidenceThresholdBps: number;
+  /** Is token active */
+  isActive: boolean;
+}
+
+/**
+ * Create an allowed token for shop payments.
+ *
+ * Admin-only. Enables payment with this SPL token.
+ */
+export function createCreateAllowedTokenInstruction(
+  accounts: CreateAllowedTokenAccounts,
+  params: CreateAllowedTokenParams
+): TransactionInstruction {
+    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
+    { pubkey: allowedToken, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(71);
+  writer.writePubkey(params.pythFeed);
+  if (params.switchboardFeed) {
+    writer.writePubkey(params.switchboardFeed);
+  } else {
+    writer.writeZeros(32);
+  }
+  writer.writeU32(params.maxStalenessSlots);
+  writer.writeU16(params.confidenceThresholdBps);
+  writer.writeBool(params.isActive);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_ALLOWED_TOKEN, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Allowed Token (Admin)
+// ============================================================
+
+export interface UpdateAllowedTokenAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Token mint to update */
+  tokenMint: PublicKey;
+}
+
+export interface UpdateAllowedTokenParams {
+  /** New Pyth feed (optional) */
+  pythFeed?: PublicKey;
+  /** New Switchboard feed (optional) */
+  switchboardFeed?: PublicKey;
+  /** New max staleness */
+  maxStalenessSlots?: number;
+  /** New confidence threshold */
+  confidenceThresholdBps?: number;
+  /** Is active */
+  isActive?: boolean;
+}
+
+/**
+ * Update an allowed token configuration.
+ *
+ * Admin-only.
+ */
+export function createUpdateAllowedTokenInstruction(
+  accounts: UpdateAllowedTokenAccounts,
+  params: UpdateAllowedTokenParams = {}
+): TransactionInstruction {
+    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+
+  const keys = [
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: allowedToken, isSigner: false, isWritable: true },
+  ];
+
+  const writer = new BufferWriter(71);
+  if (params.pythFeed) {
+    writer.writePubkey(params.pythFeed);
+  } else {
+    writer.writeZeros(32);
+  }
+  if (params.switchboardFeed) {
+    writer.writePubkey(params.switchboardFeed);
+  } else {
+    writer.writeZeros(32);
+  }
+  writer.writeU32(params.maxStalenessSlots ?? 0);
+  writer.writeU16(params.confidenceThresholdBps ?? 0);
+  writer.writeBool(params.isActive ?? true);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Close Allowed Token (Admin)
+// ============================================================
+
+export interface CloseAllowedTokenAccounts {
+  /** Rent recipient */
+  rentRecipient: PublicKey;
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Token mint to close */
+  tokenMint: PublicKey;
+}
+
+/**
+ * Close an allowed token.
+ *
+ * Admin-only. Reclaims rent.
+ */
+export function createCloseAllowedTokenInstruction(
+  accounts: CloseAllowedTokenAccounts
+): TransactionInstruction {
+    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+
+  const keys = [
+    { pubkey: accounts.rentRecipient, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: allowedToken, isSigner: false, isWritable: true },
+  ];
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CLOSE_ALLOWED_TOKEN);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Purchase NOVI
+// ============================================================
+
+export interface PurchaseNoviAccounts {
+  /** Buyer's wallet (signer) */
+  buyer: PublicKey;
+  /** GameEngine account */
+  gameEngine: PublicKey;
+  /** Treasury wallet to receive SOL payment */
+  treasury: PublicKey;
+  /** NOVI token mint */
+  noviMint: PublicKey;
+}
+
+/** Optional oracle accounts for price discovery */
+export interface PurchaseNoviOracleAccounts {
+  /** ShopConfig account (for SOL oracle config) */
+  shopConfig: PublicKey;
+  /** SOL/USD oracle feed (Pyth or Switchboard) */
+  solOracleFeed: PublicKey;
+  /** NOVI/USD oracle feed (Pyth or Switchboard) */
+  noviOracleFeed: PublicKey;
+  /** Switchboard queue account (only for Switchboard, omit for Pyth) */
+  switchboardQueue?: PublicKey;
+}
+
+export interface PurchaseNoviParams {
+  /** Package index (0-4) */
+  packageIndex: number;
+  /** Maximum lamports willing to pay (slippage protection) */
+  maxLamports: BN | number | bigint;
+  /** Optional oracle accounts for price discovery with 15% undercut */
+  oracleAccounts?: PurchaseNoviOracleAccounts;
+}
+
+/**
+ * Purchase NOVI tokens from the shop.
+ *
+ * Users select from fixed package amounts. NOVI is minted to the user's
+ * reserved token account. Bonuses are applied based on:
+ * - Package tier (bulk discount)
+ * - Subscription tier
+ * - Purchase streak (consecutive daily purchases)
+ *
+ * # Pricing
+ * - If oracleAccounts is provided: uses oracle price with 15% undercut
+ * - Otherwise: uses DAO-set fallback price (novi_base_price_lamports)
+ *
+ * # Accounts (Required - 9)
+ * 0. [signer, writable] buyer - Wallet paying SOL
+ * 1. [writable] user_account - UserAccount PDA (tracks purchases)
+ * 2. [] player_account - PlayerAccount PDA (for subscription tier)
+ * 3. [] game_engine - GameEngine (config & pricing)
+ * 4. [writable] treasury - Treasury wallet (receives SOL)
+ * 5. [writable] novi_mint - NOVI token mint
+ * 6. [writable] reserved_token_account - User's reserved ATA (receives minted NOVI)
+ * 7. [] token_program - SPL Token program
+ * 8. [] system_program - System program
+ *
+ * # Accounts (Optional - Oracle Pricing with Pyth, +3)
+ * 9. [] shop_config - ShopConfigAccount
+ * 10. [] sol_oracle_feed - SOL/USD Pyth price feed
+ * 11. [] novi_oracle_feed - NOVI/USD Pyth price feed
+ *
+ * # Accounts (Optional - Oracle Pricing with Switchboard, +6)
+ * 9. [] shop_config - ShopConfigAccount
+ * 10. [] sol_oracle_feed - SOL/USD Switchboard quote
+ * 11. [] novi_oracle_feed - NOVI/USD Switchboard quote
+ * 12. [] switchboard_queue - Switchboard queue account
+ * 13. [] slothashes_sysvar - SlotHashes sysvar
+ * 14. [] instructions_sysvar - Instructions sysvar
+ */
+export function createPurchaseNoviInstruction(
+  accounts: PurchaseNoviAccounts,
+  params: PurchaseNoviParams
+): TransactionInstruction {
+    const [user] = deriveUserPda(accounts.buyer);
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
+
+  // Reserved token account is owned by UserAccount PDA
+  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(accounts.noviMint, user);
+
+  const keys = [
+    { pubkey: accounts.buyer, isSigner: true, isWritable: true },
+    { pubkey: user, isSigner: false, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: accounts.treasury, isSigner: false, isWritable: true },
+    { pubkey: accounts.noviMint, isSigner: false, isWritable: true },
+    { pubkey: reservedTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // Add optional oracle accounts for price discovery
+  if (params.oracleAccounts) {
+    const oracle = params.oracleAccounts;
+    keys.push(
+      { pubkey: oracle.shopConfig, isSigner: false, isWritable: false },
+      { pubkey: oracle.solOracleFeed, isSigner: false, isWritable: false },
+      { pubkey: oracle.noviOracleFeed, isSigner: false, isWritable: false },
+    );
+
+    // Add Switchboard-specific accounts if using Switchboard
+    if (oracle.switchboardQueue) {
+      keys.push(
+        { pubkey: oracle.switchboardQueue, isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_SLOT_HASHES_PUBKEY, isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
+      );
+    }
+  }
+
+  // Instruction data: package_index (u8) + max_lamports (u64)
+  const writer = new BufferWriter(9);
+  writer.writeU8(params.packageIndex);
+  writer.writeU64(params.maxLamports);
+
+  const data = createInstructionData(DISCRIMINATORS.SHOP_PURCHASE_NOVI, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}

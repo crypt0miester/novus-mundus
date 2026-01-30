@@ -17,6 +17,11 @@ pub enum GameError {
     InvalidPDA = 6010,
     MissingRequiredAccount = 6011,
     FeatureLocked = 6012,
+    InvalidKingdomId = 6013,
+    KingdomMismatch = 6014,
+    KingdomRegistrationClosed = 6015,
+    KingdomNotStarted = 6016,
+    CrossKingdomNotAllowed = 6017,
 
     // Player Errors (100-199)
     PlayerAlreadyExists = 6100,
@@ -305,6 +310,8 @@ pub enum GameError {
     InventoryNeedsExpansion = 7614,
     AccountNotInitialized = 7615,
     AccountAlreadyExists = 7616,
+    DailyCapExceeded = 7617,
+    SlippageExceeded = 7618,
 
     // Estate System Errors (1700-1799)
     EstateNotFound = 7700,

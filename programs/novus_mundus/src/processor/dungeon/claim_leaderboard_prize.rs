@@ -91,13 +91,13 @@ pub fn process(
         return Err(GameError::LeaderboardWeekNotEnded.into());
     }
 
-    // 5. Load player
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    // 5. Load player (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.key(), owner.key(), program_id)?;
 
-    // 6. Load and validate leaderboard PDA
+    // 6. Load and validate leaderboard PDA (kingdom-scoped)
     require_owner(leaderboard_account, program_id)?;
 
-    let (expected_pda, lb_bump) = DungeonLeaderboard::derive_pda(dungeon_id, week_number);
+    let (expected_pda, lb_bump) = DungeonLeaderboard::derive_pda(game_engine.key(), dungeon_id, week_number);
     if leaderboard_account.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -144,10 +144,11 @@ pub fn process(
     // Drop borrows before CPI
     drop(lb_data);
 
-    // 10. Load GameEngine for mint authority
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 10. Load GameEngine for mint authority (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &bump_seed);
+    let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
     drop(game_engine_data);
 

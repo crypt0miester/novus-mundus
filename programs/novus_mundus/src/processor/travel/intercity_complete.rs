@@ -71,7 +71,11 @@ pub fn process(
 
     // 3. Load Player Data
 
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    // Verify owner matches
+    if &player_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 5. Validate Intercity Travel In Progress
 

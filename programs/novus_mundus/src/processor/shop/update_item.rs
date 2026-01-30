@@ -14,7 +14,6 @@ use crate::{
 #[repr(u8)]
 pub enum UpdateField {
     PriceSol = 1,
-    // PriceGems = 2, // Removed - use token payments instead
     IsActive = 4,
     IsFeatured = 8,
     AvailableFrom = 16,

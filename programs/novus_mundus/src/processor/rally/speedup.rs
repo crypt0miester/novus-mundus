@@ -84,11 +84,11 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 4. Load Game Engine
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // 4. Load Game Engine (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    // 5. Load Payer (anyone can pay for speedup)
-    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, payer_owner.key(), program_id)?;
+    // 5. Load Payer (anyone can pay for speedup, kingdom-scoped)
+    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, game_engine_account.key(), payer_owner.key(), program_id)?;
 
     let now = Clock::get()?.unix_timestamp;
 

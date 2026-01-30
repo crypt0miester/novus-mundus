@@ -59,13 +59,10 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 6 {
+    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
+    if instruction_data.len() < 2 {
         return Err(ProgramError::InvalidInstructionData);
     }
-
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
 
     // Load king player
     require_owner(king_account, program_id)?;
@@ -77,7 +74,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
     if castle.king != *king_account.key() {

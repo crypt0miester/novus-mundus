@@ -118,11 +118,12 @@ pub fn process(
         return Err(GameError::InsufficientSubscriptionTier.into());
     }
 
-    // 7. Derive and Verify EventParticipation PDA
+    // 7. Derive and Verify EventParticipation PDA (kingdom-scoped)
 
     let event_id_bytes = event_data.id.to_le_bytes();
+    let event_game_engine = event_data.game_engine;
     let (expected_participation, bump) = find_program_address(
-        &[EVENT_PARTICIPATION_SEED, &event_id_bytes, player_owner.key().as_ref()],
+        &[EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.key().as_ref()],
         program_id,
     );
 
@@ -136,7 +137,7 @@ pub fn process(
         .minimum_balance(EventParticipation::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(EVENT_PARTICIPATION_SEED, &event_id_bytes, player_owner.key(), &bump_seed);
+    let seeds = pinocchio::seeds!(EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.key(), &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -151,7 +152,7 @@ pub fn process(
 
     let mut participation_account_data = event_participation_account.try_borrow_mut_data()?;
     let participation_data = unsafe { EventParticipation::load_mut(&mut participation_account_data) };
-    *participation_data = EventParticipation::new(event_data.id, *player_owner.key(), now, bump);
+    *participation_data = EventParticipation::new(event_game_engine, event_data.id, *player_owner.key(), now, bump);
 
     // 10. Update Player and Event
 

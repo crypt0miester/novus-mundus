@@ -111,9 +111,9 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load and Validate Game Engine / Treasury
+    // 4. Load and Validate Game Engine / Treasury (kingdom-scoped)
 
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     if treasury.key() != &game_engine.treasury_wallet {
         return Err(GameError::InvalidTreasury.into());
@@ -161,10 +161,10 @@ pub fn process(
         return Err(GameError::SaleSoldOut.into());
     }
 
-    // 7. Read Player for Validation and Discount Calculation
+    // 7. Read Player for Validation and Discount Calculation (kingdom-scoped)
 
     let (fib_discount_bps, sub_discount_bps, milestone_discount_bps, streak_discount_bps) = {
-        let player = PlayerAccount::load_checked(player_account, buyer.key(), program_id)?;
+        let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
 
         // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
         require_extension(&*player, EXT_HEROES)?;
@@ -230,7 +230,7 @@ pub fn process(
 
     // HARD GATE: Require Market building to use shop
     // Need to load player again for estate ownership verification
-    let player_for_estate = PlayerAccount::load_checked(player_account, buyer.key(), program_id)?;
+    let player_for_estate = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
     let estate = load_estate_for_player(estate_account, &*player_for_estate, program_id)?;
     require_market(estate, 1)?;
 
@@ -292,7 +292,7 @@ pub fn process(
         // Two-pass fulfillment to avoid borrow conflicts:
         // Pass 1: Fulfill non-inventory items (needs mutable player)
         {
-            let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+            let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
             for i in 0..item_count {
                 let bundle_item = &bundle.items[i];
                 if bundle_item.quantity == 0 {
@@ -352,7 +352,7 @@ pub fn process(
         }
     } else {
         // Items that go directly to PlayerAccount fields
-        let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+        let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
         fulfill_item(&mut *player, item_type, total_items)?;
     }
 
@@ -368,7 +368,7 @@ pub fn process(
 
     // 13. Update Player Shop State
 
-    let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
 
     // Unlock EXT_INVENTORY extension if not already unlocked
     unlock_extension_if_eligible(player_account, buyer, &mut *player, EXT_INVENTORY)?;

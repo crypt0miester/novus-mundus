@@ -121,31 +121,36 @@ pub fn process(
         data[0..8].try_into().map_err(|_| ProgramError::InvalidInstructionData)?
     );
 
-    // 4. Load and verify accounts
-    // Load player first - we need current_city for encounter PDA validation
-    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
+    // 4. Load GameEngine first to get kingdom context
+    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let ge = unsafe { GameEngine::load(&game_engine_data_ref) };
+    let kingdom_id = ge.kingdom_id;
+    drop(game_engine_data_ref);
 
-    // 4a. Validate player not traveling (can't fight while moving)
+    let game_engine_data = GameEngine::load_checked(game_engine, kingdom_id, program_id)?;
+
+    // 5. Load and verify player (kingdom-scoped)
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
+
+    // 5a. Validate player not traveling (can't fight while moving)
     if player_data.is_traveling_any() {
         return Err(GameError::PlayerTraveling.into());
     }
 
-    // 4b. Validate player not in active rally (can't risk losing units before rally executes)
+    // 5b. Validate player not in active rally (can't risk losing units before rally executes)
     if player_data.rally_stats.current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
-    
-    // Load encounter with standardized validation
+
+    // 6. Load encounter with standardized validation (kingdom-scoped)
     // Uses player's current_city - if encounter is in different city, PDA check fails
     let mut encounter_data = EncounterAccount::load_checked_mut(
         encounter,
+        game_engine.key(),
         player_data.current_city,
         encounter_id,
         program_id,
     )?;
-
-    // GameEngine: load_checked
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Get current timestamp
@@ -361,6 +366,7 @@ pub fn process(
     // Re-load encounter data for remaining operations (immutable is fine now)
     let encounter_data = EncounterAccount::load_checked(
         encounter,
+        game_engine.key(),
         player_data.current_city,
         encounter_id,
         program_id,
@@ -641,17 +647,19 @@ pub fn process(
             return Err(GameError::NotInEvent.into());
         }
 
-        // Load event participation with ownership validation
+        // Load event participation with ownership validation (kingdom-scoped)
         let mut participation = crate::state::EventParticipation::load_checked_mut(
             event_participation_acc,
+            game_engine.key(),
             player_data.current_event,
             owner.key(),
             program_id,
         )?;
 
-        // Load event with ownership validation
+        // Load event with ownership validation (kingdom-scoped)
         let mut event_data = crate::state::EventAccount::load_checked_mut(
             event_acc,
+            game_engine.key(),
             player_data.current_event,
             program_id,
         )?;

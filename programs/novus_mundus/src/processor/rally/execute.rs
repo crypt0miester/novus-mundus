@@ -117,7 +117,7 @@ pub fn process(
     require_owner(rally_account, program_id)?;
     let rally_data_check = rally_account.try_borrow_data()?;
     let rally_data = unsafe { RallyAccount::load(&rally_data_check) };
-    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
     let economic_config = &game_engine_data.economic_config;
 

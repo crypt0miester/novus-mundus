@@ -1,6 +1,7 @@
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
+    pubkey::Pubkey,
     ProgramResult,
 };
 
@@ -11,15 +12,21 @@ use crate::constants::CITY_SEED;
 /// Cities are the macro-level positioning system - players must be in the same
 /// city to attack each other, but also need matching coordinates within the city.
 ///
-/// PDA: seeds = [b"city", city_id.to_le_bytes()]
+/// Cities are KINGDOM-SCOPED - each kingdom has its own set of cities with
+/// theme-appropriate names and configurations.
+///
+/// PDA: seeds = [b"city", game_engine, city_id.to_le_bytes()]
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CityAccount {
-    /// Unique city identifier (0-65535 cities possible)
+    /// Reference to the game engine (kingdom) this city belongs to
+    pub game_engine: Pubkey,                // 32 bytes
+
+    /// Unique city identifier within this kingdom (0-65535 cities possible)
     pub city_id: u16,                       // 2 bytes
 
     /// City name (UTF-8 encoded, padded with zeros)
-    /// Examples: "New York", "Neo Tokyo", "London"
+    /// Names are theme-specific: "King's Landing" (Medieval), "Neo Tokyo" (Cyberpunk)
     pub name: [u8; 32],                     // 32 bytes
 
     /// Geographic center point (latitude in degrees)
@@ -67,9 +74,13 @@ pub struct CityAccount {
     pub arena_season_id: u32,               // 4 bytes
 }
 
+/// Compile-time assertion: ensure SIZE matches actual struct layout
+const _CITY_SIZE_CHECK: [(); core::mem::size_of::<CityAccount>()] = [(); CityAccount::SIZE];
+
 impl CityAccount {
-    /// Total size in bytes: 2 + 32 + 8 + 8 + 4 + 1 + 4 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 4 = 91 bytes
-    pub const SIZE: usize = 91;
+    /// Total size in bytes - must match core::mem::size_of::<CityAccount>()
+    /// With #[repr(C)] alignment, the compiler may insert padding.
+    pub const SIZE: usize = core::mem::size_of::<CityAccount>();
 
     /// Load city account with read-only access
     ///
@@ -95,20 +106,21 @@ impl CityAccount {
 
     /// Derive the PDA for a city account (finds bump - slower)
     /// Use this only during account creation
-    pub fn derive_pda(city_id: u16) -> (pinocchio::pubkey::Pubkey, u8) {
+    /// Seeds: ["city", game_engine, city_id]
+    pub fn derive_pda(game_engine: &Pubkey, city_id: u16) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
-            &[CITY_SEED, &city_id.to_le_bytes()],
+            &[CITY_SEED, game_engine.as_ref(), &city_id.to_le_bytes()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(city_id: u16, bump: u8) -> Result<pinocchio::pubkey::Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, city_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[CITY_SEED, &city_id_bytes, &bump_seed],
+            &[CITY_SEED, game_engine.as_ref(), &city_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -118,11 +130,16 @@ impl CityAccount {
         account: &AccountInfo,
         city_data: &CityAccount,
     ) -> ProgramResult {
-        let expected_address = Self::create_pda(city_data.city_id, city_data.bump)?;
+        let expected_address = Self::create_pda(&city_data.game_engine, city_data.city_id, city_data.bump)?;
         if account.key() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
+    }
+
+    /// Check if city belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     /// Calculate max encounters based on current population

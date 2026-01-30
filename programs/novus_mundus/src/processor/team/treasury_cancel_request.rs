@@ -57,10 +57,21 @@ pub fn process(
     require_writable(owner)?;
     require_writable(request_account)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom (if player still in team)
+    if player.team != crate::state::NULL_PUBKEY && player.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM
     require_extension(&*player, EXT_TEAM)?;

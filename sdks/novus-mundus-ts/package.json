@@ -1,0 +1,36 @@
+{
+  "name": "novus-mundus-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Novus Mundus on-chain game",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:e2e": "bun test tests/e2e/",
+    "setup:local": "bun run scripts/setup-local.ts",
+    "programs:dump": "./scripts/dump-programs.sh",
+    "validator:start": "./scripts/start-validator.sh",
+    "validator:reset": "./scripts/start-validator.sh --reset",
+    "validator:debug": "./scripts/start-validator.sh --debug",
+    "validator:stop": "./scripts/stop-validator.sh"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "@solana/web3.js": "^1.98.4",
+    "bn.js": "^5.2.2"
+  }
+}

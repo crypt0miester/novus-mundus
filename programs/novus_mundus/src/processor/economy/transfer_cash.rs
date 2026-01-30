@@ -101,11 +101,14 @@ pub fn process(
     }
 
     // ============================================================
-    // 4. Load Accounts
+    // 4. Load Accounts (kingdom-scoped)
     // ============================================================
 
-    // Sender: load_checked (verifies PDA + ownership)
-    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, sender.key(), program_id)?;
+    // GameEngine: load_checked_by_key (validates ownership and gets config)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+
+    // Sender: load_checked (verifies PDA + ownership, kingdom-scoped)
+    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, game_engine_account.key(), sender.key(), program_id)?;
 
     // Receiver: manual load (we don't have receiver's wallet key in accounts)
     // Must verify program ownership to prevent fake account attacks
@@ -113,11 +116,8 @@ pub fn process(
     let mut receiver_data_ref = receiver_player_account.try_borrow_mut_data()?;
     let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
 
-    // Team: load_checked (verifies PDA + ownership using team_id from instruction data)
-    let _team = TeamAccount::load_checked(team_account, team_id, program_id)?;
-
-    // GameEngine: load_checked
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // Team: load_checked (verifies PDA + ownership using team_id, kingdom-scoped)
+    let _team = TeamAccount::load_checked(team_account, game_engine_account.key(), team_id, program_id)?;
 
     // ============================================================
     // 6. Get Current Time

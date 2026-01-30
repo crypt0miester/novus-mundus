@@ -196,12 +196,16 @@ impl CourtPosition {
 // ============================================================
 
 /// CastleAccount - Primary account storing castle state and configuration
+/// KINGDOM-SCOPED: Castles exist within a kingdom (via game_engine)
 ///
-/// PDA Seeds: [CASTLE_SEED, city_id (u16 LE), castle_id (u16 LE)]
+/// PDA Seeds: [CASTLE_SEED, game_engine, city_id (u16 LE), castle_id (u16 LE)]
 /// Size: ~600 bytes
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CastleAccount {
+    // Kingdom Reference (32 bytes)
+    pub game_engine: Pubkey,
+
     // Identity (8 bytes)
     pub castle_id: u16,
     pub city_id: u16,
@@ -432,22 +436,22 @@ impl CastleAccount {
 
     /// Derive PDA for a castle account
     /// Seeds: [CASTLE_SEED, city_id, castle_id]
-    pub fn derive_pda(city_id: u16, castle_id: u16) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Pubkey, city_id: u16, castle_id: u16) -> (Pubkey, u8) {
         let city_id_bytes = city_id.to_le_bytes();
         let castle_id_bytes = castle_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[CASTLE_SEED, &city_id_bytes, &castle_id_bytes],
+            &[CASTLE_SEED, game_engine.as_ref(), &city_id_bytes, &castle_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(city_id: u16, castle_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, city_id: u16, castle_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let castle_id_bytes = castle_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[CASTLE_SEED, &city_id_bytes, &castle_id_bytes, &bump_seed],
+            &[CASTLE_SEED, game_engine.as_ref(), &city_id_bytes, &castle_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -455,6 +459,7 @@ impl CastleAccount {
     /// Load and verify a CastleAccount
     pub fn load_checked<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         city_id: u16,
         castle_id: u16,
         program_id: &Pubkey,
@@ -463,7 +468,7 @@ impl CastleAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(city_id, castle_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, castle_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -476,6 +481,10 @@ impl CastleAccount {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
         if loaded.bump != bump {
             return Err(ProgramError::InvalidSeeds);
         }
@@ -483,9 +492,15 @@ impl CastleAccount {
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
 
+    /// Check if castle belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
+    }
+
     /// Load and verify a CastleAccount mutably
     pub fn load_checked_mut<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         city_id: u16,
         castle_id: u16,
         program_id: &Pubkey,
@@ -494,7 +509,7 @@ impl CastleAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(city_id, castle_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, castle_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -505,6 +520,63 @@ impl CastleAccount {
 
         if loaded.castle_id != castle_id || loaded.city_id != city_id {
             return Err(crate::error::GameError::InvalidParameter.into());
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Load without explicit game_engine - re-derives PDA from stored data
+    /// Use when game_engine account is not available but you have the castle account
+    pub fn load_checked_by_key<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // Re-derive PDA from stored game_engine, city_id, castle_id
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load mutably without explicit game_engine - re-derives PDA from stored data
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // Re-derive PDA from stored game_engine, city_id, castle_id
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         if loaded.bump != bump {

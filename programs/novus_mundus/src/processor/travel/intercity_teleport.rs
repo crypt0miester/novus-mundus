@@ -77,9 +77,11 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 4. Load Accounts
+    // 4. Load Accounts (kingdom-scoped)
 
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    // Load GameEngine first for cost configuration and kingdom scoping
+    let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
@@ -118,8 +120,7 @@ pub fn process(
 
     // 9. Calculate Teleport Cost (with DAO multiplier)
 
-    // Load GameEngine for cost configuration
-    let game_engine_data = crate::state::GameEngine::load_checked(game_engine_account, program_id)?;
+    // GameEngine already loaded above for kingdom scoping
     let gameplay_config = &game_engine_data.gameplay_config;
 
     let distance_km = calculate_distance(

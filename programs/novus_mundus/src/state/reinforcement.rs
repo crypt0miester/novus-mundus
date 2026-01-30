@@ -63,6 +63,7 @@ impl ReinforcementStatus {
 // ============================================================
 
 /// Unified Reinforcement Account - Tracks units/weapons/hero sent to defend
+/// KINGDOM-SCOPED: Reinforcements exist within a kingdom
 ///
 /// Works for both:
 /// - Player reinforcement (teammate → teammate)
@@ -83,6 +84,12 @@ impl ReinforcementStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ReinforcementAccount {
+    // ============================================================
+    // Kingdom Reference (32 bytes)
+    // ============================================================
+    /// Kingdom this reinforcement belongs to
+    pub game_engine: Pubkey,
+
     // ============================================================
     // Identity (64 bytes)
     // ============================================================
@@ -269,12 +276,13 @@ impl ReinforcementAccount {
     // ============================================================
 
     /// Derive PDA for player reinforcement
-    /// Seeds: [REINFORCEMENT_SEED, sender, destination]
-    /// Only one reinforcement per sender→destination pair
-    pub fn derive_player_pda(sender: &Pubkey, destination: &Pubkey) -> (Pubkey, u8) {
+    /// Seeds: [REINFORCEMENT_SEED, game_engine, sender, destination]
+    /// Only one reinforcement per sender→destination pair within a kingdom
+    pub fn derive_player_pda(game_engine: &Pubkey, sender: &Pubkey, destination: &Pubkey) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
             &[
                 REINFORCEMENT_SEED,
+                game_engine.as_ref(),
                 sender.as_ref(),
                 destination.as_ref(),
             ],
@@ -283,12 +291,13 @@ impl ReinforcementAccount {
     }
 
     /// Derive PDA for castle garrison
-    /// Seeds: [GARRISON_SEED, sender, castle]
-    /// Only one garrison per sender→castle pair
-    pub fn derive_castle_pda(sender: &Pubkey, castle: &Pubkey) -> (Pubkey, u8) {
+    /// Seeds: [GARRISON_SEED, game_engine, sender, castle]
+    /// Only one garrison per sender→castle pair within a kingdom
+    pub fn derive_castle_pda(game_engine: &Pubkey, sender: &Pubkey, castle: &Pubkey) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
             &[
                 GARRISON_SEED,
+                game_engine.as_ref(),
                 sender.as_ref(),
                 castle.as_ref(),
             ],
@@ -298,6 +307,7 @@ impl ReinforcementAccount {
 
     /// Create PDA from known bump (player reinforcement)
     pub fn create_player_pda(
+        game_engine: &Pubkey,
         sender: &Pubkey,
         destination: &Pubkey,
         bump: u8,
@@ -306,6 +316,7 @@ impl ReinforcementAccount {
         pinocchio::pubkey::create_program_address(
             &[
                 REINFORCEMENT_SEED,
+                game_engine.as_ref(),
                 sender.as_ref(),
                 destination.as_ref(),
                 &bump_seed,
@@ -316,6 +327,7 @@ impl ReinforcementAccount {
 
     /// Create PDA from known bump (castle garrison)
     pub fn create_castle_pda(
+        game_engine: &Pubkey,
         sender: &Pubkey,
         castle: &Pubkey,
         bump: u8,
@@ -324,11 +336,145 @@ impl ReinforcementAccount {
         pinocchio::pubkey::create_program_address(
             &[
                 GARRISON_SEED,
+                game_engine.as_ref(),
                 sender.as_ref(),
                 castle.as_ref(),
                 &bump_seed,
             ],
             &crate::ID,
         )
+    }
+
+    /// Load and verify a ReinforcementAccount immutably (player reinforcement).
+    pub fn load_checked_player<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        sender: &Pubkey,
+        destination: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_player_pda(game_engine, sender, destination);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a ReinforcementAccount mutably (player reinforcement).
+    pub fn load_checked_player_mut<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        sender: &Pubkey,
+        destination: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_player_pda(game_engine, sender, destination);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Load and verify a ReinforcementAccount immutably (castle garrison).
+    pub fn load_checked_castle<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        sender: &Pubkey,
+        castle: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_castle_pda(game_engine, sender, castle);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a ReinforcementAccount mutably (castle garrison).
+    pub fn load_checked_castle_mut<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        sender: &Pubkey,
+        castle: &Pubkey,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_castle_pda(game_engine, sender, castle);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Check if reinforcement belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 }

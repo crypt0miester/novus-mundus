@@ -1,14 +1,14 @@
 //! Create Arena Season (Instruction 230)
+//! KINGDOM-SCOPED: Arena seasons exist within a kingdom
 //!
-//! Creates a new arena season for a city. Only callable by DAO authority.
-//! Auto-increments the city's arena_season_id.
+//! Creates a new arena season for a kingdom. Only callable by DAO authority.
+//! Auto-increments the season_id within the kingdom.
 //!
 //! # Accounts
 //! 0. `[WRITE]` arena_season: ArenaSeasonAccount PDA (to be created)
 //! 1. `[SIGNER, WRITE]` authority: Season authority (DAO)
-//! 2. `[]` game_engine: GameEngine PDA
-//! 3. `[WRITE]` city_account: CityAccount PDA
-//! 4. `[]` system_program: System program
+//! 2. `[]` game_engine: GameEngine PDA (for kingdom scoping)
+//! 3. `[]` system_program: System program
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -26,19 +26,21 @@ use crate::{
     },
     error::GameError,
     state::{
-        ArenaSeasonAccount, ArenaLeaderboardEntry, ArenaStatus, GameEngine, CityAccount,
+        ArenaSeasonAccount, ArenaLeaderboardEntry, ArenaStatus, GameEngine,
         ARENA_SEASON_ACCOUNT_SIZE,
     },
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match},
+    emit,
+    events::KingdomArenaSeasonStarted,
 };
 
 /// Instruction data for create_season
-/// - city_id: u16 (2 bytes)
+/// - season_id: u32 (4 bytes) - Season identifier within kingdom
 /// - master_prize_pool: u64 (8 bytes)
 /// - daily_prize_pool: u64 (8 bytes)
 /// - daily_distribution_cap: u64 (8 bytes)
 /// - min_level_required: u8 (1 byte)
-/// Total: 27 bytes
+/// Total: 29 bytes
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -49,7 +51,6 @@ pub fn process(
         arena_season,
         authority,
         game_engine,
-        city_account,
         system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -59,60 +60,48 @@ pub fn process(
     require_signer(authority)?;
     require_writable(authority)?;
     require_writable(arena_season)?;
-    require_writable(city_account)?;
-    require_owner(city_account, program_id)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Load and validate GameEngine - authority must be game authority
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 3. Load and validate GameEngine - authority must be game authority (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     if authority.key() != &game_engine_data.game_authority {
         return Err(GameError::Unauthorized.into());
     }
+    let kingdom_id = game_engine_data.kingdom_id;
     drop(game_engine_data);
 
-    // 4. Parse Instruction Data (27 bytes minimum)
-    if instruction_data.len() < 27 {
+    // 4. Parse Instruction Data (29 bytes minimum)
+    if instruction_data.len() < 29 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let season_id = u32::from_le_bytes([
+        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
+    ]);
 
     let master_prize_pool = u64::from_le_bytes([
-        instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5],
-        instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9],
+        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
+        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
     ]);
 
     let daily_prize_pool = u64::from_le_bytes([
-        instruction_data[10], instruction_data[11], instruction_data[12], instruction_data[13],
-        instruction_data[14], instruction_data[15], instruction_data[16], instruction_data[17],
+        instruction_data[12], instruction_data[13], instruction_data[14], instruction_data[15],
+        instruction_data[16], instruction_data[17], instruction_data[18], instruction_data[19],
     ]);
 
     let daily_distribution_cap = u64::from_le_bytes([
-        instruction_data[18], instruction_data[19], instruction_data[20], instruction_data[21],
-        instruction_data[22], instruction_data[23], instruction_data[24], instruction_data[25],
+        instruction_data[20], instruction_data[21], instruction_data[22], instruction_data[23],
+        instruction_data[24], instruction_data[25], instruction_data[26], instruction_data[27],
     ]);
 
-    let min_level_required = instruction_data[26];
+    let min_level_required = instruction_data[28];
 
-    // 5. Load and validate City PDA, increment arena_season_id
-    let city = unsafe { CityAccount::load_mut(city_account)? };
-    if city.city_id != city_id {
-        return Err(GameError::InvalidParameter.into());
-    }
-
-    // Verify City PDA
-    CityAccount::validate_pda(city_account, city)?;
-
-    // Increment season ID for this city
-    let season_id = city.arena_season_id.saturating_add(1);
-    city.arena_season_id = season_id;
-
-    // 6. Load Clock
+    // 5. Load Clock
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 7. Verify and create Arena Season PDA
-    let (expected_pda, bump) = ArenaSeasonAccount::derive_pda(authority.key(), season_id);
+    // 6. Verify and create Arena Season PDA (kingdom-scoped)
+    let (expected_pda, bump) = ArenaSeasonAccount::derive_pda(game_engine.key(), season_id);
     if arena_season.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -129,7 +118,7 @@ pub fn process(
     let season_id_bytes = season_id.to_le_bytes();
     let seeds = pinocchio::seeds!(
         ARENA_SEASON_SEED,
-        authority.key().as_ref(),
+        game_engine.key().as_ref(),
         &season_id_bytes,
         &bump_seed
     );
@@ -143,7 +132,7 @@ pub fn process(
         owner: program_id,
     }.invoke_signed(&[signer])?;
 
-    // 8. Initialize ArenaSeasonAccount
+    // 7. Initialize ArenaSeasonAccount
     let mut data_ref = arena_season.try_borrow_mut_data()?;
     let season = unsafe { ArenaSeasonAccount::load_mut(&mut data_ref) };
 
@@ -154,9 +143,12 @@ pub fn process(
     let current_day = (now / crate::constants::SECONDS_PER_DAY) as u32;
 
     *season = ArenaSeasonAccount {
+        // Kingdom reference
+        game_engine: *game_engine.key(),
+
         // Identity
         season_id,
-        city_id,
+        city_id: 0, // 0 = kingdom-wide arena
         authority: *authority.key(),
 
         // Timing
@@ -187,6 +179,16 @@ pub fn process(
         bump,
         _reserved: [0; 7],
     };
+
+    // Emit KingdomArenaSeasonStarted event
+    emit!(KingdomArenaSeasonStarted {
+        kingdom_id,
+        game_engine: *game_engine.key(),
+        season_id,
+        start_time,
+        end_time,
+        prize_pool: master_prize_pool,
+    });
 
     Ok(())
 }

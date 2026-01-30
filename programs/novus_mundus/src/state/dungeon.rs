@@ -761,11 +761,14 @@ impl DungeonRun {
 
 /// Weekly leaderboard for a specific dungeon.
 /// Tracks top 10 fastest clears with prize distribution.
+/// KINGDOM-SCOPED: Each kingdom has its own dungeon leaderboards
 ///
-/// PDA: ["dungeon_leaderboard", dungeon_id, week_number]
+/// PDA: ["dungeon_leaderboard", game_engine, dungeon_id, week_number]
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DungeonLeaderboard {
+    /// Kingdom this leaderboard belongs to
+    pub game_engine: Pubkey,
     /// Dungeon template ID
     pub dungeon_id: u16,
     /// Week number (weeks since epoch)
@@ -877,27 +880,32 @@ impl DungeonLeaderboard {
     }
 
     /// Derive PDA for a dungeon leaderboard
-    /// Seeds: [DUNGEON_LEADERBOARD_SEED, dungeon_id, week_number]
-    pub fn derive_pda(dungeon_id: u16, week_number: u16) -> (Pubkey, u8) {
+    /// Seeds: [DUNGEON_LEADERBOARD_SEED, game_engine, dungeon_id, week_number]
+    pub fn derive_pda(game_engine: &Pubkey, dungeon_id: u16, week_number: u16) -> (Pubkey, u8) {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[DUNGEON_LEADERBOARD_SEED, &dungeon_id_bytes, &week_bytes],
+            &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(dungeon_id: u16, week_number: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, dungeon_id: u16, week_number: u16, bump: u8) -> Result<Pubkey, ProgramError> {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[DUNGEON_LEADERBOARD_SEED, &dungeon_id_bytes, &week_bytes, &bump_seed],
+            &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes, &bump_seed],
             &crate::ID,
         )
+    }
+
+    /// Check if leaderboard belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 }
 
 // Compile-time size verification
-const _: () = assert!(DungeonLeaderboard::LEN == 416, "DungeonLeaderboard size changed");
+const _: () = assert!(DungeonLeaderboard::LEN == 448, "DungeonLeaderboard size changed");

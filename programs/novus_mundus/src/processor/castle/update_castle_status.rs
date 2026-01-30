@@ -38,7 +38,7 @@ use crate::{
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 2 {
@@ -48,20 +48,14 @@ pub fn process(
     let _caller = &accounts[0];
     let castle_account = &accounts[1];
 
-    // Parse instruction data
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    // No instruction data parameters needed (city_id/castle_id from account)
 
     // Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     let old_status = castle.status;
     let mut new_status = old_status;

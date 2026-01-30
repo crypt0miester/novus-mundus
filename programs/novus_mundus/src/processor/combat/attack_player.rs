@@ -628,17 +628,19 @@ pub fn process(
 
     // 18. Update event scores if attacker is participating in an event
     if let (Some(attacker_event_participation), Some(attacker_event)) = (attacker_event_participation, attacker_event) {
-        // Load event participation with ownership validation
+        // Load event participation with ownership validation (kingdom-scoped)
         let mut attacker_participation = crate::state::EventParticipation::load_checked_mut(
             attacker_event_participation,
+            &attacker_data.game_engine,
             attacker_data.current_event,
             attacker_owner.key(),
             program_id,
         )?;
 
-        // Load event with ownership validation
+        // Load event with ownership validation (kingdom-scoped)
         let mut attacker_event_data = crate::state::EventAccount::load_checked_mut(
             attacker_event,
+            &attacker_data.game_engine,
             attacker_data.current_event,
             program_id,
         )?;
@@ -704,17 +706,19 @@ pub fn process(
 
     // 19. Update event scores if defender is participating in an event
     if let (Some(defender_event_participation), Some(defender_event)) = (defender_event_participation, defender_event) {
-        // Load event participation with ownership validation
+        // Load event participation with ownership validation (kingdom-scoped)
         let mut defender_participation = crate::state::EventParticipation::load_checked_mut(
             defender_event_participation,
+            &defender_data.game_engine,
             defender_data.current_event,
             &defender_data.owner,
             program_id,
         )?;
 
-        // Load event with ownership validation
+        // Load event with ownership validation (kingdom-scoped)
         let mut defender_event_data = crate::state::EventAccount::load_checked_mut(
             defender_event,
+            &defender_data.game_engine,
             defender_data.current_event,
             program_id,
         )?;

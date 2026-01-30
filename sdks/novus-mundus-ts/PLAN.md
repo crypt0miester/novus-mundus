@@ -1805,6 +1805,1064 @@ async function fetchLeaderboardData() {
 
 ---
 
+## Advanced Features (UI/Server Support)
+
+### 11. Real-Time Subscriptions (`subscriptions/index.ts`)
+
+```typescript
+import { Connection, PublicKey, AccountInfo, Commitment } from '@solana/web3.js';
+import { PlayerAccount, deserializePlayerAccount } from '../state/player';
+import { EventEmitter } from 'events';
+
+/** Subscription manager for real-time account updates */
+export class AccountSubscriptionManager extends EventEmitter {
+  private connection: Connection;
+  private subscriptions: Map<string, number> = new Map();
+  private accountCache: Map<string, Buffer> = new Map();
+
+  constructor(connection: Connection) {
+    super();
+    this.connection = connection;
+  }
+
+  /**
+   * Subscribe to player account changes
+   * Emits 'playerUpdate' with { pubkey, previous, current, changes }
+   */
+  subscribeToPlayer(
+    owner: PublicKey,
+    callback: (update: PlayerAccountUpdate) => void,
+    commitment: Commitment = 'confirmed'
+  ): () => void {
+    const [playerPda] = derivePlayerPda(owner);
+    const key = playerPda.toBase58();
+
+    const subId = this.connection.onAccountChange(
+      playerPda,
+      (accountInfo: AccountInfo<Buffer>) => {
+        const previous = this.accountCache.get(key);
+        const current = Buffer.from(accountInfo.data);
+
+        // Deserialize both states
+        const prevState = previous ? deserializePlayerAccount(previous) : null;
+        const currState = deserializePlayerAccount(current);
+
+        // Detect what changed
+        const changes = prevState ? detectPlayerChanges(prevState, currState) : null;
+
+        // Update cache
+        this.accountCache.set(key, current);
+
+        // Emit update
+        callback({
+          pubkey: playerPda,
+          previous: prevState,
+          current: currState,
+          changes,
+          slot: accountInfo.owner ? undefined : undefined, // slot from context
+        });
+      },
+      commitment
+    );
+
+    this.subscriptions.set(key, subId);
+
+    // Return unsubscribe function
+    return () => {
+      this.connection.removeAccountChangeListener(subId);
+      this.subscriptions.delete(key);
+      this.accountCache.delete(key);
+    };
+  }
+
+  /** Subscribe to multiple players at once */
+  subscribeToPlayers(
+    owners: PublicKey[],
+    callback: (update: PlayerAccountUpdate) => void
+  ): () => void {
+    const unsubscribes = owners.map((owner) =>
+      this.subscribeToPlayer(owner, callback)
+    );
+    return () => unsubscribes.forEach((unsub) => unsub());
+  }
+
+  /** Subscribe to castle account changes */
+  subscribeToCastle(
+    castleId: number,
+    callback: (update: CastleAccountUpdate) => void
+  ): () => void {
+    const [castlePda] = deriveCastlePda(castleId);
+    // Similar implementation...
+  }
+
+  /** Unsubscribe from all */
+  unsubscribeAll(): void {
+    for (const [key, subId] of this.subscriptions) {
+      this.connection.removeAccountChangeListener(subId);
+    }
+    this.subscriptions.clear();
+    this.accountCache.clear();
+  }
+}
+
+/** Detected changes between player states */
+export interface PlayerChanges {
+  resources: {
+    cashDelta: BN;
+    lockedNoviDelta: BN;
+    gemsDelta: BN;
+    weaponsDelta: BN;
+    produceDelta: BN;
+    vehiclesDelta: BN;
+    fragmentsDelta: BN;
+  };
+  units: {
+    defensiveDelta: [BN, BN, BN];
+    operativeDelta: [BN, BN, BN];
+  };
+  leveledUp: boolean;
+  xpGained: BN;
+  travelStarted: boolean;
+  travelCompleted: boolean;
+  teamChanged: boolean;
+  // ... more change flags
+}
+
+/** Detect what changed between two player states */
+export function detectPlayerChanges(
+  prev: PlayerAccount,
+  curr: PlayerAccount
+): PlayerChanges {
+  return {
+    resources: {
+      cashDelta: curr.cash.sub(prev.cash),
+      lockedNoviDelta: curr.lockedNovi.sub(prev.lockedNovi),
+      gemsDelta: curr.gems.sub(prev.gems),
+      weaponsDelta: curr.weapons.sub(prev.weapons),
+      produceDelta: curr.produce.sub(prev.produce),
+      vehiclesDelta: curr.vehicles.sub(prev.vehicles),
+      fragmentsDelta: curr.fragments.sub(prev.fragments),
+    },
+    units: {
+      defensiveDelta: [
+        curr.defensiveUnit1.sub(prev.defensiveUnit1),
+        curr.defensiveUnit2.sub(prev.defensiveUnit2),
+        curr.defensiveUnit3.sub(prev.defensiveUnit3),
+      ],
+      operativeDelta: [
+        curr.operativeUnit1.sub(prev.operativeUnit1),
+        curr.operativeUnit2.sub(prev.operativeUnit2),
+        curr.operativeUnit3.sub(prev.operativeUnit3),
+      ],
+    },
+    leveledUp: curr.level > prev.level,
+    xpGained: curr.xp.sub(prev.xp),
+    travelStarted: prev.travelEndTime.isZero() && !curr.travelEndTime.isZero(),
+    travelCompleted: !prev.travelEndTime.isZero() && curr.travelEndTime.isZero(),
+    teamChanged: prev.teamId !== curr.teamId,
+  };
+}
+```
+
+---
+
+### 12. Formatting Utilities (`utils/format.ts`)
+
+```typescript
+import BN from 'bn.js';
+
+/** Format large numbers with K/M/B suffixes */
+export function formatNumber(value: BN | number | bigint, decimals: number = 1): string {
+  const num = typeof value === 'number' ? value : Number(value.toString());
+
+  if (num >= 1_000_000_000) {
+    return (num / 1_000_000_000).toFixed(decimals) + 'B';
+  } else if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(decimals) + 'M';
+  } else if (num >= 1_000) {
+    return (num / 1_000).toFixed(decimals) + 'K';
+  }
+  return num.toLocaleString();
+}
+
+/** Format NOVI amount (1 decimal place in contract) */
+export function formatNovi(amount: BN): string {
+  const value = amount.toNumber() / 10; // 1 decimal
+  return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/** Format duration in human-readable form */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${mins}m`;
+  }
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  return `${days}d ${hours}h`;
+}
+
+/** Format countdown (returns "Ready!" if <= 0) */
+export function formatCountdown(endTimestamp: BN | number, now?: number): string {
+  const end = typeof endTimestamp === 'number' ? endTimestamp : endTimestamp.toNumber();
+  const current = now ?? Math.floor(Date.now() / 1000);
+  const remaining = end - current;
+
+  if (remaining <= 0) return 'Ready!';
+  return formatDuration(remaining);
+}
+
+/** Format distance in km */
+export function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)}m`;
+  if (km < 10) return `${km.toFixed(1)}km`;
+  return `${Math.round(km)}km`;
+}
+
+/** Format player name (trim trailing zeros from fixed-size buffer) */
+export function formatPlayerName(nameBytes: Uint8Array): string {
+  const nullIndex = nameBytes.indexOf(0);
+  const slice = nullIndex === -1 ? nameBytes : nameBytes.slice(0, nullIndex);
+  return new TextDecoder().decode(slice);
+}
+
+/** Format timestamp to locale string */
+export function formatTimestamp(timestamp: BN | number): string {
+  const ts = typeof timestamp === 'number' ? timestamp : timestamp.toNumber();
+  return new Date(ts * 1000).toLocaleString();
+}
+
+/** Format relative time ("2 hours ago", "in 5 minutes") */
+export function formatRelativeTime(timestamp: BN | number, now?: number): string {
+  const ts = typeof timestamp === 'number' ? timestamp : timestamp.toNumber();
+  const current = now ?? Math.floor(Date.now() / 1000);
+  const diff = ts - current;
+
+  if (Math.abs(diff) < 60) return diff >= 0 ? 'just now' : 'just now';
+
+  const absDiff = Math.abs(diff);
+  const prefix = diff >= 0 ? 'in ' : '';
+  const suffix = diff < 0 ? ' ago' : '';
+
+  if (absDiff < 3600) return `${prefix}${Math.floor(absDiff / 60)} minutes${suffix}`;
+  if (absDiff < 86400) return `${prefix}${Math.floor(absDiff / 3600)} hours${suffix}`;
+  return `${prefix}${Math.floor(absDiff / 86400)} days${suffix}`;
+}
+```
+
+---
+
+### 13. Computed Values & Calculators (`calculators/index.ts`)
+
+```typescript
+import BN from 'bn.js';
+import { PlayerAccount } from '../state/player';
+import { ExpeditionAccount } from '../state/expedition';
+import { CastleAccount } from '../state/castle';
+import {
+  STAMINA_REGEN_INTERVAL,
+  MAX_STAMINA_BY_TIER,
+  DEFENSIVE_UNIT_1_POWER,
+  DEFENSIVE_UNIT_2_POWER,
+  DEFENSIVE_UNIT_3_POWER,
+  OPERATIVE_UNIT_1_POWER,
+  OPERATIVE_UNIT_2_POWER,
+  OPERATIVE_UNIT_3_POWER,
+  WEAPON_POWER_MULTIPLIER,
+  VEHICLE_POWER_MULTIPLIER,
+  MINING_GEMS_PER_OP_HOUR,
+  FISHING_PRODUCE_PER_OP_HOUR,
+  EARTH_RADIUS_KM,
+} from '../constants';
+
+// ==================== Stamina Calculations ====================
+
+/** Calculate current stamina including regeneration */
+export function calculateCurrentStamina(player: PlayerAccount, now?: number): number {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const lastUpdate = player.staminaUpdatedAt.toNumber();
+  const elapsed = currentTime - lastUpdate;
+
+  // Regenerate 1 stamina per STAMINA_REGEN_INTERVAL seconds
+  const regenerated = Math.floor(elapsed / STAMINA_REGEN_INTERVAL);
+  const maxStamina = MAX_STAMINA_BY_TIER[player.subscriptionTier];
+
+  return Math.min(player.stamina.toNumber() + regenerated, maxStamina);
+}
+
+/** Calculate time until stamina is full */
+export function calculateStaminaFullTime(player: PlayerAccount): number {
+  const current = calculateCurrentStamina(player);
+  const max = MAX_STAMINA_BY_TIER[player.subscriptionTier];
+  const needed = max - current;
+
+  if (needed <= 0) return 0;
+  return needed * STAMINA_REGEN_INTERVAL;
+}
+
+/** Calculate time until specific stamina amount */
+export function calculateStaminaRegenTime(player: PlayerAccount, targetStamina: number): number {
+  const current = calculateCurrentStamina(player);
+  if (current >= targetStamina) return 0;
+
+  const needed = targetStamina - current;
+  return needed * STAMINA_REGEN_INTERVAL;
+}
+
+// ==================== Combat Power Calculations ====================
+
+/** Calculate defensive power */
+export function calculateDefensivePower(player: PlayerAccount): BN {
+  const unit1Power = player.defensiveUnit1.muln(DEFENSIVE_UNIT_1_POWER);
+  const unit2Power = player.defensiveUnit2.muln(DEFENSIVE_UNIT_2_POWER);
+  const unit3Power = player.defensiveUnit3.muln(DEFENSIVE_UNIT_3_POWER);
+
+  return unit1Power.add(unit2Power).add(unit3Power);
+}
+
+/** Calculate offensive power (operatives + weapons + vehicles) */
+export function calculateOffensivePower(player: PlayerAccount): BN {
+  const op1Power = player.operativeUnit1.muln(OPERATIVE_UNIT_1_POWER);
+  const op2Power = player.operativeUnit2.muln(OPERATIVE_UNIT_2_POWER);
+  const op3Power = player.operativeUnit3.muln(OPERATIVE_UNIT_3_POWER);
+  const weaponPower = player.weapons.muln(WEAPON_POWER_MULTIPLIER);
+  const vehiclePower = player.vehicles.muln(VEHICLE_POWER_MULTIPLIER);
+
+  return op1Power.add(op2Power).add(op3Power).add(weaponPower).add(vehiclePower);
+}
+
+/** Calculate total power (for leaderboards) */
+export function calculateTotalPower(player: PlayerAccount): BN {
+  return calculateDefensivePower(player).add(calculateOffensivePower(player));
+}
+
+/** Calculate net worth (locked NOVI + cash equivalent) */
+export function calculateNetWorth(player: PlayerAccount): BN {
+  // Simplified: locked NOVI + cash/1000 (rough conversion)
+  return player.lockedNovi.add(player.cash.divn(1000));
+}
+
+// ==================== Travel Calculations ====================
+
+/** Calculate haversine distance between two points in km */
+export function calculateDistance(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number
+): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return EARTH_RADIUS_KM * c;
+}
+
+/** Calculate travel time in seconds */
+export function calculateTravelTime(distanceKm: number, speedKmh: number): number {
+  return Math.ceil((distanceKm / speedKmh) * 3600);
+}
+
+/** Check if player is currently traveling */
+export function isPlayerTraveling(player: PlayerAccount, now?: number): boolean {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  return player.travelEndTime.toNumber() > currentTime;
+}
+
+/** Get travel progress (0-100) */
+export function getTravelProgress(player: PlayerAccount, now?: number): number {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const start = player.travelStartTime.toNumber();
+  const end = player.travelEndTime.toNumber();
+
+  if (end === 0 || currentTime >= end) return 100;
+  if (currentTime <= start) return 0;
+
+  const total = end - start;
+  const elapsed = currentTime - start;
+  return Math.min(100, Math.floor((elapsed / total) * 100));
+}
+
+// ==================== Expedition Calculations ====================
+
+/** Calculate expedition yield projection */
+export function calculateExpeditionYield(
+  expedition: ExpeditionAccount,
+  now?: number
+): { baseYield: BN; bonusYield: BN; totalYield: BN; isComplete: boolean } {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const endTime = expedition.startTime.toNumber() + expedition.duration;
+  const isComplete = currentTime >= endTime;
+
+  // Get base yield rate per hour based on type and tier
+  const yieldRates = expedition.expeditionType === 1
+    ? MINING_GEMS_PER_OP_HOUR
+    : FISHING_PRODUCE_PER_OP_HOUR;
+
+  const yieldPerOpHour = yieldRates[expedition.tier];
+
+  // Calculate total operative hours
+  const totalOps = expedition.operativeUnit1
+    .add(expedition.operativeUnit2.muln(150).divn(100)) // Tier 2 = 1.5x
+    .add(expedition.operativeUnit3.muln(200).divn(100)); // Tier 3 = 2x
+
+  const hours = expedition.duration / 3600;
+  const baseYield = totalOps.muln(yieldPerOpHour).muln(hours);
+
+  // Bonus from strikes (average score * bonus rate)
+  let bonusYield = new BN(0);
+  if (expedition.strikes > 0) {
+    const avgScore = expedition.totalScore / expedition.strikes;
+    if (avgScore >= 80) {
+      bonusYield = baseYield.muln(25).divn(100); // 25% bonus for perfect
+    } else {
+      bonusYield = baseYield.muln(avgScore).divn(200); // Up to 12.5% bonus
+    }
+  }
+
+  return {
+    baseYield,
+    bonusYield,
+    totalYield: baseYield.add(bonusYield),
+    isComplete,
+  };
+}
+
+/** Get expedition progress (0-100) */
+export function getExpeditionProgress(expedition: ExpeditionAccount, now?: number): number {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const start = expedition.startTime.toNumber();
+  const end = start + expedition.duration;
+
+  if (currentTime >= end) return 100;
+  if (currentTime <= start) return 0;
+
+  const total = expedition.duration;
+  const elapsed = currentTime - start;
+  return Math.min(100, Math.floor((elapsed / total) * 100));
+}
+
+// ==================== Cooldown Calculations ====================
+
+/** Check if claim cooldown is active */
+export function isClaimCooldownActive(player: PlayerAccount, now?: number): boolean {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const cooldownEnd = player.lastCollectionTime.toNumber() + CLAIM_COOLDOWN;
+  return currentTime < cooldownEnd;
+}
+
+/** Get remaining cooldown in seconds */
+export function getRemainingCooldown(lastActionTime: BN, cooldownSeconds: number, now?: number): number {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const cooldownEnd = lastActionTime.toNumber() + cooldownSeconds;
+  return Math.max(0, cooldownEnd - currentTime);
+}
+
+/** Check if player has new player protection */
+export function hasNewPlayerProtection(player: PlayerAccount, now?: number): boolean {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  return player.newPlayerProtectionEnds.toNumber() > currentTime;
+}
+
+/** Check if player has attack immunity */
+export function hasAttackImmunity(player: PlayerAccount, now?: number): boolean {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const immunityEnd = player.lastAttackedAt.toNumber() + ATTACK_IMMUNITY_DURATION;
+  return currentTime < immunityEnd;
+}
+```
+
+---
+
+### 14. Eligibility & Validation Helpers (`validation/eligibility.ts`)
+
+```typescript
+import BN from 'bn.js';
+import { PlayerAccount } from '../state/player';
+import { TeamAccount } from '../state/team';
+import { ExpeditionAccount } from '../state/expedition';
+import { calculateCurrentStamina } from '../calculators';
+
+/** Result of eligibility check */
+export interface EligibilityResult {
+  eligible: boolean;
+  reason?: string;
+  errorCode?: number;
+}
+
+/** Check if player can start an expedition */
+export function canStartExpedition(
+  player: PlayerAccount,
+  expeditionType: 'mining' | 'fishing',
+  tier: number,
+  operatives: [BN, BN, BN],
+  existingExpedition: ExpeditionAccount | null
+): EligibilityResult {
+  // Check no existing expedition
+  if (existingExpedition) {
+    return { eligible: false, reason: 'Expedition already in progress', errorCode: 7800 };
+  }
+
+  // Check expedition type unlocked
+  if (expeditionType === 'mining' && !player.hasMining) {
+    return { eligible: false, reason: 'Mining not unlocked', errorCode: 7810 };
+  }
+  if (expeditionType === 'fishing' && !player.hasFishing) {
+    return { eligible: false, reason: 'Fishing not unlocked', errorCode: 7811 };
+  }
+
+  // Check tier valid
+  if (tier < 0 || tier > 4) {
+    return { eligible: false, reason: 'Invalid expedition tier', errorCode: 7804 };
+  }
+
+  // Check sufficient operatives
+  const [op1, op2, op3] = operatives;
+  if (op1.gt(player.operativeUnit1)) {
+    return { eligible: false, reason: 'Insufficient Tier 1 operatives', errorCode: 7805 };
+  }
+  if (op2.gt(player.operativeUnit2)) {
+    return { eligible: false, reason: 'Insufficient Tier 2 operatives', errorCode: 7805 };
+  }
+  if (op3.gt(player.operativeUnit3)) {
+    return { eligible: false, reason: 'Insufficient Tier 3 operatives', errorCode: 7805 };
+  }
+
+  // Check NOVI cost
+  const noviCost = MINING_NOVI_COST[tier]; // or FISHING_NOVI_COST
+  if (player.lockedNovi.ltn(noviCost)) {
+    return { eligible: false, reason: `Insufficient locked NOVI (need ${noviCost})`, errorCode: 6102 };
+  }
+
+  return { eligible: true };
+}
+
+/** Check if player can attack another player */
+export function canAttackPlayer(
+  attacker: PlayerAccount,
+  target: PlayerAccount,
+  now?: number
+): EligibilityResult {
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+
+  // Can't attack self
+  if (attacker.owner.equals(target.owner)) {
+    return { eligible: false, reason: 'Cannot attack yourself', errorCode: 6116 };
+  }
+
+  // Check target not protected
+  if (target.newPlayerProtectionEnds.toNumber() > currentTime) {
+    return { eligible: false, reason: 'Target has new player protection', errorCode: 6118 };
+  }
+
+  // Check target not immune
+  const immunityEnd = target.lastAttackedAt.toNumber() + ATTACK_IMMUNITY_DURATION;
+  if (currentTime < immunityEnd) {
+    return { eligible: false, reason: 'Target has attack immunity', errorCode: 6117 };
+  }
+
+  // Check same city
+  if (attacker.cityId !== target.cityId) {
+    return { eligible: false, reason: 'Players not in same city', errorCode: 6421 };
+  }
+
+  // Check attacker not traveling
+  if (attacker.travelEndTime.toNumber() > currentTime) {
+    return { eligible: false, reason: 'Cannot attack while traveling', errorCode: 6109 };
+  }
+
+  // Check sufficient defensive units
+  const totalDefensive = attacker.defensiveUnit1
+    .add(attacker.defensiveUnit2)
+    .add(attacker.defensiveUnit3);
+  if (totalDefensive.isZero()) {
+    return { eligible: false, reason: 'No defensive units available', errorCode: 7110 };
+  }
+
+  return { eligible: true };
+}
+
+/** Check if player can join a team */
+export function canJoinTeam(
+  player: PlayerAccount,
+  team: TeamAccount
+): EligibilityResult {
+  // Check not already in team
+  if (player.teamId !== 0) {
+    return { eligible: false, reason: 'Already in a team', errorCode: 6206 };
+  }
+
+  // Check team not full
+  const activeMemberCount = team.memberSlots.filter(s => s.isActive).length;
+  if (activeMemberCount >= team.maxMembers) {
+    return { eligible: false, reason: 'Team is full', errorCode: 6202 };
+  }
+
+  // Check level requirement
+  if (player.level < team.minLevelToJoin) {
+    return { eligible: false, reason: `Level ${team.minLevelToJoin} required`, errorCode: 6221 };
+  }
+
+  // Check if invite-only
+  if (team.isInviteOnly) {
+    return { eligible: false, reason: 'Team is invite-only', errorCode: 6212 };
+  }
+
+  return { eligible: true };
+}
+
+/** Check if player can claim expedition */
+export function canClaimExpedition(
+  expedition: ExpeditionAccount | null,
+  now?: number
+): EligibilityResult {
+  if (!expedition) {
+    return { eligible: false, reason: 'No expedition in progress', errorCode: 7801 };
+  }
+
+  const currentTime = now ?? Math.floor(Date.now() / 1000);
+  const endTime = expedition.startTime.toNumber() + expedition.duration;
+
+  if (currentTime < endTime) {
+    const remaining = endTime - currentTime;
+    return {
+      eligible: false,
+      reason: `Expedition not complete (${formatDuration(remaining)} remaining)`,
+      errorCode: 7802,
+    };
+  }
+
+  return { eligible: true };
+}
+```
+
+---
+
+### 15. Error Message Parsing (`errors.ts` extension)
+
+```typescript
+/** Human-readable error messages */
+export const ERROR_MESSAGES: Record<number, string> = {
+  // General Errors
+  6000: 'Game is currently paused for maintenance',
+  6001: 'You are not authorized to perform this action',
+  6002: 'Invalid timestamp provided',
+  6003: 'Math overflow occurred',
+  6004: 'Invalid account provided',
+  6006: 'Insufficient balance',
+  6007: 'Invalid parameter',
+
+  // Player Errors
+  6100: 'Player account already exists',
+  6101: 'Player not found',
+  6102: 'Insufficient locked NOVI',
+  6103: 'Insufficient cash',
+  6107: 'Insufficient units',
+  6109: 'Cannot perform action while traveling',
+  6116: 'Cannot attack yourself',
+  6117: 'Target has attack immunity',
+  6118: 'Target has new player protection',
+
+  // Team Errors
+  6200: 'Team name is already taken',
+  6201: 'Team not found',
+  6202: 'Team is full',
+  6206: 'You are already in a team',
+  6207: 'You are not in a team',
+  6209: 'Invite not found or expired',
+
+  // Expedition Errors
+  7800: 'Expedition already in progress',
+  7801: 'No expedition in progress',
+  7802: 'Expedition not complete yet',
+  7805: 'Insufficient operatives for expedition',
+  7810: 'Mining not unlocked (build Workshop first)',
+  7811: 'Fishing not unlocked (build Dock first)',
+
+  // Castle Errors
+  8100: 'Castle not found',
+  8101: 'Castle already has a king',
+  8102: 'Castle is in contest period',
+  8103: 'Castle is protected',
+  8106: 'You are not the castle king',
+
+  // ... all 466 error codes
+};
+
+/** Parse error code to human-readable message */
+export function parseErrorMessage(errorCode: number): string {
+  return ERROR_MESSAGES[errorCode] ?? `Unknown error (code: ${errorCode})`;
+}
+
+/** Parse error from transaction result */
+export function parseTransactionError(error: any): {
+  code: number | null;
+  message: string;
+  logs?: string[];
+} {
+  // Handle SendTransactionError
+  if (error?.logs) {
+    // Look for "Program log: Error: custom program error: 0x..."
+    for (const log of error.logs) {
+      const match = log.match(/custom program error: 0x([0-9a-f]+)/i);
+      if (match) {
+        const code = parseInt(match[1], 16);
+        return {
+          code,
+          message: parseErrorMessage(code),
+          logs: error.logs,
+        };
+      }
+    }
+  }
+
+  // Handle error object with code
+  if (typeof error?.code === 'number') {
+    return {
+      code: error.code,
+      message: parseErrorMessage(error.code),
+    };
+  }
+
+  return {
+    code: null,
+    message: error?.message ?? 'Unknown error',
+    logs: error?.logs,
+  };
+}
+```
+
+---
+
+### 16. Transaction Simulation (`utils/simulation.ts`)
+
+```typescript
+import {
+  Connection,
+  Transaction,
+  VersionedTransaction,
+  SimulatedTransactionResponse,
+  PublicKey,
+} from '@solana/web3.js';
+import { parseTransactionError } from '../errors';
+
+/** Simulation result with parsed errors */
+export interface SimulationResult {
+  success: boolean;
+  unitsConsumed: number | null;
+  logs: string[];
+  error: {
+    code: number | null;
+    message: string;
+  } | null;
+  returnData: Buffer | null;
+}
+
+/** Simulate a transaction before sending */
+export async function simulateTransaction(
+  connection: Connection,
+  transaction: Transaction | VersionedTransaction,
+  signers?: PublicKey[]
+): Promise<SimulationResult> {
+  try {
+    let response: SimulatedTransactionResponse;
+
+    if (transaction instanceof Transaction) {
+      const { value } = await connection.simulateTransaction(transaction, signers);
+      response = value;
+    } else {
+      const { value } = await connection.simulateTransaction(transaction);
+      response = value;
+    }
+
+    if (response.err) {
+      const parsed = parseTransactionError({ logs: response.logs });
+      return {
+        success: false,
+        unitsConsumed: response.unitsConsumed ?? null,
+        logs: response.logs ?? [],
+        error: {
+          code: parsed.code,
+          message: parsed.message,
+        },
+        returnData: null,
+      };
+    }
+
+    return {
+      success: true,
+      unitsConsumed: response.unitsConsumed ?? null,
+      logs: response.logs ?? [],
+      error: null,
+      returnData: response.returnData?.data
+        ? Buffer.from(response.returnData.data[0], 'base64')
+        : null,
+    };
+  } catch (err: any) {
+    const parsed = parseTransactionError(err);
+    return {
+      success: false,
+      unitsConsumed: null,
+      logs: err?.logs ?? [],
+      error: {
+        code: parsed.code,
+        message: parsed.message,
+      },
+      returnData: null,
+    };
+  }
+}
+
+/** Simulate and optionally send transaction */
+export async function simulateAndSend(
+  connection: Connection,
+  transaction: Transaction,
+  options: {
+    skipSimulation?: boolean;
+    onSimulation?: (result: SimulationResult) => void;
+  } = {}
+): Promise<{ signature: string; simulation: SimulationResult | null }> {
+  let simulation: SimulationResult | null = null;
+
+  if (!options.skipSimulation) {
+    simulation = await simulateTransaction(connection, transaction);
+    options.onSimulation?.(simulation);
+
+    if (!simulation.success) {
+      throw new Error(simulation.error?.message ?? 'Simulation failed');
+    }
+  }
+
+  const signature = await connection.sendRawTransaction(transaction.serialize());
+
+  return { signature, simulation };
+}
+```
+
+---
+
+### 17. Domain Name Resolution (`external/nameResolver.ts`)
+
+```typescript
+import { Connection, PublicKey } from '@solana/web3.js';
+import { sha256 } from '@noble/hashes/sha256';
+
+const HASH_PREFIX = 'ALT Name Service';
+const NULL_PUBKEY = new PublicKey(new Uint8Array(32));
+
+/** Resolve domain name to player/team PDA */
+export async function resolveDomainToOwner(
+  connection: Connection,
+  domainName: string,
+  tldParent: PublicKey
+): Promise<PublicKey | null> {
+  // Derive name account PDA
+  const hashedName = sha256(Buffer.from(HASH_PREFIX + domainName));
+  const [nameAccountPda] = PublicKey.findProgramAddressSync(
+    [hashedName, NULL_PUBKEY.toBuffer(), tldParent.toBuffer()],
+    ALT_NAME_SERVICE_PROGRAM_ID
+  );
+
+  // Fetch name account
+  const accountInfo = await connection.getAccountInfo(nameAccountPda);
+  if (!accountInfo) return null;
+
+  // Parse NameRecordHeader to get owner
+  // Offset 0: parent_name (32), offset 32: nclass (32), offset 64: owner (32)
+  const owner = new PublicKey(accountInfo.data.slice(64, 96));
+
+  return owner;
+}
+
+/** Resolve player PDA to their domain name */
+export async function resolveOwnerToDomain(
+  connection: Connection,
+  ownerPda: PublicKey,
+  tldHouse: PublicKey
+): Promise<string | null> {
+  // Derive reverse name account
+  const ownerBase58 = ownerPda.toBase58();
+  const hashedReverse = sha256(Buffer.from(HASH_PREFIX + ownerBase58));
+  const [reverseAccountPda] = PublicKey.findProgramAddressSync(
+    [hashedReverse, tldHouse.toBuffer(), NULL_PUBKEY.toBuffer()],
+    ALT_NAME_SERVICE_PROGRAM_ID
+  );
+
+  // Fetch reverse account
+  const accountInfo = await connection.getAccountInfo(reverseAccountPda);
+  if (!accountInfo) return null;
+
+  // Parse name from account data (after header)
+  const HEADER_SIZE = 96; // NameRecordHeader size
+  const nameData = accountInfo.data.slice(HEADER_SIZE);
+
+  // Find null terminator
+  const nullIndex = nameData.indexOf(0);
+  const nameBytes = nullIndex === -1 ? nameData : nameData.slice(0, nullIndex);
+
+  return new TextDecoder().decode(nameBytes);
+}
+
+/** Get player display name (domain or truncated pubkey) */
+export async function getPlayerDisplayName(
+  connection: Connection,
+  player: PlayerAccount,
+  tldHouse: PublicKey
+): Promise<string> {
+  // First try to get domain name
+  const [playerPda] = derivePlayerPda(player.owner);
+  const domain = await resolveOwnerToDomain(connection, playerPda, tldHouse);
+
+  if (domain) {
+    return domain;
+  }
+
+  // Fall back to formatted name from account
+  const name = formatPlayerName(player.name);
+  if (name && name.length > 0) {
+    return name;
+  }
+
+  // Fall back to truncated pubkey
+  const pubkey = player.owner.toBase58();
+  return `${pubkey.slice(0, 4)}...${pubkey.slice(-4)}`;
+}
+```
+
+---
+
+### 18. Retry & Rate Limiting (`utils/retry.ts`)
+
+```typescript
+/** Retry options */
+export interface RetryOptions {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  retryOn?: (error: any) => boolean;
+}
+
+/** Default retry predicate - retry on network/rate limit errors */
+export function defaultRetryPredicate(error: any): boolean {
+  const message = error?.message?.toLowerCase() ?? '';
+
+  // Retry on rate limit
+  if (message.includes('429') || message.includes('rate limit')) {
+    return true;
+  }
+
+  // Retry on network errors
+  if (message.includes('network') || message.includes('timeout')) {
+    return true;
+  }
+
+  // Retry on blockhash errors
+  if (message.includes('blockhash not found')) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Execute with exponential backoff retry */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    baseDelayMs = 500,
+    maxDelayMs = 10000,
+    retryOn = defaultRetryPredicate,
+  } = options;
+
+  let lastError: any;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxRetries || !retryOn(error)) {
+        throw error;
+      }
+
+      // Exponential backoff with jitter
+      const delay = Math.min(
+        baseDelayMs * Math.pow(2, attempt) + Math.random() * 100,
+        maxDelayMs
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+/** Rate-limited function executor */
+export class RateLimiter {
+  private queue: Array<{
+    fn: () => Promise<any>;
+    resolve: (value: any) => void;
+    reject: (error: any) => void;
+  }> = [];
+  private processing = false;
+  private lastRequestTime = 0;
+
+  constructor(
+    private requestsPerSecond: number = 10,
+    private burstLimit: number = 5
+  ) {}
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ fn, resolve, reject });
+      this.processQueue();
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.processing || this.queue.length === 0) return;
+
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const minInterval = 1000 / this.requestsPerSecond;
+      const elapsed = Date.now() - this.lastRequestTime;
+
+      if (elapsed < minInterval) {
+        await new Promise((r) => setTimeout(r, minInterval - elapsed));
+      }
+
+      const { fn, resolve, reject } = this.queue.shift()!;
+      this.lastRequestTime = Date.now();
+
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    }
+
+    this.processing = false;
+  }
+}
+```
+
+---
+
 ## Estimated Output
 
 | Category | Files | Lines (est.) |
@@ -1815,8 +2873,14 @@ async function fetchLeaderboardData() {
 | Events | 20 modules | ~2,500 |
 | Parser | 4 | ~800 |
 | External integrations | 6 | ~1,200 |
-| Utils + Client | 5 | ~1,000 |
-| **Total** | ~230+ files | ~20,500 lines |
+| Subscriptions | 2 | ~400 |
+| Calculators | 3 | ~600 |
+| Validators/Eligibility | 2 | ~500 |
+| Formatting | 1 | ~200 |
+| Simulation/Retry | 2 | ~300 |
+| Name Resolution | 1 | ~200 |
+| Utils + Client | 5 | ~1,200 |
+| **Total** | ~245+ files | ~23,000 lines |
 
 ---
 

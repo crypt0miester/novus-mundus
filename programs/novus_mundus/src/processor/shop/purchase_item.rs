@@ -116,9 +116,9 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load and Validate Game Engine / Treasury
+    // 4. Load and Validate Game Engine / Treasury (kingdom-scoped)
 
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify treasury matches
     if treasury.key() != &game_engine.treasury_wallet {
@@ -182,9 +182,9 @@ pub fn process(
     // Total before discounts
     let total_base = base_price.saturating_mul(quantity);
 
-    // 8. Load Player and Calculate Discounts
+    // 8. Load Player and Calculate Discounts (kingdom-scoped)
 
-    let mut player = PlayerAccount::load_checked_mut(player_account, buyer.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
 
     // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
     // Player must lock a hero before using the shop (user journey)

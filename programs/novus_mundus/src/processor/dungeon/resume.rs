@@ -56,8 +56,11 @@ pub fn process(
     // 3. Parse instruction data
     let first_room_type = if !data.is_empty() { data[0] } else { 0 };
 
-    // 4. Load player using load_checked_mut
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    // 4. Load player using load_checked_mut_by_key (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 5. Load dungeon run using load_checked_mut (PDA derived from player_account)
     let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;

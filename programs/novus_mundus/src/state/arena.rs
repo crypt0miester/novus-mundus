@@ -71,14 +71,16 @@ impl Default for ArenaLeaderboardEntry {
 }
 
 /// Arena Season Account - tracks season state and global leaderboard
+/// KINGDOM-SCOPED: Each kingdom has its own arena seasons and leaderboards
 ///
-/// PDA Seeds: ["arena_season", authority, season_id]
+/// PDA Seeds: ["arena_season", game_engine, season_id]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaSeasonAccount {
-    // ===== Identity (38 bytes) =====
+    // ===== Kingdom & Identity (70 bytes) =====
+    pub game_engine: Pubkey,                     // 32 - Kingdom this season belongs to
     pub season_id: u32,                          // 4 - Incrementing season number
-    pub city_id: u16,                            // 2 - City this arena belongs to (0 = global)
+    pub city_id: u16,                            // 2 - City this arena belongs to (0 = kingdom-wide)
     pub authority: Pubkey,                       // 32 - Who can finalize/admin
 
     // ===== Timing (25 bytes) =====
@@ -114,10 +116,11 @@ impl ArenaSeasonAccount {
     pub const LEN: usize = ARENA_SEASON_ACCOUNT_SIZE;
 
     /// Derive the PDA for an arena season
-    pub fn derive_pda(authority: &Pubkey, season_id: u32) -> (Pubkey, u8) {
+    /// Seeds: ["arena_season", game_engine, season_id]
+    pub fn derive_pda(game_engine: &Pubkey, season_id: u32) -> (Pubkey, u8) {
         let season_id_bytes = season_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[ARENA_SEASON_SEED, authority.as_ref(), &season_id_bytes],
+            &[ARENA_SEASON_SEED, game_engine.as_ref(), &season_id_bytes],
             &crate::ID,
         )
     }
@@ -125,7 +128,7 @@ impl ArenaSeasonAccount {
     /// Load and validate arena season account (immutable)
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
-        authority: &Pubkey,
+        game_engine: &Pubkey,
         season_id: u32,
         program_id: &Pubkey,
     ) -> Result<Loaded<'a, Self>, ProgramError> {
@@ -133,7 +136,7 @@ impl ArenaSeasonAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(authority, season_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, season_id);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -150,13 +153,17 @@ impl ArenaSeasonAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &account_ref.game_engine != game_engine {
+            return Err(GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { Loaded::new(data, loaded) })
     }
 
     /// Load and validate arena season account (mutable)
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
-        authority: &Pubkey,
+        game_engine: &Pubkey,
         season_id: u32,
         program_id: &Pubkey,
     ) -> Result<LoadedMut<'a, Self>, ProgramError> {
@@ -164,7 +171,7 @@ impl ArenaSeasonAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(authority, season_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, season_id);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -181,7 +188,16 @@ impl ArenaSeasonAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &account_ref.game_engine != game_engine {
+            return Err(GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { LoadedMut::new(data, loaded) })
+    }
+
+    /// Check if season belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     /// Load without full validation (for initialization)
@@ -295,11 +311,12 @@ pub const ARENA_PARTICIPANT_ACCOUNT_SIZE: usize = 488;
 
 /// Arena Participant Account - per-player, per-season state tracking
 ///
-/// PDA Seeds: ["arena_participant", season_authority, season_id, player]
+/// PDA Seeds: ["arena_participant", game_engine, season_id, player]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaParticipantAccount {
-    // ===== Identity (36 bytes) =====
+    // ===== Identity (68 bytes) =====
+    pub game_engine: Pubkey,                     // 32 - Kingdom reference
     pub player: Pubkey,                          // 32
     pub season_id: u32,                          // 4
 
@@ -335,12 +352,13 @@ impl ArenaParticipantAccount {
     pub const STARTING_ELO: u32 = 1000;
 
     /// Derive the PDA for an arena participant
-    pub fn derive_pda(season_authority: &Pubkey, season_id: u32, player: &Pubkey) -> (Pubkey, u8) {
+    /// Seeds: ["arena_participant", game_engine, season_id, player]
+    pub fn derive_pda(game_engine: &Pubkey, season_id: u32, player: &Pubkey) -> (Pubkey, u8) {
         let season_id_bytes = season_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
             &[
                 ARENA_PARTICIPANT_SEED,
-                season_authority.as_ref(),
+                game_engine.as_ref(),
                 &season_id_bytes,
                 player.as_ref(),
             ],
@@ -351,7 +369,7 @@ impl ArenaParticipantAccount {
     /// Load and validate arena participant account (immutable)
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
-        season_authority: &Pubkey,
+        game_engine: &Pubkey,
         season_id: u32,
         player: &Pubkey,
         program_id: &Pubkey,
@@ -360,7 +378,7 @@ impl ArenaParticipantAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(season_authority, season_id, player);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, season_id, player);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -383,7 +401,7 @@ impl ArenaParticipantAccount {
     /// Load and validate arena participant account (mutable)
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
-        season_authority: &Pubkey,
+        game_engine: &Pubkey,
         season_id: u32,
         player: &Pubkey,
         program_id: &Pubkey,
@@ -392,7 +410,7 @@ impl ArenaParticipantAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(season_authority, season_id, player);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, season_id, player);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -482,12 +500,14 @@ impl ArenaParticipantAccount {
 pub const ARENA_LOADOUT_ACCOUNT_SIZE: usize = 128;
 
 /// Arena Loadout Account - player's configured arena loadout (reusable across seasons)
+/// KINGDOM-SCOPED: Loadouts are per-kingdom since player units differ per kingdom
 ///
-/// PDA Seeds: ["arena_loadout", player]
+/// PDA Seeds: ["arena_loadout", game_engine, player]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaLoadoutAccount {
-    // ===== Identity (33 bytes) =====
+    // ===== Identity (65 bytes) =====
+    pub game_engine: Pubkey,                     // 32 - Kingdom reference
     pub player: Pubkey,                          // 32
     pub bump: u8,                                // 1
 
@@ -511,13 +531,18 @@ impl ArenaLoadoutAccount {
     pub const LEN: usize = ARENA_LOADOUT_ACCOUNT_SIZE;
 
     /// Derive the PDA for an arena loadout
-    pub fn derive_pda(player: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(&[ARENA_LOADOUT_SEED, player.as_ref()], &crate::ID)
+    /// Seeds: ["arena_loadout", game_engine, player]
+    pub fn derive_pda(game_engine: &Pubkey, player: &Pubkey) -> (Pubkey, u8) {
+        pinocchio::pubkey::find_program_address(
+            &[ARENA_LOADOUT_SEED, game_engine.as_ref(), player.as_ref()],
+            &crate::ID,
+        )
     }
 
     /// Load and validate arena loadout account (immutable)
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         player: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<Loaded<'a, Self>, ProgramError> {
@@ -525,7 +550,7 @@ impl ArenaLoadoutAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(player);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, player);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -548,6 +573,7 @@ impl ArenaLoadoutAccount {
     /// Load and validate arena loadout account (mutable)
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         player: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<LoadedMut<'a, Self>, ProgramError> {
@@ -555,7 +581,7 @@ impl ArenaLoadoutAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(player);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, player);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -573,6 +599,68 @@ impl ArenaLoadoutAccount {
         }
 
         Ok(unsafe { LoadedMut::new(data, loaded) })
+    }
+
+    /// Load and verify by key immutably.
+    /// Uses stored game_engine and player to re-derive and validate PDA.
+    pub fn load_checked_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let data = account.try_borrow_data()?;
+        if data.len() < Self::LEN {
+            return Err(ProgramError::AccountDataTooSmall);
+        }
+
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // Re-derive and validate PDA using stored values
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.player);
+        if account.key() != &expected_pda {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify by key mutably.
+    /// Uses stored game_engine and player to re-derive and validate PDA.
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        if data.len() < Self::LEN {
+            return Err(ProgramError::AccountDataTooSmall);
+        }
+
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // Re-derive and validate PDA using stored values
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.player);
+        if account.key() != &expected_pda {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { LoadedMut::new(data, ptr) })
     }
 
     /// Load without full validation (for initialization)

@@ -9,6 +9,7 @@ pub const OCCUPANT_PLAYER: u8 = 1;
 pub const OCCUPANT_ENCOUNTER: u8 = 2;
 
 /// Grid-based location account for cell occupancy
+/// KINGDOM-SCOPED: Locations exist within a kingdom
 ///
 /// Each grid cell is approximately 11 meters × 11 meters (0.0001 degrees).
 /// Only ONE entity (player or encounter) can occupy a cell at a time.
@@ -21,10 +22,12 @@ pub const OCCUPANT_ENCOUNTER: u8 = 2;
 /// holder, they can steal the reservation. The original holder's travel is
 /// reversed (as if cancelled) and they must run cancel to finalize.
 ///
-/// PDA derivation: [LOCATION_SEED, city_id, grid_lat, grid_long]
+/// PDA derivation: [LOCATION_SEED, game_engine, city_id, grid_lat, grid_long]
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct LocationAccount {
+    /// Kingdom this location belongs to
+    pub game_engine: Pubkey,        // 32 bytes
     /// Grid latitude (coordinate × 10000, rounded)
     pub grid_lat: i32,              // 4 bytes
     /// Grid longitude (coordinate × 10000, rounded)
@@ -117,29 +120,100 @@ impl LocationAccount {
     }
 
     /// Derive the PDA for a location cell
-    /// Seeds: [LOCATION_SEED, city_id, grid_lat, grid_long]
-    pub fn derive_pda(city_id: u16, grid_lat: i32, grid_long: i32) -> (Pubkey, u8) {
+    /// Seeds: [LOCATION_SEED, game_engine, city_id, grid_lat, grid_long]
+    pub fn derive_pda(game_engine: &Pubkey, city_id: u16, grid_lat: i32, grid_long: i32) -> (Pubkey, u8) {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
 
         pinocchio::pubkey::find_program_address(
-            &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
+            &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Pubkey, ProgramError> {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
         let bump_seed = [bump];
 
         pinocchio::pubkey::create_program_address(
-            &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes, &bump_seed],
+            &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes, &bump_seed],
             &crate::ID,
         )
+    }
+
+    /// Load and verify a LocationAccount immutably.
+    pub fn load_checked<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        city_id: u16,
+        grid_lat: i32,
+        grid_long: i32,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a LocationAccount mutably.
+    pub fn load_checked_mut<'a>(
+        account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
+        city_id: u16,
+        grid_lat: i32,
+        grid_long: i32,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Check if location belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     /// Get adjacent grid cells (for finding alternative when occupied)

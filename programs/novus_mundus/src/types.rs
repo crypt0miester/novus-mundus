@@ -29,14 +29,28 @@ impl TryFrom<u8> for UnitType {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum Theme {
+    #[default]
     Medieval = 0,
     Cyberpunk = 1,
     SciFi = 2,
     Modern = 3,
     PostApocalyptic = 4,
+}
 
+impl Theme {
+    /// Convert from u8 value
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Medieval,
+            1 => Self::Cyberpunk,
+            2 => Self::SciFi,
+            3 => Self::Modern,
+            4 => Self::PostApocalyptic,
+            _ => Self::Medieval, // Default to Medieval for invalid values
+        }
+    }
 }
 
 impl TryFrom<u8> for Theme {

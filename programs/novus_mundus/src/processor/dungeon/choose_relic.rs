@@ -58,11 +58,11 @@ pub fn process(
     require_signer(game_authority)?;
     require_writable(dungeon_run_account)?;
 
-    // 3. Load and validate player using load_checked
-    let _player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
+    // 3. Load and validate player using load_checked (kingdom-scoped)
+    let _player = PlayerAccount::load_checked(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
-    // 4. Validate game_authority against GameEngine
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // 4. Validate game_authority against GameEngine (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     if game_authority.key() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }

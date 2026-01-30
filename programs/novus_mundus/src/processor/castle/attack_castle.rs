@@ -74,34 +74,32 @@ pub fn process(
     require_writable(castle_account)?;
     require_owner(attacker_player, program_id)?;
 
-    // Parse instruction data
-    if instruction_data.len() < 5 {
+    // Parse instruction data (city_id/castle_id from account)
+    if instruction_data.len() < 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let drive_by = instruction_data[4] != 0;
+    let drive_by = instruction_data[0] != 0;
 
     // Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // Load game engine for combat config
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // Load game engine for combat config (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     let gameplay_config = &game_engine.gameplay_config;
     let economic_config = &game_engine.economic_config;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle can be attacked
     if !castle.can_be_attacked(now) {
         return Err(GameError::CastleNotAttackable.into());
     }
 
-    // Load attacker
-    let mut attacker = PlayerAccount::load_checked_mut(attacker_player, attacker_wallet.key(), program_id)?;
+    // Load attacker (kingdom-scoped)
+    let mut attacker = PlayerAccount::load_checked_mut(attacker_player, game_engine_account.key(), attacker_wallet.key(), program_id)?;
 
     // Verify attacker is not traveling
     if attacker.is_traveling_any() {

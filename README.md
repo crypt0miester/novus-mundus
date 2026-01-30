@@ -4,7 +4,9 @@
 
 Novus Mundus is a continuous strategy game built on Solana where players command armies, collect resources, and compete in dynamic events to earn **NOVI** - the game's dual-purpose token that fuels both gameplay and real rewards.
 
-**Theme-Flexible Design:** Launch with medieval theme, switch to cyberpunk, sci-fi, or post-apocalyptic themes without changing core mechanics. All unit names and visuals are theme layers - the strategy stays the same.
+**Multi-Kingdom System:** Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own theme, leaderboards, and events.
+
+**Theme-Flexible Design:** Medieval, cyberpunk, sci-fi, or post-apocalyptic - each kingdom has its own theme. Unit names and visuals change, but strategy stays the same.
 
 **Deterministic Gameplay:** No randomness. All mechanics use the golden ratio family for predictable, skill-based outcomes.
 
@@ -12,17 +14,34 @@ Novus Mundus is a continuous strategy game built on Solana where players command
 
 ## Game Overview
 
-### The Living World
+### Kingdoms: Fair Starts for Everyone
 
-Unlike traditional games with resets, Novus Mundus is a **persistent world** where:
-- Your kingdom and progress never reset
+Novus Mundus uses a **multi-kingdom system** to ensure fair competition:
+
+- **New kingdoms launch periodically** - Everyone in a kingdom starts at the same time
+- **Join late? No problem** - Pick a newer kingdom and compete with players at your level
+- **Each kingdom is independent** - Separate leaderboards, events, and rankings
+- **Same wallet, multiple kingdoms** - Play in Genesis (medieval) and Vanguard (cyberpunk) simultaneously
+- **Shared heroes and NOVI** - Your NFT heroes and token work across all kingdoms
+
+**Example Kingdoms:**
+| Kingdom | Theme | Launch |
+|---------|-------|--------|
+| Genesis | Medieval | Day 1 |
+| Vanguard | Cyberpunk | Month 2 |
+| Frontier | Post-Apocalyptic | Month 4 |
+
+### The Persistent World
+
+Unlike traditional games with resets, each kingdom is a **persistent world** where:
+- Your progress within a kingdom never resets
 - Events occur continuously (daily, weekly, seasonal)
 - Alliances and rivalries develop organically over time
 - Strategic decisions compound into long-term advantages
 
-### The Medieval Setting
+### Your Empire
 
-Command your kingdom across multiple **locations** (cities), each with unique strategic advantages:
+Command your forces across multiple **cities** within your kingdom, each with unique strategic advantages:
 - Deploy **defensive units** to protect your holdings
 - Manage **operative units** to collect resources
 - Launch attacks on rival kingdoms
@@ -164,23 +183,23 @@ The game uses real longitude to calculate local time with 7 periods:
 - golden root (1.272x) for good timing
 - 1/phi (0.618x) for poor timing
 
-### Locations (Cities)
+### Cities
 
-Players can travel between 50 world locations:
+Each kingdom has **24 cities** with themed names matching the kingdom's setting:
 
 **City Types:**
-| Type | Bonus | Examples |
-|------|-------|----------|
-| Capital | Balanced (1.0x all) | New York, London, Tokyo |
-| Resource | Collection (1.272x) | Miami, Rome, Auckland |
-| Combat | Attack/Defense (1.272x) | Chicago, Berlin, Seoul |
-| Trade | Economy (1.618x) | Singapore, Hong Kong, Dubai |
+| Type | Bonus | Medieval Example | Cyberpunk Example |
+|------|-------|------------------|-------------------|
+| Capital | Balanced (1.0x) | King's Landing | Neo Tokyo |
+| Resource | Collection (1.272x) | Harvest Vale | Data Farm |
+| Combat | Attack/Defense (1.272x) | Ironhold | War District |
+| Trade | Economy (1.618x) | Merchant's Rest | Black Market |
 
-**Location Mechanics:**
-- **Same-location attacks**: Can only attack players in your current city
+**City Mechanics:**
+- **Same-city attacks**: Can only attack players in your current city
 - **Travel**: Move between cities (uses NOVI, takes time)
 - **Strategic positioning**: Different cities have different bonuses
-- **Territory Wars**: Events may involve controlling specific locations
+- **Territory Wars**: Events may involve controlling specific cities
 
 ### Safebox System
 
@@ -210,6 +229,102 @@ Players can travel between 50 world locations:
 - Fragments and gems (research-gated)
 - Loot distributed based on damage contribution
 
+### Dungeons (PvE Challenge)
+
+Test your heroes against progressively difficult dungeon floors for weekly rewards.
+
+**How It Works:**
+- Select a dungeon and send your heroes
+- Clear floors to progress deeper
+- Higher floors = better rewards
+- Weekly leaderboards track deepest clears
+
+**Dungeon Types:**
+| Dungeon | Difficulty | Specialty |
+|---------|------------|-----------|
+| Crypt | Easy | Entry-level, learn mechanics |
+| Labyrinth | Medium | Balanced challenge |
+| Abyss | Hard | Endgame content |
+
+**Rewards:**
+- Hero fragments for leveling
+- Gems for upgrades
+- Weekly leaderboard prizes (kingdom-scoped)
+- Reserved NOVI for top performers
+
+### Arena (Competitive PvP)
+
+Seasonal PvP competition where players battle for rankings and prizes.
+
+**How It Works:**
+- Each kingdom has its own arena seasons
+- Set your battle loadout (heroes + units)
+- Challenge other players in your ranking bracket
+- Climb the leaderboard for better rewards
+
+**Arena Seasons:**
+- Seasons last 1-4 weeks
+- Rankings reset each season
+- Prizes distributed at season end
+- Top players earn Reserved NOVI
+
+**Battle System:**
+- Deterministic combat (no luck)
+- Strategy matters: unit composition, hero selection
+- Daily battle limit encourages smart matchmaking
+- Win streaks provide bonus ranking points
+
+### Castle Battles (Territory Control)
+
+Capture and hold castles to earn passive income and prestige for your team.
+
+**Castle System:**
+- Each city has castles that teams can capture
+- Holding a castle generates rewards for your team
+- Appoint court positions (King, General, Treasurer, etc.)
+- Garrison troops to defend against attackers
+
+**Capturing Castles:**
+- Attack a castle held by another team
+- Rally with teammates for coordinated assaults
+- Defeat the garrison to claim control
+- Defend against counter-attacks
+
+**Castle Benefits:**
+| Position | Bonus |
+|----------|-------|
+| King | Highest share of castle income |
+| Court Members | Moderate share + special perks |
+| Garrison Contributors | Share based on contribution |
+
+**Strategy:**
+- Stronger castles in high-value cities
+- Coordinate with your team for defense schedules
+- Balance garrison strength vs active army size
+
+### Estates (Personal Property)
+
+Build and upgrade your personal estate to generate passive income and unlock bonuses.
+
+**Estate Features:**
+- Personal property that grows with your character
+- Generates passive resources over time
+- Upgradeable buildings for increased output
+- Safe from raids (unlike active resources)
+
+**Estate Buildings:**
+| Building | Benefit |
+|----------|---------|
+| Manor | Increases locked NOVI capacity |
+| Barracks | Faster unit training |
+| Warehouse | Higher resource storage |
+| Market | Better shop discounts |
+
+**Upgrading:**
+- Spend NOVI and resources to upgrade buildings
+- Higher levels = better bonuses
+- Requires minimum player level for each tier
+
 ### Combat Mechanics
 
 **Attack Power Formula (Deterministic):**
@@ -232,6 +347,8 @@ total_power = base_power x weapon_coverage x total_bonus / 10000
 ---
 
 ## Events & Competition
+
+All events and leaderboards are **kingdom-specific** - you compete only with players in your kingdom, ensuring fair matchups regardless of when you started playing.
 
 ### Daily Challenges (Every 24 Hours)
 Quick, accessible events for all players:
@@ -655,29 +772,36 @@ Free players can compete in dailies. Subscribers dominate high-stakes events. Ev
 - Phantom, Backpack, or any Solana wallet
 - Fund with SOL for transactions
 
-### Step 2: Register Kingdom
-- Create your player account
+### Step 2: Choose Your Kingdom
+- Browse available kingdoms and their themes
+- **New player?** Join a recently launched kingdom for fair competition
+- **Veteran?** Play multiple kingdoms with the same wallet
+- Check kingdom age and player count before joining
+
+### Step 3: Register Your Character
+- Create your player account in the chosen kingdom
 - Receive starting resources
 - 24-hour protection begins
 - Start generating locked NOVI
 
-### Step 3: Build Your Strategy
+### Step 4: Build Your Strategy
 - Hire units with locked NOVI
 - Maintain happiness (feed and arm your troops)
 - Attack diverse opponents
 - Collect resources with operative units
 
-### Step 4: Join Events
+### Step 5: Join Events
 - Start with daily challenges (7-day eligibility)
 - Progress to weekly tournaments (30-day)
 - Dominate seasonal championships (60-day+)
 - Win reserved NOVI, withdraw to wallet
 
-### Step 5: Grow Your Kingdom
+### Step 6: Grow Your Empire
 - Consider subscription for faster progression
 - Join or form a team
 - Invest in research and heroes
 - Accumulate reserved NOVI for real earnings
+- Expand to additional kingdoms when ready
 
 ---
 
@@ -685,6 +809,8 @@ Free players can compete in dailies. Subscribers dominate high-stakes events. Ev
 
 Novus Mundus is designed for **skill-based competition**, not pay-to-win:
 
+- **Fair starts through kingdoms** - New kingdoms launch regularly so everyone can start fresh
+- **Kingdom-scoped competition** - Compete only with players who started when you did
 - Free players can earn through daily challenges and smart gameplay
 - Subscriptions accelerate progression but don't guarantee victories
 - Events reward strategy over wallet size
@@ -692,7 +818,7 @@ Novus Mundus is designed for **skill-based competition**, not pay-to-win:
 - Transparent on-chain actions ensure fairness
 - Deterministic mechanics mean no luck-based advantages
 
-**The best kingdoms are built with time, strategy, and skill - not just SOL.**
+**Late to the game? Join a new kingdom and compete on equal footing.**
 
 ---
 
@@ -717,6 +843,6 @@ Game mechanics, events, and features will evolve based on:
 
 ---
 
-**Version:** 2.0
+**Version:** 3.0 (Multi-Kingdom)
 **Framework:** Pinocchio (Solana)
 

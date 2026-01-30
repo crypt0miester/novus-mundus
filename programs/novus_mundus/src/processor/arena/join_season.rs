@@ -71,10 +71,14 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 5. Load and validate Player
-    let player = PlayerAccount::load_checked(player_account, player_authority.key(), program_id)?;
+    // 5. Load and validate Player (using by_key for kingdom scoping)
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
+    if &player.owner != player_authority.key() {
+        return Err(GameError::Unauthorized.into());
+    }
     let player_key = *player_account.key();
     let player_level = player.level;
+    let player_game_engine = player.game_engine;
     drop(player);
 
     // 6. Load and validate Arena Season
@@ -104,12 +108,12 @@ pub fn process(
         return Err(GameError::InsufficientLevel.into());
     }
 
-    let season_authority = season.authority;
+    let _season_authority = season.authority;
     drop(season_data);
 
     // 7. Verify participant account doesn't already exist
     let (expected_participant_pda, participant_bump) =
-        ArenaParticipantAccount::derive_pda(&season_authority, season_id, player_authority.key());
+        ArenaParticipantAccount::derive_pda(&player_game_engine, season_id, player_account.key());
     if participant_account.key() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -126,9 +130,9 @@ pub fn process(
     let season_id_bytes = season_id.to_le_bytes();
     let participant_seeds = pinocchio::seeds!(
         ARENA_PARTICIPANT_SEED,
-        season_authority.as_ref(),
+        player_game_engine.as_ref(),
         &season_id_bytes,
-        player_authority.key().as_ref(),
+        player_account.key().as_ref(),
         &participant_bump_seed
     );
     let participant_signer = pinocchio::instruction::Signer::from(&participant_seeds);
@@ -146,6 +150,7 @@ pub fn process(
     let participant = unsafe { ArenaParticipantAccount::load_mut(&mut participant_data_ref) };
 
     *participant = ArenaParticipantAccount {
+        game_engine: player_game_engine,
         player: player_key,
         season_id,
         battle_timestamps: [0i64; 10],
@@ -166,7 +171,7 @@ pub fn process(
 
     // 10. Create Loadout Account if it doesn't exist (reusable across seasons)
     let (expected_loadout_pda, loadout_bump) =
-        ArenaLoadoutAccount::derive_pda(player_authority.key());
+        ArenaLoadoutAccount::derive_pda(&player_game_engine, player_account.key());
     if loadout_account.key() != &expected_loadout_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -178,7 +183,8 @@ pub fn process(
         let loadout_bump_seed = [loadout_bump];
         let loadout_seeds = pinocchio::seeds!(
             ARENA_LOADOUT_SEED,
-            player_authority.key().as_ref(),
+            player_game_engine.as_ref(),
+            player_account.key().as_ref(),
             &loadout_bump_seed
         );
         let loadout_signer = pinocchio::instruction::Signer::from(&loadout_seeds);
@@ -196,6 +202,7 @@ pub fn process(
         let loadout = unsafe { ArenaLoadoutAccount::load_mut(&mut loadout_data_ref) };
 
         *loadout = ArenaLoadoutAccount {
+            game_engine: player_game_engine,
             player: player_key,
             bump: loadout_bump,
             arena_hero: Pubkey::default(),

@@ -1,8 +1,5 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, Sysvar},
+    account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -10,20 +7,22 @@ use crate::{
     constants::{PLAYER_SEED, GAME_ENGINE_SEED, LOCATION_SEED, STARTER_LOCKED_NOVI},
     error::GameError,
     state::{PlayerAccount, GameEngine, CityAccount, LocationAccount},
-    validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
     token_helpers::get_or_create_associated_token_account,
     helpers::mint_tokens,
     emit,
-    events::PlayerCreated,
+    events::PlayerJoinedKingdom,
 };
 
 /// Initialize a new player account and NOVI token account
+/// KINGDOM-SCOPED: Player is created within a specific kingdom
 ///
 /// Creates:
 /// 1. Player account PDA - holds all gameplay state
 /// 2. Associated Token Account (ATA) - holds NOVI tokens for gameplay
 ///
 /// Player account includes:
+/// - Kingdom reference (game_engine)
 /// - Locked NOVI (gameplay fuel, non-withdrawable)
 /// - Units (defensive and operative)
 /// - Resources (weapons, produce, vehicles, cash)
@@ -39,7 +38,7 @@ use crate::{
 /// - 24-hour New Player Protection (no PvP attacks)
 ///
 /// # Accounts Expected
-/// 1. `[writable]` player - Player account PDA to create ([b"player", owner.key()])
+/// 1. `[writable]` player - Player account PDA to create ([b"player", game_engine, owner.key()])
 /// 2. `[signer, writable]` owner - Player's wallet (pays for account creation)
 /// 3. `[writable]` player_token_account - Player's NOVI token ATA
 /// 4. `[writable]` game_engine - GameEngine PDA (for config and novi_mint, increments total_players)
@@ -52,14 +51,17 @@ use crate::{
 ///
 /// # Instruction Data
 /// [0..2] starting_city_id: u16 (little-endian) - City ID where player spawns
+/// [2..10] spawn_lat: f64 (little-endian) - Spawn latitude (must be within city radius)
+/// [10..18] spawn_long: f64 (little-endian) - Spawn longitude (must be within city radius)
 ///
 /// # PDA Derivation
-/// Seeds: `[b"player", owner.key()]`
-/// The player account is deterministic per wallet
+/// Seeds: `[b"player", game_engine.key(), owner.key()]`
+/// The player account is deterministic per wallet within a kingdom
 ///
 /// # Returns
 /// - `Ok(())` on successful initialization
 /// - `Err(GameError::CityNotFound)` if city doesn't exist or ID mismatch
+/// - `Err(GameError::KingdomRegistrationClosed)` if registration is closed
 ///
 /// # Implementation Notes
 /// - Player spawns at city center coordinates
@@ -88,10 +90,15 @@ pub fn process(
     };
 
     // 2. Parse Instruction Data
-    if data.len() < 2 {
+    // [0..2] starting_city_id: u16
+    // [2..10] spawn_lat: f64
+    // [10..18] spawn_long: f64
+    if data.len() < 18 {
         return Err(ProgramError::InvalidInstructionData);
     }
     let starting_city_id = u16::from_le_bytes([data[0], data[1]]);
+    let spawn_lat = f64::from_le_bytes(data[2..10].try_into().unwrap());
+    let spawn_long = f64::from_le_bytes(data[10..18].try_into().unwrap());
 
     // 3. Validate Accounts
 
@@ -113,18 +120,37 @@ pub fn process(
     // City must be owned by this program
     require_owner(starting_city, program_id)?;
 
-    // 4. Derive and Validate Player PDA
+    // 4. Load GameEngine for config (mutable to increment total_players)
+    require_writable(game_engine)?;
+    let mut game_engine_data_ref = game_engine.try_borrow_mut_data()?;
+    let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_data_ref) };
 
-    let (expected_player, bump) = derive_pda(
-        &[PLAYER_SEED, owner.key()],
-        program_id,
-    );
+    // 4a. Validate GameEngine PDA
+    let (expected_game_engine, _ge_bump) = GameEngine::derive_pda(game_engine_data.kingdom_id);
+    if game_engine.key() != &expected_game_engine {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // 4b. Check if kingdom registration is open
+    let clock = Clock::get()?;
+    let created_at = clock.unix_timestamp;
+
+    if !game_engine_data.registration_open {
+        return Err(GameError::KingdomRegistrationClosed.into());
+    }
+    if game_engine_data.registration_closes_at > 0 && created_at > game_engine_data.registration_closes_at {
+        return Err(GameError::KingdomRegistrationClosed.into());
+    }
+
+    // 5. Derive and Validate Player PDA (kingdom-scoped)
+
+    let (expected_player, bump) = PlayerAccount::derive_pda(game_engine.key(), owner.key());
 
     if player.key() != &expected_player {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // 5. Load and Validate City
+    // 6. Load and Validate City (must be in same kingdom)
 
     let city_data = unsafe { CityAccount::load_mut(starting_city)? };
 
@@ -133,17 +159,24 @@ pub fn process(
         return Err(GameError::CityNotFound.into());
     }
 
+    // Verify city is in the same kingdom
+    if &city_data.game_engine != game_engine.key() {
+        return Err(GameError::KingdomMismatch.into());
+    }
+
     // Validate city PDA
     CityAccount::validate_pda(starting_city, city_data)?;
 
-    // Get city coordinates for player spawn
-    let spawn_lat = city_data.latitude;
-    let spawn_long = city_data.longitude;
-
-    // 6. Load GameEngine for config (mutable to increment total_players)
-    require_writable(game_engine)?;
-    let mut game_engine_data_ref = game_engine.try_borrow_mut_data()?;
-    let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_data_ref) };
+    // Validate spawn coordinates are within city radius
+    {
+        let dlat = spawn_lat - city_data.latitude;
+        let dlong = spawn_long - city_data.longitude;
+        // Approximate distance in km (1 degree ≈ 111 km)
+        let dist_km = ((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0)).sqrt();
+        if dist_km > city_data.radius_km as f64 {
+            return Err(GameError::OutOfRange.into());
+        }
+    }
 
     // Verify novi_mint matches GameEngine configuration
     if novi_mint.key() != &game_engine_data.novi_mint {
@@ -162,17 +195,13 @@ pub fn process(
     // Get new player protection duration from config
     let protection_duration = game_engine_data.gameplay_config.new_player_protection_duration;
 
-    // 7. Get Current Timestamp
-    let clock = Clock::get()?;
-    let created_at = clock.unix_timestamp;
-
-    // 8. Calculate Rent and Create Account
+    // 7. Calculate Rent and Create Account
 
     let lamports = pinocchio::sysvars::rent::Rent::get()?
         .minimum_balance(PlayerAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, owner.key(), &bump_seed);
+    let seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key(), owner.key(), &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -183,26 +212,39 @@ pub fn process(
         owner: program_id,
     }.invoke_signed(&[signer])?;
 
-    // 9. Initialize Player Data with Starting City and Resources
+    // 8. Initialize Player Data with Starting City and Resources
+    {
+        let mut player_data_ref = player.try_borrow_mut_data()?;
+        let player_data = unsafe {
+            PlayerAccount::load_mut(&mut player_data_ref)
+        };
 
-    let mut player_data_ref = player.try_borrow_mut_data()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
+        // Initialize with starter resources and city (kingdom-scoped)
+        *player_data = PlayerAccount::init_with_city(
+            *game_engine.key(),
+            *owner.key(),
+            created_at,
+            bump,
+            starting_city_id,
+            spawn_lat,
+            spawn_long,
+            protection_duration,
+        );
 
-    // Initialize with starter resources and city
-    *player_data = PlayerAccount::init_with_city(
-        *owner.key(),
-        created_at,
-        bump,
-        starting_city_id,
-        spawn_lat,
-        spawn_long,
-        protection_duration,
-    );
+        // Set default name as "Player #X"
+        player_data.set_default_name(player_number);
 
-    // Set default name as "Player #X"
-    player_data.set_default_name(player_number);
+        // Quantize spawn coordinates to grid
+        let spawn_grid_lat = LocationAccount::to_grid(spawn_lat);
+        let spawn_grid_long = LocationAccount::to_grid(spawn_long);
+
+        // Update player coords to grid cell center
+        let cell_center_lat = LocationAccount::from_grid(spawn_grid_lat);
+        let cell_center_long = LocationAccount::from_grid(spawn_grid_long);
+        player_data.current_lat = cell_center_lat;
+        player_data.current_long = cell_center_long;
+    }
+    // player_data_ref dropped here — required before CPIs that touch player account
 
     // 10. Increment city players_present
     city_data.players_present = city_data.players_present.saturating_add(1);
@@ -213,25 +255,28 @@ pub fn process(
     let spawn_grid_lat = LocationAccount::to_grid(spawn_lat);
     let spawn_grid_long = LocationAccount::to_grid(spawn_long);
 
-    // Update player coords to grid cell center
-    let cell_center_lat = LocationAccount::from_grid(spawn_grid_lat);
-    let cell_center_long = LocationAccount::from_grid(spawn_grid_long);
-    player_data.current_lat = cell_center_lat;
-    player_data.current_long = cell_center_long;
-
-    // Derive spawn location PDA
+    // Derive spawn location PDA (kingdom-scoped)
     let city_bytes = starting_city_id.to_le_bytes();
     let lat_bytes = spawn_grid_lat.to_le_bytes();
     let long_bytes = spawn_grid_long.to_le_bytes();
 
-    let (expected_spawn_pda, spawn_location_bump) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
-        program_id,
+    let (expected_spawn_pda, spawn_location_bump) = LocationAccount::derive_pda(
+        game_engine.key(),
+        starting_city_id,
+        spawn_grid_lat,
+        spawn_grid_long,
     );
 
     if spawn_location.key() != &expected_spawn_pda {
         return Err(GameError::InvalidPDA.into());
     }
+
+    // Save game_engine values needed after dropping the borrow
+    let kingdom_id = game_engine_data.kingdom_id;
+    let ge_bump = game_engine_data.bump;
+
+    // Drop game_engine borrow before CPIs that touch game_engine account
+    drop(game_engine_data_ref);
 
     // Create or occupy spawn location
     let spawn_location_len = spawn_location.data_len();
@@ -244,6 +289,7 @@ pub fn process(
         let loc_bump_seed = [spawn_location_bump];
         let location_seeds = pinocchio::seeds!(
             LOCATION_SEED,
+            game_engine.key(),
             &city_bytes,
             &lat_bytes,
             &long_bytes,
@@ -262,6 +308,7 @@ pub fn process(
         let mut location_data = spawn_location.try_borrow_mut_data()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
+        location.game_engine = *game_engine.key();
         location.grid_lat = spawn_grid_lat;
         location.grid_long = spawn_grid_long;
         location.city_id = starting_city_id;
@@ -270,7 +317,7 @@ pub fn process(
         location.occupant = *player.key();
         location.occupied_since = created_at;
         location.location_creator = *owner.key();
-        location.reserved_arrival_time = 0; // Player starts at location (not traveling)
+        location.reserved_arrival_time = 0;
     } else {
         // Location exists, check if occupied
         let mut location_data = spawn_location.try_borrow_mut_data()?;
@@ -289,7 +336,7 @@ pub fn process(
         location.occupant = *player.key();
         location.occupied_since = created_at;
         location.location_creator = *owner.key();
-        location.reserved_arrival_time = 0; // Player starts at location (not traveling)
+        location.reserved_arrival_time = 0;
     }
 
     // 12. Create Player's NOVI Token Account (ATA)
@@ -297,16 +344,16 @@ pub fn process(
     get_or_create_associated_token_account(
         owner,                      // Payer
         player_token_account,       // The ATA to create
-        owner,                      // ATA owner
+        player,                     // ATA owner
         novi_mint,                  // Token mint (NOVI)
         system_program,
         token_program,
     )?;
 
-    // 12. Mint Starter NOVI Tokens to Player
-    // This matches the locked_novi starter amount in PlayerAccount::init_with_city
-    let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &bump_seed);
+    // 13. Mint Starter NOVI Tokens to Player
+    let kingdom_id_bytes = kingdom_id.to_le_bytes();
+    let bump_seed = [ge_bump];
+    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     mint_tokens(
@@ -317,12 +364,13 @@ pub fn process(
         &[signer],
     )?;
 
-    // Emit PlayerCreated event
-    emit!(PlayerCreated {
+    // Emit PlayerJoinedKingdom event
+    emit!(PlayerJoinedKingdom {
+        kingdom_id,
+        game_engine: *game_engine.key(),
         player: *player.key(),
-        user: *owner.key(),
-        city: *starting_city.key(),
-        timestamp: created_at,
+        owner: *owner.key(),
+        joined_at: created_at,
     });
 
     Ok(())

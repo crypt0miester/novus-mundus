@@ -103,8 +103,8 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 5. Validate GameEngine and game_authority
-    let ge_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 5. Validate GameEngine and game_authority (kingdom-scoped)
+    let ge_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     if game_authority.key() != &ge_data.game_authority {
         return Err(GameError::Unauthorized.into());
     }
@@ -131,11 +131,12 @@ pub fn process(
         return Err(GameError::ArenaSeasonExpired.into());
     }
 
-    let season_authority = season.authority;
+    let _season_authority = season.authority;
 
-    // 7. Load Players
+    // 7. Load Players (kingdom-scoped)
     let challenger_player_data = PlayerAccount::load_checked(
         challenger_player,
+        game_engine.key(),
         challenger_authority.key(),
         program_id,
     )?;
@@ -148,10 +149,10 @@ pub fn process(
     let defender_authority_key = defender_player_data.owner;
     drop(defender_player_raw);
 
-    // 8. Load Participants
+    // 8. Load Participants (kingdom-scoped)
     let mut challenger_part = ArenaParticipantAccount::load_checked_mut(
         challenger_participant,
-        &season_authority,
+        game_engine.key(),
         season_id,
         challenger_authority.key(),
         program_id,
@@ -159,21 +160,23 @@ pub fn process(
 
     let mut defender_part = ArenaParticipantAccount::load_checked_mut(
         defender_participant,
-        &season_authority,
+        game_engine.key(),
         season_id,
         &defender_authority_key,
         program_id,
     )?;
 
-    // 9. Load Loadouts
+    // 9. Load Loadouts (kingdom-scoped)
     let challenger_loadout_data = ArenaLoadoutAccount::load_checked(
         challenger_loadout,
+        game_engine.key(),
         challenger_authority.key(),
         program_id,
     )?;
 
     let defender_loadout_data = ArenaLoadoutAccount::load_checked(
         defender_loadout,
+        game_engine.key(),
         &defender_authority_key,
         program_id,
     )?;

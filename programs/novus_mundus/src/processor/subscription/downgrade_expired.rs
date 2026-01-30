@@ -25,7 +25,6 @@ use crate::{
 /// - UI triggering cleanup on page load
 ///
 /// # Accounts
-/// - [signer] payer: Anyone (pays transaction fee)
 /// - [writable] player_account: PlayerAccount to check/downgrade
 ///
 /// # Instruction Data
@@ -40,14 +39,10 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [payer, player_account] = accounts else {
+    let [player_account] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate Accounts
-    if !payer.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
-    }
     require_writable(player_account)?;
     require_owner(player_account, program_id)?;
 

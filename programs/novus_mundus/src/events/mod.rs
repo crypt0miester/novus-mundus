@@ -44,6 +44,7 @@ pub mod initialization;
 pub mod game_event;
 pub mod dungeon;
 pub mod castle;
+pub mod kingdom;
 
 // Re-export all events for convenience
 pub use combat::*;
@@ -67,6 +68,7 @@ pub use initialization::*;
 pub use game_event::*;
 pub use dungeon::*;
 pub use castle::*;
+pub use kingdom::*;
 
 // ============================================================================
 // Compile-time SHA256 for discriminator generation

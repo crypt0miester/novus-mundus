@@ -12,7 +12,7 @@ use crate::{
     state::{
         GameEngine, GameCaps, EconomicConfig, GameplayConfig,
         SubscriptionTier, MintingConfig, ThemeModifierConfig,
-        ThemeMultipliers,
+        ThemeMultipliers, NoviPurchaseConfig,
         game_engine::RallyCaps as GameEngineRallyCaps,
     },
     types::Theme,
@@ -20,24 +20,24 @@ use crate::{
         require_signer,
         require_writable,
         require_key_match,
-        derive_pda,
     },
     constants::{GAME_ENGINE_SEED, NOVI_MINT_SEED},
     emit,
-    events::GameEngineInitialized,
+    events::KingdomCreated,
 };
 
-/// Initialize global game configuration and NOVI mint
+/// Initialize a kingdom game configuration and NOVI mint
 ///
-/// This instruction should be called once during deployment.
+/// This instruction creates a new kingdom (GameEngine).
+/// Each kingdom is identified by a unique kingdom_id.
 /// Only modifiable via DAO governance after initialization.
 ///
 /// Creates:
-/// 1. GameEngine PDA (game state and authority)
-/// 2. NOVI token mint with GameEngine as mint authority
+/// 1. GameEngine PDA (game state and authority for this kingdom)
+/// 2. NOVI token mint with GameEngine as mint authority (only for kingdom 0)
 ///
 /// # Accounts
-/// - [writable] game_engine: GameEngine PDA ([b"game_engine"])
+/// - [writable] game_engine: GameEngine PDA ([b"game_engine", kingdom_id])
 /// - [signer] authority: DAO governance authority
 /// - [writable] novi_mint: NOVI mint PDA ([b"novi_mint"])
 /// - [writable] treasury_wallet: Wallet that receives SOL subscription payments
@@ -46,12 +46,27 @@ use crate::{
 /// - [] rent: Rent sysvar
 ///
 /// # Instruction Data
-/// None (uses default configuration)
+/// - kingdom_id: u16 (kingdom identifier)
+/// - kingdom_name: [u8; 32] (kingdom name)
+/// - theme: u8 (Theme enum value)
+/// - kingdom_start_time: i64 (when kingdom gameplay begins)
+/// - registration_closes_at: i64 (when registration closes, 0 = never)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    _data: &[u8],
+    data: &[u8],
 ) -> ProgramResult {
+    // Parse instruction data
+    if data.len() < 51 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    let kingdom_id = u16::from_le_bytes([data[0], data[1]]);
+    let mut kingdom_name = [0u8; 32];
+    kingdom_name.copy_from_slice(&data[2..34]);
+    let theme = data[34];
+    let kingdom_start_time = i64::from_le_bytes(data[35..43].try_into().unwrap());
+    let registration_closes_at = i64::from_le_bytes(data[43..51].try_into().unwrap());
+
     // 1. Parse accounts
     let [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -64,15 +79,18 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
     require_key_match(token_program, &pinocchio_token::ID)?;
 
-    // 3. Derive GameEngine PDA
-    let (expected_game_engine, game_engine_bump) = derive_pda(&[GAME_ENGINE_SEED], program_id);
+    // 3. Derive GameEngine PDA with kingdom_id
+    let (expected_game_engine, game_engine_bump) = GameEngine::derive_pda(kingdom_id);
 
     if game_engine.key() != &expected_game_engine {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // 4. Derive NOVI mint PDA
-    let (expected_novi_mint, novi_mint_bump) = derive_pda(&[NOVI_MINT_SEED], program_id);
+    let (expected_novi_mint, novi_mint_bump) = pinocchio::pubkey::find_program_address(
+        &[NOVI_MINT_SEED],
+        program_id,
+    );
 
     if novi_mint.key() != &expected_novi_mint {
         return Err(ProgramError::InvalidSeeds);
@@ -81,8 +99,9 @@ pub fn process(
     // 5. Create GameEngine account
     let lamports = Rent::get()?.minimum_balance(GameEngine::LEN);
 
+    let kingdom_id_bytes = kingdom_id.to_le_bytes();
     let bump_seed = [game_engine_bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &bump_seed);
+    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -119,13 +138,18 @@ pub fn process(
         freeze_authority: None,                // No freeze authority
     }.invoke()?;
 
-    // 8. Initialize GameEngine state with default configuration
+    // 8. Initialize GameEngine state with kingdom configuration
     let mut game_engine_data_ref = game_engine.try_borrow_mut_data()?;
     let game_engine_data = unsafe {
         GameEngine::load_mut(&mut game_engine_data_ref)
     };
 
     *game_engine_data = create_default_game_engine(
+        kingdom_id,
+        kingdom_name,
+        theme,
+        kingdom_start_time,
+        registration_closes_at,
         *authority.key(),
         *novi_mint.key(),
         *treasury_wallet.key(),
@@ -133,20 +157,57 @@ pub fn process(
         novi_mint_bump,
     );
 
-    // Emit GameEngineInitialized event
+    // Emit KingdomCreated event
     let clock = pinocchio::sysvars::clock::Clock::get()?;
-    emit!(GameEngineInitialized {
-        game_engine: *game_engine.key(),
-        authority: *authority.key(),
-        timestamp: clock.unix_timestamp,
+    emit!(KingdomCreated {
+        kingdom_id,
+        kingdom_name,
+        theme,
+        start_time: kingdom_start_time,
+        registration_closes_at,
+        created_by: *authority.key(),
+        created_at: clock.unix_timestamp,
     });
 
     Ok(())
 }
 
-/// Create default GameEngine configuration
-fn create_default_game_engine(authority: Pubkey, novi_mint: Pubkey, treasury_wallet: Pubkey, game_engine_bump: u8, novi_mint_bump: u8) -> GameEngine {
+/// Create default GameEngine configuration for a kingdom
+fn create_default_game_engine(
+    kingdom_id: u16,
+    kingdom_name: [u8; 32],
+    theme: u8,
+    kingdom_start_time: i64,
+    registration_closes_at: i64,
+    authority: Pubkey,
+    novi_mint: Pubkey,
+    treasury_wallet: Pubkey,
+    game_engine_bump: u8,
+    novi_mint_bump: u8,
+) -> GameEngine {
+    // Calculate kingdom_name_len
+    let mut kingdom_name_len = 0u8;
+    for (i, &b) in kingdom_name.iter().enumerate() {
+        if b != 0 {
+            kingdom_name_len = (i + 1) as u8;
+        }
+    }
+
     GameEngine {
+        // Kingdom fields
+        kingdom_id,
+        _padding_kingdom: [0; 6],
+        kingdom_name,
+        kingdom_name_len,
+        _padding_name: [0; 7],
+        kingdom_start_time,
+        registration_open: true,                        // Start with registration open
+        _padding_reg: [0; 7],
+        registration_closes_at,
+        kingdom_theme: Theme::from_u8(theme),
+        _padding_theme: [0; 7],
+
+        // Authority fields
         authority,
         payment_authority: authority,                   // Default to same as authority (can be changed later)
         game_authority: authority,                      // Default to same as authority (can be changed later)
@@ -343,6 +404,8 @@ fn create_default_game_engine(authority: Pubkey, novi_mint: Pubkey, treasury_wal
             _padding: [0; 7],
             theme_multipliers: ThemeMultipliers::default(),
         },
+
+        novi_purchase_config: NoviPurchaseConfig::default(),
     }
 }
 

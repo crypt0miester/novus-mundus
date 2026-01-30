@@ -89,7 +89,6 @@ pub fn process(
         system_program,
         name: b"Novus Mundus Heroes",
         uri: b"https://novusmundus.gg/heroes/collection",
-        max_size: 0,  // Unlimited supply
     }.invoke_signed(&[collection_signer])?;
 
     Ok(())

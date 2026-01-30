@@ -329,17 +329,19 @@ pub fn process(
     // 10. Update Event Scores (if participating)
 
     if let (Some(event_participation), Some(event)) = (event_participation, event) {
-        // Load event participation with ownership validation
+        // Load event participation with ownership validation (kingdom-scoped)
         let mut participation = crate::state::EventParticipation::load_checked_mut(
             event_participation,
+            game_engine.key(),
             player_data.current_event,
             owner.key(),
             program_id,
         )?;
 
-        // Load event with ownership validation
+        // Load event with ownership validation (kingdom-scoped)
         let mut event_data = crate::state::EventAccount::load_checked_mut(
             event,
+            game_engine.key(),
             player_data.current_event,
             program_id,
         )?;

@@ -82,12 +82,15 @@ pub fn process(
         instruction_data[84], instruction_data[85], instruction_data[86], instruction_data[87],
     ]);
 
-    // 4. Load and validate Loadout
-    let mut loadout = ArenaLoadoutAccount::load_checked_mut(
+    // 4. Load and validate Loadout (using by_key for kingdom scoping)
+    let mut loadout = ArenaLoadoutAccount::load_checked_mut_by_key(
         loadout_account,
-        player_authority.key(),
         program_id,
     )?;
+    // Verify player authority matches
+    if &loadout.player != player_authority.key() {
+        return Err(crate::error::GameError::Unauthorized.into());
+    }
 
     // 5. Update loadout (validation happens at battle time in challenge_player)
     loadout.arena_hero = arena_hero;

@@ -66,7 +66,11 @@ pub fn process(
 
     // 3. Load Accounts
 
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    // Verify owner matches
+    if &player_data.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;

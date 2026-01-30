@@ -29,7 +29,7 @@ pub const EXT_COURT: u32      = 1 << 6;  // 0x0040 - Castle court membership
 // ============================================================
 // NOTE: These values are verified by compile-time assertions at the end of this file.
 // If a struct changes, the build will fail until these constants are updated.
-pub const CORE_SIZE: usize = 1016;      // PlayerCore size (verified by static assertion) - includes reinforcement aggregates (72 bytes)
+pub const CORE_SIZE: usize = 1048;      // PlayerCore size (verified by static assertion) - includes game_engine (32 bytes) + reinforcement aggregates (72 bytes)
 pub const RESEARCH_SIZE: usize = 96;    // ResearchSection size
 pub const HEROES_SIZE: usize = 130;     // HeroesSection size
 pub const INVENTORY_SIZE: usize = 424;  // InventorySection size (verified by static assertion)
@@ -40,21 +40,24 @@ pub const COURT_SIZE: usize = 48;       // CourtSection size (castle court membe
 
 // Fixed offsets (cumulative, in order)
 pub const CORE_OFFSET: usize = 0;
-pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 1016
-pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1112
-pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1242
-pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1666
-pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1746
-pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1786
-pub const COURT_OFFSET: usize = COSMETICS_OFFSET + COSMETICS_SIZE;      // 1866
-pub const MAX_SIZE: usize = COURT_OFFSET + COURT_SIZE;                  // 1914
+pub const RESEARCH_OFFSET: usize = CORE_SIZE;                           // 1048
+pub const HEROES_OFFSET: usize = RESEARCH_OFFSET + RESEARCH_SIZE;       // 1144
+pub const INVENTORY_OFFSET: usize = HEROES_OFFSET + HEROES_SIZE;        // 1274
+pub const RALLY_OFFSET: usize = INVENTORY_OFFSET + INVENTORY_SIZE;      // 1698
+pub const TEAM_OFFSET: usize = RALLY_OFFSET + RALLY_SIZE;               // 1778
+pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1818
+pub const COURT_OFFSET: usize = COSMETICS_OFFSET + COSMETICS_SIZE;      // 1898
+pub const MAX_SIZE: usize = COURT_OFFSET + COURT_SIZE;                  // 1946
 
 // ============================================================
-// PLAYER CORE (1008 bytes) - Always present
+// PLAYER CORE - Always present
 // ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PlayerCore {
+    // Kingdom Reference (32 bytes)
+    pub game_engine: Pubkey,                // 32 - Which kingdom this player belongs to
+
     // Identity (48 bytes)
     pub owner: Pubkey,                      // 32
     pub created_at: i64,                    // 8
@@ -353,8 +356,9 @@ impl PlayerCore {
     pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Initialize with default values
-    pub fn init(owner: Pubkey, created_at: i64, bump: u8) -> Self {
+    pub fn init(game_engine: Pubkey, owner: Pubkey, created_at: i64, bump: u8) -> Self {
         Self {
+            game_engine,
             owner,
             created_at,
             bump,
@@ -574,6 +578,7 @@ impl PlayerCore {
     /// - 100 Locked NOVI
     /// - New player protection (duration from GameEngine config)
     pub fn init_with_city(
+        game_engine: Pubkey,
         owner: Pubkey,
         created_at: i64,
         bump: u8,
@@ -583,6 +588,7 @@ impl PlayerCore {
         protection_duration: i64,
     ) -> Self {
         Self {
+            game_engine,
             owner,
             created_at,
             bump,
@@ -1480,6 +1486,7 @@ impl PlayerCore {
     /// Checks: program ownership, PDA derivation, owner field, bump field.
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         expected_owner: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
@@ -1489,7 +1496,7 @@ impl PlayerCore {
         }
 
         // 2. Derive PDA and verify
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -1504,7 +1511,12 @@ impl PlayerCore {
             return Err(crate::error::GameError::Unauthorized.into());
         }
 
-        // 5. Verify bump matches
+        // 5. Verify game_engine field matches
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        // 6. Verify bump matches
         if loaded.bump != bump {
             return Err(ProgramError::InvalidSeeds);
         }
@@ -1516,6 +1528,7 @@ impl PlayerCore {
     /// Checks: program ownership, PDA derivation, owner field, bump field.
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         expected_owner: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
@@ -1525,7 +1538,7 @@ impl PlayerCore {
         }
 
         // 2. Derive PDA and verify
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -1540,7 +1553,65 @@ impl PlayerCore {
             return Err(crate::error::GameError::Unauthorized.into());
         }
 
-        // 5. Verify bump matches
+        // 5. Verify game_engine field matches
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        // 6. Verify bump matches
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Load a player by verifying against its stored game_engine and owner
+    /// Use when you have the account but not the game_engine upfront
+    pub fn load_checked_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // Verify PDA matches stored game_engine and owner
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load a player mutably by verifying against its stored game_engine and owner
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // Verify PDA matches stored game_engine and owner
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.owner);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
         if loaded.bump != bump {
             return Err(ProgramError::InvalidSeeds);
         }
@@ -1840,18 +1911,19 @@ impl PlayerCore {
     }
 
     /// Derive the PDA for a player account
-    pub fn derive_pda(owner: &Pubkey) -> (Pubkey, u8) {
+    /// Seeds: ["player", game_engine, owner]
+    pub fn derive_pda(game_engine: &Pubkey, owner: &Pubkey) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
-            &[PLAYER_SEED, owner.as_ref()],
+            &[PLAYER_SEED, game_engine.as_ref(), owner.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[PLAYER_SEED, owner.as_ref(), &bump_seed],
+            &[PLAYER_SEED, game_engine.as_ref(), owner.as_ref(), &bump_seed],
             &crate::ID,
         )
     }
@@ -1861,11 +1933,16 @@ impl PlayerCore {
         account: &AccountInfo,
         player_data: &PlayerAccount,
     ) -> ProgramResult {
-        let expected_address = Self::create_pda(&player_data.owner, player_data.bump)?;
+        let expected_address = Self::create_pda(&player_data.game_engine, &player_data.owner, player_data.bump)?;
         if account.key() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
+    }
+
+    /// Check if player belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     // ============================================================
@@ -1963,6 +2040,16 @@ pub struct UserAccount {
     pub total_reserved_earned: u64,
 
     pub last_withdrawal: i64,
+
+    // === NOVI Purchase Tracking (14 bytes + 2 padding = 16 bytes) ===
+    /// Current consecutive daily purchase streak (1-7+)
+    pub novi_purchase_streak: u16,
+    /// Last purchase day number (unix_timestamp / 86400)
+    pub novi_last_purchase_day: u32,
+    /// Total NOVI purchased today (resets daily, with 1 decimal)
+    pub novi_purchased_today: u64,
+    /// Padding for 8-byte alignment
+    pub _padding2: [u8; 2],
 }
 
 impl UserAccount {
@@ -2046,6 +2133,10 @@ impl UserAccount {
             total_events_won: 0,
             total_reserved_earned: 0,
             last_withdrawal: 0,
+            novi_purchase_streak: 0,
+            novi_last_purchase_day: 0,
+            novi_purchased_today: 0,
+            _padding2: [0; 2],
         }
     }
 

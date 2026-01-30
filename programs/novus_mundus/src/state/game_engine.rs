@@ -4,13 +4,35 @@ use pinocchio::{
     program_error::ProgramError,
     ProgramResult,
 };
-use crate::{types::Theme, constants::GAME_ENGINE_SEED};
+use crate::{NULL_PUBKEY, constants::GAME_ENGINE_SEED, types::Theme};
 
-/// Global game configuration and state
+/// Kingdom game configuration and state
+/// Each kingdom is a separate game instance with its own players, events, and leaderboards
 /// Only modifiable via DAO governance
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GameEngine {
+    /// Kingdom identifier (0 = Genesis, 1+ = subsequent kingdoms)
+    pub kingdom_id: u16,                        // 2 bytes
+    pub _padding_kingdom: [u8; 6],              // 6 bytes (alignment)
+
+    /// Kingdom name (e.g., "Genesis", "Vanguard", "Frontier")
+    pub kingdom_name: [u8; 32],                 // 32 bytes
+    pub kingdom_name_len: u8,                   // 1 byte
+    pub _padding_name: [u8; 7],                 // 7 bytes (alignment)
+
+    /// Kingdom start time (when gameplay begins - fair start reference)
+    pub kingdom_start_time: i64,                // 8 bytes
+
+    /// Registration status
+    pub registration_open: bool,                // 1 byte - Can new players join?
+    pub _padding_reg: [u8; 7],                  // 7 bytes (alignment)
+    pub registration_closes_at: i64,            // 8 bytes - Optional deadline (0 = never)
+
+    /// Kingdom theme (affects city names, visuals - not mechanics)
+    pub kingdom_theme: Theme,                   // 1 byte
+    pub _padding_theme: [u8; 7],                // 7 bytes (alignment)
+
     /// DAO governance program authority
     pub authority: Pubkey,                      // 32 bytes
 
@@ -65,6 +87,9 @@ pub struct GameEngine {
 
     /// Theme modifiers (global, DAO controlled)
     pub theme_config: ThemeModifierConfig,
+
+    /// NOVI Purchase configuration (DAO controlled)
+    pub novi_purchase_config: NoviPurchaseConfig,
 }
 
 impl GameEngine {
@@ -80,21 +105,30 @@ impl GameEngine {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
+    /// Get kingdom name as &str
+    pub fn kingdom_name(&self) -> &str {
+        core::str::from_utf8(&self.kingdom_name[0..self.kingdom_name_len as usize])
+            .unwrap_or("")
+    }
+
     /// Derive the PDA for the game engine account (finds bump - slower)
     /// Use this only during account creation
-    pub fn derive_pda() -> (Pubkey, u8) {
+    /// Seeds: ["game_engine", kingdom_id]
+    pub fn derive_pda(kingdom_id: u16) -> (Pubkey, u8) {
+        let kingdom_id_bytes = kingdom_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[GAME_ENGINE_SEED],
+            &[GAME_ENGINE_SEED, &kingdom_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(kingdom_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+        let kingdom_id_bytes = kingdom_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[GAME_ENGINE_SEED, &bump_seed],
+            &[GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -103,13 +137,14 @@ impl GameEngine {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
+        kingdom_id: u16,
         program_id: &Pubkey,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
         if account.owner() != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda();
+        let (expected_pda, bump) = Self::derive_pda(kingdom_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -122,6 +157,10 @@ impl GameEngine {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if loaded.kingdom_id != kingdom_id {
+            return Err(crate::error::GameError::InvalidKingdomId.into());
+        }
+
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
 
@@ -129,13 +168,14 @@ impl GameEngine {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
+        kingdom_id: u16,
         program_id: &Pubkey,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
         if account.owner() != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda();
+        let (expected_pda, bump) = Self::derive_pda(kingdom_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -143,6 +183,63 @@ impl GameEngine {
         let mut data = account.try_borrow_mut_data()?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if loaded.kingdom_id != kingdom_id {
+            return Err(crate::error::GameError::InvalidKingdomId.into());
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Load GameEngine by verifying against its stored kingdom_id
+    /// Use when you have the account but not the kingdom_id upfront
+    pub fn load_checked_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // Verify PDA matches stored kingdom_id
+        let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load GameEngine mutably by verifying against its stored kingdom_id
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // Verify PDA matches stored kingdom_id
+        let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
+        if account.key() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
 
         if loaded.bump != bump {
             return Err(ProgramError::InvalidSeeds);
@@ -156,11 +253,27 @@ impl GameEngine {
         account: &AccountInfo,
         engine_data: &GameEngine,
     ) -> ProgramResult {
-        let expected_address = Self::create_pda(engine_data.bump)?;
+        let expected_address = Self::create_pda(engine_data.kingdom_id, engine_data.bump)?;
         if account.key() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
+    }
+
+    /// Check if kingdom registration is currently open
+    pub fn is_registration_open(&self, now: i64) -> bool {
+        if !self.registration_open {
+            return false;
+        }
+        if self.registration_closes_at > 0 && now >= self.registration_closes_at {
+            return false;
+        }
+        true
+    }
+
+    /// Check if kingdom gameplay has started
+    pub fn has_started(&self, now: i64) -> bool {
+        now >= self.kingdom_start_time
     }
 
 }
@@ -525,6 +638,152 @@ impl ThemeMultipliers {
             defense_multiplier: 1000,
             collection_multiplier: 1000,
             encounter_health_multiplier: 1000,
+        }
+    }
+}
+
+/// NOVI Purchase System Configuration
+/// All fields are DAO-adjustable to tune the economy
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct NoviPurchaseConfig {
+    // === Pricing (10 bytes) ===
+    /// Base price per NOVI in lamports (e.g., 100_000 = 0.0001 SOL per NOVI)
+    /// Used as FALLBACK when oracle is not available
+    pub novi_base_price_lamports: u64,
+    /// Market undercut in basis points (e.g., 1500 = 15% below market when oracle used)
+    pub novi_market_undercut_bps: u16,
+
+    // === Fixed Purchase Packages - 5 tiers (40 bytes) ===
+    /// Users can ONLY purchase these exact amounts (with 1 decimal, e.g., 5000 = 500 NOVI)
+    /// [500, 1000, 5000, 10000, 25000] NOVI
+    pub novi_purchase_amounts: [u64; 5],
+
+    // === Bulk Bonus per Package (10 bytes) ===
+    /// Bonus in basis points for each package tier
+    /// e.g., [300, 500, 800, 1200, 1500] = [3%, 5%, 8%, 12%, 15%]
+    pub novi_bulk_bonus_bps: [u16; 5],
+
+    // === Subscription Bonuses - 4 tiers (8 bytes) ===
+    /// Additional bonus based on subscription tier
+    /// e.g., [0, 400, 800, 1200] = [0%, 4%, 8%, 12%] for Rookie/Expert/Epic/Legendary
+    pub novi_sub_bonus_bps: [u16; 4],
+
+    // === Subscription Daily Caps - 4 tiers (32 bytes) ===
+    /// Maximum NOVI purchasable per day by subscription tier (with 1 decimal)
+    /// e.g., [100_000, 500_000, 2_000_000, 20_000_000] = [10k, 50k, 200k, 2M] NOVI
+    pub novi_sub_daily_cap: [u64; 4],
+
+    // === Streak Bonuses - 7 days (14 bytes) ===
+    /// Bonus for consecutive daily purchases (days 1-7)
+    /// e.g., [0, 100, 200, 300, 500, 700, 1000] = [0%, 1%, 2%, 3%, 5%, 7%, 10%]
+    pub novi_streak_bonus_bps: [u16; 7],
+
+    // === Oracle Configuration (72 bytes) ===
+    /// Pyth NOVI/USD price feed (Pubkey::default() = not configured)
+    pub novi_pyth_feed: Pubkey,
+    /// Switchboard NOVI/USD price feed (Pubkey::default() = not configured)
+    pub novi_switchboard_feed: Pubkey,
+    /// Max staleness in slots before oracle price is rejected
+    pub novi_max_staleness_slots: u16,
+    /// Max confidence interval for Pyth (basis points)
+    pub novi_confidence_threshold_bps: u16,
+
+    // === Padding for alignment (4 bytes) ===
+    pub _padding: [u8; 4],
+}
+
+impl NoviPurchaseConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            // 0.0001 SOL per NOVI (adjustable by DAO) - FALLBACK when no oracle
+            novi_base_price_lamports: 100_000,
+            // 15% undercut when oracle is used
+            novi_market_undercut_bps: 1500,
+
+            // Fixed purchase packages: 500, 1k, 5k, 10k, 25k NOVI (with 1 decimal)
+            novi_purchase_amounts: [5_000, 10_000, 50_000, 100_000, 250_000],
+
+            // Bulk bonuses: 3%, 5%, 8%, 12%, 15%
+            novi_bulk_bonus_bps: [300, 500, 800, 1200, 1500],
+
+            // Subscription bonuses: 0%, 4%, 8%, 12% for Rookie/Expert/Epic/Legendary
+            novi_sub_bonus_bps: [0, 400, 800, 1200],
+
+            // Daily caps: 10k, 50k, 200k, 2M NOVI (with 1 decimal)
+            novi_sub_daily_cap: [100_000, 500_000, 2_000_000, 20_000_000],
+
+            // Streak bonuses: 0%, 1%, 2%, 3%, 5%, 7%, 10% for days 1-7
+            novi_streak_bonus_bps: [0, 100, 200, 300, 500, 700, 1000],
+
+            // Oracle config - default to not configured (NULL_PUBKEY)
+            // DAO sets these when oracle feeds become available
+            novi_pyth_feed: NULL_PUBKEY,
+            novi_switchboard_feed: NULL_PUBKEY,
+            novi_max_staleness_slots: 30,           // ~12 seconds at 400ms slots
+            novi_confidence_threshold_bps: 500,     // 5% max confidence interval
+
+            _padding: [0; 4],
+        }
+    }
+
+    /// Check if Pyth oracle is configured
+    pub fn has_pyth_oracle(&self) -> bool {
+        self.novi_pyth_feed != NULL_PUBKEY
+    }
+
+    /// Check if Switchboard oracle is configured
+    pub fn has_switchboard_oracle(&self) -> bool {
+        self.novi_switchboard_feed != NULL_PUBKEY
+    }
+
+    /// Check if any oracle is configured
+    pub fn has_oracle(&self) -> bool {
+        self.has_pyth_oracle() || self.has_switchboard_oracle()
+    }
+
+    /// Calculate total bonus in basis points
+    pub fn calculate_total_bonus_bps(
+        &self,
+        package_index: u8,
+        subscription_tier: u8,
+        streak_day: u16,
+    ) -> u32 {
+        let bulk_bonus = if (package_index as usize) < 5 {
+            self.novi_bulk_bonus_bps[package_index as usize] as u32
+        } else {
+            0
+        };
+
+        let sub_bonus = if (subscription_tier as usize) < 4 {
+            self.novi_sub_bonus_bps[subscription_tier as usize] as u32
+        } else {
+            0
+        };
+
+        let streak_index = (streak_day.saturating_sub(1) as usize).min(6);
+        let streak_bonus = self.novi_streak_bonus_bps[streak_index] as u32;
+
+        bulk_bonus + sub_bonus + streak_bonus
+    }
+
+    /// Get daily cap for a subscription tier
+    pub fn get_daily_cap(&self, subscription_tier: u8) -> u64 {
+        if (subscription_tier as usize) < 4 {
+            self.novi_sub_daily_cap[subscription_tier as usize]
+        } else {
+            self.novi_sub_daily_cap[3] // Default to highest tier
+        }
+    }
+
+    /// Get purchase amount for a package index
+    pub fn get_purchase_amount(&self, package_index: u8) -> Option<u64> {
+        if (package_index as usize) < 5 {
+            Some(self.novi_purchase_amounts[package_index as usize])
+        } else {
+            None
         }
     }
 }

@@ -15,9 +15,13 @@ impl LeaderboardEntry {
 }
 
 /// Event account with top-10 leaderboard
+/// KINGDOM-SCOPED: Each kingdom has its own events and leaderboards
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EventAccount {
+    /// Kingdom this event belongs to
+    pub game_engine: Pubkey,                    // 32 bytes
+
     pub id: u64,                                // 8 bytes
     pub name: [u8; 64],                         // 64 bytes
     pub name_len: u8,                           // 1 byte
@@ -88,21 +92,21 @@ impl EventAccount {
     }
 
     /// Derive PDA for an event account
-    /// Seeds: [EVENT_SEED, event_id]
-    pub fn derive_pda(event_id: u64) -> (Pubkey, u8) {
+    /// Seeds: [EVENT_SEED, game_engine, event_id]
+    pub fn derive_pda(game_engine: &Pubkey, event_id: u64) -> (Pubkey, u8) {
         let event_id_bytes = event_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[EVENT_SEED, &event_id_bytes],
+            &[EVENT_SEED, game_engine.as_ref(), &event_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(event_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, event_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
         let event_id_bytes = event_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[EVENT_SEED, &event_id_bytes, &bump_seed],
+            &[EVENT_SEED, game_engine.as_ref(), &event_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -110,6 +114,7 @@ impl EventAccount {
     /// Load and verify an EventAccount immutably.
     pub fn load_checked<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         event_id: u64,
         program_id: &Pubkey,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
@@ -117,7 +122,7 @@ impl EventAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(event_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -130,12 +135,17 @@ impl EventAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
 
     /// Load and verify an EventAccount mutably.
     pub fn load_checked_mut<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         event_id: u64,
         program_id: &Pubkey,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
@@ -143,7 +153,7 @@ impl EventAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(event_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -156,17 +166,27 @@ impl EventAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Check if event belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 }
 
 /// Event participation tracking (PDA per player per event)
-/// PDA: ["event_participation", event_id_bytes, player_owner]
+/// PDA: ["event_participation", game_engine, event_id_bytes, player_owner]
 ///
 /// NOTE: This account is CLOSED after claiming prize (rent refunded to winner)
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EventParticipation {
+    pub game_engine: Pubkey,                    // 32 bytes - Kingdom reference
     pub event_id: u64,                          // 8 bytes
     pub player: Pubkey,                         // 32 bytes
     pub score: u64,                             // 8 bytes
@@ -188,8 +208,9 @@ impl EventParticipation {
     }
 
     /// Initialize new participation
-    pub fn new(event_id: u64, player: Pubkey, joined_at: i64, bump: u8) -> Self {
+    pub fn new(game_engine: Pubkey, event_id: u64, player: Pubkey, joined_at: i64, bump: u8) -> Self {
         Self {
+            game_engine,
             event_id,
             player,
             score: 0,
@@ -201,21 +222,21 @@ impl EventParticipation {
     }
 
     /// Derive PDA for event participation
-    /// Seeds: [EVENT_PARTICIPATION_SEED, event_id, player_owner]
-    pub fn derive_pda(event_id: u64, player_owner: &Pubkey) -> (Pubkey, u8) {
+    /// Seeds: [EVENT_PARTICIPATION_SEED, game_engine, event_id, player_owner]
+    pub fn derive_pda(game_engine: &Pubkey, event_id: u64, player_owner: &Pubkey) -> (Pubkey, u8) {
         let event_id_bytes = event_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[EVENT_PARTICIPATION_SEED, &event_id_bytes, player_owner.as_ref()],
+            &[EVENT_PARTICIPATION_SEED, game_engine.as_ref(), &event_id_bytes, player_owner.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(event_id: u64, player_owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, event_id: u64, player_owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
         let event_id_bytes = event_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[EVENT_PARTICIPATION_SEED, &event_id_bytes, player_owner.as_ref(), &bump_seed],
+            &[EVENT_PARTICIPATION_SEED, game_engine.as_ref(), &event_id_bytes, player_owner.as_ref(), &bump_seed],
             &crate::ID,
         )
     }
@@ -223,6 +244,7 @@ impl EventParticipation {
     /// Load and verify an EventParticipation immutably.
     pub fn load_checked<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         event_id: u64,
         player_owner: &Pubkey,
         program_id: &Pubkey,
@@ -231,7 +253,7 @@ impl EventParticipation {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(event_id, player_owner);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id, player_owner);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -250,6 +272,7 @@ impl EventParticipation {
     /// Load and verify an EventParticipation mutably.
     pub fn load_checked_mut<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         event_id: u64,
         player_owner: &Pubkey,
         program_id: &Pubkey,
@@ -258,7 +281,7 @@ impl EventParticipation {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(event_id, player_owner);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id, player_owner);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }

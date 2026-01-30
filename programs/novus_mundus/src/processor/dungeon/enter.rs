@@ -84,8 +84,11 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load and validate player using load_checked_mut
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    // 4. Load and validate player using load_checked_mut_by_key (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 5. Validate dungeon run doesn't already exist
     // (account should have 0 lamports if not created)

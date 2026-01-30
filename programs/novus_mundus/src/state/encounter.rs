@@ -3,6 +3,7 @@ use pinocchio::program_error::ProgramError;
 use crate::constants::ENCOUNTER_SEED;
 
 /// Encounter account with dynamic attacker list
+/// KINGDOM-SCOPED: Encounters exist within a kingdom
 ///
 /// Memory layout:
 /// - Fixed header (EncounterAccount struct)
@@ -18,6 +19,7 @@ use crate::constants::ENCOUNTER_SEED;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EncounterAccount {
+    pub game_engine: Pubkey,                    // 32 bytes - Kingdom this encounter belongs to
     pub id: u64,                                // 8 bytes
     pub city_id: u16,                           // 2 bytes - Which city the encounter is in
     pub level: u8,                              // 1 byte - Encounter level (1-100)
@@ -59,23 +61,23 @@ impl EncounterAccount {
     }
 
     /// Derive PDA for an encounter account
-    /// Seeds: [ENCOUNTER_SEED, city_id, encounter_id]
-    pub fn derive_pda(city_id: u16, encounter_id: u64) -> (Pubkey, u8) {
+    /// Seeds: [ENCOUNTER_SEED, game_engine, city_id, encounter_id]
+    pub fn derive_pda(game_engine: &Pubkey, city_id: u16, encounter_id: u64) -> (Pubkey, u8) {
         let city_id_bytes = city_id.to_le_bytes();
         let encounter_id_bytes = encounter_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes],
+            &[ENCOUNTER_SEED, game_engine.as_ref(), &city_id_bytes, &encounter_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(city_id: u16, encounter_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, city_id: u16, encounter_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let encounter_id_bytes = encounter_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes, &bump_seed],
+            &[ENCOUNTER_SEED, game_engine.as_ref(), &city_id_bytes, &encounter_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -84,6 +86,7 @@ impl EncounterAccount {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         city_id: u16,
         encounter_id: u64,
         program_id: &Pubkey,
@@ -92,7 +95,7 @@ impl EncounterAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(city_id, encounter_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, encounter_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -105,6 +108,10 @@ impl EncounterAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
 
@@ -112,6 +119,7 @@ impl EncounterAccount {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked_mut<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        game_engine: &Pubkey,
         city_id: u16,
         encounter_id: u64,
         program_id: &Pubkey,
@@ -120,7 +128,7 @@ impl EncounterAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(city_id, encounter_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, encounter_id);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -133,7 +141,16 @@ impl EncounterAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Check if encounter belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     /// Get immutable slice of attackers from account data

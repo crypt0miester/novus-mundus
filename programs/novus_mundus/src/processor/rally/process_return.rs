@@ -153,7 +153,7 @@ pub fn process(
         require_owner(home_city_account, program_id)?;
         let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
         let home_city_data = unsafe { CityAccount::load(home_city_account)? };
-        let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
         // Validate city accounts match
         if rally_city_data.city_id != rally_city {
@@ -218,11 +218,14 @@ pub fn process(
         // If return_duration == 0 (exactly at home), continue processing
     }
 
-    // 9. Load PlayerAccount (using load_checked_mut with participant_owner validated above)
-    let mut player = PlayerAccount::load_checked_mut(player_account, participant_owner.key(), program_id)?;
+    // 9. Load PlayerAccount (using by_key, participant_owner already validated above)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    if &player.owner != participant_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
-    // 10. Load GameEngine for networth calculation
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // 10. Load GameEngine for networth calculation (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Track data for event
     let (units_returned, loot_received): ([u64; 3], u64);

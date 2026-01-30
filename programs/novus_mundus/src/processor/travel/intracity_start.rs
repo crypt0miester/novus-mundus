@@ -102,14 +102,13 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 5. Load Accounts
+    // 5. Load Accounts (kingdom-scoped)
 
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     require_owner(current_city_account, program_id)?;
     let city_data = unsafe { CityAccount::load_mut(current_city_account)? };
-
-    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
 
     // 7. Validate Not Already Traveling
 

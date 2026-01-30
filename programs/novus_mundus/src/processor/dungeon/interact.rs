@@ -75,8 +75,8 @@ pub fn process(
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
 
-    // 3. Validate game_authority against GameEngine
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // 3. Validate game_authority against GameEngine (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     if game_authority.key() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
@@ -94,8 +94,8 @@ pub fn process(
         (0, 0)
     };
 
-    // 5. Load player using load_checked
-    let player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
+    // 5. Load player using load_checked (kingdom-scoped)
+    let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     // 6. Load dungeon run using load_checked_mut (PDA derived from player_account)
     let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;

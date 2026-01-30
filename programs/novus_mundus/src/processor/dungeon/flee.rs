@@ -61,8 +61,11 @@ pub fn process(
     require_writable(dungeon_run_account)?;
     require_writable(hero_mint)?;
 
-    // 3. Load player using load_checked_mut
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
+    // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 4. Load dungeon run using load_checked (PDA derived from player_account)
     let (_, run_bump) = DungeonRun::derive_pda(player_account.key());

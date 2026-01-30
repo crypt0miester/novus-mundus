@@ -199,7 +199,7 @@ pub fn process(
     // Create PDA signer for GameEngine (mint authority)
     let bump_seed = [game_engine_data.bump];
     let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::instruction::Signer::from(&seeds);
 
     // Mint tokens to user's reserved token account (increases total supply)
     crate::helpers::mint_tokens(

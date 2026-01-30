@@ -83,13 +83,10 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 6 {
+    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
+    if instruction_data.len() < 2 {
         return Err(ProgramError::InvalidInstructionData);
     }
-
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
 
     // Load player
     require_owner(player_account, program_id)?;
@@ -100,8 +97,8 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // Load castle (immutable)
-    let castle = CastleAccount::load_checked(castle_account, city_id, castle_id, program_id)?;
+    // Load castle (immutable, kingdom-scoped)
+    let castle = CastleAccount::load_checked_by_key(castle_account, program_id)?;
 
     // Get castle tier
     let tier = CastleTier::from_u8(castle.tier).ok_or(GameError::InvalidCastleTier)?;
@@ -218,12 +215,13 @@ pub fn process(
         days,
     );
 
-    // Load game engine for mint authority
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // Load game engine for mint authority (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Create GameEngine PDA signer for minting
     let ge_bump_seed = [game_engine.bump];
-    let ge_seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &ge_bump_seed);
+    let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
+    let ge_seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
     let ge_signer = pinocchio::instruction::Signer::from(&ge_seeds);
 
     // Mint NOVI tokens based on tier

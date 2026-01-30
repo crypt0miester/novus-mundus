@@ -66,8 +66,11 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 4. Load Player and validate ownership
-    let player = PlayerAccount::load_checked(player_account, player_owner.key(), program_id)?;
+    // 4. Load Player and validate ownership (using by_key for kingdom scoping)
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
+    if &player.owner != player_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
     drop(player);
 
     // 5. Load Rally and validate state
@@ -120,7 +123,7 @@ pub fn process(
     require_owner(home_city_account, program_id)?;
     let rally_city_data = unsafe { CityAccount::load(rally_city_account)? };
     let home_city_data = unsafe { CityAccount::load(home_city_account)? };
-    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Validate city accounts match
     if rally_city_data.city_id != rally_city {

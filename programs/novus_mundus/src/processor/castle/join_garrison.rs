@@ -65,20 +65,18 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 55 {
+    // Parse instruction data (city_id/castle_id from account)
+    if instruction_data.len() < 51 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
-    let units_1 = u64::from_le_bytes(instruction_data[6..14].try_into().unwrap());
-    let units_2 = u64::from_le_bytes(instruction_data[14..22].try_into().unwrap());
-    let units_3 = u64::from_le_bytes(instruction_data[22..30].try_into().unwrap());
-    let melee = u64::from_le_bytes(instruction_data[30..38].try_into().unwrap());
-    let ranged = u64::from_le_bytes(instruction_data[38..46].try_into().unwrap());
-    let siege = u64::from_le_bytes(instruction_data[46..54].try_into().unwrap());
-    let hero_slot = instruction_data[54];
+    let units_1 = u64::from_le_bytes(instruction_data[2..10].try_into().unwrap());
+    let units_2 = u64::from_le_bytes(instruction_data[10..18].try_into().unwrap());
+    let units_3 = u64::from_le_bytes(instruction_data[18..26].try_into().unwrap());
+    let melee = u64::from_le_bytes(instruction_data[26..34].try_into().unwrap());
+    let ranged = u64::from_le_bytes(instruction_data[34..42].try_into().unwrap());
+    let siege = u64::from_le_bytes(instruction_data[42..50].try_into().unwrap());
+    let hero_slot = instruction_data[50];
 
     // Load player
     require_owner(player_account, program_id)?;
@@ -90,7 +88,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle tier supports garrison
     if castle.max_garrison == 0 {

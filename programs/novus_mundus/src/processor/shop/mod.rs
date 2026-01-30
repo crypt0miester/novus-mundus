@@ -3,6 +3,7 @@ pub mod create_item;
 pub mod create_bundle;
 pub mod purchase_item;
 pub mod purchase_bundle;
+pub mod purchase_novi;
 pub mod create_flash_sale;
 pub mod purchase_flash_sale;
 pub mod close_sale;

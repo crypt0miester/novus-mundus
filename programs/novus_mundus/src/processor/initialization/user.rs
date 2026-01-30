@@ -8,7 +8,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::USER_SEED,
-    state::{UserAccount, PlayerAccount, GameEngine},
+    state::{UserAccount, GameEngine},
     validation::{require_signer, require_writable, require_key_match, derive_pda},
     token_helpers::get_or_create_associated_token_account,
     emit,
@@ -135,11 +135,14 @@ pub fn process(
         UserAccount::load_mut(&mut user_data_ref)
     };
 
-    // Derive player PDA from owner (deterministic)
-    let (player_pda, _) = PlayerAccount::derive_pda(owner.key());
+    // In multi-kingdom, player accounts are per-kingdom.
+    // UserAccount.player is set to NULL_PUBKEY initially.
+    // It gets populated when the user creates a player in a specific kingdom.
+    use crate::NULL_PUBKEY;
 
     // Initialize with default values (free tier subscription)
-    *user_data = UserAccount::init(*owner.key(), player_pda, bump);
+    // player field starts as NULL_PUBKEY - will be set when player joins a kingdom
+    *user_data = UserAccount::init(*owner.key(), NULL_PUBKEY, bump);
 
     // 7. Create User's NOVI Token Account (ATA)
 

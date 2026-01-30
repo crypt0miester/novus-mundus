@@ -31,8 +31,6 @@ pub struct CreateCollectionV1<'a> {
     pub name: &'a [u8],
     /// URI of the collection (max 200 bytes)
     pub uri: &'a [u8],
-    /// Maximum number of items in the collection (0 = unlimited)
-    pub max_size: u32,
 }
 
 impl CreateCollectionV1<'_> {
@@ -85,20 +83,7 @@ impl CreateCollectionV1<'_> {
         write_bytes(&mut instruction_data[offset..offset+uri_len], &self.uri[..uri_len]);
         offset += uri_len;
 
-        // Write max_size as Option<u32>
-        if self.max_size > 0 {
-            // Some
-            write_bytes(&mut instruction_data[offset..offset+1], &[1]);
-            offset += 1;
-            write_bytes(&mut instruction_data[offset..offset+4], &self.max_size.to_le_bytes());
-            offset += 4;
-        } else {
-            // None (unlimited)
-            write_bytes(&mut instruction_data[offset..offset+1], &[0]);
-            offset += 1;
-        }
-
-        // Write None for plugins (Option discriminator 0)
+        // Write None for plugins (Option<Vec<PluginAuthorityPair>> = None)
         write_bytes(&mut instruction_data[offset..offset+1], &[0]);
         offset += 1;
 

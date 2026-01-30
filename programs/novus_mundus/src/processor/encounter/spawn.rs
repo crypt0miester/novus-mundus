@@ -362,6 +362,7 @@ pub fn process(
         .min(9000); // Cap at 90% reduction to keep encounters beatable
 
     *encounter_data = EncounterAccount {
+        game_engine: *game_engine_account.key(),
         id: encounter_id,
         city_id: city_data.city_id,
         level: encounter_level,                 // NEW

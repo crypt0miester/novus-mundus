@@ -68,10 +68,21 @@ pub fn process(
     require_writable(request_account)?;
     require_writable(requester_refund)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let rejecter = PlayerAccount::load_checked(rejecter_account, rejecter_owner.key(), program_id)?;
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    let rejecter = PlayerAccount::load_checked_by_key(rejecter_account, program_id)?;
+    if &rejecter.owner != rejecter_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom
+    if rejecter.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM
     require_extension(&*rejecter, EXT_TEAM)?;

@@ -86,10 +86,13 @@ pub fn process(
         return Err(GameError::NotOnTeam.into());
     }
 
+    // Get kingdom from player (for PDA derivation)
+    let player_game_engine = player.game_engine;
+
     // Load castle
     require_owner(castle_account, program_id)?;
 
-    let (expected_castle_pda, _castle_bump) = CastleAccount::derive_pda(city_id, castle_id);
+    let (expected_castle_pda, _castle_bump) = CastleAccount::derive_pda(&player_game_engine, city_id, castle_id);
     if castle_account.key() != &expected_castle_pda {
         return Err(GameError::InvalidPDA.into());
     }

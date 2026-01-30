@@ -5,15 +5,17 @@ use crate::constants::{TEAM_SEED, TEAM_SLOT_SEED, TEAM_INVITE_SEED};
 use crate::error::GameError;
 
 // ============================================================
-// TEAM ACCOUNT (240 bytes)
+// TEAM ACCOUNT (272 bytes)
 // ============================================================
 
 /// Team account - stores team metadata and configuration.
 /// Members are stored in separate TeamMemberSlot PDAs.
+/// KINGDOM-SCOPED: Teams exist within a single kingdom
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamAccount {
-    // === IDENTITY (48 bytes - aligned to 8) ===
+    // === KINGDOM & IDENTITY (80 bytes) ===
+    pub game_engine: Pubkey,        // 32 - Kingdom this team belongs to
     pub id: u64,                    // 8 - Unique team ID (for PDA derivation)
     pub leader: Pubkey,             // 32 - Team leader's player account pubkey
     pub bump: u8,                   // 1 - PDA bump seed
@@ -184,21 +186,21 @@ impl TeamAccount {
     }
 
     /// Derive PDA for a team account
-    /// Seeds: [TEAM_SEED, team_id]
-    pub fn derive_pda(team_id: u64) -> (Pubkey, u8) {
+    /// Seeds: [TEAM_SEED, game_engine, team_id]
+    pub fn derive_pda(game_engine: &Pubkey, team_id: u64) -> (Pubkey, u8) {
         let team_id_bytes = team_id.to_le_bytes();
         pinocchio::pubkey::find_program_address(
-            &[TEAM_SEED, &team_id_bytes],
+            &[TEAM_SEED, game_engine.as_ref(), &team_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(team_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Pubkey, team_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
         let team_id_bytes = team_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[TEAM_SEED, &team_id_bytes, &bump_seed],
+            &[TEAM_SEED, game_engine.as_ref(), &team_id_bytes, &bump_seed],
             &crate::ID,
         )
     }
@@ -207,6 +209,7 @@ impl TeamAccount {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         team_id: u64,
         program_id: &Pubkey,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
@@ -214,7 +217,7 @@ impl TeamAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(team_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, team_id);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -227,6 +230,10 @@ impl TeamAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
 
@@ -234,6 +241,7 @@ impl TeamAccount {
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked_mut<'a>(
         account: &'a AccountInfo,
+        game_engine: &Pubkey,
         team_id: u64,
         program_id: &Pubkey,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
@@ -241,7 +249,7 @@ impl TeamAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(team_id);
+        let (expected_pda, bump) = Self::derive_pda(game_engine, team_id);
         if account.key() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
@@ -254,7 +262,72 @@ impl TeamAccount {
             return Err(ProgramError::InvalidSeeds);
         }
 
+        if &loaded.game_engine != game_engine {
+            return Err(GameError::KingdomMismatch.into());
+        }
+
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Load and verify a TeamAccount by key immutably.
+    /// Uses stored game_engine to validate PDA derivation.
+    /// For use when game_engine is not passed in accounts.
+    pub fn load_checked_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let data = account.try_borrow_data()?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+
+        // Use stored game_engine and id to re-derive and validate PDA
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.id);
+        if account.key() != &expected_pda {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
+    /// Load and verify a TeamAccount by key mutably.
+    /// Uses stored game_engine to validate PDA derivation.
+    /// For use when game_engine is not passed in accounts.
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a AccountInfo,
+        program_id: &Pubkey,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if account.owner() != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        let mut data = account.try_borrow_mut_data()?;
+        let ptr = data.as_mut_ptr() as *mut Self;
+        let loaded = unsafe { &*ptr };
+
+        // Use stored game_engine and id to re-derive and validate PDA
+        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.id);
+        if account.key() != &expected_pda {
+            return Err(GameError::InvalidPDA.into());
+        }
+
+        if loaded.bump != bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Check if team belongs to a specific kingdom
+    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+        &self.game_engine == game_engine
     }
 
     /// Get name as &str
@@ -291,6 +364,7 @@ impl TeamAccount {
 
     /// Initialize a new team
     pub fn init(
+        game_engine: Pubkey,
         id: u64,
         leader: Pubkey,
         bump: u8,
@@ -299,6 +373,7 @@ impl TeamAccount {
         created_at: i64,
     ) -> Self {
         let mut team = Self {
+            game_engine,
             id,
             leader,
             bump,
@@ -336,7 +411,7 @@ impl TeamAccount {
 }
 
 // Compile-time size assertion
-const _: [(); 240] = [(); core::mem::size_of::<TeamAccount>()];
+const _: [(); 272] = [(); core::mem::size_of::<TeamAccount>()];
 
 // ============================================================
 // TEAM MEMBER SLOT (96 bytes)

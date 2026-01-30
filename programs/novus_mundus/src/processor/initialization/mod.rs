@@ -7,3 +7,5 @@ pub mod game_engine;
 pub mod player;
 pub mod user;
 pub mod city;
+pub mod close_registration;
+pub mod batch_cities;

@@ -116,9 +116,9 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load and verify accounts
-    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 4. Load and verify accounts (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Calculate total cost with DAO multiplier
@@ -235,17 +235,19 @@ pub fn process(
     // 10. Update event scores if player is participating (only if locked Novi used)
     if !pay_with_cash {
         if let (Some(event_participation), Some(event)) = (event_participation, event) {
-            // Load event participation with ownership validation
+            // Load event participation with ownership validation (kingdom-scoped)
             let mut participation = crate::state::EventParticipation::load_checked_mut(
                 event_participation,
+                game_engine.key(),
                 player_data.current_event,
                 owner.key(),
                 program_id,
             )?;
 
-            // Load event with ownership validation
+            // Load event with ownership validation (kingdom-scoped)
             let mut event_data = crate::state::EventAccount::load_checked_mut(
                 event,
+                game_engine.key(),
                 player_data.current_event,
                 program_id,
             )?;

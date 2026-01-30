@@ -63,8 +63,11 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 4. Load and validate creator
-    let creator = PlayerAccount::load_checked(creator_player, creator_owner.key(), program_id)?;
+    // 4. Load and validate creator (using by_key for kingdom scoping)
+    let creator = PlayerAccount::load_checked_by_key(creator_player, program_id)?;
+    if &creator.owner != creator_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // Require EXT_RALLY
     require_extension(&*creator, EXT_RALLY)?;
@@ -123,7 +126,7 @@ pub fn process(
 
     // Re-borrow creator player to get their home coordinates
     // Already validated ownership above, just re-load
-    let creator_data = PlayerAccount::load_checked(creator_player, creator_owner.key(), program_id)?;
+    let creator_data = PlayerAccount::load_checked_by_key(creator_player, program_id)?;
     let home_lat = creator_data.current_lat;
     let home_long = creator_data.current_long;
     drop(creator_data);

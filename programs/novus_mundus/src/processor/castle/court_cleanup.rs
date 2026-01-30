@@ -58,14 +58,12 @@ pub fn process(
     let holder_account = &accounts[3];
     let rent_recipient = &accounts[4];
 
-    // Parse instruction data
-    if instruction_data.len() < 7 {
+    // Parse instruction data (city_id/castle_id from account)
+    if instruction_data.len() < 3 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
-    let position = instruction_data[6];
+    let position = instruction_data[2];
 
     // Validate position (0-4 for 5 court position types)
     if position > 4 {
@@ -73,7 +71,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {

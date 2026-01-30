@@ -116,10 +116,10 @@ pub fn process(
         name[..copy_len].copy_from_slice(&instruction_data[19..19 + copy_len]);
     }
 
-    // Derive PDA
+    // Derive PDA (kingdom-scoped)
     let city_id_bytes = city_id.to_le_bytes();
     let castle_id_bytes = castle_id.to_le_bytes();
-    let (expected_pda, bump) = CastleAccount::derive_pda(city_id, castle_id);
+    let (expected_pda, bump) = CastleAccount::derive_pda(game_engine_account.key(), city_id, castle_id);
 
     if castle_account.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -135,6 +135,7 @@ pub fn process(
     let bump_seed = [bump];
     let seeds = pinocchio::seeds!(
         CASTLE_SEED,
+        game_engine_account.key().as_ref(),
         &city_id_bytes,
         &castle_id_bytes,
         &bump_seed

@@ -99,8 +99,11 @@ pub fn process_attacks(
     let double_strike_triggered = data.get(1).map(|&b| b == 1).unwrap_or(false);
     let crit_triggered = data.get(2).map(|&b| b == 1).unwrap_or(false);
 
-    // 4. Load and validate player using load_checked
-    let player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
+    // 4. Load and validate player using load_checked_by_key (kingdom-scoped)
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 5. Load and validate dungeon run using load_checked_mut (PDA derived from player_account)
     let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;

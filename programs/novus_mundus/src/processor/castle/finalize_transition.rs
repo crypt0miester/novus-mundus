@@ -69,7 +69,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {

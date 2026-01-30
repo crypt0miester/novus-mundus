@@ -99,17 +99,17 @@ pub fn process(
 
     let collection_type = CollectionType::try_from(data[8])?;
 
-    // 4. Load and verify player/user accounts (PDA + ownership + bump in one call)
-    let mut player_data = PlayerAccount::load_checked_mut(player, owner.key(), program_id)?;
+    // 4. Load GameEngine for config (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+
+    // 5. Load and verify player/user accounts (PDA + ownership + bump in one call)
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
     let mut user_data = UserAccount::load_checked_mut(user, owner.key(), program_id)?;
 
     // Validate player not traveling (can't collect while traveling)
     if player_data.is_traveling_any() {
         return Err(GameError::PlayerTraveling.into());
     }
-
-    // Load GameEngine for config
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Validate sufficient locked Novi
@@ -480,17 +480,19 @@ pub fn process(
 
     // 14. Update event scores if player is participating in an event
     if let (Some(event_participation), Some(event)) = (event_participation, event) {
-        // Load event participation with ownership validation
+        // Load event participation with ownership validation (kingdom-scoped)
         let mut participation = crate::state::EventParticipation::load_checked_mut(
             event_participation,
+            game_engine.key(),
             player_data.current_event,
             owner.key(),
             program_id,
         )?;
 
-        // Load event with ownership validation
+        // Load event with ownership validation (kingdom-scoped)
         let mut event_data = crate::state::EventAccount::load_checked_mut(
             event,
+            game_engine.key(),
             player_data.current_event,
             program_id,
         )?;

@@ -67,18 +67,29 @@ pub fn process(
     require_writable(new_leader_slot_account)?;
     require_writable(team_account)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    // Current leader: use load_checked (read-only, has signer)
-    let current_leader = PlayerAccount::load_checked(current_leader_account, current_leader_owner.key(), program_id)?;
+    // Current leader: use load_checked_by_key (read-only, has signer)
+    let current_leader = PlayerAccount::load_checked_by_key(current_leader_account, program_id)?;
+    if &current_leader.owner != current_leader_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // New leader: manual load (we don't have new leader's wallet key)
     require_owner(new_leader_account, program_id)?;
     let new_leader_data_ref = new_leader_account.try_borrow_data()?;
     let new_leader = unsafe { PlayerAccount::load(&new_leader_data_ref) };
 
-    // Team: use load_checked_mut
-    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
+    // Team: use load_checked_mut_by_key
+    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom
+    if current_leader.game_engine != team.game_engine || new_leader.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM for current leader
     require_extension(&*current_leader, EXT_TEAM)?;

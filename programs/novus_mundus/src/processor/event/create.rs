@@ -1,6 +1,6 @@
 use pinocchio::{
     ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address},
-    sysvars::{Sysvar, clock::Clock}
+    sysvars::Sysvar,
 };
 use pinocchio_system::instructions::CreateAccount;
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     types::{EventType, PrizeType},
     validation::{require_signer, require_writable, require_key_match},
     emit,
-    events::game_event::GameEventCreated,
+    events::KingdomEventCreated,
 };
 
 /// Create a new event (DAO only)
@@ -178,14 +178,15 @@ pub fn process(
         };
     }
 
-    // Emit event
-    emit!(GameEventCreated {
-        event: *event_account.key(),
+    // Emit KingdomEventCreated event
+    emit!(KingdomEventCreated {
+        kingdom_id: game_engine_data.kingdom_id,
+        game_engine: *game_engine_account.key(),
+        event_id,
         event_type,
         start_time,
         end_time,
         prize_pool: prize_amount,
-        timestamp: Clock::get()?.unix_timestamp,
     });
 
     Ok(())

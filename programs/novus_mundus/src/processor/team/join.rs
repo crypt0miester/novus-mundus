@@ -69,12 +69,25 @@ pub fn process(
     require_writable(member_slot_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping validation)
 
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
-    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    // Verify owner matches
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    // Verify team_id matches
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
 
-    // 4a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
+    // 4a. Verify same kingdom (player and team must be in same kingdom)
+    if player.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
+
+    // 4b. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
     require_extension(&*player, EXT_RALLY)?;
 
     // 4b. Unlock EXT_TEAM extension if not already unlocked

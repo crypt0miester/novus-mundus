@@ -177,8 +177,8 @@ pub fn process(
         return Err(GameError::InvalidTeam.into());
     }
 
-    // 7a. Load team and check disbanded
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    // 7a. Load team and check disbanded (kingdom-scoped)
+    let team = TeamAccount::load_checked(team_account, game_engine.key(), team_id, program_id)?;
     if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
@@ -315,8 +315,9 @@ pub fn process(
 
     let arrives_at = now + travel_duration as i64;
 
-    // 14. Verify and Create ReinforcementAccount PDA
+    // 14. Verify and Create ReinforcementAccount PDA (kingdom-scoped)
     let (expected_pda, bump) = ReinforcementAccount::derive_player_pda(
+        game_engine.key(),
         sender_owner.key(),
         &dest_owner,
     );
@@ -355,6 +356,7 @@ pub fn process(
     let bump_seed = [bump];
     let seeds = pinocchio::seeds!(
         REINFORCEMENT_SEED,
+        game_engine.key().as_ref(),
         sender_owner.key().as_ref(),
         dest_owner.as_ref(),
         &bump_seed
@@ -372,6 +374,9 @@ pub fn process(
     // 17. Initialize Reinforcement Account
     let mut reinf_data_ref = reinforcement_account.try_borrow_mut_data()?;
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
+
+    // Kingdom reference
+    reinf.game_engine = *game_engine.key();
 
     // Identity
     reinf.sender = *sender_owner.key();

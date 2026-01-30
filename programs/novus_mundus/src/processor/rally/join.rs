@@ -147,8 +147,8 @@ pub fn process(
     let rally_city = rally.rally_city;
     let rally_team = rally.team;
 
-    // 7. Load Player and validate
-    let mut player = PlayerAccount::load_checked_mut(player_account, player_owner.key(), program_id)?;
+    // 7. Load Player and validate (kingdom-scoped)
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.key(), player_owner.key(), program_id)?;
 
     // Cannot be the creator (they join automatically at create)
     if player_owner.key() == &rally_creator {
@@ -175,8 +175,8 @@ pub fn process(
         return Err(GameError::InvalidTeam.into());
     }
 
-    // Load team and verify not disbanded
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    // Load team and verify not disbanded (kingdom-scoped)
+    let team = TeamAccount::load_checked(team_account, game_engine.key(), team_id, program_id)?;
     if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
@@ -207,8 +207,8 @@ pub fn process(
         return Err(GameError::InsufficientWeapons.into());
     }
 
-    // 9. Load GameEngine for networth and theme speed
-    let game_engine_data = GameEngine::load_checked(game_engine, program_id)?;
+    // 9. Load GameEngine for networth and theme speed (kingdom-scoped)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     // 10. Load rally city for travel calculation
     require_owner(rally_city_account, program_id)?;
@@ -288,9 +288,9 @@ pub fn process(
     drop(rally_data_ref);
     drop(game_engine_data);
 
-    // 12. Verify and create RallyParticipant PDA
+    // 12. Verify and create RallyParticipant PDA (kingdom-scoped)
     let (expected_participant_pda, participant_bump) =
-        RallyParticipant::derive_pda(&rally_creator, rally_id, player_owner.key());
+        RallyParticipant::derive_pda(game_engine.key(), &rally_creator, rally_id, player_owner.key());
     if participant_account.key() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -307,6 +307,7 @@ pub fn process(
     let rally_id_bytes = rally_id.to_le_bytes();
     let participant_seeds = pinocchio::seeds!(
         RALLY_PARTICIPANT_SEED,
+        game_engine.key().as_ref(),
         rally_creator.as_ref(),
         &rally_id_bytes,
         player_owner.key().as_ref(),

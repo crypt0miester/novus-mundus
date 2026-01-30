@@ -1,5 +1,5 @@
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address}, sysvars::{Sysvar, clock::Clock}
+    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -89,10 +89,10 @@ pub fn process(
     let _name_str = core::str::from_utf8(name_bytes)
         .map_err(|_| ProgramError::InvalidInstructionData)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (kingdom-scoped)
 
-    let mut player = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     // 4a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
     // Player must create/join a rally before creating a team (user journey)
@@ -146,13 +146,10 @@ pub fn process(
         owner.key()[7],
     ]));
 
-    // 8. Derive and Verify Team PDA
+    // 8. Derive and Verify Team PDA (kingdom-scoped)
 
     let team_id_bytes = team_id.to_le_bytes();
-    let (expected_team, team_bump) = find_program_address(
-        &[TEAM_SEED, &team_id_bytes],
-        program_id,
-    );
+    let (expected_team, team_bump) = TeamAccount::derive_pda(game_engine_account.key(), team_id);
 
     if team_account.key() != &expected_team {
         return Err(GameError::InvalidPDA.into());
@@ -174,7 +171,7 @@ pub fn process(
         .minimum_balance(TeamAccount::LEN);
 
     let team_bump_seed = [team_bump];
-    let team_seeds = pinocchio::seeds!(TEAM_SEED, &team_id_bytes, &team_bump_seed);
+    let team_seeds = pinocchio::seeds!(TEAM_SEED, game_engine_account.key().as_ref(), &team_id_bytes, &team_bump_seed);
     let team_signer = pinocchio::instruction::Signer::from(&team_seeds);
 
     CreateAccount {
@@ -194,6 +191,7 @@ pub fn process(
     let max_members = MAX_TEAM_MEMBERS_BY_TIER[TIER_ROOKIE as usize] as u16;
 
     *team_data = TeamAccount::init(
+        *game_engine_account.key(), // kingdom-scoped
         team_id,
         *player_account.key(), // leader is the player account, not owner wallet
         team_bump,

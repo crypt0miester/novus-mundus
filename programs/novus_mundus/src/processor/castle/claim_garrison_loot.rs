@@ -53,13 +53,10 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 6 {
+    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
+    if instruction_data.len() < 2 {
         return Err(ProgramError::InvalidInstructionData);
     }
-
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
 
     // Load player
     require_owner(player_account, program_id)?;
@@ -70,8 +67,8 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // Load castle (for verification and event)
-    let castle = CastleAccount::load_checked(castle_account, city_id, castle_id, program_id)?;
+    // Load castle (for verification and event, kingdom-scoped)
+    let castle = CastleAccount::load_checked_by_key(castle_account, program_id)?;
 
     // Load garrison contribution
     require_owner(garrison_account, program_id)?;

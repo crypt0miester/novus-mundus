@@ -2,12 +2,14 @@
 //!
 //! Creates a new weekly leaderboard for a dungeon. Permissionless crank.
 //! The leaderboard for a given (dungeon_id, week_number) can only be created once.
+//! KINGDOM-SCOPED: Each kingdom has its own dungeon leaderboards.
 //!
 //! # Accounts
 //! 0. `[SIGNER, WRITE]` payer: Pays for account creation
 //! 1. `[]` dungeon_template: DungeonTemplate PDA (verifies dungeon exists)
 //! 2. `[WRITE]` leaderboard: DungeonLeaderboard PDA (to be created)
-//! 3. `[]` system_program: System program
+//! 3. `[]` game_engine: GameEngine PDA (for kingdom scoping)
+//! 4. `[]` system_program: System program
 //!
 //! # Instruction Data
 //! - dungeon_id: u16 (2 bytes)
@@ -27,8 +29,10 @@ use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::DUNGEON_LEADERBOARD_SEED,
     error::GameError,
-    state::{DungeonTemplate, DungeonLeaderboard},
+    state::{DungeonTemplate, DungeonLeaderboard, GameEngine},
     validation::{require_signer, require_writable},
+    emit,
+    events::KingdomDungeonLeaderboardCreated,
 };
 
 /// Seconds per week (7 days)
@@ -49,6 +53,7 @@ pub fn process(
         payer,
         dungeon_template_account,
         leaderboard_account,
+        game_engine,
         _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -74,6 +79,12 @@ pub fn process(
     // 4. Validate dungeon exists
     let _template = DungeonTemplate::load_checked(dungeon_template_account, dungeon_id, program_id)?;
 
+    // 4b. Load GameEngine for kingdom_id
+    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+    let kingdom_id = game_engine_data.kingdom_id;
+    drop(game_engine_data_ref);
+
     // 5. Validate week number is current or future
     let clock = Clock::get()?;
     let current_week = get_week_number(clock.unix_timestamp);
@@ -87,8 +98,8 @@ pub fn process(
         return Err(GameError::AccountAlreadyExists.into());
     }
 
-    // 7. Verify PDA
-    let (expected_pda, bump) = DungeonLeaderboard::derive_pda(dungeon_id, week_number);
+    // 7. Verify PDA (kingdom-scoped)
+    let (expected_pda, bump) = DungeonLeaderboard::derive_pda(game_engine.key(), dungeon_id, week_number);
     if leaderboard_account.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -102,6 +113,7 @@ pub fn process(
     let bump_seed = [bump];
     let seeds = pinocchio::seeds!(
         DUNGEON_LEADERBOARD_SEED,
+        game_engine.key().as_ref(),
         &dungeon_id_bytes,
         &week_bytes,
         &bump_seed
@@ -120,6 +132,7 @@ pub fn process(
     let mut lb_data = leaderboard_account.try_borrow_mut_data()?;
     let leaderboard = unsafe { DungeonLeaderboard::load_mut(&mut lb_data) };
 
+    leaderboard.game_engine = *game_engine.key();
     leaderboard.dungeon_id = dungeon_id;
     leaderboard.week_number = week_number;
     leaderboard.leaderboard_count = 0;
@@ -132,6 +145,15 @@ pub fn process(
         leaderboard.leaderboard[i].player = [0u8; 32];
         leaderboard.leaderboard[i].score = 0;
     }
+
+    // Emit KingdomDungeonLeaderboardCreated event
+    emit!(KingdomDungeonLeaderboardCreated {
+        kingdom_id,
+        game_engine: *game_engine.key(),
+        dungeon_id,
+        week_number,
+        prize_pool,
+    });
 
     Ok(())
 }

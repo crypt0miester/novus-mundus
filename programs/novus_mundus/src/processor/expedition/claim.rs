@@ -146,8 +146,8 @@ pub fn process(
     // Check if expedition had a hero
     let has_hero = hero_mint_key != NULL_PUBKEY;
 
-    // 6. Load GameEngine for expedition config
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // 6. Load GameEngine for expedition config (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     let max_ops = game_engine.economic_config.max_operatives_per_expedition;
     let mining_rates = game_engine.economic_config.mining_gems_per_op_hour;
     let fishing_rates = game_engine.economic_config.fishing_produce_per_op_hour;

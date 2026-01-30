@@ -71,10 +71,21 @@ pub fn process(
     require_writable(target_slot_account)?;
     require_writable(team_account)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let demoter = PlayerAccount::load_checked(demoter_account, demoter_owner.key(), program_id)?;
-    let mut team = TeamAccount::load_checked_mut(team_account, team_id, program_id)?;
+    let demoter = PlayerAccount::load_checked_by_key(demoter_account, program_id)?;
+    if &demoter.owner != demoter_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
+    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom
+    if demoter.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM
     require_extension(&*demoter, EXT_TEAM)?;

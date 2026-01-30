@@ -70,10 +70,10 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 4. Load Accounts
+    // 4. Load Accounts (kingdom-scoped)
 
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, owner.key(), program_id)?;
-    let game_engine_data = GameEngine::load_checked(game_engine_account, program_id)?;
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     // 6. Validate Currently Traveling
 

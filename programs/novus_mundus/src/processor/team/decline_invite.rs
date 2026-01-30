@@ -52,9 +52,12 @@ pub fn process(
     require_writable(invite_account)?;
     require_writable(inviter_refund)?;
 
-    // 3. Load Player Account
+    // 3. Load Player Account (using by_key for kingdom scoping)
 
-    let player = PlayerAccount::load_checked(player_account, owner.key(), program_id)?;
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
+    if &player.owner != owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // 3a. Require EXT_RALLY (prerequisite for teams)
     require_extension(&*player, EXT_RALLY)?;

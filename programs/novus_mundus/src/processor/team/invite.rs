@@ -76,18 +76,29 @@ pub fn process(
     require_writable(invite_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 4. Load Accounts
+    // 4. Load Accounts (using by_key for kingdom scoping)
 
-    // Inviter: use load_checked (read-only, has signer)
-    let inviter = PlayerAccount::load_checked(inviter_player_account, inviter_owner.key(), program_id)?;
+    // Inviter: use load_checked_by_key (read-only, has signer)
+    let inviter = PlayerAccount::load_checked_by_key(inviter_player_account, program_id)?;
+    if &inviter.owner != inviter_owner.key() {
+        return Err(GameError::Unauthorized.into());
+    }
 
     // Invitee: manual load (we don't have invitee's wallet key)
     require_owner(invitee_player_account, program_id)?;
     let invitee_data_ref = invitee_player_account.try_borrow_data()?;
     let invitee = unsafe { PlayerAccount::load(&invitee_data_ref) };
 
-    // Team: use load_checked (read-only)
-    let team = TeamAccount::load_checked(team_account, team_id, program_id)?;
+    // Team: use load_checked_by_key (read-only)
+    let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
+    if team.id != team_id {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Verify same kingdom for all parties
+    if inviter.game_engine != team.game_engine || invitee.game_engine != team.game_engine {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // 4a. Require EXT_TEAM for inviter
     require_extension(&*inviter, EXT_TEAM)?;

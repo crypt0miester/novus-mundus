@@ -21,9 +21,6 @@ use crate::{
 /// into gameplay fuel (Locked Novi). This is a permanent conversion
 /// that CANNOT be reversed.
 ///
-/// Use case: Player wants to upgrade subscription tier by depositing
-/// Novi, or wants to reinvest their earnings into gameplay.
-///
 /// # Token Account Ownership
 /// - Reserved token account: OWNED BY UserAccount PDA (not user wallet!)
 /// - Locked token account: OWNED BY PlayerAccount PDA (not user wallet!)

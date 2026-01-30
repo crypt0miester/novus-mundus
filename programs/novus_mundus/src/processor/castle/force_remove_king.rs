@@ -58,8 +58,8 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Load and verify game engine
-    let game_engine = GameEngine::load_checked(game_engine_account, program_id)?;
+    // Load and verify game engine (kingdom-scoped)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
     if dao_authority.key() != &game_engine.authority {
@@ -75,7 +75,7 @@ pub fn process(
     let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut(castle_account, city_id, castle_id, program_id)?;
+    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle has a king (is not vacant)
     if castle.king == NULL_PUBKEY {
