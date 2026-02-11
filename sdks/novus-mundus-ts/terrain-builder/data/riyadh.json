@@ -1,0 +1,118 @@
+{
+  "seed": 3089931085,
+  "waterLine": 0,
+  "peakLine": 255,
+  "radiusKm": 40,
+  "anchorCount": 12,
+  "version": 1,
+  "anchors": [
+    {
+      "x": -27,
+      "y": -6,
+      "mass": 114,
+      "lift": 204,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 8
+    },
+    {
+      "x": 1068,
+      "y": 1092,
+      "mass": 117,
+      "lift": 196,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 20
+    },
+    {
+      "x": -1072,
+      "y": 1089,
+      "mass": 112,
+      "lift": 209,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 24
+    },
+    {
+      "x": 1073,
+      "y": -1080,
+      "mass": 119,
+      "lift": 191,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 22
+    },
+    {
+      "x": -1109,
+      "y": -1088,
+      "mass": 112,
+      "lift": 207,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 21
+    },
+    {
+      "x": -2,
+      "y": 1818,
+      "mass": 115,
+      "lift": 202,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 18
+    },
+    {
+      "x": 26,
+      "y": -1768,
+      "mass": 114,
+      "lift": 203,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 7
+    },
+    {
+      "x": 1785,
+      "y": 7,
+      "mass": 102,
+      "lift": 228,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 27
+    },
+    {
+      "x": -1823,
+      "y": 329,
+      "mass": 103,
+      "lift": 226,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 13
+    },
+    {
+      "x": 9,
+      "y": 3065,
+      "mass": 190,
+      "lift": 177,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 80
+    },
+    {
+      "x": 1793,
+      "y": 2864,
+      "mass": 181,
+      "lift": 186,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 73
+    },
+    {
+      "x": -1832,
+      "y": 3056,
+      "mass": 189,
+      "lift": 178,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 73
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "seed": 393224916,
+  "waterLine": 93,
+  "peakLine": 244,
+  "radiusKm": 40,
+  "anchorCount": 13,
+  "version": 1,
+  "anchors": [
+    {
+      "x": -28,
+      "y": 1813,
+      "mass": 109,
+      "lift": 215,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 181
+    },
+    {
+      "x": 1800,
+      "y": 1474,
+      "mass": 105,
+      "lift": 221,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 171
+    },
+    {
+      "x": -1772,
+      "y": 1421,
+      "mass": 96,
+      "lift": 239,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 168
+    },
+    {
+      "x": 1053,
+      "y": 2165,
+      "mass": 91,
+      "lift": 247,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 156
+    },
+    {
+      "x": -699,
+      "y": 1102,
+      "mass": 106,
+      "lift": 221,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 183
+    },
+    {
+      "x": -32,
+      "y": 2894,
+      "mass": 73,
+      "lift": 255,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 169
+    },
+    {
+      "x": -1469,
+      "y": 2508,
+      "mass": 90,
+      "lift": 249,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 143
+    },
+    {
+      "x": 1106,
+      "y": 385,
+      "mass": 121,
+      "lift": 186,
+      "pushX": 0,
+      "pushY": -1,
+      "moisture": 165
+    },
+    {
+      "x": -1081,
+      "y": 373,
+      "mass": 122,
+      "lift": 186,
+      "pushX": 0,
+      "pushY": -1,
+      "moisture": 187
+    },
+    {
+      "x": -9,
+      "y": -1115,
+      "mass": 184,
+      "lift": 183,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 130
+    },
+    {
+      "x": 1826,
+      "y": -1826,
+      "mass": 214,
+      "lift": 112,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 128
+    },
+    {
+      "x": -1825,
+      "y": -1836,
+      "mass": 195,
+      "lift": 166,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 118
+    },
+    {
+      "x": -37,
+      "y": -2860,
+      "mass": 222,
+      "lift": 70,
+      "pushX": 0,
+      "pushY": 0,
+      "moisture": 131
+    }
+  ]
+}

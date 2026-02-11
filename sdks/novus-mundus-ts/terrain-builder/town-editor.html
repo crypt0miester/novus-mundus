@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Town Layout Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+#toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #16213e; border-bottom: 1px solid #333; flex-shrink: 0; flex-wrap: wrap; }
+#toolbar label { font-size: 11px; color: #999; margin: 0; }
+#toolbar select, #toolbar input[type=range] { background: #1a1a2e; border: 1px solid #444; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+#toolbar select { min-width: 120px; }
+#toolbar input[type=range] { width: 100px; accent-color: #7ec8e3; }
+#toolbar button { font-size: 11px; padding: 4px 10px; }
+#toolbar .sep { width: 1px; height: 20px; background: #444; margin: 0 4px; }
+#toolbar .val { font-size: 10px; color: #7ec8e3; min-width: 28px; text-align: center; }
+#main { display: flex; flex: 1; overflow: hidden; }
+#viewport { flex: 1; position: relative; overflow: hidden; background: #0f0f23; }
+#viewport canvas { display: block; width: 100%; height: 100%; }
+#panel { width: 340px; background: #16213e; border-left: 1px solid #333; overflow-y: auto; flex-shrink: 0; padding: 0; }
+#panel::-webkit-scrollbar { width: 6px; }
+#panel::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+#bottombar { display: flex; align-items: center; gap: 16px; padding: 4px 12px; background: #16213e; border-top: 1px solid #333; font-size: 11px; color: #888; flex-shrink: 0; }
+#bottombar .coord { color: #7ec8e3; }
+#bottombar .sel-info { color: #aaa; }
+#fps { color: #666; margin-left: auto; }
+
+/* Panel sections */
+.section { border-bottom: 1px solid #333; }
+.section-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; cursor: pointer; user-select: none; background: #1a2040; }
+.section-header:hover { background: #1e2550; }
+.section-header h3 { font-size: 12px; color: #7ec8e3; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+.section-header .chevron { color: #666; font-size: 10px; transition: transform 0.15s; }
+.section.collapsed .section-body { display: none; }
+.section.collapsed .chevron { transform: rotate(-90deg); }
+.section-body { padding: 8px 12px 12px; }
+.field { margin-bottom: 6px; }
+.field label { display: block; font-size: 10px; color: #888; margin-bottom: 2px; }
+.field input[type=number] { width: 70px; background: #1a1a2e; border: 1px solid #444; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+.field input[type=range] { width: 100%; accent-color: #7ec8e3; }
+.field input[type=color] { width: 32px; height: 20px; padding: 0; border: 1px solid #444; border-radius: 3px; background: none; cursor: pointer; }
+.field input[type=text] { width: 100%; background: #1a1a2e; border: 1px solid #444; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+.field-row { display: flex; gap: 8px; align-items: center; }
+.field-row .field { flex: 1; margin-bottom: 0; }
+.field .val { font-size: 10px; color: #7ec8e3; text-align: right; }
+button { background: #7ec8e3; color: #000; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+button:hover { background: #5ab0d0; }
+button.danger { background: #e74c3c; color: #fff; }
+button.danger:hover { background: #c0392b; }
+button.secondary { background: #3a3a5e; color: #ccc; }
+button.secondary:hover { background: #4a4a6e; }
+.toggle-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 11px; }
+.toggle-row input[type=checkbox] { accent-color: #7ec8e3; width: 14px; height: 14px; }
+.toggle-row label { color: #ccc; cursor: pointer; margin: 0; }
+.plot-card { background: #1a1a2e; border: 1px solid #333; border-radius: 4px; padding: 6px 8px; margin: 4px 0; }
+.plot-card.selected { border-color: #7ec8e3; }
+.plot-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.plot-header span { font-weight: bold; font-size: 11px; color: #7ec8e3; }
+.plot-body { padding-top: 6px; }
+.dec-card { background: #1a1a2e; border: 1px solid #333; border-radius: 4px; padding: 6px 8px; margin: 4px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.dec-card select { background: #16213e; border: 1px solid #444; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; }
+.dec-card input[type=number] { width: 52px; background: #16213e; border: 1px solid #444; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; }
+.status-msg { padding: 4px 8px; font-size: 10px; border-radius: 3px; margin: 4px 0; }
+.status-ok { background: #1a3a1a; color: #8c8; }
+.status-err { background: #3a1a1a; color: #c88; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- ── Toolbar ── -->
+<div id="toolbar">
+  <label>Terrain:</label>
+  <select id="terrain-select"><option value="">-- select city --</option></select>
+  <div class="sep"></div>
+  <label>Estate Lv:</label>
+  <input type="range" id="estate-level" min="0" max="5" value="1" step="1">
+  <span class="val" id="estate-level-val">1</span>
+  <div class="sep"></div>
+  <label>Time:</label>
+  <input type="range" id="time-slider" min="0" max="24" step="0.5" value="12">
+  <span class="val" id="time-val">12:00</span>
+  <div class="sep"></div>
+  <button id="btn-preset-empty" class="secondary">Empty</button>
+  <button id="btn-preset-starter" class="secondary">Starter</button>
+  <button id="btn-preset-full" class="secondary">All Bldgs</button>
+  <button id="btn-preset-maxed" class="secondary">Maxed</button>
+  <div class="sep"></div>
+  <button id="btn-save">Save</button>
+  <button id="btn-load" class="secondary">Load</button>
+  <button id="btn-reset" class="danger">Reset</button>
+  <button id="btn-copy" class="secondary">Copy JSON</button>
+  <div class="sep"></div>
+  <div class="toggle-row">
+    <input type="checkbox" id="chk-grid"><label for="chk-grid">Grid</label>
+  </div>
+  <div class="toggle-row">
+    <input type="checkbox" id="chk-labels" checked><label for="chk-labels">Labels</label>
+  </div>
+  <div class="toggle-row">
+    <input type="checkbox" id="chk-snap"><label for="chk-snap">Snap</label>
+  </div>
+</div>
+
+<!-- ── Main Area ── -->
+<div id="main">
+  <div id="viewport"></div>
+  <div id="panel"></div>
+</div>
+
+<!-- ── Bottom Bar ── -->
+<div id="bottombar">
+  <span>Mouse: <span class="coord" id="mouse-coord">-</span></span>
+  <span class="sel-info" id="sel-info">No selection</span>
+  <span id="fps">-- fps</span>
+</div>
+
+<script type="module">
+import { TerrainRenderer, BUILDING_TYPES } from './terrain-renderer.js';
+
+const API_BASE = '';
+
+// ─── Terrain helper functions (same as terrain-blender.html) ───
+
+function buoyancy(mass, lift) { return Math.max(0, Math.min(255, lift - (mass >> 1))); }
+function noise(seed, x, y) {
+  let h = (seed ^ (x * 374761393) ^ (y * 668265263)) >>> 0;
+  h = ((h ^ (h >> 13)) * 1274126177) >>> 0;
+  return (h >> 24) & 0xFF;
+}
+function twoNearest(a, ox, oy) {
+  let ni = 0, si = 1, dn = 1e9, ds = 1e9;
+  for (let i = 0; i < a.length; i++) {
+    const d = Math.abs(a[i].x - ox) + Math.abs(a[i].y - oy);
+    if (d < dn) { ds = dn; si = ni; dn = d; ni = i; }
+    else if (d < ds) { ds = d; si = i; }
+  }
+  return [ni, si, dn, ds];
+}
+function pressureEffect(a1, a2, d1, d2) {
+  const px1 = a1.pushX || 0, py1 = a1.pushY || 0;
+  const px2 = a2.pushX || 0, py2 = a2.pushY || 0;
+  const w1 = d1 > 0 ? 1 / d1 : 100;
+  const w2 = d2 > 0 ? 1 / d2 : 100;
+  const total = w1 + w2;
+  const px = (px1 * w1 + px2 * w2) / total;
+  const py = (py1 * w1 + py2 * w2) / total;
+  return ((Math.abs(px) + Math.abs(py)) * 0.5) | 0;
+}
+function elevation(config, ox, oy) {
+  const a = config.anchors;
+  if (!a || a.length === 0) return 128;
+  if (a.length === 1) return buoyancy(a[0].mass, a[0].lift);
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const b1 = buoyancy(a[ni].mass, a[ni].lift);
+  const b2 = buoyancy(a[si].mass, a[si].lift);
+  const total = dn + ds;
+  const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
+  const base = b1 + (((b2 - b1) * t / 256) | 0);
+  const pres = pressureEffect(a[ni], a[si], dn, ds);
+  const tex = ((noise(config.seed, ox, oy) - 128) / 4) | 0;
+  return Math.max(0, Math.min(255, base + pres + tex));
+}
+function moisture(config, ox, oy) {
+  const a = config.anchors;
+  if (!a || a.length === 0) return 128;
+  if (a.length === 1) return a[0].moisture ?? 128;
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const m1 = a[ni].moisture ?? 128;
+  const m2 = a[si].moisture ?? 128;
+  const total = dn + ds;
+  if (total === 0) return m1;
+  return Math.max(0, Math.min(255, (m1 * ds + m2 * dn) / total | 0));
+}
+function elevColor(e, wl, pl, m) {
+  m = m ?? 128;
+  if (e <= wl) {
+    const d = wl > 0 ? (wl - e) / wl : 0;
+    return [20 + 40 * (1-d)|0, 60 + 80 * (1-d)|0, 120 + 100 * (1-d)|0];
+  }
+  if (e >= pl) {
+    const h = (255 - pl) > 0 ? (e - pl) / (255 - pl) : 0;
+    const v = 160 + 80 * h | 0;
+    return [v, v, v];
+  }
+  const range = (pl - wl) || 1;
+  const t = (e - wl) / range;
+  const f = m / 255;
+  if (t < 0.1) return [210, 200, 160];
+  if (t < 0.5) {
+    const h = (t - 0.1) / 0.4;
+    const ar = 210 - 35*h, ag = 190 - 45*h, ab = 140 - 40*h;
+    const lr = 100 - 40*h, lg = 180 - 60*h, lb = 60 - 20*h;
+    return [ar + (lr - ar)*f|0, ag + (lg - ag)*f|0, ab + (lb - ab)*f|0];
+  }
+  const h = (t - 0.5) / 0.5;
+  const ar = 175 + 20*h, ag = 150 + 15*h, ab = 105 + 20*h;
+  const lr = 100 + 50*h, lg = 80 + 30*h, lb = 40 + 30*h;
+  return [ar + (lr - ar)*f|0, ag + (lg - ag)*f|0, ab + (lb - ab)*f|0];
+}
+
+// ─── State ───
+
+let layout = null;       // Current town-layout.json
+let terrain = null;      // Current terrain config
+let renderer = null;     // TerrainRenderer instance
+let selectedElement = null; // { type: 'plot'|'decoration'|'townSquare', index }
+let dragState = null;    // { type, index, startX, startZ, startMouseX, startMouseY }
+const SNAP_SIZE = 0.05;
+const DECORATION_TYPES = ['rock','fence','well','barrel','crate','banner','campfire','cart','lamp','sign'];
+
+// ─── Default Layout ───
+
+const DEFAULT_LAYOUT = {
+  version: 1,
+  townSquare: { x: 0, z: 0, radius: 0.4, style: 'cobblestone', fountainScale: 1.0,
+    lampPostCount: 4, lampPostRadius: 0.32, lampColor: '#ffeeaa', stoneColor: '#a09880',
+    innerRingRadius: [0.28, 0.32] },
+  plots: [
+    { id: 0, label: 'Starter', tier: '1', x: -1.05, z: 0.95, rotation: 0, scale: 1.0,
+      padSize: 0.58, padColor: '#6a8a55', borderColor: '#887766',
+      slots: [{dx:-0.17,dz:-0.17,rotation:0},{dx:0.17,dz:-0.17,rotation:0},{dx:-0.17,dz:0.17,rotation:0},{dx:0.17,dz:0.17,rotation:0}] },
+    { id: 1, label: 'Tier 1', tier: '1', x: 1.05, z: 0.95, rotation: 0, scale: 1.0,
+      padSize: 0.58, padColor: '#6a8a55', borderColor: '#887766',
+      slots: [{dx:-0.17,dz:-0.17,rotation:0},{dx:0.17,dz:-0.17,rotation:0},{dx:-0.17,dz:0.17,rotation:0},{dx:0.17,dz:0.17,rotation:0}] },
+    { id: 2, label: 'Tier 2', tier: '2', x: -1.05, z: -0.75, rotation: 0, scale: 1.0,
+      padSize: 0.58, padColor: '#6a8a55', borderColor: '#887766',
+      slots: [{dx:-0.17,dz:-0.17,rotation:0},{dx:0.17,dz:-0.17,rotation:0},{dx:-0.17,dz:0.17,rotation:0},{dx:0.17,dz:0.17,rotation:0}] },
+    { id: 3, label: 'Tier 2', tier: '2', x: 1.05, z: -0.75, rotation: 0, scale: 1.0,
+      padSize: 0.58, padColor: '#6a8a55', borderColor: '#887766',
+      slots: [{dx:-0.17,dz:-0.17,rotation:0},{dx:0.17,dz:-0.17,rotation:0},{dx:-0.17,dz:0.17,rotation:0},{dx:0.17,dz:0.17,rotation:0}] },
+    { id: 4, label: 'Prestige', tier: '3', x: 0.0, z: -1.70, rotation: 0, scale: 1.0,
+      padSize: 0.58, padColor: '#6a8a55', borderColor: '#887766',
+      slots: [{dx:-0.17,dz:-0.17,rotation:0},{dx:0.17,dz:-0.17,rotation:0},{dx:-0.17,dz:0.17,rotation:0},{dx:0.17,dz:0.17,rotation:0}] },
+  ],
+  roads: { width: 0.08, height: 0.003, color: '#9a9080', style: 'cobblestone', customPaths: [] },
+  trees: { count: 40, minDistance: 0.7, plotClearance: 0.4, minHeight: 0.06, maxHeight: 0.14,
+    trunkColor: '#5a3a20', leafColors: ['#2d6b30','#3a7a35','#4a8a40'], custom: [] },
+  decorations: [],
+  walls: { enabled: false, points: [], height: 0.06, thickness: 0.02, color: '#887766', gatePositions: [] },
+  lighting: { sunColor: '#ffeedd', sunIntensity: 2.0, sunPosition: [3,4,2],
+    ambientColor: '#607090', ambientIntensity: 0.8,
+    hemiSkyColor: '#88bbee', hemiGroundColor: '#445522', hemiIntensity: 0.5,
+    shadowMapSize: 2048, shadowBias: -0.002 },
+  camera: { fov: 50, distance: 4.0, minDistance: 1.2, maxDistance: 7.0, pitch: 40, yaw: 35, targetY: 0.1 },
+  terrain: { meshSize: 5, resolution: 96, patchRadius: 120, maxHeight: 0.15,
+    waterOpacity: 0.55, waterColor: '#2266aa', skirtColor: '#4a6b35' },
+  buildingScale: { baseUnit: 0.05, levelScaleFactor: 0.055 }
+};
+
+// A simple flat-ish terrain so the town is visible without loading a city file.
+// waterLine=10 keeps terrain surface very close to y=0 so plots/decorations aren't buried.
+const FALLBACK_TERRAIN = {
+  seed: 42, waterLine: 10, peakLine: 220,
+  anchors: [
+    { x: 0, y: 0, mass: 0, lift: 28, pushX: 0, pushY: 0, moisture: 200 },
+    { x: 120, y: 0, mass: 0, lift: 30, pushX: 0, pushY: 0, moisture: 190 },
+    { x: -120, y: 0, mass: 0, lift: 26, pushX: 0, pushY: 0, moisture: 210 },
+    { x: 0, y: 120, mass: 0, lift: 27, pushX: 0, pushY: 0, moisture: 195 },
+    { x: 0, y: -120, mass: 0, lift: 29, pushX: 0, pushY: 0, moisture: 185 },
+  ]
+};
+
+// ─── Init ───
+
+async function init() {
+  layout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  terrain = FALLBACK_TERRAIN;
+
+  // Try loading saved layout
+  try {
+    const res = await fetch(API_BASE + '/api/files/town-layout.json');
+    if (res.ok) layout = await res.json();
+  } catch(e) { /* use default */ }
+
+  // Init renderer
+  const viewport = document.getElementById('viewport');
+  renderer = new TerrainRenderer({
+    container: viewport,
+    functions: { elevation, elevColor, moisture, noise, buoyancy, twoNearest },
+    coastlineData: null,
+    worldData: null,
+  });
+
+  // Enter town mode with layout
+  const estateLevel = parseInt(document.getElementById('estate-level').value);
+  renderer.enterTownModeWithLayout(terrain, layout, { plotsOwned: estateLevel, reset: true });
+
+  // Load terrain file list
+  loadTerrainList();
+
+  // Build panel
+  buildPanel();
+
+  // Toolbar events
+  bindToolbar();
+
+  // FPS counter
+  let frames = 0, lastFps = performance.now();
+  const fpsEl = document.getElementById('fps');
+  const tick = () => {
+    frames++;
+    const now = performance.now();
+    if (now - lastFps >= 1000) {
+      fpsEl.textContent = `${frames} fps`;
+      frames = 0;
+      lastFps = now;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ─── Terrain List ───
+
+async function loadTerrainList() {
+  try {
+    const res = await fetch(API_BASE + '/api/files');
+    if (!res.ok) return;
+    const files = await res.json();
+    const sel = document.getElementById('terrain-select');
+    for (const f of files) {
+      if (f.name === 'town-layout.json' || f.name === 'world.json' || f.name.startsWith('coastlines')) continue;
+      const opt = document.createElement('option');
+      opt.value = f.name;
+      opt.textContent = f.name.replace('.json', '');
+      sel.appendChild(opt);
+    }
+  } catch(e) {}
+}
+
+async function loadTerrain(name) {
+  try {
+    const res = await fetch(API_BASE + '/api/files/' + encodeURIComponent(name));
+    if (!res.ok) return;
+    terrain = await res.json();
+    rebuildScene();
+  } catch(e) {}
+}
+
+// ─── Scene Rebuild ───
+
+function rebuildScene() {
+  // Preserve current estate state across rebuilds
+  const savedEstate = renderer._townEstateState
+    ? JSON.parse(JSON.stringify(renderer._townEstateState))
+    : null;
+  renderer.updateTownLayout(layout);
+  if (savedEstate) {
+    renderer._townEstateState = savedEstate;
+  } else {
+    const estateLevel = parseInt(document.getElementById('estate-level').value);
+    renderer._townEstateState = {
+      plotsOwned: estateLevel,
+      buildings: new Array(20).fill(null).map(() => ({ type: -1, status: 0, level: 0 })),
+    };
+    renderer._townEstateState.buildings[0] = { type: 0, status: 2, level: 1 };
+  }
+  renderer._rebuildTownPlots();
+  renderer._updateTownLighting();
+  // Re-apply grid
+  if (document.getElementById('chk-grid').checked) renderer.toggleGridOverlay(true);
+}
+
+// Debounced live update to avoid hammering the scene on every input event
+let _liveTimer = null;
+function liveUpdate() {
+  if (_liveTimer) clearTimeout(_liveTimer);
+  _liveTimer = setTimeout(() => { _liveTimer = null; rebuildScene(); }, 80);
+}
+
+// ─── Toolbar ───
+
+function bindToolbar() {
+  document.getElementById('terrain-select').onchange = (e) => {
+    if (e.target.value) loadTerrain(e.target.value);
+  };
+
+  document.getElementById('estate-level').oninput = (e) => {
+    document.getElementById('estate-level-val').textContent = e.target.value;
+    const lv = parseInt(e.target.value);
+    if (renderer._townEstateState) {
+      renderer._townEstateState.plotsOwned = lv;
+      renderer._rebuildTownPlots();
+      renderer._updateTownHUD && renderer._updateTownHUD();
+    }
+  };
+
+  document.getElementById('time-slider').oninput = (e) => {
+    const h = parseFloat(e.target.value);
+    const hh = Math.floor(h), mm = ((h % 1) * 60).toFixed(0).padStart(2, '0');
+    document.getElementById('time-val').textContent = `${hh}:${mm}`;
+    renderer.setTownTimeOfDay(h);
+  };
+
+  // Presets
+  document.getElementById('btn-preset-empty').onclick = () => applyPreset('empty');
+  document.getElementById('btn-preset-starter').onclick = () => applyPreset('starter');
+  document.getElementById('btn-preset-full').onclick = () => applyPreset('full');
+  document.getElementById('btn-preset-maxed').onclick = () => applyPreset('maxed');
+
+  // Save / Load / Reset / Copy
+  document.getElementById('btn-save').onclick = saveLayout;
+  document.getElementById('btn-load').onclick = loadLayout;
+  document.getElementById('btn-reset').onclick = resetLayout;
+  document.getElementById('btn-copy').onclick = copyJSON;
+
+  // Toggles
+  document.getElementById('chk-grid').onchange = (e) => renderer.toggleGridOverlay(e.target.checked);
+  document.getElementById('chk-labels').onchange = (e) => {
+    for (const lbl of renderer._townLabels) lbl.visible = e.target.checked;
+  };
+}
+
+function applyPreset(type) {
+  if (!renderer._townEstateState) return;
+  const estate = renderer._townEstateState;
+  // Clear all
+  for (let i = 0; i < 20; i++) estate.buildings[i] = { type: -1, status: 0, level: 0 };
+
+  if (type === 'starter') {
+    estate.plotsOwned = 1;
+    estate.buildings[0] = { type: 0, status: 2, level: 1 };
+  } else if (type === 'full') {
+    estate.plotsOwned = 5;
+    for (let i = 0; i < 13 && i < 20; i++) {
+      estate.buildings[i] = { type: i, status: 2, level: 1 };
+    }
+  } else if (type === 'maxed') {
+    estate.plotsOwned = 5;
+    for (let i = 0; i < 13 && i < 20; i++) {
+      estate.buildings[i] = { type: i, status: 2, level: 20 };
+    }
+  } else {
+    estate.plotsOwned = 1;
+  }
+
+  document.getElementById('estate-level').value = estate.plotsOwned;
+  document.getElementById('estate-level-val').textContent = estate.plotsOwned;
+  renderer._rebuildTownPlots();
+}
+
+async function saveLayout() {
+  // Sync positions from renderer
+  const syncedLayout = renderer.getTownLayout() || layout;
+  try {
+    const res = await fetch(API_BASE + '/api/files/town-layout.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncedLayout, null, 2)
+    });
+    if (res.ok) {
+      layout = syncedLayout;
+      showStatus('Saved town-layout.json', 'ok');
+    } else {
+      showStatus('Save failed: ' + res.statusText, 'err');
+    }
+  } catch(e) {
+    showStatus('Save error: ' + e.message, 'err');
+  }
+}
+
+async function loadLayout() {
+  try {
+    const res = await fetch(API_BASE + '/api/files/town-layout.json');
+    if (res.ok) {
+      layout = await res.json();
+      rebuildScene();
+      buildPanel();
+      showStatus('Loaded town-layout.json', 'ok');
+    } else {
+      showStatus('Load failed', 'err');
+    }
+  } catch(e) {
+    showStatus('Load error: ' + e.message, 'err');
+  }
+}
+
+function resetLayout() {
+  if (!confirm('Reset to defaults?')) return;
+  layout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+  rebuildScene();
+  buildPanel();
+  showStatus('Reset to defaults', 'ok');
+}
+
+function copyJSON() {
+  const syncedLayout = renderer.getTownLayout() || layout;
+  navigator.clipboard.writeText(JSON.stringify(syncedLayout, null, 2));
+  showStatus('JSON copied to clipboard', 'ok');
+}
+
+function showStatus(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'status-msg status-' + type;
+  el.textContent = msg;
+  document.getElementById('toolbar').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function updateDragFields() {
+  if (!dragState) return;
+  if (dragState.type === 'plot') {
+    const p = layout.plots[dragState.index];
+    const xEl = document.getElementById(`plot-x-${dragState.index}`);
+    const zEl = document.getElementById(`plot-z-${dragState.index}`);
+    if (xEl) xEl.value = p.x;
+    if (zEl) zEl.value = p.z;
+  } else if (dragState.type === 'decoration') {
+    const d = layout.decorations[dragState.index];
+    const xEl = document.getElementById(`dec-x-${dragState.index}`);
+    const zEl = document.getElementById(`dec-z-${dragState.index}`);
+    if (xEl) xEl.value = d.x;
+    if (zEl) zEl.value = d.z;
+  }
+}
+
+function updateSelInfo() {
+  const el = document.getElementById('sel-info');
+  if (!selectedElement) { el.textContent = 'No selection'; return; }
+  if (selectedElement.type === 'plot') {
+    const p = layout.plots[selectedElement.index];
+    el.textContent = `Plot ${p.id}: "${p.label}" at (${p.x}, ${p.z})`;
+  } else if (selectedElement.type === 'decoration') {
+    const d = layout.decorations[selectedElement.index];
+    el.textContent = `Decoration: ${d.type} at (${d.x}, ${d.z})`;
+  }
+}
+
+// ─── Panel Builder ───
+
+function buildPanel() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = '';
+
+  // Town Square
+  panel.appendChild(buildSection('Town Square', buildTownSquarePanel()));
+  // Plots
+  panel.appendChild(buildSection('Plots', buildPlotsPanel()));
+  // Roads
+  panel.appendChild(buildSection('Roads', buildRoadsPanel()));
+  // Trees
+  panel.appendChild(buildSection('Trees', buildTreesPanel()));
+  // Decorations
+  panel.appendChild(buildSection('Decorations', buildDecorationsPanel()));
+  // Walls
+  panel.appendChild(buildSection('Walls', buildWallsPanel(), true));
+  // Lighting
+  panel.appendChild(buildSection('Lighting', buildLightingPanel()));
+  // Camera
+  panel.appendChild(buildSection('Camera', buildCameraPanel(), true));
+  // Terrain
+  panel.appendChild(buildSection('Terrain', buildTerrainPanel(), true));
+  // Building Scale
+  panel.appendChild(buildSection('Building Scale', buildBuildingScalePanel(), true));
+}
+
+function buildSection(title, bodyEl, collapsed = false) {
+  const sec = document.createElement('div');
+  sec.className = 'section' + (collapsed ? ' collapsed' : '');
+  const hdr = document.createElement('div');
+  hdr.className = 'section-header';
+  hdr.innerHTML = `<h3>${title}</h3><span class="chevron">\u25BC</span>`;
+  hdr.onclick = () => sec.classList.toggle('collapsed');
+  sec.appendChild(hdr);
+  const body = document.createElement('div');
+  body.className = 'section-body';
+  body.appendChild(bodyEl);
+  sec.appendChild(body);
+  return sec;
+}
+
+// ── Town Square Panel ──
+function buildTownSquarePanel() {
+  const d = document.createElement('div');
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('X', 'townSquare.x', layout.townSquare.x, -5, 5, 0.05)}
+      ${nf('Z', 'townSquare.z', layout.townSquare.z, -5, 5, 0.05)}
+    </div>
+    <div class="field-row">
+      ${nf('Radius', 'townSquare.radius', layout.townSquare.radius, 0.1, 2, 0.05)}
+      ${nf('Fountain Scale', 'townSquare.fountainScale', layout.townSquare.fountainScale, 0.1, 3, 0.1)}
+    </div>
+    <div class="field-row">
+      ${nf('Lamp Count', 'townSquare.lampPostCount', layout.townSquare.lampPostCount, 0, 12, 1)}
+      ${nf('Lamp Radius', 'townSquare.lampPostRadius', layout.townSquare.lampPostRadius, 0.1, 1, 0.02)}
+    </div>
+    <div class="field-row">
+      ${cf('Stone', 'townSquare.stoneColor', layout.townSquare.stoneColor)}
+      ${cf('Lamp Color', 'townSquare.lampColor', layout.townSquare.lampColor)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Plots Panel ──
+function buildPlotsPanel() {
+  const d = document.createElement('div');
+  for (let i = 0; i < layout.plots.length; i++) {
+    const p = layout.plots[i];
+    const card = document.createElement('div');
+    card.className = 'plot-card';
+    card.innerHTML = `
+      <div class="plot-header" data-toggle="plot-body-${i}">
+        <span>Plot ${i}: ${p.label} (Tier ${p.tier})</span>
+        <span class="chevron">\u25BC</span>
+      </div>
+      <div class="plot-body" id="plot-body-${i}" style="display:none">
+        <div class="field-row">
+          <div class="field"><label>X</label><input type="number" id="plot-x-${i}" value="${p.x}" step="0.05" data-bind="plots.${i}.x"></div>
+          <div class="field"><label>Z</label><input type="number" id="plot-z-${i}" value="${p.z}" step="0.05" data-bind="plots.${i}.z"></div>
+          <div class="field"><label>Rotation</label><input type="number" value="${p.rotation}" step="5" data-bind="plots.${i}.rotation"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Pad Size</label><input type="number" value="${p.padSize}" step="0.02" data-bind="plots.${i}.padSize"></div>
+          <div class="field"><label>Label</label><input type="text" value="${p.label}" data-bind="plots.${i}.label"></div>
+        </div>
+        <div class="field-row">
+          ${cf('Pad Color', `plots.${i}.padColor`, p.padColor)}
+          ${cf('Border', `plots.${i}.borderColor`, p.borderColor)}
+        </div>
+        <div style="margin-top:4px;font-size:10px;color:#888">Slots:</div>
+        ${p.slots.map((s, si) => `
+          <div class="field-row" style="margin:2px 0">
+            <div class="field"><label>dx</label><input type="number" value="${s.dx}" step="0.01" data-bind="plots.${i}.slots.${si}.dx" style="width:55px"></div>
+            <div class="field"><label>dz</label><input type="number" value="${s.dz}" step="0.01" data-bind="plots.${i}.slots.${si}.dz" style="width:55px"></div>
+            <div class="field"><label>rot</label><input type="number" value="${s.rotation}" step="5" data-bind="plots.${i}.slots.${si}.rotation" style="width:55px"></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    // Toggle
+    card.querySelector('.plot-header').onclick = () => {
+      const body = card.querySelector('.plot-body');
+      body.style.display = body.style.display === 'none' ? 'block' : 'none';
+    };
+    // Make plot draggable by clicking the card
+    card.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+      selectedElement = { type: 'plot', index: i };
+      updateSelInfo();
+    });
+    d.appendChild(card);
+  }
+  wireFields(d);
+  return d;
+}
+
+// ── Roads Panel ──
+function buildRoadsPanel() {
+  const d = document.createElement('div');
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('Width', 'roads.width', layout.roads.width, 0.01, 0.3, 0.01)}
+      ${nf('Height', 'roads.height', layout.roads.height, 0.001, 0.02, 0.001)}
+    </div>
+    <div class="field-row">
+      ${cf('Color', 'roads.color', layout.roads.color)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Trees Panel ──
+function buildTreesPanel() {
+  const d = document.createElement('div');
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('Count', 'trees.count', layout.trees.count, 0, 100, 1)}
+      ${nf('Min Distance', 'trees.minDistance', layout.trees.minDistance, 0.1, 3, 0.1)}
+    </div>
+    <div class="field-row">
+      ${nf('Plot Clear', 'trees.plotClearance', layout.trees.plotClearance, 0.1, 2, 0.05)}
+    </div>
+    <div class="field-row">
+      ${nf('Min Height', 'trees.minHeight', layout.trees.minHeight, 0.02, 0.3, 0.01)}
+      ${nf('Max Height', 'trees.maxHeight', layout.trees.maxHeight, 0.05, 0.5, 0.01)}
+    </div>
+    <div class="field-row">
+      ${cf('Trunk', 'trees.trunkColor', layout.trees.trunkColor)}
+    </div>
+    <div class="field-row">
+      ${layout.trees.leafColors.map((c, i) => cf(`Leaf ${i+1}`, `trees.leafColors.${i}`, c)).join('')}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Decorations Panel ──
+function buildDecorationsPanel() {
+  const d = document.createElement('div');
+  const addBtn = document.createElement('button');
+  addBtn.textContent = '+ Add Decoration';
+  addBtn.onclick = () => {
+    // Place at a visible offset (not at 0,0 which is under the town square)
+    const n = layout.decorations.length;
+    const angle = (n * 1.3) % (Math.PI * 2);
+    const r = 0.6 + (n % 4) * 0.3;
+    layout.decorations.push({
+      type: 'rock',
+      x: Math.round(Math.sin(angle) * r * 100) / 100,
+      z: Math.round(Math.cos(angle) * r * 100) / 100,
+      scale: 1.0, rotation: 0, color: '#777777'
+    });
+    buildPanel();
+    liveUpdate();
+  };
+  d.appendChild(addBtn);
+
+  for (let i = 0; i < layout.decorations.length; i++) {
+    const dec = layout.decorations[i];
+    const card = document.createElement('div');
+    card.className = 'dec-card';
+    card.innerHTML = `
+      <select data-dec-type="${i}">${DECORATION_TYPES.map(t =>
+        `<option value="${t}" ${t === dec.type ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <input type="number" id="dec-x-${i}" value="${dec.x}" step="0.05" style="width:55px" title="X">
+      <input type="number" id="dec-z-${i}" value="${dec.z}" step="0.05" style="width:55px" title="Z">
+      <input type="number" value="${dec.scale}" step="0.1" style="width:45px" title="Scale" data-dec-scale="${i}">
+      <input type="number" value="${dec.rotation || 0}" step="5" style="width:45px" title="Rotation" data-dec-rot="${i}">
+      <input type="color" value="${dec.color || '#777777'}" data-dec-color="${i}" style="width:28px;height:18px">
+      <button class="danger" data-dec-del="${i}" style="padding:2px 6px;font-size:10px">\u2716</button>
+    `;
+
+    // Bind events
+    card.querySelector(`select[data-dec-type="${i}"]`).onchange = (e) => { dec.type = e.target.value; liveUpdate(); };
+    card.querySelector(`#dec-x-${i}`).onchange = (e) => { dec.x = parseFloat(e.target.value); liveUpdate(); };
+    card.querySelector(`#dec-z-${i}`).onchange = (e) => { dec.z = parseFloat(e.target.value); liveUpdate(); };
+    card.querySelector(`[data-dec-scale="${i}"]`).onchange = (e) => { dec.scale = parseFloat(e.target.value); liveUpdate(); };
+    card.querySelector(`[data-dec-rot="${i}"]`).onchange = (e) => { dec.rotation = parseFloat(e.target.value); liveUpdate(); };
+    card.querySelector(`[data-dec-color="${i}"]`).oninput = (e) => { dec.color = e.target.value; liveUpdate(); };
+    card.querySelector(`[data-dec-del="${i}"]`).onclick = () => {
+      layout.decorations.splice(i, 1);
+      buildPanel();
+      liveUpdate();
+    };
+
+    // Make decoration selectable/draggable
+    card.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
+      selectedElement = { type: 'decoration', index: i };
+      updateSelInfo();
+    });
+
+    d.appendChild(card);
+  }
+  return d;
+}
+
+// ── Walls Panel ──
+function buildWallsPanel() {
+  const d = document.createElement('div');
+  const w = layout.walls;
+  d.innerHTML = `
+    <div class="toggle-row">
+      <input type="checkbox" data-bind="walls.enabled" ${w.enabled ? 'checked' : ''}>
+      <label>Enable Walls</label>
+    </div>
+    <div class="field-row">
+      ${nf('Height', 'walls.height', w.height, 0.01, 0.2, 0.01)}
+      ${nf('Thickness', 'walls.thickness', w.thickness, 0.005, 0.1, 0.005)}
+    </div>
+    <div class="field-row">
+      ${cf('Color', 'walls.color', w.color)}
+    </div>
+    <div style="margin-top:6px">
+      <span style="font-size:10px;color:#888">Wall points: ${w.points.length}</span>
+      <button class="secondary" id="btn-wall-rect" style="margin-left:6px;font-size:10px;padding:2px 6px">Add Rectangle</button>
+      <button class="secondary" id="btn-wall-circle" style="font-size:10px;padding:2px 6px">Add Circle</button>
+      <button class="danger" id="btn-wall-clear" style="font-size:10px;padding:2px 6px">Clear</button>
+    </div>
+    <div id="wall-point-list" style="margin-top:4px;max-height:120px;overflow-y:auto;font-size:10px;color:#999"></div>
+  `;
+  wireFields(d);
+
+  // Wall point presets
+  d.querySelector('#btn-wall-rect').onclick = () => {
+    w.enabled = true;
+    w.points = [[-1.8, -2.2], [1.8, -2.2], [1.8, 1.5], [-1.8, 1.5]];
+    buildPanel();
+    liveUpdate();
+  };
+  d.querySelector('#btn-wall-circle').onclick = () => {
+    w.enabled = true;
+    w.points = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      w.points.push([Math.round(Math.sin(a) * 2 * 100) / 100, Math.round(Math.cos(a) * 2 * 100) / 100]);
+    }
+    buildPanel();
+    liveUpdate();
+  };
+  d.querySelector('#btn-wall-clear').onclick = () => {
+    w.points = [];
+    w.enabled = false;
+    buildPanel();
+    liveUpdate();
+  };
+
+  // Show existing points
+  const list = d.querySelector('#wall-point-list');
+  if (w.points.length > 0) {
+    list.innerHTML = w.points.map((p, i) =>
+      `<div style="display:flex;gap:4px;align-items:center;margin:1px 0">
+        <span style="min-width:16px">${i}:</span>
+        <input type="number" value="${p[0]}" step="0.1" style="width:55px;background:#16213e;border:1px solid #444;color:#fff;font-size:10px;padding:1px 3px;border-radius:2px" data-wp="${i}" data-axis="0">
+        <input type="number" value="${p[1]}" step="0.1" style="width:55px;background:#16213e;border:1px solid #444;color:#fff;font-size:10px;padding:1px 3px;border-radius:2px" data-wp="${i}" data-axis="1">
+        <button class="danger" data-wp-del="${i}" style="padding:1px 4px;font-size:9px">\u2716</button>
+      </div>`
+    ).join('');
+    list.querySelectorAll('input[data-wp]').forEach(el => {
+      el.onchange = () => {
+        const idx = parseInt(el.dataset.wp);
+        const axis = parseInt(el.dataset.axis);
+        w.points[idx][axis] = parseFloat(el.value);
+        liveUpdate();
+      };
+    });
+    list.querySelectorAll('button[data-wp-del]').forEach(el => {
+      el.onclick = () => {
+        w.points.splice(parseInt(el.dataset.wpDel), 1);
+        if (w.points.length < 2) w.enabled = false;
+        buildPanel();
+        liveUpdate();
+      };
+    });
+  }
+
+  return d;
+}
+
+// ── Lighting Panel ──
+function buildLightingPanel() {
+  const d = document.createElement('div');
+  const l = layout.lighting;
+  d.innerHTML = `
+    <div class="field-row">
+      ${cf('Sun', 'lighting.sunColor', l.sunColor)}
+      ${nf('Sun Intensity', 'lighting.sunIntensity', l.sunIntensity, 0, 5, 0.1)}
+    </div>
+    <div class="field-row">
+      ${nf('Sun X', 'lighting.sunPosition.0', l.sunPosition[0], -10, 10, 0.5)}
+      ${nf('Sun Y', 'lighting.sunPosition.1', l.sunPosition[1], -10, 10, 0.5)}
+      ${nf('Sun Z', 'lighting.sunPosition.2', l.sunPosition[2], -10, 10, 0.5)}
+    </div>
+    <div class="field-row">
+      ${cf('Ambient', 'lighting.ambientColor', l.ambientColor)}
+      ${nf('Ambient Int', 'lighting.ambientIntensity', l.ambientIntensity, 0, 3, 0.1)}
+    </div>
+    <div class="field-row">
+      ${cf('Hemi Sky', 'lighting.hemiSkyColor', l.hemiSkyColor)}
+      ${cf('Hemi Ground', 'lighting.hemiGroundColor', l.hemiGroundColor)}
+    </div>
+    <div class="field-row">
+      ${nf('Hemi Int', 'lighting.hemiIntensity', l.hemiIntensity, 0, 3, 0.1)}
+    </div>
+    <div class="field-row">
+      ${nf('Shadow Size', 'lighting.shadowMapSize', l.shadowMapSize, 512, 4096, 512)}
+      ${nf('Shadow Bias', 'lighting.shadowBias', l.shadowBias, -0.01, 0, 0.001)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Camera Panel ──
+function buildCameraPanel() {
+  const d = document.createElement('div');
+  const c = layout.camera;
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('FOV', 'camera.fov', c.fov, 20, 90, 5)}
+      ${nf('Distance', 'camera.distance', c.distance, 1, 10, 0.5)}
+    </div>
+    <div class="field-row">
+      ${nf('Min Dist', 'camera.minDistance', c.minDistance, 0.5, 5, 0.1)}
+      ${nf('Max Dist', 'camera.maxDistance', c.maxDistance, 3, 20, 0.5)}
+    </div>
+    <div class="field-row">
+      ${nf('Pitch', 'camera.pitch', c.pitch, 0, 80, 5)}
+      ${nf('Yaw', 'camera.yaw', c.yaw, -180, 180, 5)}
+    </div>
+    <div class="field-row">
+      ${nf('Target Y', 'camera.targetY', c.targetY, -1, 2, 0.05)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Terrain Panel ──
+function buildTerrainPanel() {
+  const d = document.createElement('div');
+  const t = layout.terrain;
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('Mesh Size', 'terrain.meshSize', t.meshSize, 2, 10, 1)}
+      ${nf('Resolution', 'terrain.resolution', t.resolution, 32, 256, 16)}
+    </div>
+    <div class="field-row">
+      ${nf('Patch Radius', 'terrain.patchRadius', t.patchRadius, 30, 300, 10)}
+      ${nf('Max Height', 'terrain.maxHeight', t.maxHeight, 0.01, 0.5, 0.01)}
+    </div>
+    <div class="field-row">
+      ${nf('Water Opacity', 'terrain.waterOpacity', t.waterOpacity, 0, 1, 0.05)}
+    </div>
+    <div class="field-row">
+      ${cf('Water', 'terrain.waterColor', t.waterColor)}
+      ${cf('Skirt', 'terrain.skirtColor', t.skirtColor)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ── Building Scale Panel ──
+function buildBuildingScalePanel() {
+  const d = document.createElement('div');
+  const b = layout.buildingScale;
+  d.innerHTML = `
+    <div class="field-row">
+      ${nf('Base Unit', 'buildingScale.baseUnit', b.baseUnit, 0.01, 0.2, 0.005)}
+      ${nf('Level Factor', 'buildingScale.levelScaleFactor', b.levelScaleFactor, 0.01, 0.2, 0.005)}
+    </div>
+  `;
+  wireFields(d);
+  return d;
+}
+
+// ─── Field Helpers ───
+
+/** Number field returning HTML with data-bind path */
+function nf(label, bind, value, min, max, step) {
+  return `<div class="field"><label>${label}</label><input type="number" value="${value}" min="${min}" max="${max}" step="${step}" data-bind="${bind}"></div>`;
+}
+
+/** Color field returning HTML with data-bind path */
+function cf(label, bind, value) {
+  return `<div class="field"><label>${label}</label><input type="color" value="${value}" data-bind="${bind}"></div>`;
+}
+
+/**
+ * Wire all data-bind elements inside container.
+ * Resolves dot-separated paths like "lighting.sunPosition.0" into layout object,
+ * updates the value, and triggers liveUpdate().
+ */
+function wireFields(container) {
+  container.querySelectorAll('[data-bind]').forEach(el => {
+    const handler = () => {
+      const path = el.dataset.bind.split('.');
+      let obj = layout;
+      for (let i = 0; i < path.length - 1; i++) {
+        const key = isNaN(path[i]) ? path[i] : parseInt(path[i]);
+        obj = obj[key];
+      }
+      const lastKey = isNaN(path[path.length - 1]) ? path[path.length - 1] : parseInt(path[path.length - 1]);
+      const val = el.type === 'checkbox' ? el.checked :
+                  el.type === 'color' || el.type === 'text' ? el.value :
+                  parseFloat(el.value);
+      obj[lastKey] = val;
+      liveUpdate();
+    };
+    // Use 'input' for real-time feedback on sliders/colors, 'change' for text/number
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
+  });
+}
+
+// ─── Async Viewport Init (needs THREE import for raycasting) ───
+
+let THREE;
+async function initViewportInteraction() {
+  THREE = await import('three');
+  const canvas = renderer._renderer.domElement;
+  const raycaster = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const pt = new THREE.Vector3();
+
+  canvas.addEventListener('pointermove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera({ x: mx, y: my }, renderer._camera);
+    if (raycaster.ray.intersectPlane(groundPlane, pt)) {
+      document.getElementById('mouse-coord').textContent = `X: ${pt.x.toFixed(2)}, Z: ${pt.z.toFixed(2)}`;
+    }
+
+    if (dragState) {
+      if (raycaster.ray.intersectPlane(groundPlane, pt)) {
+        let nx = pt.x + dragState.offsetX;
+        let nz = pt.z + dragState.offsetZ;
+        if (document.getElementById('chk-snap').checked) {
+          nx = Math.round(nx / SNAP_SIZE) * SNAP_SIZE;
+          nz = Math.round(nz / SNAP_SIZE) * SNAP_SIZE;
+        }
+        nx = Math.round(nx * 100) / 100;
+        nz = Math.round(nz * 100) / 100;
+
+        if (dragState.type === 'plot') {
+          layout.plots[dragState.index].x = nx;
+          layout.plots[dragState.index].z = nz;
+          renderer._townPlotPositions[dragState.index] = { x: nx, z: nz };
+          const pg = renderer._townPlotGroups[dragState.index];
+          if (pg) pg.position.set(nx, 0, nz);
+        } else if (dragState.type === 'decoration') {
+          layout.decorations[dragState.index].x = nx;
+          layout.decorations[dragState.index].z = nz;
+          if (renderer._townDecorationGroup) {
+            const child = renderer._townDecorationGroup.children[dragState.index];
+            if (child) child.position.set(nx, 0, nz);
+          }
+        } else if (dragState.type === 'townSquare') {
+          layout.townSquare.x = nx;
+          layout.townSquare.z = nz;
+          if (renderer._townSquareGroup) renderer._townSquareGroup.position.set(nx, 0, nz);
+        }
+        updateSelInfo();
+        updateDragFields();
+      }
+    }
+  });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera({ x: mx, y: my }, renderer._camera);
+
+    // Test intersection with plots
+    const targets = [];
+    for (const pg of renderer._townPlotGroups) {
+      if (pg) pg.traverse(o => { if (o.isMesh && o.userData.type) targets.push(o); });
+    }
+    // Test decorations
+    if (renderer._townDecorationGroup) {
+      renderer._townDecorationGroup.children.forEach((child, idx) => {
+        child.traverse(o => {
+          if (o.isMesh) { o.userData._decIdx = idx; targets.push(o); }
+        });
+      });
+    }
+    // Test town square
+    if (renderer._townSquareGroup) {
+      renderer._townSquareGroup.traverse(o => {
+        if (o.isMesh) { o.userData._isTownSquare = true; targets.push(o); }
+      });
+    }
+
+    const hits = raycaster.intersectObjects(targets, false);
+    if (hits.length > 0) {
+      const hit = hits[0].object;
+      const ud = hit.userData;
+
+      // Get world position of click on ground plane
+      const clickPt = new THREE.Vector3();
+      raycaster.ray.intersectPlane(groundPlane, clickPt);
+
+      if (ud._decIdx != null) {
+        const idx = ud._decIdx;
+        selectedElement = { type: 'decoration', index: idx };
+        const dec = layout.decorations[idx];
+        dragState = { type: 'decoration', index: idx, offsetX: dec.x - clickPt.x, offsetZ: dec.z - clickPt.z };
+        renderer._controls.enabled = false;
+        updateSelInfo();
+        return;
+      }
+
+      if (ud._isTownSquare) {
+        selectedElement = { type: 'townSquare', index: 0 };
+        dragState = {
+          type: 'townSquare', index: 0,
+          offsetX: (layout.townSquare.x || 0) - clickPt.x,
+          offsetZ: (layout.townSquare.z || 0) - clickPt.z
+        };
+        renderer._controls.enabled = false;
+        updateSelInfo();
+        return;
+      }
+
+      if (ud.type === 'plot-pad' || ud.type === 'plot') {
+        const plotIdx = ud.plotIdx;
+        selectedElement = { type: 'plot', index: plotIdx };
+        const pp = layout.plots[plotIdx];
+        dragState = { type: 'plot', index: plotIdx, offsetX: pp.x - clickPt.x, offsetZ: pp.z - clickPt.z };
+        renderer._controls.enabled = false;
+        updateSelInfo();
+        return;
+      }
+    }
+
+    // Deselect
+    selectedElement = null;
+    dragState = null;
+    updateSelInfo();
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    if (dragState) {
+      dragState = null;
+      renderer._controls.enabled = true;
+      // Rebuild roads (they depend on plot positions)
+      liveUpdate();
+    }
+  });
+}
+
+// ─── Start ───
+
+init().then(() => {
+  initViewportInteraction();
+});
+</script>
+</body>
+</html>

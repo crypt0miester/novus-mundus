@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "townSquare": {
+    "x": 0.51,
+    "z": 0.27,
+    "radius": 0.8,
+    "style": "cobblestone",
+    "fountainScale": 2,
+    "lampPostCount": 9,
+    "lampPostRadius": 0.42,
+    "lampColor": "#ffeeaa",
+    "stoneColor": "#a09880",
+    "innerRingRadius": [
+      0.28,
+      0.32
+    ]
+  },
+  "plots": [
+    {
+      "id": 0,
+      "label": "Starter",
+      "tier": "1",
+      "x": -2.62,
+      "z": 3.23,
+      "rotation": 0,
+      "scale": 1,
+      "padSize": 0.58,
+      "padColor": "#6a8a55",
+      "borderColor": "#887766",
+      "slots": [
+        {
+          "dx": -0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": -0.17,
+          "dz": 0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": 0.17,
+          "rotation": 0
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "label": "Tier 1",
+      "tier": "1",
+      "x": 2.9,
+      "z": 3.17,
+      "rotation": 0,
+      "scale": 1,
+      "padSize": 0.58,
+      "padColor": "#6a8a55",
+      "borderColor": "#887766",
+      "slots": [
+        {
+          "dx": -0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": -0.17,
+          "dz": 0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": 0.17,
+          "rotation": 0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "label": "Tier 2",
+      "tier": "2",
+      "x": -2.58,
+      "z": -2.07,
+      "rotation": 0,
+      "scale": 1,
+      "padSize": 0.58,
+      "padColor": "#6a8a55",
+      "borderColor": "#887766",
+      "slots": [
+        {
+          "dx": -0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": -0.17,
+          "dz": 0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": 0.17,
+          "rotation": 0
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "label": "Tier 2",
+      "tier": "2",
+      "x": 3.26,
+      "z": -1.36,
+      "rotation": 0,
+      "scale": 1,
+      "padSize": 0.58,
+      "padColor": "#6a8a55",
+      "borderColor": "#887766",
+      "slots": [
+        {
+          "dx": -0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": -0.17,
+          "dz": 0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": 0.17,
+          "rotation": 0
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "label": "Prestige",
+      "tier": "3",
+      "x": 0.19,
+      "z": -1.64,
+      "rotation": 0,
+      "scale": 1,
+      "padSize": 0.58,
+      "padColor": "#6a8a55",
+      "borderColor": "#887766",
+      "slots": [
+        {
+          "dx": -0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": -0.17,
+          "rotation": 0
+        },
+        {
+          "dx": -0.17,
+          "dz": 0.17,
+          "rotation": 0
+        },
+        {
+          "dx": 0.17,
+          "dz": 0.17,
+          "rotation": 0
+        }
+      ]
+    }
+  ],
+  "roads": {
+    "width": 0.23,
+    "height": 0.008,
+    "color": "#9a9080",
+    "style": "cobblestone",
+    "customPaths": []
+  },
+  "trees": {
+    "count": 48,
+    "minDistance": 0.7,
+    "plotClearance": 0.4,
+    "minHeight": 0.06,
+    "maxHeight": 0.14,
+    "trunkColor": "#5a3a20",
+    "leafColors": [
+      "#2d6b30",
+      "#3a7a35",
+      "#4a8a40"
+    ],
+    "custom": []
+  },
+  "decorations": [
+    {
+      "type": "rock",
+      "x": 0.45,
+      "z": -0.7,
+      "scale": 3.1,
+      "rotation": 135,
+      "color": "#777777"
+    },
+    {
+      "type": "rock",
+      "x": 1.43,
+      "z": -1.48,
+      "scale": 1,
+      "rotation": 0,
+      "color": "#777777"
+    }
+  ],
+  "walls": {
+    "enabled": true,
+    "points": [],
+    "height": 0.13,
+    "thickness": 0.075,
+    "color": "#887766",
+    "gatePositions": []
+  },
+  "lighting": {
+    "sunColor": "#ffeedd",
+    "sunIntensity": 2,
+    "sunPosition": [
+      3,
+      4,
+      2
+    ],
+    "ambientColor": "#969696",
+    "ambientIntensity": 0.8,
+    "hemiSkyColor": "#ffffff",
+    "hemiGroundColor": "#445522",
+    "hemiIntensity": 1,
+    "shadowMapSize": 2048,
+    "shadowBias": 0
+  },
+  "camera": {
+    "fov": 85,
+    "distance": 4,
+    "minDistance": 1.9,
+    "maxDistance": 10,
+    "pitch": 40,
+    "yaw": 35,
+    "targetY": 0.1
+  },
+  "terrain": {
+    "meshSize": 10,
+    "resolution": 32,
+    "patchRadius": 0,
+    "maxHeight": 0.01,
+    "waterOpacity": 0,
+    "waterColor": "#2266aa",
+    "skirtColor": "#4a6b35"
+  },
+  "buildingScale": {
+    "baseUnit": 0.1,
+    "levelScaleFactor": 0.1
+  }
+}

@@ -1,0 +1,3103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terrain Designer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; display: flex; height: 100vh; }
+#sidebar { width: 360px; background: #16213e; padding: 16px; overflow-y: auto; border-right: 1px solid #333; flex-shrink: 0; }
+#canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; background: #0f0f23; position: relative; overflow: hidden; }
+canvas { box-shadow: 0 0 40px rgba(0,100,200,0.2); cursor: grab; transition: transform 0.15s ease-out; }
+canvas.dragging { cursor: grabbing; }
+#zoom-hud { position: absolute; bottom: 16px; right: 16px; background: rgba(22,33,62,0.85); border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #7ec8e3; pointer-events: none; }
+#coord-hud { position: absolute; bottom: 16px; left: 16px; background: rgba(22,33,62,0.85); border: 1px solid #444; border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #999; pointer-events: none; white-space: pre-line; min-width: 180px; }
+#zoom-controls { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; }
+#zoom-controls button { width: 32px; height: 32px; font-size: 18px; padding: 0; display: flex; align-items: center; justify-content: center; }
+#sidebar-toggle { position: absolute; top: 16px; left: 16px; z-index: 10; width: 32px; height: 32px; font-size: 16px; padding: 0; display: flex; align-items: center; justify-content: center; }
+body.sidebar-hidden #sidebar { display: none; }
+body.fullscreen #sidebar { display: none; }
+body.fullscreen #canvas-wrap { position: fixed; inset: 0; z-index: 100; }
+#legend { position: absolute; top: 16px; left: 56px; background: rgba(22,33,62,0.92); border: 1px solid #444; border-radius: 6px; padding: 10px 14px; font-size: 11px; color: #ccc; line-height: 1.1; }
+#legend.hidden { display: none; }
+#legend-title { font-size: 12px; font-weight: bold; color: #7ec8e3; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+#legend-title button { background: none; color: #888; font-size: 14px; padding: 0 2px; cursor: pointer; }
+#legend-title button:hover { color: #fff; background: none; }
+.legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.legend-swatch { width: 24px; height: 10px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; flex-shrink: 0; }
+.legend-line { width: 18px; height: 2px; flex-shrink: 0; }
+.legend-sep { border-top: 1px solid #333; margin: 6px 0; }
+h2 { font-size: 14px; color: #7ec8e3; margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 1px; }
+h1 { font-size: 18px; margin-bottom: 12px; color: #fff; }
+label { display: block; font-size: 12px; color: #999; margin-top: 6px; }
+input[type=range] { width: 100%; accent-color: #7ec8e3; }
+input[type=number] { width: 70px; background: #1a1a2e; border: 1px solid #444; color: #fff; padding: 2px 6px; border-radius: 3px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.anchor-card { background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 8px; margin: 4px 0; font-size: 11px; }
+.anchor-card.selected { border-color: #7ec8e3; }
+.anchor-header { display: flex; justify-content: space-between; align-items: center; }
+.anchor-header span { font-weight: bold; color: #7ec8e3; }
+button { background: #7ec8e3; color: #000; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+button:hover { background: #5ab0d0; }
+button.danger { background: #e74c3c; color: #fff; }
+button.danger:hover { background: #c0392b; }
+button.secondary { background: #3a3a5e; color: #ccc; }
+button.secondary:hover { background: #4a4a6e; }
+#stats { font-size: 11px; color: #888; margin-top: 8px; }
+.gen-btn { margin: 2px; padding: 5px 10px; font-size: 11px; }
+textarea { width: 100%; height: 100px; background: #1a1a2e; border: 1px solid #444; color: #ccc; font-family: monospace; font-size: 10px; padding: 4px; border-radius: 3px; }
+.toggle-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+.toggle-row input[type=checkbox] { accent-color: #7ec8e3; width: 16px; height: 16px; }
+.toggle-row label { margin-top: 0; color: #ccc; cursor: pointer; }
+.gen-section { background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 10px; margin: 6px 0; }
+.gen-section label { margin-top: 4px; }
+.gen-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.elev-slider { width: 100%; height: 6px; accent-color: #7ec8e3; margin: 2px 0; }
+.elev-bar { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.elev-bar span { font-size: 10px; color: #888; min-width: 18px; text-align: right; }
+.terrain-btns { display: flex; gap: 2px; margin-top: 4px; flex-wrap: wrap; }
+.terrain-btns button { font-size: 9px; padding: 2px 5px; border-radius: 3px; }
+.tbtn-ocean { background: rgb(30,80,160); color: #fff; }
+.tbtn-ocean:hover { background: rgb(40,100,180); }
+.tbtn-shore { background: rgb(60,140,200); color: #fff; }
+.tbtn-shore:hover { background: rgb(70,160,220); }
+.tbtn-beach { background: rgb(210,200,160); color: #333; }
+.tbtn-beach:hover { background: rgb(220,210,170); }
+.tbtn-plains { background: rgb(80,150,50); color: #fff; }
+.tbtn-plains:hover { background: rgb(90,170,60); }
+.tbtn-hills { background: rgb(120,95,55); color: #fff; }
+.tbtn-hills:hover { background: rgb(140,110,65); }
+.tbtn-mountain { background: rgb(180,180,180); color: #333; }
+.tbtn-mountain:hover { background: rgb(200,200,200); }
+.elev-label { font-size: 10px; font-weight: bold; padding: 1px 4px; border-radius: 2px; }
+#elev-gradient { height: 14px; border-radius: 3px; border: 1px solid #444; position: relative; margin: 20px 0 10px; }
+#elev-gradient .marker { position: absolute; top: -3px; width: 2px; height: 20px; background: #fff; }
+#elev-gradient .marker-label { position: absolute; top: -14px; font-size: 8px; color: #aaa; white-space: nowrap; transform: translateX(-50%); }
+
+/* ─── Tab navigation ─── */
+.tab-bar { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 2px solid #333; }
+.tab-btn { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; font-weight: bold; letter-spacing: 0.5px; cursor: pointer; background: transparent; color: #666; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s, border-color 0.15s; }
+.tab-btn:hover { color: #aaa; background: transparent; }
+.tab-btn.active { color: #7ec8e3; border-bottom-color: #7ec8e3; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ─── File manager ─── */
+.file-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.file-card { background: #1a1a2e; border: 1px solid #333; border-radius: 6px; padding: 10px; cursor: pointer; transition: border-color 0.15s; }
+.file-card:hover { border-color: #7ec8e3; }
+.file-card .file-name { font-weight: bold; color: #e0e0e0; font-size: 13px; }
+.file-card .file-meta { font-size: 10px; color: #666; margin-top: 3px; }
+.file-card .file-actions { display: flex; gap: 4px; margin-top: 6px; }
+.file-card .file-actions button { font-size: 11px; padding: 3px 8px; }
+.file-save-row { display: flex; gap: 6px; margin: 8px 0; }
+.file-save-row input[type=text] { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #fff; padding: 6px 8px; border-radius: 4px; font-size: 12px; }
+.file-save-row input[type=text]::placeholder { color: #555; }
+.file-empty { color: #555; font-size: 12px; text-align: center; padding: 24px 0; }
+.file-status { font-size: 11px; margin: 6px 0; padding: 6px 8px; border-radius: 4px; }
+.file-status.success { background: rgba(46,160,67,0.15); color: #3fb950; border: 1px solid rgba(46,160,67,0.3); }
+.file-status.error { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+.server-status { font-size: 11px; padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; }
+.server-status.online { background: rgba(46,160,67,0.1); color: #3fb950; }
+.server-status.offline { background: rgba(248,81,73,0.1); color: #f85149; }
+#three-container { position: absolute; inset: 0; display: none; }
+#three-container canvas { width: 100% !important; height: 100% !important; }
+
+/* ─── World tab: loading spinner ─── */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeCheck { from { opacity:0; transform:scale(0.5); } to { opacity:1; transform:scale(1); } }
+.world-spinner { display:inline-block; width:14px; height:14px; border:2px solid #444; border-top-color:#7ec8e3; border-radius:50%; animation:spin 0.7s linear infinite; vertical-align:middle; }
+.world-spinner.done { animation:none; border-color:transparent; width:0; height:0; padding:0; border:none; }
+.world-status-row { display:flex; align-items:center; gap:8px; font-size:12px; color:#888; margin-bottom:10px; min-height:20px; }
+.world-status-row .check { color:#4f4; animation:fadeCheck 0.3s ease; }
+.world-status-row .error { color:#f44; }
+
+/* ─── Smooth collapsible ─── */
+.world-collapsible { max-height:0; opacity:0; overflow:hidden; transition:max-height 0.35s ease, opacity 0.3s ease; }
+.world-collapsible.open { max-height:400px; opacity:1; }
+
+/* ─── City search + filter pills ─── */
+.city-search { width:100%; background:#1a1a2e; border:1px solid #444; color:#e0e0e0; padding:6px 10px; border-radius:4px; font-size:12px; margin-bottom:6px; outline:none; }
+.city-search:focus { border-color:#7ec8e3; }
+.city-search::placeholder { color:#555; }
+.city-filter-row { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; }
+.city-filter-pill { padding:3px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:#2a2a4e; color:#888; border:1px solid #333; transition:all 0.15s; }
+.city-filter-pill:hover { background:#3a3a5e; color:#ccc; }
+.city-filter-pill.active { background:#7ec8e3; color:#000; border-color:#7ec8e3; }
+
+/* ─── City cards ─── */
+.city-card { background:#1a1a2e; border:1px solid #333; border-radius:6px; padding:8px 10px; margin-bottom:4px; cursor:pointer; transition:border-color 0.15s, background 0.15s; display:flex; align-items:center; gap:8px; }
+.city-card:hover { border-color:#7ec8e3; background:#1e1e36; }
+.city-card.active { border-color:#7ec8e3; background:#1a2a4e; }
+.city-badge { font-size:9px; font-weight:bold; padding:2px 6px; border-radius:3px; color:#000; text-transform:uppercase; letter-spacing:0.5px; flex-shrink:0; }
+.city-name { font-weight:bold; color:#e0e0e0; font-size:12px; }
+.city-meta { font-size:10px; color:#666; margin-top:1px; }
+
+/* ─── Breadcrumb ─── */
+.world-breadcrumb { display:flex; align-items:center; gap:4px; font-size:12px; margin-bottom:10px; min-height:20px; flex-wrap:wrap; }
+.bc-segment { color:#7ec8e3; cursor:pointer; padding:2px 4px; border-radius:3px; transition:background 0.15s; }
+.bc-segment:hover { background:rgba(126,200,227,0.15); }
+.bc-sep { color:#444; font-size:10px; }
+.bc-current { color:#e0e0e0; font-weight:bold; padding:2px 4px; }
+
+/* ─── Controls card ─── */
+.world-controls-card { background:#1a1a2e; border:1px solid #333; border-radius:6px; padding:10px; margin:8px 0; }
+.world-controls-card h3 { font-size:12px; color:#7ec8e3; margin:0 0 8px; text-transform:uppercase; letter-spacing:0.5px; }
+
+/* ─── Primary button ─── */
+button.primary { background:#7ec8e3; color:#000; font-weight:bold; }
+button.primary:hover { background:#5ab0d0; }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>Terrain Designer</h1>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('editor')">Editor</button>
+    <button class="tab-btn" onclick="switchTab('files')">Files</button>
+    <button class="tab-btn" onclick="switchTab('world')">World</button>
+  </div>
+
+  <div id="tab-editor" class="tab-panel active">
+
+  <h2>Random Generator</h2>
+  <div class="gen-section">
+    <div class="row">
+      <label>Anchors <input type="number" id="gen-count" value="10" min="2" max="30" style="width:50px"></label>
+      <label>Water % <input type="number" id="gen-water" value="35" min="5" max="80" style="width:50px"></label>
+    </div>
+    <label>Land Spread <input type="range" id="gen-spread" min="500" max="5000" value="2500"></label>
+    <div class="gen-row">
+      <button class="gen-btn" onclick="generateRandom('continental')">Continental</button>
+      <button class="gen-btn" onclick="generateRandom('archipelago')">Archipelago</button>
+      <button class="gen-btn" onclick="generateRandom('pangaea')">Pangaea</button>
+      <button class="gen-btn" onclick="generateRandom('atoll')">Atoll</button>
+    </div>
+    <div class="gen-row" style="margin-top:4px">
+      <button class="gen-btn secondary" onclick="randomizeSeed()">Random Seed</button>
+      <button class="gen-btn secondary" onclick="randomizeAnchors()">Shuffle Anchors</button>
+      <button class="gen-btn secondary" onclick="generateRandom('random')">Full Random</button>
+    </div>
+    <label style="font-size:10px;color:#555;margin-top:8px">Tectonic (realistic)</label>
+    <div class="gen-row">
+      <button class="gen-btn" onclick="generateTectonic('coastal-range')">Coastal Range</button>
+      <button class="gen-btn" onclick="generateTectonic('island-arc')">Island Arc</button>
+      <button class="gen-btn" onclick="generateTectonic('collision')">Collision</button>
+    </div>
+    <div class="gen-row" style="margin-top:4px">
+      <button class="gen-btn" onclick="generateTectonic('rift-valley')">Rift Valley</button>
+      <button class="gen-btn" onclick="generateTectonic('passive-margin')">Passive Margin</button>
+      <button class="gen-btn secondary" onclick="generateTectonic('random')">Random Tectonic</button>
+    </div>
+  </div>
+
+  <h2>Config</h2>
+  <div class="row">
+    <label>Seed <input type="number" id="seed" value="1279872052"></label>
+    <label>Water <input type="number" id="waterLine" value="90" min="0" max="255"></label>
+    <label>Peak <input type="number" id="peakLine" value="245" min="0" max="255"></label>
+  </div>
+  <label>Water Line <input type="range" id="waterSlider" min="0" max="200" value="90"></label>
+  <label>Peak Line <input type="range" id="peakSlider" min="100" max="255" value="245"></label>
+  <label>Radius (km) <input type="number" id="radiusKm" value="40" min="5" max="200"></label>
+  <div class="toggle-row">
+    <input type="checkbox" id="showPassable" onchange="render()">
+    <label for="showPassable">Show passable overlay (P)</label>
+  </div>
+  <div class="toggle-row">
+    <input type="checkbox" id="show3D" onchange="show3D = this.checked; canvas.style.transform = 'none'; document.getElementById('canvas-wrap').style.perspective = 'none'; render(); if (!show3D) applyTilt();">
+    <label for="show3D">3D topography (3)</label>
+  </div>
+  <div id="elev-gradient"></div>
+  <div class="row" style="margin-top:6px">
+    <label style="flex:1">Tilt (T) <input type="range" id="tiltSlider" min="0" max="60" value="0" style="width:100%"></label>
+    <span id="tiltVal" style="font-size:11px;color:#7ec8e3;min-width:24px;text-align:right">0°</span>
+  </div>
+  <div class="row">
+    <label style="flex:1">Rotate <input type="range" id="rotSlider" min="0" max="360" value="0" style="width:100%"></label>
+    <span id="rotVal" style="font-size:11px;color:#7ec8e3;min-width:28px;text-align:right">0°</span>
+  </div>
+
+  <h2>Topology Tools</h2>
+  <div class="gen-section">
+    <div class="gen-row">
+      <button class="gen-btn" onclick="autoPush()" title="Calculate push vectors so terrain slopes naturally between land and water">Auto-Push</button>
+      <button class="gen-btn" onclick="fillTransitions()" title="Insert intermediate anchors between land and water for gradual slopes">Fill Transitions</button>
+      <button class="gen-btn secondary" onclick="clearPush()" title="Reset all push vectors to zero">Clear Push</button>
+    </div>
+    <label style="font-size:10px;color:#666;margin-top:4px">Auto-Push sets push vectors so boundaries slope naturally. Fill Transitions adds intermediate anchors between pairs with large elevation gaps.</label>
+    <div class="row" style="margin-top:4px">
+      <label>Max gap <input type="number" id="fill-gap" value="60" min="20" max="150" style="width:50px" title="Elevation gap threshold for inserting transition anchors"></label>
+      <label>Push str <input type="number" id="push-str" value="3" min="1" max="6" style="width:40px" title="Maximum push vector magnitude"></label>
+    </div>
+  </div>
+
+  <h2>Anchors <button onclick="addAnchor()">+ Add</button></h2>
+  <div id="anchor-list"></div>
+
+  <h2>Stats</h2>
+  <div id="stats"></div>
+
+  <h2>Export</h2>
+  <button onclick="exportJSON()">Copy JSON</button>
+  <button onclick="importJSON()">Import JSON</button>
+  <button class="secondary" onclick="switchTab('files')">Save to File</button>
+  <textarea id="json-area" placeholder="Paste JSON here to import"></textarea>
+
+  </div><!-- /tab-editor -->
+
+  <div id="tab-files" class="tab-panel">
+    <div id="server-status" class="server-status offline">Checking server...</div>
+
+    <h2>Save Current</h2>
+    <div class="file-save-row">
+      <input type="text" id="save-filename" placeholder="my-terrain.json">
+      <button onclick="saveFile()">Save</button>
+    </div>
+    <div id="save-status"></div>
+
+    <h2>Saved Terrains</h2>
+    <div style="margin-bottom:8px">
+      <button class="secondary" onclick="refreshFileList()">Refresh</button>
+    </div>
+    <div id="file-list" class="file-list">
+      <div class="file-empty">No files yet</div>
+    </div>
+  </div><!-- /tab-files -->
+
+  <div id="tab-world" class="tab-panel">
+    <h2>World Map (3D)</h2>
+
+    <!-- Status row: spinner + text -->
+    <div class="world-status-row">
+      <div id="world-spinner" class="world-spinner"></div>
+      <span id="world-status">Loading...</span>
+    </div>
+
+    <!-- Breadcrumb navigation -->
+    <div id="world-breadcrumb" class="world-breadcrumb"></div>
+
+    <!-- City labels toggle -->
+    <div class="toggle-row">
+      <input type="checkbox" id="worldShowLabels" checked onchange="if(window.terrainRenderer)terrainRenderer.setCityLabelsVisible(this.checked)">
+      <label for="worldShowLabels">City labels</label>
+    </div>
+    <div class="toggle-row">
+      <input type="checkbox" id="worldAzimuthal" onchange="if(window.terrainRenderer)terrainRenderer.setGlobeProjection(this.checked?'azimuthal':'sphere')">
+      <label for="worldAzimuthal">Azimuthal projection</label>
+    </div>
+
+    <!-- City view controls (collapsible) -->
+    <div id="world-city-controls" class="world-collapsible">
+      <div class="world-controls-card">
+        <h3>Terrain Display</h3>
+        <div class="toggle-row">
+          <input type="checkbox" id="worldWireframe" onchange="if(window.terrainRenderer)terrainRenderer.setWireframe(this.checked)">
+          <label for="worldWireframe">Wireframe</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="worldWater" checked onchange="if(window.terrainRenderer)terrainRenderer.setWaterEnabled(this.checked)">
+          <label for="worldWater">Water plane</label>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="worldAnchors" onchange="if(window.terrainRenderer)terrainRenderer.setAnchorMarkers(this.checked)">
+          <label for="worldAnchors">Anchor markers</label>
+        </div>
+        <label>Height Scale <input type="range" id="worldHeightScale" min="0.2" max="3" step="0.1" value="1" oninput="if(window.terrainRenderer)terrainRenderer.setHeightScale(Number(this.value))"></label>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="margin-top:8px; display:flex; gap:6px;">
+      <button class="secondary" onclick="worldResetView()">Reset view (R)</button>
+      <button id="btn-globe-view" class="secondary" onclick="worldFlyToGlobe()">Globe View</button>
+    </div>
+
+    <!-- City info area -->
+    <div id="world-city-info" style="margin-top:8px; font-size:12px; color:#aaa;"></div>
+
+    <h2>Cities</h2>
+    <!-- Search + type filter -->
+    <input type="text" id="city-search" class="city-search" placeholder="Search cities..." oninput="filterCityList()">
+    <div class="city-filter-row">
+      <button class="city-filter-pill active" onclick="setCityFilter('All', this)">All</button>
+      <button class="city-filter-pill" onclick="setCityFilter('Capital', this)">Capital</button>
+      <button class="city-filter-pill" onclick="setCityFilter('Trade', this)">Trade</button>
+      <button class="city-filter-pill" onclick="setCityFilter('Combat', this)">Combat</button>
+      <button class="city-filter-pill" onclick="setCityFilter('Resource', this)">Resource</button>
+    </div>
+    <div id="world-city-list" style="max-height:300px; overflow-y:auto;"></div>
+  </div><!-- /tab-world -->
+
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="terrain" width="512" height="512"></canvas>
+  <div id="three-container"></div>
+  <div id="zoom-hud"></div>
+  <div id="coord-hud"></div>
+  <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (Tab)">&#9776;</button>
+  <div id="legend">
+    <div id="legend-title">Legend <button onclick="document.getElementById('legend').classList.add('hidden')" title="Hide">&times;</button></div>
+    <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(90deg,rgb(20,60,120),rgb(60,140,220))"></div> Deep Ocean &ndash; Shallow Water</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:rgb(210,200,160)"></div> Beach / Coast</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(90deg,rgb(100,180,60),rgb(60,120,40))"></div> Plains &ndash; Forest</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(90deg,rgb(100,80,40),rgb(150,110,70))"></div> Hills &ndash; Highlands</div>
+    <div class="legend-row"><div class="legend-swatch" style="background:linear-gradient(90deg,rgb(160,160,160),rgb(240,240,240))"></div> Mountains &ndash; Snow Peaks</div>
+    <div class="legend-sep"></div>
+    <div class="legend-row"><div class="legend-dot" style="background:#4f4"></div> Land anchor</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#4af"></div> Water anchor (mass&gt;150)</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ff0"></div> Selected anchor</div>
+    <div class="legend-row"><div class="legend-line" style="background:#f80"></div> Push vector</div>
+  </div>
+  <div id="zoom-controls">
+    <button onclick="zoomIn()" title="Zoom in">+</button>
+    <button onclick="zoomOut()" title="Zoom out">&minus;</button>
+    <button onclick="resetView()" title="Reset view" style="font-size:12px">R</button>
+    <button onclick="toggleFullscreen()" title="Fullscreen (F)" style="font-size:14px">&#x26F6;</button>
+  </div>
+</div>
+
+<script>
+// ─── Terrain math (matches Rust + TS SDK) ───
+
+function terrainHash(seed, x, y) {
+  let h = (seed ^ (x >>> 0) ^ rotl(y >>> 0, 16)) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0x45D9F3B) >>> 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x45D9F3B) >>> 0;
+  h ^= h >>> 16;
+  return h & 0xFF;
+}
+
+function rotl(v, n) { return ((v << n) | (v >>> (32 - n))) >>> 0; }
+
+// Smooth noise — integer fixed-point math matching on-chain Rust + TS SDK
+function smoothstep256(t) {
+  return (t * t * (768 - 2 * t)) >>> 16;
+}
+
+function smoothOctave(seed, x, y, shift) {
+  const s = 1 << shift;
+  const gx = Math.floor(x / s), gy = Math.floor(y / s);
+  const fx = ((((x % s) + s) % s) * 256 / s) | 0;
+  const fy = ((((y % s) + s) % s) * 256 / s) | 0;
+  const v00 = terrainHash(seed, gx, gy);
+  const v10 = terrainHash(seed, gx + 1, gy);
+  const v01 = terrainHash(seed, gx, gy + 1);
+  const v11 = terrainHash(seed, gx + 1, gy + 1);
+  const tx = smoothstep256(fx), ty = smoothstep256(fy);
+  const itx = 256 - tx, ity = 256 - ty;
+  return (v00 * itx * ity + v10 * tx * ity + v01 * itx * ty + v11 * tx * ty) / (256 * 256) | 0;
+}
+
+function noise(seed, x, y) {
+  const o1 = smoothOctave(seed, x, y, 10);
+  const o2 = smoothOctave((seed ^ 0x9E3779B9) >>> 0, x, y, 7);
+  const o3 = smoothOctave((seed ^ 0x517CC1B7) >>> 0, x, y, 4);
+  return ((o1 * 4 + o2 * 2 + o3) / 7) | 0;
+}
+
+function buoyancy(mass, lift) {
+  return ((lift * (255 - mass)) / 255) | 0;
+}
+
+function twoNearest(anchors, ox, oy) {
+  let bi = 0, bd = 1e18, si = 0, sd = 1e18;
+  for (let i = 0; i < anchors.length; i++) {
+    const dx = ox - anchors[i].x, dy = oy - anchors[i].y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { sd = bd; si = bi; bd = d; bi = i; }
+    else if (d < sd) { sd = d; si = i; }
+  }
+  return [bi, si, bd, sd];
+}
+
+function pressureEffect(nearest, second, dn, ds) {
+  const total = dn + ds;
+  if (total === 0) return 0;
+  const prox = ((dn * 128) / total) | 0;
+  if (prox < 32) return 0;
+  const str = Math.min((prox - 32) * 8, 255);
+  const rpx = nearest.pushX - second.pushX;
+  const rpy = nearest.pushY - second.pushY;
+  if (rpx === 0 && rpy === 0) return 0;
+  const bx = second.x - nearest.x, by = second.y - nearest.y;
+  const mag = Math.max(Math.abs(bx) + Math.abs(by), 1);
+  const nx = ((bx * 64) / mag) | 0, ny = ((by * 64) / mag) | 0;
+  const dot = rpx * nx + rpy * ny;
+  const eff = Math.max(-60, Math.min(60, (dot / 128) | 0));
+  return (eff * str / 256) | 0;
+}
+
+function elevation(config, ox, oy) {
+  const a = config.anchors;
+  if (a.length < 2) return a.length === 1 ? buoyancy(a[0].mass, a[0].lift) : 128;
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const b1 = buoyancy(a[ni].mass, a[ni].lift);
+  const b2 = buoyancy(a[si].mass, a[si].lift);
+  const total = dn + ds;
+  const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
+  const base = b1 + (((b2 - b1) * t / 256) | 0);
+  const pres = pressureEffect(a[ni], a[si], dn, ds);
+  const tex = ((noise(config.seed, ox, oy) - 128) / 4) | 0;
+  return Math.max(0, Math.min(255, base + pres + tex));
+}
+
+function moisture(config, ox, oy) {
+  const a = config.anchors;
+  if (a.length < 2) return a.length === 1 ? (a[0].moisture ?? 128) : 128;
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const m1 = a[ni].moisture ?? 128;
+  const m2 = a[si].moisture ?? 128;
+  const total = dn + ds;
+  const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
+  return Math.max(0, Math.min(255, m1 + (((m2 - m1) * t / 256) | 0)));
+}
+
+function elevColor(e, wl, pl, m) {
+  m = m ?? 128;
+  if (e <= wl) {
+    const d = wl > 0 ? (wl - e) / wl : 0;
+    return [20 + 40 * (1 - d) | 0, 60 + 80 * (1 - d) | 0, 120 + 100 * (1 - d) | 0];
+  }
+  if (e >= pl) {
+    const h = (255 - pl) ? (e - pl) / (255 - pl) : 0;
+    const v = 160 + 80 * h | 0;
+    return [v, v, v];
+  }
+  const range = (pl - wl) || 1;
+  const t = (e - wl) / range;
+  const f = m / 255; // 0=arid, 1=lush
+
+  // Beach — always sandy
+  if (t < 0.1) return [210, 200, 160];
+
+  // Low-mid elevation
+  if (t < 0.5) {
+    const h = (t - 0.1) / 0.4;
+    // Arid: warm sand → rocky earth
+    const ar = 210 - 35*h, ag = 190 - 45*h, ab = 140 - 40*h;
+    // Lush: bright green → dark forest
+    const lr = 100 - 40*h, lg = 180 - 60*h, lb = 60 - 20*h;
+    return [ar + (lr-ar)*f|0, ag + (lg-ag)*f|0, ab + (lb-ab)*f|0];
+  }
+
+  // High elevation
+  const h = (t - 0.5) / 0.5;
+  // Arid: rocky mesa → pale rock
+  const ar = 175 + 20*h, ag = 150 + 15*h, ab = 105 + 20*h;
+  // Lush: brown earth → dark brown highland
+  const lr = 100 + 50*h, lg = 80 + 30*h, lb = 40 + 30*h;
+  return [ar + (lr-ar)*f|0, ag + (lg-ag)*f|0, ab + (lb-ab)*f|0];
+}
+
+// ─── State ───
+
+let config = {
+  seed: 1279872052, waterLine: 90, peakLine: 245,
+  anchors: [
+    { x: -200, y: 200, mass: 88, lift: 172, pushX: 0, pushY: 0, moisture: 180 },
+    { x: 600, y: 800, mass: 85, lift: 168, pushX: 0, pushY: 0, moisture: 170 },
+    { x: -1200, y: -400, mass: 82, lift: 175, pushX: 0, pushY: 0, moisture: 190 },
+    { x: -600, y: -2200, mass: 72, lift: 192, pushX: 0, pushY: 2, moisture: 160 },
+    { x: -1800, y: 1800, mass: 70, lift: 195, pushX: 1, pushY: -1, moisture: 200 },
+    { x: 700, y: 2500, mass: 80, lift: 178, pushX: 0, pushY: 0, moisture: 185 },
+    { x: 3200, y: 0, mass: 205, lift: 55, pushX: -2, pushY: 0, moisture: 140 },
+    { x: 2800, y: -1500, mass: 215, lift: 45, pushX: -1, pushY: 1, moisture: 120 },
+    { x: 3500, y: 1500, mass: 210, lift: 50, pushX: -2, pushY: -1, moisture: 130 },
+    { x: 1800, y: -600, mass: 140, lift: 120, pushX: -1, pushY: 0, moisture: 150 },
+    { x: 4200, y: -2500, mass: 220, lift: 40, pushX: 0, pushY: 0, moisture: 100 },
+    { x: 200, y: -3200, mass: 78, lift: 185, pushX: 0, pushY: 1, moisture: 175 },
+  ]
+};
+
+let radiusKm = 40;
+let selectedAnchor = -1;
+let dragging = false;
+let showPassable = false;
+let tiltDeg = 0;
+let rotDeg = 0;
+let show3D = false;
+
+// ─── Zoom / Pan state ───
+let zoom = 1.0;
+let panX = 0;  // pan offset in game-units
+let panY = 0;
+let panning = false;
+let panStartX = 0, panStartY = 0;
+let panStartOX = 0, panStartOY = 0;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 16;
+
+// ─── Canvas ───
+
+const canvas = document.getElementById('terrain');
+const ctx = canvas.getContext('2d');
+
+function radiusGU() {
+  return Math.round(radiusKm / 111 * 10000);
+}
+
+// Convert pixel coords to game-unit coords (accounting for zoom + pan)
+function pxToGU(px, py) {
+  const size = canvas.width;
+  const center = size / 2;
+  const rgu = radiusGU();
+  const scale = (rgu / center) / zoom;
+  const ox = Math.round((px - center) * scale + panX);
+  const oy = Math.round((center - py) * scale + panY);
+  return [ox, oy];
+}
+
+// Convert game-unit coords to pixel coords
+function guToPx(ox, oy) {
+  const size = canvas.width;
+  const center = size / 2;
+  const rgu = radiusGU();
+  const scale = (rgu / center) / zoom;
+  const px = (ox - panX) / scale + center;
+  const py = center - (oy - panY) / scale;
+  return [px, py];
+}
+
+function render() {
+  showPassable = document.getElementById('showPassable').checked;
+  if (show3D) { render3D(); return; }
+  const size = canvas.width;
+  const img = ctx.createImageData(size, size);
+  const center = size / 2;
+  const rgu = radiusGU();
+  const scale = (rgu / center) / zoom;
+  const r2 = rgu * rgu;
+  let land = 0, water = 0, mountain = 0, totalInBounds = 0;
+
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const ox = Math.round((px - center) * scale + panX);
+      const oy = Math.round((center - py) * scale + panY);
+      const i = (py * size + px) * 4;
+
+      if (ox * ox + oy * oy > r2) {
+        img.data[i + 3] = 0;
+        continue;
+      }
+
+      const e = elevation(config, ox, oy);
+      const mo = moisture(config, ox, oy);
+      const passable = e > config.waterLine && e < config.peakLine;
+      let [r, g, b] = elevColor(e, config.waterLine, config.peakLine, mo);
+
+      if (showPassable) {
+        if (passable) {
+          r = Math.round(r * 0.4 + 60);
+          g = Math.round(g * 0.4 + 180);
+          b = Math.round(b * 0.4 + 40);
+        } else {
+          const gray = (r + g + b) / 3;
+          r = Math.round(gray * 0.5 + 100);
+          g = Math.round(gray * 0.3);
+          b = Math.round(gray * 0.3);
+        }
+      }
+
+      img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+
+      totalInBounds++;
+      if (e <= config.waterLine) water++;
+      else if (e >= config.peakLine) mountain++;
+      else land++;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // Draw anchor markers
+  for (let i = 0; i < config.anchors.length; i++) {
+    const a = config.anchors[i];
+    const [px, py] = guToPx(a.x, a.y);
+    if (px < -20 || px > size + 20 || py < -20 || py > size + 20) continue;
+    ctx.beginPath();
+    ctx.arc(px, py, i === selectedAnchor ? 6 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = i === selectedAnchor ? '#ff0' : (a.mass > 150 ? '#4af' : '#4f4');
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    if (a.pushX !== 0 || a.pushY !== 0) {
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + a.pushX * 8, py - a.pushY * 8);
+      ctx.strokeStyle = '#f80';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  if (zoom > 1.05) {
+    const [cx, cy] = guToPx(0, 0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
+  }
+
+  const total = land + water + mountain || 1;
+  const guPerPx = scale;
+  const mPerGU = 11.1;
+  const m2PerPx = (guPerPx * mPerGU) ** 2;
+  const km2PerPx = m2PerPx / 1e6;
+  const totalAreaKm2 = totalInBounds * km2PerPx;
+  const passableAreaKm2 = land * km2PerPx;
+  const waterAreaKm2 = water * km2PerPx;
+  const mountainAreaKm2 = mountain * km2PerPx;
+  const km2PerCity = 4;
+  const maxCities = Math.floor(passableAreaKm2 / km2PerCity);
+
+  document.getElementById('stats').innerHTML =
+    `<b>Passable:</b> ${land} px (${(land/total*100).toFixed(1)}%) — ${passableAreaKm2.toFixed(1)} km²<br>` +
+    `Water: ${water} px (${(water/total*100).toFixed(1)}%) — ${waterAreaKm2.toFixed(1)} km²<br>` +
+    `Mountain: ${mountain} px (${(mountain/total*100).toFixed(1)}%) — ${mountainAreaKm2.toFixed(1)} km²<br>` +
+    `Total area: ${totalAreaKm2.toFixed(1)} km²<br>` +
+    `Anchors: ${config.anchors.length} | Bytes: ${16 + config.anchors.length * 8}<br>` +
+    `<b>Max city plots: ~${maxCities}</b> (@ ${km2PerCity} km²/city)`;
+
+  updateZoomHUD();
+}
+
+// ─── CSS Perspective Tilt (Google Maps style) ───
+
+function applyTilt() {
+  const wrap = document.getElementById('canvas-wrap');
+  if (tiltDeg > 0) {
+    wrap.style.perspective = '1200px';
+    canvas.style.transform = `rotateX(${tiltDeg}deg) rotate(${rotDeg}deg)`;
+    canvas.style.transformOrigin = 'center center';
+  } else {
+    wrap.style.perspective = 'none';
+    canvas.style.transform = rotDeg > 0 ? `rotate(${rotDeg}deg)` : 'none';
+  }
+}
+
+// ─── 3D Voxel Heightmap Renderer ───
+// Standalone — render() is never modified. Delete this block to revert.
+
+function render3D() {
+  const size = canvas.width;
+  const center = size / 2;
+  const rgu = radiusGU();
+  const scale = (rgu / center) / zoom;
+  const r2 = rgu * rgu;
+
+  const tilt = 40 * Math.PI / 180; // fixed camera angle
+  const rot = rotDeg * Math.PI / 180;
+  const cosT = Math.cos(tilt);
+  const sinT = Math.sin(tilt);
+  const cosR = Math.cos(rot);
+  const sinR = Math.sin(rot);
+
+  // Raw projection — will be auto-fitted after grid is built
+  const rawMargin = size * (1 - cosT);
+  const rawH = rawMargin;
+
+  // ── Phase 1: Build elevation + moisture grids at half resolution ──
+  const gs = 2; // grid sample step
+  const gw = Math.ceil(size / gs);
+  const gh = Math.ceil(size / gs);
+  const grid = new Float32Array(gw * gh).fill(-1);
+  const mGrid = new Float32Array(gw * gh).fill(128);
+
+  for (let gr = 0; gr < gh; gr++) {
+    for (let gc = 0; gc < gw; gc++) {
+      const row = gr * gs, col = gc * gs;
+      const lx = (col - center) * scale;
+      const ly = (center - row) * scale;
+      const ox = Math.round(lx * cosR - ly * sinR + panX);
+      const oy = Math.round(lx * sinR + ly * cosR + panY);
+      if (ox * ox + oy * oy <= r2) {
+        grid[gr * gw + gc] = elevation(config, ox, oy);
+        mGrid[gr * gw + gc] = moisture(config, ox, oy);
+      }
+    }
+  }
+
+  // ── Phase 2: Box blur (3x3) for smooth terrain ──
+  const blurred = new Float32Array(gw * gh).fill(-1);
+  for (let gr = 0; gr < gh; gr++) {
+    for (let gc = 0; gc < gw; gc++) {
+      const idx = gr * gw + gc;
+      if (grid[idx] < 0) continue;
+      let sum = 0, cnt = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nr = gr + dy, nc = gc + dx;
+          if (nr >= 0 && nr < gh && nc >= 0 && nc < gw) {
+            const ni = nr * gw + nc;
+            if (grid[ni] >= 0) { sum += grid[ni]; cnt++; }
+          }
+        }
+      }
+      blurred[idx] = sum / cnt;
+    }
+  }
+
+  // ── Bilinear interpolation from blurred grid ──
+  function sampleElev(row, col) {
+    const gr = row / gs, gc = col / gs;
+    const r0 = Math.min(Math.floor(gr), gh - 1), c0 = Math.min(Math.floor(gc), gw - 1);
+    const r1 = Math.min(r0 + 1, gh - 1), c1 = Math.min(c0 + 1, gw - 1);
+    const fr = gr - r0, fc = gc - c0;
+    const e00 = blurred[r0 * gw + c0], e01 = blurred[r0 * gw + c1];
+    const e10 = blurred[r1 * gw + c0], e11 = blurred[r1 * gw + c1];
+    if (e00 < 0 && e01 < 0 && e10 < 0 && e11 < 0) return -1;
+    // Replace out-of-bounds corners with nearest valid
+    const v00 = e00 >= 0 ? e00 : (e01 >= 0 ? e01 : e10 >= 0 ? e10 : e11);
+    const v01 = e01 >= 0 ? e01 : v00;
+    const v10 = e10 >= 0 ? e10 : v00;
+    const v11 = e11 >= 0 ? e11 : v00;
+    return v00 * (1 - fr) * (1 - fc) + v01 * (1 - fr) * fc
+         + v10 * fr * (1 - fc) + v11 * fr * fc;
+  }
+  function sampleMoist(row, col) {
+    const gr = row / gs, gc = col / gs;
+    const r0 = Math.min(Math.floor(gr), gh - 1), c0 = Math.min(Math.floor(gc), gw - 1);
+    const r1 = Math.min(r0 + 1, gh - 1), c1 = Math.min(c0 + 1, gw - 1);
+    const fr = gr - r0, fc = gc - c0;
+    return mGrid[r0*gw+c0]*(1-fr)*(1-fc) + mGrid[r0*gw+c1]*(1-fr)*fc
+         + mGrid[r1*gw+c0]*fr*(1-fc) + mGrid[r1*gw+c1]*fr*fc;
+  }
+
+  // ── Phase 3: Auto-fit — scan visible Y extent, then scale to canvas ──
+  let minY = Infinity, maxY = -Infinity;
+  for (let row = 0; row < size; row += 8) {
+    for (let col = 0; col < size; col += 8) {
+      const e = sampleElev(row, col);
+      if (e < 0) continue;
+      const sy = rawMargin + row * cosT - (e / 255) * rawH;
+      const by = rawMargin + row * cosT;
+      if (sy < minY) minY = sy;
+      if (by > maxY) maxY = by;
+    }
+  }
+  if (minY >= maxY) return; // no visible terrain
+  // Only auto-fit when zoomed in — prevents distortion when zoomed out
+  let fitScale = 1, fitOff = 0;
+  if (zoom > 1) {
+    fitScale = size / (maxY - minY);
+    fitOff = -minY * fitScale;
+  }
+
+  // ── Phase 4: Render at full pixel resolution ──
+  const img = ctx.createImageData(size, size);
+  for (let i = 0; i < size * size * 4; i += 4) {
+    const row = (i / 4 / size) | 0;
+    const g = 15 + (row / size) * 10 | 0;
+    img.data[i] = 10; img.data[i+1] = g; img.data[i+2] = 25; img.data[i+3] = 255;
+  }
+
+  const yBuf = new Float32Array(size).fill(size + 1);
+  const prevElev = new Float32Array(size).fill(-1);
+  let land = 0, water = 0, mountain = 0, totalInBounds = 0;
+
+  // Sweep front-to-back (near → far)
+  for (let row = size - 1; row >= 0; row--) {
+    for (let col = 0; col < size; col++) {
+      const e = sampleElev(row, col);
+      if (e < 0) continue;
+      const mo = sampleMoist(row, col);
+
+      let [r, g, b] = elevColor(e, config.waterLine, config.peakLine, mo);
+
+      if (showPassable) {
+        const passable = e > config.waterLine && e < config.peakLine;
+        if (passable) {
+          r = Math.round(r * 0.4 + 60); g = Math.round(g * 0.4 + 180); b = Math.round(b * 0.4 + 40);
+        } else {
+          const gray = (r + g + b) / 3;
+          r = Math.round(gray * 0.5 + 100); g = Math.round(gray * 0.3); b = Math.round(gray * 0.3);
+        }
+      }
+
+      totalInBounds++;
+      if (e <= config.waterLine) water++;
+      else if (e >= config.peakLine) mountain++;
+      else land++;
+
+      const screenY = (rawMargin + row * cosT - (e / 255) * rawH) * fitScale + fitOff;
+      if (screenY >= yBuf[col]) continue;
+
+      const baseY = (rawMargin + row * cosT) * fitScale + fitOff;
+      const pe = prevElev[col];
+      const slopeFactor = pe < 0 ? 1.0 : Math.max(0.55, Math.min(1.2, 1.0 + (e - pe) / 40));
+      prevElev[col] = e;
+
+      const top = Math.max(0, Math.floor(screenY));
+      const bottom = Math.min(size - 1, Math.floor(Math.min(baseY, yBuf[col])));
+      if (top > bottom) { yBuf[col] = screenY; continue; }
+
+      const topEnd = Math.min(top + 1, bottom);
+      for (let py = top; py <= bottom; py++) {
+        const i = (py * size + col) * 4;
+        const shade = py <= topEnd ? slopeFactor
+          : 0.35 + 0.25 * ((bottom - py) / (bottom - topEnd || 1));
+        img.data[i]     = Math.min(255, r * shade) | 0;
+        img.data[i + 1] = Math.min(255, g * shade) | 0;
+        img.data[i + 2] = Math.min(255, b * shade) | 0;
+        img.data[i + 3] = 255;
+      }
+      yBuf[col] = screenY;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // Draw anchor markers projected into 3D
+  for (let i = 0; i < config.anchors.length; i++) {
+    const a = config.anchors[i];
+    const dx = a.x - panX, dy = a.y - panY;
+    const lx = dx * cosR + dy * sinR;
+    const ly = -dx * sinR + dy * cosR;
+    const c = lx / scale + center;
+    const rw = center - ly / scale;
+    const e = buoyancy(a.mass, a.lift);
+    const sy = (rawMargin + rw * cosT - (e / 255) * rawH) * fitScale + fitOff;
+
+    if (c < -20 || c > size + 20 || sy < -20 || sy > size + 20) continue;
+    ctx.beginPath();
+    ctx.arc(c, sy, i === selectedAnchor ? 6 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = i === selectedAnchor ? '#ff0' : (a.mass > 150 ? '#4af' : '#4f4');
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Update stats
+  const total = land + water + mountain || 1;
+  const guPerPx = scale;
+  const m2PerPx = (guPerPx * 11.1) ** 2;
+  const km2PerPx = m2PerPx / 1e6;
+  const passableAreaKm2 = land * km2PerPx;
+  const km2PerCity = 4;
+  document.getElementById('stats').innerHTML =
+    `<b>Passable:</b> ${land} px (${(land/total*100).toFixed(1)}%) — ${passableAreaKm2.toFixed(1)} km²<br>` +
+    `Water: ${water} px (${(water/total*100).toFixed(1)}%) — ${(water*km2PerPx).toFixed(1)} km²<br>` +
+    `Mountain: ${mountain} px (${(mountain/total*100).toFixed(1)}%) — ${(mountain*km2PerPx).toFixed(1)} km²<br>` +
+    `Total area: ${(totalInBounds*km2PerPx).toFixed(1)} km²<br>` +
+    `Anchors: ${config.anchors.length} | Bytes: ${16 + config.anchors.length * 8}<br>` +
+    `<b>Max city plots: ~${Math.floor(passableAreaKm2 / km2PerCity)}</b> (@ ${km2PerCity} km²/city)`;
+
+  updateZoomHUD();
+}
+
+// ─── end 3D block ───
+
+function updateZoomHUD() {
+  let text = `${zoom.toFixed(1)}x`;
+  if (zoom > 1.05) text += ` | pan: ${panX|0}, ${panY|0}`;
+  if (tiltDeg > 0) text += ` | tilt: ${tiltDeg}° rot: ${rotDeg}°`;
+  document.getElementById('zoom-hud').textContent = text;
+}
+
+// ─── Zoom Controls ───
+
+function zoomIn() { applyZoom(zoom * 1.5, canvas.width / 2, canvas.height / 2); }
+function zoomOut() { applyZoom(zoom / 1.5, canvas.width / 2, canvas.height / 2); }
+function resetView() { zoom = 1; panX = 0; panY = 0; render(); }
+
+function applyZoom(newZoom, pivotPx, pivotPy) {
+  newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+  if (newZoom === zoom) return;
+
+  // Zoom toward the pixel under the cursor
+  const size = canvas.width;
+  const center = size / 2;
+  const rgu = radiusGU();
+
+  // Game-unit coord under cursor before zoom
+  const oldScale = (rgu / center) / zoom;
+  const guX = (pivotPx - center) * oldScale + panX;
+  const guY = (center - pivotPy) * oldScale + panY;
+
+  zoom = newZoom;
+
+  // After zoom, adjust pan so the same game-unit stays under cursor
+  const newScale = (rgu / center) / zoom;
+  panX = guX - (pivotPx - center) * newScale;
+  panY = guY - (center - pivotPy) * newScale;
+
+  render();
+}
+
+// Mouse wheel zoom
+canvas.addEventListener('wheel', function(e) {
+  if (activeTab === 'world') return;
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / rect.width * canvas.width;
+  const py = (e.clientY - rect.top) / rect.height * canvas.height;
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  applyZoom(zoom * factor, px, py);
+}, { passive: false });
+
+// ─── Random Generator ───
+
+function randSeed() {
+  return (Math.random() * 0xFFFFFFFF) >>> 0;
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randFloat(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function randomizeSeed() {
+  config.seed = randSeed();
+  syncUI(); render();
+}
+
+function randomizeAnchors() {
+  // Keep the same anchors but shuffle their positions
+  const spread = Number(document.getElementById('gen-spread').value) || 2500;
+  for (const a of config.anchors) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * spread;
+    a.x = Math.round(Math.cos(angle) * dist);
+    a.y = Math.round(Math.sin(angle) * dist);
+    a.pushX = randInt(-3, 3);
+    a.pushY = randInt(-3, 3);
+  }
+  selectedAnchor = -1;
+  syncUI(); render();
+}
+
+function generateRandom(style) {
+  const count = Number(document.getElementById('gen-count').value) || 10;
+  const waterPct = Number(document.getElementById('gen-water').value) || 35;
+  const spread = Number(document.getElementById('gen-spread').value) || 2500;
+
+  config.seed = randSeed();
+  config.waterLine = Math.round(60 + waterPct * 1.6);
+  config.peakLine = randInt(230, 250);
+  config.anchors = [];
+
+  // Determine how many land vs water anchors based on waterPct
+  const waterAnchors = Math.max(1, Math.round(count * waterPct / 100));
+  const landAnchors = count - waterAnchors;
+
+  switch (style) {
+    case 'continental':
+      generateContinental(landAnchors, waterAnchors, spread);
+      break;
+    case 'archipelago':
+      generateArchipelago(landAnchors, waterAnchors, spread);
+      break;
+    case 'pangaea':
+      generatePangaea(landAnchors, waterAnchors, spread);
+      break;
+    case 'atoll':
+      generateAtoll(landAnchors, waterAnchors, spread);
+      break;
+    default:
+      generateFullRandom(count, spread);
+      break;
+  }
+
+  selectedAnchor = -1;
+  radiusKm = Math.round(spread * 111 / 10000 * 1.4);
+  syncUI(); render();
+}
+
+function makeAnchor(x, y, isWater, intensity) {
+  if (isWater) {
+    const mass = randInt(180 + intensity * 30, 230);
+    const lift = randInt(30, 70 - intensity * 10);
+    return { x: Math.round(x), y: Math.round(y), mass, lift, pushX: randInt(-2, 2), pushY: randInt(-2, 2) };
+  } else {
+    const mass = randInt(60, 100 - intensity * 10);
+    const lift = randInt(155 + intensity * 15, 220);
+    return { x: Math.round(x), y: Math.round(y), mass, lift, pushX: randInt(-2, 2), pushY: randInt(-2, 2) };
+  }
+}
+
+function generateContinental(landCount, waterCount, spread) {
+  // 1-3 landmasses with water around edges
+  const continents = randInt(1, 3);
+  const centersAngles = [];
+  for (let c = 0; c < continents; c++) {
+    centersAngles.push(c * (Math.PI * 2 / continents) + randFloat(-0.3, 0.3));
+  }
+
+  // Place land anchors clustered near continent centers
+  for (let i = 0; i < landCount; i++) {
+    const ci = i % continents;
+    const baseAngle = centersAngles[ci];
+    const dist = randFloat(0, spread * 0.5);
+    const angle = baseAngle + randFloat(-0.8, 0.8);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      false, randFloat(0, 1)
+    ));
+  }
+
+  // Place water anchors at the edges
+  for (let i = 0; i < waterCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(spread * 0.5, spread * 1.1);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      true, randFloat(0, 1)
+    ));
+  }
+}
+
+function generateArchipelago(landCount, waterCount, spread) {
+  // Many small islands scattered across a wide area
+  const islands = Math.max(3, landCount);
+  for (let i = 0; i < islands; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(spread * 0.1, spread * 0.7);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      false, randFloat(0, 0.5) // lower intensity = smaller islands
+    ));
+  }
+
+  for (let i = 0; i < waterCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(spread * 0.3, spread * 1.1);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      true, randFloat(0.3, 1)
+    ));
+  }
+}
+
+function generatePangaea(landCount, waterCount, spread) {
+  // One big landmass in the center, ocean all around
+  for (let i = 0; i < landCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(0, spread * 0.35);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      false, randFloat(0.3, 1)
+    ));
+  }
+
+  for (let i = 0; i < waterCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(spread * 0.55, spread * 1.2);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      true, randFloat(0.5, 1)
+    ));
+  }
+}
+
+function generateAtoll(landCount, waterCount, spread) {
+  // Ring of land with water in center and outside
+  const ringRadius = spread * 0.45;
+
+  // Land anchors in a ring
+  for (let i = 0; i < landCount; i++) {
+    const angle = (i / landCount) * Math.PI * 2 + randFloat(-0.2, 0.2);
+    const dist = ringRadius + randFloat(-spread * 0.12, spread * 0.12);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      false, randFloat(0.2, 0.7)
+    ));
+  }
+
+  // Water: some in the center lagoon, some outside
+  const innerWater = Math.max(1, Math.floor(waterCount * 0.4));
+  for (let i = 0; i < innerWater; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(0, spread * 0.2);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      true, randFloat(0.3, 0.8)
+    ));
+  }
+  for (let i = innerWater; i < waterCount; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = randFloat(spread * 0.7, spread * 1.2);
+    config.anchors.push(makeAnchor(
+      Math.cos(angle) * dist,
+      Math.sin(angle) * dist,
+      true, randFloat(0.5, 1)
+    ));
+  }
+}
+
+function generateFullRandom(count, spread) {
+  // Completely random - roll the dice on everything
+  const style = ['continental', 'archipelago', 'pangaea', 'atoll'][randInt(0, 3)];
+  const waterAnchors = Math.max(1, randInt(Math.floor(count * 0.2), Math.floor(count * 0.6)));
+  const landAnchors = count - waterAnchors;
+
+  switch (style) {
+    case 'continental': generateContinental(landAnchors, waterAnchors, spread); break;
+    case 'archipelago': generateArchipelago(landAnchors, waterAnchors, spread); break;
+    case 'pangaea': generatePangaea(landAnchors, waterAnchors, spread); break;
+    case 'atoll': generateAtoll(landAnchors, waterAnchors, spread); break;
+  }
+}
+
+// ─── Tectonic Generator ───
+
+function generateTectonic(style) {
+  if (style === 'random') {
+    style = ['coastal-range', 'island-arc', 'collision', 'rift-valley', 'passive-margin'][randInt(0, 4)];
+  }
+
+  const spread = Number(document.getElementById('gen-spread').value) || 2500;
+  config.seed = randSeed();
+  config.anchors = [];
+
+  // Random spine direction — the main geological feature axis
+  const spine = randFloat(0, Math.PI * 2);
+  const perp = spine + Math.PI / 2;
+  const S = spread;
+
+  // Helper: place anchor at position along spine axis + perpendicular offset
+  function put(alongT, perpT, targetElev, jitter) {
+    jitter = jitter || 0.08;
+    const elev = Math.max(0, Math.min(255, targetElev + randInt(-6, 6)));
+    const x = Math.cos(spine) * alongT * S + Math.cos(perp) * perpT * S + randFloat(-1,1) * jitter * S;
+    const y = Math.sin(spine) * alongT * S + Math.sin(perp) * perpT * S + randFloat(-1,1) * jitter * S;
+    const { mass, lift } = elevToMassLift(elev);
+    config.anchors.push({ x: Math.round(x), y: Math.round(y), mass, lift, pushX: 0, pushY: 0 });
+  }
+
+  switch (style) {
+    case 'coastal-range': tectonicCoastalRange(put); break;
+    case 'island-arc': tectonicIslandArc(put, S, spine); break;
+    case 'collision': tectonicCollision(put); break;
+    case 'rift-valley': tectonicRiftValley(put); break;
+    case 'passive-margin': tectonicPassiveMargin(put); break;
+  }
+
+  config.waterLine = randInt(85, 95);
+  config.peakLine = randInt(235, 250);
+  selectedAnchor = -1;
+  radiusKm = Math.round(spread * 111 / 10000 * 1.5);
+  syncUI(); render();
+  autoPush();
+}
+
+// Oceanic subduction under continental — mountain chain along coast
+// [deep ocean | trench/shelf | mountains | foothills | plains]
+function tectonicCoastalRange(put) {
+  // Mountain chain — 4 peaks along the spine, close to ocean side
+  put(-0.6,  0.05, randInt(215, 245));
+  put(-0.2,  0.0,  randInt(220, 248));
+  put( 0.2, -0.05, randInt(225, 250));
+  put( 0.6,  0.0,  randInt(210, 240));
+
+  // Foothills — inland from mountains
+  put(-0.4,  0.30, randInt(155, 185));
+  put( 0.1,  0.28, randInt(150, 180));
+  put( 0.5,  0.35, randInt(145, 175));
+
+  // Interior plains — far inland
+  put(-0.5,  0.60, randInt(110, 140));
+  put( 0.0,  0.55, randInt(115, 135));
+  put( 0.4,  0.65, randInt(105, 130));
+
+  // Continental shelf — just offshore
+  put(-0.3, -0.25, randInt(65, 82));
+  put( 0.3, -0.22, randInt(60, 78));
+
+  // Deep ocean
+  put(-0.5, -0.65, randInt(20, 40));
+  put( 0.0, -0.60, randInt(15, 35));
+  put( 0.5, -0.70, randInt(18, 38));
+  put( 0.0, -0.95, randInt(10, 25));
+}
+
+// Oceanic-oceanic convergence — volcanic peaks in a curved arc
+function tectonicIslandArc(put, S, spine) {
+  const arcRadius = S * 0.45;
+  const arcCenter = Math.PI * 0.6; // how much of the circle the arc spans
+  const arcStart = randFloat(0, Math.PI * 2);
+  const peakCount = randInt(5, 7);
+
+  // Volcanic peaks along the arc
+  for (let i = 0; i < peakCount; i++) {
+    const t = i / (peakCount - 1);
+    const angle = arcStart + (t - 0.5) * arcCenter;
+    const r = arcRadius + randFloat(-S * 0.06, S * 0.06);
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    const elev = randInt(185, 245);
+    const { mass, lift } = elevToMassLift(elev);
+    config.anchors.push({ x: Math.round(x), y: Math.round(y), mass, lift, pushX: 0, pushY: 0 });
+  }
+
+  // Shallow water between the islands (inner side of arc)
+  for (let i = 0; i < 3; i++) {
+    const t = (i + 0.5) / 3;
+    const angle = arcStart + (t - 0.5) * arcCenter;
+    const r = arcRadius * 0.55 + randFloat(-S * 0.05, S * 0.05);
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    const elev = randInt(60, 80);
+    const { mass, lift } = elevToMassLift(elev);
+    config.anchors.push({ x: Math.round(x), y: Math.round(y), mass, lift, pushX: 0, pushY: 0 });
+  }
+
+  // Deep ocean — center of the arc (back-arc basin)
+  const cx = Math.cos(arcStart) * arcRadius * 0.1;
+  const cy = Math.sin(arcStart) * arcRadius * 0.1;
+  for (const [ox, oy] of [[0, 0], [0.3, 0.2], [-0.3, -0.2]]) {
+    const elev = randInt(15, 35);
+    const { mass, lift } = elevToMassLift(elev);
+    config.anchors.push({ x: Math.round(cx + ox * S), y: Math.round(cy + oy * S), mass, lift, pushX: 0, pushY: 0 });
+  }
+
+  // Deep ocean — outer side (trench side)
+  for (let i = 0; i < 3; i++) {
+    const t = i / 2;
+    const angle = arcStart + (t - 0.5) * arcCenter;
+    const r = arcRadius * 1.5 + randFloat(0, S * 0.15);
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    const elev = randInt(10, 28);
+    const { mass, lift } = elevToMassLift(elev);
+    config.anchors.push({ x: Math.round(x), y: Math.round(y), mass, lift, pushX: 0, pushY: 0 });
+  }
+}
+
+// Continental-continental collision — massive mountain range, lowlands both sides
+// [plains A | foothills A | MOUNTAINS | foothills B | plains B]
+function tectonicCollision(put) {
+  // Central mountain range — 5 peaks along the spine
+  put(-0.7,  0.0, randInt(225, 252));
+  put(-0.35, 0.03, randInt(230, 255));
+  put( 0.0, -0.02, randInt(235, 255));
+  put( 0.35, 0.02, randInt(228, 252));
+  put( 0.7,  0.0, randInt(220, 248));
+
+  // Foothills — both sides of the range
+  put(-0.4,  0.28, randInt(155, 185));
+  put( 0.2,  0.30, randInt(150, 180));
+  put( 0.6,  0.25, randInt(148, 178));
+  put(-0.3, -0.30, randInt(155, 185));
+  put( 0.3, -0.28, randInt(150, 180));
+
+  // Lowland plains — further out on both sides
+  put(-0.5,  0.60, randInt(108, 135));
+  put( 0.2,  0.65, randInt(105, 130));
+  put(-0.2, -0.62, randInt(110, 138));
+  put( 0.5, -0.58, randInt(105, 132));
+
+  // Optional distant water on one side (foreland basin / sea)
+  put( 0.0,  0.95, randInt(55, 75));
+  put( 0.0, -0.98, randInt(50, 70));
+}
+
+// Continent splitting — two ridges flanking a low valley/rift
+// [outer plains A | ridge A | RIFT VALLEY | ridge B | outer plains B]
+function tectonicRiftValley(put) {
+  // Ridge A (left side of rift)
+  put(-0.5, -0.25, randInt(175, 210));
+  put( 0.0, -0.22, randInt(180, 215));
+  put( 0.5, -0.28, randInt(170, 205));
+
+  // Ridge B (right side of rift)
+  put(-0.5,  0.25, randInt(175, 210));
+  put( 0.0,  0.22, randInt(180, 215));
+  put( 0.5,  0.28, randInt(170, 205));
+
+  // Rift valley floor — low, possibly flooded
+  const flooded = Math.random() < 0.4;
+  const valleyElev = flooded ? randInt(55, 80) : randInt(90, 115);
+  put(-0.3,  0.0, valleyElev);
+  put( 0.3,  0.0, valleyElev + randInt(-8, 8));
+
+  // Outer slopes / plains — beyond the ridges
+  put(-0.4, -0.55, randInt(125, 155));
+  put( 0.3, -0.60, randInt(120, 150));
+  put(-0.3,  0.58, randInt(125, 155));
+  put( 0.4,  0.55, randInt(118, 148));
+
+  // Distant lowlands / ocean at edges
+  put( 0.0, -0.92, randInt(40, 65));
+  put( 0.0,  0.95, randInt(38, 62));
+  put(-0.6,  0.85, randInt(35, 58));
+  put( 0.6, -0.88, randInt(42, 65));
+}
+
+// No active boundary — gentle highlands, broad coastal plain, wide shelf
+// [deep ocean | shelf | coastal plain | gentle hills | inland highland]
+function tectonicPassiveMargin(put) {
+  // Inland highlands — gentle, rounded, not dramatic
+  put(-0.4,  0.55, randInt(160, 195));
+  put( 0.2,  0.60, randInt(155, 190));
+  put( 0.5,  0.50, randInt(150, 185));
+
+  // Rolling interior
+  put(-0.5,  0.35, randInt(125, 155));
+  put( 0.0,  0.30, randInt(120, 148));
+  put( 0.5,  0.38, randInt(118, 145));
+
+  // Coastal plain — wide, low, flat
+  put(-0.6,  0.08, randInt(98, 115));
+  put(-0.1,  0.05, randInt(95, 112));
+  put( 0.4,  0.10, randInt(96, 110));
+
+  // Continental shelf — broad and shallow
+  put(-0.4, -0.18, randInt(68, 82));
+  put( 0.1, -0.22, randInt(65, 80));
+  put( 0.5, -0.15, randInt(70, 82));
+
+  // Shelf break → deep ocean
+  put(-0.3, -0.50, randInt(35, 55));
+  put( 0.3, -0.48, randInt(30, 50));
+
+  // Abyssal plain
+  put( 0.0, -0.80, randInt(12, 30));
+  put(-0.5, -0.85, randInt(10, 25));
+  put( 0.5, -0.90, randInt(15, 28));
+}
+
+// ─── Elevation helpers ───
+
+// Terrain type presets: [targetElev, description]
+const TERRAIN_TYPES = {
+  ocean:    { elev: 30,  label: 'Ocean',    cls: 'tbtn-ocean' },
+  shore:    { elev: 75,  label: 'Shore',    cls: 'tbtn-shore' },
+  beach:    { elev: 100, label: 'Beach',    cls: 'tbtn-beach' },
+  plains:   { elev: 145, label: 'Plains',   cls: 'tbtn-plains' },
+  hills:    { elev: 195, label: 'Hills',    cls: 'tbtn-hills' },
+  mountain: { elev: 248, label: 'Mountain', cls: 'tbtn-mountain' },
+};
+
+// Given a target elevation (0-255), find mass/lift that produce it via buoyancy.
+// Constraint: buoyancy = lift * (255 - mass) / 255, with both in [0,255].
+// For lift to stay <= 255: mass must be <= 255 - targetElev.
+function elevToMassLift(targetElev) {
+  targetElev = Math.max(0, Math.min(255, Math.round(targetElev)));
+  const maxAllowedMass = 255 - targetElev; // hard constraint
+
+  // Pick mass: prefer higher for low elevations (water dot color in preview),
+  // lower for high elevations (land dot color).
+  let mass;
+  if (targetElev <= 80) {
+    mass = Math.round(230 - targetElev * 0.9);
+  } else {
+    mass = Math.round(130 - (targetElev - 80) * 0.5);
+  }
+  mass = Math.max(0, Math.min(maxAllowedMass, mass));
+
+  const denom = 255 - mass;
+  if (denom <= 0) return { mass: 0, lift: targetElev };
+  let lift = Math.round(targetElev * 255 / denom);
+  lift = Math.max(0, Math.min(255, lift));
+  return { mass, lift };
+}
+
+// Live drag — update mass/lift and re-render map, but don't rebuild anchor list DOM
+function setAnchorElevLive(i, targetElev) {
+  targetElev = Math.max(0, Math.min(255, Math.round(targetElev)));
+  const { mass, lift } = elevToMassLift(targetElev);
+  config.anchors[i].mass = mass;
+  config.anchors[i].lift = lift;
+  // Update just the label text next to the slider without rebuilding DOM
+  const card = document.querySelectorAll('.anchor-card')[i];
+  if (card) {
+    const span = card.querySelector('.elev-bar span');
+    if (span) span.textContent = targetElev;
+    const lbl = card.querySelector('.elev-label');
+    if (lbl) {
+      const tl = terrainLabel(targetElev, config.waterLine, config.peakLine);
+      const bg = elevColorCSS(targetElev, config.waterLine, config.peakLine, config.anchors[i].moisture ?? 128);
+      lbl.style.background = bg;
+      lbl.style.color = targetElev > 120 ? '#222' : '#fff';
+      lbl.textContent = `${tl.text} (${targetElev})`;
+    }
+  }
+  render();
+}
+
+function setAnchorMoistureLive(i, val) {
+  config.anchors[i].moisture = Math.max(0, Math.min(255, Math.round(Number(val))));
+  const card = document.querySelectorAll('.anchor-card')[i];
+  if (card) {
+    const bars = card.querySelectorAll('.elev-bar');
+    if (bars[1]) { const sp = bars[1].querySelector('span'); if (sp) sp.textContent = 'M:' + config.anchors[i].moisture; }
+    const elev = buoyancy(config.anchors[i].mass, config.anchors[i].lift);
+    const lbl = card.querySelector('.elev-label');
+    if (lbl) lbl.style.background = elevColorCSS(elev, config.waterLine, config.peakLine, config.anchors[i].moisture);
+  }
+  render();
+}
+
+// Final commit — rebuild anchor list to sync all values
+function setAnchorElev(i, targetElev) {
+  targetElev = Math.max(0, Math.min(255, Math.round(targetElev)));
+  const { mass, lift } = elevToMassLift(targetElev);
+  config.anchors[i].mass = mass;
+  config.anchors[i].lift = lift;
+  render(); renderAnchorList();
+}
+
+function setAnchorTerrain(i, type) {
+  setAnchorElev(i, TERRAIN_TYPES[type].elev);
+}
+
+function elevColorCSS(e, wl, pl, m) {
+  const [r, g, b] = elevColor(e, wl, pl, m);
+  return `rgb(${r},${g},${b})`;
+}
+
+function terrainLabel(elev, wl, pl) {
+  if (elev <= wl * 0.5) return { text: 'Deep Ocean', color: '#4488cc' };
+  if (elev <= wl) return { text: 'Water', color: '#5599dd' };
+  const range = (pl - wl) || 1;
+  const t = (elev - wl) / range;
+  if (t < 0.1) return { text: 'Beach', color: '#d2c8a0' };
+  if (t < 0.3) return { text: 'Plains', color: '#6aad44' };
+  if (t < 0.5) return { text: 'Forest', color: '#3c7828' };
+  if (t < 0.8) return { text: 'Hills', color: '#8a6e3c' };
+  if (elev < pl) return { text: 'Highland', color: '#9a7a50' };
+  return { text: 'Mountain', color: '#bbb' };
+}
+
+// ─── Topology tools ───
+
+// For each anchor, find the K nearest other anchors
+function kNearest(anchors, idx, k) {
+  const a = anchors[idx];
+  const dists = [];
+  for (let j = 0; j < anchors.length; j++) {
+    if (j === idx) continue;
+    const dx = a.x - anchors[j].x, dy = a.y - anchors[j].y;
+    dists.push({ idx: j, dist: Math.sqrt(dx * dx + dy * dy), dx, dy });
+  }
+  dists.sort((a, b) => a.dist - b.dist);
+  return dists.slice(0, k);
+}
+
+function autoPush() {
+  const anchors = config.anchors;
+  if (anchors.length < 2) return;
+  const maxStr = Number(document.getElementById('push-str').value) || 3;
+  const wl = config.waterLine;
+
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    const aElev = buoyancy(a.mass, a.lift);
+
+    // Only land anchors that border water/lower terrain get push vectors.
+    // Water anchors stay at push=(0,0) to avoid convergent boundaries
+    // that spike elevation at water-water or water-land edges.
+    if (aElev <= wl) {
+      a.pushX = 0;
+      a.pushY = 0;
+      continue;
+    }
+
+    let px = 0, py = 0;
+    for (let j = 0; j < anchors.length; j++) {
+      if (i === j) continue;
+      const b = anchors[j];
+      const bElev = buoyancy(b.mass, b.lift);
+      const elevDiff = aElev - bElev;
+      // Only care about LOWER neighbors (we push toward them to slope down)
+      if (elevDiff < 20) continue;
+
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 === 0) continue;
+      const dist = Math.sqrt(dist2);
+
+      // Push toward lower neighbor, weighted by gap and inverse distance
+      const weight = elevDiff / (dist2 * 0.0001);
+      px += (dx / dist) * weight;
+      py += (dy / dist) * weight;
+    }
+
+    const mag = Math.sqrt(px * px + py * py);
+    if (mag > 0.01) {
+      a.pushX = Math.round(Math.max(-maxStr, Math.min(maxStr, (px / mag) * maxStr)));
+      a.pushY = Math.round(Math.max(-maxStr, Math.min(maxStr, (py / mag) * maxStr)));
+    } else {
+      a.pushX = 0;
+      a.pushY = 0;
+    }
+  }
+
+  selectedAnchor = -1;
+  render(); renderAnchorList();
+}
+
+function clearPush() {
+  for (const a of config.anchors) { a.pushX = 0; a.pushY = 0; }
+  render(); renderAnchorList();
+}
+
+function fillTransitions() {
+  const anchors = config.anchors;
+  const len = anchors.length;
+  if (len < 2) return;
+  const maxGap = Number(document.getElementById('fill-gap').value) || 60;
+  const newAnchors = [];
+
+  // For each anchor, find significantly lower neighbors. Place transition
+  // anchors in RINGS around the high anchor so the peak stays at center
+  // and elevation falls off radially — like an actual mountain or island.
+  for (let i = 0; i < len; i++) {
+    const a = anchors[i];
+    const aElev = buoyancy(a.mass, a.lift);
+
+    // Collect unblocked neighbors that are significantly lower
+    const lowerNeighbors = [];
+    for (let j = 0; j < len; j++) {
+      if (i === j) continue;
+      const b = anchors[j];
+      const bElev = buoyancy(b.mass, b.lift);
+      const gap = aElev - bElev;
+      if (gap <= maxGap) continue;
+
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Skip if another anchor sits between us
+      let blocked = false;
+      for (let k = 0; k < len; k++) {
+        if (k === i || k === j) continue;
+        const c = anchors[k];
+        const di = Math.sqrt((c.x - a.x) ** 2 + (c.y - a.y) ** 2);
+        const dj = Math.sqrt((c.x - b.x) ** 2 + (c.y - b.y) ** 2);
+        if (di < dist * 0.55 && dj < dist * 0.55) { blocked = true; break; }
+      }
+      if (blocked) continue;
+
+      lowerNeighbors.push({ idx: j, elev: bElev, gap, dist, angle: Math.atan2(dy, dx) });
+    }
+
+    if (lowerNeighbors.length === 0) continue;
+
+    // How many concentric rings do we need?
+    const maxNeighborGap = Math.max(...lowerNeighbors.map(n => n.gap));
+    const rings = Math.ceil(maxNeighborGap / maxGap);
+    const nearestDist = Math.min(...lowerNeighbors.map(n => n.dist));
+
+    // For each ring, place anchors facing each lower-neighbor direction
+    for (let r = 1; r <= rings; r++) {
+      const ringT = r / (rings + 1);
+      const ringElev = Math.round(aElev - maxNeighborGap * ringT);
+      // Ring radius: 50% → 85% of nearest lower neighbor distance
+      const ringRadius = nearestDist * (0.50 + 0.35 * ringT);
+
+      // Place one anchor per distinct direction (quantized to ~45deg sectors)
+      const placed = new Set();
+      for (const n of lowerNeighbors) {
+        const sector = Math.round(n.angle * 4 / Math.PI); // 8 sectors
+        if (placed.has(sector)) continue;
+        placed.add(sector);
+
+        const jitter = ringRadius * 0.1;
+        const mx = Math.round(a.x + Math.cos(n.angle) * ringRadius + (Math.random() - 0.5) * jitter);
+        const my = Math.round(a.y + Math.sin(n.angle) * ringRadius + (Math.random() - 0.5) * jitter);
+        const { mass, lift } = elevToMassLift(ringElev);
+        newAnchors.push({ x: mx, y: my, mass, lift, pushX: 0, pushY: 0 });
+      }
+    }
+  }
+
+  if (newAnchors.length === 0) return;
+
+  config.anchors.push(...newAnchors);
+  selectedAnchor = -1;
+  render(); renderAnchorList();
+  autoPush();
+}
+
+// ─── UI ───
+
+function renderElevGradient() {
+  const el = document.getElementById('elev-gradient');
+  const wl = config.waterLine;
+  const pl = config.peakLine;
+  // Build a CSS gradient from the elevColor function
+  const stops = [];
+  for (let i = 0; i <= 20; i++) {
+    const e = Math.round(i / 20 * 255);
+    // Show gradient at average moisture of all anchors
+    const avgM = config.anchors.length > 0
+      ? Math.round(config.anchors.reduce((s, a) => s + (a.moisture ?? 128), 0) / config.anchors.length) : 128;
+    const [r, g, b] = elevColor(e, wl, pl, avgM);
+    stops.push(`rgb(${r},${g},${b}) ${(i/20*100).toFixed(1)}%`);
+  }
+  const wlPct = (wl / 255 * 100).toFixed(1);
+  const plPct = (pl / 255 * 100).toFixed(1);
+  el.style.background = `linear-gradient(90deg, ${stops.join(', ')})`;
+  el.innerHTML = `
+    <div class="marker" style="left:${wlPct}%"><div class="marker-label">Water ${wl}</div></div>
+    <div class="marker" style="left:${plPct}%"><div class="marker-label">Peak ${pl}</div></div>
+  `;
+}
+
+function syncUI() {
+  document.getElementById('seed').value = config.seed;
+  document.getElementById('waterLine').value = config.waterLine;
+  document.getElementById('peakLine').value = config.peakLine;
+  document.getElementById('waterSlider').value = config.waterLine;
+  document.getElementById('peakSlider').value = config.peakLine;
+  document.getElementById('radiusKm').value = radiusKm;
+  renderElevGradient();
+  renderAnchorList();
+}
+
+function renderAnchorList() {
+  const el = document.getElementById('anchor-list');
+  el.innerHTML = config.anchors.map((a, i) => {
+    const elev = buoyancy(a.mass, a.lift);
+    const tl = terrainLabel(elev, config.waterLine, config.peakLine);
+    const mo = a.moisture ?? 128;
+    const bgColor = elevColorCSS(elev, config.waterLine, config.peakLine, mo);
+    return `
+    <div class="anchor-card ${i === selectedAnchor ? 'selected' : ''}" onclick="selectAnchor(${i})">
+      <div class="anchor-header">
+        <span>#${i}</span>
+        <span class="elev-label" style="background:${bgColor};color:${elev > 120 ? '#222' : '#fff'}">${tl.text} (${elev})</span>
+        <button class="danger" onclick="event.stopPropagation(); removeAnchor(${i})">x</button>
+      </div>
+      <div class="elev-bar">
+        <span>${elev}</span>
+        <input type="range" class="elev-slider" min="0" max="255" value="${elev}"
+          oninput="setAnchorElevLive(${i}, this.value)" onchange="setAnchorElev(${i}, this.value)" onclick="event.stopPropagation()">
+      </div>
+      <div class="elev-bar" style="margin-top:2px">
+        <span title="Moisture: 0=arid 255=lush" style="cursor:help">M:${mo}</span>
+        <input type="range" min="0" max="255" value="${mo}"
+          oninput="setAnchorMoistureLive(${i}, this.value)" onchange="updateAnchor(${i},'moisture',this.value)" onclick="event.stopPropagation()">
+      </div>
+      <div class="terrain-btns">
+        ${Object.entries(TERRAIN_TYPES).map(([k,v]) => `<button class="${v.cls}" onclick="event.stopPropagation(); setAnchorTerrain(${i},'${k}')">${v.label}</button>`).join('')}
+      </div>
+      <div class="row" style="margin-top:4px">
+        <label>x <input type="number" value="${a.x}" onchange="updateAnchor(${i},'x',this.value)" onclick="event.stopPropagation()" style="width:55px"></label>
+        <label>y <input type="number" value="${a.y}" onchange="updateAnchor(${i},'y',this.value)" onclick="event.stopPropagation()" style="width:55px"></label>
+        <label>pushX <input type="number" value="${a.pushX}" min="-128" max="127" onchange="updateAnchor(${i},'pushX',this.value)" onclick="event.stopPropagation()" style="width:40px"></label>
+        <label>pushY <input type="number" value="${a.pushY}" min="-128" max="127" onchange="updateAnchor(${i},'pushY',this.value)" onclick="event.stopPropagation()" style="width:40px"></label>
+      </div>
+      <div style="color:#555;margin-top:2px;font-size:9px">mass:${a.mass} lift:${a.lift}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectAnchor(i) { selectedAnchor = i; renderAnchorList(); render(); }
+
+function updateAnchor(i, field, val) {
+  config.anchors[i][field] = Number(val);
+  render(); renderAnchorList();
+}
+
+function addAnchor() {
+  // Add anchor at current pan center so it's visible
+  config.anchors.push({ x: Math.round(panX), y: Math.round(panY), mass: 85, lift: 170, pushX: 0, pushY: 0, moisture: 128 });
+  selectedAnchor = config.anchors.length - 1;
+  syncUI(); render();
+}
+
+function removeAnchor(i) {
+  config.anchors.splice(i, 1);
+  if (selectedAnchor >= config.anchors.length) selectedAnchor = config.anchors.length - 1;
+  syncUI(); render();
+}
+
+function exportJSON() {
+  const text = getConfigJSON();
+  document.getElementById('json-area').value = text;
+  navigator.clipboard?.writeText(text);
+}
+
+function getConfigJSON() {
+  return JSON.stringify({
+    seed: config.seed,
+    waterLine: config.waterLine,
+    peakLine: config.peakLine,
+    radiusKm: radiusKm,
+    anchorCount: config.anchors.length,
+    version: 1,
+    anchors: config.anchors
+  }, null, 2);
+}
+
+function importJSON() {
+  try {
+    const data = JSON.parse(document.getElementById('json-area').value);
+    config.seed = data.seed ?? config.seed;
+    config.waterLine = data.waterLine ?? config.waterLine;
+    config.peakLine = data.peakLine ?? config.peakLine;
+    config.anchors = data.anchors ?? [];
+    if (data.radiusKm) radiusKm = data.radiusKm;
+    selectedAnchor = -1;
+    syncUI(); render();
+  } catch (e) { alert('Invalid JSON: ' + e.message); }
+}
+
+// Config inputs
+for (const id of ['seed', 'waterLine', 'peakLine', 'radiusKm']) {
+  document.getElementById(id).addEventListener('change', function() {
+    if (id === 'radiusKm') { radiusKm = Number(this.value); }
+    else { config[id] = Number(this.value); }
+    if (id === 'waterLine') document.getElementById('waterSlider').value = this.value;
+    if (id === 'peakLine') document.getElementById('peakSlider').value = this.value;
+    if (id === 'waterLine' || id === 'peakLine') { renderElevGradient(); renderAnchorList(); }
+    render();
+  });
+}
+document.getElementById('waterSlider').addEventListener('input', function() {
+  config.waterLine = Number(this.value);
+  document.getElementById('waterLine').value = this.value;
+  renderElevGradient(); renderAnchorList(); render();
+});
+document.getElementById('peakSlider').addEventListener('input', function() {
+  config.peakLine = Number(this.value);
+  document.getElementById('peakLine').value = this.value;
+  renderElevGradient(); renderAnchorList(); render();
+});
+
+// ─── Tilt / Rotation sliders ───
+document.getElementById('tiltSlider').addEventListener('input', function() {
+  tiltDeg = Number(this.value);
+  document.getElementById('tiltVal').textContent = tiltDeg + '°';
+  applyTilt();
+});
+document.getElementById('rotSlider').addEventListener('input', function() {
+  rotDeg = Number(this.value);
+  document.getElementById('rotVal').textContent = rotDeg + '°';
+  if (show3D) render(); else applyTilt();
+});
+
+// ─── Canvas mouse interaction (drag anchors + pan) ───
+
+canvas.addEventListener('mousedown', function(e) {
+  if (activeTab === 'world') return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) / rect.width * canvas.width;
+  const cy = (e.clientY - rect.top) / rect.height * canvas.height;
+
+  // Right-click or middle-click or shift+click: pan
+  if (e.button === 2 || e.button === 1 || e.shiftKey) {
+    panning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartOX = panX;
+    panStartOY = panY;
+    canvas.classList.add('dragging');
+    e.preventDefault();
+    return;
+  }
+
+  // Left-click: try to grab an anchor
+  let closest = -1, closestD = 400;
+  for (let i = 0; i < config.anchors.length; i++) {
+    const a = config.anchors[i];
+    const [px, py] = guToPx(a.x, a.y);
+    const d = (cx - px) ** 2 + (cy - py) ** 2;
+    if (d < closestD) { closestD = d; closest = i; }
+  }
+
+  if (closest >= 0) {
+    selectedAnchor = closest;
+    dragging = true;
+    canvas.classList.add('dragging');
+    renderAnchorList();
+  }
+});
+
+canvas.addEventListener('mousemove', function(e) {
+  if (activeTab === 'world') return;
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX - rect.left) / rect.width * canvas.width;
+  const cy = (e.clientY - rect.top) / rect.height * canvas.height;
+
+  // Update coord HUD
+  const [gx, gy] = pxToGU(cx, cy);
+  const rgu = radiusGU();
+  const inBounds = gx * gx + gy * gy <= rgu * rgu;
+  if (inBounds) {
+    const e2 = elevation(config, gx, gy);
+    const pass = e2 > config.waterLine && e2 < config.peakLine;
+    const tl = terrainLabel(e2, config.waterLine, config.peakLine);
+    document.getElementById('coord-hud').textContent =
+      `(${gx}, ${gy}) elev: ${e2}\n${tl.text} | ${pass ? 'PASSABLE' : 'BLOCKED'}`;
+  } else {
+    document.getElementById('coord-hud').textContent = `(${gx}, ${gy}) [outside]`;
+  }
+
+  if (panning) {
+    const size = canvas.width;
+    const center = size / 2;
+    const rgu = radiusGU();
+    const scale = (rgu / center) / zoom;
+    const dxPx = (e.clientX - panStartX) / rect.width * canvas.width;
+    const dyPx = (e.clientY - panStartY) / rect.height * canvas.height;
+    panX = panStartOX - dxPx * scale;
+    panY = panStartOY + dyPx * scale;
+    render();
+    return;
+  }
+
+  if (dragging && selectedAnchor >= 0) {
+    const [gx, gy] = pxToGU(cx, cy);
+    config.anchors[selectedAnchor].x = gx;
+    config.anchors[selectedAnchor].y = gy;
+    render(); renderAnchorList();
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  dragging = false; panning = false;
+  canvas.classList.remove('dragging');
+});
+canvas.addEventListener('mouseleave', () => {
+  dragging = false; panning = false;
+  canvas.classList.remove('dragging');
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ─── Fullscreen / Sidebar toggle ───
+
+function toggleSidebar() {
+  document.body.classList.toggle('sidebar-hidden');
+  resizeCanvas();
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  document.body.classList.toggle('fullscreen', !!document.fullscreenElement);
+  resizeCanvas();
+});
+
+// ─── Auto-resize canvas to fill available space ───
+
+function resizeCanvas() {
+  requestAnimationFrame(() => {
+    const wrap = document.getElementById('canvas-wrap');
+    const size = Math.min(wrap.clientWidth, wrap.clientHeight) - 32;
+    const clamped = Math.max(256, Math.min(2048, size));
+    if (canvas.width !== clamped) {
+      canvas.width = clamped;
+      canvas.height = clamped;
+      render();
+    }
+  });
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'r' || e.key === 'R') resetView();
+  if (e.key === '+' || e.key === '=') zoomIn();
+  if (e.key === '-') zoomOut();
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  if (e.key === 'l' || e.key === 'L') document.getElementById('legend').classList.toggle('hidden');
+  if (e.key === 'p' || e.key === 'P') { const cb = document.getElementById('showPassable'); cb.checked = !cb.checked; render(); }
+  if (e.key === 't' || e.key === 'T') { tiltDeg = tiltDeg > 0 ? 0 : 35; document.getElementById('tiltSlider').value = tiltDeg; document.getElementById('tiltVal').textContent = tiltDeg + '°'; applyTilt(); }
+  if (e.key === '3') {
+    if (activeTab === 'editor') {
+      show3D = !show3D; document.getElementById('show3D').checked = show3D; canvas.style.transform = 'none'; document.getElementById('canvas-wrap').style.perspective = 'none'; render(); if (!show3D) applyTilt();
+    }
+  }
+  if (e.key === 'z' || e.key === 'Z') {
+    if (activeTab === 'world' && window.terrainRenderer && terrainRenderer.mode === 'globe') {
+      const cb = document.getElementById('worldAzimuthal');
+      if (cb) { cb.checked = !cb.checked; terrainRenderer.setGlobeProjection(cb.checked ? 'azimuthal' : 'sphere'); }
+    }
+  }
+  if (e.key === 'w' || e.key === 'W') { switchTab(activeTab === 'world' ? 'editor' : 'world'); }
+  if (e.key === 'Tab') { e.preventDefault(); toggleSidebar(); }
+  if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
+});
+
+// ─── Tab switching ───
+
+let activeTab = 'editor';
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  // Toggle Three.js container vs 2D canvas
+  const threeContainer = document.getElementById('three-container');
+  const terrainCanvas = document.getElementById('terrain');
+  if (tab === 'world') {
+    threeContainer.style.display = 'block';
+    terrainCanvas.style.display = 'none';
+    document.getElementById('legend').classList.add('hidden');
+    document.getElementById('zoom-controls').style.display = 'none';
+    document.getElementById('coord-hud').style.display = 'none';
+    document.getElementById('zoom-hud').style.display = 'none';
+    loadWorldData3D();
+  } else {
+    threeContainer.style.display = 'none';
+    terrainCanvas.style.display = 'block';
+    document.getElementById('zoom-controls').style.display = '';
+    document.getElementById('coord-hud').style.display = '';
+    document.getElementById('zoom-hud').style.display = '';
+  }
+
+  if (tab === 'files') refreshFileList();
+  if (tab === 'editor') render();
+}
+
+// ─── File Manager ───
+
+const API_BASE = window.location.origin + '/api';
+let serverOnline = false;
+
+async function checkServer() {
+  const el = document.getElementById('server-status');
+  try {
+    const res = await fetch(API_BASE + '/files');
+    if (res.ok) {
+      serverOnline = true;
+      el.className = 'server-status online';
+      el.textContent = 'Server connected';
+      return true;
+    }
+  } catch (e) {}
+  serverOnline = false;
+  el.className = 'server-status offline';
+  el.innerHTML = 'Server offline — run <code style="background:#1a1a2e;padding:2px 4px;border-radius:2px">node serve.js</code> in terrain-builder/';
+  return false;
+}
+
+function showSaveStatus(msg, ok) {
+  const el = document.getElementById('save-status');
+  el.className = 'file-status ' + (ok ? 'success' : 'error');
+  el.textContent = msg;
+  setTimeout(() => { el.textContent = ''; el.className = ''; }, 4000);
+}
+
+async function saveFile() {
+  if (!serverOnline) { showSaveStatus('Server offline', false); return; }
+  let name = document.getElementById('save-filename').value.trim();
+  if (!name) { showSaveStatus('Enter a filename', false); return; }
+  if (!name.endsWith('.json')) name += '.json';
+  // Sanitize: only keep safe chars
+  name = name.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+
+  try {
+    const res = await fetch(API_BASE + '/files/' + encodeURIComponent(name), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: getConfigJSON()
+    });
+    if (res.ok) {
+      showSaveStatus('Saved: ' + name, true);
+      refreshFileList();
+    } else {
+      const data = await res.json();
+      showSaveStatus('Error: ' + (data.error || res.statusText), false);
+    }
+  } catch (e) {
+    showSaveStatus('Network error: ' + e.message, false);
+  }
+}
+
+async function refreshFileList() {
+  const ok = await checkServer();
+  const el = document.getElementById('file-list');
+  if (!ok) { el.innerHTML = '<div class="file-empty">Server offline</div>'; return; }
+
+  try {
+    const res = await fetch(API_BASE + '/files');
+    const data = await res.json();
+    if (!data.files || data.files.length === 0) {
+      el.innerHTML = '<div class="file-empty">No saved terrains yet</div>';
+      return;
+    }
+    el.innerHTML = data.files.map(f => {
+      const date = new Date(f.modified);
+      const ago = timeAgo(date);
+      const sizeKB = (f.size / 1024).toFixed(1);
+      return `<div class="file-card">
+        <div class="file-name">${escHTML(f.name)}</div>
+        <div class="file-meta">${sizeKB} KB &middot; ${ago}</div>
+        <div class="file-actions">
+          <button onclick="loadFile('${escAttr(f.name)}')">Load</button>
+          <button class="secondary" onclick="previewFile('${escAttr(f.name)}')">Preview</button>
+          <button class="danger" onclick="deleteFile('${escAttr(f.name)}')">Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="file-empty">Error loading files</div>';
+  }
+}
+
+async function loadFile(name) {
+  try {
+    const res = await fetch(API_BASE + '/files/' + encodeURIComponent(name));
+    if (!res.ok) { alert('Failed to load: ' + name); return; }
+    const data = await res.json();
+    config.seed = data.seed ?? config.seed;
+    config.waterLine = data.waterLine ?? config.waterLine;
+    config.peakLine = data.peakLine ?? config.peakLine;
+    config.anchors = data.anchors ?? [];
+    if (data.radiusKm) radiusKm = data.radiusKm;
+    selectedAnchor = -1;
+    zoom = 1; panX = 0; panY = 0;
+    syncUI(); render();
+    // Auto-fill save input with current file name
+    document.getElementById('save-filename').value = name;
+    // Switch to editor
+    switchTab('editor');
+  } catch (e) {
+    alert('Error loading file: ' + e.message);
+  }
+}
+
+async function previewFile(name) {
+  try {
+    const res = await fetch(API_BASE + '/files/' + encodeURIComponent(name));
+    if (!res.ok) return;
+    const data = await res.json();
+    const anchors = data.anchors || [];
+    const landCount = anchors.filter(a => buoyancy(a.mass, a.lift) > (data.waterLine || 90)).length;
+    alert(
+      `${name}\n\n` +
+      `Seed: ${data.seed}\n` +
+      `Water/Peak: ${data.waterLine}/${data.peakLine}\n` +
+      `Radius: ${data.radiusKm || '?'} km\n` +
+      `Anchors: ${anchors.length} (${landCount} land, ${anchors.length - landCount} water)`
+    );
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function deleteFile(name) {
+  if (!confirm('Delete ' + name + '?')) return;
+  try {
+    const res = await fetch(API_BASE + '/files/' + encodeURIComponent(name), { method: 'DELETE' });
+    if (res.ok) refreshFileList();
+    else alert('Failed to delete');
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function timeAgo(date) {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function escHTML(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+// ─── World Map Renderer (Globe + City Zoom) ───
+
+let worldData = null;
+let coastlineData = null;
+let worldCenterLon = 0;
+let worldCenterLat = 30;
+let worldZoom = 1;
+let worldPanning = false;
+let worldPanStartX = 0, worldPanStartY = 0;
+let worldPanStartLon = 0, worldPanStartLat = 0;
+let worldDragDist = 0;
+let hoveredCity = -1;
+
+// City zoom mode
+let worldMode = 'globe'; // 'globe' or 'city'
+let worldActiveCity = null;
+let worldCityConfig = null;
+let worldCityRadiusKm = 40;
+let worldCityPanX = 0, worldCityPanY = 0;
+let worldCityPanStartX = 0, worldCityPanStartY = 0;
+const CITY_ZOOM_THRESHOLD = 16;
+let cityLoadingId = -1;
+
+// Equirectangular land mask (built once from coastlines)
+let eqMaskData = null;
+const EQ_W = 2048, EQ_H = 1024;
+
+function buildEquirectangularMask() {
+  if (eqMaskData) return;
+  const mc = document.createElement('canvas');
+  mc.width = EQ_W; mc.height = EQ_H;
+  const mctx = mc.getContext('2d');
+  mctx.fillStyle = '#000';
+  mctx.fillRect(0, 0, EQ_W, EQ_H);
+  mctx.fillStyle = '#fff';
+  coastlineData.features.forEach(feature => {
+    const geom = feature.geometry;
+    const polys = geom.type === 'MultiPolygon' ? geom.coordinates : [geom.coordinates];
+    polys.forEach(poly => {
+      mctx.beginPath();
+      poly.forEach(ring => {
+        ring.forEach((coord, i) => {
+          const px = ((coord[0] + 180) / 360) * EQ_W;
+          const py = ((90 - coord[1]) / 180) * EQ_H;
+          if (i === 0) mctx.moveTo(px, py); else mctx.lineTo(px, py);
+        });
+        mctx.closePath();
+      });
+      mctx.fill('evenodd');
+    });
+  });
+  eqMaskData = mctx.getImageData(0, 0, EQ_W, EQ_H);
+}
+
+function isLandEq(lon, lat) {
+  if (!eqMaskData) return false;
+  lon = ((lon % 360) + 540) % 360 - 180;
+  const px = Math.floor(((lon + 180) / 360) * EQ_W) % EQ_W;
+  const py = Math.floor(((90 - lat) / 180) * EQ_H);
+  if (py < 0 || py >= EQ_H || px < 0 || px >= EQ_W) return false;
+  return eqMaskData.data[(py * EQ_W + px) * 4] > 128;
+}
+
+async function loadWorldData() {
+  if (worldData && coastlineData) return;
+  const status = document.getElementById('world-status');
+  try {
+    if (!worldData) {
+      const res = await fetch(API_BASE + '/files/world.json');
+      if (res.ok) worldData = await res.json();
+    }
+    if (!coastlineData) {
+      const res = await fetch(API_BASE + '/files/coastlines.json');
+      if (res.ok) coastlineData = await res.json();
+    }
+    if (worldData && coastlineData) {
+      buildEquirectangularMask();
+      status.textContent = `Loaded: ${worldData.cities.length} cities`;
+      status.style.color = '#4f4';
+      buildCityList();
+    } else {
+      status.textContent = 'Failed to load world data. Is the server running?';
+      status.style.color = '#f44';
+    }
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    status.style.color = '#f44';
+  }
+}
+
+function buildCityList() {
+  if (!worldData) return;
+  const el = document.getElementById('world-city-list');
+  const typeColors = { Capital: '#ffd700', Trade: '#4af', Combat: '#f44', Resource: '#4f4' };
+  el.innerHTML = worldData.cities.map(c =>
+    `<div style="padding:3px 4px; cursor:pointer; border-bottom:1px solid #333;"
+          onmouseover="hoveredCity=${c.id}; renderWorld()"
+          onmouseout="hoveredCity=-1; renderWorld()"
+          onclick="loadCityTerrain(${c.id})">
+      <span style="color:${typeColors[c.type] || '#aaa'}">●</span>
+      <b>${escHTML(c.name)}</b> <span style="color:#666">${c.type} · ${c.radiusKm}km · ${c.profile}</span>
+    </div>`
+  ).join('');
+}
+
+// ─── Orthographic Globe Projection ───
+
+function globeR() {
+  return (canvas.width / 2 - 4) * worldZoom;
+}
+
+// Project lon/lat to canvas pixel. Returns null if behind globe.
+function worldToCanvas(lon, lat) {
+  const size = canvas.width;
+  const half = size / 2;
+  const R = globeR();
+  const DEG = Math.PI / 180;
+  const lat0 = worldCenterLat * DEG, lon0 = worldCenterLon * DEG;
+  const latR = lat * DEG, lonR = lon * DEG;
+  const cosLat = Math.cos(latR), sinLat = Math.sin(latR);
+  const cosLat0 = Math.cos(lat0), sinLat0 = Math.sin(lat0);
+  const dlon = lonR - lon0;
+  const cosC = sinLat0 * sinLat + cosLat0 * cosLat * Math.cos(dlon);
+  if (cosC < 0) return null; // behind globe
+  const x = cosLat * Math.sin(dlon);
+  const y = cosLat0 * sinLat - sinLat0 * cosLat * Math.cos(dlon);
+  return [half + x * R, half - y * R];
+}
+
+// Inverse: canvas pixel to lon/lat. Returns null if outside globe.
+function canvasToLonLat(px, py) {
+  const size = canvas.width;
+  const half = size / 2;
+  const R = globeR();
+  const x = (px - half) / R, y = -(py - half) / R;
+  const rho = Math.sqrt(x * x + y * y);
+  if (rho > 1.01) return null;
+  if (rho < 0.0001) return [worldCenterLon, worldCenterLat];
+  const c = Math.asin(Math.min(rho, 1.0));
+  const sinC = Math.sin(c), cosC = Math.cos(c);
+  const DEG = Math.PI / 180;
+  const lat0 = worldCenterLat * DEG, lon0 = worldCenterLon * DEG;
+  const lat = Math.asin(cosC * Math.sin(lat0) + y * sinC * Math.cos(lat0) / rho);
+  const lon = lon0 + Math.atan2(x * sinC, rho * Math.cos(lat0) * cosC - y * Math.sin(lat0) * sinC);
+  return [lon / DEG, lat / DEG];
+}
+
+// ─── Cache helpers ───
+
+let worldCacheCanvas2 = null;
+let worldCacheKey = '';
+function worldMakeCacheKey() {
+  if (worldMode === 'city' && worldActiveCity) {
+    return `city:${worldActiveCity.id}:${worldZoom}:${worldCityPanX}:${worldCityPanY}:${canvas.width}`;
+  }
+  return `globe:${worldCenterLon.toFixed(3)}:${worldCenterLat.toFixed(3)}:${worldZoom.toFixed(3)}:${canvas.width}`;
+}
+
+function worldSaveCache() {
+  const size = canvas.width;
+  if (!worldCacheCanvas2) worldCacheCanvas2 = document.createElement('canvas');
+  worldCacheCanvas2.width = size;
+  worldCacheCanvas2.height = size;
+  worldCacheCanvas2.getContext('2d').drawImage(canvas, 0, 0);
+}
+
+// ─── Globe renderer ───
+
+function renderGlobe() {
+  const size = canvas.width;
+  const half = size / 2;
+  const R = globeR();
+  const R2 = R * R;
+  buildEquirectangularMask();
+
+  const img = ctx.createImageData(size, size);
+  const DEG = Math.PI / 180;
+  const lat0 = worldCenterLat * DEG, lon0 = worldCenterLon * DEG;
+  const cosLat0 = Math.cos(lat0), sinLat0 = Math.sin(lat0);
+
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const i = (py * size + px) * 4;
+      const dx = px - half, dy = -(py - half);
+      const d2 = dx * dx + dy * dy;
+
+      if (d2 > R2) {
+        img.data[i] = 15; img.data[i+1] = 15; img.data[i+2] = 35; img.data[i+3] = 255;
+        continue;
+      }
+
+      // Inverse orthographic
+      const x = dx / R, y = dy / R;
+      const rho = Math.sqrt(x * x + y * y);
+      let lonDeg, latDeg;
+      if (rho < 0.0001) {
+        lonDeg = worldCenterLon; latDeg = worldCenterLat;
+      } else {
+        const c = Math.asin(Math.min(rho, 1.0));
+        const sinC = Math.sin(c), cosC = Math.cos(c);
+        latDeg = Math.asin(cosC * sinLat0 + y * sinC * cosLat0 / rho) / DEG;
+        lonDeg = (lon0 + Math.atan2(x * sinC, rho * cosLat0 * cosC - y * sinLat0 * sinC)) / DEG;
+      }
+
+      if (isLandEq(lonDeg, latDeg)) {
+        img.data[i] = 225; img.data[i+1] = 225; img.data[i+2] = 220; img.data[i+3] = 255;
+      } else {
+        const n = ((px * 7919 + py * 104729 + 31) >>> 0) & 0x0F;
+        img.data[i] = 20+n; img.data[i+1] = 50+n; img.data[i+2] = 90+n; img.data[i+3] = 255;
+      }
+
+      // Atmospheric edge shading
+      if (rho > 0.85) {
+        const f = (rho - 0.85) / 0.15 * 0.4;
+        img.data[i]   = img.data[i]   * (1-f) + 60*f;
+        img.data[i+1] = img.data[i+1] * (1-f) + 100*f;
+        img.data[i+2] = img.data[i+2] * (1-f) + 180*f;
+      }
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // Atmosphere ring
+  ctx.beginPath();
+  ctx.arc(half, half, R, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(80, 140, 220, 0.4)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Outer glow
+  if (R < half + 20) {
+    const glow = ctx.createRadialGradient(half, half, R - 2, half, half, R + 15);
+    glow.addColorStop(0, 'rgba(60, 120, 200, 0.15)');
+    glow.addColorStop(1, 'rgba(60, 120, 200, 0)');
+    ctx.beginPath();
+    ctx.arc(half, half, R + 15, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+  }
+
+  worldSaveCache();
+}
+
+// ─── City terrain in world view ───
+
+function nearestCityToCenter() {
+  if (!worldData) return null;
+  let best = null, bestDist = Infinity;
+  const DEG = Math.PI / 180;
+  worldData.cities.forEach(c => {
+    const dlon = (c.lon - worldCenterLon) * DEG * Math.cos(worldCenterLat * DEG);
+    const dlat = (c.lat - worldCenterLat) * DEG;
+    const d = dlon * dlon + dlat * dlat;
+    if (d < bestDist) { bestDist = d; best = c; }
+  });
+  // Within ~20° of a city
+  return bestDist < (20 * DEG) * (20 * DEG) ? best : null;
+}
+
+async function ensureCityLoaded(city) {
+  if (worldActiveCity && worldActiveCity.id === city.id && worldCityConfig) return true;
+  if (cityLoadingId === city.id) return false;
+  cityLoadingId = city.id;
+  try {
+    const res = await fetch(API_BASE + '/files/' + city.terrain);
+    if (res.ok) {
+      const data = await res.json();
+      worldCityConfig = {
+        seed: data.seed, waterLine: data.waterLine, peakLine: data.peakLine,
+        anchors: data.anchors || []
+      };
+      worldCityRadiusKm = data.radiusKm || city.radiusKm || 40;
+      worldActiveCity = city;
+      worldCityPanX = 0;
+      worldCityPanY = 0;
+      cityLoadingId = -1;
+      worldCacheKey = '';
+      renderWorld();
+      return true;
+    }
+  } catch (e) {}
+  cityLoadingId = -1;
+  return false;
+}
+
+function renderCityTerrain() {
+  if (!worldCityConfig || !worldActiveCity) return;
+  const cfg = worldCityConfig;
+  const size = canvas.width;
+  const center = size / 2;
+  const rgu = Math.round(worldCityRadiusKm / 111 * 10000);
+  const cityZoom = worldZoom / (CITY_ZOOM_THRESHOLD * 2.5);
+  const scale = (rgu / center) / cityZoom;
+
+  const tilt = 40 * Math.PI / 180;
+  const cosT = Math.cos(tilt);
+  const rawMargin = size * (1 - cosT);
+  const rawH = rawMargin;
+
+  // Extra rows behind the camera so back terrain fills the top of the 3D view
+  const extraBack = Math.ceil(size * 0.1);
+  const totalRows = size + extraBack;
+
+  // Phase 1: Build elevation + moisture grids at half res — extended range
+  // Inside radius: real terrain. Outside: ocean (so terrain shape matches editor)
+  const gs = 2;
+  const gw = Math.ceil(size / gs);
+  const gh = Math.ceil(totalRows / gs);
+  const grid = new Float32Array(gw * gh);
+  const mGrid = new Float32Array(gw * gh).fill(128);
+  const r2 = rgu * rgu;
+  const fadeStart2 = (rgu * 0.92) * (rgu * 0.92); // start fading near edge
+
+  for (let gr = 0; gr < gh; gr++) {
+    for (let gc = 0; gc < gw; gc++) {
+      const col = gc * gs;
+      const row = gr * gs - extraBack;
+      const ox = Math.round((col - center) * scale + worldCityPanX);
+      const oy = Math.round((center - row) * scale + worldCityPanY);
+      const d2 = ox * ox + oy * oy;
+      if (d2 > r2) {
+        grid[gr * gw + gc] = Math.max(1, cfg.waterLine - 30);
+        mGrid[gr * gw + gc] = 128;
+      } else if (d2 > fadeStart2) {
+        const t = (Math.sqrt(d2) - rgu * 0.92) / (rgu * 0.08);
+        const real = elevation(cfg, ox, oy);
+        const ocean = cfg.waterLine - 30;
+        grid[gr * gw + gc] = real * (1 - t) + ocean * t;
+        mGrid[gr * gw + gc] = moisture(cfg, ox, oy);
+      } else {
+        grid[gr * gw + gc] = elevation(cfg, ox, oy);
+        mGrid[gr * gw + gc] = moisture(cfg, ox, oy);
+      }
+    }
+  }
+
+  // Phase 2: Box blur (3x3)
+  const blurred = new Float32Array(gw * gh);
+  for (let gr = 0; gr < gh; gr++) {
+    for (let gc = 0; gc < gw; gc++) {
+      let sum = 0, cnt = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nr = gr + dy, nc = gc + dx;
+          if (nr >= 0 && nr < gh && nc >= 0 && nc < gw) { sum += grid[nr * gw + nc]; cnt++; }
+        }
+      }
+      blurred[gr * gw + gc] = sum / cnt;
+    }
+  }
+
+  // sampleElev takes screen-space row (can be negative) and maps to grid
+  function sampleElev(screenRow, col) {
+    const gr = (screenRow + extraBack) / gs, gc = col / gs;
+    const r0 = Math.max(0, Math.min(Math.floor(gr), gh - 1));
+    const c0 = Math.max(0, Math.min(Math.floor(gc), gw - 1));
+    const r1 = Math.min(r0 + 1, gh - 1), c1 = Math.min(c0 + 1, gw - 1);
+    const fr = Math.max(0, gr - r0), fc = Math.max(0, gc - c0);
+    return blurred[r0*gw+c0]*(1-fr)*(1-fc) + blurred[r0*gw+c1]*(1-fr)*fc
+         + blurred[r1*gw+c0]*fr*(1-fc) + blurred[r1*gw+c1]*fr*fc;
+  }
+  function sampleMoist(screenRow, col) {
+    const gr = (screenRow + extraBack) / gs, gc = col / gs;
+    const r0 = Math.max(0, Math.min(Math.floor(gr), gh - 1));
+    const c0 = Math.max(0, Math.min(Math.floor(gc), gw - 1));
+    const r1 = Math.min(r0 + 1, gh - 1), c1 = Math.min(c0 + 1, gw - 1);
+    const fr = Math.max(0, gr - r0), fc = Math.max(0, gc - c0);
+    return mGrid[r0*gw+c0]*(1-fr)*(1-fc) + mGrid[r0*gw+c1]*(1-fr)*fc
+         + mGrid[r1*gw+c0]*fr*(1-fc) + mGrid[r1*gw+c1]*fr*fc;
+  }
+
+  // Phase 3: Auto-fit Y extent (visible rows only — not extended back rows)
+  let minY = Infinity, maxY = -Infinity;
+  for (let row = 0; row < size; row += 8) {
+    for (let col = 0; col < size; col += 8) {
+      const e = sampleElev(row, col);
+      const sy = rawMargin + row * cosT - (e / 255) * rawH;
+      const by = rawMargin + row * cosT;
+      if (sy < minY) minY = sy;
+      if (by > maxY) maxY = by;
+    }
+  }
+  if (minY >= maxY) return;
+  // Only auto-fit when zoomed in past 1x (matches editor behavior)
+  // At lower zoom, use natural scale so you can see terrain boundaries
+  let fitScale = 1, fitOff = 0;
+  if (cityZoom > 1) {
+    fitScale = size / (maxY - minY);
+    fitOff = -minY * fitScale;
+  }
+
+  // Phase 4: 3D voxel sweep (front-to-back, extended back range to fill screen)
+  const img = ctx.createImageData(size, size);
+  // No background init needed — every pixel will be filled by terrain
+
+  const yBuf = new Float32Array(size).fill(size + 1);
+  const prevElev = new Float32Array(size).fill(-1);
+
+  for (let row = size - 1; row >= -extraBack; row--) {
+    for (let col = 0; col < size; col++) {
+      const e = sampleElev(row, col);
+      const mo = sampleMoist(row, col);
+      const [r, g, b] = elevColor(e, cfg.waterLine, cfg.peakLine, mo);
+
+      const screenY = (rawMargin + row * cosT - (e / 255) * rawH) * fitScale + fitOff;
+      if (screenY >= yBuf[col]) continue;
+
+      const baseY = (rawMargin + row * cosT) * fitScale + fitOff;
+      const pe = prevElev[col];
+      const slopeFactor = pe < 0 ? 1.0 : Math.max(0.55, Math.min(1.2, 1.0 + (e - pe) / 40));
+      prevElev[col] = e;
+
+      const top = Math.max(0, Math.floor(screenY));
+      const bottom = Math.min(size - 1, Math.floor(Math.min(baseY, yBuf[col])));
+      if (top > bottom) { yBuf[col] = screenY; continue; }
+
+      const topEnd = Math.min(top + 1, bottom);
+      for (let py = top; py <= bottom; py++) {
+        const i = (py * size + col) * 4;
+        const shade = py <= topEnd ? slopeFactor
+          : 0.35 + 0.25 * ((bottom - py) / (bottom - topEnd || 1));
+        img.data[i]     = Math.min(255, r * shade) | 0;
+        img.data[i + 1] = Math.min(255, g * shade) | 0;
+        img.data[i + 2] = Math.min(255, b * shade) | 0;
+        img.data[i + 3] = 255;
+      }
+      yBuf[col] = screenY;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // City name overlay
+  ctx.save();
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillText(worldActiveCity.name, center + 1, 31);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(worldActiveCity.name, center, 30);
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#7ec8e3';
+  ctx.fillText(`${worldActiveCity.type} \u00b7 ${worldCityRadiusKm}km \u00b7 ${worldActiveCity.profile}`, center, 48);
+  ctx.restore();
+
+  worldSaveCache();
+}
+
+// ─── Globe overlays (markers, labels) ───
+
+function drawWorldOverlays() {
+  if (worldMode === 'city') return;
+
+  const size = canvas.width;
+  const typeColors = { Capital: '#ffd700', Trade: '#4af', Combat: '#f55', Resource: '#4f4' };
+  const typeSz = { Capital: 5, Trade: 3.5, Combat: 3.5, Resource: 3 };
+
+  // Radius circles
+  const showRadius = document.getElementById('worldShowRadius').checked;
+  if (showRadius) {
+    worldData.cities.forEach(c => {
+      const cp = worldToCanvas(c.lon, c.lat);
+      if (!cp) return;
+      const rp = worldToCanvas(c.lon + c.radiusKm / 111, c.lat);
+      if (!rp) return;
+      const rPx = Math.abs(rp[0] - cp[0]);
+      if (rPx < 1) return;
+      ctx.beginPath();
+      ctx.arc(cp[0], cp[1], rPx, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+  }
+
+  // City markers
+  worldData.cities.forEach(c => {
+    const cp = worldToCanvas(c.lon, c.lat);
+    if (!cp) return;
+    const [px, py] = cp;
+    if (px < -20 || px > size + 20 || py < -20 || py > size + 20) return;
+    const isHovered = c.id === hoveredCity;
+    const r = isHovered ? 7 : (typeSz[c.type] || 3);
+    if (isHovered) {
+      ctx.beginPath();
+      ctx.arc(px, py, r + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = typeColors[c.type] || '#fff';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // City labels
+  const showLabels = document.getElementById('worldShowLabels').checked;
+  if (showLabels && worldZoom > 0.8) {
+    ctx.save();
+    const fontSize = Math.max(9, Math.min(13, 10 * worldZoom));
+    ctx.font = `bold ${fontSize}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    worldData.cities.forEach(c => {
+      const cp = worldToCanvas(c.lon, c.lat);
+      if (!cp) return;
+      const [px, py] = cp;
+      if (px < -50 || px > size + 50 || py < -20 || py > size + 20) return;
+      const isHovered = c.id === hoveredCity;
+      if (worldZoom < 1.5 && c.type !== 'Capital' && !isHovered) return;
+      const offset = (typeSz[c.type] || 3) + 4;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillText(c.name, px + offset + 1, py + 1);
+      ctx.fillStyle = isHovered ? '#fff' : '#ddd';
+      ctx.fillText(c.name, px + offset, py);
+    });
+    ctx.restore();
+  }
+
+  // Frame
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, size - 2, size - 2);
+}
+
+// ─── Main world render ───
+
+function renderWorld() {
+  if (activeTab !== 'world') return;
+  if (!coastlineData || !worldData) return;
+
+  // Determine mode
+  let inCityMode = false;
+  if (worldZoom >= CITY_MIN_WORLD_ZOOM) {
+    const city = nearestCityToCenter();
+    if (city) {
+      if (!worldActiveCity || worldActiveCity.id !== city.id || !worldCityConfig) {
+        ensureCityLoaded(city);
+      }
+      if (worldActiveCity && worldActiveCity.id === city.id && worldCityConfig) {
+        inCityMode = true;
+      }
+    }
+  }
+
+  if (inCityMode) {
+    worldMode = 'city';
+    const key = worldMakeCacheKey();
+    if (key !== worldCacheKey) {
+      renderCityTerrain();
+      worldCacheKey = key;
+    } else if (worldCacheCanvas2) {
+      ctx.drawImage(worldCacheCanvas2, 0, 0);
+    }
+  } else {
+    if (worldMode === 'city') {
+      worldMode = 'globe';
+      worldActiveCity = null;
+      worldCityConfig = null;
+    }
+    const key = worldMakeCacheKey();
+    if (key !== worldCacheKey) {
+      renderGlobe();
+      worldCacheKey = key;
+    } else if (worldCacheCanvas2) {
+      ctx.drawImage(worldCacheCanvas2, 0, 0);
+    }
+    drawWorldOverlays();
+  }
+
+  // Update HUD
+  const hud = document.getElementById('zoom-hud');
+  if (inCityMode && worldActiveCity) {
+    hud.textContent = `${worldActiveCity.name} \u00b7 ${(worldZoom/CITY_ZOOM_THRESHOLD).toFixed(1)}x`;
+  } else {
+    hud.textContent = `Globe \u00b7 ${worldZoom.toFixed(1)}x`;
+  }
+}
+
+// ─── World mouse/wheel handlers ───
+
+function worldMouseDown(e) {
+  if (activeTab !== 'world') return;
+  worldPanning = true;
+  worldDragDist = 0;
+  worldPanStartX = e.clientX;
+  worldPanStartY = e.clientY;
+  if (worldMode === 'city') {
+    worldCityPanStartX = worldCityPanX;
+    worldCityPanStartY = worldCityPanY;
+  } else {
+    worldPanStartLon = worldCenterLon;
+    worldPanStartLat = worldCenterLat;
+  }
+}
+
+function worldMouseMove(e) {
+  if (activeTab !== 'world' || !worldData) return;
+
+  if (worldPanning) {
+    const size = canvas.width;
+    const rect = canvas.getBoundingClientRect();
+    const pixelRatio = size / rect.width;
+    const dx = (e.clientX - worldPanStartX) * pixelRatio;
+    const dy = (e.clientY - worldPanStartY) * pixelRatio;
+    worldDragDist = Math.max(worldDragDist, Math.abs(dx) + Math.abs(dy));
+
+    if (worldMode === 'city' && worldCityConfig) {
+      // Pan within city terrain (clamped to ~1.2x radius)
+      const center = size / 2;
+      const rgu = Math.round(worldCityRadiusKm / 111 * 10000);
+      const cityZoom = worldZoom / (CITY_ZOOM_THRESHOLD * 2.5);
+      const scale = (rgu / center) / cityZoom;
+      const limit = rgu * 1.2;
+      worldCityPanX = Math.max(-limit, Math.min(limit, worldCityPanStartX - dx * scale));
+      worldCityPanY = Math.max(-limit, Math.min(limit, worldCityPanStartY + dy * scale));
+    } else {
+      // Rotate globe
+      const half = size / 2;
+      const degreesPerPixel = 180 / (Math.max(half, globeR()) * Math.PI);
+      worldCenterLon = worldPanStartLon - dx * degreesPerPixel;
+      worldCenterLat = Math.max(-90, Math.min(90, worldPanStartLat + dy * degreesPerPixel));
+    }
+
+    // Full re-render during drag (globe needs accurate projection, cache shift doesn't work for a sphere)
+    worldCacheKey = '';
+    renderWorld();
+    return;
+  }
+
+  // Hover detection (globe mode only)
+  if (worldMode !== 'globe') return;
+
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+  let nearest = -1, nearestDist = 400;
+  worldData.cities.forEach(c => {
+    const cp = worldToCanvas(c.lon, c.lat);
+    if (!cp) return;
+    const d = (px - cp[0]) ** 2 + (py - cp[1]) ** 2;
+    if (d < nearestDist) { nearestDist = d; nearest = c.id; }
+  });
+  if (nearest !== hoveredCity) {
+    hoveredCity = nearest;
+    renderWorld();
+    const info = document.getElementById('world-city-info');
+    if (nearest >= 0) {
+      const c = worldData.cities[nearest];
+      info.innerHTML = `<b>${escHTML(c.name)}</b> (${c.type})<br>${c.lat.toFixed(2)}°, ${c.lon.toFixed(2)}° · ${c.radiusKm}km · ${c.profile}<br><span style="color:#7ec8e3">Click to load in editor</span>`;
+    } else {
+      info.textContent = '';
+    }
+  }
+}
+
+function worldMouseUp() {
+  const wasDrag = worldDragDist > 5;
+  worldPanning = false;
+  // Short click on globe city → load in editor
+  if (!wasDrag && hoveredCity >= 0 && worldMode === 'globe') {
+    loadCityTerrain(hoveredCity);
+  }
+}
+
+const CITY_MIN_WORLD_ZOOM = CITY_ZOOM_THRESHOLD * 2.5; // cityZoom=1.0 → terrain fills canvas
+
+function worldWheel(e) {
+  if (activeTab !== 'world') return;
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 0.85 : 1.18;
+  const oldZoom = worldZoom;
+  worldZoom = Math.max(0.15, Math.min(640, worldZoom * factor));
+
+  // When zooming out past city minimum, exit to globe
+  if (oldZoom >= CITY_MIN_WORLD_ZOOM && worldZoom < CITY_MIN_WORLD_ZOOM) {
+    worldZoom = CITY_ZOOM_THRESHOLD * 0.95; // snap back to globe
+    worldMode = 'globe';
+    worldCityConfig = null;
+    worldActiveCity = null;
+    worldCacheKey = '';
+  }
+  // When zooming in past threshold, snap to city minimum
+  if (oldZoom < CITY_ZOOM_THRESHOLD && worldZoom >= CITY_ZOOM_THRESHOLD) {
+    worldZoom = CITY_MIN_WORLD_ZOOM;
+  }
+
+  renderWorld();
+}
+
+async function loadCityTerrain(cityId) {
+  if (!worldData) return;
+  const city = worldData.cities.find(c => c.id === cityId);
+  if (!city) return;
+  try {
+    await loadFile(city.terrain);
+  } catch (e) {
+    document.getElementById('world-city-info').innerHTML =
+      `<span style="color:#f44">Error loading: ${e.message}</span>`;
+  }
+}
+
+// World events — hooked into existing canvas listeners
+canvas.addEventListener('mousedown', function(e) {
+  if (activeTab === 'world') worldMouseDown(e);
+});
+canvas.addEventListener('mousemove', function(e) {
+  if (activeTab === 'world') worldMouseMove(e);
+});
+canvas.addEventListener('mouseup', function(e) {
+  if (activeTab === 'world') worldMouseUp();
+});
+canvas.addEventListener('wheel', function(e) {
+  if (activeTab === 'world') { e.preventDefault(); worldWheel(e); }
+}, { passive: false });
+
+// ─── World tab: Three.js integration ───
+
+window.terrainRenderer = null;
+window._cityFilter = 'All';
+window._activeCityName = null;
+
+// ─── World tab helpers ───
+
+function setWorldStatus(text, state) {
+  const spinner = document.getElementById('world-spinner');
+  const status = document.getElementById('world-status');
+  status.textContent = text;
+  status.className = '';
+  if (state === 'loading') {
+    spinner.className = 'world-spinner';
+  } else if (state === 'done') {
+    spinner.className = 'world-spinner done';
+    status.innerHTML = '<span class="check">\u2714</span> ' + escHTML(text);
+  } else if (state === 'error') {
+    spinner.className = 'world-spinner done';
+    status.innerHTML = '<span class="error">\u2716</span> ' + escHTML(text);
+  }
+}
+
+function updateBreadcrumb(segments) {
+  const el = document.getElementById('world-breadcrumb');
+  if (!segments || segments.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = segments.map((seg, i) => {
+    if (i < segments.length - 1) {
+      return `<span class="bc-segment" onclick="${seg.onclick || ''}">${escHTML(seg.label)}</span><span class="bc-sep">\u203A</span>`;
+    }
+    return `<span class="bc-current">${escHTML(seg.label)}</span>`;
+  }).join('');
+}
+
+function filterCityList() {
+  const query = (document.getElementById('city-search').value || '').toLowerCase();
+  const cards = document.querySelectorAll('#world-city-list .city-card');
+  cards.forEach(card => {
+    const name = (card.dataset.name || '').toLowerCase();
+    const type = card.dataset.type || '';
+    const matchName = !query || name.includes(query);
+    const matchType = window._cityFilter === 'All' || type === window._cityFilter;
+    card.style.display = (matchName && matchType) ? '' : 'none';
+  });
+}
+
+function setCityFilter(type, btn) {
+  window._cityFilter = type;
+  document.querySelectorAll('.city-filter-pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  filterCityList();
+}
+
+// ─── World tab: Three.js integration (rewritten) ───
+
+async function loadWorldData3D() {
+  try {
+    if (!worldData) {
+      setWorldStatus('Loading world data...', 'loading');
+      const res = await fetch(API_BASE + '/files/world.json');
+      if (res.ok) worldData = await res.json();
+    }
+    if (!coastlineData) {
+      setWorldStatus('Loading coastlines...', 'loading');
+      const res = await fetch(API_BASE + '/files/coastlines.json');
+      if (res.ok) coastlineData = await res.json();
+    }
+    if (!worldData || !coastlineData) {
+      setWorldStatus('Failed to load world data. Is the server running?', 'error');
+      return;
+    }
+
+    buildEquirectangularMask();
+    buildCityList3D();
+
+    if (!window.terrainRenderer) {
+      setWorldStatus('Building globe...', 'loading');
+      const { TerrainRenderer } = await import('./terrain-renderer.js');
+      const container = document.getElementById('three-container');
+      window.terrainRenderer = new TerrainRenderer({
+        container,
+        functions: { elevation, moisture, elevColor },
+        coastlineData,
+        worldData,
+        onCityFocus: (cityId) => flyToCity3D(cityId),
+        onCityExit: () => worldFlyToGlobe(),
+        onCityHover: (cityId) => {
+          const info = document.getElementById('world-city-info');
+          if (cityId != null && worldData) {
+            const c = worldData.cities.find(ci => ci.id === cityId);
+            if (c) info.innerHTML = `<b>${escHTML(c.name)}</b> — ${c.type} · ${c.radiusKm}km`;
+          } else {
+            if (!window._activeCityId) info.textContent = '';
+          }
+        }
+      });
+      setWorldStatus(`${worldData.cities.length} cities loaded`, 'done');
+      updateBreadcrumb([{ label: 'Globe' }]);
+    } else {
+      setWorldStatus(`${worldData.cities.length} cities loaded`, 'done');
+      window.terrainRenderer.resize();
+    }
+  } catch (e) {
+    setWorldStatus('Error: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+function buildCityList3D() {
+  if (!worldData) return;
+  const el = document.getElementById('world-city-list');
+  const badgeColors = { Capital: '#ffd700', Trade: '#4af', Combat: '#f44', Resource: '#4f4' };
+  el.innerHTML = worldData.cities.map(c => {
+    const bg = badgeColors[c.type] || '#888';
+    return `<div class="city-card" data-city-id="${c.id}" data-type="${c.type}" data-name="${escHTML(c.name)}" onclick="flyToCity3D(${c.id})">
+      <span class="city-badge" style="background:${bg}">${escHTML(c.type)}</span>
+      <div>
+        <div class="city-name">${escHTML(c.name)}</div>
+        <div class="city-meta">${c.radiusKm}km · ${c.profile}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function flyToCity3D(cityId) {
+  if (!window.terrainRenderer || !worldData) return;
+  if (window._activeCityId === cityId) return;
+  if (window.terrainRenderer.mode === 'transitioning') return;
+
+  const city = worldData.cities.find(c => c.id === cityId);
+  if (!city) return;
+  window._activeCityId = cityId;
+  window._activeCityName = city.name;
+
+  const info = document.getElementById('world-city-info');
+  info.innerHTML = `Loading <b>${escHTML(city.name)}</b> terrain...`;
+
+  // Slide open controls
+  document.getElementById('world-city-controls').classList.add('open');
+
+  // Update breadcrumb
+  updateBreadcrumb([
+    { label: 'Globe', onclick: 'worldFlyToGlobe()' },
+    { label: city.name }
+  ]);
+
+  // Style Globe View button as primary
+  const globeBtn = document.getElementById('btn-globe-view');
+  globeBtn.className = 'primary';
+
+  // Mark active city card
+  document.querySelectorAll('.city-card').forEach(c => c.classList.remove('active'));
+  const activeCard = document.querySelector(`.city-card[data-city-id="${cityId}"]`);
+  if (activeCard) {
+    activeCard.classList.add('active');
+    activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  try {
+    const res = await fetch(API_BASE + '/files/' + city.terrain);
+    if (!res.ok) { info.innerHTML = '<span style="color:#f44">Failed to load terrain</span>'; return; }
+    const data = await res.json();
+    const terrainConfig = {
+      seed: data.seed, waterLine: data.waterLine, peakLine: data.peakLine,
+      anchors: data.anchors || []
+    };
+    const rKm = data.radiusKm || city.radiusKm || 40;
+
+    window.terrainRenderer.loadCityTerrain(cityId, terrainConfig, rKm);
+    window.terrainRenderer.flyToCity(cityId);
+
+    info.innerHTML = `<b>${escHTML(city.name)}</b> &mdash; ${city.type} &middot; ${rKm}km &middot; ${city.profile}
+      <button onclick="worldEnterTownMode()" style="margin-left:8px" class="secondary">Town View</button>`;
+    window._lastTerrainConfig = terrainConfig;
+  } catch (e) {
+    info.innerHTML = `<span style="color:#f44">Error: ${e.message}</span>`;
+  }
+}
+
+function worldFlyToGlobe() {
+  if (!window.terrainRenderer) return;
+  window.terrainRenderer.unloadCityTerrain();
+  window.terrainRenderer.flyToGlobe();
+  window._activeCityId = null;
+  window._activeCityName = null;
+
+  updateBreadcrumb([{ label: 'Globe' }]);
+  document.getElementById('world-city-info').textContent = '';
+  document.getElementById('world-city-controls').classList.remove('open');
+  document.getElementById('btn-globe-view').className = 'secondary';
+  document.querySelectorAll('.city-card').forEach(c => c.classList.remove('active'));
+}
+
+function worldEnterTownMode() {
+  if (!window.terrainRenderer || !window._lastTerrainConfig) return;
+  window.terrainRenderer.enterTownMode(window._lastTerrainConfig, { reset: true });
+  const cityName = window._activeCityName || 'City';
+  updateBreadcrumb([
+    { label: 'Globe', onclick: 'worldFlyToGlobe()' },
+    { label: cityName, onclick: `flyToCity3D(${window._activeCityId})` },
+    { label: 'Town' }
+  ]);
+  document.getElementById('world-city-info').innerHTML =
+    '<button onclick="worldExitTownMode()" class="secondary">Back to City</button>';
+}
+
+function worldExitTownMode() {
+  if (!window.terrainRenderer) return;
+  window.terrainRenderer.exitTownMode();
+  const cityName = window._activeCityName || 'City';
+  updateBreadcrumb([
+    { label: 'Globe', onclick: 'worldFlyToGlobe()' },
+    { label: cityName }
+  ]);
+  document.getElementById('world-city-info').textContent = '';
+}
+
+function worldResetView() {
+  if (activeTab === 'world' && window.terrainRenderer) {
+    window.terrainRenderer.unloadCityTerrain();
+    window.terrainRenderer.flyToGlobe();
+    window.terrainRenderer.setGlobeProjection('sphere');
+    const azCb = document.getElementById('worldAzimuthal');
+    if (azCb) azCb.checked = false;
+    window._activeCityId = null;
+    window._activeCityName = null;
+    updateBreadcrumb([{ label: 'Globe' }]);
+    document.getElementById('world-city-info').textContent = '';
+    document.getElementById('world-city-controls').classList.remove('open');
+    document.getElementById('btn-globe-view').className = 'secondary';
+    document.querySelectorAll('.city-card').forEach(c => c.classList.remove('active'));
+    return;
+  }
+  // Legacy 2D reset
+  worldZoom = 1;
+  worldCenterLon = 0;
+  worldCenterLat = 30;
+  worldMode = 'globe';
+  worldCityConfig = null;
+  worldActiveCity = null;
+  worldCacheKey = '';
+  renderWorld();
+}
+
+// Initial render — size canvas to fit, then render
+syncUI();
+resizeCanvas();
+</script>
+</body>
+</html>
