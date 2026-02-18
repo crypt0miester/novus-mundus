@@ -151,6 +151,7 @@ pub fn process(
     let mut promo_data_ref = dao_promotion_account.try_borrow_mut_data()?;
     let promo = unsafe { DAOPromotionAccount::load_mut(&mut promo_data_ref) };
 
+    promo.account_key = crate::state::AccountKey::DaoPromotion as u8;
     promo.payer = *payer.key();
     promo.title = title;
 

@@ -61,11 +61,11 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 3 {
+    if instruction_data.len() < 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let position_type = instruction_data[2];
+    let position_type = instruction_data[0];
 
     // Load king player
     require_owner(king_account, program_id)?;

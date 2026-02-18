@@ -230,7 +230,7 @@ fn find_attributes_in_registry(data: &[u8], registry_offset: usize) -> Option<us
 
 /// Parse the Attributes plugin data at the given offset
 fn parse_attributes_data(data: &[u8], offset: usize, buffs: &mut [ParsedBuff; 4]) -> usize {
-    let mut pos = offset;
+    let mut pos = offset + 1; // Skip plugin type discriminator byte
     let mut buff_count = 0;
 
     // Read attribute_list Vec length (4 bytes)
@@ -373,7 +373,7 @@ pub fn parse_hero_nft(nft_data: &[u8]) -> Option<ParsedHeroNft> {
 /// Parse hero attributes from the Attributes plugin data
 fn parse_hero_attributes_data(data: &[u8], offset: usize) -> Option<ParsedHeroNft> {
     let mut result = ParsedHeroNft::default();
-    let mut pos = offset;
+    let mut pos = offset + 1; // Skip plugin type discriminator byte
     let mut buff_idx: usize = 0;
 
     // Read attribute_list Vec length

@@ -11,7 +11,7 @@ use crate::{
     error::GameError,
     state::{
         PlayerAccount, TeamAccount, TeamMemberSlot, TeamInviteAccount, NULL_PUBKEY,
-        require_extension, unlock_extension_if_eligible, EXT_RALLY, EXT_TEAM,
+        require_extension, unlock_extension_if_eligible, EXT_INVENTORY, EXT_TEAM,
     },
     constants::{TEAM_SLOT_SEED, TEAM_INVITE_SEED},
     helpers::close_account,
@@ -77,12 +77,19 @@ pub fn process(
     require_writable(invite_refund)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 4. Load Accounts (using by_key for kingdom scoping)
-
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
+    // 4. Pre-checks and extension unlock (before mutable load to avoid borrow conflict)
+    {
+        let data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        if &player.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        require_extension(player, EXT_INVENTORY)?;
     }
+    unlock_extension_if_eligible(player_account, owner, EXT_TEAM)?;
+
+    // 4a. Load Accounts mutably (using by_key for kingdom scoping)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
@@ -92,12 +99,6 @@ pub fn process(
     if player.game_engine != team.game_engine {
         return Err(GameError::KingdomMismatch.into());
     }
-
-    // 4a. Require EXT_RALLY (prerequisite for teams)
-    require_extension(&*player, EXT_RALLY)?;
-
-    // 4b. Unlock EXT_TEAM on first team join via invite
-    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
 
     // 5. Verify and Validate Invite
 

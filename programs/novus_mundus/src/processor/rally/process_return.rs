@@ -7,16 +7,22 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::INTRACITY_WALKING_SPEED_KMH,
+    constants::{INTRACITY_WALKING_SPEED_KMH, PLAYER_SEED},
     error::GameError,
-    helpers::close_account,
+    helpers::{
+        close_account,
+        parse_hero_nft,
+        add_hero_buffs_to_player_with_location,
+        estate::{load_estate_for_player_mut, has_infirmary},
+    },
     logic::{
         calculate_networth,
         location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
     },
     state::{
         CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant,
-        RallyStatus,
+        RallyStatus, HeroTemplate, player::NULL_PUBKEY,
+        tier_from_mint_cost, is_hero_at_home, location_bonus_for_tier,
     },
     validation::{require_writable, require_owner},
     emit,
@@ -47,13 +53,21 @@ use crate::{
 /// 4. `[]` game_engine - For economic config and theme speed
 /// 5. `[]` rally_city_account - CityAccount for rally city (for return calculation)
 /// 6. `[]` home_city_account - CityAccount for home city (for return calculation)
+///
+/// 7. `[WRITE]` estate_account - Participant's EstateAccount PDA (for wounded tracking)
+///
+/// # Optional Hero Accounts (when participant had a committed hero)
+/// 8. `[WRITE*]` hero_mint - Hero NFT AssetV1 account (must match participant.hero, writable if transfer needed)
+/// 9. `[]` hero_template - HeroTemplate PDA
+/// 10. `[]` hero_collection - Hero collection PDA (only needed if all hero slots full, for NFT transfer)
+/// 11. `[]` system_program - System program (only needed if all hero slots full, for NFT transfer)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 7 {
+    if accounts.len() < 8 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -64,6 +78,7 @@ pub fn process(
     let game_engine_account = &accounts[4];
     let rally_city_account = &accounts[5];
     let home_city_account = &accounts[6];
+    let estate_account = &accounts[7];
 
     // 2. Validate basic account requirements
     require_writable(rally_account)?;
@@ -308,11 +323,96 @@ pub fn process(
             .saturating_add(participant.siege_weapons_committed);
     }
 
+    // 11-wounded. Transfer casualties to estate wounded pool (Infirmary feature)
+    if included_in_march {
+        let cas_1 = participant.casualties_1;
+        let cas_2 = participant.casualties_2;
+        let cas_3 = participant.casualties_3;
+        if cas_1 > 0 || cas_2 > 0 || cas_3 > 0 {
+            require_writable(estate_account)?;
+            require_owner(estate_account, program_id)?;
+            let estate = load_estate_for_player_mut(estate_account, &*player, program_id)?;
+            if has_infirmary(estate) {
+                let w1 = estate.get_wounded_def_1().saturating_add(cas_1 as u32);
+                let w2 = estate.get_wounded_def_2().saturating_add(cas_2 as u32);
+                let w3 = estate.get_wounded_def_3().saturating_add(cas_3 as u32);
+                estate.set_wounded_def_1(w1);
+                estate.set_wounded_def_2(w2);
+                estate.set_wounded_def_3(w3);
+            }
+        }
+    }
+
+    // 11a. Restore committed hero (if any)
+    let committed_hero_key = participant.hero;
+    let mut hero_needs_transfer = false;
+    if committed_hero_key != NULL_PUBKEY {
+        // Need hero_mint and hero_template accounts (accounts 8 and 9)
+        // When all slots are full, also need hero_collection (10) and system_program (11)
+        if accounts.len() < 10 {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        }
+        let hero_mint = &accounts[8];
+        let hero_template_account = &accounts[9];
+
+        // Verify mint matches participant's committed hero
+        if hero_mint.key() != &committed_hero_key {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // Parse hero NFT to get level and template_id
+        let nft_data = hero_mint.try_borrow_data()?;
+        let parsed_hero = parse_hero_nft(&nft_data)
+            .ok_or(GameError::InvalidParameter)?;
+        drop(nft_data);
+
+        // Load and verify template
+        let template_data = hero_template_account.try_borrow_data()?;
+        let template = unsafe { HeroTemplate::load(&template_data) };
+        if parsed_hero.template_id != template.template_id {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // Find empty slot on player
+        let mut empty_slot: Option<usize> = None;
+        for i in 0..3 {
+            if player.active_heroes[i] == NULL_PUBKEY {
+                empty_slot = Some(i);
+                break;
+            }
+        }
+
+        if let Some(slot) = empty_slot {
+            // Slot available: restore hero with buffs
+            let tier = tier_from_mint_cost(template.mint_cost_sol);
+            let at_home = is_hero_at_home(parsed_hero.origin_city, player.current_city);
+            let location_bonus_bps = if at_home {
+                location_bonus_for_tier(tier)
+            } else {
+                0
+            };
+
+            add_hero_buffs_to_player_with_location(&mut player, parsed_hero.level, template, location_bonus_bps);
+
+            player.active_heroes[slot] = committed_hero_key;
+            player.slot_location_bonus[slot] = location_bonus_bps;
+        } else {
+            // All slots full (player locked new heroes while this one was committed)
+            // Transfer the NFT directly to the participant's wallet instead
+            hero_needs_transfer = true;
+        }
+
+        drop(template_data);
+    }
+
     // 12. Update counters and status
     participant.returned = true;
     rally.returned_count = rally.returned_count.saturating_add(1);
-    player.rally_stats.current_rallies_joined =
-        player.rally_stats.current_rallies_joined.saturating_sub(1);
+    // Skip decrement for leader of cancelled rallies — already decremented in cancel.rs
+    if !(rally_status == RallyStatus::Cancelled as u8 && participant.is_leader) {
+        player.rally_stats.current_rallies_joined =
+            player.rally_stats.current_rallies_joined.saturating_sub(1);
+    }
 
     // Check if rally is complete (all participants returned)
     // Only transition Returning → Completed, not Cancelled → Completed
@@ -329,11 +429,42 @@ pub fn process(
     let rally_key = *rally_account.key();
     let player_key = *participant_owner.key();
 
+    // Store player PDA info for hero transfer if needed
+    let player_ge = player.game_engine;
+    let player_bump = player.bump;
+
     // Drop borrows before closing account
     drop(player);
     drop(participant_data_ref);
     drop(rally_data_ref);
     drop(game_engine);
+
+    // 12a. Transfer hero NFT to wallet if slots were full
+    if hero_needs_transfer {
+        // Need hero_mint (8), hero_collection (10), system_program (11)
+        if accounts.len() < 12 {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        }
+        let hero_mint = &accounts[8];
+        let hero_collection = &accounts[10];
+        let system_program = &accounts[11];
+
+        require_writable(hero_mint)?;
+
+        let bump_seed = [player_bump];
+        let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, participant_owner.key(), &bump_seed);
+        let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+
+        p_core::instructions::TransferV1 {
+            asset: hero_mint,
+            collection: hero_collection,
+            new_owner: participant_owner,
+            payer: participant_owner,
+            authority: player_account,
+            system_program,
+            log_wrapper: system_program,
+        }.invoke_signed(&[player_signer])?;
+    }
 
     // 13. Close RallyParticipant account (refund rent to participant)
     close_account(rally_participant_account, participant_owner)?;

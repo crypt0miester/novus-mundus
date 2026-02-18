@@ -112,6 +112,9 @@ impl FishingTier {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ExpeditionAccount {
+    /// Account discriminator (AccountKey::Expedition)
+    pub account_key: u8,
+
     /// Player who owns this expedition (32 bytes)
     pub player: Pubkey,
 
@@ -155,7 +158,7 @@ pub struct ExpeditionAccount {
 }
 
 impl ExpeditionAccount {
-    pub const LEN: usize = core::mem::size_of::<Self>(); // 104 bytes
+    pub const LEN: usize = core::mem::size_of::<Self>(); // 112 bytes (with account_key)
 
     /// Initialize a new expedition account
     pub fn init(
@@ -171,6 +174,7 @@ impl ExpeditionAccount {
         operative_unit_3: u64,
     ) -> Self {
         Self {
+            account_key: crate::state::AccountKey::Expedition as u8,
             player,
             hero_mint,
             expedition_type,
@@ -304,4 +308,4 @@ impl ExpeditionAccount {
 }
 
 // Compile-time size verification
-const _: () = assert!(ExpeditionAccount::LEN == 104, "ExpeditionAccount size changed");
+const _: () = assert!(ExpeditionAccount::LEN == 112, "ExpeditionAccount size changed");

@@ -79,30 +79,30 @@ pub fn process(
         return Err(GameError::DaoRequired.into());
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 51 {
+    // Parse instruction data (discriminator already stripped by entry point)
+    if instruction_data.len() < 49 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
-    let tier = instruction_data[6];
+    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let tier = instruction_data[4];
     let latitude = i32::from_le_bytes([
+        instruction_data[5],
+        instruction_data[6],
         instruction_data[7],
         instruction_data[8],
-        instruction_data[9],
-        instruction_data[10],
     ]);
     let longitude = i32::from_le_bytes([
+        instruction_data[9],
+        instruction_data[10],
         instruction_data[11],
         instruction_data[12],
-        instruction_data[13],
-        instruction_data[14],
     ]);
-    let min_level = instruction_data[15];
-    let min_networth_millions = instruction_data[16];
-    let min_troops_thousands = instruction_data[17];
-    let name_len = instruction_data[18];
+    let min_level = instruction_data[13];
+    let min_networth_millions = instruction_data[14];
+    let min_troops_thousands = instruction_data[15];
+    let name_len = instruction_data[16];
 
     // Validate tier
     if tier > 4 {
@@ -112,8 +112,8 @@ pub fn process(
     // Copy name
     let mut name = [0u8; 32];
     let copy_len = (name_len as usize).min(32);
-    if instruction_data.len() >= 19 + copy_len {
-        name[..copy_len].copy_from_slice(&instruction_data[19..19 + copy_len]);
+    if instruction_data.len() >= 17 + copy_len {
+        name[..copy_len].copy_from_slice(&instruction_data[17..17 + copy_len]);
     }
 
     // Derive PDA (kingdom-scoped)
@@ -159,6 +159,8 @@ pub fn process(
     let castle = unsafe { CastleAccount::load_mut(&mut castle_data) };
 
     // Identity
+    castle.account_key = crate::state::AccountKey::Castle as u8;
+    castle.game_engine = *game_engine_account.key();
     castle.castle_id = castle_id;
     castle.city_id = city_id;
     castle.tier = tier;

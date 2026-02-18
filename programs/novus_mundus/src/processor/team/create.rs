@@ -7,10 +7,10 @@ use crate::{
     error::GameError,
     state::{
         PlayerAccount, TeamAccount, TeamMemberSlot, GameEngine,
-        unlock_extension_if_eligible, require_extension, EXT_RALLY, EXT_TEAM,
+        unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_TEAM,
         NULL_PUBKEY,
     },
-    constants::{TEAM_SEED, TEAM_SLOT_SEED, MAX_TEAM_MEMBERS_BY_TIER, TIER_ROOKIE},
+    constants::{PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED, MAX_TEAM_MEMBERS_BY_TIER, TIER_ROOKIE},
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_key_match},
     logic::safe_math::apply_bp,
@@ -68,22 +68,28 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data
+    // Format: team_id (u64, 8 bytes) + name_len (u8) + name (N bytes)
 
-    if instruction_data.is_empty() {
+    if instruction_data.len() < 9 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let name_len = instruction_data[0] as usize;
+    let team_id = u64::from_le_bytes([
+        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
+        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
+    ]);
+
+    let name_len = instruction_data[8] as usize;
 
     if name_len < 3 || name_len > 32 {
         return Err(GameError::TeamNameTooLong.into());
     }
 
-    if instruction_data.len() < 1 + name_len {
+    if instruction_data.len() < 9 + name_len {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let name_bytes = &instruction_data[1..1 + name_len];
+    let name_bytes = &instruction_data[9..9 + name_len];
 
     // Validate UTF-8
     let _name_str = core::str::from_utf8(name_bytes)
@@ -92,61 +98,52 @@ pub fn process(
     // 4. Load Accounts (kingdom-scoped)
 
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
-    // 4a. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
-    // Player must create/join a rally before creating a team (user journey)
-    require_extension(&*player, EXT_RALLY)?;
-
-    // 4b. Unlock EXT_TEAM extension if not already unlocked
-    // This is the fifth step in the user journey
-    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
-
-    // 5. Validate Player Can Create Team
-
-    // Already in a team?
-    if player.team != NULL_PUBKEY {
-        return Err(GameError::AlreadyInTeam.into());
+    // 4a. Check extensions and unlock TEAM before loading player mutably
+    {
+        let data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        require_extension(player, EXT_INVENTORY)?;
     }
+    unlock_extension_if_eligible(player_account, owner, EXT_TEAM)?;
 
-    // 6. Burn Team Creation Cost (with DAO multiplier)
+    // 5. Validate Player Can Create Team + calculate cost (scoped borrow - dropped before CPI)
+    let (adjusted_creation_cost, player_bump) = {
+        let player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
-    let base_creation_cost = game_engine.gameplay_config.team_creation_cost;
+        // Already in a team?
+        if player.team != NULL_PUBKEY {
+            return Err(GameError::AlreadyInTeam.into());
+        }
 
-    // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
-    let adjusted_creation_cost = apply_bp(base_creation_cost, game_engine.economic_config.cost_multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
+        let base_creation_cost = game_engine.gameplay_config.team_creation_cost;
+        let adjusted_creation_cost = apply_bp(base_creation_cost, game_engine.economic_config.cost_multiplier as u64)
+            .ok_or(GameError::MathOverflow)?;
 
-    let bump_seed = [game_engine.bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+        (adjusted_creation_cost, player.bump)
+    }; // player borrow dropped here
+
+    // 6. Burn Team Creation Cost (CPI - requires no active borrows on player_account)
+    // Player PDA owns the token account, so player_account is the burn authority
+    let bump_seed = [player_bump];
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine_account.key(), owner.key(), &bump_seed);
+    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
     burn_tokens(
         player_token_account,
         novi_mint,
-        owner,
+        player_account,
         adjusted_creation_cost,
-        &[signer],
+        &[player_signer],
     )?;
 
-    // 7. Generate Team ID
+    // 7. Get clock for timestamps
 
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // Use timestamp + player pubkey hash as team ID for uniqueness
-    let team_id = (now as u64).wrapping_add(u64::from_le_bytes([
-        owner.key()[0],
-        owner.key()[1],
-        owner.key()[2],
-        owner.key()[3],
-        owner.key()[4],
-        owner.key()[5],
-        owner.key()[6],
-        owner.key()[7],
-    ]));
-
     // 8. Derive and Verify Team PDA (kingdom-scoped)
+    // team_id is provided by the client in instruction data
 
     let team_id_bytes = team_id.to_le_bytes();
     let (expected_team, team_bump) = TeamAccount::derive_pda(game_engine_account.key(), team_id);
@@ -237,7 +234,8 @@ pub fn process(
 
     drop(slot_data);
 
-    // 14. Update Player Account
+    // 14. Update Player Account (re-load after CPIs)
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
 
     player.team = *team_account.key();
     player.team_slot_index = slot_index;

@@ -63,6 +63,9 @@ pub enum ResearchBuffType {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ResearchTemplate {
+    /// Account discriminator (AccountKey::ResearchTemplate)
+    pub account_key: u8,
+
     pub research_type: u8,           // 0-29 (30 research nodes)
     pub category: u8,                // ResearchCategory
     pub max_level: u8,               // 5-25 depending on node
@@ -146,6 +149,9 @@ impl ResearchTemplate {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ResearchProgress {
+    /// Account discriminator (AccountKey::ResearchProgress)
+    pub account_key: u8,
+
     pub player: Pubkey,                    // Owner
     pub current_research: u8,              // Active research type (255 = none)
     pub current_level: u8,                 // Current level being researched
@@ -199,6 +205,7 @@ impl ResearchProgress {
     /// Initialize with default values
     pub fn init(player: Pubkey, bump: u8) -> Self {
         Self {
+            account_key: crate::state::AccountKey::ResearchProgress as u8,
             player,
             current_research: 255, // No active research
             current_level: 0,

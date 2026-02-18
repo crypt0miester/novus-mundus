@@ -9,6 +9,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{ReinforcementAccount, ReinforcementStatus, PlayerAccount},
+    helpers::estate::{load_estate_for_player_mut, has_infirmary},
     validation::{require_writable, require_owner},
     emit,
     events::reinforcement::ReinforcementReturned,
@@ -28,6 +29,7 @@ use crate::{
 /// 0. `[WRITE]` reinforcement_account: ReinforcementAccount PDA
 /// 1. `[WRITE]` sender_player: Sender's PlayerAccount PDA (receives units)
 /// 2. `[WRITE]` sender_owner: Sender's wallet (receives rent refund)
+/// 3. `[WRITE]` estate_account: Sender's EstateAccount PDA (for wounded tracking)
 ///
 /// # Instruction Data
 /// None required
@@ -37,20 +39,23 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
-        reinforcement_account,
-        sender_player,
-        sender_owner,
-    ] = accounts else {
+    if accounts.len() < 4 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+
+    let reinforcement_account = &accounts[0];
+    let sender_player = &accounts[1];
+    let sender_owner = &accounts[2];
+    let estate_account = &accounts[3];
 
     // 2. Validate Accounts
     require_writable(reinforcement_account)?;
     require_writable(sender_player)?;
     require_writable(sender_owner)?;
+    require_writable(estate_account)?;
     require_owner(reinforcement_account, program_id)?;
     require_owner(sender_player, program_id)?;
+    require_owner(estate_account, program_id)?;
 
     // 3. Get Clock
     let clock = Clock::get()?;
@@ -99,6 +104,9 @@ pub fn process(
     let return_siege = reinf.siege_weapons;
     let return_hero = reinf.hero;
     let sender_key = reinf.sender;
+    let wounded_1 = reinf.wounded_def_1;
+    let wounded_2 = reinf.wounded_def_2;
+    let wounded_3 = reinf.wounded_def_3;
 
     // Drop the borrow before modifying
     drop(reinf_data_ref);
@@ -122,6 +130,19 @@ pub fn process(
         }
         // If no empty slot, hero is still unlocked (just not equipped)
         // This is a design choice - heroes don't die but might need re-equipping
+    }
+
+    // 11a. Transfer wounded units to sender's estate (Infirmary feature)
+    if wounded_1 > 0 || wounded_2 > 0 || wounded_3 > 0 {
+        let estate = load_estate_for_player_mut(estate_account, &*sender, program_id)?;
+        if has_infirmary(estate) {
+            let w1 = estate.get_wounded_def_1().saturating_add(wounded_1);
+            let w2 = estate.get_wounded_def_2().saturating_add(wounded_2);
+            let w3 = estate.get_wounded_def_3().saturating_add(wounded_3);
+            estate.set_wounded_def_1(w1);
+            estate.set_wounded_def_2(w2);
+            estate.set_wounded_def_3(w3);
+        }
     }
 
     // Emit event

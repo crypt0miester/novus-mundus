@@ -12,9 +12,9 @@ use crate::{
     emit,
     error::GameError,
     events::PlayerTeleported,
-    state::{PlayerAccount, CityAccount, LocationAccount, HeroTemplate, NULL_PUBKEY, require_extension, EXT_INVENTORY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
+    state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, HeroTemplate, NULL_PUBKEY, require_extension, EXT_INVENTORY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
     constants::LOCATION_SEED,
-    helpers::{close_account, clear_hero_buffs, parse_hero_nft, add_hero_buffs_to_player_with_location},
+    helpers::{close_account, clear_hero_buffs, parse_hero_nft, add_hero_buffs_to_player_with_location, estate::{load_estate_for_player, require_stables}},
     logic::location::calculate_distance,
     logic::safe_math::apply_bp,
     validation::require_owner,
@@ -36,13 +36,14 @@ use crate::{
 /// 5. `[WRITE]` origin_location - LocationAccount for current cell (to vacate)
 /// 6. `[WRITE]` destination_location - LocationAccount for destination cell (to occupy)
 /// 7. `[]` system_program - For creating location account
+/// 8. `[]` estate_account - EstateAccount PDA (for Stables requirement)
 ///
 /// # Optional Hero Accounts (for location synergy recalculation)
 /// For each locked hero slot (0-2), if slot is occupied, include:
-/// 8+2n. `[]` hero_nft_n - Hero NFT mint account for slot n
-/// 9+2n. `[]` hero_template_n - HeroTemplate PDA for slot n (for tier calculation)
+/// 9+2n. `[]` hero_nft_n - Hero NFT mint account for slot n
+/// 10+2n. `[]` hero_template_n - HeroTemplate PDA for slot n (for tier calculation)
 ///
-/// Total: 8 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
+/// Total: 9 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -50,18 +51,19 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
-        player_account,
-        owner,
-        origin_city_account,
-        destination_city_account,
-        game_engine_account,
-        origin_location_account,
-        destination_location_account,
-        _system_program,
-    ] = accounts else {
+    if accounts.len() < 9 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+
+    let player_account = &accounts[0];
+    let owner = &accounts[1];
+    let origin_city_account = &accounts[2];
+    let destination_city_account = &accounts[3];
+    let game_engine_account = &accounts[4];
+    let origin_location_account = &accounts[5];
+    let destination_location_account = &accounts[6];
+    let _system_program = &accounts[7];
+    let estate_account = &accounts[8];
 
     // 2. Parse Instruction Data
 
@@ -79,9 +81,12 @@ pub fn process(
 
     // 4. Load Accounts (kingdom-scoped)
 
-    // Load GameEngine first for cost configuration and kingdom scoping
-    let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
+    // Validate via load_checked then drop RefCell borrows for CPI compatibility
+    { let _ = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
+    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
+
+    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?; }
+    let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
@@ -90,6 +95,10 @@ pub fn process(
 
     // 5a. Require EXT_INVENTORY for teleportation (premium feature)
     require_extension(&*player_data, EXT_INVENTORY)?;
+
+    // 5b. HARD GATE: Require Stables Lv 10+ for teleportation
+    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+    require_stables(estate, 10)?;
 
     // 6. Validate Not Currently Traveling
 
@@ -164,13 +173,11 @@ pub fn process(
     let origin_grid_lat = LocationAccount::to_grid(player_data.current_lat);
     let origin_grid_long = LocationAccount::to_grid(player_data.current_long);
 
-    let origin_city_bytes = player_data.current_city.to_le_bytes();
-    let origin_lat_bytes = origin_grid_lat.to_le_bytes();
-    let origin_long_bytes = origin_grid_long.to_le_bytes();
-
-    let (expected_origin_pda, _) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &origin_city_bytes, &origin_lat_bytes, &origin_long_bytes],
-        program_id,
+    let (expected_origin_pda, _) = LocationAccount::derive_pda(
+        game_engine_account.key(),
+        player_data.current_city,
+        origin_grid_lat,
+        origin_grid_long,
     );
 
     if origin_location_account.key() != &expected_origin_pda {
@@ -187,8 +194,8 @@ pub fn process(
         }
     }
 
-    // Close the origin location account (refund rent to owner)
-    close_account(origin_location_account, owner)?;
+    // NOTE: Origin close is deferred until after CreateAccount CPI (step 16b)
+    // to avoid UnbalancedInstruction from mixing unsafe lamport manipulation with CPI.
 
     // 14. Quantize Destination City Center to Grid Cell
 
@@ -198,15 +205,28 @@ pub fn process(
     let cell_center_lat = LocationAccount::from_grid(dest_grid_lat);
     let cell_center_long = LocationAccount::from_grid(dest_grid_long);
 
+    // 14a. Terrain Passability Check (city center should always pass, but validate)
+    {
+        let (ox, oy) = crate::logic::terrain::city_offset(
+            dest_grid_lat, dest_grid_long,
+            destination_city_data.latitude, destination_city_data.longitude,
+        );
+        if !destination_city_data.is_terrain_passable(destination_city_account, ox, oy) {
+            return Err(crate::error::GameError::TerrainImpassable.into());
+        }
+    }
+
     // 15. Validate Destination Location PDA
 
     let dest_city_bytes = destination_city_id.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();
     let dest_long_bytes = dest_grid_long.to_le_bytes();
 
-    let (expected_dest_pda, dest_location_bump) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &dest_city_bytes, &dest_lat_bytes, &dest_long_bytes],
-        program_id,
+    let (expected_dest_pda, dest_location_bump) = LocationAccount::derive_pda(
+        game_engine_account.key(),
+        destination_city_id,
+        dest_grid_lat,
+        dest_grid_long,
     );
 
     if destination_location_account.key() != &expected_dest_pda {
@@ -225,6 +245,7 @@ pub fn process(
         let bump_seed = [dest_location_bump];
         let location_seeds = pinocchio::seeds!(
             LOCATION_SEED,
+            game_engine_account.key().as_ref(),
             &dest_city_bytes,
             &dest_lat_bytes,
             &dest_long_bytes,
@@ -243,6 +264,7 @@ pub fn process(
         let mut location_data = destination_location_account.try_borrow_mut_data()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
+        location.account_key = crate::state::AccountKey::Location as u8;
         location.grid_lat = dest_grid_lat;
         location.grid_long = dest_grid_long;
         location.city_id = destination_city_id;
@@ -271,6 +293,10 @@ pub fn process(
         location.reserved_arrival_time = 0; // Instant teleport = already arrived
     }
 
+    // 16b. Close Origin Location (deferred from step 13)
+    // Uses unsafe lamport manipulation, so it MUST happen after all CPIs
+    close_account(origin_location_account, owner)?;
+
     // 17. Update Player Location (Instant)
 
     player_data.current_city = destination_city_id;
@@ -290,13 +316,13 @@ pub fn process(
 
     let has_locked_heroes = player_data.active_heroes.iter().any(|h| *h != NULL_PUBKEY);
 
-    if has_locked_heroes && accounts.len() > 8 {
+    if has_locked_heroes && accounts.len() > 9 {
         // Clear all existing hero buffs before recalculating
         clear_hero_buffs(&mut *player_data);
 
         // Parse hero accounts from remaining accounts (2 per locked hero: NFT + Template)
         // NFT-Only System: All hero state is stored in NFT attributes
-        let hero_accounts = &accounts[8..];
+        let hero_accounts = &accounts[9..];
         let mut hero_idx = 0;
 
         for slot in 0..3 {

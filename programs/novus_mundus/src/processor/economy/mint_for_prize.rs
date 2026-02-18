@@ -197,8 +197,9 @@ pub fn process(
     // 6. Actually MINT tokens (SPL Token CPI)
 
     // Create PDA signer for GameEngine (mint authority)
+    let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
+    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     // Mint tokens to user's reserved token account (increases total supply)

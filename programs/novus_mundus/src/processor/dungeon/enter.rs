@@ -47,18 +47,18 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
-        owner,
-        player_account,
-        dungeon_template_account,
-        dungeon_run_account,
-        estate_account,
-        hero_mint,
-        hero_collection,
-        system_program,
-    ] = accounts else {
+    if accounts.len() < 9 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+    let owner = &accounts[0];
+    let player_account = &accounts[1];
+    let dungeon_template_account = &accounts[2];
+    let dungeon_run_account = &accounts[3];
+    let estate_account = &accounts[4];
+    let hero_mint = &accounts[5];
+    let hero_collection = &accounts[6];
+    let system_program = &accounts[7];
+    let p_core_program = &accounts[8];
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -110,9 +110,9 @@ pub fn process(
         return Err(GameError::InsufficientStamina.into());
     }
 
-    // Check Arena building level (dungeons require Arena)
+    // Check Catacombs building level (dungeons require Catacombs, split from Arena)
     let estate = load_estate_for_player(estate_account, &player, program_id)?;
-    if !has_building_at_level(&estate, crate::state::BuildingType::Arena, template.required_building_level) {
+    if !has_building_at_level(&estate, crate::state::BuildingType::Catacombs, template.required_building_level) {
         return Err(GameError::CatacombsRequired.into());
     }
 
@@ -189,11 +189,11 @@ pub fn process(
     p_core::instructions::TransferV1 {
         asset: hero_mint,
         collection: hero_collection,
-        current_owner: owner,
         new_owner: dungeon_run_account,
         payer: owner,
         authority: owner,
         system_program,
+        log_wrapper: p_core_program,
     }.invoke()?;
 
     // 11. Consume stamina
@@ -224,6 +224,7 @@ pub fn process(
     let run_data = unsafe { DungeonRun::load_mut(&mut run_data_ref) };
 
     // Initialize run state - store player_account PDA for authorization (matches PDA derivation)
+    run_data.account_key = crate::state::AccountKey::DungeonRun as u8;
     run_data.player = *player_account.key();
     run_data.hero_mint = *hero_mint.key();
     run_data.dungeon_id = dungeon_id;

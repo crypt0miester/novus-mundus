@@ -73,7 +73,7 @@ pub fn process(
     require_owner(player, program_id)?;
     require_owner(user, program_id)?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, _game_engine.key(), owner.key()], program_id)?;
     let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
     // 3. Parse Instruction Data
@@ -91,43 +91,39 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load Player and User Data
+    // 4. Validate ownership and balances (borrow, check, drop before CPI)
 
-    let mut player_data_ref = player.try_borrow_mut_data()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
+    {
+        let player_data_ref = player.try_borrow_data()?;
+        let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-    let mut user_data_ref = user.try_borrow_mut_data()?;
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data_ref)
-    };
-
-    // Verify ownership and bumps
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if player_data.bump != player_bump {
-        return Err(ProgramError::InvalidSeeds);
+        if &player_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        if player_data.bump != player_bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
     }
 
-    if &user_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
+    {
+        let user_data_ref = user.try_borrow_data()?;
+        let user_data = unsafe { UserAccount::load(&user_data_ref) };
+
+        if &user_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        if user_data.bump != user_bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        if user_data.reserved_novi < amount {
+            return Err(GameError::NoReservedNoviToWithdraw.into());
+        }
     }
-    if user_data.bump != user_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
 
-    // 5. Validate Sufficient Reserved Novi
+    // 5. Transfer Tokens (Reserved → Locked)
+    // Borrows must be dropped before CPI so runtime can access user account
 
-    if user_data.reserved_novi < amount {
-        return Err(GameError::NoReservedNoviToWithdraw.into());
-    }
-
-    // 6. Transfer Tokens (Reserved → Locked)
-
-    // CRITICAL: Reserved token account is OWNED BY UserAccount PDA
-    // So we need UserAccount PDA to sign the transfer
     let user_bump_seed = [user_bump];
     let user_seeds = pinocchio::seeds!(USER_SEED, owner.key().as_ref(), &user_bump_seed);
     let user_signer = pinocchio::instruction::Signer::from(&user_seeds);
@@ -140,11 +136,20 @@ pub fn process(
         &[user_signer],          // UserAccount PDA signs
     )?;
 
-    // 7. Update Cached Balances
+    // 6. Update Cached Balances (re-borrow after CPI)
+
+    let mut user_data_ref = user.try_borrow_mut_data()?;
+    let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
     user_data.reserved_novi = user_data.reserved_novi
         .checked_sub(amount)
         .ok_or(GameError::MathOverflow)?;
+
+    let remaining_reserved = user_data.reserved_novi;
+    drop(user_data_ref);
+
+    let mut player_data_ref = player.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     player_data.locked_novi = player_data.locked_novi
         .checked_add(amount)
@@ -154,7 +159,7 @@ pub fn process(
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
 
-    // 8. Emit Event
+    // 7. Emit Event
 
     let clock = Clock::get()?;
     emit!(NoviReservedToLocked {
@@ -162,7 +167,7 @@ pub fn process(
         player_name: player_data.name,
         amount,
         new_locked: player_data.locked_novi,
-        remaining_reserved: user_data.reserved_novi,
+        remaining_reserved,
         timestamp: clock.unix_timestamp,
     });
 

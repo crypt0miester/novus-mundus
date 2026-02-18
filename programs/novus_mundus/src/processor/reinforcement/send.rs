@@ -376,6 +376,7 @@ pub fn process(
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
 
     // Kingdom reference
+    reinf.account_key = crate::state::AccountKey::Reinforcement as u8;
     reinf.game_engine = *game_engine.key();
 
     // Identity
@@ -409,18 +410,19 @@ pub fn process(
     // Travel timing
     reinf.sent_at = now;
     reinf.travel_duration = travel_duration;
-    reinf._padding_travel = [0; 4];
+    reinf.wounded_def_1 = 0;
     reinf.arrives_at = arrives_at;
 
     // Return timing
     reinf.return_started_at = 0;
     reinf.return_duration = 0;
-    reinf._padding_return = [0; 4];
+    reinf.wounded_def_2 = 0;
 
     // Status - Traveling (process_arrival will mark Active)
     reinf.status = ReinforcementStatus::Traveling as u8;
     reinf.relieved_by_destination = false;
-    reinf._padding_status = [0; 6];
+    reinf._padding_status = [0; 2];
+    reinf.wounded_def_3 = 0;
 
     // Stats
     reinf.combats_participated = 0;

@@ -109,11 +109,11 @@ pub fn process(
     // Validate prize_type
     PrizeType::from_u8(prize_type).ok_or(GameError::InvalidParameter)?;
 
-    // 5. Derive and Verify Event PDA
+    // 5. Derive and Verify Event PDA (includes game_engine for kingdom isolation)
 
     let event_id_bytes = event_id.to_le_bytes();
     let (expected_event, bump) = find_program_address(
-        &[EVENT_SEED, &event_id_bytes],
+        &[EVENT_SEED, game_engine_account.key().as_ref(), &event_id_bytes],
         program_id,
     );
 
@@ -136,7 +136,7 @@ pub fn process(
         .minimum_balance(EventAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(EVENT_SEED, &event_id_bytes, &bump_seed);
+    let seeds = pinocchio::seeds!(EVENT_SEED, game_engine_account.key().as_ref(), &event_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -152,6 +152,8 @@ pub fn process(
     let mut event_data_ref = event_account.try_borrow_mut_data()?;
     let event_data = unsafe { EventAccount::load_mut(&mut event_data_ref) };
 
+    event_data.account_key = crate::state::AccountKey::Event as u8;
+    event_data.game_engine = *game_engine_account.key();
     event_data.id = event_id;
     event_data.name_len = name_len as u8;
     event_data.name[0..name_len].copy_from_slice(name_bytes);
@@ -169,6 +171,7 @@ pub fn process(
     event_data.prize_remaining = prize_amount; // Initialize to full amount
     event_data.prize_token_mint = prize_token_mint;
     event_data.participant_count = 0;
+    event_data.bump = bump;
 
     // Clear leaderboard
     for i in 0..EventAccount::MAX_LEADERBOARD {

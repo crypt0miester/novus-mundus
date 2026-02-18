@@ -147,6 +147,7 @@ pub fn process(
     let weekly_sale = unsafe { WeeklySaleAccount::load_mut(&mut weekly_sale_data_ref) };
 
     // Payer receives rent on close
+    weekly_sale.account_key = crate::state::AccountKey::WeeklySale as u8;
     weekly_sale.payer = *payer.key();
 
     weekly_sale.theme = theme;

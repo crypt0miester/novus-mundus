@@ -34,11 +34,11 @@ use crate::{
 /// new_locked_novi = min(locked_novi + tokens_to_mint, max_tokens)
 /// ```
 ///
-/// # Subscription Tiers (from GameEngine)
-/// - Rookie: 10 NOVI per 5 min (max 3,000)
-/// - Expert: 20 NOVI per 5 min (max 6,000)
-/// - Epic: 100 NOVI per 5 min (max 30,000)
-/// - Legendary: 500 NOVI per 5 min (max 150,000)
+/// # Subscription Tiers (from GameEngine) — display values (raw = ×10 for 1 decimal)
+/// - Rookie: 50 NOVI per 5 min (max 3,000 NOVI) → full in 5h
+/// - Expert: 100 NOVI per 5 min (max 6,000 NOVI) → full in 5h
+/// - Epic: 500 NOVI per 5 min (max 30,000 NOVI) → full in 5h
+/// - Legendary: 2,500 NOVI per 5 min (max 150,000 NOVI) → full in 5h
 ///
 /// # Accounts
 /// - [writable] player: PlayerAccount PDA
@@ -155,12 +155,12 @@ pub fn process(
         base_max_locked_novi
     };
 
-    // If already at cap, nothing to update
+    // If already at cap, update timestamp and return.
+    // This prevents time from banking while at cap — without this,
+    // a player who sits at cap for days then spends would get an
+    // instant refill from the stale last_updated_tokens_at.
     if player_data.locked_novi >= max_locked_novi {
-        // Still update timestamp to prevent overflow
-        // player_data.last_updated_tokens_at = now;
-        // TODO: Update timestamp to prevent overflow does it make sense to add this?
-        // the player will then have to wait 5 minutes to update again
+        player_data.last_updated_tokens_at = now;
         return Ok(());
     }
 
@@ -192,8 +192,9 @@ pub fn process(
         // game_engine_data already loaded above - reuse it
 
         // Create PDA signer for GameEngine (mint authority)
+        let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
+        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let signer = pinocchio::instruction::Signer::from(&seeds);
 
         // Mint tokens to player's token account (increases total supply)

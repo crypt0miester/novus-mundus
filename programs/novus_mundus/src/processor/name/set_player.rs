@@ -113,7 +113,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     let hashed_name = compute_name_hash(domain_name);
 
     // 8. Derive player PDA (this is the new owner)
-    let player_seeds: &[&[u8]] = &[PLAYER_SEED, owner.key().as_ref()];
+    let player_ge = player.game_engine;
+    let player_seeds: &[&[u8]] = &[PLAYER_SEED, &player_ge, owner.key().as_ref()];
     let (player_pda, bump) = pinocchio::pubkey::find_program_address(player_seeds, program_id);
 
     // Verify player account matches
@@ -135,7 +136,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 10. Set main domain for player PDA
     // After transfer, the player PDA is the new owner and must sign
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
     let signer = Signer::from(&seeds);
 
     SetMainDomain {

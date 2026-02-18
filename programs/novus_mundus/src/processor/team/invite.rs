@@ -9,7 +9,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM, EXT_RALLY},
+    state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM, EXT_INVENTORY},
     constants::{TEAM_INVITE_SEED, TEAM_INVITE_EXPIRY},
     validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
     emit,
@@ -103,8 +103,8 @@ pub fn process(
     // 4a. Require EXT_TEAM for inviter
     require_extension(&*inviter, EXT_TEAM)?;
 
-    // 4b. Require EXT_RALLY for invitee (prerequisite for teams)
-    require_extension(invitee, EXT_RALLY)?;
+    // 4b. Require EXT_INVENTORY for invitee (prerequisite for team join)
+    require_extension(invitee, EXT_INVENTORY)?;
 
     // 5. Validate Inviter Is In Team
 

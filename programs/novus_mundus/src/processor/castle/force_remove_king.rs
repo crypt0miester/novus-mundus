@@ -67,12 +67,12 @@ pub fn process(
     }
 
     // Parse instruction data
-    if instruction_data.len() < 6 {
+    if instruction_data.len() < 4 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
+    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;

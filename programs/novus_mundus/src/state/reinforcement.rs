@@ -84,6 +84,9 @@ impl ReinforcementStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ReinforcementAccount {
+    /// Account discriminator (AccountKey::Reinforcement)
+    pub account_key: u8,
+
     // ============================================================
     // Kingdom Reference (32 bytes)
     // ============================================================
@@ -147,8 +150,8 @@ pub struct ReinforcementAccount {
     pub sent_at: i64,
     /// Travel time to destination (seconds)
     pub travel_duration: i32,
-    /// Padding
-    pub _padding_travel: [u8; 4],
+    /// Wounded units tier 1 (set during recall, returned to estate on process_return)
+    pub wounded_def_1: u32,
     /// When units arrive at destination
     pub arrives_at: i64,
 
@@ -159,8 +162,8 @@ pub struct ReinforcementAccount {
     pub return_started_at: i64,
     /// Return travel time (seconds)
     pub return_duration: i32,
-    /// Padding
-    pub _padding_return: [u8; 4],
+    /// Wounded units tier 2 (set during recall)
+    pub wounded_def_2: u32,
 
     // ============================================================
     // Status (8 bytes)
@@ -170,7 +173,9 @@ pub struct ReinforcementAccount {
     /// True if return was initiated by destination owner (relieve vs recall)
     pub relieved_by_destination: bool,
     /// Padding
-    pub _padding_status: [u8; 6],
+    pub _padding_status: [u8; 2],
+    /// Wounded units tier 3 (set during recall)
+    pub wounded_def_3: u32,
 
     // ============================================================
     // Stats (8 bytes)

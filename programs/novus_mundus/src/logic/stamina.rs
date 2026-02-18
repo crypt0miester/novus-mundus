@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_stamina_regeneration() {
-        let mut player = PlayerAccount::init(NULL_PUBKEY, 1000, 1);
+        let mut player = PlayerAccount::init(NULL_PUBKEY, NULL_PUBKEY, 1000, 1);
         player.encounter_stamina = 50;
         player.max_encounter_stamina = 100;
         player.last_stamina_update = MORNING_BASE;
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_stamina_capped_at_max() {
-        let mut player = PlayerAccount::init(NULL_PUBKEY, 1000, 1);
+        let mut player = PlayerAccount::init(NULL_PUBKEY, NULL_PUBKEY, 1000, 1);
         player.encounter_stamina = 95;
         player.max_encounter_stamina = 100;
         player.last_stamina_update = MORNING_BASE;
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_consume_stamina_success() {
-        let mut player = PlayerAccount::init(NULL_PUBKEY, 1000, 1);
+        let mut player = PlayerAccount::init(NULL_PUBKEY, NULL_PUBKEY, 1000, 1);
         player.encounter_stamina = 100;
 
         let result = consume_stamina(&mut player, EncounterType::Common);
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_consume_stamina_insufficient() {
-        let mut player = PlayerAccount::init(NULL_PUBKEY, 1000, 1);
+        let mut player = PlayerAccount::init(NULL_PUBKEY, NULL_PUBKEY, 1000, 1);
         player.encounter_stamina = 5;
 
         let result = consume_stamina(&mut player, EncounterType::Common);
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_add_stamina() {
-        let mut player = PlayerAccount::init(NULL_PUBKEY, 1000, 1);
+        let mut player = PlayerAccount::init(NULL_PUBKEY, NULL_PUBKEY, 1000, 1);
         player.encounter_stamina = 70;
         player.max_encounter_stamina = 100;
 

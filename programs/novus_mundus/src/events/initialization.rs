@@ -72,6 +72,31 @@ impl Event for CityInitialized {
     }
 }
 
+/// Emitted when terrain data is set on a city
+pub struct TerrainSet {
+    /// City account pubkey
+    pub city: Pubkey,
+    /// City ID
+    pub city_id: u16,
+    /// Number of terrain anchors written
+    pub anchor_count: u16,
+    /// Terrain seed
+    pub terrain_seed: u32,
+}
+
+impl Event for TerrainSet {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:TerrainSet");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.city.pack(&mut buf[offset..]);
+        offset += self.city_id.pack(&mut buf[offset..]);
+        offset += self.anchor_count.pack(&mut buf[offset..]);
+        offset += self.terrain_seed.pack(&mut buf[offset..]);
+        offset
+    }
+}
+
 /// Emitted when game engine is initialized
 pub struct GameEngineInitialized {
     /// Game engine account pubkey

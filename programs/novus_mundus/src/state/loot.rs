@@ -20,6 +20,9 @@ use pinocchio::{
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct LootAccount {
+    /// Account discriminator (AccountKey::Loot)
+    pub account_key: u8,
+
     // Identity & Security (80 bytes)
     pub owner: Pubkey,                      // 32 - Who can claim this loot
     pub creator: Pubkey,                    // 32 - Who paid rent (gets refund on claim)
@@ -54,24 +57,25 @@ pub struct LootAccount {
 }
 
 impl LootAccount {
-    pub const LEN: usize = 192; // Total: 80+16+24+72 (weapon types split: melee/ranged/siege)
+    pub const LEN: usize = core::mem::size_of::<Self>(); // With account_key discriminator
     pub const EXPIRATION_DURATION: i64 = 30 * 86400; // 30 days in seconds
 
-    /// Derive PDA: [b"loot", owner, loot_id]
+    /// Derive PDA: [b"loot", player, loot_id]
     ///
-    /// Uses owner + monotonic loot_id for uniqueness
-    pub fn derive_pda(owner: &Pubkey, loot_id: u64) -> (Pubkey, u8) {
+    /// Uses player PDA + monotonic loot_id for uniqueness.
+    /// Player-specific so only the player account owner can claim.
+    pub fn derive_pda(player: &Pubkey, loot_id: u64) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
-            &[b"loot", owner.as_ref(), &loot_id.to_le_bytes()],
+            &[b"loot", player.as_ref(), &loot_id.to_le_bytes()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump (fast validation)
-    pub fn create_pda(owner: &Pubkey, loot_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Pubkey, loot_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[b"loot", owner.as_ref(), &loot_id.to_le_bytes(), &bump_seed],
+            &[b"loot", player.as_ref(), &loot_id.to_le_bytes(), &bump_seed],
             &crate::ID,
         )
     }

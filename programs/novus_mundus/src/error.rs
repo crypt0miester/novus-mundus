@@ -51,6 +51,7 @@ pub enum GameError {
     MaxUnitsReached = 6124,
     InsufficientFragments = 6125,
     MaxPlayersReached = 6126,
+    UserAccountNotCreated = 6127,         // Must create user account before player
 
     // Team Errors (200-299)
     TeamNameTaken = 6200,
@@ -87,6 +88,7 @@ pub enum GameError {
     AlreadyAtRank = 6231,                 // Member already at target rank
     InvalidCooldownHours = 6232,          // Cooldown hours out of valid range
     TeamHasDomain = 6233,                 // Must remove domain before disbanding
+    TeamHasMembers = 6234,                // Must kick all members before disbanding
 
     // Rally Errors (300-399)
     RallyNotFound = 6300,
@@ -141,6 +143,7 @@ pub enum GameError {
     DestinationOutsideCity = 6427,
     InvalidCityId = 6428,
     WrongCity = 6429,
+    TerrainImpassable = 6430,               // Destination is water or mountain
 
     // Encounter Errors (500-599)
     EncounterNotFound = 6500,
@@ -349,6 +352,11 @@ pub enum GameError {
     DailyActivityNotAvailable = 7732,
     DailyWindowExpired = 7733,      // All time windows have passed for today
     WrongTimeWindow = 7734,         // Building's mini-game not available in current window
+    CampRequired = 7735,            // Camp building required for operative hiring
+    MineRequired = 7736,            // Mine building required for mining
+    FarmRequired = 7737,            // Farm building required for farming
+    StablesRequired = 7738,         // Stables building required for travel
+    InfirmaryRequired = 7739,       // Infirmary building required
 
     // Staged Tempering Errors (1740-1759)
     StrikeTooEarly = 7740,          // Metal not ready - window hasn't opened yet
@@ -365,6 +373,10 @@ pub enum GameError {
     HeroAtMeditationCap = 7765,     // Hero at meditation cap - must use fragments
     WrongCityForMeditation = 7766,  // Hero requires meditation in specific origin city
     HeroCollectionExists = 7767,    // Hero collection already created
+    HeroAlreadyMintedByPlayer = 7768, // Player already minted this template (receipt PDA exists)
+    HeroIsLocked = 7769,            // Cannot burn a hero in an active slot
+    HeroNotOwnedByCaller = 7770,    // NFT owner does not match signer
+    SupplyCapCannotDecrease = 7771, // Supply cap can only be increased, not decreased
 
     // Expedition System Errors (1800-1819)
     ExpeditionInProgress = 7800,    // Already on an expedition
@@ -470,6 +482,9 @@ pub enum GameError {
     InvalidCastleStatus = 8134,           // Castle status doesn't support this transition
     ContestNotEnded = 8135,               // Contest period has not ended yet
     CastleUpgradeNotReady = 8136,         // Upgrade timer has not expired yet
+
+    // Account Discriminator Errors (8200+)
+    InvalidAccountKey = 8200,              // Account discriminator byte mismatch
 }
 
 impl From<GameError> for ProgramError {

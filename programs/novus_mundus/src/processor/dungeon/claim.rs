@@ -36,8 +36,8 @@ pub fn process(
     accounts: &[AccountInfo],
     _data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse accounts (minimum 6, optional leaderboard)
-    if accounts.len() < 6 {
+    // 1. Parse accounts (minimum 7 with mpl_core_program, optional leaderboard at index 7)
+    if accounts.len() < 7 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -47,7 +47,8 @@ pub fn process(
     let hero_mint = &accounts[3];
     let hero_collection = &accounts[4];
     let system_program = &accounts[5];
-    let leaderboard_account = accounts.get(6);
+    let p_core_program = &accounts[6];
+    let leaderboard_account = accounts.get(7);
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -183,11 +184,11 @@ pub fn process(
     p_core::instructions::TransferV1 {
         asset: hero_mint,
         collection: hero_collection,
-        current_owner: dungeon_run_account,
         new_owner: owner,
         payer: owner,
         authority: dungeon_run_account,
         system_program,
+        log_wrapper: p_core_program,
     }.invoke_signed(&[run_signer])?;
 
     // 9. Close dungeon run account (refund rent to owner)

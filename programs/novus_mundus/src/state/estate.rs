@@ -5,7 +5,7 @@ use pinocchio::{
 use crate::constants::ESTATE_SEED;
 
 // ============================================================
-// Building Types (13 buildings across 3 tiers)
+// Building Types (19 buildings across 3 tiers)
 // ============================================================
 
 /// Building types available in the Estate System
@@ -30,10 +30,23 @@ pub enum BuildingType {
     Observatory = 10,
     Treasury = 11,
     Citadel = 12,
+
+    // Tier 1 expansion
+    Camp = 13,        // Operative unit hiring (split from Barracks)
+    // Tier 2 expansion
+    Mine = 14,        // Mining expeditions (split from Workshop)
+    // Tier 3 expansion
+    Catacombs = 15,   // Dungeon access (split from Arena)
+    // Tier 1 expansion
+    Farm = 16,        // Produce collection (new land-based path)
+    // Tier 2 expansion
+    Stables = 17,     // Travel gating (new)
+    // Tier 3 expansion
+    Infirmary = 18,   // Unit recovery in combat (new)
 }
 
 impl BuildingType {
-    pub const COUNT: usize = 13;
+    pub const COUNT: usize = 19;
 
     /// Get the estate level required to unlock this building type
     ///
@@ -42,24 +55,34 @@ impl BuildingType {
     /// adds crafting mastery and competitive features.
     pub const fn required_estate_level(self) -> u8 {
         match self {
-            // Chapter 1: Foundation (Levels 1-6)
-            BuildingType::Mansion => 1,      // Your home base - first building
-            BuildingType::Barracks => 2,     // Recruit your first units
-            BuildingType::Workshop => 4,     // Mining expeditions
-            BuildingType::Dock => 5,         // Fishing expeditions
-            BuildingType::Vault => 6,        // Secure your wealth
+            // Chapter 1: Foundation - all buildable from start
+            // Estate level = sum of building levels, grows naturally
+            BuildingType::Mansion => 0,      // Your home base - first building
+            BuildingType::Barracks => 0,     // Recruit your first units
+            BuildingType::Workshop => 0,     // Mining expeditions
+            BuildingType::Dock => 0,         // Fishing expeditions
+            BuildingType::Vault => 0,        // Secure your wealth
 
-            // Chapter 2: Expansion (Levels 8-14)
-            BuildingType::Sanctuary => 8,    // Recruit your first hero!
-            BuildingType::Market => 10,      // Trade with others
-            BuildingType::Citadel => 12,     // Lead your first rally!
-            BuildingType::Academy => 14,     // Begin research
+            // Chapter 2: Expansion (Levels 5-10)
+            // NOTE: All set to 0 during SDK development for testability
+            BuildingType::Sanctuary => 0,    // Recruit your first hero!
+            BuildingType::Market => 0,       // Trade with others
+            BuildingType::Citadel => 0,      // Lead your first rally!
+            BuildingType::Academy => 0,      // Begin research
 
-            // Chapter 3: Mastery (Levels 16-24)
-            BuildingType::Forge => 16,       // Craft quality equipment
-            BuildingType::Arena => 18,       // Prove yourself in PvP
-            BuildingType::Observatory => 20, // Enhance your loot
-            BuildingType::Treasury => 24,    // Maximize your prizes
+            // Chapter 3: Mastery (Levels 10-16)
+            BuildingType::Forge => 0,        // Craft quality equipment
+            BuildingType::Arena => 0,        // Prove yourself in PvP
+            BuildingType::Observatory => 0,  // Enhance your loot
+            BuildingType::Treasury => 0,     // Maximize your prizes
+
+            // Expansion buildings (all 0 during development for testability)
+            BuildingType::Camp => 0,         // Operative unit hiring
+            BuildingType::Mine => 0,         // Mining expeditions
+            BuildingType::Catacombs => 0,    // Dungeon access
+            BuildingType::Farm => 0,         // Produce collection
+            BuildingType::Stables => 0,      // Travel gating
+            BuildingType::Infirmary => 0,    // Unit recovery
         }
     }
 
@@ -70,15 +93,18 @@ impl BuildingType {
             // Chapter 1: Foundation - Tier 1 (10k NOVI, 4h)
             BuildingType::Mansion | BuildingType::Barracks |
             BuildingType::Workshop | BuildingType::Vault |
-            BuildingType::Dock => 1,
+            BuildingType::Dock |
+            BuildingType::Camp | BuildingType::Farm => 1,
 
             // Chapter 2: Expansion - Tier 2 (50k NOVI, 12h)
             BuildingType::Sanctuary | BuildingType::Market |
-            BuildingType::Citadel | BuildingType::Academy => 2,
+            BuildingType::Citadel | BuildingType::Academy |
+            BuildingType::Mine | BuildingType::Stables => 2,
 
             // Chapter 3: Mastery - Tier 3 (200k NOVI, 24h)
             BuildingType::Forge | BuildingType::Arena |
-            BuildingType::Observatory | BuildingType::Treasury => 3,
+            BuildingType::Observatory | BuildingType::Treasury |
+            BuildingType::Catacombs | BuildingType::Infirmary => 3,
         }
     }
 
@@ -97,6 +123,12 @@ impl BuildingType {
             10 => Some(Self::Observatory),
             11 => Some(Self::Treasury),
             12 => Some(Self::Citadel),
+            13 => Some(Self::Camp),
+            14 => Some(Self::Mine),
+            15 => Some(Self::Catacombs),
+            16 => Some(Self::Farm),
+            17 => Some(Self::Stables),
+            18 => Some(Self::Infirmary),
             _ => None,
         }
     }
@@ -467,6 +499,8 @@ pub const SLOTS_PER_PLOT: usize = 4;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EstateAccount {
+    /// Account discriminator
+    pub account_key: u8,
     // Identity (35 bytes)
     pub owner: Pubkey,                     // Player who owns this estate
     pub city_id: u16,                      // City where estate is located
@@ -519,8 +553,23 @@ pub struct EstateAccount {
     pub created_at: i64,
     pub last_activity: i64,
 
-    // Reserved for future fixed fields (32 bytes)
-    pub _reserved: [u8; 32],
+    // Daily buffs from expansion buildings (7 bytes, carved from _reserved)
+    pub camp_discount_bps: u16,            // From Camp mini-game
+    pub stables_speed_bps: u16,            // From Stables mini-game
+    pub infirmary_recovery_daily_bps: u16, // From Infirmary mini-game
+    pub expansion_daily: u8,               // Bitflags for buildings 16+ daily completion
+
+    // Wounded units (from Infirmary tracking) (24 bytes)
+    // Stored as [u8; 4] to avoid alignment padding in #[repr(C)] after u8 field above
+    pub wounded_def_1: [u8; 4],
+    pub wounded_def_2: [u8; 4],
+    pub wounded_def_3: [u8; 4],
+    pub wounded_op_1: [u8; 4],
+    pub wounded_op_2: [u8; 4],
+    pub wounded_op_3: [u8; 4],
+
+    // Reserved for future fixed fields (1 byte)
+    pub _reserved: [u8; 1],
 
     // MUST BE LAST: Building slots (expandable)
     // Current: 20 slots (5 plots × 4 buildings each)
@@ -539,6 +588,21 @@ impl EstateAccount {
 
     /// Initial account size (1 plot = 4 slots)
     pub const INITIAL_LEN: usize = Self::HEADER_SIZE + (INITIAL_BUILDING_SLOTS * BuildingSlot::LEN);
+
+    // --- Wounded field accessors (stored as [u8; 4] for alignment) ---
+    #[inline] pub fn get_wounded_def_1(&self) -> u32 { u32::from_le_bytes(self.wounded_def_1) }
+    #[inline] pub fn get_wounded_def_2(&self) -> u32 { u32::from_le_bytes(self.wounded_def_2) }
+    #[inline] pub fn get_wounded_def_3(&self) -> u32 { u32::from_le_bytes(self.wounded_def_3) }
+    #[inline] pub fn get_wounded_op_1(&self) -> u32 { u32::from_le_bytes(self.wounded_op_1) }
+    #[inline] pub fn get_wounded_op_2(&self) -> u32 { u32::from_le_bytes(self.wounded_op_2) }
+    #[inline] pub fn get_wounded_op_3(&self) -> u32 { u32::from_le_bytes(self.wounded_op_3) }
+
+    #[inline] pub fn set_wounded_def_1(&mut self, v: u32) { self.wounded_def_1 = v.to_le_bytes(); }
+    #[inline] pub fn set_wounded_def_2(&mut self, v: u32) { self.wounded_def_2 = v.to_le_bytes(); }
+    #[inline] pub fn set_wounded_def_3(&mut self, v: u32) { self.wounded_def_3 = v.to_le_bytes(); }
+    #[inline] pub fn set_wounded_op_1(&mut self, v: u32) { self.wounded_op_1 = v.to_le_bytes(); }
+    #[inline] pub fn set_wounded_op_2(&mut self, v: u32) { self.wounded_op_2 = v.to_le_bytes(); }
+    #[inline] pub fn set_wounded_op_3(&mut self, v: u32) { self.wounded_op_3 = v.to_le_bytes(); }
 
     /// Calculate required account size for a given number of slots
     #[inline]
@@ -632,12 +696,13 @@ impl EstateAccount {
     /// Initialize a new estate
     pub fn init(owner: Pubkey, city_id: u16, now: i64, bump: u8) -> Self {
         Self {
+            account_key: crate::state::AccountKey::Estate as u8,
             // Identity
             owner,
             city_id,
             bump,
 
-            // Progression
+            // Progression: sum of all building levels, starts at 0
             estate_level: 0,
             plots_owned: 1,                              // Start with 1 plot
             total_buildings: 0,
@@ -679,13 +744,25 @@ impl EstateAccount {
             market_discount_bps: 0,
             blessed_hero: Pubkey::default(),
             citadel_stance: 0,
+            camp_discount_bps: 0,
+            stables_speed_bps: 0,
+            infirmary_recovery_daily_bps: 0,
+            expansion_daily: 0,
 
             // Timestamps
             created_at: now,
             last_activity: now,
 
+            // Wounded units (Infirmary tracking)
+            wounded_def_1: [0; 4],
+            wounded_def_2: [0; 4],
+            wounded_def_3: [0; 4],
+            wounded_op_1: [0; 4],
+            wounded_op_2: [0; 4],
+            wounded_op_3: [0; 4],
+
             // Reserved
-            _reserved: [0; 32],
+            _reserved: [0; 1],
 
             // Buildings (MUST BE LAST for expansion)
             buildings: [BuildingSlot::EMPTY; MAX_BUILDING_SLOTS],
@@ -958,6 +1035,28 @@ impl EstateAccount {
                     self.defense_bps = self.defense_bps.saturating_add(level * buff_per_level);
                     self.rally_capacity_bonus_bps = self.rally_capacity_bonus_bps.saturating_add(level * 500); // 5% per level
                 }
+                Some(BuildingType::Camp) => {
+                    // Camp: Operative training speed (shares field with Barracks)
+                    self.training_speed_bps = self.training_speed_bps.saturating_add(level * buff_per_level / 2);
+                }
+                Some(BuildingType::Mine) => {
+                    // Mine: Resource generation bonus (mining)
+                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                }
+                Some(BuildingType::Catacombs) => {
+                    // Catacombs: Loot bonus (dungeon loot, additive with Observatory)
+                    self.loot_bonus_bps = self.loot_bonus_bps.saturating_add(level * buff_per_level);
+                }
+                Some(BuildingType::Farm) => {
+                    // Farm: Resource generation bonus (farming, additive with Mine)
+                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                }
+                Some(BuildingType::Stables) => {
+                    // Stables: No cached buff (computed dynamically via stables_travel_reduction_bps)
+                }
+                Some(BuildingType::Infirmary) => {
+                    // Infirmary: No cached buff (computed dynamically via infirmary_recovery_bps)
+                }
                 None => {}
             }
         }
@@ -1004,27 +1103,28 @@ impl EstateAccount {
         }
     }
 
-    /// Derive the PDA for an estate account
-    pub fn derive_pda(owner: &Pubkey) -> (Pubkey, u8) {
+    /// Derive the PDA for an estate account (scoped to player PDA)
+    pub fn derive_pda(player_pda: &Pubkey) -> (Pubkey, u8) {
         pinocchio::pubkey::find_program_address(
-            &[ESTATE_SEED, owner.as_ref()],
+            &[ESTATE_SEED, player_pda.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player_pda: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
         let bump_seed = [bump];
         pinocchio::pubkey::create_program_address(
-            &[ESTATE_SEED, owner.as_ref(), &bump_seed],
+            &[ESTATE_SEED, player_pda.as_ref(), &bump_seed],
             &crate::ID,
         )
     }
 
     /// Load and verify an EstateAccount immutably.
-    /// Checks: program ownership, PDA derivation, owner field, bump field.
+    /// Checks: program ownership, PDA derivation (via player_pda), owner field, bump field.
     pub fn load_checked<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        player_pda: &Pubkey,
         expected_owner: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
@@ -1032,7 +1132,7 @@ impl EstateAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        let (expected_pda, bump) = Self::derive_pda(player_pda);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -1052,9 +1152,10 @@ impl EstateAccount {
     }
 
     /// Load and verify an EstateAccount mutably.
-    /// Checks: program ownership, PDA derivation, owner field, bump field.
+    /// Checks: program ownership, PDA derivation (via player_pda), owner field, bump field.
     pub fn load_checked_mut<'a>(
         account: &'a pinocchio::account_info::AccountInfo,
+        player_pda: &Pubkey,
         expected_owner: &Pubkey,
         program_id: &Pubkey,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
@@ -1062,7 +1163,7 @@ impl EstateAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
+        let (expected_pda, bump) = Self::derive_pda(player_pda);
         if account.key() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
@@ -1276,7 +1377,7 @@ impl CraftedEquipmentAccount {
         if tier == 0 || tier > 7 {
             return false;
         }
-        let tier_index = (tier - 1) as usize; // tiers are 1-indexed (Refined=1)
+        let tier_index = tier as usize; // matches strike storage: counts[quality_tier as usize]
         let counts = match equipment_type {
             CraftableEquipment::MeleeWeapons => &self.melee_weapons,
             CraftableEquipment::RangedWeapons => &self.ranged_weapons,

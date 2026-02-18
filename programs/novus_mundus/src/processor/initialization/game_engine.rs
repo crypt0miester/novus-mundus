@@ -13,6 +13,8 @@ use crate::{
         GameEngine, GameCaps, EconomicConfig, GameplayConfig,
         SubscriptionTier, MintingConfig, ThemeModifierConfig,
         ThemeMultipliers, NoviPurchaseConfig,
+        ArenaConfig, ExpeditionConfig, DungeonConfig,
+        CastleConfig, CombatConfig,
         game_engine::RallyCaps as GameEngineRallyCaps,
     },
     types::Theme,
@@ -194,9 +196,10 @@ fn create_default_game_engine(
     }
 
     GameEngine {
+        account_key: crate::state::AccountKey::GameEngine as u8,
         // Kingdom fields
         kingdom_id,
-        _padding_kingdom: [0; 6],
+        _padding_kingdom: [0; 4],
         kingdom_name,
         kingdom_name_len,
         _padding_name: [0; 7],
@@ -244,39 +247,39 @@ fn create_default_game_engine(
         economic_config: EconomicConfig {
             cost_multiplier: 10000,                     // 1.0x (normal pricing, basis points)
             last_cost_update: 0,                        // Never updated yet
-            defensive_unit_1_cost: 100,
-            defensive_unit_2_cost: 80,
-            defensive_unit_3_cost: 50,
-            operative_unit_1_cost: 100,
-            operative_unit_2_cost: 80,
-            operative_unit_3_cost: 50,
+            defensive_unit_1_cost: 500,             // 50 novi × 10 decimal
+            defensive_unit_2_cost: 800,             // 80 novi × 10 decimal
+            defensive_unit_3_cost: 1000,            // 100 novi × 10 decimal (strongest = most expensive)
+            operative_unit_1_cost: 300,             // 30 novi × 10 decimal
+            operative_unit_2_cost: 500,             // 50 novi × 10 decimal
+            operative_unit_3_cost: 1200,            // 120 novi × 10 decimal (strongest = most expensive)
             // Weapon costs using φ ratios: Melee=1.0x, Ranged=1.618x, Siege=2.618x, Armor=1.272x
-            melee_weapon_cost: 5000,                    // Base cost (1.0x)
-            ranged_weapon_cost: 8090,                   // φ × base (1.618x)
-            siege_weapon_cost: 13090,                   // φ² × base (2.618x)
-            armor_cost: 6360,                           // √φ × base (1.272x)
-            produce_cost: 20,
-            vehicle_cost: 10000,
-            stamina_cost: 100,                          // 100 Novi per 1 stamina
+            melee_weapon_cost: 500,                    // Base cost (1.0x)
+            ranged_weapon_cost: 800,                   // φ × base (1.618x)
+            siege_weapon_cost: 1300,                   // φ² × base (2.618x)
+            armor_cost: 600,                           // √φ × base (1.272x)
+            produce_cost: 200,
+            vehicle_cost: 100000,
+            stamina_cost: 1000,                          // 100 Novi per 1 stamina
 
             industrial_multiplier: 15000,               // 1.5x (basis points)
             office_multiplier: 13000,                   // 1.3x (basis points)
             general_multiplier: 11000,                  // 1.1x (basis points)
             _padding1: [0; 4],
 
-            defensive_unit_1_value: 100,
-            defensive_unit_2_value: 80,
-            defensive_unit_3_value: 50,
-            operative_unit_1_value: 100,
-            operative_unit_2_value: 80,
-            operative_unit_3_value: 50,
+            defensive_unit_1_value: 5000,
+            defensive_unit_2_value: 8000,
+            defensive_unit_3_value: 10000,
+            operative_unit_1_value: 3000,
+            operative_unit_2_value: 5000,
+            operative_unit_3_value: 12000,
             // Weapon values using φ ratios (same as costs)
             melee_weapon_value: 5000,                   // Base value (1.0x)
-            ranged_weapon_value: 8090,                  // φ × base (1.618x)
-            siege_weapon_value: 13090,                  // φ² × base (2.618x)
-            armor_value: 6360,                          // √φ × base (1.272x)
-            produce_value: 20,
-            vehicle_value: 10000,
+            ranged_weapon_value: 8000,                  // φ × base (1.618x)
+            siege_weapon_value: 13000,                  // φ² × base (2.618x)
+            armor_value: 6000,                          // √φ × base (1.272x)
+            produce_value: 200,
+            vehicle_value: 100000,
 
             // DETERMINISTIC: Golden ratio based values (no min/max randomness!)
             novi_consumption_base: 137500,              // 13.75x (midpoint of old range)
@@ -287,10 +290,10 @@ fn create_default_game_engine(
             _reserved_fibonacci: 0,                     // Reserved
 
             // Encounter base rewards (LEVEL 1): [Common, Uncommon, Rare, Epic, Legendary]
-            encounter_base_cash: [5_000, 15_000, 50_000, 150_000, 500_000],
+            encounter_base_cash: [500_000, 1_000_000, 2_500_000, 5_000_000, 50_000_000],
             encounter_base_novi: [100, 500, 2_000, 10_000, 50_000],
-            encounter_base_weapons: [10, 30, 100, 300, 1_000],
-            encounter_base_produce: [20, 60, 200, 600, 2_000],
+            encounter_base_weapons: [100, 300, 500, 1_000, 1_000_000],
+            encounter_base_produce: [1_000, 2_000, 5_000, 10_000, 1_000_000],
             encounter_base_vehicles: [0, 1, 3, 10, 30],
 
             // Oscillation frequency (Hz): [Fast → Slow as rarity increases]
@@ -336,7 +339,7 @@ fn create_default_game_engine(
             // DETERMINISTIC: Base + oscillation for PvP loot variance
             pvp_loot_percentage_base: 1000,             // 10% base loot (midpoint of old range)
             pvp_loot_oscillation_amp: 500,              // ±5% variance via oscillation
-            new_player_protection_duration: 86400,      // 24 hours
+            new_player_protection_duration: 2,            // 2 seconds (short for testing; production should be 86400)
             teleport_base_cost: 1000,
             teleport_cost_per_100km: 1000,
             team_creation_cost: 50_000,
@@ -348,9 +351,9 @@ fn create_default_game_engine(
 
             // Daily rewards (DAO-configurable)
             daily_reward_cooldown: 86400,               // 24 hours in seconds
-            daily_cash_base: 1000,                      // Base cash reward
-            daily_produce_base: 500,                    // Base produce reward
-            daily_xp_base: 25,                          // Base XP reward
+            daily_cash_base: 1_000_000,                      // Base cash reward
+            daily_produce_base: 50_000,                    // Base produce reward
+            daily_xp_base: 300,                          // Base XP reward
 
             // Synchrony calculation bonuses (basis points: 10000 = 100%)
             happiness_synchrony_max: 2000,                   // 20% max bonus from happiness
@@ -406,6 +409,12 @@ fn create_default_game_engine(
         },
 
         novi_purchase_config: NoviPurchaseConfig::default(),
+
+        arena_config: ArenaConfig::default(),
+        expedition_config: ExpeditionConfig::default(),
+        dungeon_config: DungeonConfig::default(),
+        castle_config: CastleConfig::default(),
+        combat_config: CombatConfig::default(),
     }
 }
 
@@ -417,30 +426,31 @@ fn create_rookie_tier() -> SubscriptionTier {
         name,
         tier_index: 0,
         _padding1: [0; 7],
-        cost_in_usd_cents: 0,                           // Free tier
+        cost_in_usd_cents: 500,                          // $5/month
         duration_days: 30,                              // 30 days (renewable)
         _padding2: [0; 4],
-        generation_multiplier: 1,                       // 1x daily generation
-        max_locked_novi: 3000,                          // 3k max locked NOVI
+        generation_multiplier: 500,                     // 50 NOVI per 5 min → full in 5h
+        max_locked_novi: 30_000,                        // 3,000 NOVI max (×10 for 1 decimal)
         daily_reward_multiplier: 10000,                 // 1.0x (no bonus for free tier)
         synchrony_bonus: 0,                                  // 0% synchrony bonus (free tier)
+        _padding_sync: [0; 4],
 
         // Bonuses granted on purchase/renewal
-        novi: 0,                                        // No reserved NOVI for free tier
-        cash: 1000,                                     // 1k cash bonus
-        du_1: 10,                                       // 10 defensive units
-        du_2: 0,
-        du_3: 0,
-        op_1: 10,                                       // 10 operative units
-        op_2: 0,
-        op_3: 0,
+        novi: 1_000,                                        // No reserved NOVI for free tier
+        cash: 1_000_000,                                     // 1M cash bonus
+        du_1: 10_000,                                       // 10 defensive units
+        du_2: 10_000,
+        du_3: 5_000,
+        op_1: 30_000,                                       // 10 operative units
+        op_2: 20_000,
+        op_3: 10_000,
         // Equipment bonuses (basic gear for free tier)
-        melee_weapons: 3,
-        ranged_weapons: 2,
+        melee_weapons: 20_000,
+        ranged_weapons: 5_000,
         siege_weapons: 0,
-        armor: 2,
-        produce: 20,                                    // 20 produce
-        vehicles: 0,                                    // No vehicles
+        armor: 5_000,
+        produce: 50_000,
+        vehicles: 50,
         reputation: 0,                                  // No reputation bonus
         xp: 0,                                          // No XP bonus
 
@@ -469,29 +479,30 @@ fn create_expert_tier() -> SubscriptionTier {
         cost_in_usd_cents: 1000,                        // $10/month
         duration_days: 30,                              // 30 days
         _padding2: [0; 4],
-        generation_multiplier: 2,                       // 2x daily generation
-        max_locked_novi: 6000,                          // 6k max locked NOVI
+        generation_multiplier: 1_000,                   // 100 NOVI per 5 min → full in 5h
+        max_locked_novi: 60_000,                        // 6,000 NOVI max (×10 for 1 decimal)
         daily_reward_multiplier: 15000,                 // 1.5x (50% bonus!)
         synchrony_bonus: 500,                                // 5% synchrony bonus (basis points)
+        _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal
-        novi: 1000,                                     // 1k reserved NOVI (withdrawable!)
-        cash: 5000,                                     // 5k cash bonus
-        du_1: 25,                                       // 25 defensive units
-        du_2: 10,
-        du_3: 0,
-        op_1: 25,                                       // 25 operative units
-        op_2: 10,
-        op_3: 0,
+        // Bonuses granted on purchase/renewal (1.6× Rookie for $10/month)
+        novi: 2_000,                                    // 200 display NOVI (~$2 at $0.01/NOVI)
+        cash: 1_500_000,                                // 1.5M cash bonus
+        du_1: 16_000,                                   // 40k total defensive units
+        du_2: 16_000,
+        du_3: 8_000,
+        op_1: 48_000,                                   // 96k total operative units
+        op_2: 32_000,
+        op_3: 16_000,
         // Equipment bonuses (balanced loadout)
-        melee_weapons: 7,
-        ranged_weapons: 5,
-        siege_weapons: 3,
-        armor: 5,
-        produce: 50,                                    // 50 produce
-        vehicles: 2,                                    // 2 vehicles
-        reputation: 100,                                // 100 reputation bonus
-        xp: 500,                                        // 500 XP bonus
+        melee_weapons: 32_000,
+        ranged_weapons: 8_000,
+        siege_weapons: 2_000,
+        armor: 8_000,
+        produce: 500_000,
+        vehicles: 500,
+        reputation: 250,                                // 250 reputation bonus
+        xp: 1_000,                                      // 1,000 XP bonus
 
         rally_caps: GameEngineRallyCaps::for_tier(1),
         max_team_members: 10,
@@ -518,29 +529,30 @@ fn create_epic_tier() -> SubscriptionTier {
         cost_in_usd_cents: 5000,                        // $50/month
         duration_days: 30,                              // 30 days
         _padding2: [0; 4],
-        generation_multiplier: 10,                      // 10x daily generation
-        max_locked_novi: 30_000,                        // 30k max locked NOVI
+        generation_multiplier: 5_000,                   // 500 NOVI per 5 min → full in 5h
+        max_locked_novi: 300_000,                       // 30,000 NOVI max (×10 for 1 decimal)
         daily_reward_multiplier: 20000,                 // 2.0x (100% bonus!)
         synchrony_bonus: 1000,                               // 10% synchrony bonus (basis points)
+        _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal
-        novi: 10_000,                                   // 10k reserved NOVI (withdrawable!)
-        cash: 25_000,                                   // 25k cash bonus
-        du_1: 100,                                      // 100 defensive units
-        du_2: 50,
-        du_3: 25,
-        op_1: 100,                                      // 100 operative units
-        op_2: 50,
-        op_3: 25,
+        // Bonuses granted on purchase/renewal (2.8× Rookie for $50/month)
+        novi: 10_000,                                   // 1,000 display NOVI (~$10 at $0.01/NOVI)
+        cash: 3_000_000,                                // 3M cash bonus
+        du_1: 28_000,                                   // 70k total defensive units
+        du_2: 28_000,
+        du_3: 14_000,
+        op_1: 84_000,                                   // 168k total operative units
+        op_2: 56_000,
+        op_3: 28_000,
         // Equipment bonuses (advanced arsenal)
-        melee_weapons: 20,
-        ranged_weapons: 15,
-        siege_weapons: 15,
-        armor: 15,
-        produce: 200,                                   // 200 produce
-        vehicles: 10,                                   // 10 vehicles
+        melee_weapons: 56_000,
+        ranged_weapons: 14_000,
+        siege_weapons: 4_000,
+        armor: 14_000,
+        produce: 2_000_000,
+        vehicles: 2_000,
         reputation: 500,                                // 500 reputation bonus
-        xp: 2500,                                       // 2500 XP bonus
+        xp: 2_500,                                      // 2,500 XP bonus
 
         rally_caps: GameEngineRallyCaps::for_tier(2),
         max_team_members: 25,
@@ -567,29 +579,30 @@ fn create_legendary_tier() -> SubscriptionTier {
         cost_in_usd_cents: 25000,                       // $250/month
         duration_days: 30,                              // 30 days
         _padding2: [0; 4],
-        generation_multiplier: 50,                      // 50x daily generation
-        max_locked_novi: 150_000,                       // 150k max locked NOVI
+        generation_multiplier: 25_000,                  // 2,500 NOVI per 5 min → full in 5h
+        max_locked_novi: 1_500_000,                     // 150,000 NOVI max (×10 for 1 decimal)
         daily_reward_multiplier: 30000,                 // 3.0x (200% bonus!)
         synchrony_bonus: 1500,                               // 15% synchrony bonus (basis points)
+        _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal
-        novi: 50_000,                                   // 50k reserved NOVI (withdrawable!)
-        cash: 100_000,                                  // 100k cash bonus
-        du_1: 500,                                      // 500 defensive units
-        du_2: 250,
-        du_3: 100,
-        op_1: 500,                                      // 500 operative units
-        op_2: 250,
-        op_3: 100,
+        // Bonuses granted on purchase/renewal (4× Rookie for $250/month)
+        novi: 50_000,                                   // 5,000 display NOVI (~$50 at $0.01/NOVI)
+        cash: 4_000_000,                                // 4M cash bonus
+        du_1: 40_000,                                   // 100k total defensive units
+        du_2: 40_000,
+        du_3: 20_000,
+        op_1: 120_000,                                  // 240k total operative units
+        op_2: 80_000,
+        op_3: 40_000,
         // Equipment bonuses (legendary arsenal)
-        melee_weapons: 70,
-        ranged_weapons: 65,
-        siege_weapons: 65,
-        armor: 50,
-        produce: 1000,                                  // 1000 produce
-        vehicles: 50,                                   // 50 vehicles
-        reputation: 2500,                               // 2500 reputation bonus
-        xp: 10000,                                      // 10000 XP bonus
+        melee_weapons: 80_000,
+        ranged_weapons: 20_000,
+        siege_weapons: 8_000,
+        armor: 20_000,
+        produce: 5_000_000,
+        vehicles: 5_000,
+        reputation: 1_000,                              // 1,000 reputation bonus
+        xp: 5_000,                                      // 5,000 XP bonus
 
         rally_caps: GameEngineRallyCaps::for_tier(3),
         max_team_members: 50,

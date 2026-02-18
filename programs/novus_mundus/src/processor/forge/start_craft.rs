@@ -102,81 +102,76 @@ pub fn process(
         return Err(GameError::InvalidQualityTier.into());
     }
 
-    // 4. Load Player Account
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    // Verify ownership
-    if &player.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    // 5. Validate Forge Building Requirement
-    let estate = load_estate_for_player(estate_account, player, program_id)?;
-
-    // Require minimum Forge level 1
-    require_forge(estate, 1)?;
-
-    // Check if Forge level allows this quality tier
-    if !can_craft_quality_tier(estate, quality_tier) {
-        return Err(GameError::BuildingLevelInsufficient.into());
-    }
-
-    // Get Forge level for bonus calculations
-    let forge_level = get_forge_level(estate);
-
-    // 6. Load Crafted Equipment Account
-    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
-    let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
-
-    // Verify ownership
-    if crafted.owner != player.owner {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    // 7. Check no active craft in progress
-    if crafted.is_crafting() {
-        return Err(GameError::CraftingInProgress.into());
-    }
-
-    // 8. Calculate Costs
+    // 8. Calculate Costs (before borrows)
     let novi_cost = quality_tier.novi_cost();
     let (common_cost, uncommon_cost, rare_cost, epic_cost, legendary_cost) = quality_tier.material_cost();
 
-    // 9. Check player has enough NOVI
-    if player.locked_novi < novi_cost {
-        return Err(GameError::InsufficientLockedNovi.into());
-    }
+    // 4. Phase 1: Validate and capture values (scoped borrows, dropped before CPI)
+    let (player_ge, player_bump, player_name, forge_level) = {
+        let player_data_ref = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&player_data_ref) };
 
-    // 10. Check player has enough materials
-    if player.common_materials < common_cost {
-        return Err(GameError::InsufficientMaterials.into());
-    }
-    if player.uncommon_materials < uncommon_cost {
-        return Err(GameError::InsufficientMaterials.into());
-    }
-    if player.rare_materials < rare_cost {
-        return Err(GameError::InsufficientMaterials.into());
-    }
-    if player.epic_materials < epic_cost {
-        return Err(GameError::InsufficientMaterials.into());
-    }
-    if player.legendary_materials < legendary_cost {
-        return Err(GameError::InsufficientMaterials.into());
-    }
+        // Verify ownership
+        if &player.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
 
-    // 11. Deduct materials from player
-    player.common_materials = player.common_materials.saturating_sub(common_cost);
-    player.uncommon_materials = player.uncommon_materials.saturating_sub(uncommon_cost);
-    player.rare_materials = player.rare_materials.saturating_sub(rare_cost);
-    player.epic_materials = player.epic_materials.saturating_sub(epic_cost);
-    player.legendary_materials = player.legendary_materials.saturating_sub(legendary_cost);
+        // 5. Validate Forge Building Requirement
+        let estate = load_estate_for_player(estate_account, player, program_id)?;
 
-    // 12. Burn NOVI tokens
-    // PlayerAccount PDA is the authority over locked tokens
-    let player_bump = player.bump;
+        // Require minimum Forge level 1
+        require_forge(estate, 1)?;
+
+        // Check if Forge level allows this quality tier
+        if !can_craft_quality_tier(estate, quality_tier) {
+            return Err(GameError::BuildingLevelInsufficient.into());
+        }
+
+        // Get Forge level for bonus calculations
+        let forge_level = get_forge_level(estate);
+
+        // 6. Load Crafted Equipment Account (read-only check)
+        let crafted_data_ref = crafted_equipment.try_borrow_data()?;
+        let crafted = unsafe { CraftedEquipmentAccount::load(&crafted_data_ref) };
+
+        // Verify ownership
+        if crafted.owner != player.owner {
+            return Err(GameError::Unauthorized.into());
+        }
+
+        // 7. Check no active craft in progress
+        if crafted.is_crafting() {
+            return Err(GameError::CraftingInProgress.into());
+        }
+
+        // 9. Check player has enough NOVI
+        if player.locked_novi < novi_cost {
+            return Err(GameError::InsufficientLockedNovi.into());
+        }
+
+        // 10. Check player has enough materials
+        if player.common_materials < common_cost {
+            return Err(GameError::InsufficientMaterials.into());
+        }
+        if player.uncommon_materials < uncommon_cost {
+            return Err(GameError::InsufficientMaterials.into());
+        }
+        if player.rare_materials < rare_cost {
+            return Err(GameError::InsufficientMaterials.into());
+        }
+        if player.epic_materials < epic_cost {
+            return Err(GameError::InsufficientMaterials.into());
+        }
+        if player.legendary_materials < legendary_cost {
+            return Err(GameError::InsufficientMaterials.into());
+        }
+
+        (player.game_engine, player.bump, player.name, forge_level)
+    }; // borrows dropped
+
+    // 12. Burn NOVI tokens (CPI - no active borrows)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
     let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -186,6 +181,17 @@ pub fn process(
         novi_cost,
         &[player_signer],
     )?;
+
+    // Phase 2: Update state after successful CPI (mutable borrows)
+    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+
+    // 11. Deduct materials from player
+    player.common_materials = player.common_materials.saturating_sub(common_cost);
+    player.uncommon_materials = player.uncommon_materials.saturating_sub(uncommon_cost);
+    player.rare_materials = player.rare_materials.saturating_sub(rare_cost);
+    player.epic_materials = player.epic_materials.saturating_sub(epic_cost);
+    player.legendary_materials = player.legendary_materials.saturating_sub(legendary_cost);
 
     // Update soft balance tracker
     player.locked_novi = player.locked_novi.saturating_sub(novi_cost);
@@ -205,7 +211,10 @@ pub fn process(
     let window_opens = now + stage_interval;
     let window_closes = window_opens + window_duration;
 
-    // 14. Initialize staged craft state
+    // 14. Initialize staged craft state on CraftedEquipmentAccount
+    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
+    let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
+
     crafted.active_craft_equipment = equipment_type as u8;
     crafted.target_tier = quality_tier as u8;
     crafted.stages_required = stages_required;
@@ -228,7 +237,7 @@ pub fn process(
 
     emit!(CraftStarted {
         player: *player_account.key(),
-        player_name: player.name,
+        player_name,
         item_type: equipment_type as u8,
         quality_tier: quality_tier as u8,
         materials_used: total_materials,

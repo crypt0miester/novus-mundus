@@ -19,6 +19,8 @@ use crate::constants::{
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ShopConfigAccount {
+    /// Account discriminator (AccountKey::ShopConfig)
+    pub account_key: u8,
     // Discount Caps (8 bytes) - basis points
     pub max_base_discount_bps: u16,      // Layer 1 cap (6000 = 60%)
     pub max_bundle_discount_bps: u16,    // Layer 2 cap (3500 = 35%)
@@ -112,6 +114,8 @@ impl ShopConfigAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ShopItemAccount {
+    /// Account discriminator (AccountKey::ShopItem)
+    pub account_key: u8,
     // Item Info (8 bytes)
     pub item_type: u16,                  // Maps to ItemType enum
     pub category: u8,                    // 0=Equipment, 1=Consumable, 2=Material, 3=Cosmetic
@@ -201,6 +205,8 @@ pub const MAX_BUNDLE_ITEMS: usize = 10;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BundleAccount {
+    /// Account discriminator (AccountKey::ShopBundle)
+    pub account_key: u8,
     // Bundle Info (8 bytes)
     pub tier: u8,                        // 0=Starter...4=Supreme
     pub category: u8,                    // 0=Equipment...3=Mixed
@@ -272,6 +278,8 @@ impl BundleAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DailyDealAccount {
+    /// Account discriminator (AccountKey::DailyDeal)
+    pub account_key: u8,
     // Current Deal (16 bytes)
     pub item_id: u32,                    // Current item on deal
     pub discount_bps: u16,               // 1500-4000 (15-40%)
@@ -351,6 +359,8 @@ impl FlashSaleStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct FlashSaleAccount {
+    /// Account discriminator (AccountKey::FlashSale)
+    pub account_key: u8,
     // Payer for rent return (32 bytes)
     pub payer: Pubkey,                   // Receives rent on close
 
@@ -437,6 +447,8 @@ pub enum WeeklySaleTheme {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct WeeklySaleAccount {
+    /// Account discriminator (AccountKey::WeeklySale)
+    pub account_key: u8,
     // Payer for rent return (32 bytes)
     pub payer: Pubkey,
 
@@ -520,6 +532,8 @@ pub enum SeasonalSaleStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct SeasonalSaleAccount {
+    /// Account discriminator (AccountKey::SeasonalSale)
+    pub account_key: u8,
     // Payer for rent return (32 bytes)
     pub payer: Pubkey,
 
@@ -609,6 +623,8 @@ pub enum DAOPromotionStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DAOPromotionAccount {
+    /// Account discriminator (AccountKey::DaoPromotion)
+    pub account_key: u8,
     // Payer for rent return (32 bytes)
     pub payer: Pubkey,
 
@@ -693,6 +709,8 @@ impl DAOPromotionAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PlayerPurchaseAccount {
+    /// Account discriminator (AccountKey::PlayerPurchase)
+    pub account_key: u8,
     // Tracking (24 bytes)
     pub lifetime_purchased: u64,         // Total ever purchased
     pub purchased_today: u64,            // Reset daily
@@ -768,6 +786,7 @@ pub enum ShopCategory {
     Consumable = 1,
     Material = 2,
     Cosmetic = 3,
+    Currency = 4,
 }
 
 impl ShopCategory {
@@ -777,6 +796,7 @@ impl ShopCategory {
             1 => Some(Self::Consumable),
             2 => Some(Self::Material),
             3 => Some(Self::Cosmetic),
+            4 => Some(Self::Currency),
             _ => None,
         }
     }
@@ -830,6 +850,8 @@ impl BundleTier {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct AllowedTokenAccount {
+    /// Account discriminator (AccountKey::AllowedToken)
+    pub account_key: u8,
     // ===== Token Identity (32 bytes) =====
     pub mint: Pubkey,
 

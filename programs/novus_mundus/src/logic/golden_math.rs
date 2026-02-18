@@ -13,7 +13,7 @@
 /// - φ × (1/φ) = 1 — Inverse relationships for diminishing returns
 /// - φ² = φ + 1 — Self-similar scaling for legendary tiers
 
-use crate::constants::{PHI, GOLDEN_ROOT, GOLDEN_ANGLE};
+use crate::constants::{PHI, GOLDEN_ROOT};
 
 /// Calculate √φ raised to power n (golden root power)
 ///
@@ -63,41 +63,6 @@ pub fn calculate_buff_at_level(base: u64, level: u32) -> u64 {
     } else {
         result as u64
     }
-}
-
-/// Calculate golden spiral position for deterministic spawning
-///
-/// Uses the golden angle to distribute points evenly in a spiral pattern.
-/// This creates visually pleasing, non-clustering spawn positions.
-///
-/// # Arguments
-/// * `index` - Spawn index (0, 1, 2, ...)
-/// * `center_lat` - City center latitude
-/// * `center_lon` - City center longitude
-/// * `max_radius_km` - Maximum spawn radius in km
-///
-/// # Returns
-/// (latitude, longitude) of spawn position
-#[inline]
-pub fn golden_spiral_position(
-    index: u64,
-    center_lat: f64,
-    center_lon: f64,
-    max_radius_km: f32,
-) -> (f64, f64) {
-    // Golden angle creates optimal distribution
-    let angle = index as f64 * GOLDEN_ANGLE;
-
-    // Radius grows with sqrt(index) for uniform area distribution
-    let radius_factor = libm::sqrt(index as f64) / 10.0;
-    let radius_km = radius_factor.min(1.0) * max_radius_km as f64;
-
-    // Convert km to degrees (approximate)
-    let km_per_degree = 111.0; // ~111km per degree latitude
-    let lat_offset = radius_km * libm::cos(angle) / km_per_degree;
-    let lon_offset = radius_km * libm::sin(angle) / km_per_degree;
-
-    (center_lat + lat_offset, center_lon + lon_offset)
 }
 
 /// Calculate encounter level deterministically

@@ -6,6 +6,8 @@ use crate::constants::PROGRESSION_SEED;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ProgressionAccount {
+    /// Account discriminator
+    pub account_key: u8,
     pub player: Pubkey,                         // 32 bytes
     pub level: u8,                              // 1 byte
     pub xp: u64,                                // 8 bytes

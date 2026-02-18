@@ -8,6 +8,7 @@ use pinocchio::{
 use pinocchio::sysvars::{Sysvar, clock::Clock};
 
 use crate::{
+    constants::PLAYER_SEED,
     error::GameError,
     state::PlayerAccount,
     helpers::{burn_tokens},
@@ -19,32 +20,16 @@ use crate::{
 
 /// Purchase stamina refill (monetization)
 ///
-/// Players can purchase stamina using:
-/// - Locked Novi (burn to refill)
-/// - SOL/USDC (future: treasury receives payment)
-/// - Rewards/achievements (future: free refills)
-///
-/// This is the primary monetization mechanic for encounter farming.
-///
-/// # Economics
-/// - 100 Novi per 1 stamina
-/// - Respects max_encounter_stamina cap
-/// - Instant refill (no waiting)
-///
 /// # Accounts
 /// - [writable] player: PlayerAccount
 /// - [writable] player_token_account: Player's Novi tokens (for burning)
 /// - [writable] novi_mint: NOVI mint
-/// - [] game_engine: GameEngine PDA (for burn authority)
+/// - [] game_engine: GameEngine PDA (for config)
 /// - [signer] owner: Player wallet
 /// - [] token_program: SPL Token program
 ///
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Stamina to purchase
-///
-/// # Example
-/// - Purchase 50 stamina → Burn 5,000 Novi
-/// - Purchase 100 stamina → Burn 10,000 Novi
 pub fn process(
     _program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -90,74 +75,75 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load Player Account
+    // 4. PHASE 1: Validate and calculate cost (scoped borrow - dropped before CPI)
+    let (novi_cost, player_bump) = {
+        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data = unsafe {
+            PlayerAccount::load(&player_data_ref)
+        };
 
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
+        // Verify ownership
+        if &player_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
 
-    // Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+        // Load GameEngine for Cost Configuration
+        let game_engine_data_ref = game_engine_account.try_borrow_data()?;
+        let game_engine_data = unsafe {
+            crate::state::GameEngine::load(&game_engine_data_ref)
+        };
+        let economic_config = &game_engine_data.economic_config;
 
-    // 5. Load GameEngine for Cost Configuration
+        // Calculate Novi Cost (with DAO multiplier)
+        let base_stamina_cost = economic_config.stamina_cost;
+        let adjusted_stamina_cost = apply_bp(base_stamina_cost, economic_config.cost_multiplier as u64)
+            .ok_or(GameError::MathOverflow)?;
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe {
-        crate::state::GameEngine::load(&game_engine_data_ref)
-    };
-    let economic_config = &game_engine_data.economic_config;
+        let novi_cost = (stamina_amount as u64)
+            .checked_mul(adjusted_stamina_cost)
+            .ok_or(GameError::MathOverflow)?;
 
-    // 6. Calculate Novi Cost (with DAO multiplier)
+        (novi_cost, player_data.bump)
+    }; // player borrow dropped here
 
-    // Get base cost from GameEngine config
-    let base_stamina_cost = economic_config.stamina_cost;
+    // 5. PHASE 2: Burn Novi Tokens (CPI - requires no active borrows on player)
+    // Player PDA owns the token account, so player is the burn authority
+    let bump_seed = [player_bump];
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine_account.key(), owner.key(), &bump_seed);
+    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
-    // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
-    let adjusted_stamina_cost = apply_bp(base_stamina_cost, economic_config.cost_multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
-
-    let novi_cost = (stamina_amount as u64)
-        .checked_mul(adjusted_stamina_cost)
-        .ok_or(GameError::MathOverflow)?;
-
-    // 7. Burn Novi Tokens
-
-    let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
-
-    // Burn tokens from player
     burn_tokens(
         player_token_account,
         novi_mint,
-        owner,
+        player_account,
         novi_cost,
-        &[signer],
+        &[player_signer],
     )?;
 
-    // 8. Add Stamina (Respects Cap)
+    // 6. PHASE 3: Re-borrow and update state (after CPI)
+    {
+        let mut player_data_ref = player_account.try_borrow_mut_data()?;
+        let player_data = unsafe {
+            PlayerAccount::load_mut(&mut player_data_ref)
+        };
 
-    let actual_added = add_stamina(player_data, stamina_amount);
+        // Deduct locked NOVI
+        player_data.locked_novi = player_data.locked_novi
+            .saturating_sub(novi_cost);
 
-    // If player is already at cap, they wasted Novi (intentional penalty)
-    // This prevents exploits where players pre-purchase at low tier then upgrade
-    if actual_added == 0 {
-        // Still burned the Novi, just didn't gain stamina
-        // This is by design - teach players not to buy when at cap
+        // Add Stamina (Respects Cap)
+        let actual_added = add_stamina(player_data, stamina_amount);
+
+        // Emit StaminaPurchased event
+        let now = Clock::get()?.unix_timestamp;
+        emit!(StaminaPurchased {
+            player: *player_account.key(),
+            player_name: player_data.name,
+            stamina: actual_added,
+            gems_spent: 0,
+            timestamp: now,
+        });
     }
-
-    // Emit StaminaPurchased event
-    let now = Clock::get()?.unix_timestamp;
-    emit!(StaminaPurchased {
-        player: *player_account.key(),
-        player_name: player_data.name,
-        stamina: actual_added,
-        gems_spent: 0, // This instruction uses NOVI, not gems
-        timestamp: now,
-    });
 
     Ok(())
 }

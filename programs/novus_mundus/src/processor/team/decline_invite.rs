@@ -7,7 +7,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, TeamInviteAccount, require_extension, EXT_RALLY},
+    state::{PlayerAccount, TeamInviteAccount, require_extension, EXT_INVENTORY},
     constants::TEAM_INVITE_SEED,
     helpers::close_account,
     validation::{require_signer, require_writable, require_owner, require_initialized},
@@ -59,8 +59,8 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 3a. Require EXT_RALLY (prerequisite for teams)
-    require_extension(&*player, EXT_RALLY)?;
+    // 3a. Require EXT_INVENTORY (prerequisite for team operations)
+    require_extension(&*player, EXT_INVENTORY)?;
 
     // 4. Verify Invite PDA
 

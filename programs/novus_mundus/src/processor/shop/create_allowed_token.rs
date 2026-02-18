@@ -125,6 +125,7 @@ pub fn process(
     let mut data_ref = allowed_token_account.try_borrow_mut_data()?;
     let allowed_token = unsafe { AllowedTokenAccount::load_mut(&mut data_ref) };
 
+    allowed_token.account_key = crate::state::AccountKey::AllowedToken as u8;
     allowed_token.mint = *token_mint.key();
     allowed_token.pyth_feed = pyth_feed;
     allowed_token.switchboard_feed = switchboard_feed;

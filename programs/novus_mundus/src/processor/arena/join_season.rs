@@ -150,6 +150,7 @@ pub fn process(
     let participant = unsafe { ArenaParticipantAccount::load_mut(&mut participant_data_ref) };
 
     *participant = ArenaParticipantAccount {
+        account_key: crate::state::AccountKey::ArenaParticipant as u8,
         game_engine: player_game_engine,
         player: player_key,
         season_id,
@@ -202,6 +203,7 @@ pub fn process(
         let loadout = unsafe { ArenaLoadoutAccount::load_mut(&mut loadout_data_ref) };
 
         *loadout = ArenaLoadoutAccount {
+            account_key: crate::state::AccountKey::ArenaLoadout as u8,
             game_engine: player_game_engine,
             player: player_key,
             bump: loadout_bump,

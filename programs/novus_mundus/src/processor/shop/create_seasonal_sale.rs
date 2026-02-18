@@ -145,6 +145,7 @@ pub fn process(
     let mut sale_data_ref = seasonal_sale_account.try_borrow_mut_data()?;
     let sale = unsafe { SeasonalSaleAccount::load_mut(&mut sale_data_ref) };
 
+    sale.account_key = crate::state::AccountKey::SeasonalSale as u8;
     sale.payer = *payer.key();
     sale.name = name;
 

@@ -64,8 +64,8 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 5. Derive and verify estate PDA
-    let (expected_pda, bump) = EstateAccount::derive_pda(owner.key());
+    // 5. Derive and verify estate PDA (scoped to player PDA)
+    let (expected_pda, bump) = EstateAccount::derive_pda(player_account.key());
     if estate_account.key() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -85,9 +85,9 @@ pub fn process(
     let space = EstateAccount::LEN;
     let lamports = rent.minimum_balance(space);
 
-    // 9. Create estate account via CPI
+    // 9. Create estate account via CPI (seeds use player PDA)
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(ESTATE_SEED, owner.key().as_ref(), &bump_seed);
+    let seeds = pinocchio::seeds!(ESTATE_SEED, player_account.key().as_ref(), &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {

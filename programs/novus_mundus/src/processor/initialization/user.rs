@@ -124,44 +124,38 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 6. Initialize User Data
+    {
+        // Scope the mutable borrow so it's dropped before the ATA CPI below,
+        // which needs to re-borrow `user` internally.
+        let mut user_data_ref = user.try_borrow_mut_data()?;
+        let user_data = unsafe {
+            UserAccount::load_mut(&mut user_data_ref)
+        };
 
-    // SAFETY: We just created the account with correct size and owner
-    // The account is guaranteed to be:
-    // - Owned by this program (we just created it)
-    // - Correct size (UserAccount::LEN)
-    // - Writable (validated above)
-    let mut user_data_ref = user.try_borrow_mut_data()?;
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data_ref)
-    };
+        use crate::NULL_PUBKEY;
 
-    // In multi-kingdom, player accounts are per-kingdom.
-    // UserAccount.player is set to NULL_PUBKEY initially.
-    // It gets populated when the user creates a player in a specific kingdom.
-    use crate::NULL_PUBKEY;
-
-    // Initialize with default values (free tier subscription)
-    // player field starts as NULL_PUBKEY - will be set when player joins a kingdom
-    *user_data = UserAccount::init(*owner.key(), NULL_PUBKEY, bump);
+        // Initialize with default values (free tier subscription)
+        // player field starts as NULL_PUBKEY - will be set when player joins a kingdom
+        *user_data = UserAccount::init(*owner.key(), NULL_PUBKEY, bump);
+    }
 
     // 7. Create User's NOVI Token Account (ATA)
 
     // Verify novi_mint matches GameEngine configuration
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+    {
+        let game_engine_data_ref = game_engine.try_borrow_data()?;
+        let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
 
-    if novi_mint.key() != &game_engine_data.novi_mint {
-        return Err(ProgramError::InvalidAccountData);
+        if novi_mint.key() != &game_engine_data.novi_mint {
+            return Err(ProgramError::InvalidAccountData);
+        }
     }
 
     // Create or verify user's Associated Token Account
-    // This ATA will be used for:
-    // - Receiving reserved_novi (from PvP loot, prizes, etc.)
-    // - Withdrawing earnings to wallet
     get_or_create_associated_token_account(
         owner,                      // Payer (owner pays for creation)
         user_token_account,         // The ATA to create
-        owner,                      // ATA owner (user's wallet)
+        user,                       // ATA owner (user PDA)
         novi_mint,                  // Token mint (NOVI)
         system_program,
         token_program,

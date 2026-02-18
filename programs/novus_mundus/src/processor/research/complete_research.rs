@@ -57,7 +57,7 @@ pub fn process(
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Validate player PDA (CRITICAL: prevents writing to arbitrary accounts)
-    let player_bump = require_pda(player_account, &[PLAYER_SEED, &player.owner], program_id)?;
+    let player_bump = require_pda(player_account, &[PLAYER_SEED, &player.game_engine, &player.owner], program_id)?;
     if player.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }

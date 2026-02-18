@@ -203,6 +203,8 @@ impl CourtPosition {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CastleAccount {
+    /// Account discriminator (AccountKey::Castle)
+    pub account_key: u8,
     // Kingdom Reference (32 bytes)
     pub game_engine: Pubkey,
 
@@ -622,6 +624,8 @@ impl Default for CastleReference {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct KingRegistryAccount {
+    /// Account discriminator (AccountKey::KingRegistry)
+    pub account_key: u8,
     // Identity (40 bytes)
     pub king: Pubkey,
     pub bump: u8,
@@ -776,6 +780,8 @@ impl KingRegistryAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CourtPositionAccount {
+    /// Account discriminator (AccountKey::CourtPosition)
+    pub account_key: u8,
     // Identity (40 bytes)
     pub castle: Pubkey,
     pub position_type: u8,
@@ -835,6 +841,8 @@ impl CourtPositionAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GarrisonContributionAccount {
+    /// Account discriminator (AccountKey::CastleGarrison)
+    pub account_key: u8,
     // Identity (72 bytes)
     pub castle: Pubkey,
     pub contributor: Pubkey,
@@ -956,6 +964,8 @@ impl GarrisonContributionAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamCastleRewardAccount {
+    /// Account discriminator (AccountKey::TeamCastleReward)
+    pub account_key: u8,
     // Identity (72 bytes)
     pub castle: Pubkey,
     pub member: Pubkey,

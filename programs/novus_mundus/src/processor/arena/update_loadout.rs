@@ -15,7 +15,7 @@ use pinocchio::{
 };
 
 use crate::{
-    state::ArenaLoadoutAccount,
+    state::{ArenaLoadoutAccount, PlayerCore},
     validation::require_signer,
 };
 
@@ -87,8 +87,10 @@ pub fn process(
         loadout_account,
         program_id,
     )?;
-    // Verify player authority matches
-    if &loadout.player != player_authority.key() {
+    // Verify player authority matches (loadout.player stores the PlayerCore PDA,
+    // so derive it from wallet key + game_engine to compare)
+    let (expected_player_pda, _) = PlayerCore::derive_pda(&loadout.game_engine, player_authority.key());
+    if loadout.player != expected_player_pda {
         return Err(crate::error::GameError::Unauthorized.into());
     }
 

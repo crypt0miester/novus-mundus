@@ -90,9 +90,9 @@ pub fn process(
         return Err(GameError::NotTeamLeader.into());
     }
 
-    // Team must not have a domain name (use remove_team first to reclaim domain)
-    if team.name_len > 0 {
-        return Err(GameError::TeamHasDomain.into());
+    // Team must have only the leader (no other members)
+    if team.member_count > 1 {
+        return Err(GameError::TeamHasMembers.into());
     }
 
     // 6. Return Treasury to Leader

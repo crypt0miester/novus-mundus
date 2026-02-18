@@ -118,6 +118,8 @@ pub fn process(
     let mut config_data_ref = shop_config_account.try_borrow_mut_data()?;
     let config = unsafe { ShopConfigAccount::load_mut(&mut config_data_ref) };
 
+    config.account_key = crate::state::AccountKey::ShopConfig as u8;
+
     // Discount caps
     config.max_base_discount_bps = max_base_discount_bps;
     config.max_bundle_discount_bps = max_bundle_discount_bps;

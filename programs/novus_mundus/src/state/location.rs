@@ -26,6 +26,9 @@ pub const OCCUPANT_ENCOUNTER: u8 = 2;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct LocationAccount {
+    /// Account discriminator (AccountKey::Location)
+    pub account_key: u8,            // 1 byte
+
     /// Kingdom this location belongs to
     pub game_engine: Pubkey,        // 32 bytes
     /// Grid latitude (coordinate × 10000, rounded)

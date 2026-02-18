@@ -164,6 +164,8 @@ pub fn process(
     let mut flash_sale_data_ref = flash_sale_account.try_borrow_mut_data()?;
     let flash_sale = unsafe { FlashSaleAccount::load_mut(&mut flash_sale_data_ref) };
 
+    flash_sale.account_key = crate::state::AccountKey::FlashSale as u8;
+
     // Payer receives rent on close
     flash_sale.payer = *payer.key();
 

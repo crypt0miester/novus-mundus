@@ -273,6 +273,7 @@ pub enum CollectionType {
     Cash = 0,    // Default cash generation
     Mining = 1,  // Mining for gems (research unlocked)
     Fishing = 2, // Fishing for produce (research unlocked)
+    Farming = 3, // Farming for produce (Farm building, uses defensive units)
 }
 
 impl TryFrom<u8> for CollectionType {
@@ -283,6 +284,7 @@ impl TryFrom<u8> for CollectionType {
             0 => Ok(Self::Cash),
             1 => Ok(Self::Mining),
             2 => Ok(Self::Fishing),
+            3 => Ok(Self::Farming),
             _ => Err(GameError::InvalidParameter),
         }
     }

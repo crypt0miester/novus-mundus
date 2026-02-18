@@ -202,9 +202,10 @@ pub fn process(
 
     // 17. Mint NOVI to reserved token account
     // Game engine is the mint authority
+    let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
     let game_engine_bump = game_engine.bump;
     let bump_seed = [game_engine_bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
+    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     crate::helpers::mint_tokens(

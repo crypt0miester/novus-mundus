@@ -64,11 +64,11 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 3 {
+    if instruction_data.len() < 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let position_type = instruction_data[2];
+    let position_type = instruction_data[0];
 
     // Validate position type
     if CourtPosition::from_u8(position_type).is_none() {
@@ -165,6 +165,7 @@ pub fn process(
     let mut court_data = court_position_account.try_borrow_mut_data()?;
     let court = unsafe { CourtPositionAccount::load_mut(&mut court_data) };
 
+    court.account_key = crate::state::AccountKey::CourtPosition as u8;
     court.castle = *castle_account.key();
     court.position_type = position_type;
     court.bump = court_bump;

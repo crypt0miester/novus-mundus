@@ -14,6 +14,9 @@ use crate::error::GameError;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamAccount {
+    /// Account discriminator (AccountKey::Team)
+    pub account_key: u8,
+
     // === KINGDOM & IDENTITY (80 bytes) ===
     pub game_engine: Pubkey,        // 32 - Kingdom this team belongs to
     pub id: u64,                    // 8 - Unique team ID (for PDA derivation)
@@ -373,6 +376,7 @@ impl TeamAccount {
         created_at: i64,
     ) -> Self {
         let mut team = Self {
+            account_key: crate::state::AccountKey::Team as u8,
             game_engine,
             id,
             leader,
@@ -411,7 +415,7 @@ impl TeamAccount {
 }
 
 // Compile-time size assertion
-const _: [(); 272] = [(); core::mem::size_of::<TeamAccount>()];
+const _: [(); 280] = [(); core::mem::size_of::<TeamAccount>()];
 
 // ============================================================
 // TEAM MEMBER SLOT (96 bytes)
@@ -424,6 +428,9 @@ const _: [(); 272] = [(); core::mem::size_of::<TeamAccount>()];
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamMemberSlot {
+    /// Account discriminator (AccountKey::TeamMemberSlot)
+    pub account_key: u8,
+
     // === REFERENCES (64 bytes) ===
     pub team: Pubkey,               // 32 - Team account pubkey
     pub player: Pubkey,             // 32 - Player account pubkey (not wallet!)
@@ -536,6 +543,7 @@ impl TeamMemberSlot {
         rank: u8,
     ) -> Self {
         Self {
+            account_key: crate::state::AccountKey::TeamMemberSlot as u8,
             team,
             player,
             joined_at,
@@ -595,7 +603,7 @@ impl TeamMemberSlot {
 }
 
 // Compile-time size assertion
-const _: [(); 96] = [(); core::mem::size_of::<TeamMemberSlot>()];
+const _: [(); 104] = [(); core::mem::size_of::<TeamMemberSlot>()];
 
 // ============================================================
 // TEAM INVITE ACCOUNT (128 bytes)
@@ -607,6 +615,9 @@ const _: [(); 96] = [(); core::mem::size_of::<TeamMemberSlot>()];
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamInviteAccount {
+    /// Account discriminator (AccountKey::TeamInvite)
+    pub account_key: u8,
+
     // === IDENTITY (72 bytes - aligned to 8) ===
     pub team: Pubkey,               // 32 - Team account pubkey
     pub invitee: Pubkey,            // 32 - Invitee's player account pubkey
@@ -720,6 +731,7 @@ impl TeamInviteAccount {
         expires_at: i64,
     ) -> Self {
         Self {
+            account_key: crate::state::AccountKey::TeamInvite as u8,
             team,
             invitee,
             bump,
@@ -733,7 +745,7 @@ impl TeamInviteAccount {
 }
 
 // Compile-time size assertion
-const _: [(); 128] = [(); core::mem::size_of::<TeamInviteAccount>()];
+const _: [(); 136] = [(); core::mem::size_of::<TeamInviteAccount>()];
 
 // ============================================================
 // TREASURY REQUEST (104 bytes)
@@ -748,6 +760,9 @@ const _: [(); 128] = [(); core::mem::size_of::<TeamInviteAccount>()];
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TreasuryRequest {
+    /// Account discriminator (AccountKey::TreasuryRequest)
+    pub account_key: u8,
+
     // === IDENTITY (64 bytes) ===
     pub team: Pubkey,               // 32 - Team account pubkey
     pub requester: Pubkey,          // 32 - Requester's player account pubkey
@@ -812,6 +827,7 @@ impl TreasuryRequest {
         bump: u8,
     ) -> Self {
         Self {
+            account_key: crate::state::AccountKey::TreasuryRequest as u8,
             team,
             requester,
             amount,
@@ -824,4 +840,4 @@ impl TreasuryRequest {
 }
 
 // Compile-time size assertion
-const _: [(); 104] = [(); core::mem::size_of::<TreasuryRequest>()];
+const _: [(); 112] = [(); core::mem::size_of::<TreasuryRequest>()];

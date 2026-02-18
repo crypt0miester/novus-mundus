@@ -8,7 +8,7 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    state::{PlayerAccount, ResearchProgress, unlock_extension_if_eligible, EXT_RESEARCH},
+    state::{PlayerAccount, ResearchProgress, EXT_RESEARCH},
     validation::{
         require_signer,
         require_writable,
@@ -60,8 +60,8 @@ pub fn process(
         }
     }
 
-    // 4. Derive and verify Research Progress PDA
-    let (expected_progress, bump) = ResearchProgress::derive_pda(player_owner.key());
+    // 4. Derive and verify Research Progress PDA (scoped to player PDA for multi-kingdom)
+    let (expected_progress, bump) = ResearchProgress::derive_pda(player_account.key());
 
     if research_progress.key() != &expected_progress {
         return Err(ProgramError::InvalidSeeds);
@@ -71,7 +71,7 @@ pub fn process(
     let lamports = Rent::get()?.minimum_balance(ResearchProgress::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(RESEARCH_SEED, player_owner.key().as_ref(), &bump_seed);
+    let seeds = pinocchio::seeds!(RESEARCH_SEED, player_account.key().as_ref(), &bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -82,18 +82,56 @@ pub fn process(
         owner: program_id,
     }.invoke_signed(&[signer])?;
 
-    // 6. Initialize research progress
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
-    let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
-
-    *progress = ResearchProgress::init(*player_owner.key(), bump);
+    // 6. Initialize research progress (scoped to drop borrow before CPI/resize)
+    {
+        let mut progress_data = research_progress.try_borrow_mut_data()?;
+        let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
+        *progress = ResearchProgress::init(*player_owner.key(), bump);
+    }
 
     // 7. Unlock EXT_RESEARCH extension on player account
     // This is the first step in the user journey - no prerequisites
-    {
+    // Must check extensions, drop borrow, resize via CPI, re-borrow, then update flag
+    let needs_unlock = {
+        let player_data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&player_data) };
+        player.extensions & EXT_RESEARCH == 0
+    };
+
+    if needs_unlock {
+        use crate::state::size_for_extensions;
+
+        // Calculate new size needed
+        let new_extensions = {
+            let player_data = player_account.try_borrow_data()?;
+            let player = unsafe { PlayerAccount::load(&player_data) };
+            player.extensions | EXT_RESEARCH
+        };
+        let new_size = size_for_extensions(new_extensions);
+        let current_size = player_account.data_len();
+
+        if new_size > current_size {
+            // Transfer lamports for rent via system program CPI (payer is external wallet)
+            let rent = Rent::get()?;
+            let required_lamports = rent.minimum_balance(new_size);
+            let lamports_needed = required_lamports.saturating_sub(player_account.lamports());
+
+            if lamports_needed > 0 {
+                pinocchio_system::instructions::Transfer {
+                    from: payer,
+                    to: player_account,
+                    lamports: lamports_needed,
+                }.invoke()?;
+            }
+
+            // Resize the account data
+            player_account.resize(new_size)?;
+        }
+
+        // Re-borrow and set the extension flag
         let mut player_data = player_account.try_borrow_mut_data()?;
         let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
-        unlock_extension_if_eligible(player_account, payer, player, EXT_RESEARCH)?;
+        player.extensions = new_extensions;
     }
 
     Ok(())

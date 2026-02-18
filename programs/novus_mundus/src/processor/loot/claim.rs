@@ -63,7 +63,7 @@ pub fn process(
     require_owner(loot, program_id)?;
 
     // Validate PDAs
-    let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.key(), owner.key()], program_id)?;
     let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
     // 3. Load Loot Account
@@ -78,8 +78,8 @@ pub fn process(
         return Err(GameError::AlreadyClaimed.into());
     }
 
-    // CHECK 2: Ownership validation
-    if &loot_data.owner != owner.key() {
+    // CHECK 2: Ownership validation (loot.owner = player PDA)
+    if &loot_data.owner != player.key() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -95,7 +95,7 @@ pub fn process(
     }
 
     // CHECK 4: PDA validation (ensure loot_id matches)
-    let (expected_loot, _) = LootAccount::derive_pda(owner.key(), loot_data.loot_id);
+    let (expected_loot, _) = LootAccount::derive_pda(player.key(), loot_data.loot_id);
     if loot.key() != &expected_loot {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -182,8 +182,6 @@ pub fn process(
     player_data.networth = calculate_networth(player_data, &game_engine_data.economic_config)?;
 
     // 9. Prepare event data before closing account
-    // Note: encounter field is Pubkey::default() as loot doesn't store encounter address
-    // respect and xp are 0 as they're granted instantly during combat, not via loot
 
     // Encode top 4 reward types into items array (item_id << 8 | quantity, capped at 255)
     let mut items = [0u16; 4];
@@ -227,8 +225,6 @@ pub fn process(
         player: event_player,
         player_name: event_player_name,
         cash: event_cash,
-        respect: 0, // Respect is granted instantly during combat
-        xp: 0,      // XP is granted instantly during combat
         items,
         timestamp: now,
     });

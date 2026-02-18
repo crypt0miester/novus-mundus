@@ -11,10 +11,6 @@ pub struct LootClaimed {
     pub player_name: [u8; 48],
     /// Cash earned
     pub cash: u64,
-    /// Respect earned
-    pub respect: u32,
-    /// XP earned
-    pub xp: u32,
     /// Items received (encoded as item_id << 8 | quantity for up to 4 items)
     pub items: [u16; 4],
     /// Unix timestamp
@@ -29,8 +25,6 @@ impl Event for LootClaimed {
         offset += self.player.pack(&mut buf[offset..]);
         offset += self.player_name.pack(&mut buf[offset..]);
         offset += self.cash.pack(&mut buf[offset..]);
-        offset += self.respect.pack(&mut buf[offset..]);
-        offset += self.xp.pack(&mut buf[offset..]);
         // Pack items array
         for item in &self.items {
             buf[offset..offset + 2].copy_from_slice(&item.to_le_bytes());

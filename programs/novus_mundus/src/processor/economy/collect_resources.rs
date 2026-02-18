@@ -6,8 +6,9 @@ use pinocchio::{
 };
 
 use crate::{
+    constants::PLAYER_SEED,
     error::GameError,
-    state::{PlayerAccount, UserAccount, GameEngine},
+    state::{PlayerAccount, UserAccount, GameEngine, CityAccount},
     types::{EventType, CollectionType},
     logic::{
         consume_novi_logic,
@@ -22,10 +23,11 @@ use crate::{
         apply_time_multiplier,
         ActivityType,
         safe_math::{sqrt_product, pow_three_quarters},
+        terrain,
     },
     helpers::{
         event_scoring::update_event_score,
-        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_workshop, require_dock, workshop_mining_bonus_bps, dock_fishing_bonus_bps},
+        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_mine, require_dock, require_farm, mine_mining_bonus_bps, dock_fishing_bonus_bps, farm_produce_bonus_bps},
     },
     validation::require_signer,
     emit,
@@ -129,9 +131,9 @@ pub fn process(
             if !player_data.has_mining {
                 return Err(GameError::FeatureLocked.into());
             }
-            // Mining requires Workshop building (minimum level 1)
+            // Mining requires Mine building (split from Workshop)
             let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
-            require_workshop(estate, 1)?;
+            require_mine(estate, 1)?;
         },
         CollectionType::Fishing => {
             if !player_data.has_fishing {
@@ -140,6 +142,11 @@ pub fn process(
             // Fishing requires Dock building (minimum level 1)
             let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             require_dock(estate, 1)?;
+        },
+        CollectionType::Farming => {
+            // Farming requires Farm building
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            require_farm(estate, 1)?;
         },
         CollectionType::Cash => {}, // Always unlocked
     }
@@ -249,12 +256,86 @@ pub fn process(
             // Scale back up and ensure reasonable output
             // Produce is 3x more common than gems
             base_output.saturating_mul(3)
+        },
+        CollectionType::Farming => {
+            // Farming generates produce using DEFENSIVE units (thematic: farming is "stay home" work)
+            // defensive_unit_1: 5x (hard laborers)
+            // defensive_unit_2: 4x
+            // defensive_unit_3: 3x
+            let produce_from_unit_1 = player_data.defensive_unit_1
+                .saturating_mul(5);
+
+            let produce_from_unit_2 = player_data.defensive_unit_2
+                .saturating_mul(4);
+
+            let produce_from_unit_3 = player_data.defensive_unit_3
+                .saturating_mul(3);
+
+            let unit_factor = produce_from_unit_1
+                .saturating_add(produce_from_unit_2)
+                .saturating_add(produce_from_unit_3);
+
+            // Same scaling as fishing (power^0.75)
+            let sqrt_scaled = sqrt_product(unit_factor, power);
+            let base_output = pow_three_quarters(sqrt_scaled);
+
+            // Produce is 3x more common than gems
+            base_output.saturating_mul(3)
         }
     };
 
     if base_output == 0 {
         return Err(GameError::InsufficientPower.into());
     }
+
+    // 8x. Apply terrain affinity bonus (mining near mountains, fishing near coast)
+    // City account is optional at the end of accounts list:
+    //   9 accounts (8 base + city, no events) or 11 accounts (8 base + 2 events + city)
+    let base_output = {
+        let city_idx = match accounts.len() {
+            9 => Some(8usize),
+            11 => Some(10usize),
+            _ => None,
+        };
+        if let Some(idx) = city_idx {
+            let city_acc = &accounts[idx];
+            if city_acc.owner() == program_id && city_acc.data_len() >= CityAccount::SIZE {
+                let city_data = unsafe { CityAccount::load(city_acc)? };
+                // Validate city matches player's current city
+                if city_data.city_id == player_data.current_city {
+                    let t = unsafe { CityAccount::terrain_from_account(city_acc) };
+                    if !t.anchors.is_empty() {
+                        let (ox, oy) = terrain::city_offset(
+                            terrain::to_grid(player_data.current_lat),
+                            terrain::to_grid(player_data.current_long),
+                            city_data.latitude,
+                            city_data.longitude,
+                        );
+                        let aff = terrain::terrain_affinity(&t, ox, oy);
+                        let bonus = match collection_type {
+                            CollectionType::Mining => aff.mining_bps,
+                            CollectionType::Fishing => aff.fishing_bps,
+                            _ => 0,
+                        };
+                        if bonus > 0 {
+                            let m = 10000u64 + bonus as u64;
+                            base_output.saturating_mul(m) / 10000
+                        } else {
+                            base_output
+                        }
+                    } else {
+                        base_output
+                    }
+                } else {
+                    base_output
+                }
+            } else {
+                base_output
+            }
+        } else {
+            base_output
+        }
+    };
 
     // 8a. Apply Time-of-Day Collection Bonus (DETERMINISTIC)
     // Each collection type has optimal times:
@@ -266,7 +347,7 @@ pub fn process(
     let time_activity = match collection_type {
         CollectionType::Cash => ActivityType::Collecting,
         CollectionType::Mining => ActivityType::Mining,
-        CollectionType::Fishing => ActivityType::Fishing,
+        CollectionType::Fishing | CollectionType::Farming => ActivityType::Fishing,
     };
 
     let time_adjusted_output = apply_time_multiplier(base_output, time_of_day, time_activity);
@@ -324,19 +405,25 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 11a. Actually BURN the NOVI tokens (SPL Token CPI)
-    // Create PDA signer for GameEngine (mint/burn authority)
-    let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+    // Player PDA owns the token account, so player is the burn authority
+    // Must drop player_data (LoadedMut) before CPI to release RefMut on player
+    let player_bump = player_data.bump;
+    drop(player_data); // Release RefMut so player can be passed to CPI
 
-    // Burn tokens from player's token account (permanently reduces supply)
+    let bump_seed = [player_bump];
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key(), owner.key(), &bump_seed);
+    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+
     crate::helpers::burn_tokens(
         player_token_account,
         novi_mint,
-        game_engine,
+        player,
         novi_amount,
-        &[signer],
+        &[player_signer],
     )?;
+
+    // Re-load player data after CPI (mutations from before drop are preserved in buffer)
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
 
     // 12. Transfer resources based on collection type
     // (clock already obtained above for time-of-day calculation)
@@ -379,12 +466,12 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
-            // Apply Workshop building bonus
+            // Apply Mine building bonus (split from Workshop)
             let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
-            let workshop_bonus = workshop_mining_bonus_bps(estate);
-            if workshop_bonus > 0 {
-                let workshop_multiplier = 10000u64 + workshop_bonus as u64;
-                buffed_output = buffed_output.saturating_mul(workshop_multiplier) / 10000;
+            let mine_bonus = mine_mining_bonus_bps(estate);
+            if mine_bonus > 0 {
+                let mine_multiplier = 10000u64 + mine_bonus as u64;
+                buffed_output = buffed_output.saturating_mul(mine_multiplier) / 10000;
             }
 
             player_data.gems = player_data.gems
@@ -436,6 +523,46 @@ pub fn process(
             // Hero collection_rate_bps also boosts fragment drops
             if player_data.has_fragment_drops {
                 let mut fragments = 1u64; // Deterministic: lower end of old 1-2 range (fishing less efficient)
+                if player_data.hero_collection_rate_bps > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                    fragments = fragments.saturating_mul(hero_multiplier) / 10000;
+                }
+                player_data.fragments = player_data.fragments
+                    .checked_add(fragments)
+                    .ok_or(GameError::MathOverflow)?;
+            }
+            buffed_output
+        },
+        CollectionType::Farming => {
+            // Apply research buff for farming output
+            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
+                let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+                base_output.saturating_mul(multiplier) / 10000
+            } else {
+                base_output
+            };
+
+            // Apply hero produce generation buff (multiplicative)
+            if player_data.hero_produce_generation_bps > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps as u64;
+                buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
+            }
+
+            // Apply Farm building bonus
+            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+            let farm_bonus = farm_produce_bonus_bps(estate);
+            if farm_bonus > 0 {
+                let farm_multiplier = 10000u64 + farm_bonus as u64;
+                buffed_output = buffed_output.saturating_mul(farm_multiplier) / 10000;
+            }
+
+            player_data.produce = player_data.produce
+                .checked_add(buffed_output)
+                .ok_or(GameError::MathOverflow)?;
+
+            // Deterministic fragment bonus (always award 1 fragment if unlocked)
+            if player_data.has_fragment_drops {
+                let mut fragments = 1u64;
                 if player_data.hero_collection_rate_bps > 0 {
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
@@ -497,7 +624,7 @@ pub fn process(
             program_id,
         )?;
 
-        let player_key = player.key();
+        let player_key = owner.key();
         let event_key = event.key();
 
         // DETERMINISTIC: Use exact resource value (no randomness)
@@ -548,6 +675,10 @@ pub fn process(
             (gems, frags)
         },
         CollectionType::Fishing => {
+            let frags = if player_data.has_fragment_drops { 1u16 } else { 0 };
+            (0, frags)
+        },
+        CollectionType::Farming => {
             let frags = if player_data.has_fragment_drops { 1u16 } else { 0 };
             (0, frags)
         },

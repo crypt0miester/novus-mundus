@@ -252,7 +252,7 @@ pub fn process(
                 program_id,
             )?;
 
-            let player_key = player.key();
+            let player_key = owner.key();
             let event_key = event.key();
 
             // DETERMINISTIC: Use exact cost value (no randomness)

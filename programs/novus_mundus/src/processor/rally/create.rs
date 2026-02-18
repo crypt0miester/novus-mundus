@@ -12,14 +12,19 @@ use crate::{
     error::GameError,
     state::{
         CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus,
-        TeamAccount, game_engine::RallyCaps, player::NULL_PUBKEY,
-        unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_RALLY,
+        TeamAccount, HeroTemplate, game_engine::RallyCaps, player::NULL_PUBKEY,
+        unlock_extension_if_eligible, require_extension, EXT_TEAM, EXT_RALLY,
+        calculate_weighted_power_for_level,
     },
     logic::{
         calculate_networth,
         location::calculate_intracity_travel_time,
     },
-    helpers::estate::{require_citadel, citadel_rally_capacity_bps, load_estate_for_player},
+    helpers::{
+        estate::{require_citadel, citadel_rally_capacity_bps, load_estate_for_player},
+        parse_hero_nft,
+        subtract_hero_buffs_from_player_with_location,
+    },
     validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::RallyCreated,
@@ -51,7 +56,7 @@ use crate::{
 /// # Building Bonuses
 /// Citadel provides rally capacity bonus: +2% per level (more participants allowed)
 ///
-/// # Instruction Data (107 bytes)
+/// # Instruction Data (108 bytes)
 /// - rally_id: u64 (8 bytes)
 /// - target: Pubkey (32 bytes)
 /// - target_type: u8 (1 byte) - 0=player, 1=encounter
@@ -64,25 +69,30 @@ use crate::{
 /// - ranged: u64 (8 bytes) - ranged weapons to commit
 /// - siege: u64 (8 bytes) - siege weapons to commit
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
+/// - hero_slot_index: u8 (1 byte) - 255=no hero, 0-2=commit hero from slot
+///
+/// # Optional Hero Accounts (when hero_slot_index != 255)
+/// 9. `[]` hero_mint: Hero NFT AssetV1 account
+/// 10. `[]` hero_template: HeroTemplate PDA
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts
-    let [
-        creator_player,
-        rally_account,
-        participant_account,
-        creator_owner,
-        game_engine,
-        rally_city_account,
-        system_program,
-        team_account,
-        estate_account,
-    ] = accounts else {
+    // 1. Parse Accounts (9 base, +2 optional for hero commitment)
+    if accounts.len() < 9 {
         return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    }
+
+    let creator_player = &accounts[0];
+    let rally_account = &accounts[1];
+    let participant_account = &accounts[2];
+    let creator_owner = &accounts[3];
+    let game_engine = &accounts[4];
+    let rally_city_account = &accounts[5];
+    let system_program = &accounts[6];
+    let team_account = &accounts[7];
+    let estate_account = &accounts[8];
 
     // 2. Validate Accounts
     require_signer(creator_owner)?;
@@ -92,8 +102,8 @@ pub fn process(
     require_writable(participant_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Parse Instruction Data (107 bytes minimum)
-    if instruction_data.len() < 107 {
+    // 3. Parse Instruction Data (108 bytes minimum)
+    if instruction_data.len() < 108 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -143,6 +153,7 @@ pub fn process(
         instruction_data[99], instruction_data[100], instruction_data[101], instruction_data[102],
         instruction_data[103], instruction_data[104], instruction_data[105], instruction_data[106],
     ]);
+    let hero_slot_index = instruction_data[107]; // 255 = no hero, 0-2 = commit hero from slot
 
     // 4. Validate inputs
     if target == NULL_PUBKEY {
@@ -171,7 +182,15 @@ pub fn process(
     // 6. Load GameEngine first (kingdom-scoped, needed for all subsequent loads)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
-    // 6a. Load Player and validate (kingdom-scoped)
+    // 6a. Check extensions and unlock RALLY before mutable load (avoids borrow conflict with resize)
+    {
+        let data = creator_player.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        require_extension(player, EXT_TEAM)?;
+    }
+    unlock_extension_if_eligible(creator_player, creator_owner, EXT_RALLY)?;
+
+    // 6b. Load Player and validate (kingdom-scoped)
     let mut creator = PlayerAccount::load_checked_mut(creator_player, game_engine.key(), creator_owner.key(), program_id)?;
 
     // Player must not be traveling
@@ -179,7 +198,7 @@ pub fn process(
         return Err(GameError::PlayerTraveling.into());
     }
 
-    // 6b. Validate Team Membership
+    // 6c. Validate Team Membership
     // Creator must be on a team to create a rally
     if creator.team == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
@@ -198,12 +217,6 @@ pub fn process(
 
     // Store team pubkey for rally
     let rally_team = creator.team;
-
-    // Prerequisite: EXT_INVENTORY must be unlocked
-    require_extension(&*creator, EXT_INVENTORY)?;
-
-    // Unlock EXT_RALLY if not already
-    unlock_extension_if_eligible(creator_player, creator_owner, &mut *creator, EXT_RALLY)?;
 
     // 6b. HARD GATE: Require Citadel to create rallies
     // Creating a rally requires Citadel (Estate Level 12+)
@@ -301,6 +314,62 @@ pub fn process(
     let participant_hero_crit_chance_bps = creator.hero_crit_chance_bps;
     let participant_equipped_weapon_bonus_bps = creator.equipped_weapon_bonus_bps;
 
+    // 10a. Hero commitment (optional)
+    let mut committed_hero = NULL_PUBKEY;
+    let mut hero_power_contribution: u64 = 0;
+
+    if hero_slot_index != 255 {
+        // Validate slot index
+        if hero_slot_index >= 3 {
+            return Err(GameError::InvalidParameter.into());
+        }
+        let slot = hero_slot_index as usize;
+
+        // Verify hero is locked in this slot
+        if creator.active_heroes[slot] == NULL_PUBKEY {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // Need hero_mint and hero_template accounts (accounts 9 and 10)
+        if accounts.len() < 11 {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        }
+        let hero_mint = &accounts[9];
+        let hero_template = &accounts[10];
+
+        // Verify mint matches player slot
+        if creator.active_heroes[slot] != *hero_mint.key() {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // Parse hero NFT
+        let nft_data = hero_mint.try_borrow_data()?;
+        let parsed_hero = parse_hero_nft(&nft_data)
+            .ok_or(GameError::InvalidParameter)?;
+        drop(nft_data);
+
+        // Load and verify template
+        let template_data = hero_template.try_borrow_data()?;
+        let template = unsafe { HeroTemplate::load(&template_data) };
+        if parsed_hero.template_id != template.template_id {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // Calculate hero power contribution
+        hero_power_contribution = calculate_weighted_power_for_level(parsed_hero.level, template) as u64;
+
+        // Subtract hero buffs from player (using stored location bonus)
+        let location_bonus = creator.slot_location_bonus[slot];
+        subtract_hero_buffs_from_player_with_location(&mut creator, parsed_hero.level, template, location_bonus);
+
+        drop(template_data);
+
+        // Clear player slot and location bonus
+        committed_hero = *hero_mint.key();
+        creator.active_heroes[slot] = NULL_PUBKEY;
+        creator.slot_location_bonus[slot] = 0;
+    }
+
     // 10. Deduct units and weapons from player
     creator.defensive_unit_1 = creator.defensive_unit_1.saturating_sub(units_1);
     creator.defensive_unit_2 = creator.defensive_unit_2.saturating_sub(units_2);
@@ -383,6 +452,7 @@ pub fn process(
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     *rally = RallyAccount {
+        account_key: crate::state::AccountKey::Rally as u8,
         // Kingdom reference
         game_engine: *game_engine.key(),
 
@@ -458,6 +528,7 @@ pub fn process(
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
     *participant = RallyParticipant {
+        account_key: crate::state::AccountKey::RallyParticipant as u8,
         rally_id,
         rally_creator: *creator_owner.key(),
         participant: *creator_owner.key(),
@@ -482,8 +553,8 @@ pub fn process(
         equipped_weapon_bonus_bps: participant_equipped_weapon_bonus_bps,
         _padding2: [0; 2],
 
-        hero: NULL_PUBKEY, // Hero locking is separate
-        hero_power_contribution: 0,
+        hero: committed_hero,
+        hero_power_contribution,
 
         travel_started_at: now,
         arrives_at_rally: leader_arrives_at,

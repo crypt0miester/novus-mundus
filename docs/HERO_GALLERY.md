@@ -70,9 +70,8 @@ Where φ (phi) = 1.618... (golden ratio), √φ ≈ 1.272
 
 | Tier | Mint Cost | Supply | Level Req | Typical Base Buffs |
 |------|-----------|--------|-----------|-------------------|
-| **Common** | 0.05 SOL | Unlimited | 1 | 300-500 bps |
-| **Uncommon** | 0.15 SOL | 50,000 | 10 | 500-800 bps |
-| **Rare** | 0.25 SOL | 10,000 | 25 | 800-1200 bps |
+| **Common** | 0.1 SOL | 4,000 | 1 | 300-500 bps |
+| **Rare** | 0.25 SOL | 2,000 | 25 | 800-1200 bps |
 | **Epic** | 1.0 SOL | 1,000 | 50 | 1200-2000 bps |
 | **Legendary** | 5.0 SOL | 100 | 75 | 2000-3000 bps |
 | **Mythic** | 10.0+ SOL | 10-50 | 100 | 3000+ bps |
@@ -1035,7 +1034,7 @@ HeroTemplate {
 | 0 | AttackPower | 1400 | Trident's fury |
 | 1 | DefensePower | 1200 | Ocean's embrace |
 | 2 | ResourceCapacity | 800 | Depths of wealth |
-| 3 | - | - | - |
+| 3 | FishingAffinity | 600 | Lord of the seas |
 
 ```rust
 HeroTemplate {
@@ -1054,7 +1053,7 @@ HeroTemplate {
         BuffConfig { stat: 1, base_bps: 1400, _reserved: [0; 2] },  // AttackPower
         BuffConfig { stat: 2, base_bps: 1200, _reserved: [0; 2] },  // DefensePower
         BuffConfig { stat: 9, base_bps: 800, _reserved: [0; 2] },   // ResourceCapacity
-        BuffConfig::NONE,
+        BuffConfig { stat: 18, base_bps: 600, _reserved: [0; 2] },  // FishingAffinity
     ],
     bump: 0,
     _padding: [0; 3],
@@ -1727,7 +1726,7 @@ HeroTemplate {
 | 0 | CashCollectionRate | 1000 | Merchant voyager |
 | 1 | LootBonus | 700 | Seven voyages |
 | 2 | ResourceCapacity | 400 | Ship's hold |
-| 3 | - | - | - |
+| 3 | FishingAffinity | 500 | Master of the seas |
 
 ```rust
 HeroTemplate {
@@ -1746,7 +1745,7 @@ HeroTemplate {
         BuffConfig { stat: 3, base_bps: 1000, _reserved: [0; 2] },  // CashCollectionRate
         BuffConfig { stat: 15, base_bps: 700, _reserved: [0; 2] },  // LootBonus
         BuffConfig { stat: 9, base_bps: 400, _reserved: [0; 2] },   // ResourceCapacity
-        BuffConfig::NONE,
+        BuffConfig { stat: 18, base_bps: 500, _reserved: [0; 2] },  // FishingAffinity
     ],
     bump: 0,
     _padding: [0; 3],
@@ -2492,9 +2491,9 @@ HeroTemplate {
 
 ---
 
-### Pepe
+### Degen
 
-> *"Feels good man."*
+> *"Few understand."*
 
 | Property | Value |
 |----------|-------|
@@ -2510,15 +2509,15 @@ HeroTemplate {
 **Buffs:**
 | Slot | Stat | Base BPS | Description |
 |------|------|----------|-------------|
-| 0 | LootBonus | 1000 | Meme magic |
-| 1 | CashCollectionRate | 700 | Viral wealth |
-| 2 | XpGain | 500 | Community power |
-| 3 | MiningAffinity | 800 | Meme coin mining |
+| 0 | LootBonus | 1000 | Alpha finder |
+| 1 | CashCollectionRate | 700 | Yield farming |
+| 2 | XpGain | 500 | On-chain grind |
+| 3 | MiningAffinity | 800 | MEV extraction |
 
 ```rust
 HeroTemplate {
     template_id: 152,
-    name: *b"Pepe\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+    name: *b"Degen\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
     hero_type: 2, // Economic
     category: 2,  // CryptoIcons
     mint_cost_sol: 250_000_000,
@@ -2997,15 +2996,15 @@ HeroTemplate {
 | **Mint Cost** | 1.0 SOL |
 | **Supply Cap** | 1,000 |
 | **Required Level** | 50 |
-| **Meditation City** | Moscow (ID: 6) |
+| **Meditation City** | Berlin (ID: 5) |
 
 **Buffs:**
 | Slot | Stat | Base BPS | Description |
 |------|------|----------|-------------|
-| 0 | AttackPower | 1800 | Berserker queen |
-| 1 | CriticalHitChance | 1200 | Storm fury |
+| 0 | AttackPower | 1600 | Berserker queen |
+| 1 | DefensePower | 800 | Storm shield |
 | 2 | StaminaRegen | 600 | Battle rage |
-| 3 | - | - | - |
+| 3 | CriticalHitChance | 500 | Lightning reflexes |
 
 ```rust
 HeroTemplate {
@@ -3019,12 +3018,12 @@ HeroTemplate {
     enabled: true,
     event_exclusive: false,
     required_player_level: 50,
-    meditation_city_id: 6, // Moscow (Oslo)
+    meditation_city_id: 5, // Berlin
     buffs: [
-        BuffConfig { stat: 1, base_bps: 1800, _reserved: [0; 2] },  // AttackPower
-        BuffConfig { stat: 7, base_bps: 1200, _reserved: [0; 2] },  // CriticalHitChance
+        BuffConfig { stat: 1, base_bps: 1600, _reserved: [0; 2] },  // AttackPower
+        BuffConfig { stat: 2, base_bps: 800, _reserved: [0; 2] },   // DefensePower
         BuffConfig { stat: 11, base_bps: 600, _reserved: [0; 2] },  // StaminaRegen
-        BuffConfig::NONE,
+        BuffConfig { stat: 7, base_bps: 500, _reserved: [0; 2] },   // CriticalHitChance
     ],
     bump: 0,
     _padding: [0; 3],
@@ -3438,7 +3437,7 @@ HeroTemplate {
 | **Mint Cost** | 1.0 SOL |
 | **Supply Cap** | 1,000 |
 | **Required Level** | 50 |
-| **Meditation City** | Cairo (ID: 8) |
+| **Meditation City** | Lagos (ID: 22) |
 
 **Buffs:**
 | Slot | Stat | Base BPS | Description |
@@ -3460,7 +3459,7 @@ HeroTemplate {
     enabled: true,
     event_exclusive: false,
     required_player_level: 50,
-    meditation_city_id: 8, // Cairo
+    meditation_city_id: 22, // Lagos
     buffs: [
         BuffConfig { stat: 1, base_bps: 1500, _reserved: [0; 2] },  // AttackPower
         BuffConfig { stat: 7, base_bps: 1200, _reserved: [0; 2] },  // CriticalHitChance
@@ -3487,7 +3486,7 @@ HeroTemplate {
 | **Mint Cost** | 0.25 SOL |
 | **Supply Cap** | 10,000 |
 | **Required Level** | 25 |
-| **Meditation City** | Cairo (ID: 8) |
+| **Meditation City** | Mumbai (ID: 13) |
 
 **Buffs:**
 | Slot | Stat | Base BPS | Description |
@@ -3509,7 +3508,7 @@ HeroTemplate {
     enabled: true,
     event_exclusive: false,
     required_player_level: 25,
-    meditation_city_id: 8, // Cairo
+    meditation_city_id: 13, // Mumbai
     buffs: [
         BuffConfig { stat: 3, base_bps: 1100, _reserved: [0; 2] },  // CashCollectionRate
         BuffConfig { stat: 12, base_bps: 700, _reserved: [0; 2] },  // ProduceGeneration
@@ -3670,6 +3669,55 @@ HeroTemplate {
 
 ---
 
+### Kai Tidecaller
+
+> *"The ocean provides for those who listen."*
+
+| Property | Value |
+|----------|-------|
+| **Template ID** | 281 |
+| **Type** | Economic |
+| **Category** | Original |
+| **Tier** | Epic |
+| **Mint Cost** | 1.0 SOL |
+| **Supply Cap** | 1,000 |
+| **Required Level** | 50 |
+| **Meditation City** | Shanghai (ID: 11) |
+
+**Buffs:**
+| Slot | Stat | Base BPS | Description |
+|------|------|----------|-------------|
+| 0 | FishingAffinity | 2000 | Master angler |
+| 1 | ProduceGeneration | 1000 | Ocean's bounty |
+| 2 | ResourceCapacity | 600 | Deep nets |
+| 3 | StaminaRegen | 400 | Patient fisherman |
+
+```rust
+HeroTemplate {
+    template_id: 281,
+    name: *b"Kai Tidecaller\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+    hero_type: 2, // Economic
+    category: 4,  // Original
+    mint_cost_sol: 1_000_000_000,
+    supply_cap: 1_000,
+    minted_count: 0,
+    enabled: true,
+    event_exclusive: false,
+    required_player_level: 50,
+    meditation_city_id: 11, // Shanghai
+    buffs: [
+        BuffConfig { stat: 18, base_bps: 2000, _reserved: [0; 2] }, // FishingAffinity
+        BuffConfig { stat: 12, base_bps: 1000, _reserved: [0; 2] }, // ProduceGeneration
+        BuffConfig { stat: 9, base_bps: 600, _reserved: [0; 2] },   // ResourceCapacity
+        BuffConfig { stat: 11, base_bps: 400, _reserved: [0; 2] },  // StaminaRegen
+    ],
+    bump: 0,
+    _padding: [0; 3],
+}
+```
+
+---
+
 ## Common Starter Heroes
 
 ### Roman Centurion
@@ -3819,28 +3867,128 @@ HeroTemplate {
 
 ---
 
+### Wandering Ronin
+
+> *"The masterless blade serves only justice."*
+
+| Property | Value |
+|----------|-------|
+| **Template ID** | 4 |
+| **Type** | Hybrid |
+| **Category** | Historical |
+| **Tier** | Common |
+| **Mint Cost** | 0.05 SOL |
+| **Supply Cap** | Unlimited |
+| **Required Level** | 1 |
+| **Meditation City** | Tokyo (ID: 9) |
+
+**Buffs:**
+| Slot | Stat | Base BPS | Description |
+|------|------|----------|-------------|
+| 0 | AttackPower | 400 | Ronin swordsmanship |
+| 1 | DefensePower | 300 | Battle-hardened |
+| 2 | - | - | - |
+| 3 | - | - | - |
+
+```rust
+HeroTemplate {
+    template_id: 4,
+    name: *b"Wandering Ronin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+    hero_type: 3, // Hybrid
+    category: 0,  // Historical
+    mint_cost_sol: 50_000_000,
+    supply_cap: 0, // Unlimited
+    minted_count: 0,
+    enabled: true,
+    event_exclusive: false,
+    required_player_level: 1,
+    meditation_city_id: 9, // Tokyo
+    buffs: [
+        BuffConfig { stat: 1, base_bps: 400, _reserved: [0; 2] },  // AttackPower
+        BuffConfig { stat: 2, base_bps: 300, _reserved: [0; 2] },  // DefensePower
+        BuffConfig::NONE,
+        BuffConfig::NONE,
+    ],
+    bump: 0,
+    _padding: [0; 3],
+}
+```
+
+---
+
+### Hana Luckbringer
+
+> *"Fortune favors the bold — but I make my own fortune."*
+
+| Property | Value |
+|----------|-------|
+| **Template ID** | 290 |
+| **Type** | Economic |
+| **Category** | Original |
+| **Tier** | Epic |
+| **Mint Cost** | 1.0 SOL |
+| **Supply Cap** | 1,000 |
+| **Required Level** | 50 |
+| **Meditation City** | Seoul (ID: 12) |
+
+**Buffs:**
+| Slot | Stat | Base BPS | Description |
+|------|------|----------|-------------|
+| 0 | LootBonus | 2000 | Treasure sense |
+| 1 | EncounterDamage | 800 | Opportunist strikes |
+| 2 | XpGain | 600 | Fast learner |
+| 3 | - | - | - |
+
+```rust
+HeroTemplate {
+    template_id: 290,
+    name: *b"Hana Luckbringer\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0",
+    hero_type: 2, // Economic
+    category: 4,  // Original
+    mint_cost_sol: 1_000_000_000,
+    supply_cap: 1_000,
+    minted_count: 0,
+    enabled: true,
+    event_exclusive: false,
+    required_player_level: 50,
+    meditation_city_id: 12, // Seoul
+    buffs: [
+        BuffConfig { stat: 10, base_bps: 2000, _reserved: [0; 2] },  // LootBonus
+        BuffConfig { stat: 14, base_bps: 800, _reserved: [0; 2] },   // EncounterDamage
+        BuffConfig { stat: 8, base_bps: 600, _reserved: [0; 2] },    // XpGain
+        BuffConfig::NONE,
+    ],
+    bump: 0,
+    _padding: [0; 3],
+}
+```
+
+---
+
 ## City Reference Table
 
 All heroes meditate in modern cities (IDs 1-24). Historical/mythological origins shown in parentheses.
 
 | City ID | City Name | Notable Heroes (Origin) |
 |---------|-----------|-------------------------|
-| 0 | Any | Satoshi Nakamoto, Diamond Hands, Pepe, Bored Ape, Wojak, Paper Hands |
+| 0 | Any | Satoshi Nakamoto, Diamond Hands, Degen, Bored Ape, Wojak, Paper Hands |
 | 1 | London | Robin Hood (Nottingham), Merlin (Camelot), William Wallace (Edinburgh), Nimue (Avalon), Mordred (Camelot), Gawain (Camelot), Maeve (Dublin) |
 | 2 | Paris | Napoleon, Joan of Arc (Orleans), El Cid (Burgos) |
 | 3 | Rome | Caesar, Roman Centurion, Marcus Aurelius Maximus |
 | 4 | Athens | Alexander (Pella), Leonidas (Sparta), Athena, Ares (Sparta), Zeus (Olympus), Poseidon (Atlantis), Kassandra (Delphi), Prometheus (Mount Caucasus) |
-| 6 | Moscow | Odin (Uppsala), Thor (Asgard), Viking Raider (Copenhagen), Attila (Pannonia), Beowulf (Geatland), Baba Yaga, Koschei, Ilya Muromets (Murom), Vasilisa, Dobrynya (Kiev), Bjorn, Astrid, Ragnar, Vladimir, Boris |
+| 5 | Berlin | Astrid Stormcaller |
+| 6 | Moscow | Odin (Uppsala), Thor (Asgard), Viking Raider (Copenhagen), Attila (Pannonia), Beowulf (Geatland), Baba Yaga, Koschei, Ilya Muromets (Murom), Vasilisa, Dobrynya (Kiev), Bjorn, Ragnar, Vladimir, Boris |
 | 7 | Istanbul | Theophilos (Constantinople), Nikephoros, Alexios, Heraclius (Constantinople), Chrysanthos |
 | 8 | Cairo | Cleopatra (Alexandria), Hannibal (Carthage), Ra (Heliopolis), Anubis (Memphis) |
-| 9 | Tokyo | Musashi (Kyoto), Tomoe Gozen (Kyoto), Amaterasu (Takamagahara), Akira |
+| 9 | Tokyo | Musashi (Kyoto), Tomoe Gozen (Kyoto), Amaterasu (Takamagahara), Akira, Wandering Ronin |
 | 10 | Beijing | Genghis Khan (Karakorum), Sun Tzu (Suzhou), Silk Road Merchant (Xi'an), Hua Mulan, Zhuge Liang, Li Wei |
-| 11 | Shanghai | Sun Wukong (Flower Fruit Mountain) |
+| 11 | Shanghai | Sun Wukong (Flower Fruit Mountain), Kai Tidecaller |
+| 12 | Seoul | Hana Luckbringer |
+| 13 | Mumbai | Layla Goldweaver |
 | 15 | Dubai | Khalid (Mecca), Rashid (Mecca), Omar (Medina) |
 | 16 | Baghdad | Gilgamesh (Uruk), Sinbad, Scheherazade, Aladdin, Ali Baba |
-| 17 | Tehran | Rostam (Sistan), Shirin (Ctesiphon) |
 | 18 | Mexico City | Quetzalcoatl (Tenochtitlan) |
-| 22 | Lagos | Zara, Layla |
+| 22 | Lagos | Zara Moonblade |
 
 ---
 
@@ -3868,7 +4016,6 @@ When creating a new hero template:
 | Tier | Primary Buff | Secondary Buff | Tertiary Buff | Quaternary Buff |
 |------|--------------|----------------|---------------|-----------------|
 | Common | 400-500 | 200-300 | - | - |
-| Uncommon | 600-800 | 400-500 | 200-300 | - |
 | Rare | 800-1200 | 500-800 | 300-500 | - |
 | Epic | 1400-2000 | 800-1200 | 500-800 | 300-500 |
 | Legendary | 2000-2500 | 1200-1500 | 800-1000 | 500-800 |

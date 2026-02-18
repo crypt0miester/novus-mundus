@@ -388,7 +388,7 @@ pub fn process(
         let hero_mint = &accounts[4];
         let hero_collection = &accounts[5];
         let system_program = &accounts[6];
-        let _p_core_program = &accounts[7];
+        let p_core_program = &accounts[7];
 
         // Verify hero mint matches what was stored
         if hero_mint.key() != &hero_mint_key {
@@ -412,11 +412,11 @@ pub fn process(
         p_core::instructions::TransferV1 {
             asset: hero_mint,
             collection: hero_collection,
-            current_owner: expedition_account,
             new_owner: owner,
             payer: owner,
             authority: expedition_account,
             system_program,
+            log_wrapper: p_core_program,
         }.invoke_signed(&[expedition_signer])?;
     }
 

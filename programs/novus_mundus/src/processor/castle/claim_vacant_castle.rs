@@ -61,13 +61,13 @@ pub fn process(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Parse instruction data
-    if instruction_data.len() < 6 {
+    // Parse instruction data (discriminator already stripped by entry point)
+    if instruction_data.len() < 4 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let castle_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
+    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
 
     // Verify player account ownership
     require_owner(player_account, program_id)?;
@@ -162,6 +162,7 @@ pub fn process(
         let mut registry_data = king_registry_account.try_borrow_mut_data()?;
         let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
 
+        registry.account_key = crate::state::AccountKey::KingRegistry as u8;
         registry.king = *player_account.key();
         registry.bump = registry_bump;
         registry.castle_count = 0;

@@ -39,7 +39,7 @@ use crate::{
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 5 {
@@ -58,9 +58,6 @@ pub fn process(
     }
 
     // Parse instruction data (only discriminator needed, city_id/castle_id from account)
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
 
     // Load player
     require_owner(player_account, program_id)?;

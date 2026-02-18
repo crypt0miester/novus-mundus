@@ -30,7 +30,7 @@ use crate::{
 ///
 /// # Requirements
 /// - Both players must be on the same team
-/// - Both accounts must be 7+ days old
+/// - Both accounts must meet minimum age (GameCaps.min_account_age_for_events)
 /// - Sender must have active subscription (Expert+)
 /// - Sender must have sufficient cash
 /// - Sender must not exceed daily transfer limits
@@ -129,13 +129,13 @@ pub fn process(
     // 7. Validate Account Age (7+ days for both)
     // ============================================================
 
-    const MIN_ACCOUNT_AGE_SECONDS: i64 = 7 * 24 * 60 * 60; // 7 days
+    let min_account_age = game_engine.caps.min_account_age_for_events;
 
-    if now - sender_player.created_at < MIN_ACCOUNT_AGE_SECONDS {
+    if now - sender_player.created_at < min_account_age {
         return Err(GameError::AccountTooNew.into());
     }
 
-    if now - receiver_player.created_at < MIN_ACCOUNT_AGE_SECONDS {
+    if now - receiver_player.created_at < min_account_age {
         return Err(GameError::AccountTooNew.into());
     }
 

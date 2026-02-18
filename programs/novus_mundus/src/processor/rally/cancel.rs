@@ -32,7 +32,7 @@ use crate::{
 /// # Accounts
 /// 0. `[WRITE]` rally_account: RallyAccount
 /// 1. `[WRITE]` creator_participant: Creator's RallyParticipant
-/// 2. `[]` creator_player: Creator's PlayerAccount
+/// 2. `[WRITE]` creator_player: Creator's PlayerAccount
 /// 3. `[SIGNER]` creator_owner: Creator's wallet
 /// 4. `[]` rally_city_account: CityAccount for rally city (for return travel calculation)
 ///
@@ -58,6 +58,7 @@ pub fn process(
     require_signer(creator_owner)?;
     require_writable(rally_account)?;
     require_writable(creator_participant)?;
+    require_writable(creator_player)?;
 
     // 3. Load Clock
     let clock = Clock::get()?;
@@ -153,6 +154,16 @@ pub fn process(
     participant.return_started_at = now;
     participant.return_duration = leader_return_duration;
     participant.included_in_march = false;
+
+    // 11. Decrement creator's rally counter so they aren't blocked from
+    //     travel/dungeon/PvP while waiting for process_return.
+    //     process_return will NOT re-decrement because it checks
+    //     `participant.included_in_march` which we set to false above.
+    drop(participant_data_ref);
+    let mut creator_data = creator_player.try_borrow_mut_data()?;
+    let creator = unsafe { PlayerAccount::load_mut(&mut creator_data) };
+    creator.rally_stats.current_rallies_joined = creator.rally_stats.current_rallies_joined.saturating_sub(1);
+    drop(creator_data);
 
     // Emit RallyCancelled event
     // Note: team_name not available here - would need to pass team account

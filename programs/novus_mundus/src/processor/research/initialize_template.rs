@@ -137,6 +137,7 @@ pub fn process(
     let mut template_data = research_template.try_borrow_mut_data()?;
     let template = unsafe { ResearchTemplate::load_mut(&mut template_data) };
 
+    template.account_key = crate::state::AccountKey::ResearchTemplate as u8;
     template.research_type = research_type;
     template.category = category;
     template.max_level = max_level;

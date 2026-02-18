@@ -103,22 +103,22 @@ pub fn process(
 
     let return_travel_time_seconds = (total_duration as f64 * progress) as i64;
 
-    // 9. Handle Destination Location
+    // 9. Validate Destination Location
     //
     // Two cases:
-    // A) We still own the destination - close it and refund
+    // A) We still own the destination - close it and refund (deferred until after CPI)
     // B) We were bumped - destination is gone or owned by someone else
 
     let dest_grid_lat = LocationAccount::to_grid(player_data.traveling_to_lat);
     let dest_grid_long = LocationAccount::to_grid(player_data.traveling_to_long);
 
     let city_bytes = player_data.current_city.to_le_bytes();
-    let dest_lat_bytes = dest_grid_lat.to_le_bytes();
-    let dest_long_bytes = dest_grid_long.to_le_bytes();
 
-    let (expected_dest_pda, _) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &city_bytes, &dest_lat_bytes, &dest_long_bytes],
-        program_id,
+    let (expected_dest_pda, _) = LocationAccount::derive_pda(
+        &player_data.game_engine,
+        player_data.current_city,
+        dest_grid_lat,
+        dest_grid_long,
     );
 
     if dest_location_account.key() != &expected_dest_pda {
@@ -127,6 +127,7 @@ pub fn process(
 
     let dest_location_len = dest_location_account.data_len();
     let mut was_bumped = false;
+    let mut should_close_dest = false;
 
     if dest_location_len > 0 {
         // Destination exists - check if we own it
@@ -134,23 +135,11 @@ pub fn process(
         let dest_location = unsafe { LocationAccount::load(&dest_data) };
 
         if dest_location.is_occupied_by(player_account.key()) {
-            // We own it - close and refund
-            drop(dest_data);
-
-            // Validate refund recipient
-            let dest_creator: Pubkey;
-            {
-                let data = dest_location_account.try_borrow_data()?;
-                let loc = unsafe { LocationAccount::load(&data) };
-                dest_creator = loc.location_creator;
-            }
-
-            if dest_creator_refund.key() != &dest_creator {
+            // We own it - validate refund recipient now, close after CPI
+            if dest_creator_refund.key() != &dest_location.location_creator {
                 return Err(GameError::InvalidParameter.into());
             }
-
-            // Close destination location (refund rent to creator)
-            close_account(dest_location_account, dest_creator_refund)?;
+            should_close_dest = true;
         } else {
             // We don't own it - we were bumped
             was_bumped = true;
@@ -161,6 +150,8 @@ pub fn process(
     }
 
     // 10. Reserve Return Location (origin position)
+    // NOTE: CreateAccount CPI must happen BEFORE close_account's unsafe lamport
+    // manipulation, otherwise the runtime's balance tracking gets confused.
 
     let return_grid_lat = LocationAccount::to_grid(player_data.current_lat);
     let return_grid_long = LocationAccount::to_grid(player_data.current_long);
@@ -168,9 +159,11 @@ pub fn process(
     let return_lat_bytes = return_grid_lat.to_le_bytes();
     let return_long_bytes = return_grid_long.to_le_bytes();
 
-    let (expected_return_pda, return_bump) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &city_bytes, &return_lat_bytes, &return_long_bytes],
-        program_id,
+    let (expected_return_pda, return_bump) = LocationAccount::derive_pda(
+        &player_data.game_engine,
+        player_data.current_city,
+        return_grid_lat,
+        return_grid_long,
     );
 
     if return_location_account.key() != &expected_return_pda {
@@ -185,8 +178,10 @@ pub fn process(
         let lamports = rent.minimum_balance(LocationAccount::LEN);
 
         let bump_seed = [return_bump];
+        let ge_bytes = player_data.game_engine;
         let location_seeds = pinocchio::seeds!(
             LOCATION_SEED,
+            &ge_bytes,
             &city_bytes,
             &return_lat_bytes,
             &return_long_bytes,
@@ -205,6 +200,7 @@ pub fn process(
         let mut return_data = return_location_account.try_borrow_mut_data()?;
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
 
+        return_location.account_key = crate::state::AccountKey::Location as u8;
         return_location.grid_lat = return_grid_lat;
         return_location.grid_long = return_grid_long;
         return_location.city_id = player_data.current_city;
@@ -233,6 +229,12 @@ pub fn process(
         return_location.occupied_since = now;
         return_location.location_creator = *owner.key();
         return_location.reserved_arrival_time = now + return_travel_time_seconds;
+    }
+
+    // 10b. Close Destination Location (deferred from step 9)
+    // This uses unsafe lamport manipulation, so it MUST happen after all CPIs
+    if should_close_dest {
+        close_account(dest_location_account, dest_creator_refund)?;
     }
 
     // 11. Update Player Travel State

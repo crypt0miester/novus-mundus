@@ -11,7 +11,6 @@ use crate::{
     error::GameError,
     events::IntracityTravelCompleted,
     state::{PlayerAccount, CityAccount, LocationAccount},
-    constants::LOCATION_SEED,
     types::TravelType,
     validation::require_owner,
 };
@@ -89,13 +88,11 @@ pub fn process(
 
     // 9. Validate Destination Location PDA
 
-    let city_bytes = player_data.current_city.to_le_bytes();
-    let lat_bytes = dest_grid_lat.to_le_bytes();
-    let long_bytes = dest_grid_long.to_le_bytes();
-
-    let (expected_location_pda, _) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
-        program_id,
+    let (expected_location_pda, _) = LocationAccount::derive_pda(
+        &player_data.game_engine,
+        player_data.current_city,
+        dest_grid_lat,
+        dest_grid_long,
     );
 
     if destination_location_account.key() != &expected_location_pda {

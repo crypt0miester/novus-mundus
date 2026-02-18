@@ -182,3 +182,34 @@ impl Event for EstateDailyClaimed {
         offset
     }
 }
+
+/// Emitted when wounded troops are recovered via Infirmary
+pub struct TroopsRecovered {
+    /// Player account pubkey (not wallet)
+    pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
+    /// Unit type recovered (UnitType enum)
+    pub unit_type: u8,
+    /// Number of units recovered
+    pub amount: u64,
+    /// NOVI spent on recovery
+    pub novi_spent: u64,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for TroopsRecovered {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:TroopsRecovered");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
+        offset += self.unit_type.pack(&mut buf[offset..]);
+        offset += self.amount.pack(&mut buf[offset..]);
+        offset += self.novi_spent.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}

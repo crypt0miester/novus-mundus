@@ -48,8 +48,6 @@ pub fn process(
     let _caller = &accounts[0];
     let castle_account = &accounts[1];
 
-    // No instruction data parameters needed (city_id/castle_id from account)
-
     // Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;

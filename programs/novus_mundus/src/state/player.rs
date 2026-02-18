@@ -5,6 +5,7 @@ use pinocchio::{
     sysvars::{Sysvar, rent::Rent},
     ProgramResult,
 };
+use pinocchio_system;
 use crate::constants::{PLAYER_SEED, USER_SEED};
 
 // Re-export InventoryItem from inventory module to avoid duplication
@@ -29,7 +30,7 @@ pub const EXT_COURT: u32      = 1 << 6;  // 0x0040 - Castle court membership
 // ============================================================
 // NOTE: These values are verified by compile-time assertions at the end of this file.
 // If a struct changes, the build will fail until these constants are updated.
-pub const CORE_SIZE: usize = 1048;      // PlayerCore size (verified by static assertion) - includes game_engine (32 bytes) + reinforcement aggregates (72 bytes)
+pub const CORE_SIZE: usize = 1056;      // PlayerCore size (verified by static assertion) - includes account_key + game_engine (32 bytes) + reinforcement aggregates (72 bytes)
 pub const RESEARCH_SIZE: usize = 96;    // ResearchSection size
 pub const HEROES_SIZE: usize = 130;     // HeroesSection size
 pub const INVENTORY_SIZE: usize = 424;  // InventorySection size (verified by static assertion)
@@ -55,6 +56,9 @@ pub const MAX_SIZE: usize = COURT_OFFSET + COURT_SIZE;                  // 1946
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PlayerCore {
+    /// Account discriminator (AccountKey::Player)
+    pub account_key: u8,
+
     // Kingdom Reference (32 bytes)
     pub game_engine: Pubkey,                // 32 - Which kingdom this player belongs to
 
@@ -358,6 +362,7 @@ impl PlayerCore {
     /// Initialize with default values
     pub fn init(game_engine: Pubkey, owner: Pubkey, created_at: i64, bump: u8) -> Self {
         Self {
+            account_key: crate::state::AccountKey::Player as u8,
             game_engine,
             owner,
             created_at,
@@ -588,6 +593,7 @@ impl PlayerCore {
         protection_duration: i64,
     ) -> Self {
         Self {
+            account_key: crate::state::AccountKey::Player as u8,
             game_engine,
             owner,
             created_at,
@@ -602,28 +608,28 @@ impl PlayerCore {
 
             extensions: 0, // No sections unlocked initially
 
-            // Starter resources: 100 Locked NOVI for immediate gameplay (1 decimal)
-            locked_novi: 1000,
+            // Starter resources for immediate gameplay
+            locked_novi: crate::constants::STARTER_LOCKED_NOVI,
             last_updated_tokens_at: created_at,
 
-            // Starter units: 10 each of basic defensive and operative
-            defensive_unit_1: 10,
-            defensive_unit_2: 0,
-            defensive_unit_3: 0,
-            operative_unit_1: 10,
-            operative_unit_2: 0,
-            operative_unit_3: 0,
+            // Starter units (~164M networth)
+            defensive_unit_1: 10_000,
+            defensive_unit_2: 4_000,
+            defensive_unit_3: 2_000,
+            operative_unit_1: 10_000,
+            operative_unit_2: 4_000,
+            operative_unit_3: 1_000,
 
-            // Starter equipment: basic loadout
-            melee_weapons: 3,
-            ranged_weapons: 2,
-            siege_weapons: 0,
-            armor_pieces: 2,
-            produce: 20,
-            vehicles: 0,
+            // Starter equipment (~156M networth)
+            melee_weapons: 8_000,
+            ranged_weapons: 4_000,
+            siege_weapons: 2_000,
+            armor_pieces: 8_000,
+            produce: 50_000,
+            vehicles: 500,
 
-            // Starter cash
-            cash_on_hand: 1000,
+            // Starter cash (130M networth)
+            cash_on_hand: 130_000_000,
             cash_in_vault: 0,
 
             happiness_defensive: 1.0,
@@ -661,7 +667,7 @@ impl PlayerCore {
 
             current_event: 0,
 
-            gems: 0,
+            gems: 10000,
             fragments: 0,
 
             total_attacks: 0,
@@ -1306,12 +1312,13 @@ pub fn resize_player_account(
     let required_lamports = rent.minimum_balance(new_size);
     let lamports_needed = required_lamports.saturating_sub(current_lamports);
 
-    // Transfer lamports from payer if needed
+    // Transfer lamports from payer via system program CPI
     if lamports_needed > 0 {
-        unsafe {
-            *payer.borrow_mut_lamports_unchecked() -= lamports_needed;
-            *account.borrow_mut_lamports_unchecked() += lamports_needed;
-        }
+        pinocchio_system::instructions::Transfer {
+            from: payer,
+            to: account,
+            lamports: lamports_needed,
+        }.invoke()?;
     }
 
     // Resize the account
@@ -1384,15 +1391,18 @@ pub fn ensure_extension(
 
 /// Get the prerequisite extension for a given extension
 /// Returns None if no prerequisite (EXT_RESEARCH is the first unlock)
+///
+/// User journey unlock order:
+/// RESEARCH → INVENTORY → TEAM → RALLY → HEROES → COSMETICS → COURT
 pub fn prerequisite_for_extension(ext: u32) -> Option<u32> {
     match ext {
-        EXT_RESEARCH => None,              // First unlock, no prereq
-        EXT_HEROES => Some(EXT_RESEARCH),  // Must have research first
-        EXT_INVENTORY => Some(EXT_HEROES), // Must have heroes first
-        EXT_RALLY => Some(EXT_INVENTORY),  // Must have inventory first
-        EXT_TEAM => Some(EXT_RALLY),       // Must have rally first
-        EXT_COSMETICS => Some(EXT_TEAM),   // Must have team first
-        EXT_COURT => Some(EXT_COSMETICS),  // Must have cosmetics first
+        EXT_RESEARCH => None,                // First unlock, no prereq
+        EXT_INVENTORY => Some(EXT_RESEARCH), // Must have research first
+        EXT_TEAM => Some(EXT_INVENTORY),     // Must have inventory first
+        EXT_RALLY => Some(EXT_TEAM),         // Must have team first
+        EXT_HEROES => Some(EXT_RALLY),       // Must have rally first
+        EXT_COSMETICS => Some(EXT_HEROES),   // Must have heroes first
+        EXT_COURT => Some(EXT_COSMETICS),    // Must have cosmetics first
         _ => None,
     }
 }
@@ -1402,11 +1412,11 @@ pub fn extension_prerequisite_error(ext: u32) -> crate::error::GameError {
     use crate::error::GameError;
     match ext {
         EXT_RESEARCH => GameError::ExtensionPrerequisiteNotMet, // Should never happen
-        EXT_HEROES => GameError::ResearchNotUnlocked,
-        EXT_INVENTORY => GameError::HeroesNotUnlocked,
-        EXT_RALLY => GameError::InventoryNotUnlocked,
-        EXT_TEAM => GameError::RallyNotUnlocked,
-        EXT_COSMETICS => GameError::TeamNotUnlocked,
+        EXT_INVENTORY => GameError::ResearchNotUnlocked,
+        EXT_TEAM => GameError::InventoryNotUnlocked,
+        EXT_RALLY => GameError::TeamNotUnlocked,
+        EXT_HEROES => GameError::RallyNotUnlocked,
+        EXT_COSMETICS => GameError::HeroesNotUnlocked,
         EXT_COURT => GameError::CosmeticsNotUnlocked,
         _ => GameError::ExtensionPrerequisiteNotMet,
     }
@@ -1425,31 +1435,43 @@ pub fn can_unlock_extension(player: &PlayerCore, ext: u32) -> bool {
 /// - Ok(true) if extension was newly unlocked
 /// - Ok(false) if extension was already unlocked
 /// - Err if prerequisite not met
+/// Unlock an extension on a player account, handling borrow management and resize internally.
+///
+/// IMPORTANT: The caller must NOT hold any active borrows on `account` when calling this.
+/// This function manages its own borrows to avoid conflicts with resize.
 pub fn unlock_extension_if_eligible(
     account: &AccountInfo,
     payer: &AccountInfo,
-    player: &mut PlayerCore,
     ext: u32,
 ) -> Result<bool, ProgramError> {
-    // Already unlocked?
-    if player.extensions & ext != 0 {
-        return Ok(false);
-    }
+    // 1. Check current state (scoped borrow)
+    let new_extensions = {
+        let data = account.try_borrow_data()?;
+        let player = unsafe { PlayerCore::load(&data) };
 
-    // Check prerequisite
-    if !can_unlock_extension(player, ext) {
-        return Err(extension_prerequisite_error(ext).into());
-    }
+        // Already unlocked?
+        if player.extensions & ext != 0 {
+            return Ok(false);
+        }
 
-    // Calculate new size with this extension
-    let new_extensions = player.extensions | ext;
+        // Check prerequisite
+        if !can_unlock_extension(player, ext) {
+            return Err(extension_prerequisite_error(ext).into());
+        }
+
+        player.extensions | ext
+    }; // borrow dropped here
+
+    // 2. Resize if needed (no active borrows)
     let new_size = size_for_extensions(new_extensions);
-
-    // Resize if needed
     resize_player_account(account, payer, new_size)?;
 
-    // Update extensions flag
-    player.extensions = new_extensions;
+    // 3. Re-borrow and update extensions flag
+    {
+        let mut data = account.try_borrow_mut_data()?;
+        let player = unsafe { PlayerCore::load_mut(&mut data) };
+        player.extensions = new_extensions;
+    }
 
     Ok(true)
 }
@@ -2027,6 +2049,9 @@ impl PlayerCore {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct UserAccount {
+    /// Account discriminator (AccountKey::User)
+    pub account_key: u8,
+
     pub owner: Pubkey,
     pub player: Pubkey,
     pub bump: u8,
@@ -2123,6 +2148,7 @@ impl UserAccount {
 
     pub fn init(owner: Pubkey, player: Pubkey, bump: u8) -> Self {
         Self {
+            account_key: crate::state::AccountKey::User as u8,
             owner,
             player,
             bump,

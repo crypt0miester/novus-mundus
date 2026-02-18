@@ -102,7 +102,7 @@ pub fn process(
     // SECURITY: Verify token account belongs to the UserAccount PDA
     crate::helpers::validate_token_account_owner(user_novi_ata, user.key())?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.key(), owner.key()], program_id)?;
     let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
 
     // 3. Parse instruction data
@@ -281,8 +281,9 @@ pub fn process(
     // 13a. Mint reserved NOVI to user account (if any)
     if tier.novi > 0 {
         // Create PDA signer for GameEngine (mint authority)
+        let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
+        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let signer = pinocchio::instruction::Signer::from(&seeds);
 
         // Mint NOVI tokens directly to user's token account

@@ -11,7 +11,7 @@ use crate::{
     error::GameError,
     state::{
         PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY,
-        unlock_extension_if_eligible, require_extension, EXT_RALLY, EXT_TEAM,
+        unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_TEAM,
     },
     constants::TEAM_SLOT_SEED,
     validation::{require_signer, require_writable, require_key_match, require_empty},
@@ -69,29 +69,28 @@ pub fn process(
     require_writable(member_slot_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 4. Load Accounts (using by_key for kingdom scoping validation)
-
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    // Verify owner matches
-    if &player.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
+    // 4. Pre-checks and extension unlock (before mutable load to avoid borrow conflict)
+    {
+        let data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        if &player.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        require_extension(player, EXT_INVENTORY)?;
     }
+    unlock_extension_if_eligible(player_account, owner, EXT_TEAM)?;
+
+    // 4a. Load Accounts mutably (using by_key for kingdom scoping validation)
+    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
-    // Verify team_id matches
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
 
-    // 4a. Verify same kingdom (player and team must be in same kingdom)
+    // Verify same kingdom (player and team must be in same kingdom)
     if player.game_engine != team.game_engine {
         return Err(GameError::KingdomMismatch.into());
     }
-
-    // 4b. PREREQUISITE: Require EXT_RALLY to be unlocked before teams
-    require_extension(&*player, EXT_RALLY)?;
-
-    // 4b. Unlock EXT_TEAM extension if not already unlocked
-    unlock_extension_if_eligible(player_account, owner, &mut *player, EXT_TEAM)?;
 
     // 5. Validate Player Can Join
 

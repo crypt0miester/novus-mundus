@@ -4,10 +4,10 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{PLAYER_SEED, GAME_ENGINE_SEED, LOCATION_SEED, STARTER_LOCKED_NOVI},
+    constants::{PLAYER_SEED, GAME_ENGINE_SEED, LOCATION_SEED, STARTER_LOCKED_NOVI, USER_SEED},
     error::GameError,
     state::{PlayerAccount, GameEngine, CityAccount, LocationAccount},
-    validation::{require_signer, require_writable, require_key_match, require_owner},
+    validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
     token_helpers::get_or_create_associated_token_account,
     helpers::mint_tokens,
     emit,
@@ -45,9 +45,10 @@ use crate::{
 /// 5. `[]` novi_mint - NOVI token mint
 /// 6. `[writable]` starting_city - CityAccount where player starts
 /// 7. `[writable]` spawn_location - LocationAccount for spawn cell
-/// 8. `[]` system_program - System program for account creation
-/// 9. `[]` token_program - SPL Token program
-/// 10. `[]` associated_token_program - Associated Token program
+/// 8. `[]` user - User account PDA ([b"user", owner.key()]) - must be created first
+/// 9. `[]` system_program - System program for account creation
+/// 10. `[]` token_program - SPL Token program
+/// 11. `[]` associated_token_program - Associated Token program
 ///
 /// # Instruction Data
 /// [0..2] starting_city_id: u16 (little-endian) - City ID where player spawns
@@ -82,6 +83,7 @@ pub fn process(
         novi_mint,
         starting_city,
         spawn_location,
+        user,
         system_program,
         token_program,
         _associated_token_program,
@@ -116,6 +118,20 @@ pub fn process(
 
     // Verify system program
     require_key_match(system_program, &pinocchio_system::ID)?;
+
+    // Verify user account exists and matches expected PDA
+    let (expected_user, _user_bump) = derive_pda(
+        &[USER_SEED, owner.key()],
+        program_id,
+    );
+    if user.key() != &expected_user {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    // User account must already be created (non-zero data)
+    if user.data_len() == 0 {
+        return Err(GameError::UserAccountNotCreated.into());
+    }
+    require_owner(user, program_id)?;
 
     // City must be owned by this program
     require_owner(starting_city, program_id)?;
@@ -175,6 +191,19 @@ pub fn process(
         let dist_km = ((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0)).sqrt();
         if dist_km > city_data.radius_km as f64 {
             return Err(GameError::OutOfRange.into());
+        }
+    }
+
+    // Validate spawn location is passable terrain (not water or mountain)
+    {
+        let spawn_grid_lat = crate::state::LocationAccount::to_grid(spawn_lat);
+        let spawn_grid_long = crate::state::LocationAccount::to_grid(spawn_long);
+        let (ox, oy) = crate::logic::terrain::city_offset(
+            spawn_grid_lat, spawn_grid_long,
+            city_data.latitude, city_data.longitude,
+        );
+        if !city_data.is_terrain_passable(starting_city, ox, oy) {
+            return Err(GameError::TerrainImpassable.into());
         }
     }
 
@@ -243,6 +272,11 @@ pub fn process(
         let cell_center_long = LocationAccount::from_grid(spawn_grid_long);
         player_data.current_lat = cell_center_lat;
         player_data.current_long = cell_center_long;
+
+        // Calculate initial networth from starter assets
+        player_data.networth = crate::logic::calculate_networth(
+            player_data, &game_engine_data.economic_config
+        )?;
     }
     // player_data_ref dropped here — required before CPIs that touch player account
 

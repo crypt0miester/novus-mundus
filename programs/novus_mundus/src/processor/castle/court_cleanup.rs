@@ -59,11 +59,11 @@ pub fn process(
     let rent_recipient = &accounts[4];
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 3 {
+    if instruction_data.len() < 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let position = instruction_data[2];
+    let position = instruction_data[0];
 
     // Validate position (0-4 for 5 court position types)
     if position > 4 {

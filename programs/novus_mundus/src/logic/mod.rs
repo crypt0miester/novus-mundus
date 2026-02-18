@@ -14,6 +14,7 @@ pub mod stamina;
 pub mod progression;
 pub mod rewards;
 pub mod time_cycle;
+pub mod terrain;
 
 // Re-export all logic modules for convenience
 // Some may not be used directly in on-chain code but are part of the public API
@@ -31,3 +32,5 @@ pub use stamina::*;
 pub use progression::*;
 pub use rewards::*;
 pub use time_cycle::*;
+#[allow(unused_imports)]
+pub use terrain::*;

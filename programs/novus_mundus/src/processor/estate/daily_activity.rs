@@ -68,14 +68,30 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
         BuildingType::Treasury => &[TimeWindow::Dusk],
         BuildingType::Citadel => &[TimeWindow::Dusk],
 
+        // Expansion buildings
+        BuildingType::Camp => &[TimeWindow::Dawn],                         // Military, like Barracks
+        BuildingType::Mine => &[TimeWindow::Dawn, TimeWindow::Midday],     // Like Workshop
+        BuildingType::Farm => &[TimeWindow::Dawn, TimeWindow::Midday],     // Morning chores
+        BuildingType::Catacombs => &[TimeWindow::Dusk],                    // Nighttime exploration
+        BuildingType::Stables => &[TimeWindow::Midday],                    // Midday travel prep
+        BuildingType::Infirmary => &[TimeWindow::Dusk],                    // Evening care
+
         // Mansion handled by daily_claim.rs (any time)
         BuildingType::Mansion => &[],
     }
 }
 
 /// Get the bitflag for a building type (1 << building_type)
+/// Returns 0 for buildings >= 16 (tracked via expansion_daily instead)
 fn building_bitflag(building_type: BuildingType) -> u16 {
-    1u16 << (building_type as u8)
+    let bit = building_type as u8;
+    if bit >= 16 { 0 } else { 1u16 << bit }
+}
+
+/// Get the expansion bitflag for buildings 16+ (bit 0 = type 16, bit 1 = type 17, etc.)
+fn expansion_bitflag(building_type: BuildingType) -> u8 {
+    let bit = building_type as u8;
+    if bit < 16 { 0 } else { 1u8 << (bit - 16) }
 }
 
 // ============================================================
@@ -198,6 +214,10 @@ pub fn process(
         estate_data.market_discount_bps = 0;
         estate_data.blessed_hero = Pubkey::default();
         estate_data.citadel_stance = 0;
+        estate_data.camp_discount_bps = 0;
+        estate_data.stables_speed_bps = 0;
+        estate_data.infirmary_recovery_daily_bps = 0;
+        estate_data.expansion_daily = 0;
         // Reset daily buffs (player)
         player_data.blessed_hero_bonus_bps = 0;
     }
@@ -218,11 +238,17 @@ pub fn process(
 
     // 11. Check if building already completed in this window
     let building_bit = building_bitflag(building_type);
-    let already_completed = match current_window {
-        TimeWindow::Dawn => (estate_data.dawn_buildings & building_bit) != 0,
-        TimeWindow::Midday => (estate_data.midday_buildings & building_bit) != 0,
-        TimeWindow::Dusk => (estate_data.dusk_buildings & building_bit) != 0,
-        TimeWindow::Expired => true,
+    let expansion_bit = expansion_bitflag(building_type);
+    let already_completed = if expansion_bit != 0 {
+        // Buildings 16+: tracked in expansion_daily (window-agnostic, once per day)
+        (estate_data.expansion_daily & expansion_bit) != 0
+    } else {
+        match current_window {
+            TimeWindow::Dawn => (estate_data.dawn_buildings & building_bit) != 0,
+            TimeWindow::Midday => (estate_data.midday_buildings & building_bit) != 0,
+            TimeWindow::Dusk => (estate_data.dusk_buildings & building_bit) != 0,
+            TimeWindow::Expired => true,
+        }
     };
 
     if already_completed {
@@ -244,11 +270,16 @@ pub fn process(
     )?;
 
     // 13. Mark building as completed for this window
-    match current_window {
-        TimeWindow::Dawn => estate_data.dawn_buildings |= building_bit,
-        TimeWindow::Midday => estate_data.midday_buildings |= building_bit,
-        TimeWindow::Dusk => estate_data.dusk_buildings |= building_bit,
-        TimeWindow::Expired => {}
+    if expansion_bit != 0 {
+        // Buildings 16+: tracked in expansion_daily
+        estate_data.expansion_daily |= expansion_bit;
+    } else {
+        match current_window {
+            TimeWindow::Dawn => estate_data.dawn_buildings |= building_bit,
+            TimeWindow::Midday => estate_data.midday_buildings |= building_bit,
+            TimeWindow::Dusk => estate_data.dusk_buildings |= building_bit,
+            TimeWindow::Expired => {}
+        }
     }
 
     // 14. Check for window completion bonus
@@ -452,8 +483,9 @@ fn grant_building_rewards(
             let game_engine = unsafe { GameEngine::load(&game_engine_data) };
 
             // Create PDA signer for GameEngine (mint authority)
+            let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine.bump];
-            let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &bump_seed);
+            let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
             let signer = pinocchio::instruction::Signer::from(&seeds);
 
             // Mint NOVI tokens to player's token account
@@ -481,6 +513,45 @@ fn grant_building_rewards(
             };
         }
 
+        BuildingType::Camp => {
+            // Operative cost reduction: 3-12% based on score
+            // score 0 = 300 bps (3%), score 100 = 1200 bps (12%)
+            let buff = 300 + (score_multiplier * 9) as u16;
+            estate.camp_discount_bps = buff;
+        }
+
+        BuildingType::Mine => {
+            // Gems: 5-30 based on score
+            let gems = 5 + (score_multiplier * 25 / 100);
+            player.gems = player.gems.saturating_add(gems);
+        }
+
+        BuildingType::Farm => {
+            // Produce: 10-65 based on score (parallel to Dock)
+            let produce = 10 + (score_multiplier * 55 / 100);
+            player.produce = player.produce.saturating_add(produce);
+        }
+
+        BuildingType::Catacombs => {
+            // Fragments: 1-5 based on score
+            let fragments = 1 + (score_multiplier * 4 / 100);
+            player.fragments = player.fragments.saturating_add(fragments);
+        }
+
+        BuildingType::Stables => {
+            // Travel speed bonus: 5-20% based on score
+            // score 0 = 500 bps (5%), score 100 = 2000 bps (20%)
+            let buff = 500 + (score_multiplier * 15) as u16;
+            estate.stables_speed_bps = buff;
+        }
+
+        BuildingType::Infirmary => {
+            // Unit recovery: 2-8% based on score
+            // score 0 = 200 bps (2%), score 100 = 800 bps (8%)
+            let buff = 200 + (score_multiplier * 6) as u16;
+            estate.infirmary_recovery_daily_bps = buff;
+        }
+
         BuildingType::Mansion => {
             // Mansion handled by daily_claim.rs
         }
@@ -492,11 +563,16 @@ fn grant_building_rewards(
 /// Check if a window is fully completed and grant bonus
 fn check_window_completion(estate: &mut EstateAccount, window: TimeWindow) {
     // Buildings that can be completed in each window
+    // Note: Only buildings 0-15 fit in u16 bitflags. Buildings 16+ (Farm, Stables,
+    // Infirmary) are tracked separately via expansion_daily and don't participate
+    // in window completion bonuses.
     const DAWN_BUILDINGS: u16 = (1 << BuildingType::Barracks as u8)
         | (1 << BuildingType::Workshop as u8)
         | (1 << BuildingType::Dock as u8)
         | (1 << BuildingType::Vault as u8)
-        | (1 << BuildingType::Forge as u8);
+        | (1 << BuildingType::Forge as u8)
+        | (1 << BuildingType::Camp as u8)
+        | (1 << BuildingType::Mine as u8);
 
     const MIDDAY_BUILDINGS: u16 = (1 << BuildingType::Workshop as u8)
         | (1 << BuildingType::Dock as u8)
@@ -504,12 +580,14 @@ fn check_window_completion(estate: &mut EstateAccount, window: TimeWindow) {
         | (1 << BuildingType::Forge as u8)
         | (1 << BuildingType::Market as u8)
         | (1 << BuildingType::Academy as u8)
-        | (1 << BuildingType::Arena as u8);
+        | (1 << BuildingType::Arena as u8)
+        | (1 << BuildingType::Mine as u8);
 
     const DUSK_BUILDINGS: u16 = (1 << BuildingType::Sanctuary as u8)
         | (1 << BuildingType::Observatory as u8)
         | (1 << BuildingType::Treasury as u8)
-        | (1 << BuildingType::Citadel as u8);
+        | (1 << BuildingType::Citadel as u8)
+        | (1 << BuildingType::Catacombs as u8);
 
     // Check which buildings the player actually has
     let owned_buildings = get_owned_buildings_mask(estate);
@@ -537,12 +615,12 @@ fn check_window_completion(estate: &mut EstateAccount, window: TimeWindow) {
     }
 }
 
-/// Get bitmask of buildings the player owns
+/// Get bitmask of buildings the player owns (buildings 0-15 only, u16)
 fn get_owned_buildings_mask(estate: &EstateAccount) -> u16 {
     let mut mask: u16 = 0;
     for i in 0..estate.usable_slots() {
         let building = &estate.buildings[i];
-        if !building.is_empty() && building.is_active() {
+        if !building.is_empty() && building.is_active() && building.building_type < 16 {
             mask |= 1u16 << building.building_type;
         }
     }

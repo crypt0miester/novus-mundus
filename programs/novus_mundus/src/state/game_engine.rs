@@ -12,9 +12,12 @@ use crate::{NULL_PUBKEY, constants::GAME_ENGINE_SEED, types::Theme};
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GameEngine {
+    /// Account discriminator (AccountKey::GameEngine)
+    pub account_key: u8,                        // 1 byte
+
     /// Kingdom identifier (0 = Genesis, 1+ = subsequent kingdoms)
     pub kingdom_id: u16,                        // 2 bytes
-    pub _padding_kingdom: [u8; 6],              // 6 bytes (alignment)
+    pub _padding_kingdom: [u8; 4],              // 4 bytes (alignment, reduced from 6 for account_key)
 
     /// Kingdom name (e.g., "Genesis", "Vanguard", "Frontier")
     pub kingdom_name: [u8; 32],                 // 32 bytes
@@ -90,6 +93,21 @@ pub struct GameEngine {
 
     /// NOVI Purchase configuration (DAO controlled)
     pub novi_purchase_config: NoviPurchaseConfig,
+
+    /// Arena PvP configuration (DAO controlled)
+    pub arena_config: ArenaConfig,
+
+    /// Expedition (mining/fishing) configuration (DAO controlled)
+    pub expedition_config: ExpeditionConfig,
+
+    /// Dungeon configuration (DAO controlled)
+    pub dungeon_config: DungeonConfig,
+
+    /// Castle configuration (DAO controlled)
+    pub castle_config: CastleConfig,
+
+    /// Combat configuration (DAO controlled)
+    pub combat_config: CombatConfig,
 }
 
 impl GameEngine {
@@ -481,6 +499,7 @@ pub struct SubscriptionTier {
     pub max_locked_novi: u64,                   // e.g., 3000, 6000, 30000, 150000 (max locked NOVI capacity)
     pub daily_reward_multiplier: u64,           // Basis points: 10000 = 1.0x, 15000 = 1.5x, 20000 = 2.0x, 30000 = 3.0x
     pub synchrony_bonus: u32,                        // Basis points: e.g., 500 (5% synchrony bonus per tier level)
+    pub _padding_sync: [u8; 4],                     // Alignment for next u64
 
     // Bonuses granted on EVERY purchase/renewal (NOT just starting!)
     pub novi: u64,                              // Reserved NOVI minted (withdrawable!)
@@ -703,8 +722,8 @@ impl NoviPurchaseConfig {
             // 15% undercut when oracle is used
             novi_market_undercut_bps: 1500,
 
-            // Fixed purchase packages: 500, 1k, 5k, 10k, 25k NOVI (with 1 decimal)
-            novi_purchase_amounts: [5_000, 10_000, 50_000, 100_000, 250_000],
+            // Fixed purchase packages: 1k, 10k, 100k, 1M, 5M NOVI (with 1 decimal)
+            novi_purchase_amounts: [10_000, 100_000, 1_000_000, 10_000_000, 50_000_000],
 
             // Bulk bonuses: 3%, 5%, 8%, 12%, 15%
             novi_bulk_bonus_bps: [300, 500, 800, 1200, 1500],
@@ -712,8 +731,8 @@ impl NoviPurchaseConfig {
             // Subscription bonuses: 0%, 4%, 8%, 12% for Rookie/Expert/Epic/Legendary
             novi_sub_bonus_bps: [0, 400, 800, 1200],
 
-            // Daily caps: 10k, 50k, 200k, 2M NOVI (with 1 decimal)
-            novi_sub_daily_cap: [100_000, 500_000, 2_000_000, 20_000_000],
+            // Daily caps: 100k, 500k, 1M, 10M NOVI (with 1 decimal)
+            novi_sub_daily_cap: [1_000_000, 5_000_000, 10_000_000, 100_000_000],
 
             // Streak bonuses: 0%, 1%, 2%, 3%, 5%, 7%, 10% for days 1-7
             novi_streak_bonus_bps: [0, 100, 200, 300, 500, 700, 1000],
@@ -784,6 +803,441 @@ impl NoviPurchaseConfig {
             Some(self.novi_purchase_amounts[package_index as usize])
         } else {
             None
+        }
+    }
+}
+
+// ============================================================
+// Arena PvP Configuration (136 bytes)
+// ============================================================
+
+/// Arena PvP system configuration — all DAO-adjustable
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ArenaConfig {
+    /// Season duration in seconds (e.g., 7 days)
+    pub season_duration: i64,
+    /// Claim deadline after season ends in seconds (e.g., 30 days)
+    pub claim_deadline: i64,
+    /// Match assignment expiry in seconds (e.g., 300 = 5 minutes)
+    pub match_expiry_seconds: i64,
+
+    /// Base daily reward amount (NOVI, 1 decimal)
+    pub daily_base_reward: u64,
+    /// Minimum points to qualify for leaderboard
+    pub min_points_for_leaderboard: u64,
+    /// Combat power per melee weapon
+    pub melee_weapon_power: u64,
+    /// Combat power per ranged weapon (φ ratio)
+    pub ranged_weapon_power: u64,
+    /// Combat power per siege weapon (φ² ratio)
+    pub siege_weapon_power: u64,
+    /// Combat power per armor
+    pub armor_power: u64,
+    /// Base points for winning
+    pub base_win_points: u64,
+    /// Base points for losing (participation)
+    pub base_loss_points: u64,
+    /// Draw points for both players
+    pub draw_points: u64,
+    /// Underdog bonus: extra points per 10% power disadvantage (bps)
+    pub underdog_bonus_bps: u64,
+
+    /// Starting ELO rating for new participants
+    pub starting_elo: u32,
+    /// ELO K-factor (how much ratings change per match)
+    pub elo_k_factor: u32,
+
+    /// Prize distribution for top 10 leaderboard (bps, must sum to 10000)
+    pub prize_distribution: [u16; 10],
+
+    /// Maximum daily battles per player
+    pub max_daily_battles: u8,
+    /// Maximum battles against same opponent per day
+    pub max_battles_per_opponent: u8,
+    /// Minimum battles required to claim daily reward
+    pub min_battles_for_daily_reward: u8,
+    pub _padding: [u8; 1],
+}
+
+const _: () = assert!(core::mem::size_of::<ArenaConfig>() == 136, "ArenaConfig size changed");
+
+impl ArenaConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            season_duration: 7 * 86_400,           // 7 days
+            claim_deadline: 30 * 86_400,            // 30 days
+            match_expiry_seconds: 300,              // 5 minutes
+
+            daily_base_reward: 1000,                // 100 NOVI (1 decimal)
+            min_points_for_leaderboard: 500,
+            melee_weapon_power: 10,
+            ranged_weapon_power: 16,                // φ ratio
+            siege_weapon_power: 26,                 // φ² ratio
+            armor_power: 5,
+            base_win_points: 100,
+            base_loss_points: 20,
+            draw_points: 50,
+            underdog_bonus_bps: 500,                // 5% per 10% disadvantage
+
+            starting_elo: 1000,
+            elo_k_factor: 32,
+
+            prize_distribution: [3500, 2500, 1500, 750, 750, 200, 200, 200, 200, 200],
+
+            max_daily_battles: 10,
+            max_battles_per_opponent: 2,
+            min_battles_for_daily_reward: 5,
+            _padding: [0; 1],
+        }
+    }
+}
+
+// ============================================================
+// Expedition Configuration (240 bytes)
+// ============================================================
+
+/// Expedition (mining/fishing) system configuration — all DAO-adjustable
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ExpeditionConfig {
+    /// Locked NOVI cost per mining expedition by tier [Surface..Abyssal]
+    pub mining_novi_cost: [u64; 5],
+    /// Fragment bonus per mining expedition by tier (guaranteed)
+    pub mining_fragment_bonus: [u64; 5],
+    /// Locked NOVI cost per fishing expedition by tier [Shore..Abyss]
+    pub fishing_novi_cost: [u64; 5],
+    /// Fragment bonus per fishing expedition by tier (guaranteed)
+    pub fishing_fragment_bonus: [u64; 5],
+
+    /// Rare find multiplier (e.g., 5 = 5x normal yield)
+    pub rare_find_multiplier: u64,
+    /// Operative tier 1 yield multiplier (bps, 10000 = 1.0x)
+    pub operative_tier_1_multiplier_bps: u64,
+    /// Operative tier 2 yield multiplier (bps, 15000 = 1.5x)
+    pub operative_tier_2_multiplier_bps: u64,
+    /// Operative tier 3 yield multiplier (bps, 20000 = 2.0x)
+    pub operative_tier_3_multiplier_bps: u64,
+
+    /// Mining rare find chance by tier (bps, 100 = 1%)
+    pub mining_rare_chance_bps: [u16; 5],
+    /// Fishing rare catch chance by tier (bps, 100 = 1%)
+    pub fishing_rare_chance_bps: [u16; 5],
+    /// Perfect expedition bonus (bps, 2500 = 25% extra yield)
+    pub perfect_expedition_bonus_bps: u16,
+
+    /// Mining expedition duration in hours by tier [Surface..Abyssal]
+    pub mining_duration_hours: [u8; 5],
+    /// Workshop level required for each mining tier
+    pub mining_workshop_req: [u8; 5],
+    /// Fishing expedition duration in hours by tier [Shore..Abyss]
+    pub fishing_duration_hours: [u8; 5],
+    /// Dock level required for each fishing tier
+    pub fishing_dock_req: [u8; 5],
+    /// Maximum expedition tier (0-4)
+    pub max_tier: u8,
+    /// Score threshold for perfect expedition bonus
+    pub perfect_score_threshold: u8,
+    pub _padding: [u8; 4],
+}
+
+const _: () = assert!(core::mem::size_of::<ExpeditionConfig>() == 240, "ExpeditionConfig size changed");
+
+impl ExpeditionConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            mining_novi_cost: [100, 500, 2_000, 8_000, 30_000],
+            mining_fragment_bonus: [1, 3, 8, 20, 50],
+            fishing_novi_cost: [100, 500, 2_000, 8_000, 30_000],
+            fishing_fragment_bonus: [1, 2, 5, 12, 30],
+
+            rare_find_multiplier: 5,
+            operative_tier_1_multiplier_bps: 10000, // 1.0x
+            operative_tier_2_multiplier_bps: 15000, // 1.5x
+            operative_tier_3_multiplier_bps: 20000, // 2.0x
+
+            mining_rare_chance_bps: [100, 300, 500, 1000, 2000],
+            fishing_rare_chance_bps: [100, 300, 500, 1000, 2000],
+            perfect_expedition_bonus_bps: 2500,     // 25%
+
+            mining_duration_hours: [1, 2, 4, 8, 16],
+            mining_workshop_req: [1, 5, 10, 15, 20],
+            fishing_duration_hours: [1, 2, 4, 8, 16],
+            fishing_dock_req: [1, 5, 10, 15, 20],
+            max_tier: 4,
+            perfect_score_threshold: 80,
+            _padding: [0; 4],
+        }
+    }
+}
+
+// ============================================================
+// Dungeon Configuration (224 bytes)
+// ============================================================
+
+/// Dungeon system configuration — all DAO-adjustable
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DungeonConfig {
+    /// Base gem cost to resume from checkpoint
+    pub resume_gem_cost: u64,
+    /// Unit power for dungeon combat by tier [T1, T2, T3]
+    pub unit_power: [u64; 3],
+    /// Unit health for dungeon combat by tier [T1, T2, T3]
+    pub unit_health: [u64; 3],
+
+    /// Precomputed floor reward multipliers (×10000 for precision)
+    pub floor_multipliers: [u32; 10],
+
+    /// Relic effect values (bps or special flags) — indexed by relic ID
+    pub relic_effects: [u16; 20],
+    /// 2-piece synergy bonuses (bps) — indexed by synergy tag
+    pub synergy_2_bonus_bps: [u16; 9],
+    /// 3-piece synergy bonuses (bps) — indexed by synergy tag
+    pub synergy_3_bonus_bps: [u16; 9],
+
+    /// Flee penalty by floor range (bps of accumulated rewards)
+    /// [Floor 1-3, 4-6, 7-9, 10+]
+    pub flee_penalty_bps: [u16; 4],
+    /// Treasure room loot multiplier (bps, 20000 = 2x)
+    pub treasure_loot_multiplier_bps: u16,
+    /// Trap room XP bonus (bps, 15000 = 1.5x)
+    pub trap_xp_bonus_bps: u16,
+    /// Darkness damage penalty per floor (bps)
+    pub darkness_damage_penalty_per_floor_bps: u16,
+    /// Darkness crit penalty per floor (bps)
+    pub darkness_crit_penalty_per_floor_bps: u16,
+    /// Darkness defense penalty per floor (bps)
+    pub darkness_defense_penalty_per_floor_bps: u16,
+    /// Darkness enemy buff per floor (bps)
+    pub darkness_enemy_buff_per_floor_bps: u16,
+
+    /// Relic synergy tags — indexed by relic ID
+    pub relic_synergy_tags: [u8; 20],
+    /// Maximum attacks per multi-attack instruction
+    pub max_multi_attacks: u8,
+    /// Rest room heal percentage (0-100)
+    pub rest_heal_percent: u8,
+    /// Trap room damage percent of current unit HP
+    pub trap_damage_percent: u8,
+    /// Floor where darkness crit penalty begins
+    pub darkness_crit_penalty_start_floor: u8,
+    /// Floor where darkness defense penalty begins
+    pub darkness_defense_penalty_start_floor: u8,
+    /// Floor where darkness enemy buff begins
+    pub darkness_enemy_buff_start_floor: u8,
+    pub _padding: [u8; 6],
+}
+
+const _: () = assert!(core::mem::size_of::<DungeonConfig>() == 224, "DungeonConfig size changed");
+
+impl DungeonConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            resume_gem_cost: 500,
+            unit_power: [15, 35, 80],
+            unit_health: [100, 250, 600],
+
+            floor_multipliers: [
+                10000, 12000, 14400, 17280, 20736,
+                24883, 29860, 35832, 42998, 51598,
+            ],
+
+            relic_effects: [
+                1500, 1000, 2000, 3000, 500,
+                3000, 2500, 1500, 1500, 2500,
+                1, 1, 3000, 1, 1500,
+                20000, 1, 5000, 4000, 1,
+            ],
+            synergy_2_bonus_bps: [1000, 1500, 1500, 500, 2000, 2000, 1000, 1000, 0],
+            synergy_3_bonus_bps: [2500, 3000, 4000, 1000, 10000, 5000, 2500, 2000, 0],
+
+            flee_penalty_bps: [7000, 6000, 5000, 4000],
+            treasure_loot_multiplier_bps: 20000,    // 2x
+            trap_xp_bonus_bps: 15000,               // 1.5x
+            darkness_damage_penalty_per_floor_bps: 50,  // 0.5%
+            darkness_crit_penalty_per_floor_bps: 30,    // 0.3%
+            darkness_defense_penalty_per_floor_bps: 20, // 0.2%
+            darkness_enemy_buff_per_floor_bps: 50,      // 0.5%
+
+            relic_synergy_tags: [0, 1, 2, 2, 3, 4, 5, 6, 1, 7, 5, 3, 0, 1, 0, 5, 4, 0, 3, 8],
+            max_multi_attacks: 5,
+            rest_heal_percent: 20,
+            trap_damage_percent: 10,
+            darkness_crit_penalty_start_floor: 4,
+            darkness_defense_penalty_start_floor: 7,
+            darkness_enemy_buff_start_floor: 10,
+            _padding: [0; 6],
+        }
+    }
+}
+
+// ============================================================
+// Castle Configuration (96 bytes)
+// ============================================================
+
+/// King's Castle system configuration — all DAO-adjustable
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct CastleConfig {
+    /// Contest duration in seconds (0 = instant for testing)
+    pub contest_duration: i64,
+    /// Protection duration after becoming king (seconds)
+    pub protection_duration: i64,
+    /// Attack range in meters (must be at castle to attack)
+    pub attack_range_meters: f64,
+
+    /// Daily NOVI reward for the king (at 1.0x tier multiplier)
+    pub king_novi_per_day: u64,
+    /// Daily cash reward for the king
+    pub king_cash_per_day: u64,
+    /// Daily NOVI reward for court members
+    pub court_novi_per_day: u64,
+    /// Daily cash reward for court members
+    pub court_cash_per_day: u64,
+    /// Daily NOVI reward for garrison members
+    pub member_novi_per_day: u64,
+    /// Daily cash reward for garrison members
+    pub member_cash_per_day: u64,
+
+    /// Castle tier multipliers (bps): [Outpost, Keep, Stronghold, Fortress, Citadel]
+    pub tier_multiplier_bps: [u16; 5],
+    /// King's cut of combat loot (bps, 1500 = 15%)
+    pub king_loot_cut_bps: u16,
+
+    /// Garrison capacity by king's subscription tier [Rookie..Legendary]
+    pub garrison_cap_by_tier: [u8; 4],
+    /// Maximum castles a king can hold simultaneously
+    pub max_castles_per_king: u8,
+    /// Max fortification upgrade level (255 = uncapped)
+    pub max_fortification_level: u8,
+    /// Max treasury upgrade level
+    pub max_treasury_level: u8,
+    /// Max chambers upgrade level
+    pub max_chambers_level: u8,
+    /// Max watchtower upgrade level
+    pub max_watchtower_level: u8,
+    /// Max armory upgrade level (255 = uncapped)
+    pub max_armory_level: u8,
+    pub _padding: [u8; 2],
+}
+
+const _: () = assert!(core::mem::size_of::<CastleConfig>() == 96, "CastleConfig size changed");
+
+impl CastleConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            contest_duration: 0,                    // 0 for testing (production: 7200 = 2h)
+            protection_duration: 864_000,           // 10 days
+            attack_range_meters: 50.0,
+
+            king_novi_per_day: 500_000,
+            king_cash_per_day: 1_000_000,
+            court_novi_per_day: 50_000,
+            court_cash_per_day: 100_000,
+            member_novi_per_day: 5_000,
+            member_cash_per_day: 25_000,
+
+            tier_multiplier_bps: [2500, 5000, 10000, 15000, 20000],
+            king_loot_cut_bps: 1500,                // 15%
+
+            garrison_cap_by_tier: [5, 10, 15, 25],
+            max_castles_per_king: 5,
+            max_fortification_level: 255,           // Uncapped
+            max_treasury_level: 20,
+            max_chambers_level: 5,
+            max_watchtower_level: 15,
+            max_armory_level: 255,                  // Uncapped
+            _padding: [0; 2],
+        }
+    }
+}
+
+// ============================================================
+// Combat Configuration (160 bytes)
+// ============================================================
+
+/// Combat system configuration — all DAO-adjustable
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct CombatConfig {
+    /// Damage dealt per siege weapon consumed
+    pub damage_per_siege_weapon: u64,
+    /// Max units receivable from all reinforcements combined
+    pub max_reinforcement_receive: u64,
+    /// Defensive unit tier 1 combat power
+    pub defensive_unit_1_power: u64,
+    /// Defensive unit tier 2 combat power
+    pub defensive_unit_2_power: u64,
+    /// Defensive unit tier 3 combat power
+    pub defensive_unit_3_power: u64,
+
+    /// Stamina cost to attack encounters by rarity
+    /// [Common, Uncommon, Rare, Epic, Legendary, WorldEvent]
+    pub encounter_stamina_costs: [u64; 6],
+    /// Max stamina by subscription tier [Rookie, Expert, Epic, Legendary]
+    pub max_stamina_by_tier: [u64; 4],
+
+    /// Stamina regeneration interval (seconds per 1 stamina)
+    pub stamina_regen_interval: i64,
+    /// Attack range for encounters (meters)
+    pub encounter_attack_range_meters: f64,
+    /// Attack range for PvP combat (meters)
+    pub pvp_attack_range_meters: f64,
+
+    /// Additional encounters per X players (e.g., 10 = +1 per 10 players)
+    pub encounters_per_player_count: u32,
+    /// Loot rate for dropped weapons from dead enemy troops (bps, 6000 = 60%)
+    pub weapon_loot_rate_bps: u16,
+    /// Armory raid rate when defender has operatives (bps, 2500 = 25%)
+    pub armory_raid_with_operatives_bps: u16,
+    /// Armory raid rate when defender is undefended (bps, 5000 = 50%)
+    pub armory_raid_undefended_bps: u16,
+    /// Siege capture rate from storage (bps, 8000 = 80%)
+    pub siege_capture_rate_bps: u16,
+    /// Base encounters per city (minimum)
+    pub base_encounters_per_city: u8,
+    /// Max encounters cap per city (hard limit)
+    pub max_encounters_per_city: u8,
+    pub _padding: [u8; 2],
+}
+
+const _: () = assert!(core::mem::size_of::<CombatConfig>() == 160, "CombatConfig size changed");
+
+impl CombatConfig {
+    pub const LEN: usize = core::mem::size_of::<Self>();
+
+    pub const fn default() -> Self {
+        Self {
+            damage_per_siege_weapon: 500,
+            max_reinforcement_receive: 10_000,
+            defensive_unit_1_power: 10,
+            defensive_unit_2_power: 25,
+            defensive_unit_3_power: 60,
+
+            encounter_stamina_costs: [10, 25, 50, 100, 250, 500],
+            max_stamina_by_tier: [100, 500, 1000, 10000],
+
+            stamina_regen_interval: 300,            // 5 minutes per 1 stamina
+            encounter_attack_range_meters: 10.0,
+            pvp_attack_range_meters: 15.0,
+
+            encounters_per_player_count: 10,        // +1 encounter per 10 players
+            weapon_loot_rate_bps: 6000,             // 60%
+            armory_raid_with_operatives_bps: 2500,  // 25%
+            armory_raid_undefended_bps: 5000,       // 50%
+            siege_capture_rate_bps: 8000,           // 80%
+            base_encounters_per_city: 3,
+            max_encounters_per_city: 50,
+            _padding: [0; 2],
         }
     }
 }

@@ -10,7 +10,7 @@ use pinocchio_system::instructions::CreateAccount;
 use crate::{
     error::GameError,
     state::{PlayerAccount, EncounterAccount, LootAccount, LootSourceType, LocationAccount, GameEngine},
-    constants::{LOOT_SEED, ENCOUNTER_ATTACK_RANGE_METERS, LOCATION_SEED, DAMAGE_PER_SIEGE_WEAPON},
+    constants::{LOOT_SEED, ENCOUNTER_ATTACK_RANGE_METERS, DAMAGE_PER_SIEGE_WEAPON},
     types::{EncounterType, EventType},
     logic::{
         calculate_damage_output,
@@ -48,7 +48,7 @@ use crate::{
 /// # Flow
 /// 1. Validate player is at encounter location
 /// 2. Validate encounter is alive and not despawned
-/// 3. Calculate player's damage output (operative units + weapons)
+/// 3. Calculate player's damage output (defensive units + weapons)
 /// 4. Apply damage to encounter health
 /// 5. Track attacker contribution
 /// 6. Award instant loot (cash) based on damage dealt
@@ -200,9 +200,9 @@ pub fn process(
         return Err(GameError::EncounterLevelMismatch.into());
     }
 
-    // 12. Validate player has operative units
-    let total_operative = player_data.total_operative_units();
-    if total_operative == 0 {
+    // 12. Validate player has defensive units
+    let total_defensive = player_data.total_defensive_units();
+    if total_defensive == 0 {
         return Err(GameError::InsufficientUnits.into());
     }
 
@@ -219,7 +219,7 @@ pub fn process(
 
     // Apply research buffs and hero buffs for attacking encounters
     let base_damage = calculate_damage_output(
-        total_operative,
+        total_defensive,
         player_data.total_weapons(),
         false, // drive_by disabled
         gameplay_config,
@@ -472,8 +472,8 @@ pub fn process(
                 .checked_add(1)
                 .ok_or(GameError::MathOverflow)?;
 
-            // Derive and validate loot PDA
-            let (expected_loot_pda, loot_bump) = LootAccount::derive_pda(owner.key(), loot_id);
+            // Derive and validate loot PDA (player-specific: [loot, player, loot_id])
+            let (expected_loot_pda, loot_bump) = LootAccount::derive_pda(player.key(), loot_id);
             require_key_match(loot_account, &expected_loot_pda)?;
 
             // Calculate rent for loot account
@@ -485,7 +485,7 @@ pub fn process(
             let loot_id_bytes = loot_id.to_le_bytes();
             let loot_seeds = pinocchio::seeds!(
                 LOOT_SEED,
-                owner.key().as_ref(),
+                player.key().as_ref(),
                 &loot_id_bytes,
                 &loot_bump_seed
             );
@@ -566,7 +566,8 @@ pub fn process(
             let siege_share = total_weapons - melee_share - ranged_share; // 20% + remainder
 
             *loot_data = LootAccount {
-                owner: *owner.key(),
+                account_key: crate::state::AccountKey::Loot as u8,
+                owner: *player.key(),
                 creator: *owner.key(), // Owner pays rent, gets refund on claim
                 loot_id,
                 bump: loot_bump,
@@ -603,13 +604,12 @@ pub fn process(
         // Derive expected location PDA from encounter coordinates
         let enc_grid_lat = LocationAccount::to_grid(encounter_data.location_lat);
         let enc_grid_long = LocationAccount::to_grid(encounter_data.location_long);
-        let enc_city_bytes = encounter_data.city_id.to_le_bytes();
-        let enc_lat_bytes = enc_grid_lat.to_le_bytes();
-        let enc_long_bytes = enc_grid_long.to_le_bytes();
 
-        let (expected_location_pda, _) = pinocchio::pubkey::find_program_address(
-            &[LOCATION_SEED, &enc_city_bytes, &enc_lat_bytes, &enc_long_bytes],
-            program_id,
+        let (expected_location_pda, _) = LocationAccount::derive_pda(
+            &encounter_data.game_engine,
+            encounter_data.city_id,
+            enc_grid_lat,
+            enc_grid_long,
         );
 
         if enc_location.key() != &expected_location_pda {
@@ -664,7 +664,7 @@ pub fn process(
             program_id,
         )?;
 
-        let player_key = player.key();
+        let player_key = owner.key();
         let event_key = event_acc.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)

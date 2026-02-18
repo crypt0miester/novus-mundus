@@ -120,6 +120,12 @@ pub fn process(
         // Decrement source count
         dest.reinforcement_source_count = dest.reinforcement_source_count.saturating_sub(1);
 
+        // Store wounded counts BEFORE overwriting originals
+        // These will be added to the sender's estate during process_return
+        reinf.wounded_def_1 = reinf.units_def_1.saturating_sub(return_def_1) as u32;
+        reinf.wounded_def_2 = reinf.units_def_2.saturating_sub(return_def_2) as u32;
+        reinf.wounded_def_3 = reinf.units_def_3.saturating_sub(return_def_3) as u32;
+
         // Store survival-adjusted return amounts in the ReinforcementAccount
         // These will be used by process_return to give back the correct amounts
         reinf.units_def_1 = return_def_1;

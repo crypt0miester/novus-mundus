@@ -8,15 +8,17 @@ use pinocchio::{
 
 use pinocchio_system::instructions::CreateAccount;
 
+use pinocchio::msg;
+
 use crate::{
     emit,
     error::GameError,
     events::IntercityTravelStarted,
     state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, OCCUPANT_PLAYER},
     constants::LOCATION_SEED,
-    helpers::close_account,
+    helpers::{close_account, estate::{load_estate_for_player, require_stables, stables_travel_reduction_bps}},
     logic::{
-        location::{calculate_distance, apply_travel_speed_bonuses},
+        location::{calculate_distance, apply_travel_speed_bonuses, is_within_city_bounds},
         get_time_of_day,
         get_time_multiplier,
         ActivityType,
@@ -33,7 +35,9 @@ use crate::{
 ///
 /// Instruction data format:
 /// ```text
-/// [0..2] destination_city_id: u16 (little-endian)
+/// [0..2]  destination_city_id: u16 (little-endian)
+/// [2..6]  dest_grid_lat: i32 (little-endian) - destination grid latitude
+/// [6..10] dest_grid_long: i32 (little-endian) - destination grid longitude
 /// ```
 ///
 /// # Accounts
@@ -52,9 +56,9 @@ pub fn process(
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts (9 required, 1 optional for stealing)
+    // 1. Parse Accounts (10 required, 1 optional for stealing)
 
-    if accounts.len() < 9 {
+    if accounts.len() < 10 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -65,19 +69,22 @@ pub fn process(
     let game_engine_account = &accounts[4];
     let origin_location_account = &accounts[5];
     let destination_location_account = &accounts[6];
-    let origin_creator_refund = &accounts[7];
+    let _origin_creator_refund = &accounts[7];
     let _system_program = &accounts[8];
+    let estate_account = &accounts[9];
 
     // Optional: bumped player account (required when stealing a reservation)
-    let bumped_player_account = accounts.get(9);
+    let bumped_player_account = accounts.get(10);
 
     // 2. Parse Instruction Data
 
-    if instruction_data.len() < 2 {
+    if instruction_data.len() < 10 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let destination_city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let dest_grid_lat = i32::from_le_bytes([instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5]]);
+    let dest_grid_long = i32::from_le_bytes([instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9]]);
 
     // 3. Validate Signer
 
@@ -86,14 +93,27 @@ pub fn process(
     }
 
     // 4. Load Accounts (kingdom-scoped)
+    //
+    // Validate via load_checked (which borrows RefCell), then drop the borrow
+    // and use unsafe raw pointer access instead. This avoids holding RefCell
+    // borrows during CreateAccount CPI which would cause AccountBorrowFailed.
 
-    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
+    msg!("IC_START: loading accounts");
+    { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
+    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
+
+    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?; }
+    let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
+    msg!("IC_START: accounts loaded ok");
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
     let origin_city_data = unsafe { CityAccount::load_mut(origin_city_account)? };
     let destination_city_data = unsafe { CityAccount::load(&destination_city_account)? };
+
+    // 5b. HARD GATE: Require Stables building for travel
+    let estate = load_estate_for_player(estate_account, player_data, program_id)?;
+    require_stables(estate, 1)?;
 
     // 6. Validate Not Already Traveling
 
@@ -153,25 +173,57 @@ pub fn process(
     // 9a. Apply Time-of-Day Travel Bonus (DETERMINISTIC)
     let time_of_day = get_time_of_day(now, origin_city_data.longitude);
     let travel_multiplier = get_time_multiplier(time_of_day, ActivityType::Traveling);
-    let travel_time_seconds = (base_travel_time_seconds as f64 / travel_multiplier) as i64;
+    let time_adjusted = (base_travel_time_seconds as f64 / travel_multiplier) as i64;
+
+    // 9b. Apply Stables travel time reduction
+    let stables_reduction = stables_travel_reduction_bps(estate);
+    let travel_time_seconds = if stables_reduction > 0 {
+        let reduction_factor = 10000u64.saturating_sub(stables_reduction as u64);
+        (time_adjusted as u64).saturating_mul(reduction_factor) / 10000
+    } else {
+        time_adjusted as u64
+    } as i64;
 
     let arrival_time = now + travel_time_seconds;
 
     // 10. RESERVE DESTINATION FIRST (prevents race condition)
     //
-    // Destination is the destination city's center, quantized to grid cell.
-    // This ensures no one can take our destination while we're traveling.
+    // Destination grid coordinates are provided by the client.
+    // Validate they fall within the destination city bounds.
 
-    let dest_grid_lat = LocationAccount::to_grid(destination_city_data.latitude);
-    let dest_grid_long = LocationAccount::to_grid(destination_city_data.longitude);
+    let dest_lat_f64 = LocationAccount::from_grid(dest_grid_lat);
+    let dest_long_f64 = LocationAccount::from_grid(dest_grid_long);
+
+    if !is_within_city_bounds(
+        dest_lat_f64,
+        dest_long_f64,
+        destination_city_data.latitude,
+        destination_city_data.longitude,
+        destination_city_data.radius_km,
+    ) {
+        return Err(GameError::DestinationOutsideCity.into());
+    }
+
+    // 10a. Terrain Passability Check
+    {
+        let (ox, oy) = crate::logic::terrain::city_offset(
+            dest_grid_lat, dest_grid_long,
+            destination_city_data.latitude, destination_city_data.longitude,
+        );
+        if !destination_city_data.is_terrain_passable(destination_city_account, ox, oy) {
+            return Err(GameError::TerrainImpassable.into());
+        }
+    }
 
     let dest_city_bytes = destination_city_id.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();
     let dest_long_bytes = dest_grid_long.to_le_bytes();
 
-    let (expected_dest_pda, dest_bump) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &dest_city_bytes, &dest_lat_bytes, &dest_long_bytes],
-        program_id,
+    let (expected_dest_pda, dest_bump) = LocationAccount::derive_pda(
+        game_engine_account.key(),
+        destination_city_id,
+        dest_grid_lat,
+        dest_grid_long,
     );
 
     if destination_location_account.key() != &expected_dest_pda {
@@ -182,12 +234,14 @@ pub fn process(
 
     if dest_location_len == 0 {
         // Create new destination location account
+        msg!("IC_START: creating dest location (CPI)");
         let rent = pinocchio::sysvars::rent::Rent::get()?;
         let lamports = rent.minimum_balance(LocationAccount::LEN);
 
         let bump_seed = [dest_bump];
         let location_seeds = pinocchio::seeds!(
             LOCATION_SEED,
+            game_engine_account.key().as_ref(),
             &dest_city_bytes,
             &dest_lat_bytes,
             &dest_long_bytes,
@@ -202,10 +256,12 @@ pub fn process(
             space: LocationAccount::LEN as u64,
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
+        msg!("IC_START: CPI done ok");
 
-        let mut dest_location_data = destination_location_account.try_borrow_mut_data()?;
-        let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
+        // Use unsafe raw pointer to avoid holding RefMut across close_account
+        let dest_location = unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
 
+        dest_location.account_key = crate::state::AccountKey::Location as u8;
         dest_location.grid_lat = dest_grid_lat;
         dest_location.grid_long = dest_grid_long;
         dest_location.city_id = destination_city_id;
@@ -217,8 +273,8 @@ pub fn process(
         dest_location.reserved_arrival_time = arrival_time;
     } else {
         // Destination exists - check if available or can be stolen
-        let mut dest_location_data = destination_location_account.try_borrow_mut_data()?;
-        let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
+        // Use unsafe raw pointer to avoid holding RefMut across close_account
+        let dest_location = unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
 
         if dest_location.grid_lat != dest_grid_lat || dest_location.grid_long != dest_grid_long {
             return Err(GameError::InvalidPDA.into());
@@ -236,9 +292,8 @@ pub fn process(
                     return Err(GameError::InvalidParameter.into());
                 }
 
-                // Reverse the bumped player's travel
-                let mut bumped_data = bumped_player.try_borrow_mut_data()?;
-                let bumped = unsafe { PlayerAccount::load_mut(&mut bumped_data) };
+                // Reverse the bumped player's travel (unsafe raw pointer)
+                let bumped = unsafe { &mut *(bumped_player.data_ptr() as *mut PlayerAccount) };
 
                 // Calculate how far they've traveled (proportional time)
                 let bumped_total_time = bumped.arrival_time - bumped.departure_time;
@@ -279,21 +334,19 @@ pub fn process(
     let origin_grid_lat = LocationAccount::to_grid(player_data.current_lat);
     let origin_grid_long = LocationAccount::to_grid(player_data.current_long);
 
-    let origin_city_bytes = player_data.current_city.to_le_bytes();
-    let origin_lat_bytes = origin_grid_lat.to_le_bytes();
-    let origin_long_bytes = origin_grid_long.to_le_bytes();
-
-    let (expected_origin_pda, _) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &origin_city_bytes, &origin_lat_bytes, &origin_long_bytes],
-        program_id,
+    let (expected_origin_pda, _) = LocationAccount::derive_pda(
+        game_engine_account.key(),
+        player_data.current_city,
+        origin_grid_lat,
+        origin_grid_long,
     );
 
     if origin_location_account.key() != &expected_origin_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
-    // Validate origin location and get creator for refund
-    let origin_creator: Pubkey;
+    // Validate origin location occupant
+    msg!("IC_START: validating origin occupant");
     {
         let origin_data = origin_location_account.try_borrow_data()?;
         let origin_location = unsafe { LocationAccount::load(&origin_data) };
@@ -301,17 +354,13 @@ pub fn process(
         if !origin_location.is_occupied_by(player_account.key()) {
             return Err(GameError::NotCellOccupant.into());
         }
-
-        origin_creator = origin_location.location_creator;
     }
+    msg!("IC_START: origin validated ok");
 
-    // Validate refund recipient matches stored creator
-    if origin_creator_refund.key() != &origin_creator {
-        return Err(GameError::InvalidParameter.into());
-    }
-
-    // Close origin location account (refund rent to creator)
-    close_account(origin_location_account, origin_creator_refund)?;
+    // Close origin location account (refund rent to the traveling player's owner)
+    msg!("IC_START: closing origin location");
+    close_account(origin_location_account, owner)?;
+    msg!("IC_START: close done ok");
 
     // 12. Update Player State
 

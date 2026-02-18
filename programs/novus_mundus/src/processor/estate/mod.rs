@@ -18,3 +18,5 @@ pub mod buy_plot;
 pub mod daily_claim;
 pub mod daily_activity;
 pub mod convert_materials;
+pub mod speedup;
+pub mod recover_troops;

@@ -16,7 +16,7 @@ use crate::{
     state::{
         GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus,
         ShopItemAccount, BundleAccount, PlayerAccount,
-        unlock_extension_if_eligible, require_extension, EXT_HEROES, EXT_INVENTORY,
+        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner},
     logic::safe_math::apply_bp_penalty,
@@ -166,8 +166,8 @@ pub fn process(
     let (fib_discount_bps, sub_discount_bps, milestone_discount_bps, streak_discount_bps) = {
         let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
 
-        // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
-        require_extension(&*player, EXT_HEROES)?;
+        // PREREQUISITE: Require EXT_RESEARCH to be unlocked before shopping
+        require_extension(&*player, EXT_RESEARCH)?;
 
         // Get effective subscription tier (handles expiration)
         let effective_tier = player.get_effective_tier(now);
@@ -366,12 +366,11 @@ pub fn process(
         flash_sale.status = FlashSaleStatus::SoldOut as u8;
     }
 
-    // 13. Update Player Shop State
+    // 13. Unlock EXT_INVENTORY before loading player mutably
+    unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
+    // 14. Update Player Shop State
     let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
-
-    // Unlock EXT_INVENTORY extension if not already unlocked
-    unlock_extension_if_eligible(player_account, buyer, &mut *player, EXT_INVENTORY)?;
 
     update_player_shop_state(&mut *player, final_price, now, shop_config);
 

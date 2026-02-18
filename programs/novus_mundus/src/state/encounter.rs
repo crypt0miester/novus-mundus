@@ -19,6 +19,9 @@ use crate::constants::ENCOUNTER_SEED;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EncounterAccount {
+    /// Account discriminator (AccountKey::Encounter)
+    pub account_key: u8,                        // 1 byte
+
     pub game_engine: Pubkey,                    // 32 bytes - Kingdom this encounter belongs to
     pub id: u64,                                // 8 bytes
     pub city_id: u16,                           // 2 bytes - Which city the encounter is in

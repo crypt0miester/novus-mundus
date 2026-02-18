@@ -65,6 +65,7 @@ use crate::{
 /// - [] game_engine: GameEngine PDA (for UpdatePluginV1 authority)
 /// - [] system_program: System program
 /// - [writable] estate_account: EstateAccount PDA
+/// - [] p_core_program: MPL Core program (for UpdatePluginV1 CPI)
 ///
 /// # Instruction Data
 /// None
@@ -74,7 +75,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, estate_account] = accounts else {
+    let [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, estate_account, p_core_program] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
@@ -226,6 +227,7 @@ pub fn process(
     let game_engine_data = game_engine.try_borrow_data()?;
     let ge = unsafe { crate::state::GameEngine::load(&game_engine_data) };
     let ge_bump = ge.bump;
+    let kingdom_id_bytes = ge.kingdom_id.to_le_bytes();
     drop(game_engine_data);
 
     // Build NFT attributes from context
@@ -235,7 +237,7 @@ pub fn process(
 
     // Derive game_engine PDA signer
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &ge_bump_seed);
+    let game_engine_seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
     let ge_signer = pinocchio::instruction::Signer::from(&game_engine_seeds);
 
     // Update all NFT attributes
@@ -245,7 +247,7 @@ pub fn process(
         payer: owner,
         authority: game_engine,
         system_program,
-        log_wrapper: system_program,
+        log_wrapper: p_core_program,
         update: p_core::instructions::PluginUpdateData::AttributesSet {
             attributes: &attributes[..attr_count],
         },

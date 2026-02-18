@@ -6,6 +6,7 @@ use pinocchio::{
 };
 
 use crate::constants::CITY_SEED;
+use crate::logic::terrain::{self, Anchor, CityTerrain};
 
 /// Fixed city locations where players gather and travel between
 ///
@@ -19,6 +20,9 @@ use crate::constants::CITY_SEED;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CityAccount {
+    /// Account discriminator (AccountKey::City)
+    pub account_key: u8,                    // 1 byte
+
     /// Reference to the game engine (kingdom) this city belongs to
     pub game_engine: Pubkey,                // 32 bytes
 
@@ -72,6 +76,28 @@ pub struct CityAccount {
     /// Arena PvP - current season ID for this city (incremented on create_season)
     /// Seasons 4+ behind this can be auto-finalized
     pub arena_season_id: u32,               // 4 bytes
+
+    // ─── Terrain System ──────────────────────────────────────────
+    // Variable-length anchor data follows the fixed struct in account data.
+    // Total account size = CityAccount::SIZE + anchor_count * ANCHOR_SIZE
+
+    /// Deterministic seed for terrain noise
+    pub terrain_seed: u32,                  // 4 bytes
+
+    /// Elevation at or below this value is water (impassable)
+    pub water_line: u8,                     // 1 byte
+
+    /// Elevation at or above this value is mountain (impassable)
+    pub peak_line: u8,                      // 1 byte
+
+    /// Number of terrain anchors stored after the fixed struct
+    pub anchor_count: u16,                  // 2 bytes
+
+    /// Terrain data format version (currently 1)
+    pub terrain_version: u8,                // 1 byte
+
+    /// Reserved for future terrain features
+    pub _terrain_reserved: [u8; 7],         // 7 bytes
 }
 
 /// Compile-time assertion: ensure SIZE matches actual struct layout
@@ -171,6 +197,45 @@ impl CityAccount {
     #[inline]
     pub fn can_spawn_encounter(&self) -> bool {
         self.active_encounters < self.calculate_max_encounters()
+    }
+
+    // ─── Terrain Helpers ─────────────────────────────────────────
+
+    /// Total account size for a city with N anchors.
+    pub fn account_size(anchor_count: u16) -> usize {
+        Self::SIZE + anchor_count as usize * terrain::ANCHOR_SIZE
+    }
+
+    /// Build a read-only terrain view from the city's account data.
+    ///
+    /// # Safety
+    /// Caller must ensure account data extends at least
+    /// `SIZE + anchor_count * ANCHOR_SIZE` bytes.
+    pub unsafe fn terrain_from_account<'a>(account: &'a AccountInfo) -> CityTerrain<'a> {
+        let city = &*(account.data_ptr() as *const CityAccount);
+        let count = city.anchor_count as usize;
+        let anchors = if count > 0 {
+            let ptr = account.data_ptr().add(Self::SIZE) as *const Anchor;
+            core::slice::from_raw_parts(ptr, count)
+        } else {
+            &[]
+        };
+        CityTerrain {
+            seed: city.terrain_seed,
+            water_line: city.water_line,
+            peak_line: city.peak_line,
+            anchors,
+        }
+    }
+
+    /// Check if a coordinate offset from city center is passable terrain.
+    /// Returns true if no terrain is configured (anchor_count == 0).
+    pub fn is_terrain_passable(&self, account: &AccountInfo, ox: i32, oy: i32) -> bool {
+        if self.anchor_count == 0 {
+            return true;
+        }
+        let t = unsafe { Self::terrain_from_account(account) };
+        terrain::is_passable(&t, ox, oy)
     }
 }
 

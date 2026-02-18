@@ -25,8 +25,9 @@ use crate::{
         ActivityType,
         safe_math::apply_bp,
         combat::{WeaponSet, resolve_weapon_combat},
+        terrain,
     },
-    helpers::event_scoring::update_event_score,
+    helpers::{event_scoring::update_event_score, estate::{load_estate_for_player, load_estate_for_player_mut, has_infirmary, infirmary_recovery_bps}},
     validation::{
         require_signer,
         require_writable,
@@ -44,7 +45,7 @@ use crate::{
 /// 2. Validate both in same city (macro-level check)
 /// 3. Validate both at same coordinates within city (micro-level check)
 /// 4. Validate coordinates are within city bounds (anti-cheat)
-/// 5. Calculate attacker damage output (operative units + weapons)
+/// 5. Calculate attacker damage output (defensive units + weapons)
 /// 6. Calculate defender damage output (defensive units + weapons)
 /// 7. Inflict mutual damage on both sides
 /// 8. Calculate loot stolen (cash + equipment)
@@ -58,6 +59,8 @@ use crate::{
 /// - [] attacker_city: CityAccount PDA (for bounds validation)
 /// - [] defender_city: CityAccount PDA (for bounds validation, may be same as attacker_city)
 /// - [] game_engine: GameEngine PDA (for networth value config)
+/// - [] attacker_estate: EstateAccount PDA (for Infirmary recovery)
+/// - [] defender_estate: EstateAccount PDA (for Infirmary recovery)
 /// - [writable] attacker_event_participation: (Optional) Attacker's EventParticipation PDA
 /// - [writable] attacker_event: (Optional) Attacker's EventAccount PDA
 /// - [writable] defender_event_participation: (Optional) Defender's EventParticipation PDA
@@ -70,15 +73,26 @@ pub fn process(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> Result<(), ProgramError> {
-    // 1. Parse accounts
-    let (attacker_player, defender_player, attacker_owner, attacker_city, defender_city, game_engine, attacker_event_participation, attacker_event, defender_event_participation, defender_event) = if accounts.len() >= 10 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], Some(&accounts[6]), Some(&accounts[7]), Some(&accounts[8]), Some(&accounts[9]))
-    } else if accounts.len() >= 8 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], Some(&accounts[6]), Some(&accounts[7]), None, None)
-    } else if accounts.len() >= 6 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], None, None, None, None)
-    } else {
+    // 1. Parse accounts (8 required, 4 optional event accounts)
+    if accounts.len() < 8 {
         return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let attacker_player = &accounts[0];
+    let defender_player = &accounts[1];
+    let attacker_owner = &accounts[2];
+    let attacker_city = &accounts[3];
+    let defender_city = &accounts[4];
+    let game_engine = &accounts[5];
+    let attacker_estate_account = &accounts[6];
+    let defender_estate_account = &accounts[7];
+
+    let (attacker_event_participation, attacker_event, defender_event_participation, defender_event) = if accounts.len() >= 12 {
+        (Some(&accounts[8]), Some(&accounts[9]), Some(&accounts[10]), Some(&accounts[11]))
+    } else if accounts.len() >= 10 {
+        (Some(&accounts[8]), Some(&accounts[9]), None, None)
+    } else {
+        (None, None, None, None)
     };
 
     // 2. Validate accounts
@@ -88,7 +102,7 @@ pub fn process(
     require_owner(attacker_player, program_id)?;
     require_owner(defender_player, program_id)?;
 
-    let attacker_bump = require_pda(attacker_player, &[PLAYER_SEED, attacker_owner.key()], program_id)?;
+    let attacker_bump = require_pda(attacker_player, &[PLAYER_SEED, game_engine.key(), attacker_owner.key()], program_id)?;
 
     // 3. Parse instruction data
     if data.is_empty() {
@@ -110,7 +124,7 @@ pub fn process(
     };
 
     // Validate defender PDA (CRITICAL: prevents fake defender accounts)
-    let defender_bump = require_pda(defender_player, &[PLAYER_SEED, &defender_data.owner], program_id)?;
+    let defender_bump = require_pda(defender_player, &[PLAYER_SEED, &defender_data.game_engine, &defender_data.owner], program_id)?;
     if defender_data.bump != defender_bump {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -225,9 +239,9 @@ pub fn process(
         attacker_data.new_player_protection_until = now;
     }
 
-    // 7. Validate attacker has operative units
-    let attacker_operative_total = attacker_data.total_operative_units();
-    if attacker_operative_total == 0 {
+    // 7. Validate attacker has defensive units
+    let attacker_defensive_total = attacker_data.total_defensive_units();
+    if attacker_defensive_total == 0 {
         return Err(GameError::InsufficientUnits.into());
     }
 
@@ -240,7 +254,7 @@ pub fn process(
 
     // Apply research buffs and hero buffs for attacker
     let base_attacker_damage = calculate_damage_output(
-        attacker_operative_total,
+        attacker_defensive_total,
         attacker_data.total_weapons(),
         drive_by,
         gameplay_config,
@@ -257,6 +271,40 @@ pub fn process(
     // Attacking is best at night (DeepNight gives φ), worst at Midday (1/φ)
     let time_of_day = get_time_of_day(now, attacker_data.current_long);
     let attacker_damage = apply_time_multiplier(base_attacker_damage, time_of_day, ActivityType::Attacking);
+
+    // 9b. Compute terrain elevation advantage (high ground bonus)
+    // Attacker at higher elevation → bonus to attack, penalty to defense
+    // Max ±1000 BPS (±10%) from net elevation difference
+    let terrain_elevation_net_bps: i32 = {
+        let t = unsafe { CityAccount::terrain_from_account(attacker_city) };
+        if t.anchors.is_empty() {
+            0
+        } else {
+            let (att_ox, att_oy) = terrain::city_offset(
+                terrain::to_grid(attacker_data.current_lat),
+                terrain::to_grid(attacker_data.current_long),
+                attacker_city_data.latitude,
+                attacker_city_data.longitude,
+            );
+            let (def_ox, def_oy) = terrain::city_offset(
+                terrain::to_grid(defender_data.current_lat),
+                terrain::to_grid(defender_data.current_long),
+                defender_city_data.latitude,
+                defender_city_data.longitude,
+            );
+            let att_aff = terrain::terrain_affinity(&t, att_ox, att_oy);
+            let def_aff = terrain::terrain_affinity(&t, def_ox, def_oy);
+            att_aff.elevation_bps as i32 - def_aff.elevation_bps as i32
+        }
+    };
+
+    // Apply terrain to attacker damage (positive net = high ground bonus)
+    let attacker_damage = if terrain_elevation_net_bps != 0 {
+        let m = (10000i32 + terrain_elevation_net_bps).max(5000) as u64;
+        attacker_damage.saturating_mul(m) / 10000
+    } else {
+        attacker_damage
+    };
 
     if attacker_damage == 0 {
         return Err(GameError::InsufficientAttackPower.into());
@@ -290,11 +338,28 @@ pub fn process(
     // Note: Use attacker's location for time calculation (both at same location anyway)
     let defender_damage = apply_time_multiplier(base_defender_damage, time_of_day, ActivityType::Defending);
 
+    // 10b. Apply terrain to defender damage (inverse of attacker's terrain advantage)
+    // If attacker has high ground, defender's counterattack is weaker
+    let defender_damage = if terrain_elevation_net_bps != 0 {
+        let m = (10000i32 - terrain_elevation_net_bps).max(5000) as u64;
+        defender_damage.saturating_mul(m) / 10000
+    } else {
+        defender_damage
+    };
+
     // 11. Inflict damage on defender's defensive units (PURE LOGIC)
     // Defender's armor reduces incoming damage (boosted by hero armor efficiency + equipped armor)
     // Use best armor efficiency from own hero or reinforcement heroes
     let defender_hero_armor_eff_bps = defender_data.hero_armor_efficiency_bps
         .max(defender_data.reinforcement_hero_armor_eff_bps);
+
+    // Capture originals for wounded tracking
+    let orig_defender_own_def_1 = defender_data.defensive_unit_1;
+    let orig_defender_own_def_2 = defender_data.defensive_unit_2;
+    let orig_defender_own_def_3 = defender_data.defensive_unit_3;
+    let orig_attacker_def_1 = attacker_data.defensive_unit_1;
+    let orig_attacker_def_2 = attacker_data.defensive_unit_2;
+    let orig_attacker_def_3 = attacker_data.defensive_unit_3;
 
     // Calculate total combined units for damage distribution
     let combined_def_1 = defender_data.defensive_unit_1.saturating_add(defender_data.reinforcement_def_1);
@@ -311,6 +376,26 @@ pub fn process(
         defender_hero_armor_eff_bps,
         defender_data.equipped_armor_bonus_bps,
     );
+
+    // 11a. Infirmary recovery for defender (reduce unit losses)
+    let (remaining_1, remaining_2, remaining_3) = if defender_estate_account.owner() == program_id {
+        let defender_estate = load_estate_for_player(defender_estate_account, &*defender_data, program_id)?;
+        let recovery_bps = infirmary_recovery_bps(defender_estate);
+        if recovery_bps > 0 {
+            let lost_1 = combined_def_1.saturating_sub(remaining_1);
+            let lost_2 = combined_def_2.saturating_sub(remaining_2);
+            let lost_3 = combined_def_3.saturating_sub(remaining_3);
+            (
+                remaining_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
+                remaining_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
+                remaining_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+            )
+        } else {
+            (remaining_1, remaining_2, remaining_3)
+        }
+    } else {
+        (remaining_1, remaining_2, remaining_3)
+    };
 
     let defender_units_lost = defender_defensive_total
         .saturating_sub(remaining_1.saturating_add(remaining_2).saturating_add(remaining_3));
@@ -348,12 +433,58 @@ pub fn process(
     defender_data.reinforcement_def_2 = reinf_unit_2;
     defender_data.reinforcement_def_3 = reinf_unit_3;
 
-    // 12. Inflict damage on attacker's operative units (PURE LOGIC)
-    // Attacker's armor protects operative units in counter-attack (boosted by hero armor efficiency + equipped armor)
+    // 11b. Operative attrition — if entire garrison is wiped, operatives are unprotected
+    // and take the same damage. Only triggers when ALL defensive units (own + reinforcement) = 0.
+    let orig_defender_op_1 = defender_data.operative_unit_1;
+    let orig_defender_op_2 = defender_data.operative_unit_2;
+    let orig_defender_op_3 = defender_data.operative_unit_3;
+
+    let garrison_wiped = def_unit_1 == 0 && def_unit_2 == 0 && def_unit_3 == 0
+        && reinf_unit_1 == 0 && reinf_unit_2 == 0 && reinf_unit_3 == 0;
+
+    if garrison_wiped && defender_data.total_operative_units() > 0 {
+        let (op_remaining_1, op_remaining_2, op_remaining_3) = inflict_damage(
+            defender_data.operative_unit_1,
+            defender_data.operative_unit_2,
+            defender_data.operative_unit_3,
+            defender_data.armor_pieces,
+            attacker_damage as f64,
+            gameplay_config,
+            defender_hero_armor_eff_bps,
+            defender_data.equipped_armor_bonus_bps,
+        );
+
+        // Infirmary recovery for operative losses
+        let (op_remaining_1, op_remaining_2, op_remaining_3) = if defender_estate_account.owner() == program_id {
+            let defender_estate = load_estate_for_player(defender_estate_account, &*defender_data, program_id)?;
+            let recovery_bps = infirmary_recovery_bps(defender_estate);
+            if recovery_bps > 0 {
+                let lost_1 = defender_data.operative_unit_1.saturating_sub(op_remaining_1);
+                let lost_2 = defender_data.operative_unit_2.saturating_sub(op_remaining_2);
+                let lost_3 = defender_data.operative_unit_3.saturating_sub(op_remaining_3);
+                (
+                    op_remaining_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
+                    op_remaining_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
+                    op_remaining_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+                )
+            } else {
+                (op_remaining_1, op_remaining_2, op_remaining_3)
+            }
+        } else {
+            (op_remaining_1, op_remaining_2, op_remaining_3)
+        };
+
+        defender_data.operative_unit_1 = op_remaining_1;
+        defender_data.operative_unit_2 = op_remaining_2;
+        defender_data.operative_unit_3 = op_remaining_3;
+    }
+
+    // 12. Inflict damage on attacker's defensive units (PURE LOGIC)
+    // Attacker's armor protects defensive units in counter-attack (boosted by hero armor efficiency + equipped armor)
     let (att_unit_1, att_unit_2, att_unit_3) = inflict_damage(
-        attacker_data.operative_unit_1,
-        attacker_data.operative_unit_2,
-        attacker_data.operative_unit_3,
+        attacker_data.defensive_unit_1,
+        attacker_data.defensive_unit_2,
+        attacker_data.defensive_unit_3,
         attacker_data.armor_pieces,
         defender_damage as f64,
         gameplay_config,
@@ -361,19 +492,85 @@ pub fn process(
         attacker_data.equipped_armor_bonus_bps,
     );
 
-    let attacker_units_lost = attacker_operative_total
+    // 12a. Infirmary recovery for attacker (reduce unit losses)
+    let (att_unit_1, att_unit_2, att_unit_3) = if attacker_estate_account.owner() == program_id {
+        let attacker_estate = load_estate_for_player(attacker_estate_account, &*attacker_data, program_id)?;
+        let recovery_bps = infirmary_recovery_bps(attacker_estate);
+        if recovery_bps > 0 {
+            let lost_1 = attacker_data.defensive_unit_1.saturating_sub(att_unit_1);
+            let lost_2 = attacker_data.defensive_unit_2.saturating_sub(att_unit_2);
+            let lost_3 = attacker_data.defensive_unit_3.saturating_sub(att_unit_3);
+            (
+                att_unit_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
+                att_unit_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
+                att_unit_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+            )
+        } else {
+            (att_unit_1, att_unit_2, att_unit_3)
+        }
+    } else {
+        (att_unit_1, att_unit_2, att_unit_3)
+    };
+
+    let attacker_units_lost = attacker_defensive_total
         .saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
 
-    attacker_data.operative_unit_1 = att_unit_1;
-    attacker_data.operative_unit_2 = att_unit_2;
-    attacker_data.operative_unit_3 = att_unit_3;
+    attacker_data.defensive_unit_1 = att_unit_1;
+    attacker_data.defensive_unit_2 = att_unit_2;
+    attacker_data.defensive_unit_3 = att_unit_3;
+
+    // 12b. Track wounded units on estates (Infirmary feature)
+    // Only if estate exists (owned by this program) — players without estates skip wounded tracking
+    // Defender: own defensive unit losses → wounded_def_*, operative losses → wounded_op_*
+    if defender_estate_account.owner() == program_id {
+        let defender_estate = load_estate_for_player_mut(defender_estate_account, &*defender_data, program_id)?;
+        if has_infirmary(defender_estate) {
+            let def_lost_1 = orig_defender_own_def_1.saturating_sub(def_unit_1) as u32;
+            let def_lost_2 = orig_defender_own_def_2.saturating_sub(def_unit_2) as u32;
+            let def_lost_3 = orig_defender_own_def_3.saturating_sub(def_unit_3) as u32;
+            let w1 = defender_estate.get_wounded_def_1().saturating_add(def_lost_1);
+            let w2 = defender_estate.get_wounded_def_2().saturating_add(def_lost_2);
+            let w3 = defender_estate.get_wounded_def_3().saturating_add(def_lost_3);
+            defender_estate.set_wounded_def_1(w1);
+            defender_estate.set_wounded_def_2(w2);
+            defender_estate.set_wounded_def_3(w3);
+
+            // Operative wounded (only if garrison was wiped)
+            if garrison_wiped {
+                let op_lost_1 = orig_defender_op_1.saturating_sub(defender_data.operative_unit_1) as u32;
+                let op_lost_2 = orig_defender_op_2.saturating_sub(defender_data.operative_unit_2) as u32;
+                let op_lost_3 = orig_defender_op_3.saturating_sub(defender_data.operative_unit_3) as u32;
+                let wo1 = defender_estate.get_wounded_op_1().saturating_add(op_lost_1);
+                let wo2 = defender_estate.get_wounded_op_2().saturating_add(op_lost_2);
+                let wo3 = defender_estate.get_wounded_op_3().saturating_add(op_lost_3);
+                defender_estate.set_wounded_op_1(wo1);
+                defender_estate.set_wounded_op_2(wo2);
+                defender_estate.set_wounded_op_3(wo3);
+            }
+        }
+    }
+    // Attacker: defensive unit losses from counter-attack → wounded_def_*
+    if attacker_estate_account.owner() == program_id {
+        let attacker_estate = load_estate_for_player_mut(attacker_estate_account, &*attacker_data, program_id)?;
+        if has_infirmary(attacker_estate) {
+            let att_lost_1 = orig_attacker_def_1.saturating_sub(att_unit_1) as u32;
+            let att_lost_2 = orig_attacker_def_2.saturating_sub(att_unit_2) as u32;
+            let att_lost_3 = orig_attacker_def_3.saturating_sub(att_unit_3) as u32;
+            let w1 = attacker_estate.get_wounded_def_1().saturating_add(att_lost_1);
+            let w2 = attacker_estate.get_wounded_def_2().saturating_add(att_lost_2);
+            let w3 = attacker_estate.get_wounded_def_3().saturating_add(att_lost_3);
+            attacker_estate.set_wounded_def_1(w1);
+            attacker_estate.set_wounded_def_2(w2);
+            attacker_estate.set_wounded_def_3(w3);
+        }
+    }
 
     // 12a. WEAPON COMBAT RESOLUTION
-    // Attacker's weapons (equipped by operative units)
+    // Attacker's weapons (equipped by defensive units)
     let attacker_weapons = WeaponSet::new(
-        attacker_data.melee_weapons.min(attacker_operative_total),
-        attacker_data.ranged_weapons.min(attacker_operative_total),
-        attacker_data.siege_weapons.min(attacker_operative_total),
+        attacker_data.melee_weapons.min(attacker_defensive_total),
+        attacker_data.ranged_weapons.min(attacker_defensive_total),
+        attacker_data.siege_weapons.min(attacker_defensive_total),
     );
 
     // Defender's combined weapons (own + reinforcement, equipped by combined defensive units)
@@ -400,7 +597,7 @@ pub fn process(
 
     // Resolve weapon combat
     let weapon_result = resolve_weapon_combat(
-        attacker_operative_total,
+        attacker_defensive_total,
         attacker_units_lost,
         attacker_weapons,
         attacker_damage,
@@ -432,13 +629,7 @@ pub fn process(
             let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps as u64;
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
-
-        // Apply hero luck bonus (multiplicative - luck improves loot outcomes)
-        if attacker_data.hero_loot_bonus_bps > 0 {
-            let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps as u64;
-            loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
-        }
-
+        
         // Cap at 100%
         loot_bps = loot_bps.min(10000);
 
@@ -523,8 +714,8 @@ pub fn process(
         let defender_looted = weapon_result.defender_weapons_looted;
 
         // Deduct lost weapons from attacker (proportional to casualties)
-        let casualty_ratio_bps = if attacker_operative_total > 0 {
-            ((attacker_units_lost as u128 * 10000) / attacker_operative_total as u128) as u64
+        let casualty_ratio_bps = if attacker_defensive_total > 0 {
+            ((attacker_units_lost as u128 * 10000) / attacker_defensive_total as u128) as u64
         } else {
             0
         };
@@ -645,7 +836,7 @@ pub fn process(
             program_id,
         )?;
 
-        let attacker_key = attacker_player.key();
+        let attacker_key = attacker_owner.key();
         let attacker_event_key = attacker_event.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
@@ -723,7 +914,7 @@ pub fn process(
             program_id,
         )?;
 
-        let defender_key = defender_player.key();
+        let defender_key = &defender_data.owner;
         let defender_event_key = defender_event.key();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
@@ -770,7 +961,7 @@ pub fn process(
 
     // Calculate units lost for event (need to get original values)
     // Since we already updated the units above, we track the lost counts
-    let _attacker_melee_lost = attacker_operative_total.saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
+    let _attacker_melee_lost = attacker_defensive_total.saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
 
     // Calculate cash/armor/produce/vehicles stolen (only if attacker won)
     let (cash_stolen, armor_stolen, produce_stolen, vehicles_stolen) = if attacker_won {
@@ -783,9 +974,9 @@ pub fn process(
     };
 
     // Calculate actual per-tier losses
-    let attacker_tier1_lost = attacker_data.operative_unit_1.saturating_sub(att_unit_1);
-    let attacker_tier2_lost = attacker_data.operative_unit_2.saturating_sub(att_unit_2);
-    let attacker_tier3_lost = attacker_data.operative_unit_3.saturating_sub(att_unit_3);
+    let attacker_tier1_lost = attacker_data.defensive_unit_1.saturating_sub(att_unit_1);
+    let attacker_tier2_lost = attacker_data.defensive_unit_2.saturating_sub(att_unit_2);
+    let attacker_tier3_lost = attacker_data.defensive_unit_3.saturating_sub(att_unit_3);
 
     // For defender: calculate losses before/after combat was applied
     // Note: defender units already updated, so calculate from what was removed

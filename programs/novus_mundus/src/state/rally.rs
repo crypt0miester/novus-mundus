@@ -59,6 +59,9 @@ impl RallyStatus {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct RallyAccount {
+    /// Account discriminator (AccountKey::Rally)
+    pub account_key: u8,
+
     // Kingdom Reference (32 bytes)
     pub game_engine: Pubkey,                // Kingdom this rally belongs to
 
@@ -309,6 +312,9 @@ impl RallyAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct RallyParticipant {
+    /// Account discriminator (AccountKey::RallyParticipant)
+    pub account_key: u8,
+
     // Identity (48 bytes)
     pub rally_id: u64,                      // Which rally
     pub rally_creator: Pubkey,              // Rally creator (for PDA derivation)

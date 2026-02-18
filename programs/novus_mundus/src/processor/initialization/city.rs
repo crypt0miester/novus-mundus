@@ -142,6 +142,7 @@ pub fn process(
 
     let city_data = unsafe { CityAccount::load_mut(city_account)? };
 
+    city_data.account_key = crate::state::AccountKey::City as u8;
     city_data.game_engine = *game_engine_account.key();
     city_data.city_id = city_id;
     city_data.name = name;

@@ -79,7 +79,8 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     }
 
     // 5. Derive player PDA and get bump for signing
-    let player_seeds: &[&[u8]] = &[PLAYER_SEED, owner.key().as_ref()];
+    let player_ge = player.game_engine;
+    let player_seeds: &[&[u8]] = &[PLAYER_SEED, &player_ge, owner.key().as_ref()];
     let (player_pda, bump) = pinocchio::pubkey::find_program_address(player_seeds, program_id);
 
     if player_pda != *player_account.key() {
@@ -101,7 +102,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
 
     // 8. Transfer domain ownership: player PDA → user wallet
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
     let signer = Signer::from(&seeds);
 
     Transfer {

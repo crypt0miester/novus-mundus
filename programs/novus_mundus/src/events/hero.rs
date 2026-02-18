@@ -163,3 +163,68 @@ impl Event for HeroAssignedDefensive {
         offset
     }
 }
+
+/// Emitted when a hero NFT is burned
+pub struct HeroBurned {
+    /// Hero NFT mint pubkey (now destroyed)
+    pub hero_mint: Pubkey,
+    /// Player account who burned
+    pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
+    /// Hero template ID
+    pub template_id: u16,
+    /// Hero level at time of burn
+    pub hero_level: u32,
+    /// Hero tier (0-4)
+    pub tier: u8,
+    /// NOVI reward credited (locked)
+    pub novi_reward: u64,
+    /// Template minted_count after decrement
+    pub new_minted_count: u32,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for HeroBurned {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:HeroBurned");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
+        offset += self.template_id.pack(&mut buf[offset..]);
+        offset += self.hero_level.pack(&mut buf[offset..]);
+        offset += self.tier.pack(&mut buf[offset..]);
+        offset += self.novi_reward.pack(&mut buf[offset..]);
+        offset += self.new_minted_count.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}
+
+/// Emitted when a hero template supply cap is updated
+pub struct SupplyCapUpdated {
+    /// Hero template ID
+    pub template_id: u16,
+    /// Previous supply cap
+    pub old_supply_cap: u32,
+    /// New supply cap
+    pub new_supply_cap: u32,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for SupplyCapUpdated {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:SupplyCapUpdated");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.template_id.pack(&mut buf[offset..]);
+        offset += self.old_supply_cap.pack(&mut buf[offset..]);
+        offset += self.new_supply_cap.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}

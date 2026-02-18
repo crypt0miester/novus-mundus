@@ -16,3 +16,5 @@ pub mod lock;
 pub mod unlock;
 pub mod level_up;
 pub mod assign_defensive;
+pub mod burn;
+pub mod update_supply_cap;

@@ -11,7 +11,6 @@ use crate::{
     error::GameError,
     events::{IntercityTravelCompleted, XpGained, PlayerLeveledUp},
     state::{PlayerAccount, CityAccount, LocationAccount, HeroTemplate, NULL_PUBKEY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
-    constants::LOCATION_SEED,
     types::TravelType,
     logic::{
         location::calculate_distance_meters,
@@ -137,38 +136,24 @@ pub fn process(
         });
     }
 
-    // 8. Quantize Destination City Center to Grid Cell
-
-    let dest_grid_lat = LocationAccount::to_grid(destination_city_data.latitude);
-    let dest_grid_long = LocationAccount::to_grid(destination_city_data.longitude);
-
-    // Convert grid back to cell center for actual coordinates
-    let cell_center_lat = LocationAccount::from_grid(dest_grid_lat);
-    let cell_center_long = LocationAccount::from_grid(dest_grid_long);
-
-    // 9. Validate Destination Location PDA
+    // 8. Validate Destination Location (reserved at travel_start)
+    //
+    // The destination cell was reserved by intercity_start at arbitrary coords
+    // within the destination city. We validate by checking program ownership
+    // and that the player occupies this cell.
 
     let new_city_id = player_data.destination_city;
-    let city_bytes = new_city_id.to_le_bytes();
-    let lat_bytes = dest_grid_lat.to_le_bytes();
-    let long_bytes = dest_grid_long.to_le_bytes();
 
-    let (expected_location_pda, _) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &city_bytes, &lat_bytes, &long_bytes],
-        program_id,
-    );
+    require_owner(destination_location_account, program_id)?;
 
-    if destination_location_account.key() != &expected_location_pda {
-        return Err(GameError::InvalidPDA.into());
-    }
-
-    // 10. Verify Player Already Owns Destination (reserved at travel_start)
+    let dest_grid_lat;
+    let dest_grid_long;
     {
         let mut location_data = destination_location_account.try_borrow_mut_data()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
-        // Verify grid coordinates match
-        if location.grid_lat != dest_grid_lat || location.grid_long != dest_grid_long {
+        // Verify location is in the destination city
+        if location.city_id != new_city_id {
             return Err(GameError::InvalidPDA.into());
         }
 
@@ -177,12 +162,19 @@ pub fn process(
             return Err(GameError::NotCellOccupant.into());
         }
 
+        dest_grid_lat = location.grid_lat;
+        dest_grid_long = location.grid_long;
+
         // Update occupied_since to arrival time, clear reserved_arrival_time (arrived)
         location.occupied_since = now;
         location.reserved_arrival_time = 0;
     }
 
-    // 11. Update Player Location
+    // Convert grid coords to actual coordinates for player position
+    let cell_center_lat = LocationAccount::from_grid(dest_grid_lat);
+    let cell_center_long = LocationAccount::from_grid(dest_grid_long);
+
+    // 9. Update Player Location
 
     player_data.current_city = new_city_id;
     player_data.travel_type = TravelType::None as u8;
@@ -192,7 +184,7 @@ pub fn process(
     player_data.arrival_time = -1;
     player_data.travel_speed_locked = 0.0;
 
-    // Set player coordinates to grid cell center
+    // Set player coordinates to reserved cell center
     player_data.current_lat = cell_center_lat;
     player_data.current_long = cell_center_long;
 

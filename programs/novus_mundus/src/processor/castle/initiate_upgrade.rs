@@ -77,25 +77,29 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 3 {
+    if instruction_data.len() < 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let upgrade_type = instruction_data[2];
+    let upgrade_type = instruction_data[0];
 
     // Validate upgrade type
     if upgrade_type < 1 || upgrade_type > 5 {
         return Err(GameError::InvalidUpgradeType.into());
     }
 
-    // Load king player
+    // Load king player - read needed fields, then drop borrow for CPI
     require_owner(king_account, program_id)?;
-    let mut king_data = king_account.try_borrow_mut_data()?;
-    let king = unsafe { PlayerAccount::load_mut(&mut king_data) };
+    let (king_locked_novi, king_bump, king_game_engine) = {
+        let king_data = king_account.try_borrow_data()?;
+        let king = unsafe { PlayerAccount::load(&king_data) };
 
-    if &king.owner != king_wallet.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+        if &king.owner != king_wallet.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+
+        (king.locked_novi, king.bump, king.game_engine)
+    };
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
@@ -134,15 +138,14 @@ pub fn process(
     }
 
     // Verify king has enough locked NOVI
-    if king.locked_novi < cost {
+    if king_locked_novi < cost {
         return Err(GameError::InsufficientLockedNovi.into());
     }
 
     // Burn NOVI tokens from locked token account
     // PlayerAccount PDA is the authority over locked tokens
-    let king_bump = king.bump;
     let bump_seed = [king_bump];
-    let king_seeds = pinocchio::seeds!(PLAYER_SEED, king_wallet.key().as_ref(), &bump_seed);
+    let king_seeds = pinocchio::seeds!(PLAYER_SEED, king_game_engine.as_ref(), king_wallet.key().as_ref(), &bump_seed);
     let king_signer = pinocchio::instruction::Signer::from(&king_seeds);
 
     burn_tokens(
@@ -153,7 +156,9 @@ pub fn process(
         &[king_signer],
     )?;
 
-    // Update cached balance
+    // Re-borrow king to update cached balance
+    let mut king_data = king_account.try_borrow_mut_data()?;
+    let king = unsafe { PlayerAccount::load_mut(&mut king_data) };
     king.locked_novi = king.locked_novi.saturating_sub(cost);
 
     // Get current timestamp

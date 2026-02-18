@@ -132,6 +132,7 @@ pub fn process(
     let mut lb_data = leaderboard_account.try_borrow_mut_data()?;
     let leaderboard = unsafe { DungeonLeaderboard::load_mut(&mut lb_data) };
 
+    leaderboard.account_key = crate::state::AccountKey::DungeonLeaderboard as u8;
     leaderboard.game_engine = *game_engine.key();
     leaderboard.dungeon_id = dungeon_id;
     leaderboard.week_number = week_number;

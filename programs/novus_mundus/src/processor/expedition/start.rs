@@ -39,7 +39,7 @@ use crate::{
     },
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
-    helpers::estate::{load_estate_for_player, require_workshop, require_dock},
+    helpers::estate::{load_estate_for_player, require_mine, require_dock},
     validation::{require_signer, require_writable, require_owner, require_empty},
     emit,
     events::ExpeditionStarted,
@@ -162,9 +162,9 @@ pub fn process(
             return Err(GameError::MiningNotUnlocked.into());
         }
 
-        // Check Workshop level requirement for tier
+        // Check Mine level requirement for tier (split from Workshop)
         let required_level = MINING_WORKSHOP_REQ.get(tier as usize).copied().unwrap_or(20);
-        require_workshop(estate, required_level)?;
+        require_mine(estate, required_level)?;
 
         MINING_NOVI_COST.get(tier as usize).copied().unwrap_or(30_000)
     } else {
@@ -259,7 +259,7 @@ pub fn process(
     let hero_mint_key = if has_hero_accounts {
         let hero_mint = &accounts[5];
         let hero_collection = &accounts[6];
-        let _p_core_program = &accounts[7];
+        let p_core_program = &accounts[7];
 
         require_writable(hero_mint)?;
 
@@ -275,27 +275,27 @@ pub fn process(
             p_core::instructions::TransferV1 {
                 asset: hero_mint,
                 collection: hero_collection,
-                current_owner: owner,
                 new_owner: expedition_account,
                 payer: owner,
                 authority: owner,
                 system_program,
+                log_wrapper: p_core_program,
             }.invoke()?;
         } else if current_owner_key == *player_account.key() {
             // Hero is locked in PlayerAccount PDA - need PDA signer
             let player_bump = player_data.bump;
             let player_bump_seed = [player_bump];
-            let player_seeds = pinocchio::seeds!(PLAYER_SEED, owner.key(), &player_bump_seed);
+            let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_data.game_engine, owner.key(), &player_bump_seed);
             let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
             p_core::instructions::TransferV1 {
                 asset: hero_mint,
                 collection: hero_collection,
-                current_owner: player_account,
                 new_owner: expedition_account,
                 payer: owner,
                 authority: player_account,
                 system_program,
+                log_wrapper: p_core_program,
             }.invoke_signed(&[player_signer])?;
 
             // Clear the active_heroes slot since hero is now on expedition

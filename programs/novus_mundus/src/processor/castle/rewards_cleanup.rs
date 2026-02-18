@@ -43,7 +43,7 @@ const PHASE_REWARDS: u8 = 2;
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 5 {
@@ -55,11 +55,6 @@ pub fn process(
     let member_account = &accounts[2];
     let reward_account = &accounts[3];
     let rent_recipient = &accounts[4];
-
-    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;

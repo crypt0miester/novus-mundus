@@ -19,6 +19,9 @@ impl LeaderboardEntry {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EventAccount {
+    /// Account discriminator (AccountKey::Event)
+    pub account_key: u8,                        // 1 byte
+
     /// Kingdom this event belongs to
     pub game_engine: Pubkey,                    // 32 bytes
 
@@ -186,6 +189,9 @@ impl EventAccount {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct EventParticipation {
+    /// Account discriminator (AccountKey::EventParticipation)
+    pub account_key: u8,
+
     pub game_engine: Pubkey,                    // 32 bytes - Kingdom reference
     pub event_id: u64,                          // 8 bytes
     pub player: Pubkey,                         // 32 bytes
@@ -210,6 +216,7 @@ impl EventParticipation {
     /// Initialize new participation
     pub fn new(game_engine: Pubkey, event_id: u64, player: Pubkey, joined_at: i64, bump: u8) -> Self {
         Self {
+            account_key: crate::state::AccountKey::EventParticipation as u8,
             game_engine,
             event_id,
             player,

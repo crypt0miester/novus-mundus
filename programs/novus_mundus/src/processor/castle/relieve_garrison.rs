@@ -4,6 +4,10 @@
 //!
 //! King can remove a garrison member, returning their
 //! committed units, weapons, and hero.
+//!
+//! Hero NFT is transferred from garrison PDA back to player PDA (re-locked)
+//! if there is an empty active_heroes slot. Otherwise, transferred to
+//! the relieved player's wallet (unlocked state).
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -18,16 +22,18 @@ use crate::{
     error::GameError,
     events::GarrisonLeft,
     state::{
-        CastleAccount, GarrisonContributionAccount, PlayerAccount,
+        CastleAccount, GarrisonContributionAccount, PlayerAccount, HeroTemplate,
         player::NULL_PUBKEY,
+        is_hero_at_home, location_bonus_for_tier,
     },
-    helpers::close_account,
+    constants::GARRISON_SEED,
+    helpers::{
+        close_account,
+        parse_hero_nft,
+        add_hero_buffs_to_player_with_location,
+    },
     validation::{require_owner, require_initialized},
 };
-
-/// Relieve Garrison instruction data
-/// - city_id: u16 (bytes 2-3)
-/// - castle_id: u16 (bytes 4-5)
 
 /// Accounts:
 /// 0. [signer] King wallet
@@ -36,11 +42,18 @@ use crate::{
 /// 3. [writable] Relieved player account
 /// 4. [writable] Garrison contribution account (to close)
 /// 5. [writable] Rent recipient (relieved player wallet)
+///
+/// Optional Hero accounts (if garrison has hero):
+/// 6. [writable] Hero mint (MPL Core AssetV1)
+/// 7. [] Hero template
+/// 8. [] Hero collection
+/// 9. [] System program
+/// 10. [] p_core program
 
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 6 {
@@ -57,11 +70,6 @@ pub fn process(
     // Verify signer
     if !king_wallet.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
-    }
-
-    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
     }
 
     // Load king player
@@ -89,7 +97,7 @@ pub fn process(
     // Load garrison contribution
     require_owner(garrison_account, program_id)?;
 
-    let (expected_garrison_pda, _) = GarrisonContributionAccount::derive_pda(
+    let (expected_garrison_pda, garrison_bump) = GarrisonContributionAccount::derive_pda(
         castle_account.key(),
         relieved_account.key(),
     );
@@ -114,7 +122,7 @@ pub fn process(
     let melee = garrison.melee_weapons;
     let ranged = garrison.ranged_weapons;
     let siege = garrison.siege_weapons;
-    let hero_mint = garrison.hero_mint;
+    let hero_mint_key = garrison.hero_mint;
 
     // Return units to relieved player
     relieved.defensive_unit_1 = relieved.defensive_unit_1.saturating_add(units_1);
@@ -126,16 +134,95 @@ pub fn process(
     relieved.ranged_weapons = relieved.ranged_weapons.saturating_add(ranged);
     relieved.siege_weapons = relieved.siege_weapons.saturating_add(siege);
 
-    // Return hero if committed
-    if hero_mint != NULL_PUBKEY {
+    // Handle hero return
+    if hero_mint_key != NULL_PUBKEY {
+        if accounts.len() < 11 {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        }
+
+        let hero_mint = &accounts[6];
+        let hero_template_account = &accounts[7];
+        let hero_collection = &accounts[8];
+        let system_program = &accounts[9];
+        let p_core_program = &accounts[10];
+
+        // Verify hero mint matches
+        if hero_mint.key() != &hero_mint_key {
+            return Err(GameError::InvalidParameter.into());
+        }
+
         // Find empty slot in active_heroes
+        let mut target_slot: Option<usize> = None;
         for i in 0..3 {
             if relieved.active_heroes[i] == NULL_PUBKEY {
-                relieved.active_heroes[i] = hero_mint;
+                target_slot = Some(i);
                 break;
             }
         }
-        // Note: In full implementation, transfer hero back from escrow
+
+        // Derive garrison PDA signer
+        let bump_seed = [garrison_bump];
+        let garrison_seeds = pinocchio::seeds!(
+            GARRISON_SEED,
+            castle_account.key().as_ref(),
+            relieved_account.key().as_ref(),
+            &bump_seed
+        );
+        let garrison_signer = pinocchio::instruction::Signer::from(&garrison_seeds);
+
+        if let Some(slot) = target_slot {
+            // Slot available: transfer to relieved player PDA (re-lock)
+            relieved.active_heroes[slot] = hero_mint_key;
+
+            // Re-add hero buffs
+            let template_data = hero_template_account.try_borrow_data()?;
+            let template = unsafe { HeroTemplate::load(&template_data) };
+            let nft_data = hero_mint.try_borrow_data()?;
+            if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
+                let at_home = is_hero_at_home(parsed_hero.origin_city, relieved.current_city);
+                let location_bonus = if at_home { location_bonus_for_tier(crate::state::tier_from_mint_cost(template.mint_cost_sol)) } else { 0 };
+                relieved.slot_location_bonus[slot] = location_bonus;
+                add_hero_buffs_to_player_with_location(relieved, parsed_hero.level, template, location_bonus);
+            }
+            drop(nft_data);
+            drop(template_data);
+
+            // Drop borrows before CPI
+            drop(garrison_data);
+            drop(relieved_data);
+            drop(king_data);
+
+            p_core::instructions::TransferV1 {
+                asset: hero_mint,
+                collection: hero_collection,
+                new_owner: relieved_account,
+                payer: king_wallet,
+                authority: garrison_account,
+                system_program,
+                log_wrapper: p_core_program,
+            }.invoke_signed(&[garrison_signer])?;
+        } else {
+            // All slots full: transfer to relieved player's wallet (unlocked)
+            // rent_recipient is the relieved player's wallet
+            drop(garrison_data);
+            drop(relieved_data);
+            drop(king_data);
+
+            p_core::instructions::TransferV1 {
+                asset: hero_mint,
+                collection: hero_collection,
+                new_owner: rent_recipient,
+                payer: king_wallet,
+                authority: garrison_account,
+                system_program,
+                log_wrapper: p_core_program,
+            }.invoke_signed(&[garrison_signer])?;
+        }
+    } else {
+        // No hero - drop borrows
+        drop(garrison_data);
+        drop(relieved_data);
+        drop(king_data);
     }
 
     // Get current timestamp
@@ -143,8 +230,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Copy relieved name for event
+    let relieved_data_ref = relieved_account.try_borrow_data()?;
+    let relieved_ref = unsafe { PlayerAccount::load(&relieved_data_ref) };
     let mut relieved_name = [0u8; 48];
-    relieved_name.copy_from_slice(&relieved.name);
+    relieved_name.copy_from_slice(&relieved_ref.name);
+    drop(relieved_data_ref);
 
     // Store castle name for event
     let castle_name = castle.name;
@@ -154,11 +244,6 @@ pub fn process(
     let garrison_count = castle.garrison_count;
 
     let total_weapons = melee.saturating_add(ranged).saturating_add(siege);
-
-    // Drop borrows before closing
-    drop(garrison_data);
-    drop(relieved_data);
-    drop(king_data);
 
     // Close garrison account
     close_account(garrison_account, rent_recipient)?;
@@ -173,7 +258,7 @@ pub fn process(
         units_2,
         units_3,
         weapons: total_weapons,
-        hero_mint,
+        hero_mint: hero_mint_key,
         relieved: true, // forced by king
         garrison_count,
         timestamp: now,

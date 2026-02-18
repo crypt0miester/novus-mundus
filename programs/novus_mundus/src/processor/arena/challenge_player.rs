@@ -149,12 +149,12 @@ pub fn process(
     let defender_authority_key = defender_player_data.owner;
     drop(defender_player_raw);
 
-    // 8. Load Participants (kingdom-scoped)
+    // 8. Load Participants (kingdom-scoped, keyed by player PDA)
     let mut challenger_part = ArenaParticipantAccount::load_checked_mut(
         challenger_participant,
         game_engine.key(),
         season_id,
-        challenger_authority.key(),
+        challenger_player.key(),
         program_id,
     )?;
 
@@ -162,22 +162,22 @@ pub fn process(
         defender_participant,
         game_engine.key(),
         season_id,
-        &defender_authority_key,
+        defender_player.key(),
         program_id,
     )?;
 
-    // 9. Load Loadouts (kingdom-scoped)
+    // 9. Load Loadouts (kingdom-scoped, keyed by player PDA)
     let challenger_loadout_data = ArenaLoadoutAccount::load_checked(
         challenger_loadout,
         game_engine.key(),
-        challenger_authority.key(),
+        challenger_player.key(),
         program_id,
     )?;
 
     let defender_loadout_data = ArenaLoadoutAccount::load_checked(
         defender_loadout,
         game_engine.key(),
-        &defender_authority_key,
+        defender_player.key(),
         program_id,
     )?;
 

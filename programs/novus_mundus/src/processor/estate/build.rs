@@ -62,53 +62,56 @@ pub fn process(
     let building_type = BuildingType::from_u8(instruction_data[0])
         .ok_or(ProgramError::InvalidInstructionData)?;
 
-    // 4. Load Accounts
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+    // 4. Validate preconditions (scoped borrow - dropped before CPI)
+    let (base_cost, slot_index, player_ge, player_bump, player_name) = {
+        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
-    let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+        let estate_data_ref = estate_account.try_borrow_data()?;
+        let estate_data = unsafe { EstateAccount::load(&estate_data_ref) };
 
-    // 5. Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if &estate_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+        // 5. Verify ownership
+        if &player_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        if &estate_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
 
-    // 6. Check estate level requirement for this building tier
-    let required_level = building_type.required_estate_level();
-    if estate_data.estate_level < required_level {
-        return Err(GameError::EstateLevelInsufficient.into());
-    }
+        // 6. Check estate level requirement for this building tier
+        let required_level = building_type.required_estate_level();
+        if estate_data.estate_level < required_level {
+            return Err(GameError::EstateLevelInsufficient.into());
+        }
 
-    // 7. Check building doesn't already exist
-    if estate_data.find_building(building_type).is_some() {
-        return Err(GameError::BuildingAlreadyExists.into());
-    }
+        // 7. Check building doesn't already exist
+        if estate_data.find_building(building_type).is_some() {
+            return Err(GameError::BuildingAlreadyExists.into());
+        }
 
-    // 8. Find empty slot
-    let slot_index = estate_data.find_empty_slot()
-        .ok_or(GameError::BuildingSlotFull)?;
+        // 8. Find empty slot
+        let slot_index = estate_data.find_empty_slot()
+            .ok_or(GameError::BuildingSlotFull)?;
 
-    // 9. Calculate cost (base cost for level 1)
-    let base_cost = match building_type.tier() {
-        1 => 10_000u64,    // Tier 1: 10k NOVI
-        2 => 50_000u64,    // Tier 2: 50k NOVI
-        3 => 200_000u64,   // Tier 3: 200k NOVI
-        _ => 10_000u64,
-    };
+        // 9. Calculate cost (base cost for level 1)
+        let base_cost = match building_type.tier() {
+            1 => 10_000u64,    // Tier 1: 10k NOVI
+            2 => 50_000u64,    // Tier 2: 50k NOVI
+            3 => 200_000u64,   // Tier 3: 200k NOVI
+            _ => 10_000u64,
+        };
 
-    // 10. Check player has enough balance
-    if player_data.locked_novi < base_cost {
-        return Err(GameError::InsufficientLockedNovi.into());
-    }
+        // 10. Check player has enough balance
+        if player_data.locked_novi < base_cost {
+            return Err(GameError::InsufficientLockedNovi.into());
+        }
 
-    // 11. Burn NOVI tokens
-    let player_bump = player_data.bump;
+        (base_cost, slot_index, player_data.game_engine, player_data.bump, player_data.name)
+    }; // borrows dropped here
+
+    // 11. Burn NOVI tokens (CPI - requires no active borrows)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
     let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -119,10 +122,7 @@ pub fn process(
         &[player_signer],
     )?;
 
-    // Update soft balance tracker
-    player_data.locked_novi = player_data.locked_novi.saturating_sub(base_cost);
-
-    // 12. Get current time and calculate construction end
+    // 12. Update player and estate state (re-borrow after CPI)
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
@@ -133,27 +133,37 @@ pub fn process(
         _ => 4 * 3600i64,
     };
 
-    // 13. Initialize building slot
-    estate_data.buildings[slot_index] = BuildingSlot {
-        building_type: building_type as u8,
-        status: BuildingStatus::Building as u8,
-        level: 0, // Level 0 during construction, becomes 1 on completion
-        mastery_level: 0,
-        mastery_xp: 0,
-        construction_started: now,
-        construction_ends: now + construction_time,
-        total_novi_invested: base_cost,
-        _padding: [0; 4],
-    };
+    {
+        let mut player_data_ref = player_account.try_borrow_mut_data()?;
+        let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+        player_data.locked_novi = player_data.locked_novi.saturating_sub(base_cost);
+    }
 
-    // 14. Update estate stats
-    estate_data.total_buildings = estate_data.total_buildings.saturating_add(1);
-    estate_data.last_activity = now;
+    {
+        let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+        let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
-    // 15. Emit BuildingStarted event
+        // 13. Initialize building slot
+        estate_data.buildings[slot_index] = BuildingSlot {
+            building_type: building_type as u8,
+            status: BuildingStatus::Building as u8,
+            level: 0, // Level 0 during construction, becomes 1 on completion
+            mastery_level: 0,
+            mastery_xp: 0,
+            construction_started: now,
+            construction_ends: now + construction_time,
+            total_novi_invested: base_cost,
+            _padding: [0; 4],
+        };
+
+        // 14. Update estate stats
+        estate_data.total_buildings = estate_data.total_buildings.saturating_add(1);
+        estate_data.last_activity = now;
+    }
+
     emit!(BuildingStarted {
         player: *player_account.key(),
-        player_name: player_data.name,
+        player_name,
         building_type: building_type as u8,
         plot: slot_index as u8,
         completes_at: now + construction_time,

@@ -34,8 +34,10 @@ pub fn close_account(
     }
 
     // Zero out account data
-    let mut data = account.try_borrow_mut_data()?;
-    data.fill(0);
+    {
+        let mut data = account.try_borrow_mut_data()?;
+        data.fill(0);
+    } // drop RefMut before resize
 
     // Resize to 0 (mark as closed)
     account.resize(0)?;

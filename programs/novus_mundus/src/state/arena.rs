@@ -26,8 +26,8 @@ use crate::{
 // Arena Season Account
 // ============================================================
 
-/// Size of ArenaSeasonAccount in bytes
-pub const ARENA_SEASON_ACCOUNT_SIZE: usize = 560;
+/// Size of ArenaSeasonAccount in bytes (with repr(C) alignment padding)
+pub const ARENA_SEASON_ACCOUNT_SIZE: usize = 608;
 
 /// Arena season status
 #[repr(u8)]
@@ -77,6 +77,9 @@ impl Default for ArenaLeaderboardEntry {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaSeasonAccount {
+    /// Account discriminator (AccountKey::ArenaSeason)
+    pub account_key: u8,
+
     // ===== Kingdom & Identity (70 bytes) =====
     pub game_engine: Pubkey,                     // 32 - Kingdom this season belongs to
     pub season_id: u32,                          // 4 - Incrementing season number
@@ -113,7 +116,7 @@ pub struct ArenaSeasonAccount {
 }
 
 impl ArenaSeasonAccount {
-    pub const LEN: usize = ARENA_SEASON_ACCOUNT_SIZE;
+    pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Derive the PDA for an arena season
     /// Seeds: ["arena_season", game_engine, season_id]
@@ -306,8 +309,9 @@ impl ArenaSeasonAccount {
 // Arena Participant Account
 // ============================================================
 
-/// Size of ArenaParticipantAccount in bytes
-pub const ARENA_PARTICIPANT_ACCOUNT_SIZE: usize = 488;
+/// Size of ArenaParticipantAccount in bytes (with repr(C) alignment padding)
+/// Packed fields total 520 but repr(C) adds padding for i64 alignment = 536
+pub const ARENA_PARTICIPANT_ACCOUNT_SIZE: usize = 536;
 
 /// Arena Participant Account - per-player, per-season state tracking
 ///
@@ -315,6 +319,9 @@ pub const ARENA_PARTICIPANT_ACCOUNT_SIZE: usize = 488;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaParticipantAccount {
+    /// Account discriminator (AccountKey::ArenaParticipant)
+    pub account_key: u8,
+
     // ===== Identity (68 bytes) =====
     pub game_engine: Pubkey,                     // 32 - Kingdom reference
     pub player: Pubkey,                          // 32
@@ -346,7 +353,7 @@ pub struct ArenaParticipantAccount {
 }
 
 impl ArenaParticipantAccount {
-    pub const LEN: usize = ARENA_PARTICIPANT_ACCOUNT_SIZE;
+    pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Starting ELO rating for new participants
     pub const STARTING_ELO: u32 = 1000;
@@ -496,8 +503,9 @@ impl ArenaParticipantAccount {
 // Arena Loadout Account
 // ============================================================
 
-/// Size of ArenaLoadoutAccount in bytes
-pub const ARENA_LOADOUT_ACCOUNT_SIZE: usize = 128;
+/// Size of ArenaLoadoutAccount in bytes (with repr(C) alignment padding)
+/// Packed fields total 160 but repr(C) adds padding for u64 alignment = 168
+pub const ARENA_LOADOUT_ACCOUNT_SIZE: usize = 168;
 
 /// Arena Loadout Account - player's configured arena loadout (reusable across seasons)
 /// KINGDOM-SCOPED: Loadouts are per-kingdom since player units differ per kingdom
@@ -506,6 +514,9 @@ pub const ARENA_LOADOUT_ACCOUNT_SIZE: usize = 128;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaLoadoutAccount {
+    /// Account discriminator (AccountKey::ArenaLoadout)
+    pub account_key: u8,
+
     // ===== Identity (65 bytes) =====
     pub game_engine: Pubkey,                     // 32 - Kingdom reference
     pub player: Pubkey,                          // 32
@@ -528,7 +539,7 @@ pub struct ArenaLoadoutAccount {
 }
 
 impl ArenaLoadoutAccount {
-    pub const LEN: usize = ARENA_LOADOUT_ACCOUNT_SIZE;
+    pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Derive the PDA for an arena loadout
     /// Seeds: ["arena_loadout", game_engine, player]
@@ -682,3 +693,8 @@ impl ArenaLoadoutAccount {
             .saturating_add(self.siege_weapons)
     }
 }
+
+// Compile-time size assertions
+const _: () = assert!(core::mem::size_of::<ArenaParticipantAccount>() == ARENA_PARTICIPANT_ACCOUNT_SIZE);
+const _: () = assert!(core::mem::size_of::<ArenaLoadoutAccount>() == ARENA_LOADOUT_ACCOUNT_SIZE);
+const _: () = assert!(core::mem::size_of::<ArenaSeasonAccount>() == ARENA_SEASON_ACCOUNT_SIZE);

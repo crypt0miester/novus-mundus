@@ -156,6 +156,7 @@ pub fn process(
     let mut bundle_data_ref = bundle_account.try_borrow_mut_data()?;
     let bundle = unsafe { BundleAccount::load_mut(&mut bundle_data_ref) };
 
+    bundle.account_key = crate::state::AccountKey::ShopBundle as u8;
     bundle.tier = tier;
     bundle.category = category;
     bundle.item_count = item_count as u8;

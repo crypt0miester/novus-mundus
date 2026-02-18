@@ -84,12 +84,23 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data
+    //    [0]     encounter_type: u8
+    //    [1..5]  grid_lat: i32 (LE)
+    //    [5..9]  grid_long: i32 (LE)
 
-    if instruction_data.is_empty() {
+    if instruction_data.len() < 9 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let encounter_type = EncounterType::try_from(instruction_data[0])?;
+    let client_grid_lat = i32::from_le_bytes([
+        instruction_data[1], instruction_data[2],
+        instruction_data[3], instruction_data[4],
+    ]);
+    let client_grid_long = i32::from_le_bytes([
+        instruction_data[5], instruction_data[6],
+        instruction_data[7], instruction_data[8],
+    ]);
 
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 
@@ -182,8 +193,9 @@ pub fn process(
                 (dao_adjusted_cost as f64 / spawn_weight) as u64
             };
 
+            let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine_data.bump];
-            let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &bump_seed);
+            let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
             let signer = pinocchio::instruction::Signer::from(&seeds);
 
             // Burn tokens from player
@@ -198,18 +210,37 @@ pub fn process(
     }
     // Auto-spawns skip NOVI burning (free for automation)
 
-    // 8. Generate Deterministic Location Within City Radius (Golden Spiral)
+    // 8. Validate Client-Provided Spawn Location
+    //
+    // Client passes grid_lat/grid_long (computed off-chain, e.g. golden spiral).
+    // Program validates the position is within city radius.
+    // This avoids SBF float precision issues with on-chain trig.
 
-    // Use encounter_id as spawn_index for deterministic golden spiral positioning
-    let spawn_index = city_data.total_encounters_spawned as u64;
-    let (random_lat, random_long) = generate_deterministic_location_in_city(
-        city_data.latitude,
-        city_data.longitude,
-        city_data.radius_km,
-        spawn_index,
-    );
+    let spawn_grid_lat = client_grid_lat;
+    let spawn_grid_long = client_grid_long;
 
-    // 8a. Validate and Create Spawn Location
+    // Validate coords are within city radius (simple Euclidean approx)
+    let spawn_lat = LocationAccount::from_grid(spawn_grid_lat);
+    let spawn_long = LocationAccount::from_grid(spawn_grid_long);
+    let dlat = spawn_lat - city_data.latitude;
+    let dlong = spawn_long - city_data.longitude;
+    let dist_km = libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
+    if dist_km > city_data.radius_km as f64 {
+        return Err(GameError::OutOfRange.into());
+    }
+
+    // 8. Terrain Passability Check — encounters cannot spawn in water or on mountains
+    {
+        let (ox, oy) = crate::logic::terrain::city_offset(
+            spawn_grid_lat, spawn_grid_long,
+            city_data.latitude, city_data.longitude,
+        );
+        if !city_data.is_terrain_passable(city_account, ox, oy) {
+            return Err(GameError::TerrainImpassable.into());
+        }
+    }
+
+    // 8a. Validate Spawn Location PDA
     //
     // Encounters claim their spawn cell to prevent:
     // - Players moving into the encounter's position
@@ -217,16 +248,15 @@ pub fn process(
     //
     // The cell is released when the encounter is defeated or despawns.
 
-    let spawn_grid_lat = LocationAccount::to_grid(random_lat);
-    let spawn_grid_long = LocationAccount::to_grid(random_long);
-
     let spawn_city_bytes = city_data.city_id.to_le_bytes();
     let spawn_lat_bytes = spawn_grid_lat.to_le_bytes();
     let spawn_long_bytes = spawn_grid_long.to_le_bytes();
 
-    let (expected_spawn_location, spawn_location_bump) = pinocchio::pubkey::find_program_address(
-        &[LOCATION_SEED, &spawn_city_bytes, &spawn_lat_bytes, &spawn_long_bytes],
-        program_id,
+    let (expected_spawn_location, spawn_location_bump) = LocationAccount::derive_pda(
+        game_engine_account.key(),
+        city_data.city_id,
+        spawn_grid_lat,
+        spawn_grid_long,
     );
 
     if spawn_location_account.key() != &expected_spawn_location {
@@ -243,11 +273,12 @@ pub fn process(
     let city_id_bytes = city_data.city_id.to_le_bytes();
     let encounter_id_bytes = encounter_id.to_le_bytes();
     let (expected_encounter, encounter_bump) = find_program_address(
-        &[ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes],
+        &[ENCOUNTER_SEED, game_engine_account.key().as_ref(), &city_id_bytes, &encounter_id_bytes],
         program_id,
     );
 
     if encounter_account.key() != &expected_encounter {
+        pinocchio::msg!("encounter PDA mismatch");
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -263,6 +294,7 @@ pub fn process(
         let loc_bump_seed = [spawn_location_bump];
         let location_seeds = pinocchio::seeds!(
             LOCATION_SEED,
+            game_engine_account.key().as_ref(),
             &spawn_city_bytes,
             &spawn_lat_bytes,
             &spawn_long_bytes,
@@ -281,6 +313,7 @@ pub fn process(
         let mut location_data = spawn_location_account.try_borrow_mut_data()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
+        location.account_key = crate::state::AccountKey::Location as u8;
         location.grid_lat = spawn_grid_lat;
         location.grid_long = spawn_grid_long;
         location.city_id = city_data.city_id;
@@ -320,7 +353,7 @@ pub fn process(
         .minimum_balance(space);
 
     let enc_bump_seed = [encounter_bump];
-    let seeds = pinocchio::seeds!(ENCOUNTER_SEED, &city_id_bytes, &encounter_id_bytes, &enc_bump_seed);
+    let seeds = pinocchio::seeds!(ENCOUNTER_SEED, game_engine_account.key().as_ref(), &city_id_bytes, &encounter_id_bytes, &enc_bump_seed);
     let signer = pinocchio::instruction::Signer::from(&seeds);
 
     CreateAccount {
@@ -362,14 +395,15 @@ pub fn process(
         .min(9000); // Cap at 90% reduction to keep encounters beatable
 
     *encounter_data = EncounterAccount {
+        account_key: crate::state::AccountKey::Encounter as u8,
         game_engine: *game_engine_account.key(),
         id: encounter_id,
         city_id: city_data.city_id,
         level: encounter_level,                 // NEW
         rarity: encounter_type as u8,
         _padding0: [0; 4],
-        location_lat: random_lat,
-        location_long: random_long,
+        location_lat: spawn_lat,
+        location_long: spawn_long,
         spawned_at: now,
         despawn_at: now + encounter_type.despawn_duration(),
         health: total_health,
@@ -392,35 +426,12 @@ pub fn process(
         city: *city_account.key(),
         encounter_type: encounter_type as u8,
         level: encounter_level,
-        x: random_lat as i32,  // Convert lat to i32 for event
-        y: random_long as i32, // Convert long to i32 for event
+        x: spawn_grid_lat,
+        y: spawn_grid_long,
         timestamp: now,
     });
 
     Ok(())
-}
-
-/// Generate deterministic latitude/longitude within a city's radius
-///
-/// Uses golden spiral distribution based on encounter ID for deterministic,
-/// visually pleasing spawn positions that don't cluster.
-///
-/// # Arguments
-/// * `city_lat` - City center latitude
-/// * `city_long` - City center longitude
-/// * `radius_km` - City radius in kilometers
-/// * `spawn_index` - Deterministic index (encounter_id)
-///
-/// # Returns
-/// (lat, long) within the circle
-fn generate_deterministic_location_in_city(
-    city_lat: f64,
-    city_long: f64,
-    radius_km: f32,
-    spawn_index: u64,
-) -> (f64, f64) {
-    // Use golden spiral positioning from golden_math
-    crate::logic::golden_spiral_position(spawn_index, city_lat, city_long, radius_km)
 }
 
 

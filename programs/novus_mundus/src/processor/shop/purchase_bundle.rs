@@ -16,7 +16,7 @@ use crate::{
     state::{
         GameEngine, ShopConfigAccount, BundleAccount, ShopItemAccount,
         PlayerAccount, BundleTier,
-        unlock_extension_if_eligible, require_extension, EXT_HEROES, EXT_INVENTORY,
+        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match},
     logic::safe_math::apply_bp_penalty,
@@ -140,21 +140,20 @@ pub fn process(
         return Err(GameError::BundleNotActive.into());
     }
 
-    // 7. Load Player and Check Requirements
+    // 7. Check extensions and unlock INVENTORY before loading player mutably
+    {
+        let data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        if player.owner != *buyer.key() {
+            return Err(GameError::NotOwner.into());
+        }
+        require_extension(player, EXT_RESEARCH)?;
+    }
+    unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
+    // 8. Load Player mutably for remaining operations
     let mut player_data_ref = player_account.try_borrow_mut_data()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    // Verify player owns this account
-    if player.owner != *buyer.key() {
-        return Err(GameError::NotOwner.into());
-    }
-
-    // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
-    require_extension(player, EXT_HEROES)?;
-
-    // Unlock EXT_INVENTORY extension if not already unlocked
-    unlock_extension_if_eligible(player_account, buyer, player, EXT_INVENTORY)?;
 
     // Get effective subscription tier (handles expiration)
     let effective_tier = player.get_effective_tier(now);

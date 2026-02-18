@@ -51,6 +51,8 @@ impl Default for InventoryItem {
 /// Size: HEADER_LEN + (slot_count * 16) bytes
 #[repr(C)]
 pub struct PlayerInventoryHeader {
+    /// Account discriminator
+    pub account_key: u8,
     pub owner: Pubkey,          // 32 bytes - Player's wallet
     pub bump: u8,               // 1 byte
     pub _padding: [u8; 3],      // 3 bytes - Alignment
@@ -59,7 +61,7 @@ pub struct PlayerInventoryHeader {
 }
 
 impl PlayerInventoryHeader {
-    pub const LEN: usize = 40; // 32 + 1 + 3 + 2 + 2
+    pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Calculate total account size for given slot count
     pub const fn account_size(slot_count: u16) -> usize {

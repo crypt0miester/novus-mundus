@@ -78,6 +78,12 @@ fn building_type_to_error(building_type: BuildingType) -> GameError {
         BuildingType::Observatory => GameError::ObservatoryRequired,
         BuildingType::Treasury => GameError::TreasuryRequired,
         BuildingType::Citadel => GameError::CitadelRequired,
+        BuildingType::Camp => GameError::CampRequired,
+        BuildingType::Mine => GameError::MineRequired,
+        BuildingType::Catacombs => GameError::CatacombsRequired,
+        BuildingType::Farm => GameError::FarmRequired,
+        BuildingType::Stables => GameError::StablesRequired,
+        BuildingType::Infirmary => GameError::InfirmaryRequired,
     }
 }
 
@@ -93,6 +99,7 @@ pub fn require_mansion(estate: &EstateAccount, min_level: u8) -> Result<&Buildin
 
 /// Require Barracks at minimum level
 #[inline]
+#[allow(dead_code)]
 pub fn require_barracks(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Barracks, min_level)
 }
@@ -145,22 +152,75 @@ pub fn require_citadel(estate: &EstateAccount, min_level: u8) -> Result<&Buildin
     require_building(estate, BuildingType::Citadel, min_level)
 }
 
+/// Require Camp at minimum level (operative unit hiring)
+#[inline]
+#[allow(dead_code)]
+pub fn require_camp(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Camp, min_level)
+}
+
+/// Require Mine at minimum level (mining expeditions)
+#[inline]
+pub fn require_mine(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Mine, min_level)
+}
+
+/// Require Catacombs at minimum level (dungeon access)
+#[inline]
+#[allow(dead_code)]
+pub fn require_catacombs(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Catacombs, min_level)
+}
+
+/// Require Farm at minimum level (produce collection)
+#[inline]
+pub fn require_farm(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Farm, min_level)
+}
+
+/// Require Stables at minimum level (travel gating)
+#[inline]
+pub fn require_stables(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Stables, min_level)
+}
+
+/// Require Infirmary at minimum level (unit recovery)
+#[inline]
+pub fn require_infirmary(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+    require_building(estate, BuildingType::Infirmary, min_level)
+}
+
 // ============================================================
-// Unit Hiring Requirements (Barracks levels)
+// Unit Hiring Requirements (Barracks/Camp levels)
 // ============================================================
 
 use crate::types::UnitType;
 
-/// Get required Barracks level for a unit type
-pub const fn required_barracks_level_for_unit(unit_type: UnitType) -> u8 {
+/// Get the required building type for a unit type
+/// Defensive units (0-2) → Barracks, Operative units (3-5) → Camp
+pub const fn required_building_for_unit(unit_type: UnitType) -> BuildingType {
+    match unit_type {
+        UnitType::DefensiveUnit1 | UnitType::DefensiveUnit2 | UnitType::DefensiveUnit3 => BuildingType::Barracks,
+        UnitType::OperativeUnit1 | UnitType::OperativeUnit2 | UnitType::OperativeUnit3 => BuildingType::Camp,
+    }
+}
+
+/// Get required building level for a unit type
+pub const fn required_level_for_unit(unit_type: UnitType) -> u8 {
     match unit_type {
         UnitType::DefensiveUnit1 => 1,
-        UnitType::DefensiveUnit2 => 5,
-        UnitType::DefensiveUnit3 => 10,
-        UnitType::OperativeUnit1 => 3,
-        UnitType::OperativeUnit2 => 8,
-        UnitType::OperativeUnit3 => 15,
+        UnitType::DefensiveUnit2 => 1,
+        UnitType::DefensiveUnit3 => 1,
+        UnitType::OperativeUnit1 => 1,
+        UnitType::OperativeUnit2 => 1,
+        UnitType::OperativeUnit3 => 1,
     }
+}
+
+/// Get required Barracks level for a unit type (legacy, kept for compatibility)
+#[allow(dead_code)]
+pub const fn required_barracks_level_for_unit(unit_type: UnitType) -> u8 {
+    required_level_for_unit(unit_type)
 }
 
 
@@ -549,6 +609,7 @@ pub fn get_forge_level(estate: &EstateAccount) -> u8 {
 
 /// Get mining output bonus from Workshop level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
+#[allow(dead_code)]
 pub fn workshop_mining_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(workshop) = estate.find_building(BuildingType::Workshop) {
         if workshop.is_active() {
@@ -573,6 +634,98 @@ pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
+
+// ============================================================
+// Mine Mining Bonus
+// ============================================================
+
+/// Get mining output bonus from Mine level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+pub fn mine_mining_bonus_bps(estate: &EstateAccount) -> u16 {
+    if let Some(mine) = estate.find_building(BuildingType::Mine) {
+        if mine.is_active() {
+            return mine.level as u16 * 50;
+        }
+    }
+    0
+}
+
+// ============================================================
+// Farm Produce Bonus
+// ============================================================
+
+/// Get produce output bonus from Farm level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+pub fn farm_produce_bonus_bps(estate: &EstateAccount) -> u16 {
+    if let Some(farm) = estate.find_building(BuildingType::Farm) {
+        if farm.is_active() {
+            return farm.level as u16 * 50;
+        }
+    }
+    0
+}
+
+// ============================================================
+// Camp Operative Speed Bonus
+// ============================================================
+
+/// Get operative training speed bonus from Camp level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+#[allow(dead_code)]
+pub fn camp_operative_speed_bps(estate: &EstateAccount) -> u16 {
+    if let Some(camp) = estate.find_building(BuildingType::Camp) {
+        if camp.is_active() {
+            return camp.level as u16 * 50;
+        }
+    }
+    0
+}
+
+// ============================================================
+// Stables Travel Reduction
+// ============================================================
+
+/// Get travel time reduction from Stables level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+pub fn stables_travel_reduction_bps(estate: &EstateAccount) -> u16 {
+    if let Some(stables) = estate.find_building(BuildingType::Stables) {
+        if stables.is_active() {
+            return stables.level as u16 * 50;
+        }
+    }
+    0
+}
+
+// ============================================================
+// Infirmary Recovery
+// ============================================================
+
+/// Get unit recovery rate from Infirmary level (basis points)
+/// Formula: 0.25% per level (25 bps per level, max 5% at lv20)
+pub fn infirmary_recovery_bps(estate: &EstateAccount) -> u16 {
+    if let Some(infirmary) = estate.find_building(BuildingType::Infirmary) {
+        if infirmary.is_active() {
+            return infirmary.level as u16 * 25;
+        }
+    }
+    0
+}
+
+// ============================================================
+// Catacombs Dungeon Bonus
+// ============================================================
+
+/// Get dungeon bonus from Catacombs level (basis points)
+/// Formula: 0.5% per level (50 bps per level)
+#[allow(dead_code)]
+pub fn catacombs_dungeon_bonus_bps(estate: &EstateAccount) -> u16 {
+    if let Some(catacombs) = estate.find_building(BuildingType::Catacombs) {
+        if catacombs.is_active() {
+            return catacombs.level as u16 * 50;
+        }
+    }
+    0
+}
 
 // ============================================================
 // Treasury Prize Bonuses
@@ -776,5 +929,35 @@ pub fn load_estate_for_player<'a>(
     // Note: This is safe because we're returning a reference to stack-allocated
     // data that will be valid for 'a lifetime
     Ok(unsafe { &*(estate as *const EstateAccount) })
+}
+
+/// Load estate account mutably from account info and verify ownership
+pub fn load_estate_for_player_mut<'a>(
+    estate_account: &'a AccountInfo,
+    player: &PlayerAccount,
+    program_id: &Pubkey,
+) -> Result<&'a mut EstateAccount, ProgramError> {
+    // Verify estate account is owned by this program
+    if estate_account.owner() != program_id {
+        return Err(ProgramError::IllegalOwner);
+    }
+
+    // Load estate data mutably
+    let mut estate_data = estate_account.try_borrow_mut_data()?;
+    let estate = unsafe { EstateAccount::load_mut(&mut estate_data) };
+
+    // Verify ownership matches player
+    if estate.owner != player.owner {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    Ok(unsafe { &mut *(estate as *mut EstateAccount) })
+}
+
+/// Check if estate has an Infirmary building (any level)
+pub fn has_infirmary(estate: &EstateAccount) -> bool {
+    estate.find_building(BuildingType::Infirmary)
+        .map(|slot| slot.level > 0)
+        .unwrap_or(false)
 }
 

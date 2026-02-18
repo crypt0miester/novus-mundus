@@ -37,6 +37,34 @@ impl Event for MeditationStarted {
     }
 }
 
+/// Emitted when meditation is sped up with gems
+pub struct MeditationSpeedup {
+    /// Player account pubkey (not wallet)
+    pub player: Pubkey,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
+    /// Seconds of meditation time added
+    pub speedup_seconds: u64,
+    /// Gems spent
+    pub gems_spent: u64,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for MeditationSpeedup {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:MeditationSpeedup");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
+        offset += self.speedup_seconds.pack(&mut buf[offset..]);
+        offset += self.gems_spent.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}
+
 /// Emitted when meditation rewards are claimed
 pub struct MeditationClaimed {
     /// Player account pubkey (not wallet)

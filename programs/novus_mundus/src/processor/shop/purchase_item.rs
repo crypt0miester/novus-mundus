@@ -17,7 +17,7 @@ use crate::{
     state::{
         GameEngine, ShopConfigAccount, ShopItemAccount, PlayerPurchaseAccount,
         PlayerAccount, DailyDealAccount, WeeklySaleAccount,
-        unlock_extension_if_eligible, require_extension, EXT_HEROES, EXT_INVENTORY,
+        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner},
     logic::safe_math::apply_bp_penalty,
@@ -182,17 +182,17 @@ pub fn process(
     // Total before discounts
     let total_base = base_price.saturating_mul(quantity);
 
-    // 8. Load Player and Calculate Discounts (kingdom-scoped)
+    // 8. Check extensions and unlock INVENTORY before loading player mutably
+    // (must be done before load_checked_mut to avoid borrow conflicts with resize)
+    {
+        let data = player_account.try_borrow_data()?;
+        let player = unsafe { PlayerAccount::load(&data) };
+        require_extension(player, EXT_RESEARCH)?;
+    }
+    unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
+    // 9. Load Player and Calculate Discounts (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
-
-    // PREREQUISITE: Require EXT_HEROES to be unlocked before shopping
-    // Player must lock a hero before using the shop (user journey)
-    require_extension(&*player, EXT_HEROES)?;
-
-    // Unlock EXT_INVENTORY extension if not already unlocked
-    // This is the third step in the user journey
-    unlock_extension_if_eligible(player_account, buyer, &mut *player, EXT_INVENTORY)?;
 
     // Calculate subscription discount (using effective tier to handle expiration)
     let effective_tier = player.get_effective_tier(now);
@@ -217,14 +217,19 @@ pub fn process(
         now,
     );
 
-    // HARD GATE: Require Market building to use shop
-    let estate = load_estate_for_player(estate_account, &*player, program_id)?;
-    require_market(estate, 1)?;
+    // HARD GATE: Require Market building to use shop (skip for gems - item_type 50)
+    // Gems are premium currency purchasable without Market
+    let market_bonus_bps = if shop_item.item_type != 50 {
+        let estate = load_estate_for_player(estate_account, &*player, program_id)?;
+        require_market(estate, 1)?;
 
-    // Calculate Market discount (BUILDING BONUS + DAILY MINI-GAME BONUS)
-    let building_discount = market_discount_bps(estate);
-    let daily_discount = estate.market_discount_bps;
-    let market_bonus_bps = building_discount.saturating_add(daily_discount);
+        // Calculate Market discount (BUILDING BONUS + DAILY MINI-GAME BONUS)
+        let building_discount = market_discount_bps(estate);
+        let daily_discount = estate.market_discount_bps;
+        building_discount.saturating_add(daily_discount)
+    } else {
+        0u16
+    };
 
     // Calculate final price (multiplicative stacking)
     let final_price = calculate_final_price(
@@ -278,6 +283,7 @@ pub fn process(
             // Initialize
             let mut pp_data_ref = player_purchase_account.try_borrow_mut_data()?;
             let pp = unsafe { PlayerPurchaseAccount::load_mut(&mut pp_data_ref) };
+            pp.account_key = crate::state::AccountKey::PlayerPurchase as u8;
             pp.lifetime_purchased = 0;
             pp.purchased_today = 0;
             pp.last_purchase_day = PlayerPurchaseAccount::current_day(now);

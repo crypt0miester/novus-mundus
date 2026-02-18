@@ -41,13 +41,14 @@ pub fn process(
     require_signer(authority)?;
     require_writable(game_engine)?;
 
-    let _bump = require_pda(game_engine, &[GAME_ENGINE_SEED], program_id)?;
-
-    // 3. Load game engine
+    // 3. Load game engine (before PDA check so we can read kingdom_id)
     let mut game_engine_data_check = game_engine.try_borrow_mut_data()?;
     let game_engine_data = unsafe {
         GameEngine::load_mut(&mut game_engine_data_check)
     };
+
+    let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+    let _bump = require_pda(game_engine, &[GAME_ENGINE_SEED, &kingdom_id_bytes], program_id)?;
 
     // 4. Verify DAO authority
     if authority.key() != &game_engine_data.authority {

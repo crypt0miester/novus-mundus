@@ -119,6 +119,8 @@ impl BuffConfig {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct HeroTemplate {
+    /// Account discriminator
+    pub account_key: u8,
     // Identity
     pub template_id: u16,              // Unique ID (0-65535)
     pub name: [u8; 32],                // "Alexander the Great"
@@ -260,7 +262,7 @@ pub const fn get_buff_stat_name(stat: u8) -> &'static str {
         1 => "Attack",
         2 => "Defense",
         3 => "Economy",
-        4 => "XP",
+        4 => "XPGain",
         5 => "Training",
         6 => "Rally",
         7 => "Crit",
@@ -321,16 +323,15 @@ pub fn calculate_weighted_power_for_level(level: u32, template: &HeroTemplate) -
 // ============================================================
 
 /// Hero tier for location bonus calculation
-/// Determines the percentage bonus (1-10%) when hero is in their home city
+/// Determines the percentage bonus (2-10%) when hero is in their home city
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum HeroTier {
-    Common = 0,      // 1% location bonus
-    Uncommon = 1,    // 2% location bonus
-    Rare = 2,        // 4% location bonus
-    Epic = 3,        // 6% location bonus
-    Legendary = 4,   // 8% location bonus
-    Mythic = 5,      // 10% location bonus
+    Common = 0,      // 2% location bonus
+    Rare = 1,        // 4% location bonus
+    Epic = 2,        // 6% location bonus
+    Legendary = 3,   // 8% location bonus
+    Mythic = 4,      // 10% location bonus
 }
 
 impl HeroTier {
@@ -339,11 +340,10 @@ impl HeroTier {
     pub const fn from_u8(val: u8) -> Self {
         match val {
             0 => Self::Common,
-            1 => Self::Uncommon,
-            2 => Self::Rare,
-            3 => Self::Epic,
-            4 => Self::Legendary,
-            5 => Self::Mythic,
+            1 => Self::Rare,
+            2 => Self::Epic,
+            3 => Self::Legendary,
+            4 => Self::Mythic,
             _ => Self::Common, // Default to common for invalid values
         }
     }
@@ -352,8 +352,7 @@ impl HeroTier {
     #[inline]
     pub const fn location_bonus_bps(self) -> u16 {
         match self {
-            Self::Common => 100,      // 1%
-            Self::Uncommon => 200,    // 2%
+            Self::Common => 200,      // 2%
             Self::Rare => 400,        // 4%
             Self::Epic => 600,        // 6%
             Self::Legendary => 800,   // 8%
@@ -365,19 +364,18 @@ impl HeroTier {
 /// Get location bonus in basis points for a tier value
 ///
 /// # Arguments
-/// * `tier` - Hero tier (0=Common, 1=Uncommon, 2=Rare, 3=Epic, 4=Legendary, 5=Mythic)
+/// * `tier` - Hero tier (0=Common, 1=Rare, 2=Epic, 3=Legendary, 4=Mythic)
 ///
 /// # Returns
-/// Bonus in basis points (100-1000, i.e., 1%-10%)
+/// Bonus in basis points (200-1000, i.e., 2%-10%)
 #[inline]
 pub const fn location_bonus_for_tier(tier: u8) -> u16 {
     match tier {
-        0 => 100,   // Common: 1%
-        1 => 200,   // Uncommon: 2%
-        2 => 400,   // Rare: 4%
-        3 => 600,   // Epic: 6%
-        4 => 800,   // Legendary: 8%
-        5 => 1000,  // Mythic: 10%
+        0 => 200,   // Common: 2%
+        1 => 400,   // Rare: 4%
+        2 => 600,   // Epic: 6%
+        3 => 800,   // Legendary: 8%
+        4 => 1000,  // Mythic: 10%
         _ => 0,     // Invalid tier
     }
 }
@@ -398,27 +396,79 @@ pub const fn is_hero_at_home(hero_city: u16, player_city: u16) -> bool {
 
 /// Derive tier from mint cost (in lamports)
 ///
-/// Used during mint to determine hero tier from template's mint_cost_sol
+/// Used during mint to determine hero tier from template's mint_cost_sol.
+/// 5-tier system: Common(0), Rare(1), Epic(2), Legendary(3), Mythic(4)
 #[inline]
 pub const fn tier_from_mint_cost(mint_cost_lamports: u64) -> u8 {
     // Thresholds based on HERO_GALLERY.md tier pricing:
-    // Common: 0.05 SOL = 50_000_000 lamports
-    // Uncommon: 0.15 SOL = 150_000_000 lamports
+    // Common: 0.10 SOL = 100_000_000 lamports
     // Rare: 0.25 SOL = 250_000_000 lamports
     // Epic: 1.0 SOL = 1_000_000_000 lamports
     // Legendary: 5.0 SOL = 5_000_000_000 lamports
     // Mythic: 10.0 SOL = 10_000_000_000 lamports
     if mint_cost_lamports >= 10_000_000_000 {
-        5 // Mythic
+        4 // Mythic
     } else if mint_cost_lamports >= 5_000_000_000 {
-        4 // Legendary
+        3 // Legendary
     } else if mint_cost_lamports >= 1_000_000_000 {
-        3 // Epic
+        2 // Epic
     } else if mint_cost_lamports >= 250_000_000 {
-        2 // Rare
-    } else if mint_cost_lamports >= 150_000_000 {
-        1 // Uncommon
+        1 // Rare
     } else {
         0 // Common
     }
+}
+
+/// Calculate NOVI reward for burning a hero
+///
+/// Formula: tier_base × level² (checked arithmetic)
+/// Returns locked NOVI amount (with 1 decimal, so values are ×10)
+///
+/// Tier base values (×10 for 1 decimal):
+/// - Common(0): 500 (50 NOVI)
+/// - Rare(1): 5,000 (500 NOVI)
+/// - Epic(2): 20,000 (2,000 NOVI)
+/// - Legendary(3): 100,000 (10,000 NOVI)
+/// - Mythic(4): 250,000 (25,000 NOVI)
+pub fn calculate_burn_reward(level: u32, tier: u8) -> Result<u64, ProgramError> {
+    let tier_base: u64 = match tier {
+        0 => 500,       // Common: 50 NOVI
+        1 => 5_000,     // Rare: 500 NOVI
+        2 => 20_000,    // Epic: 2,000 NOVI
+        3 => 100_000,   // Legendary: 10,000 NOVI
+        4 => 250_000,   // Mythic: 25,000 NOVI
+        _ => 500,       // Default to Common
+    };
+    let lvl = level.max(1) as u64;
+    let lvl_squared = lvl.checked_mul(lvl)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+    tier_base.checked_mul(lvl_squared)
+        .ok_or(ProgramError::ArithmeticOverflow)
+}
+
+/// Calculate sanctuary mint bonus (locked NOVI)
+///
+/// Bonus tiers based on sanctuary level:
+/// - Level 5+:  5% of mint cost (in NOVI equivalent)
+/// - Level 10+: 10% of mint cost
+/// - Level 15+: 15% of mint cost
+/// - Level 20+: 20% of mint cost
+///
+/// Conversion: 1 SOL ≈ 10,000 NOVI (with 1 decimal = 100,000)
+/// mint_cost_lamports / 1_000_000_000 × 100_000 = mint_cost_lamports / 10_000
+pub fn calculate_mint_bonus(mint_cost_lamports: u64, sanctuary_level: u8) -> Result<u64, ProgramError> {
+    let bonus_bps: u64 = match sanctuary_level {
+        0..=4 => return Ok(0),
+        5..=9 => 500,    // 5%
+        10..=14 => 1000, // 10%
+        15..=19 => 1500, // 15%
+        _ => 2000,       // 20%
+    };
+    // Convert mint cost (lamports) to NOVI equivalent (1 decimal)
+    // 1 SOL = 1_000_000_000 lamports = 100_000 NOVI (with decimal)
+    // novi_equiv = mint_cost_lamports / 10_000
+    let novi_equivalent = mint_cost_lamports / 10_000;
+    novi_equivalent.checked_mul(bonus_bps)
+        .ok_or(ProgramError::ArithmeticOverflow)
+        .map(|v| v / 10_000)
 }

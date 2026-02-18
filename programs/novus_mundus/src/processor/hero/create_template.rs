@@ -153,6 +153,7 @@ pub fn process(
     let mut template_data = hero_template.try_borrow_mut_data()?;
     let template = unsafe { HeroTemplate::load_mut(&mut template_data) };
 
+    template.account_key = crate::state::AccountKey::HeroTemplate as u8;
     template.template_id = template_id;
     template.name = name;
     template.hero_type = hero_type;

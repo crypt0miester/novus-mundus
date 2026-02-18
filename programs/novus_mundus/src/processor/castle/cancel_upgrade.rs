@@ -45,7 +45,7 @@ const UPGRADE_COST_MULTIPLIER: u64 = 15;
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 7 {
@@ -66,9 +66,6 @@ pub fn process(
     }
 
     // Parse instruction data (only discriminator needed, city_id/castle_id from account)
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
 
     // Load king player
     require_owner(king_account, program_id)?;

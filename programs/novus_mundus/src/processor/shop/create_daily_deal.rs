@@ -132,6 +132,7 @@ pub fn process(
     let mut daily_deal_data_ref = daily_deal_account.try_borrow_mut_data()?;
     let daily_deal = unsafe { DailyDealAccount::load_mut(&mut daily_deal_data_ref) };
 
+    daily_deal.account_key = crate::state::AccountKey::DailyDeal as u8;
     daily_deal.item_id = initial_item_id;
     daily_deal.discount_bps = initial_discount_bps;
     daily_deal._padding1 = [0; 2];

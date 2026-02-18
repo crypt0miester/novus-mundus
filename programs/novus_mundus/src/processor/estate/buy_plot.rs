@@ -61,36 +61,38 @@ pub fn process(
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
 
-    // 3. Load Accounts
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
+    // 3. Phase 1: Validate and capture values (scoped borrow, dropped before CPI)
+    let (cost, plot_index, player_ge, player_bump, player_name) = {
+        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
-    let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+        let estate_data_ref = estate_account.try_borrow_data()?;
+        let estate_data = unsafe { EstateAccount::load(&estate_data_ref) };
 
-    // 4. Verify ownership
-    if &player_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if &estate_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
+        // 4. Verify ownership
+        if &player_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
+        if &estate_data.owner != owner.key() {
+            return Err(GameError::Unauthorized.into());
+        }
 
-    // 5. Get plot cost and current plot count
-    let cost = estate_data.next_plot_cost()
-        .ok_or(GameError::ExceedsMaxCap)?; // Max plots reached
-    let plot_index = estate_data.plots_owned;
+        // 5. Get plot cost and current plot count
+        let cost = estate_data.next_plot_cost()
+            .ok_or(GameError::ExceedsMaxCap)?;
+        let plot_index = estate_data.plots_owned;
 
-    // 6. Check player has enough NOVI
-    if player_data.locked_novi < cost {
-        return Err(GameError::InsufficientLockedNovi.into());
-    }
+        // 6. Check player has enough NOVI
+        if player_data.locked_novi < cost {
+            return Err(GameError::InsufficientLockedNovi.into());
+        }
 
-    // 7. Burn NOVI tokens
-    // PlayerAccount PDA is the authority over locked tokens
-    let player_bump = player_data.bump;
+        (cost, plot_index, player_data.game_engine, player_data.bump, player_data.name)
+    }; // borrows dropped
+
+    // 7. Burn NOVI tokens (CPI - no active borrows)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, owner.key().as_ref(), &bump_seed);
+    let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
     let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -101,10 +103,14 @@ pub fn process(
         &[player_signer],
     )?;
 
-    // Update soft balance tracker
+    // 8. Phase 2: Update state after successful CPI (mutable borrow)
+    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
     player_data.locked_novi = player_data.locked_novi.saturating_sub(cost);
 
-    // 8. Buy the plot (unlocks 4 more slots)
+    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
+
     estate_data.buy_plot()
         .ok_or(GameError::ExceedsMaxCap)?;
 
@@ -116,7 +122,7 @@ pub fn process(
     // 10. Emit PlotPurchased event
     emit!(PlotPurchased {
         player: *player_account.key(),
-        player_name: player_data.name,
+        player_name,
         plot: plot_index,
         cost,
         total_plots: estate_data.plots_owned,

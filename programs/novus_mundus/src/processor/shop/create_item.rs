@@ -174,6 +174,7 @@ pub fn process(
     let mut item_data_ref = shop_item_account.try_borrow_mut_data()?;
     let item = unsafe { ShopItemAccount::load_mut(&mut item_data_ref) };
 
+    item.account_key = crate::state::AccountKey::ShopItem as u8;
     item.item_type = item_type;
     item.category = category;
     item.rarity = rarity;

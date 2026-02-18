@@ -249,6 +249,7 @@ pub fn process(
     let mut template_data = dungeon_template.try_borrow_mut_data()?;
     let template = unsafe { DungeonTemplate::load_mut(&mut template_data) };
 
+    template.account_key = crate::state::AccountKey::DungeonTemplate as u8;
     template.dungeon_id = dungeon_id;
     template.theme = theme;
     template.total_floors = total_floors;

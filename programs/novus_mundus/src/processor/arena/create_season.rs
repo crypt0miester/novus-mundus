@@ -143,6 +143,7 @@ pub fn process(
     let current_day = (now / crate::constants::SECONDS_PER_DAY) as u32;
 
     *season = ArenaSeasonAccount {
+        account_key: crate::state::AccountKey::ArenaSeason as u8,
         // Kingdom reference
         game_engine: *game_engine.key(),
 

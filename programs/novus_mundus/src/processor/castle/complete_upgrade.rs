@@ -35,7 +35,7 @@ use crate::{
 pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    instruction_data: &[u8],
+    _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
     if accounts.len() < 2 {
@@ -44,11 +44,6 @@ pub fn process(
 
     let _crank = &accounts[0];
     let castle_account = &accounts[1];
-
-    // Parse instruction data (only discriminator needed, city_id/castle_id from account)
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
