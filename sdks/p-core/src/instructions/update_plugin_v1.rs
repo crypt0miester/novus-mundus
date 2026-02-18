@@ -7,59 +7,25 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::{write_bytes, UNINIT_BYTE, plugins::{PluginType, PluginAuthority}};
+use crate::{write_bytes, UNINIT_BYTE};
 
 /// Plugin update data
 pub enum PluginUpdateData<'a> {
-    /// Set/update attributes only
+    /// Set/update all attributes (replaces entire attribute list)
     AttributesSet {
-        /// Attributes to set/update (key, value pairs)
+        /// Full attribute list (key, value pairs)
         attributes: &'a [(&'a [u8], &'a [u8])],
-    },
-    /// Remove attributes only
-    AttributesRemove {
-        /// Keys of attributes to remove
-        keys: &'a [&'a [u8]],
-    },
-    /// Update attributes authority only
-    AttributesAuthority {
-        /// New authority
-        new_authority: PluginAuthority,
-    },
-    /// Set attributes and update authority
-    AttributesSetWithAuthority {
-        /// Attributes to set/update
-        attributes: &'a [(&'a [u8], &'a [u8])],
-        /// New authority
-        new_authority: PluginAuthority,
     },
     /// Update freeze state
     FreezeDelegateState {
         /// New frozen state
         frozen: bool,
     },
-    /// Update freeze delegate authority
-    FreezeDelegateAuthority {
-        /// New authority
-        new_authority: PluginAuthority,
-    },
-    /// Update freeze state and authority
-    FreezeDelegateStateAndAuthority {
-        /// New frozen state
-        frozen: bool,
-        /// New authority
-        new_authority: PluginAuthority,
-    },
-    /// Update any delegate authority
-    DelegateAuthority {
-        /// Plugin type to update
-        plugin_type: PluginType,
-        /// New authority
-        new_authority: PluginAuthority,
-    },
 }
 
 /// Update a plugin on an MPL Core Asset V1.
+///
+/// Borsh-serialized as UpdatePluginV1Args { plugin: Plugin }
 ///
 /// ### Accounts:
 ///   0. `[WRITE]` The asset to update the plugin on
@@ -105,8 +71,8 @@ impl UpdatePluginV1<'_> {
             AccountMeta::readonly(self.log_wrapper.key()),
         ];
 
-        // Allocate instruction data
-        let mut instruction_data = [UNINIT_BYTE; 512]; // Max size
+        // Allocate instruction data - must be large enough for attributes
+        let mut instruction_data = [UNINIT_BYTE; 1024];
 
         let mut offset = 0;
 
@@ -114,203 +80,44 @@ impl UpdatePluginV1<'_> {
         write_bytes(&mut instruction_data[offset..offset+1], &[6]);
         offset += 1;
 
-        // Write plugin update data based on type
+        // Serialize UpdatePluginV1Args { plugin: Plugin }
+        // using Borsh format - just the Plugin enum, no authority
         match &self.update {
             PluginUpdateData::AttributesSet { attributes } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::Attributes as u8]);
+                // Plugin::Attributes is variant 6 in the Plugin enum
+                write_bytes(&mut instruction_data[offset..offset+1], &[6]);
                 offset += 1;
 
-                // Write update type (0 = set attributes only)
-                write_bytes(&mut instruction_data[offset..offset+1], &[0]);
-                offset += 1;
+                // Attributes { attribute_list: Vec<Attribute> }
+                // Borsh Vec: 4-byte u32 LE length + elements
+                let attr_count = attributes.len().min(10) as u32;
+                write_bytes(&mut instruction_data[offset..offset+4], &attr_count.to_le_bytes());
+                offset += 4;
 
-                // Write attribute count
-                let attr_count = attributes.len().min(10) as u8;
-                write_bytes(&mut instruction_data[offset..offset+1], &[attr_count]);
-                offset += 1;
-
-                // Write each attribute
+                // Each Attribute { key: String, value: String }
+                // Borsh String: 4-byte u32 LE length + UTF-8 bytes
                 for (key, value) in attributes.iter().take(10) {
-                    // Write key length and key
-                    let key_len = key.len().min(32) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[key_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], &key[..(key_len as usize)]);
+                    let key_len = key.len() as u32;
+                    write_bytes(&mut instruction_data[offset..offset+4], &key_len.to_le_bytes());
+                    offset += 4;
+                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], key);
                     offset += key_len as usize;
 
-                    // Write value length and value
-                    let value_len = value.len().min(64) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[value_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(value_len as usize)], &value[..(value_len as usize)]);
-                    offset += value_len as usize;
-                }
-            },
-            PluginUpdateData::AttributesRemove { keys } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::Attributes as u8]);
-                offset += 1;
-
-                // Write update type (1 = remove attributes only)
-                write_bytes(&mut instruction_data[offset..offset+1], &[1]);
-                offset += 1;
-
-                // Write key count
-                let key_count = keys.len().min(10) as u8;
-                write_bytes(&mut instruction_data[offset..offset+1], &[key_count]);
-                offset += 1;
-
-                // Write each key to remove
-                for key in keys.iter().take(10) {
-                    let key_len = key.len().min(32) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[key_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], &key[..(key_len as usize)]);
-                    offset += key_len as usize;
-                }
-            },
-            PluginUpdateData::AttributesAuthority { new_authority } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::Attributes as u8]);
-                offset += 1;
-
-                // Write update type (2 = update authority only)
-                write_bytes(&mut instruction_data[offset..offset+1], &[2]);
-                offset += 1;
-
-                // Write new authority
-                write_bytes(&mut instruction_data[offset..offset+1], &[new_authority.discriminator()]);
-                offset += 1;
-
-                if let PluginAuthority::Address(pubkey) = new_authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
-            },
-            PluginUpdateData::AttributesSetWithAuthority { attributes, new_authority } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::Attributes as u8]);
-                offset += 1;
-
-                // Write update type (3 = set attributes and update authority)
-                write_bytes(&mut instruction_data[offset..offset+1], &[3]);
-                offset += 1;
-
-                // Write attribute count
-                let attr_count = attributes.len().min(10) as u8;
-                write_bytes(&mut instruction_data[offset..offset+1], &[attr_count]);
-                offset += 1;
-
-                // Write each attribute
-                for (key, value) in attributes.iter().take(10) {
-                    let key_len = key.len().min(32) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[key_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], &key[..(key_len as usize)]);
-                    offset += key_len as usize;
-
-                    let value_len = value.len().min(64) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[value_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(value_len as usize)], &value[..(value_len as usize)]);
-                    offset += value_len as usize;
-                }
-
-                // Write new authority
-                write_bytes(&mut instruction_data[offset..offset+1], &[new_authority.discriminator()]);
-                offset += 1;
-
-                if let PluginAuthority::Address(pubkey) = new_authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
+                    let val_len = value.len() as u32;
+                    write_bytes(&mut instruction_data[offset..offset+4], &val_len.to_le_bytes());
+                    offset += 4;
+                    write_bytes(&mut instruction_data[offset..offset+(val_len as usize)], value);
+                    offset += val_len as usize;
                 }
             },
             PluginUpdateData::FreezeDelegateState { frozen } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::FreezeDelegate as u8]);
-                offset += 1;
-
-                // Write update type (0 = state only)
-                write_bytes(&mut instruction_data[offset..offset+1], &[0]);
-                offset += 1;
-
-                // Write frozen state
-                write_bytes(&mut instruction_data[offset..offset+1], &[*frozen as u8]);
-                offset += 1;
-            },
-            PluginUpdateData::FreezeDelegateAuthority { new_authority } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::FreezeDelegate as u8]);
-                offset += 1;
-
-                // Write update type (1 = authority only)
+                // Plugin::FreezeDelegate is variant 1 in the Plugin enum
                 write_bytes(&mut instruction_data[offset..offset+1], &[1]);
                 offset += 1;
 
-                // Write new authority
-                write_bytes(&mut instruction_data[offset..offset+1], &[new_authority.discriminator()]);
-                offset += 1;
-
-                if let PluginAuthority::Address(pubkey) = new_authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
-            },
-            PluginUpdateData::FreezeDelegateStateAndAuthority { frozen, new_authority } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::FreezeDelegate as u8]);
-                offset += 1;
-
-                // Write update type (2 = both state and authority)
-                write_bytes(&mut instruction_data[offset..offset+1], &[2]);
-                offset += 1;
-
-                // Write frozen state
+                // FreezeDelegate { frozen: bool }
                 write_bytes(&mut instruction_data[offset..offset+1], &[*frozen as u8]);
                 offset += 1;
-
-                // Write new authority
-                write_bytes(&mut instruction_data[offset..offset+1], &[new_authority.discriminator()]);
-                offset += 1;
-
-                if let PluginAuthority::Address(pubkey) = new_authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
-            },
-            PluginUpdateData::DelegateAuthority { plugin_type, new_authority } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[*plugin_type as u8]);
-                offset += 1;
-
-                // Write update type (3 = authority update for any delegate)
-                write_bytes(&mut instruction_data[offset..offset+1], &[3]);
-                offset += 1;
-
-                // Write new authority
-                write_bytes(&mut instruction_data[offset..offset+1], &[new_authority.discriminator()]);
-                offset += 1;
-
-                if let PluginAuthority::Address(pubkey) = new_authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
             },
         }
 

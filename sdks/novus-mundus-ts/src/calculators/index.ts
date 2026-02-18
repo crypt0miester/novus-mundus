@@ -6,31 +6,34 @@
  */
 
 // Constants (golden ratio family, basis points helpers)
-export * from './constants.ts';
+export * from './constants';
 
 // Time calculations (day/night cycle, activity multipliers)
-export * from './time.ts';
+export * from './time';
 
 // Travel calculations (distance, travel time, teleport costs)
-export * from './travel.ts';
+export * from './travel';
 
 // Combat calculations (damage, weapons, casualties)
-export * from './combat.ts';
+export * from './combat';
 
 // Reward calculations (loot pools, XP, fragments, gems)
-export * from './rewards.ts';
+export * from './rewards';
 
 // Stamina calculations (regeneration, consumption)
-export * from './stamina.ts';
+export * from './stamina';
 
 // Progression calculations (XP requirements, leveling)
-export * from './progression.ts';
+export * from './progression';
 
 // Resource calculations (networth, consumption, generation)
-export * from './resources.ts';
+export * from './resources';
 
 // Cost calculations (hiring, upgrades, speedups)
-export * from './costs.ts';
+export * from './costs';
 
 // NOVI purchase calculations (bonuses, caps, streaks)
-export * from './novi.ts';
+export * from './novi';
+
+// Terrain calculations (elevation, passability, rendering)
+export * from './terrain';

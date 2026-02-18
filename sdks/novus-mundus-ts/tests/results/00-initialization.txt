@@ -1,0 +1,51 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/00-initialization.test.ts:
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.0s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.4s.
+(pass) Initialization > GameEngine defaults > should have initialized GameEngine with default configs [1.69ms]
+(pass) Initialization > GameEngine defaults > should have default ArenaConfig values [1.86ms]
+(pass) Initialization > GameEngine defaults > should have default ExpeditionConfig values [0.49ms]
+(pass) Initialization > GameEngine defaults > should have default DungeonConfig values [0.37ms]
+(pass) Initialization > GameEngine defaults > should have default CastleConfig values [0.53ms]
+(pass) Initialization > GameEngine defaults > should have default CombatConfig values [0.52ms]
+[32m  ✓ tx [2macJr3zuT9TVG..[0m[0m
+[2m[onchain][0m [2macJr3zuT9T..[0m [35mupdate game config[0m
+[2m[onchain][0m [2macJr3zuT9T..[0m [33mTotal 334 / 399,700 CU[0m
+(pass) Initialization > update_game_config > should update ArenaConfig via DAO authority [410.01ms]
+[32m  ✓ tx [2m3waZ5TbmPjWx..[0m[0m
+[2m[onchain][0m [2m3waZ5TbmPj..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m3waZ5TbmPj..[0m [33mTotal 336 / 399,700 CU[0m
+(pass) Initialization > update_game_config > should update CombatConfig via DAO authority [517.16ms]
+[32m  ✓ tx [2m4GrRJEV16sak..[0m[0m
+[2m[onchain][0m [2m4GrRJEV16s..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m4GrRJEV16s..[0m [33mTotal 362 / 399,700 CU[0m
+(pass) Initialization > update_game_config > should update multiple configs in single transaction [417.14ms]
+[2m[onchain][0m [2m23HF7GvH9H..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m23HF7GvH9H..[0m [33mTotal 334 / 399,700 CU[0m
+[32m  ✓ tx [2m23HF7GvH9HTh..[0m[0m
+(pass) Initialization > update_game_config > should update DungeonConfig via DAO authority [504.93ms]
+[2m[onchain][0m [2m2FH1Mf1XKd..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2FH1Mf1XKd..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m2FH1Mf1XKd..[0m [33mTotal 244 / 399,700 CU[0m
+[2m[onchain][0m [2m2FH1Mf1XKd..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1771[0m
+[31m  ✗ unauthorized update[0m
+[31m    Unauthorized (6001): You are not authorized to perform this action[0m
+[33m  ⊘ unauthorized update [2m(expected failure)[0m
+(pass) Initialization > update_game_config > should reject update from non-authority signer [942.44ms]
+[validator] Stopping validator (pid 11081)...
+
+ 11 pass
+ 0 fail
+ 77 expect() calls
+Ran 11 tests across 1 files. [7.36s]

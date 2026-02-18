@@ -9,7 +9,7 @@
  * - Protection mechanics
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
 
@@ -24,6 +24,8 @@ import {
   deriveCityPda,
   EncounterRarity,
 } from '../../src/index';
+import { deriveLocationPda } from '../../src/pda';
+import { BuildingType } from '../../src/types/enums';
 
 import {
   type TestContext,
@@ -48,21 +50,48 @@ import {
   fetchPlayer,
   fetchEncounter,
   fetchLoot,
+  accountExists,
 } from '../utils/accounts';
+import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
   SECONDS_PER_DAY,
 } from '../fixtures/time';
+import { CITIES } from '../fixtures/setup';
+
+// ============================================================
+// Golden Spiral Helpers (must match Rust logic)
+// ============================================================
+
+const GOLDEN_ANGLE = 2.399963229728653;
+const GRID_PRECISION = 10000;
+
+/** Compute the golden spiral spawn coords for a given city and spawn index */
+function goldenSpiralGridCoords(cityId: number, spawnIndex: number, radiusKm: number = 50): { gridLat: number; gridLong: number } {
+  const city = CITIES[cityId]!;
+  const angle = spawnIndex * GOLDEN_ANGLE;
+  const radiusFactor = Math.sqrt(spawnIndex) / 10.0;
+  const radius = Math.min(radiusFactor, 1.0) * radiusKm;
+  const kmPerDegree = 111.0;
+  const latOffset = radius * Math.cos(angle) / kmPerDegree;
+  const lonOffset = radius * Math.sin(angle) / kmPerDegree;
+  return {
+    gridLat: Math.round((city.lat + latOffset) * GRID_PRECISION),
+    gridLong: Math.round((city.lon + lonOffset) * GRID_PRECISION),
+  };
+}
 
 // ============================================================
 // Test Suite
 // ============================================================
+setDefaultTimeout(60_000);
 
 describe('Combat System', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
 
   beforeAll(async () => {
+    log.section('Combat System');
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: true });
   });
@@ -77,10 +106,7 @@ describe('Combat System', () => {
 
   describe('PvP Combat', () => {
     it('should execute PvP attack successfully', async () => {
-      const { attacker, defender } = await createCombatReadyPlayers(factory);
-
-      // Wait for defender protection to expire (mock: set timestamp in future)
-      const futureTime = await getCurrentTimestamp(ctx.connection) + SECONDS_PER_DAY * 2;
+      const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
 
       // Get initial state
       const attackerBefore = await fetchPlayer(ctx.connection, attacker.playerPda);
@@ -89,43 +115,44 @@ describe('Combat System', () => {
       expect(attackerBefore).not.toBeNull();
       expect(defenderBefore).not.toBeNull();
 
-      // Execute attack
+      // Execute attack (defender's protection expired during movePlayerToPlayer travel time)
       const ix = createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
           defenderPlayer: defender.playerPda,
-          attackerCityId: 1, // Default city
+          attackerCityId: 1,
           defenderCityId: 1,
         },
-        {
-          driveBy: false,
-        }
+        { driveBy: false }
       );
 
-      const tx = new Transaction().add(ix);
+      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
 
-      // Attack should succeed (or fail due to protection)
-      // In real test, we'd manipulate time or use unprotected defender
-      try {
-        await sendTransaction(ctx.connection, tx, [attacker.keypair]);
+      // Verify state changes after combat
+      const attackerAfter = await fetchPlayer(ctx.connection, attacker.playerPda);
+      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
 
-        // Verify state changes
-        const attackerAfter = await fetchPlayer(ctx.connection, attacker.playerPda);
-        const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
+      expect(attackerAfter).not.toBeNull();
+      expect(defenderAfter).not.toBeNull();
 
-        expect(attackerAfter).not.toBeNull();
-        expect(defenderAfter).not.toBeNull();
+      // Winner steals cash from loser
+      const totalCashBefore = attackerBefore!.cashOnHand.add(defenderBefore!.cashOnHand);
+      const totalCashAfter = attackerAfter!.cashOnHand.add(defenderAfter!.cashOnHand);
+      // Cash is transferred, not created — total should stay roughly the same
+      // (small rounding differences possible from bps calculations)
+      expect(totalCashAfter.gte(totalCashBefore.muln(9).divn(10))).toBe(true);
 
-        // Attacker should have some loot or casualties
-        // Defender should have losses
-      } catch {
-        // Expected if defender is still protected
-      }
+      // At least one side should have fewer defensive units (casualties)
+      const defenderLostUnits = defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)
+        || defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2);
+      const attackerLostUnits = attackerBefore!.defensiveUnit1.gt(attackerAfter!.defensiveUnit1)
+        || attackerBefore!.defensiveUnit2.gt(attackerAfter!.defensiveUnit2);
+      expect(defenderLostUnits || attackerLostUnits).toBe(true);
     });
 
     it('should reject attack on protected player', async () => {
-      const attacker = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       const defender = await factory.createPlayer({ initialize: true });
 
       // Give attacker some units
@@ -157,9 +184,9 @@ describe('Combat System', () => {
     });
 
     it('should reject attack on same city requirement', async () => {
-      // Create players in different cities
-      const attacker = await factory.createPlayer({ cityId: 1, initialize: true });
-      const defender = await factory.createPlayer({ cityId: 2, initialize: true });
+      // Create players in different cities (use 3/4 to avoid collision with PvP players in city 1)
+      const attacker = await factory.createPlayer({ cityId: 3, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender = await factory.createPlayer({ cityId: 4, initialize: true });
 
       await factory.hireUnits(attacker, 3, 100);
 
@@ -174,8 +201,8 @@ describe('Combat System', () => {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
           defenderPlayer: defender.playerPda,
-          attackerCityId: 1,
-          defenderCityId: 2,
+          attackerCityId: 3,
+          defenderCityId: 4,
         },
         {
           driveBy: false,
@@ -187,7 +214,7 @@ describe('Combat System', () => {
     });
 
     it('should reject self-attack', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       await factory.hireUnits(player, 3, 100);
 
       const ix = createAttackPlayerInstruction(
@@ -208,7 +235,7 @@ describe('Combat System', () => {
     });
 
     it('should reject attack without troops', async () => {
-      const attacker = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true });
       const defender = await factory.createPlayer({ initialize: true });
 
       // Don't give attacker any units
@@ -237,25 +264,57 @@ describe('Combat System', () => {
 
   describe('PvE Combat', () => {
     it('should attack encounter successfully', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      // Use city 17 (Berlin, lat 52.5°) - high latitude ensures 1 grid cell in longitude ≈ 6.8m (within 10m attack range)
+      const cityId = 17;
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Camp] });
       await factory.hireUnits(player, 3, 50);
       await factory.purchaseEquipment(player, 0, 25); // melee weapons
 
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       expect(playerAccount).not.toBeNull();
 
-      // Get city encounter (assuming one exists from setup)
-      // In real test, we'd spawn an encounter first
-      const cityId = playerAccount!.currentCity;
-      const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+      // Spawn an encounter adjacent to the player (within 10m attack range)
+      // Player is at city center; spawn encounter 1 grid cell offset in longitude (~8-10m at mid-latitudes)
       const encounterId = 0;
+      const city = CITIES[cityId]!;
+      const playerGridLat = Math.round(city.lat * GRID_PRECISION);
+      const playerGridLong = Math.round(city.lon * GRID_PRECISION);
+      const encounterGridLat = playerGridLat;
+      const encounterGridLong = playerGridLong + 1; // ~8-10m at mid-latitudes
+
+      const spawnIx = createSpawnEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          playerOwner: ctx.daoAuthority.publicKey,
+          cityId,
+          gridLat: encounterGridLat,
+          gridLong: encounterGridLong,
+          encounterIndex: encounterId,
+        },
+        { encounterType: EncounterRarity.Common }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      expect(encounter).not.toBeNull();
+
+      // Attack the encounter (include death accounts in case encounter is killed)
+      const [playerPda] = derivePlayerPda(ctx.gameEngine, player.publicKey);
+      const playerBefore = await fetchPlayer(ctx.connection, playerPda);
+      const lootId = playerBefore!.lootCounter.toNumber();
+      const [lootPda] = deriveLootPda(playerPda, lootId);
+      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
 
       const ix = createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           encounter: encounterPda,
+          loot: lootPda,
+          encounterLocation: encounterLocationPda,
+          locationCreatorRefund: ctx.daoAuthority.publicKey,
         },
         {
           encounterId,
@@ -263,21 +322,15 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
+      await sendTransaction(ctx.connection, tx, [player.keypair]);
 
-      try {
-        await sendTransaction(ctx.connection, tx, [player.keypair]);
-
-        // Verify combat happened
-        const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(playerAfter).not.toBeNull();
-      } catch (err) {
-        // Encounter might not exist
-        console.warn('Attack encounter failed (might not exist):', err);
-      }
+      // Verify combat happened
+      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerAfter).not.toBeNull();
     });
 
     it('should require stamina for encounter attack', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       await factory.hireUnits(player, 3, 50);
 
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
@@ -288,17 +341,43 @@ describe('Combat System', () => {
     });
 
     it('should grant rewards from encounter', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      // Use city 9 to avoid conflicts with other tests
+      const cityId = 9;
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Camp] });
       await factory.hireUnits(player, 3, 100);
       await factory.purchaseEquipment(player, 0, 50);
 
       const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
       expect(playerBefore).not.toBeNull();
 
-      const cityId = playerBefore!.currentCity;
-      const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+      // Spawn an encounter adjacent to the player (within 10m attack range)
       const encounterId = 0;
+      const city = CITIES[cityId]!;
+      const playerGridLat = Math.round(city.lat * GRID_PRECISION);
+      const playerGridLong = Math.round(city.lon * GRID_PRECISION);
+      const encounterGridLat = playerGridLat;
+      const encounterGridLong = playerGridLong + 1; // ~8-10m at mid-latitudes
+
+      const spawnIx = createSpawnEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          playerOwner: ctx.daoAuthority.publicKey,
+          cityId,
+          gridLat: encounterGridLat,
+          gridLong: encounterGridLong,
+          encounterIndex: encounterId,
+        },
+        { encounterType: EncounterRarity.Common }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+
+      // Derive death accounts in case encounter is killed
+      const lootId = playerBefore!.lootCounter.toNumber();
+      const [lootPda] = deriveLootPda(player.playerPda, lootId);
+      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
 
       // Attack encounter
       const ix = createAttackEncounterInstruction(
@@ -306,6 +385,9 @@ describe('Combat System', () => {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           encounter: encounterPda,
+          loot: lootPda,
+          encounterLocation: encounterLocationPda,
+          locationCreatorRefund: ctx.daoAuthority.publicKey,
         },
         {
           encounterId,
@@ -313,19 +395,13 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
+      await sendTransaction(ctx.connection, tx, [player.keypair]);
 
-      try {
-        await sendTransaction(ctx.connection, tx, [player.keypair]);
+      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerAfter).not.toBeNull();
 
-        const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(playerAfter).not.toBeNull();
-
-        // Should have gained some XP
-        expect(playerAfter!.currentXp.gte(playerBefore!.currentXp)).toBe(true);
-      } catch (err) {
-        // Encounter might not exist or player lost
-        console.warn('Attack encounter for rewards failed:', err);
-      }
+      // Should have gained some XP
+      expect(playerAfter!.currentXp.gte(playerBefore!.currentXp)).toBe(true);
     });
   });
 
@@ -334,35 +410,162 @@ describe('Combat System', () => {
   // ============================================================
 
   describe('Loot System', () => {
-    it('should create loot after successful attack', async () => {
-      const { attacker, defender } = await createCombatReadyPlayers(factory);
-
-      // Mock: Assume attack creates loot
-      const [lootPda] = deriveLootPda(defender.playerPda, attacker.playerPda);
-
-      // In real test, we'd execute attack and verify loot creation
-    });
-
-    it('should claim loot successfully', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Mock: Create loot claim scenario
-      // In real test, we'd have pending loot to claim
+    it('should create loot after killing encounter', async () => {
+      // Use a fresh high-latitude city so 1 grid cell in longitude is within 10m attack range
+      const cityId = 15; // London (lat ~51.5°) — fresh city, no prior encounters
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
+      // Hire defensive units and buy weapons to one-shot a Common encounter (2000 HP)
+      await factory.hireUnits(player, 0, 50000);    // tier 1 defensive units
+      await factory.purchaseEquipment(player, 0, 50); // melee weapons
 
       const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
       expect(playerBefore).not.toBeNull();
+      const lootCounterBefore = playerBefore!.lootCounter.toNumber();
+
+      // Spawn a Common encounter adjacent to player
+      const encounterId = 0;
+      const city = CITIES[cityId]!;
+      const playerGridLat = Math.round(city.lat * GRID_PRECISION);
+      const playerGridLong = Math.round(city.lon * GRID_PRECISION);
+      const encounterGridLat = playerGridLat;
+      const encounterGridLong = playerGridLong + 1;
+
+      const spawnIx = createSpawnEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          playerOwner: ctx.daoAuthority.publicKey,
+          cityId,
+          gridLat: encounterGridLat,
+          gridLong: encounterGridLong,
+          encounterIndex: encounterId,
+        },
+        { encounterType: EncounterRarity.Common }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+
+      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      expect(encounter).not.toBeNull();
+
+      // Derive death accounts: loot PDA, encounter location, location creator refund
+      // Use the known spawn grid coords directly (same as what we passed to spawn)
+      const [lootPda] = deriveLootPda(player.playerPda, lootCounterBefore);
+      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
+
+      // Attack with death accounts (encounter should die from massive damage)
+      // locationCreatorRefund must match the payer who spawned the encounter (daoAuthority)
+      const attackIx = createAttackEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          owner: player.publicKey,
+          encounter: encounterPda,
+          loot: lootPda,
+          encounterLocation: encounterLocationPda,
+          locationCreatorRefund: ctx.daoAuthority.publicKey,
+        },
+        { encounterId }
+      );
+
+      await sendTransaction(ctx.connection, new Transaction().add(attackIx), [player.keypair]);
+
+      // Verify loot was created
+      const loot = await fetchLoot(ctx.connection, player.playerPda, lootCounterBefore);
+      expect(loot).not.toBeNull();
+      expect(loot!.claimed).toBe(false);
+      // Loot should have some rewards
+      assertBnGreaterThan(loot!.cash, 0, 'Loot should contain cash');
+
+      // Player's loot counter should have incremented
+      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerAfter!.lootCounter.toNumber()).toBeGreaterThan(lootCounterBefore);
     });
 
-    it('should reject double loot claim', async () => {
-      // Once loot is claimed, trying to claim again should fail
+    it('should claim loot successfully', async () => {
+      // Use a different high-latitude city to avoid conflicts
+      const cityId = 16; // Paris (lat ~48.9°)
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
+      await factory.hireUnits(player, 0, 50000);         // tier 1 defensive units
+      await factory.purchaseEquipment(player, 0, 50);    // melee weapons for damage
+
+      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerBefore).not.toBeNull();
+      const lootId = playerBefore!.lootCounter.toNumber();
+
+      // Spawn and kill encounter to generate loot
+      const encounterId = 0;
+      const city = CITIES[cityId]!;
+      const pGridLat = Math.round(city.lat * GRID_PRECISION);
+      const pGridLong = Math.round(city.lon * GRID_PRECISION);
+
+      const spawnIx = createSpawnEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          playerOwner: ctx.daoAuthority.publicKey,
+          cityId,
+          gridLat: pGridLat,
+          gridLong: pGridLong + 1,
+          encounterIndex: encounterId,
+        },
+        { encounterType: EncounterRarity.Common }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+
+      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      expect(encounter).not.toBeNull();
+
+      const [lootPda] = deriveLootPda(player.playerPda, lootId);
+      // Use known spawn grid coords directly
+      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, pGridLat, pGridLong + 1);
+
+      const attackIx = createAttackEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          owner: player.publicKey,
+          encounter: encounterPda,
+          loot: lootPda,
+          encounterLocation: encounterLocationPda,
+          locationCreatorRefund: ctx.daoAuthority.publicKey,
+        },
+        { encounterId }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(attackIx), [player.keypair]);
+
+      // Verify loot exists
+      const loot = await fetchLoot(ctx.connection, player.playerPda, lootId);
+      expect(loot).not.toBeNull();
+
+      // Record player state before claim
+      const playerBeforeClaim = await fetchPlayer(ctx.connection, player.playerPda);
+      const cashBefore = playerBeforeClaim!.cashOnHand;
+
+      // Claim loot — creator is the owner wallet (who paid rent for loot account)
+      const claimIx = createClaimLootInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        loot: lootPda,
+        creator: player.publicKey,
+      });
+
+      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+
+      // Verify rewards were transferred
+      const playerAfterClaim = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerAfterClaim!.cashOnHand.gt(cashBefore)).toBe(true);
+
+      // Loot account should be closed (rent reclaimed)
+      const lootGone = !(await accountExists(ctx.connection, lootPda));
+      expect(lootGone).toBe(true);
+    });
+
+    it('should reject claim of non-existent loot', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Create a mock loot address (would be a real loot account in production)
       const mockLootAccount = Keypair.generate().publicKey;
-
-      // Create a loot claim instruction
-      // Creator receives rent refund when loot is closed
       const mockCreator = Keypair.generate().publicKey;
+
       const ix = createClaimLootInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -370,26 +573,11 @@ describe('Combat System', () => {
         creator: mockCreator,
       });
 
-      try {
-        // First claim
-        await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
-
-        // Second claim should fail
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(
-            createClaimLootInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
-              loot: mockLootAccount,
-              creator: mockCreator,
-            })
-          ),
-          [player.keypair]
-        );
-      } catch {
-        // Loot might not exist
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [player.keypair]
+      );
     });
   });
 
@@ -399,40 +587,42 @@ describe('Combat System', () => {
 
   describe('Combat Calculations', () => {
     it('should calculate attack power correctly', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
 
-      // Hire units and purchase equipment
-      await factory.hireUnits(player, 3, 100); // operative unit 1
+      // Defensive units are the combat units (for both attack and defense)
+      // Operatives are for financial/economy activities
+      await factory.hireUnits(player, 0, 100); // defensive unit 1 (combat)
       await factory.purchaseEquipment(player, 0, 50); // melee weapons
 
       const account = await fetchPlayer(ctx.connection, player.playerPda);
       expect(account).not.toBeNull();
 
-      // Verify units and equipment were added
-      assertBnGreaterThan(account!.operativeUnit1, 0, 'Should have operative units');
+      // Attack power = defensive units + weapons
+      assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive units for combat');
       assertBnGreaterThan(account!.meleeWeapons, 0, 'Should have melee weapons');
     });
 
     it('should calculate defense power correctly', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
 
-      // Hire defensive units and get armor
-      await factory.hireUnits(player, 0, 100); // defensive unit 1
-      await factory.purchaseEquipment(player, 5, 50); // armor
+      // Defensive units + armor = defense power
+      await factory.hireUnits(player, 0, 200); // defensive unit 1
+      await factory.hireUnits(player, 1, 200);  // defensive unit 2
+      await factory.purchaseEquipment(player, 5, 50); // armor (type 5)
 
       const account = await fetchPlayer(ctx.connection, player.playerPda);
       expect(account).not.toBeNull();
 
-      // Verify units and equipment were added
-      assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive units');
+      assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive unit 1');
+      assertBnGreaterThan(account!.defensiveUnit2, 0, 'Should have defensive unit 2');
       assertBnGreaterThan(account!.armorPieces, 0, 'Should have armor');
     });
 
     it('should apply weapon efficiency bonuses', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
 
-      // Get varied equipment
-      await factory.hireUnits(player, 3, 100);
+      // Hire defensive units (the combat units) and varied weapons
+      await factory.hireUnits(player, 0, 100); // defensive unit 1
       await factory.purchaseEquipment(player, 0, 30); // melee
       await factory.purchaseEquipment(player, 1, 30); // ranged
       await factory.purchaseEquipment(player, 2, 20); // siege
@@ -440,6 +630,7 @@ describe('Combat System', () => {
       const account = await fetchPlayer(ctx.connection, player.playerPda);
       expect(account).not.toBeNull();
 
+      assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive units');
       assertBnGreaterThan(account!.meleeWeapons, 0, 'Should have melee weapons');
       assertBnGreaterThan(account!.rangedWeapons, 0, 'Should have ranged weapons');
       assertBnGreaterThan(account!.siegeWeapons, 0, 'Should have siege weapons');
@@ -452,32 +643,80 @@ describe('Combat System', () => {
 
   describe('Casualties', () => {
     it('should inflict casualties on loser', async () => {
-      const { attacker, defender } = await createCombatReadyPlayers(factory);
+      const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
 
       const defenderBefore = await fetchPlayer(ctx.connection, defender.playerPda);
       expect(defenderBefore).not.toBeNull();
 
-      const initialDefensiveUnits = defenderBefore!.defensiveUnit1;
+      // Execute PvP attack
+      const ix = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+        },
+        { driveBy: false }
+      );
 
-      // Mock: After combat, loser should have fewer units
-      // Real test would execute attack and verify
+      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
+
+      // Verify the loser lost defensive units
+      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
+      const attackerAfter = await fetchPlayer(ctx.connection, attacker.playerPda);
+      expect(defenderAfter).not.toBeNull();
+      expect(attackerAfter).not.toBeNull();
+
+      // One side must have lost units — casualties are inflicted via inflict_damage()
+      const defLost = defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)
+        || defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2);
+      expect(defLost).toBe(true);
     });
 
     it('should distribute casualties across unit types', async () => {
-      // Casualties should affect multiple unit types based on composition
-      const player = await factory.createPlayer({ initialize: true });
+      // Create a defender with all 3 unit types, then attack them
+      const defender = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
+      await factory.hireUnits(defender, 0, 100);
+      await factory.hireUnits(defender, 1, 100);
+      await factory.hireUnits(defender, 2, 100);
 
-      await factory.hireUnits(player, 0, 100);
-      await factory.hireUnits(player, 1, 100);
-      await factory.hireUnits(player, 2, 100);
+      const defenderBefore = await fetchPlayer(ctx.connection, defender.playerPda);
+      expect(defenderBefore).not.toBeNull();
+      assertBnGreaterThan(defenderBefore!.defensiveUnit1, 0, 'Should have def unit 1');
+      assertBnGreaterThan(defenderBefore!.defensiveUnit2, 0, 'Should have def unit 2');
+      assertBnGreaterThan(defenderBefore!.defensiveUnit3, 0, 'Should have def unit 3');
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // Create a strong attacker and move to combat range
+      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      await factory.hireUnits(attacker, 0, 300);
+      await factory.purchaseEquipment(attacker, 0, 100); // melee weapons
+      await factory.movePlayerToPlayer(attacker, defender);
 
-      // Verify player has multiple unit types
-      assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have def unit 1');
-      assertBnGreaterThan(account!.defensiveUnit2, 0, 'Should have def unit 2');
-      assertBnGreaterThan(account!.defensiveUnit3, 0, 'Should have def unit 3');
+      // Attack
+      const ix = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+        },
+        { driveBy: false }
+      );
+
+      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
+
+      // Casualties should be distributed proportionally across unit types
+      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
+      expect(defenderAfter).not.toBeNull();
+
+      // At least 2 of 3 unit types should have taken casualties (proportional distribution)
+      let typesWithCasualties = 0;
+      if (defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)) typesWithCasualties++;
+      if (defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2)) typesWithCasualties++;
+      if (defenderBefore!.defensiveUnit3.gt(defenderAfter!.defensiveUnit3)) typesWithCasualties++;
+      expect(typesWithCasualties).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -486,75 +725,139 @@ describe('Combat System', () => {
   // ============================================================
 
   describe('Combat Restrictions', () => {
-    it('should respect travel status', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+    it('should reject attack while traveling', async () => {
+      // Create a player with units in a high-latitude city
+      const cityId = 19;
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      await factory.hireUnits(player, 0, 100);
+      await factory.purchaseEquipment(player, 0, 50);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(playerAccount).not.toBeNull();
 
-      // Player not traveling should be able to attack
-      // Player traveling should not be able to attack
+      // Spawn an encounter near the player
+      const encounterId = 0;
+      const city = CITIES[cityId]!;
+      const pGridLat = Math.round(city.lat * GRID_PRECISION);
+      const pGridLong = Math.round(city.lon * GRID_PRECISION);
+
+      const spawnIx = createSpawnEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          playerOwner: ctx.daoAuthority.publicKey,
+          cityId,
+          gridLat: pGridLat,
+          gridLong: pGridLong + 1,
+          encounterIndex: encounterId,
+        },
+        { encounterType: EncounterRarity.Common }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+
+      // Start intracity travel (player becomes traveling)
+      const destLat = city.lat + 0.001;
+      const destLong = city.lon + 0.001;
+      await factory.startIntracityTravel(player, cityId, pGridLat, pGridLong, destLat, destLong);
+
+      // Try to attack while traveling — should fail with PlayerTraveling
+      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const ix = createAttackEncounterInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          owner: player.publicKey,
+          encounter: encounterPda,
+        },
+        { encounterId }
+      );
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [player.keypair]
+      );
     });
 
-    it('should respect team alliance', async () => {
-      // Team members cannot attack each other
-      const player1 = await factory.createPlayer({ cityId: 1, initialize: true });
-      const player2 = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should reject PvP attack while traveling', async () => {
+      // Create attacker and defender in same city
+      const defender = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      await factory.hireUnits(defender, 0, 50);
 
-      await factory.hireUnits(player1, 3, 100);
+      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      await factory.hireUnits(attacker, 0, 200);
+      await factory.purchaseEquipment(attacker, 0, 50);
 
-      // If players are in the same team, attack should fail
-      // This requires team setup first
-      const account1 = await fetchPlayer(ctx.connection, player1.playerPda);
-      const account2 = await fetchPlayer(ctx.connection, player2.playerPda);
-      expect(account1).not.toBeNull();
-      expect(account2).not.toBeNull();
-      // If both have same teamId, attack would fail
+      // Move attacker to defender's city and near them
+      await factory.movePlayerToPlayer(attacker, defender);
+
+      // Get attacker's current location
+      const attackerLoc = await factory.getPlayerLocation(attacker);
+      expect(attackerLoc).not.toBeNull();
+
+      // Start intracity travel (attacker becomes traveling)
+      const city = CITIES[1]!;
+      const destLat = city.lat + 0.002;
+      const destLong = city.lon + 0.002;
+      await factory.startIntracityTravel(attacker, 1, attackerLoc!.gridLat, attackerLoc!.gridLong, destLat, destLong);
+
+      // Try to PvP attack while traveling — should fail
+      const ix = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+        },
+        { driveBy: false }
+      );
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [attacker.keypair]
+      );
     });
 
     it('should enforce attack cooldown', async () => {
       // Players have cooldown between attacks
-      const attacker = await factory.createPlayer({ cityId: 1, initialize: true });
+      const attacker = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       const defender1 = await factory.createPlayer({ cityId: 1, initialize: true });
       const defender2 = await factory.createPlayer({ cityId: 1, initialize: true });
 
       await factory.hireUnits(attacker, 3, 200);
 
-      try {
-        // First attack
-        const ix1 = createAttackPlayerInstruction(
-          {
-            gameEngine: ctx.gameEngine,
-            attacker: attacker.publicKey,
-            defenderPlayer: defender1.playerPda,
-            attackerCityId: 1,
-            defenderCityId: 1,
-          },
-          { driveBy: false }
-        );
+      // First attack
+      const ix1 = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender1.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+        },
+        { driveBy: false }
+      );
 
-        await sendTransaction(ctx.connection, new Transaction().add(ix1), [attacker.keypair]);
+      await sendTransaction(ctx.connection, new Transaction().add(ix1), [attacker.keypair]);
 
-        // Second attack immediately should fail due to cooldown
-        const ix2 = createAttackPlayerInstruction(
-          {
-            gameEngine: ctx.gameEngine,
-            attacker: attacker.publicKey,
-            defenderPlayer: defender2.playerPda,
-            attackerCityId: 1,
-            defenderCityId: 1,
-          },
-          { driveBy: false }
-        );
+      // Second attack immediately should fail due to cooldown
+      const ix2 = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender2.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+        },
+        { driveBy: false }
+      );
 
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(ix2),
-          [attacker.keypair]
-        );
-      } catch {
-        // Attack might fail for other reasons
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix2),
+        [attacker.keypair]
+      );
     });
   });
 
@@ -564,8 +867,11 @@ describe('Combat System', () => {
 
   describe('Encounter Spawning', () => {
     it('should spawn encounter in city', async () => {
-      // DAO authority spawns encounters
-      const cityId = 1;
+      // DAO authority spawns encounters (use city 5 to avoid conflicts with PvP tests)
+      // Use spiral index 5 for coords to avoid city-center collision with player spawns
+      const cityId = 5;
+      const encounterIndex = 0; // Must match city's encounter_counter (starts at 0)
+      const { gridLat, gridLong } = goldenSpiralGridCoords(cityId, 5);
 
       const ix = createSpawnEncounterInstruction(
         {
@@ -573,9 +879,9 @@ describe('Combat System', () => {
           payer: ctx.daoAuthority.publicKey,
           playerOwner: ctx.daoAuthority.publicKey,
           cityId,
-          gridLat: 0,
-          gridLong: 0,
-          encounterIndex: 0,
+          gridLat,
+          gridLong,
+          encounterIndex,
         },
         {
           encounterType: EncounterRarity.Common,
@@ -584,97 +890,93 @@ describe('Combat System', () => {
 
       const tx = new Transaction().add(ix);
 
-      try {
-        await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
 
-        // Verify encounter was created
-        // In real test, we'd derive and fetch the encounter
-      } catch (err) {
-        // Might fail if not authorized
-        console.warn('Spawn encounter failed (might not be authorized):', err);
-      }
+      // Verify encounter was created
+      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      expect(encounter).not.toBeNull();
     });
 
     it('should have correct encounter power based on level', async () => {
-      // Higher level encounters should be stronger
-      const cityId = 1;
+      // Higher level encounters should be stronger (use city 6 to avoid conflicts)
+      const cityId = 6;
 
-      // Spawn low level encounter
+      // Spawn low level encounter (encounterIndex 0 - must match city counter)
+      // Use spiral index 5 for coords to avoid city-center collision with player spawns
+      const spawn0 = goldenSpiralGridCoords(cityId, 5);
       const lowLevelIx = createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
           playerOwner: ctx.daoAuthority.publicKey,
           cityId,
-          gridLat: 0,
-          gridLong: 1,
-          encounterIndex: 1,
+          gridLat: spawn0.gridLat,
+          gridLong: spawn0.gridLong,
+          encounterIndex: 0,
         },
         { encounterType: EncounterRarity.Common }
       );
 
-      // Spawn high level encounter
+      // Spawn higher rarity encounter (encounterIndex 1) - use Rare to avoid time-of-day restrictions
+      const spawn1 = goldenSpiralGridCoords(cityId, 6);
       const highLevelIx = createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
           playerOwner: ctx.daoAuthority.publicKey,
           cityId,
-          gridLat: 0,
-          gridLong: 2,
-          encounterIndex: 2,
+          gridLat: spawn1.gridLat,
+          gridLong: spawn1.gridLong,
+          encounterIndex: 1,
         },
-        { encounterType: EncounterRarity.Epic }
+        { encounterType: EncounterRarity.Rare }
       );
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(lowLevelIx), [ctx.daoAuthority]);
-        await sendTransaction(ctx.connection, new Transaction().add(highLevelIx), [ctx.daoAuthority]);
-        // High level encounter would have more power/HP
-      } catch {
-        // Might not be authorized
-      }
+      await sendTransaction(ctx.connection, new Transaction().add(lowLevelIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.connection, new Transaction().add(highLevelIx), [ctx.daoAuthority]);
+      // High level encounter would have more power/HP
     });
 
     it('should have correct encounter rewards based on type', async () => {
       // Different encounter types have different rewards
-      const cityId = 1;
+      // Use city 7 to avoid encounter limit and conflicts
+      const cityId = 7;
 
-      // Common encounter = basic rewards
+      // Common encounter = basic rewards (encounterIndex 0 for this city)
+      // Use spiral index 5 for coords to avoid city-center collision with player spawns
+      const spawn0 = goldenSpiralGridCoords(cityId, 5);
       const commonIx = createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
           playerOwner: ctx.daoAuthority.publicKey,
           cityId,
-          gridLat: 1,
-          gridLong: 0,
-          encounterIndex: 3,
+          gridLat: spawn0.gridLat,
+          gridLong: spawn0.gridLong,
+          encounterIndex: 0,
         },
         { encounterType: EncounterRarity.Common }
       );
 
-      // Legendary encounter = better rewards
-      const legendaryIx = createSpawnEncounterInstruction(
+      // Uncommon encounter = better rewards (encounterIndex 1 for this city)
+      const spawn1 = goldenSpiralGridCoords(cityId, 6);
+      const uncommonIx = createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
           playerOwner: ctx.daoAuthority.publicKey,
           cityId,
-          gridLat: 1,
-          gridLong: 1,
-          encounterIndex: 4,
+          gridLat: spawn1.gridLat,
+          gridLong: spawn1.gridLong,
+          encounterIndex: 1,
         },
-        { encounterType: EncounterRarity.Legendary }
+        { encounterType: EncounterRarity.Uncommon }
       );
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(commonIx), [ctx.daoAuthority]);
-        await sendTransaction(ctx.connection, new Transaction().add(legendaryIx), [ctx.daoAuthority]);
-        // Legendary encounter drops better loot
-      } catch {
-        // Might not be authorized
-      }
+      await sendTransaction(ctx.connection, new Transaction().add(commonIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.connection, new Transaction().add(uncommonIx), [ctx.daoAuthority]);
+      // Higher rarity encounter drops better loot
     });
   });
 });

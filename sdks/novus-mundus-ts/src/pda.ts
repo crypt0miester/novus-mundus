@@ -11,7 +11,7 @@ import {
   SEEDS,
   ALT_NAME_SERVICE_PROGRAM_ID,
   TLD_HOUSE_PROGRAM_ID,
-} from './program.ts';
+} from './program';
 
 // ============================================================
 // Core Account PDAs
@@ -222,13 +222,15 @@ export function deriveEncounterPda(
   );
 }
 
-/** Derive Loot PDA */
+/** Derive Loot PDA: [b"loot", player_pda, loot_id_le] */
 export function deriveLootPda(
-  encounter: PublicKey,
-  attacker: PublicKey
+  playerPda: PublicKey,
+  lootId: number | bigint
 ): [PublicKey, number] {
+  const lootIdBuffer = Buffer.alloc(8);
+  lootIdBuffer.writeBigUInt64LE(BigInt(lootId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.LOOT, encounter.toBuffer(), attacker.toBuffer()],
+    [SEEDS.LOOT, playerPda.toBuffer(), lootIdBuffer],
     PROGRAM_ID
   );
 }
@@ -281,8 +283,9 @@ export function deriveProgressionPda(player: PublicKey): [PublicKey, number] {
 export function deriveResearchTemplatePda(
   templateId: number
 ): [PublicKey, number] {
-  const templateIdBuffer = Buffer.alloc(2);
-  templateIdBuffer.writeUInt16LE(templateId);
+  // Rust uses single byte: &[research_type]
+  const templateIdBuffer = Buffer.alloc(1);
+  templateIdBuffer.writeUInt8(templateId);
   return PublicKey.findProgramAddressSync(
     [SEEDS.RESEARCH_TEMPLATE, templateIdBuffer],
     PROGRAM_ID
@@ -303,6 +306,7 @@ export function deriveResearchPda(player: PublicKey): [PublicKey, number] {
 
 /** Derive Hero Template PDA */
 export function deriveHeroTemplatePda(templateId: number): [PublicKey, number] {
+  // Rust uses u16 LE: template_id.to_le_bytes()
   const templateIdBuffer = Buffer.alloc(2);
   templateIdBuffer.writeUInt16LE(templateId);
   return PublicKey.findProgramAddressSync(
@@ -314,6 +318,19 @@ export function deriveHeroTemplatePda(templateId: number): [PublicKey, number] {
 /** Derive Hero Collection PDA */
 export function deriveHeroCollectionPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([SEEDS.HERO_COLLECTION], PROGRAM_ID);
+}
+
+/** Derive Hero Mint Receipt PDA (existence = player already minted this template) */
+export function deriveHeroMintReceiptPda(
+  playerPda: PublicKey,
+  templateId: number
+): [PublicKey, number] {
+  const templateIdBuffer = Buffer.alloc(2);
+  templateIdBuffer.writeUInt16LE(templateId);
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.HERO_MINT_RECEIPT, playerPda.toBuffer(), templateIdBuffer],
+    PROGRAM_ID
+  );
 }
 
 // ============================================================
@@ -455,10 +472,10 @@ export function deriveAllowedTokenPda(
 // Estate System PDAs
 // ============================================================
 
-/** Derive Estate PDA */
-export function deriveEstatePda(owner: PublicKey): [PublicKey, number] {
+/** Derive Estate PDA (scoped to player PDA) */
+export function deriveEstatePda(playerPda: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [SEEDS.ESTATE, owner.toBuffer()],
+    [SEEDS.ESTATE, playerPda.toBuffer()],
     PROGRAM_ID
   );
 }
@@ -535,6 +552,7 @@ export function deriveArenaLoadoutPda(
 export function deriveDungeonTemplatePda(
   templateId: number
 ): [PublicKey, number] {
+  // Rust uses u16 LE: dungeon_id.to_le_bytes()
   const templateIdBuffer = Buffer.alloc(2);
   templateIdBuffer.writeUInt16LE(templateId);
   return PublicKey.findProgramAddressSync(

@@ -1,14 +1,14 @@
 /**
  * Rally Accounts
  *
- * RallyAccount - Team attack coordination (304 bytes)
- * RallyParticipant - Per-joiner state (312 bytes)
+ * RallyAccount - Team attack coordination (368 bytes)
+ * RallyParticipant - Per-joiner state (352 bytes)
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { RallyStatus, RallyTargetType } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { RallyStatus, RallyTargetType } from '../types/enums';
 
 // ============================================================
 // Rally Account Interface
@@ -87,8 +87,8 @@ export interface RallyAccount {
   bump: number;
 }
 
-/** RallyAccount size in bytes */
-export const RALLY_ACCOUNT_SIZE = 304;
+/** RallyAccount size in bytes (repr(C) layout with alignment padding) */
+export const RALLY_ACCOUNT_SIZE = 368;
 
 // ============================================================
 // Rally Participant Interface
@@ -167,8 +167,8 @@ export interface RallyParticipant {
   bump: number;
 }
 
-/** RallyParticipant size in bytes */
-export const RALLY_PARTICIPANT_SIZE = 312;
+/** RallyParticipant size in bytes (repr(C) layout with alignment padding) */
+export const RALLY_PARTICIPANT_SIZE = 352;
 
 // ============================================================
 // Deserialization
@@ -178,7 +178,13 @@ export const RALLY_PARTICIPANT_SIZE = 312;
 export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
   const reader = new BufferReader(data);
 
-  // Identity (48 bytes)
+  reader.readU8(); // account_key discriminator
+
+  // Kingdom Reference (32 bytes)
+  reader.readPubkey(); // game_engine (skip, not in interface)
+  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
+
+  // Identity
   const id = reader.readU64();
   const creator = reader.readPubkey();
   const team = reader.readPubkey();
@@ -311,14 +317,17 @@ export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
 export function deserializeRallyParticipant(data: Uint8Array | Buffer): RallyParticipant {
   const reader = new BufferReader(data);
 
-  // Identity (48 bytes)
+  reader.readU8(); // account_key discriminator
+  reader.skip(7); // implicit padding for u64 alignment (offset 1 -> 8)
+
+  // Identity
   const rallyId = reader.readU64();
   const rallyCreator = reader.readPubkey();
   const participant = reader.readPubkey();
 
-  // Home location (4 bytes)
+  // Home location (2 bytes + 6 bytes padding for u64 alignment)
   const homeCity = reader.readU16();
-  reader.skip(2); // padding
+  reader.skip(6); // 2 explicit _padding1 + 4 implicit repr(C) alignment
 
   // Units committed (24 bytes)
   const unitsCommitted1 = reader.readU64();

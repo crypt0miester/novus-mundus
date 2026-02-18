@@ -4,5 +4,5 @@
  * Parse and deserialize on-chain events from transaction logs.
  */
 
-export * from './types.ts';
-export * from './parser.ts';
+export * from './types';
+export * from './parser';

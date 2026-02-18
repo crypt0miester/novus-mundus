@@ -8,7 +8,7 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize.ts';
+import { BufferReader } from '../utils/deserialize';
 
 // ============================================================
 // Dungeon Enums (local definitions matching Rust state)
@@ -197,8 +197,11 @@ export interface DungeonLeaderboardAccount {
 // Deserialization
 // ============================================================
 
-function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateAccount {
+export function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+  reader.skip(1); // implicit padding for u16 alignment
 
   const dungeonId = reader.readU16();
   const theme = reader.readU8() as DungeonTheme;
@@ -215,6 +218,8 @@ function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateA
 
   const nameBytes = reader.readBytes(32);
   const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
+
+  reader.skip(2); // implicit padding for u32 alignment
 
   // Floor power array (10 u32s)
   const floorPower: number[] = [];
@@ -268,12 +273,15 @@ function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateA
   };
 }
 
-function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
+export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
 
   const player = reader.readPubkey();
   const heroMint = reader.readPubkey();
 
+  reader.skip(1); // implicit padding for u16 alignment
   const dungeonId = reader.readU16();
   const status = reader.readU8() as DungeonStatus;
   const currentFloor = reader.readU8();
@@ -281,6 +289,7 @@ function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
   const roomType = reader.readU8() as RoomType;
   const lastCheckpoint = reader.readU8();
   const bump = reader.readU8();
+  reader.skip(6); // implicit padding for u64 alignment
 
   const enemyHealth = reader.readU64();
   const enemyMaxHealth = reader.readU64();
@@ -297,6 +306,7 @@ function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
   const bossAbilityActive = reader.readBool();
   const bossAbilityCounter = reader.readU8();
   reader.skip(3); // _boss_padding
+  reader.skip(7); // implicit padding for u64 alignment
   const bossShield = reader.readU64();
 
   // Units arrays
@@ -408,23 +418,26 @@ function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
   };
 }
 
-function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): DungeonLeaderboardAccount {
+export function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): DungeonLeaderboardAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+  reader.skip(32); // game_engine
+  reader.skip(1); // implicit padding for u16 alignment
 
   const dungeonId = reader.readU16();
   const weekNumber = reader.readU16();
-  const bump = reader.readU8();
-  reader.skip(3); // padding
-
-  // Read entries count (assuming it's stored as u8)
   const entryCount = reader.readU8();
-  reader.skip(7); // padding
+  const bump = reader.readU8();
+  reader.skip(2); // claimed_mask u16 (skip for interface)
+  reader.skip(6); // implicit padding for u64 alignment
+  reader.skip(8); // prize_pool (skip for interface)
 
   const entries: DungeonLeaderboardEntry[] = [];
   for (let i = 0; i < entryCount; i++) {
     const player = reader.readPubkey();
     const score = reader.readU64();
-    const timestamp = reader.readI64();
+    const timestamp = score; // LeaderboardEntry only has player+score; timestamp for compatibility
     entries.push({ player, score, timestamp });
   }
 

@@ -28,6 +28,7 @@ import {
   type ArenaParticipantAccount,
   type LootAccount,
   type EventAccount,
+  type EventParticipation,
   type GameEngineAccount,
   type CityAccount,
   type ShopConfigAccount,
@@ -48,6 +49,7 @@ import {
   deserializeArenaParticipant,
   deserializeLoot,
   deserializeEvent,
+  deserializeEventParticipation,
   deserializeGameEngine,
   deserializeCity,
   deserializeShopConfig,
@@ -68,6 +70,7 @@ import {
   deriveArenaParticipantPda,
   deriveLootPda,
   deriveEventPda,
+  deriveEventParticipationPda,
   deriveCastlePda,
   deriveDungeonRunPda,
   deriveGameEnginePda,
@@ -331,9 +334,10 @@ export async function fetchArenaParticipant(
   connection: Connection,
   gameEngine: PublicKey,
   seasonId: number,
-  player: PublicKey
+  ownerOrPlayerPda: PublicKey
 ): Promise<ArenaParticipantAccount | null> {
-  const [participantPda] = deriveArenaParticipantPda(gameEngine, seasonId, player);
+  // ownerOrPlayerPda should be the PlayerAccount PDA (participant PDA is keyed by player PDA)
+  const [participantPda] = deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
   const info = await fetchAccount(connection, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaParticipant(info.data);
@@ -345,10 +349,10 @@ export async function fetchArenaParticipant(
 
 export async function fetchLoot(
   connection: Connection,
-  source: PublicKey,
-  attacker: PublicKey
+  playerPda: PublicKey,
+  lootId: number | bigint
 ): Promise<LootAccount | null> {
-  const [lootPda] = deriveLootPda(source, attacker);
+  const [lootPda] = deriveLootPda(playerPda, lootId);
   const info = await fetchAccount(connection, lootPda);
   if (!info || info.data.length === 0) return null;
   return deserializeLoot(info.data);
@@ -367,6 +371,18 @@ export async function fetchEvent(
   const info = await fetchAccount(connection, eventPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEvent(info.data);
+}
+
+export async function fetchEventParticipation(
+  connection: Connection,
+  gameEngine: PublicKey,
+  eventId: number,
+  playerOwner: PublicKey
+): Promise<EventParticipation | null> {
+  const [participationPda] = deriveEventParticipationPda(gameEngine, eventId, playerOwner);
+  const info = await fetchAccount(connection, participationPda);
+  if (!info || info.data.length === 0) return null;
+  return deserializeEventParticipation(info.data);
 }
 
 // ============================================================
@@ -404,9 +420,9 @@ export async function fetchDungeonRunRaw(
 
 export async function fetchEstateRaw(
   connection: Connection,
-  owner: PublicKey
+  playerPda: PublicKey
 ): Promise<AccountInfo<Buffer> | null> {
-  const [estatePda] = deriveEstatePda(owner);
+  const [estatePda] = deriveEstatePda(playerPda);
   return fetchAccount(connection, estatePda);
 }
 

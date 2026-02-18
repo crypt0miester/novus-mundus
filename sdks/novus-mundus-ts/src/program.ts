@@ -90,6 +90,7 @@ export const SEEDS = {
   // Hero system
   HERO_TEMPLATE: Buffer.from('hero_template'),
   HERO_COLLECTION: Buffer.from('hero_collection'),
+  HERO_MINT_RECEIPT: Buffer.from('hero_mint_receipt'),
 
   // Shop system
   SHOP_CONFIG: Buffer.from('shop_config'),
@@ -140,6 +141,9 @@ export const DISCRIMINATORS = {
   INIT_CITY: 3,
   CLOSE_REGISTRATION: 4,
   BATCH_CITIES: 5,
+  UPDATE_GAME_CONFIG: 6,
+  SET_TERRAIN: 7,
+  APPEND_TERRAIN: 8,
 
   // Economy (10-19)
   UPDATE_LOCKED_NOVI: 10,
@@ -239,6 +243,7 @@ export const DISCRIMINATORS = {
   // Sanctuary Meditation (137-139)
   SANCTUARY_START_MEDITATION: 137,
   SANCTUARY_CLAIM_MEDITATION: 138,
+  SANCTUARY_SPEEDUP_MEDITATION: 139,
 
   // Shop System (140-159)
   SHOP_INIT_CONFIG: 140,
@@ -271,6 +276,8 @@ export const DISCRIMINATORS = {
   ESTATE_DAILY_CLAIM: 165,
   ESTATE_DAILY_ACTIVITY: 166,
   ESTATE_CONVERT_MATERIALS: 167,
+  ESTATE_SPEEDUP: 168,
+  ESTATE_RECOVER_TROOPS: 169,
 
   // Forge System (180-189)
   FORGE_INITIALIZE: 180,
@@ -355,6 +362,10 @@ export const DISCRIMINATORS = {
 
   // Token Economy (300-309) - NOVI Purchases
   SHOP_PURCHASE_NOVI: 300,
+
+  // Hero Burn & Supply (310-319)
+  HERO_BURN: 310,
+  HERO_UPDATE_SUPPLY_CAP: 311,
 } as const;
 
 /** Type for discriminator values */

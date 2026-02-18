@@ -4,6 +4,7 @@
  * Instructions for estate/building system:
  * - Create estate
  * - Build/upgrade/complete buildings
+ * - Speedup building construction
  * - Buy plots
  * - Daily claims and activities
  * - Material conversion
@@ -14,15 +15,15 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
-import { BuildingType } from '../types/enums.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { BuildingType } from '../types/enums';
 
 // ============================================================
 // Create Estate
@@ -40,6 +41,7 @@ export interface CreateEstateParams {
   cityId: number;
 }
 
+/** ~5,000 CU */
 /**
  * Create estate account.
  *
@@ -51,7 +53,7 @@ export function createCreateEstateInstruction(
   params: CreateEstateParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER, WRITE)
@@ -94,6 +96,7 @@ export interface BuildBuildingParams {
   buildingType: BuildingType | number;
 }
 
+/** ~10,000 CU */
 /**
  * Start construction of a new building.
  *
@@ -104,7 +107,7 @@ export function createBuildBuildingInstruction(
   params: BuildBuildingParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [noviMint] = deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
@@ -146,6 +149,7 @@ export interface UpgradeBuildingParams {
   buildingType: BuildingType | number;
 }
 
+/** ~10,000 CU */
 /**
  * Start upgrade of an existing building.
  *
@@ -156,7 +160,7 @@ export function createUpgradeBuildingInstruction(
   params: UpgradeBuildingParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [noviMint] = deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
@@ -198,6 +202,7 @@ export interface CompleteBuildingParams {
   buildingType: BuildingType | number;
 }
 
+/** ~5,000 CU */
 /**
  * Complete building construction/upgrade.
  *
@@ -209,7 +214,7 @@ export function createCompleteBuildingInstruction(
   params: CompleteBuildingParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -244,6 +249,7 @@ export interface BuyPlotAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~10,000 CU */
 /**
  * Buy an additional building plot.
  *
@@ -253,7 +259,7 @@ export function createBuyPlotInstruction(
   accounts: BuyPlotAccounts
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [noviMint] = deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
@@ -287,6 +293,7 @@ export interface DailyClaimAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Claim daily building production.
  *
@@ -296,7 +303,7 @@ export function createDailyClaimInstruction(
   accounts: DailyClaimAccounts
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -341,6 +348,7 @@ export interface DailyActivityParams {
   score: number;
 }
 
+/** ~5,000 CU */
 /**
  * Complete building mini-game activity.
  *
@@ -352,17 +360,17 @@ export interface DailyActivityParams {
  * - Dusk: Hours 9-16
  *
  * Building to Window Mapping:
- * - Dawn: Barracks
- * - Dawn/Midday: Workshop, Dock, Vault, Forge
- * - Midday: Market, Academy, Arena
- * - Dusk: Sanctuary, Observatory, Treasury, Citadel
+ * - Dawn: Barracks, Camp
+ * - Dawn/Midday: Workshop, Dock, Vault, Forge, Mine, Farm
+ * - Midday: Market, Academy, Arena, Stables
+ * - Dusk: Sanctuary, Observatory, Treasury, Citadel, Catacombs, Infirmary
  */
 export function createDailyActivityInstruction(
   accounts: DailyActivityAccounts,
   params: DailyActivityParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -426,6 +434,7 @@ export interface ConvertMaterialsParams {
   conversions: number;
 }
 
+/** ~5,000 CU */
 /**
  * Convert materials to higher tier.
  *
@@ -448,7 +457,7 @@ export function createConvertMaterialsInstruction(
   params: ConvertMaterialsParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -466,6 +475,120 @@ export function createConvertMaterialsInstruction(
   writer.writeU8(params.conversions);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_CONVERT_MATERIALS, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Building Speedup
+// ============================================================
+
+export interface BuildingSpeedupAccounts {
+  /** Player's wallet (signer) */
+  owner: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+}
+
+export interface BuildingSpeedupParams {
+  /** Building type to speed up */
+  buildingType: BuildingType | number;
+  /** Speedup tier: 1 = 50% time remains, 2 = 25% time remains */
+  speedupTier: 1 | 2;
+}
+
+/** ~25,000 CU */
+/**
+ * Speed up building construction/upgrade.
+ *
+ * Costs gems based on remaining time and tier.
+ * - Tier 1: 50% of time remains (1x gem cost)
+ * - Tier 2: 25% of time remains (2x gem cost)
+ */
+export function createBuildingSpeedupInstruction(
+  accounts: BuildingSpeedupAccounts,
+  params: BuildingSpeedupParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = deriveEstatePda(player);
+
+  // Rust account order:
+  // 0. player_account (WRITE)
+  // 1. estate_account (WRITE)
+  // 2. owner (SIGNER)
+  // 3. game_engine
+  const keys = [
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: estate, isSigner: false, isWritable: true },
+    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(2);
+  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
+  writer.writeU8(params.speedupTier);
+
+  const data = createInstructionData(DISCRIMINATORS.ESTATE_SPEEDUP, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Recover Troops
+// ============================================================
+
+export interface RecoverTroopsAccounts {
+  owner: PublicKey;
+  gameEngine: PublicKey;
+}
+
+export interface RecoverTroopsParams {
+  /** Unit type (0-5: DefensiveUnit1-3, OperativeUnit1-3) */
+  unitType: number;
+  /** Number of wounded units to recover */
+  amount: bigint | number;
+}
+
+/** ~15,000 CU */
+/**
+ * Recover wounded troops from the Infirmary.
+ *
+ * Requires Infirmary building. Cost is 50% of normal hire cost,
+ * further reduced by Infirmary level and daily buff.
+ */
+export function createRecoverTroopsInstruction(
+  accounts: RecoverTroopsAccounts,
+  params: RecoverTroopsParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = deriveEstatePda(player);
+
+  // Rust account order:
+  // 0. owner (SIGNER)
+  // 1. player_account (WRITE)
+  // 2. estate_account (WRITE)
+  // 3. game_engine
+  const keys = [
+    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: estate, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(10);
+  writer.writeU8(params.unitType);
+  writer.writeU8(0); // padding
+  writer.writeU64(BigInt(params.amount));
+
+  const data = createInstructionData(DISCRIMINATORS.ESTATE_RECOVER_TROOPS, writer.toBuffer());
 
   return new TransactionInstruction({
     keys,

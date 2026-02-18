@@ -25,7 +25,7 @@ export {
   OPERATIVE_UNIT_1_POWER as OP1_POWER_COST,
   OPERATIVE_UNIT_2_POWER as OP2_POWER_COST,
   OPERATIVE_UNIT_3_POWER as OP3_POWER_COST,
-} from '../constants.ts';
+} from '../constants';
 
 // ============================================================
 // Basis Points Helpers

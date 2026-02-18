@@ -9,16 +9,16 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveCityPda,
   deriveEncounterPda,
   deriveLocationPda,
   derivePlayerPda,
   deriveNoviMintPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Enums
@@ -58,6 +58,7 @@ export interface SpawnEncounterParams {
   encounterType: EncounterRarity;
 }
 
+/** ~20,000 CU */
 /**
  * Spawn an encounter at a location.
  *
@@ -122,9 +123,11 @@ export function createSpawnEncounterInstruction(
     { pubkey: spawnLocation, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: encounter_type (u8)
-  const writer = new BufferWriter(1);
+  // Instruction data: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE)
+  const writer = new BufferWriter(9);
   writer.writeU8(params.encounterType);
+  writer.writeI32(accounts.gridLat);
+  writer.writeI32(accounts.gridLong);
 
   const data = createInstructionData(DISCRIMINATORS.ENCOUNTER_SPAWN, writer.toBuffer());
 

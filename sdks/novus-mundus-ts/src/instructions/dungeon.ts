@@ -18,8 +18,8 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -28,45 +28,69 @@ import {
   deriveDungeonLeaderboardPda,
   deriveHeroCollectionPda,
   deriveEstatePda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Create Template (Admin)
 // ============================================================
 
 export interface CreateDungeonTemplateAccounts {
-  /** Payer for account creation */
-  payer: PublicKey;
-  /** DAO authority (signer) */
+  /** DAO authority (signer, pays for account) */
   daoAuthority: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
 }
 
 export interface CreateDungeonTemplateParams {
-  /** Template ID */
+  /** Template ID (dungeon_id) */
   templateId: number;
-  /** Dungeon name */
+  /** Theme (0=Crypts, 1=Caverns, 2=Abyss, 3=Forge) */
+  theme?: number;
+  /** Total floors (1-10) */
+  totalFloors: number;
+  /** Rooms per floor (1-10) */
+  roomsPerFloor?: number;
+  /** Checkpoint every N floors */
+  checkpointInterval?: number;
+  /** Minimum player level */
+  minPlayerLevel?: number;
+  /** Required building level (Arena) */
+  requiredBuildingLevel?: number;
+  /** Stamina cost */
+  staminaCost?: number;
+  /** Boss power multiplier bps */
+  bossPowerMultiplier?: number;
+  /** Dungeon name (max 32 bytes) */
   name: string;
-  /** Minimum level required */
-  minLevel: number;
-  /** Entry cost in NOVI */
-  entryCost: BN | number | bigint;
-  /** Number of floors */
-  floors: number;
-  /** Difficulty multiplier bps */
-  difficultyBps: number;
-  /** Base rewards */
-  baseRewards: BN | number | bigint;
-  /** Is template enabled */
-  enabled: boolean;
+  /** Floor power array (up to 10 floors) */
+  floorPower?: number[];
+  /** Room type weights (must sum to 10000 bps) */
+  combatWeight?: number;
+  treasureWeight?: number;
+  campWeight?: number;
+  restWeight?: number;
+  trapWeight?: number;
+  /** Darkness config */
+  darknessBaseBps?: number;
+  darknessPerFloorBps?: number;
+  /** Time limit in seconds (0 = unlimited) */
+  timeLimitSeconds?: number;
+  /** Reward config */
+  baseXpPerRoom?: BN | number | bigint;
+  baseNoviPerFloor?: BN | number | bigint;
+  completionBonusBps?: number;
+  rewardScalingBps?: number;
 }
 
+/** ~10,000 CU */
 /**
  * Create a dungeon template.
  *
  * Admin-only. Defines a dungeon type.
+ *
+ * Rust account order: [dao_authority, dungeon_template, game_engine, system_program]
+ * Instruction data: 128 bytes matching DungeonTemplate struct layout.
  */
 export function createCreateDungeonTemplateInstruction(
   accounts: CreateDungeonTemplateAccounts,
@@ -74,27 +98,83 @@ export function createCreateDungeonTemplateInstruction(
 ): TransactionInstruction {
   const [template] = deriveDungeonTemplatePda(params.templateId);
 
+  // Rust expects: [dao_authority, dungeon_template, game_engine, system_program]
   const keys = [
-    { pubkey: accounts.payer, isSigner: true, isWritable: true },
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+  // Build 128-byte instruction data matching Rust struct layout:
+  //  [0..2]    dungeon_id: u16
+  //  [2]       theme: u8
+  //  [3]       total_floors: u8
+  //  [4]       rooms_per_floor: u8
+  //  [5]       checkpoint_interval: u8
+  //  [6]       min_player_level: u8
+  //  [7]       required_building_level: u8
+  //  [8..10]   stamina_cost: u16
+  //  [10..12]  boss_power_multiplier: u16
+  //  [12..16]  padding (4 bytes)
+  //  [16..48]  name: [u8; 32]
+  //  [48..88]  floor_power: [u32; 10]
+  //  [88..90]  combat_weight: u16
+  //  [90..92]  treasure_weight: u16
+  //  [92..94]  camp_weight: u16
+  //  [94..96]  rest_weight: u16
+  //  [96..98]  trap_weight: u16
+  //  [98..100] padding2: u16
+  //  [100..102] darkness_base_bps: u16
+  //  [102..104] darkness_per_floor_bps: u16
+  //  [104..108] time_limit_seconds: u32
+  //  [108..116] base_xp_per_room: u64
+  //  [116..124] base_novi_per_floor: u64
+  //  [124..126] completion_bonus_bps: u16
+  //  [126..128] reward_scaling_bps: u16
+  const writer = new BufferWriter(132);
+  writer.writeU16(params.templateId);                           // [0..2]
+  writer.writeU8(params.theme ?? 0);                            // [2]
+  writer.writeU8(params.totalFloors);                           // [3]
+  writer.writeU8(params.roomsPerFloor ?? 5);                    // [4]
+  writer.writeU8(params.checkpointInterval ?? 3);               // [5]
+  writer.writeU8(params.minPlayerLevel ?? 1);                   // [6]
+  writer.writeU8(params.requiredBuildingLevel ?? 0);            // [7]
+  writer.writeU16(params.staminaCost ?? 0);                     // [8..10]
+  writer.writeU16(params.bossPowerMultiplier ?? 15000);         // [10..12]
+  writer.writeZeros(4);                                          // [12..16] padding
 
-  const writer = new BufferWriter(64);
-  writer.writeU16(params.templateId);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
-  writer.writeZeros(32 - nameBytes.length);
-  writer.writeU8(params.minLevel);
-  writer.writeU64(params.entryCost);
-  writer.writeU8(params.floors);
-  writer.writeU16(params.difficultyBps);
-  writer.writeU64(params.baseRewards);
-  writer.writeBool(params.enabled);
+  // Name (32 bytes, zero-padded)
+  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+  writer.writeBytes(nameBytes);                                  // [16..16+len]
+  writer.writeZeros(32 - nameBytes.length);                      // pad to [48]
+
+  // Floor power (10 × u32 = 40 bytes)
+  const floorPower = params.floorPower ?? [];
+  for (let i = 0; i < 10; i++) {
+    writer.writeU32(floorPower[i] ?? (100 + i * 50));           // [48..88]
+  }
+
+  // Room weights (must sum to 10000)
+  writer.writeU16(params.combatWeight ?? 4000);                  // [88..90]
+  writer.writeU16(params.treasureWeight ?? 2000);                // [90..92]
+  writer.writeU16(params.campWeight ?? 1500);                    // [92..94]
+  writer.writeU16(params.restWeight ?? 1500);                    // [94..96]
+  writer.writeU16(params.trapWeight ?? 1000);                    // [96..98]
+  writer.writeZeros(2);                                          // [98..100] padding2
+
+  // Darkness config
+  writer.writeU16(params.darknessBaseBps ?? 0);                  // [100..102]
+  writer.writeU16(params.darknessPerFloorBps ?? 0);              // [102..104]
+
+  // Time limit
+  writer.writeU32(params.timeLimitSeconds ?? 0);                 // [104..108]
+
+  // Reward config
+  writer.writeU64(params.baseXpPerRoom ?? 100);                  // [108..116]
+  writer.writeU64(params.baseNoviPerFloor ?? 50);                // [116..124]
+  writer.writeU16(params.completionBonusBps ?? 5000);            // [124..126]
+  writer.writeU16(params.rewardScalingBps ?? 10000);             // [126..128]
 
   const data = createInstructionData(DISCRIMINATORS.DUNGEON_CREATE_TEMPLATE, writer.toBuffer());
 
@@ -127,6 +207,7 @@ export interface CreateLeaderboardParams {
   prizePool: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Create a weekly leaderboard.
  *
@@ -137,12 +218,14 @@ export function createCreateLeaderboardInstruction(
   params: CreateLeaderboardParams
 ): TransactionInstruction {
   const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
+  const [dungeonTemplate] = deriveDungeonTemplatePda(params.templateId);
 
+  // Rust account order: payer, dungeon_template, leaderboard, game_engine, system_program
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: dungeonTemplate, isSigner: false, isWritable: false },
     { pubkey: leaderboard, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
@@ -182,6 +265,7 @@ export interface EnterDungeonParams {
   heroSpecialization: number;
 }
 
+/** ~40,000 CU */
 /**
  * Enter a dungeon.
  *
@@ -194,7 +278,7 @@ export function createEnterDungeonInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [template] = deriveDungeonTemplatePda(params.templateId);
   const [dungeonRun] = deriveDungeonRunPda(player);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [heroCollection] = deriveHeroCollectionPda();
 
   // Rust account order:
@@ -206,6 +290,7 @@ export function createEnterDungeonInstruction(
   // 5. hero_mint (writable)
   // 6. hero_collection (read)
   // 7. system_program (read)
+  // 8. mpl_core_program (needed for hero NFT transfer CPI)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -215,6 +300,7 @@ export function createEnterDungeonInstruction(
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: dungeon_id (u16), first_room_type (u8), hero_specialization (u8)
@@ -254,6 +340,7 @@ export interface AttackParams {
   crit: boolean;
 }
 
+/** ~60,000 CU */
 /**
  * Attack an enemy in the dungeon.
  *
@@ -318,6 +405,7 @@ export interface AttackMultiParams {
   crit: boolean;
 }
 
+/** ~60,000 CU */
 /**
  * Attack multiple enemies in the dungeon.
  *
@@ -377,6 +465,7 @@ export interface InteractParams {
   nextRoomType: number;
 }
 
+/** ~25,000 CU */
 /**
  * Interact with a dungeon object.
  *
@@ -447,6 +536,7 @@ export interface ChooseRelicParams {
   relicOptions: number[];
 }
 
+/** ~5,000 CU */
 /**
  * Choose a relic from offered selection.
  *
@@ -506,6 +596,7 @@ export interface FleeAccounts {
   heroMint: PublicKey;
 }
 
+/** ~20,000 CU */
 /**
  * Flee from the dungeon.
  *
@@ -526,6 +617,7 @@ export function createFleeInstruction(
   // 3. hero_mint (writable)
   // 4. hero_collection (read)
   // 5. system_program (read)
+  // 6. mpl_core_program (for hero NFT transfer CPI)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -533,6 +625,7 @@ export function createFleeInstruction(
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.DUNGEON_FLEE);
@@ -566,6 +659,7 @@ export interface ClaimDungeonParams {
   weekNumber?: number;
 }
 
+/** ~15,000 CU */
 /**
  * Claim dungeon rewards.
  *
@@ -586,7 +680,8 @@ export function createClaimDungeonInstruction(
   // 3. hero_mint (writable)
   // 4. hero_collection (read)
   // 5. system_program (read)
-  // 6. leaderboard (optional, writable)
+  // 6. mpl_core_program (for hero NFT transfer CPI)
+  // 7. leaderboard (optional, writable)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -594,6 +689,7 @@ export function createClaimDungeonInstruction(
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Add leaderboard if provided
@@ -631,6 +727,7 @@ export interface ResumeParams {
   firstRoomType: number;
 }
 
+/** ~10,000 CU */
 /**
  * Resume an interrupted dungeon run.
  *
@@ -687,6 +784,7 @@ export interface ClaimLeaderboardPrizeParams {
   weekNumber: number;
 }
 
+/** ~10,000 CU */
 /**
  * Claim leaderboard prize.
  *

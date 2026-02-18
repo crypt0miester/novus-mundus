@@ -5,10 +5,13 @@
  */
 
 // Pyth Oracle helpers
-export * from './pyth.ts';
+export * from './pyth';
 
 // Switchboard Oracle helpers
-export * from './switchboard.ts';
+export * from './switchboard';
 
 // TLD House / Alt Name Service helpers
-export * from './tld-house.ts';
+export * from './tld-house';
+
+// Metaplex Core AssetV1 parser
+export * from './asset';

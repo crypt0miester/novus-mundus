@@ -11,14 +11,14 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveEstatePda,
   deriveHeroTemplatePda,
   deriveHeroCollectionPda,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Start Meditation
@@ -40,6 +40,7 @@ export interface StartMeditationParams {
   heroSlot: number;
 }
 
+/** ~10,000 CU */
 /**
  * Start hero meditation at the Sanctuary.
  *
@@ -51,7 +52,7 @@ export function createStartMeditationInstruction(
   params: StartMeditationParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
 
   const keys = [
@@ -89,6 +90,7 @@ export interface ClaimMeditationAccounts {
   heroTemplateId: number;
 }
 
+/** ~10,000 CU */
 /**
  * Claim meditation rewards.
  *
@@ -103,7 +105,7 @@ export function createClaimMeditationInstruction(
   accounts: ClaimMeditationAccounts
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
   const [heroCollection] = deriveHeroCollectionPda();
 
@@ -117,17 +119,67 @@ export function createClaimMeditationInstruction(
   // 6. system_program (READ)
   // 7. estate_account (WRITE)
   const keys = [
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },  // writable: CPI payer for UpdatePluginV1
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: heroTemplate, isSigner: false, isWritable: false },
-    { pubkey: heroCollection, isSigner: false, isWritable: false },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },  // writable: UpdatePluginV1 CPI
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: estate, isSigner: false, isWritable: true },
+    { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.SANCTUARY_CLAIM_MEDITATION);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Speedup Meditation
+// ============================================================
+
+export interface SpeedupMeditationAccounts {
+  /** Player's wallet (signer) */
+  owner: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+}
+
+export interface SpeedupMeditationParams {
+  /** Speedup tier: 1 = 1 hour (3000 gems), 2 = 6 hours (18000 gems) */
+  speedupTier: number;
+}
+
+/** ~5,000 CU */
+/**
+ * Speed up an active meditation by spending gems.
+ *
+ * Advances meditation_started_at backwards so more time appears elapsed
+ * when claim is called.
+ *
+ * - Tier 1: adds 1 hour of meditation time (3,000 gems)
+ * - Tier 2: adds 6 hours of meditation time (18,000 gems)
+ */
+export function createSpeedupMeditationInstruction(
+  accounts: SpeedupMeditationAccounts,
+  params: SpeedupMeditationParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+
+  const keys = [
+    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: player, isSigner: false, isWritable: true },
+  ];
+
+  const writer = new BufferWriter(1);
+  writer.writeU8(params.speedupTier);
+
+  const data = createInstructionData(DISCRIMINATORS.SANCTUARY_SPEEDUP_MEDITATION, writer.toBuffer());
 
   return new TransactionInstruction({
     keys,

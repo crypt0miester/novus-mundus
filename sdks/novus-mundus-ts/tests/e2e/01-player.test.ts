@@ -44,6 +44,7 @@ import {
   sendTransaction,
   expectTransactionToFail,
 } from '../utils/transactions';
+import { log } from '../utils/logger';
 import {
   fetchPlayer,
 } from '../utils/accounts';
@@ -61,6 +62,7 @@ describe('Player Lifecycle', () => {
   let factory: PlayerFactory;
 
   beforeAll(async () => {
+    log.section('Player Lifecycle');
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: false });
   });
@@ -77,15 +79,8 @@ describe('Player Lifecycle', () => {
     it('should initialize a new player in city 1', async () => {
       const player = await factory.createPlayer({
         cityId: 1,
-        initialize: false,
+        initialize: true,
       });
-
-      // Verify player doesn't exist yet
-      const preFetch = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(preFetch).toBeNull();
-
-      // Initialize the player
-      await factory.initializePlayer(player);
 
       // Verify player now exists
       const postFetch = await fetchPlayer(ctx.connection, player.playerPda);

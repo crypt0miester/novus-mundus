@@ -10,8 +10,8 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { CastleTier, CastleStatus, CourtPosition } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { CastleTier, CastleStatus, CourtPosition } from '../types/enums';
 
 // ============================================================
 // Castle Account Interface
@@ -149,8 +149,12 @@ export interface TeamCastleRewardAccount {
 // Deserialization
 // ============================================================
 
-function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
+export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+  reader.skip(32); // game_engine
+  reader.skip(1); // implicit padding for u16 alignment
 
   // Identity (8 bytes)
   const castleId = reader.readU16();
@@ -164,6 +168,7 @@ function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   const nameBytes = reader.readBytes(32);
   const nameLen = reader.readU8();
   reader.skip(3); // _padding2
+  reader.skip(2); // implicit padding for i32 alignment
   const name = new TextDecoder().decode(nameBytes.slice(0, nameLen)).replace(/\0/g, '');
 
   // Location (16 bytes)
@@ -294,8 +299,9 @@ function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   };
 }
 
-function deserializeKingRegistry(data: Uint8Array | Buffer): KingRegistryAccount {
+export function deserializeKingRegistry(data: Uint8Array | Buffer): KingRegistryAccount {
   const reader = new BufferReader(data);
+  reader.readU8(); // account_key
   const king = reader.readPubkey();
   const castle = reader.readPubkey();
   const bump = reader.readU8();
@@ -303,40 +309,55 @@ function deserializeKingRegistry(data: Uint8Array | Buffer): KingRegistryAccount
   return { king, castle, bump };
 }
 
-function deserializeCourtPosition(data: Uint8Array | Buffer): CourtPositionAccount {
+export function deserializeCourtPosition(data: Uint8Array | Buffer): CourtPositionAccount {
   const reader = new BufferReader(data);
+  reader.readU8(); // account_key
   const castle = reader.readPubkey();
-  const holder = reader.readPubkey();
   const position = reader.readU8() as CourtPosition;
-  reader.skip(7); // padding
-  const appointedAt = reader.readI64();
-  const lastClaimedAt = reader.readI64();
   const bump = reader.readU8();
+  reader.skip(6); // _padding1
+  const holder = reader.readPubkey();
+  reader.skip(7); // implicit padding for i64 alignment
+  const appointedAt = reader.readI64();
+  const lastClaimedAt = appointedAt; // Not in Rust struct; using appointedAt for compatibility
 
   return { castle, holder, position, appointedAt, lastClaimedAt, bump };
 }
 
-function deserializeGarrisonContribution(data: Uint8Array | Buffer): GarrisonContributionAccount {
+export function deserializeGarrisonContribution(data: Uint8Array | Buffer): GarrisonContributionAccount {
   const reader = new BufferReader(data);
+  reader.readU8(); // account_key
   const castle = reader.readPubkey();
   const contributor = reader.readPubkey();
-  const du1 = reader.readU64();
-  const du2 = reader.readU64();
-  const du3 = reader.readU64();
-  const joinedAt = reader.readI64();
-  const lastClaimedAt = reader.readI64();
   const bump = reader.readU8();
+  reader.skip(1); // is_king
+  reader.skip(6); // _padding1
+  reader.skip(7); // implicit padding for i64 alignment
+  const joinedAt = reader.readI64(); // contributed_at
+  const du1 = reader.readU64(); // units_1
+  const du2 = reader.readU64(); // units_2
+  const du3 = reader.readU64(); // units_3
+  reader.skip(24); // melee_weapons, ranged_weapons, siege_weapons
+  reader.skip(32); // hero_mint
+  reader.skip(8); // hero_defense_bps, hero_weapon_eff_bps, _padding2
+  reader.skip(24); // loot_melee, loot_ranged, loot_siege
+  reader.skip(8); // loot_claimed, _padding3
+  const lastClaimedAt = joinedAt; // Not in Rust struct; using joinedAt for compatibility
 
   return { castle, contributor, du1, du2, du3, joinedAt, lastClaimedAt, bump };
 }
 
-function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCastleRewardAccount {
+export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCastleRewardAccount {
   const reader = new BufferReader(data);
+  reader.readU8(); // account_key
   const castle = reader.readPubkey();
-  const team = reader.readPubkey();
   const member = reader.readPubkey();
-  const lastClaimedAt = reader.readI64();
   const bump = reader.readU8();
+  reader.skip(7); // _padding1
+  reader.skip(7); // implicit padding for i64 alignment
+  const lastClaimedAt = reader.readI64();
+  reader.skip(8); // total_claimed_novi (not in interface)
+  const team = castle; // team not in Rust struct; placeholder for interface compatibility
 
   return { castle, team, member, lastClaimedAt, bump };
 }

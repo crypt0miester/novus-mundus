@@ -5,13 +5,13 @@
  */
 
 // Common validation utilities
-export * from './common.ts';
+export * from './common';
 
 // Player state validation
-export * from './player.ts';
+export * from './player';
 
 // Economy validation
-export * from './economy.ts';
+export * from './economy';
 
 // Team validation
-export * from './team.ts';
+export * from './team';

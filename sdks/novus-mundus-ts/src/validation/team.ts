@@ -6,7 +6,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import type { TeamAccount, TeamMemberSlot, TeamInviteAccount, TreasuryRequest } from '../state/team.ts';
+import type { TeamAccount, TeamMemberSlot, TeamInviteAccount, TreasuryRequest } from '../state/team';
 import {
   isTeamActive,
   isTeamPublic,
@@ -14,10 +14,10 @@ import {
   rankHasPermission,
   isInviteExpired,
   isTreasuryRequestExecutable,
-} from '../state/team.ts';
-import { TeamPermissions } from '../state/team.ts';
-import type { PlayerCore } from '../state/player.ts';
-import { hasTeam } from '../state/player.ts';
+} from '../state/team';
+import { TeamPermissions } from '../state/team';
+import type { PlayerCore } from '../state/player';
+import { hasTeam } from '../state/player';
 import {
   type ValidationResult,
   valid,
@@ -25,7 +25,7 @@ import {
   combine,
   validateRange,
   validateName,
-} from './common.ts';
+} from './common';
 
 // ============================================================
 // Team State Validation

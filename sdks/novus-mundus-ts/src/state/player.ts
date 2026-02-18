@@ -7,8 +7,8 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { TravelType, SubscriptionTier } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { TravelType, SubscriptionTier } from '../types/enums';
 
 // ============================================================
 // Extension Flags
@@ -28,7 +28,7 @@ export const ExtensionFlags = {
 // Section Sizes & Offsets
 // ============================================================
 
-export const CORE_SIZE = 1048;
+export const CORE_SIZE = 1056;
 export const RESEARCH_SIZE = 96;
 export const HEROES_SIZE = 130;
 export const INVENTORY_SIZE = 424;
@@ -331,11 +331,15 @@ function deserializePlayerRallyCaps(reader: BufferReader): PlayerRallyCaps {
 export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
   const reader = new BufferReader(data);
 
+  // Account discriminator (1 byte)
+  reader.readU8(); // account_key discriminator
+
   // Kingdom Reference (32 bytes)
   const gameEngine = reader.readPubkey();
 
   // Identity (48 bytes)
   const owner = reader.readPubkey();
+  reader.skip(7); // implicit padding for i64 alignment (account_key shifted offsets by 1)
   const createdAt = reader.readI64();
   const bump = reader.readU8();
   const version = reader.readU8();

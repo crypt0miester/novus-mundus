@@ -17,8 +17,8 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -27,11 +27,13 @@ import {
   deriveCastlePda,
   deriveCourtPda,
   deriveGarrisonPda,
+  deriveHeroTemplatePda,
+  deriveHeroCollectionPda,
   deriveKingRegistryPda,
   deriveTeamCastleRewardPda,
   deriveUserPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Create Castle (Admin)
@@ -65,6 +67,7 @@ export interface CreateCastleParams {
   name: string;
 }
 
+/** ~20,000 CU */
 /**
  * Create a castle.
  *
@@ -142,6 +145,7 @@ export interface ClaimVacantCastleAccounts {
   castleId: number;
 }
 
+/** ~25,000 CU */
 /**
  * Claim a vacant castle.
  *
@@ -204,6 +208,7 @@ export interface AppointCourtParams {
   position: number;
 }
 
+/** ~10,000 CU */
 /**
  * Appoint a player to court position.
  *
@@ -269,6 +274,7 @@ export interface DismissCourtParams {
   position: number;
 }
 
+/** ~10,000 CU */
 /**
  * Dismiss a court member.
  *
@@ -332,6 +338,7 @@ export interface ResignCourtParams {
   position: number;
 }
 
+/** ~5,000 CU */
 /**
  * Resign from court position.
  *
@@ -389,6 +396,7 @@ export interface InitiateUpgradeParams {
   upgradeType: number;
 }
 
+/** ~15,000 CU */
 /**
  * Initiate castle upgrade.
  *
@@ -447,6 +455,7 @@ export interface CancelUpgradeAccounts {
   castleId: number;
 }
 
+/** ~15,000 CU */
 /**
  * Cancel castle upgrade.
  *
@@ -503,6 +512,7 @@ export interface CompleteUpgradeAccounts {
   castleId: number;
 }
 
+/** ~5,000 CU */
 /**
  * Complete castle upgrade.
  *
@@ -544,8 +554,6 @@ export interface JoinGarrisonAccounts {
   cityId: number;
   /** Castle ID */
   castleId: number;
-  /** Hero mint (optional) */
-  heroMint?: PublicKey;
 }
 
 export interface JoinGarrisonParams {
@@ -555,8 +563,13 @@ export interface JoinGarrisonParams {
   weapons: [BN | number | bigint, BN | number | bigint, BN | number | bigint];
   /** Hero slot (0-2, or 255 for no hero) */
   heroSlot: number;
+  /** Hero NFT mint address (required if heroSlot < 3) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroSlot < 3) */
+  heroTemplateId?: number;
 }
 
+/** ~15,000 CU */
 /**
  * Join castle garrison.
  *
@@ -576,7 +589,12 @@ export function createJoinGarrisonInstruction(
   // 2. castle_account (WRITE)
   // 3. garrison_account (WRITE)
   // 4. system_program (READ)
-  // 5. hero_mint (optional)
+  //
+  // Optional hero accounts (if hero_slot < 3):
+  // 5. hero_mint (WRITE)
+  // 6. hero_template (READ)
+  // 7. hero_collection (READ)
+  // 8. p_core_program (READ)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -585,8 +603,13 @@ export function createJoinGarrisonInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  if (accounts.heroMint) {
-    keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: false });
+  if (params.heroSlot < 3 && params.heroMint && params.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
+    const [heroCollection] = deriveHeroCollectionPda();
+    keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: true });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
+    keys.push({ pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
   // Instruction data: units_1-3 (u64×3), melee/ranged/siege (u64×3), hero_slot (u8)
@@ -622,8 +645,13 @@ export interface LeaveGarrisonAccounts {
   cityId: number;
   /** Castle ID */
   castleId: number;
+  /** Hero NFT mint (required if garrison has hero) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroMint provided) */
+  heroTemplateId?: number;
 }
 
+/** ~15,000 CU */
 /**
  * Leave castle garrison.
  *
@@ -642,6 +670,13 @@ export function createLeaveGarrisonInstruction(
   // 2. castle_account (WRITE)
   // 3. garrison_account (WRITE)
   // 4. rent_recipient (WRITE)
+  //
+  // Optional hero accounts (if garrison has hero):
+  // 5. hero_mint (WRITE)
+  // 6. hero_template (READ)
+  // 7. hero_collection (READ)
+  // 8. system_program (READ)
+  // 9. p_core_program (READ)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -649,6 +684,16 @@ export function createLeaveGarrisonInstruction(
     { pubkey: garrison, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: false, isWritable: true }, // rent_recipient
   ];
+
+  if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = deriveHeroCollectionPda();
+    keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
+    keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
+    keys.push({ pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false });
+  }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
   const data = createInstructionData(DISCRIMINATORS.CASTLE_LEAVE_GARRISON, Buffer.alloc(0));
@@ -675,8 +720,13 @@ export interface RelieveGarrisonAccounts {
   cityId: number;
   /** Castle ID */
   castleId: number;
+  /** Hero NFT mint (required if garrison member has hero) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroMint provided) */
+  heroTemplateId?: number;
 }
 
+/** ~10,000 CU */
 /**
  * Relieve garrison member.
  *
@@ -697,6 +747,13 @@ export function createRelieveGarrisonInstruction(
   // 3. relieved_account (WRITE)
   // 4. garrison_account (WRITE)
   // 5. rent_recipient (WRITE)
+  //
+  // Optional hero accounts (if garrison member has hero):
+  // 6. hero_mint (WRITE)
+  // 7. hero_template (READ)
+  // 8. hero_collection (READ)
+  // 9. system_program (READ)
+  // 10. p_core_program (READ)
   const keys = [
     { pubkey: accounts.king, isSigner: true, isWritable: false },
     { pubkey: kingPlayer, isSigner: false, isWritable: false },
@@ -705,6 +762,16 @@ export function createRelieveGarrisonInstruction(
     { pubkey: garrison, isSigner: false, isWritable: true },
     { pubkey: accounts.garrisonMember, isSigner: false, isWritable: true }, // rent_recipient = relieved player wallet
   ];
+
+  if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = deriveHeroCollectionPda();
+    keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
+    keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
+    keys.push({ pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false });
+  }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
   const data = createInstructionData(DISCRIMINATORS.CASTLE_RELIEVE_GARRISON, Buffer.alloc(0));
@@ -733,6 +800,7 @@ export interface ClaimCastleRewardsAccounts {
   courtPosition?: PublicKey;
 }
 
+/** ~15,000 CU */
 /**
  * Claim castle rewards.
  *
@@ -802,6 +870,7 @@ export interface ClaimGarrisonLootAccounts {
   castleId: number;
 }
 
+/** ~10,000 CU */
 /**
  * Claim garrison loot.
  *
@@ -858,6 +927,7 @@ export interface AttackCastleParams {
   driveBy: boolean;
 }
 
+/** ~50,000 CU */
 /**
  * Attack a castle.
  *
@@ -922,6 +992,7 @@ export interface FinalizeTransitionAccounts {
   oldKing?: PublicKey;
 }
 
+/** ~10,000 CU */
 /**
  * Finalize castle transition.
  *
@@ -968,6 +1039,52 @@ export function createFinalizeTransitionInstruction(
 }
 
 // ============================================================
+// Update Castle Status (Permissionless)
+// ============================================================
+
+export interface UpdateCastleStatusAccounts {
+  /** Anyone can call (permissionless) */
+  caller: PublicKey;
+  /** Game engine PDA (kingdom) */
+  gameEngine: PublicKey;
+  /** City ID */
+  cityId: number;
+  /** Castle ID */
+  castleId: number;
+}
+
+/** ~5,000 CU */
+/**
+ * Update castle status.
+ *
+ * Permissionless. Triggers time-based status transitions:
+ * - CONTEST → PROTECTED (after contest period)
+ * - PROTECTED → VULNERABLE (after protection expires)
+ */
+export function createUpdateCastleStatusInstruction(
+  accounts: UpdateCastleStatusAccounts
+): TransactionInstruction {
+  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+
+  // Rust account order:
+  // 0. caller (SIGNER)
+  // 1. castle_account (WRITE)
+  const keys = [
+    { pubkey: accounts.caller, isSigner: true, isWritable: false },
+    { pubkey: castle, isSigner: false, isWritable: true },
+  ];
+
+  // No instruction data needed
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_UPDATE_STATUS, Buffer.alloc(0));
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
 // Force Remove King (Admin)
 // ============================================================
 
@@ -984,6 +1101,7 @@ export interface ForceRemoveKingAccounts {
   currentKing: PublicKey;
 }
 
+/** ~15,000 CU */
 /**
  * Force remove king from castle.
  *
@@ -1039,8 +1157,13 @@ export interface GarrisonCleanupAccounts {
   castleId: number;
   /** Garrison member to cleanup */
   garrisonMember: PublicKey;
+  /** Hero NFT mint (required if garrison member has hero) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroMint provided) */
+  heroTemplateId?: number;
 }
 
+/** ~10,000 CU */
 /**
  * Cleanup garrison during transition.
  *
@@ -1059,6 +1182,13 @@ export function createGarrisonCleanupInstruction(
   // 2. contributor_account (WRITE)
   // 3. garrison_account (WRITE)
   // 4. rent_recipient (WRITE)
+  //
+  // Optional hero accounts (if garrison member has hero):
+  // 5. hero_mint (WRITE)
+  // 6. hero_template (READ)
+  // 7. hero_collection (READ)
+  // 8. system_program (READ)
+  // 9. p_core_program (READ)
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
     { pubkey: castle, isSigner: false, isWritable: true },
@@ -1066,6 +1196,16 @@ export function createGarrisonCleanupInstruction(
     { pubkey: garrison, isSigner: false, isWritable: true },
     { pubkey: accounts.garrisonMember, isSigner: false, isWritable: true }, // rent_recipient
   ];
+
+  if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = deriveHeroCollectionPda();
+    keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
+    keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
+    keys.push({ pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false });
+  }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
   const data = createInstructionData(DISCRIMINATORS.CASTLE_GARRISON_CLEANUP, Buffer.alloc(0));
@@ -1095,6 +1235,7 @@ export interface CourtCleanupParams {
   position: number;
 }
 
+/** ~5,000 CU */
 /**
  * Cleanup court position during transition.
  *
@@ -1148,6 +1289,7 @@ export interface RewardsCleanupAccounts {
   member: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Cleanup team castle reward account during transition.
  *
@@ -1176,6 +1318,104 @@ export function createRewardsCleanupInstruction(
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
   const data = createInstructionData(DISCRIMINATORS.CASTLE_REWARDS_CLEANUP, Buffer.alloc(0));
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Castle Config (DAO Only)
+// ============================================================
+
+export interface UpdateCastleConfigAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** Game engine PDA (kingdom) */
+  gameEngine: PublicKey;
+  /** City ID */
+  cityId: number;
+  /** Castle ID */
+  castleId: number;
+}
+
+export type UpdateCastleConfigParams =
+  | { configType: 0; rewardRates: { kingNovi: bigint | number; kingCash: bigint | number; courtNovi: bigint | number; courtCash: bigint | number; memberNovi: bigint | number; memberCash: bigint | number } }
+  | { configType: 1; tierMultiplier: number }
+  | { configType: 2; treasuryLevel: number }
+  | { configType: 3; name: string };
+
+/** ~5,000 CU */
+/**
+ * Update castle configuration.
+ *
+ * DAO-only. Updates reward rates, tier multiplier, treasury level, or name.
+ *
+ * Rust account order (3):
+ * 0. [signer] dao_authority
+ * 1. [] game_engine
+ * 2. [writable] castle
+ */
+export function createUpdateCastleConfigInstruction(
+  accounts: UpdateCastleConfigAccounts,
+  params: UpdateCastleConfigParams
+): TransactionInstruction {
+  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: castle, isSigner: false, isWritable: true },
+  ];
+
+  let paramData: Buffer;
+
+  switch (params.configType) {
+    case 0: {
+      // reward_rates: config_type (u8) + 6×u64
+      const writer = new BufferWriter(49);
+      writer.writeU8(0);
+      writer.writeU64(params.rewardRates.kingNovi);
+      writer.writeU64(params.rewardRates.kingCash);
+      writer.writeU64(params.rewardRates.courtNovi);
+      writer.writeU64(params.rewardRates.courtCash);
+      writer.writeU64(params.rewardRates.memberNovi);
+      writer.writeU64(params.rewardRates.memberCash);
+      paramData = writer.toBuffer();
+      break;
+    }
+    case 1: {
+      // tier_multiplier: config_type (u8) + u16
+      const writer = new BufferWriter(3);
+      writer.writeU8(1);
+      writer.writeU16(params.tierMultiplier);
+      paramData = writer.toBuffer();
+      break;
+    }
+    case 2: {
+      // treasury_level: config_type (u8) + u8
+      const writer = new BufferWriter(2);
+      writer.writeU8(2);
+      writer.writeU8(params.treasuryLevel);
+      paramData = writer.toBuffer();
+      break;
+    }
+    case 3: {
+      // name: config_type (u8) + 48 bytes (padded)
+      const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 48);
+      const namePadded = Buffer.alloc(48);
+      nameBytes.copy(namePadded);
+      const writer = new BufferWriter(49);
+      writer.writeU8(3);
+      writer.writeBytes(namePadded);
+      paramData = writer.toBuffer();
+      break;
+    }
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_UPDATE_CONFIG, paramData);
 
   return new TransactionInstruction({
     keys,

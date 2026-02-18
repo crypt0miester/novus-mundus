@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { Connection, PublicKey, Keypair, Transaction } from '@solana/web3.js';
-import { NovusMundusClient } from '../../src/client.ts';
+import { NovusMundusClient } from '../../src/client';
 
 describe('NovusMundusClient', () => {
   // Use a mock connection URL (won't actually connect in these tests)
@@ -83,7 +83,7 @@ describe('NovusMundusClient', () => {
 describe('Client Type Definitions', () => {
   it('should export AccountFetchResult type', () => {
     // Import type to verify it exists
-    const result: import('../../src/client.ts').AccountFetchResult<string> = {
+    const result: import('../../src/client').AccountFetchResult<string> = {
       pubkey: PublicKey.default,
       account: 'test',
       exists: true,
@@ -93,7 +93,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export TransactionBuildOptions type', () => {
-    const options: import('../../src/client.ts').TransactionBuildOptions = {
+    const options: import('../../src/client').TransactionBuildOptions = {
       computeUnits: 300_000,
       computeUnitPrice: 10,
       recentBlockhash: 'test',
@@ -103,7 +103,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export SimulationResult type', () => {
-    const result: import('../../src/client.ts').SimulationResult = {
+    const result: import('../../src/client').SimulationResult = {
       success: true,
       error: null,
       logs: ['log1', 'log2'],
@@ -115,7 +115,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export SendResult type', () => {
-    const result: import('../../src/client.ts').SendResult = {
+    const result: import('../../src/client').SendResult = {
       signature: 'abc123',
       success: true,
       error: null,
@@ -126,7 +126,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export BulkFetchResult type', () => {
-    const result: import('../../src/client.ts').BulkFetchResult<number> = {
+    const result: import('../../src/client').BulkFetchResult<number> = {
       pubkey: PublicKey.default,
       account: 42,
     };
@@ -135,7 +135,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export FetchLootOptions type', () => {
-    const options: import('../../src/client.ts').FetchLootOptions = {
+    const options: import('../../src/client').FetchLootOptions = {
       unclaimedOnly: true,
     };
 
@@ -143,7 +143,7 @@ describe('Client Type Definitions', () => {
   });
 
   it('should export FetchEncountersOptions type', () => {
-    const options: import('../../src/client.ts').FetchEncountersOptions = {
+    const options: import('../../src/client').FetchEncountersOptions = {
       aliveOnly: true,
     };
 
@@ -152,7 +152,7 @@ describe('Client Type Definitions', () => {
 
   it('should export FetchRalliesOptions type', () => {
     const team = Keypair.generate().publicKey;
-    const options: import('../../src/client.ts').FetchRalliesOptions = {
+    const options: import('../../src/client').FetchRalliesOptions = {
       team,
       activeOnly: true,
     };
@@ -163,7 +163,7 @@ describe('Client Type Definitions', () => {
 
   it('should export FetchPlayersOptions type', () => {
     const team = Keypair.generate().publicKey;
-    const options: import('../../src/client.ts').FetchPlayersOptions = {
+    const options: import('../../src/client').FetchPlayersOptions = {
       cityId: 1,
       team,
       minLevel: 10,

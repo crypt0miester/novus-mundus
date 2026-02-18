@@ -6,11 +6,11 @@
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import type { VersionedTransactionResponse, TransactionResponse } from '@solana/web3.js';
-import type { ParsedInstruction } from './instruction.ts';
-import { parseInstructionData, isNovusMundusInstruction } from './instruction.ts';
-import { parseEventsFromLogs } from '../events/parser.ts';
-import type { NovusMundusEvent } from '../events/types.ts';
-import { PROGRAM_ID } from '../program.ts';
+import type { ParsedInstruction } from './instruction';
+import { parseInstructionData, isNovusMundusInstruction } from './instruction';
+import { parseEventsFromLogs } from '../events/parser';
+import type { NovusMundusEvent } from '../events/types';
+import { PROGRAM_ID } from '../program';
 
 // ============================================================
 // Types

@@ -18,8 +18,8 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -36,8 +36,8 @@ import {
   deriveInventoryPda,
   deriveAllowedTokenPda,
   deriveUserPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // ============================================================
 // Initialize Config (Admin)
@@ -63,6 +63,7 @@ export interface InitializeConfigParams {
   maxTotalDiscountBps?: number;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize shop configuration.
  *
@@ -142,6 +143,7 @@ export interface CreateItemParams {
   isFeatured?: boolean;
 }
 
+/** ~5,000 CU */
 /**
  * Create a shop item.
  *
@@ -227,6 +229,7 @@ export interface UpdateItemParams {
   currentGlobalStock?: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Update a shop item.
  *
@@ -239,7 +242,6 @@ export function createUpdateItemInstruction(
 ): TransactionInstruction {
     const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
 
-  // Rust account order: dao_authority, game_engine, shop_item
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
@@ -338,6 +340,7 @@ export interface PurchaseItemParams {
   weeklySaleWeek?: BN | number | bigint;
 }
 
+/** ~20,000 CU */
 /**
  * Purchase an item from the shop.
  *
@@ -352,7 +355,7 @@ export function createPurchaseItemInstruction(
   const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
   const [playerPurchase] = derivePlayerPurchasePda(accounts.buyer, accounts.itemId);
   const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(accounts.buyer);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },
@@ -443,6 +446,7 @@ export interface CreateBundleParams {
   items: CreateBundleItemInput[];
 }
 
+/** ~10,000 CU */
 /**
  * Create a bundle.
  *
@@ -522,6 +526,7 @@ export interface UpdateBundleParams {
   savingsBps?: number;
 }
 
+/** ~5,000 CU */
 /**
  * Update a bundle.
  *
@@ -613,6 +618,7 @@ export interface PurchaseBundleParams {
   paymentType?: number;
 }
 
+/** ~15,000 CU */
 /**
  * Purchase a bundle.
  *
@@ -626,7 +632,7 @@ export function createPurchaseBundleInstruction(
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
   const [bundle] = deriveBundlePda(accounts.gameEngine, accounts.bundleId);
   const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(accounts.buyer);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },
@@ -669,6 +675,8 @@ export interface CreateFlashSaleAccounts {
   daoAuthority: PublicKey;
   /** GameEngine account */
   gameEngine: PublicKey;
+  /** Sale ID (next_flash_sale_id from shop config, starts at 0) */
+  saleId: number | bigint;
 }
 
 export interface CreateFlashSaleParams {
@@ -686,6 +694,7 @@ export interface CreateFlashSaleParams {
   maxStock: BN | number | bigint;
 }
 
+/** ~10,000 CU */
 /**
  * Create a flash sale.
  *
@@ -696,15 +705,14 @@ export function createCreateFlashSaleInstruction(
   params: CreateFlashSaleParams
 ): TransactionInstruction {
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  // Note: Flash sale PDA uses next_flash_sale_id from shopConfig, created at runtime
-  // For now, we pass a placeholder that will be created
+  const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
     { pubkey: shopConfig, isSigner: false, isWritable: true },
-    // Flash sale account will be added by caller
+    { pubkey: flashSale, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
@@ -749,6 +757,7 @@ export interface PurchaseFlashSaleParams {
   paymentType?: number;
 }
 
+/** ~40,000 CU */
 /**
  * Purchase from a flash sale.
  *
@@ -763,7 +772,7 @@ export function createPurchaseFlashSaleInstruction(
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
   const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
   const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(accounts.buyer);
+  const [estate] = deriveEstatePda(player);
 
   // Rust account order: buyer, player, game_engine, shop_config, flash_sale,
   //                     item_or_bundle, treasury, inventory, system_program, estate
@@ -814,6 +823,7 @@ export interface CloseSaleAccounts {
   saleId: bigint | number;
 }
 
+/** ~5,000 CU */
 /**
  * Close a flash sale.
  *
@@ -856,12 +866,17 @@ export interface CreateDailyDealAccounts {
 export interface CreateDailyDealParams {
   /** Slot index (0-2) */
   slotIndex: number;
-  /** Item ID for this deal */
+  /** Initial item ID for this deal */
   itemId: number;
-  /** Discount in basis points */
+  /** Initial discount in basis points (1500-4000) */
   discountBps: number;
+  /** Next item ID (pre-computed for rotation) */
+  nextItemId: number;
+  /** Next discount in basis points (1500-4000) */
+  nextDiscountBps: number;
 }
 
+/** ~5,000 CU */
 /**
  * Create a daily deal.
  *
@@ -881,10 +896,13 @@ export function createCreateDailyDealInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(7);
+  // slot(1) + item_id(4) + discount(2) + next_item(4) + next_discount(2) = 13
+  const writer = new BufferWriter(13);
   writer.writeU8(params.slotIndex);
   writer.writeU32(params.itemId);
   writer.writeU16(params.discountBps);
+  writer.writeU32(params.nextItemId);
+  writer.writeU16(params.nextDiscountBps);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_DAILY_DEAL, writer.toBuffer());
 
@@ -915,6 +933,7 @@ export interface RotateDailyDealParams {
   newDiscountBps: number;
 }
 
+/** ~5,000 CU */
 /**
  * Rotate a daily deal to a new item.
  *
@@ -927,12 +946,14 @@ export function createRotateDailyDealInstruction(
     const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, accounts.slotIndex);
 
   const keys = [
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: dailyDeal, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(6);
+  // slot_index(1) + new_next_item_id(4) + new_next_discount_bps(2) = 7
+  const writer = new BufferWriter(7);
+  writer.writeU8(accounts.slotIndex);
   writer.writeU32(params.newItemId);
   writer.writeU16(params.newDiscountBps);
 
@@ -959,16 +980,23 @@ export interface CreateWeeklySaleAccounts {
 }
 
 export interface CreateWeeklySaleParams {
-  /** Week number */
+  /** Week number (epoch week number for PDA) */
   weekNumber: BN | number | bigint;
+  /** Theme (0=Combat, 1=Defense, 2=Resource, 3=Growth, 4=Expedition) */
+  theme: number;
+  /** Bonus type */
+  bonusType: number;
+  /** Bonus value in basis points */
+  bonusValueBps: number;
+  /** Category discounts [Equipment, Consumable, Material, Cosmetic] in bps (max 3000) */
+  categoryDiscounts: [number, number, number, number];
   /** Start timestamp */
   startsAt: BN | number | bigint;
-  /** End timestamp */
-  endsAt: BN | number | bigint;
-  /** Category discounts [Equipment, Consumable, Material, Cosmetic] in bps */
-  categoryDiscounts: [number, number, number, number];
+  /** Duration in days (1-7) */
+  durationDays: number;
 }
 
+/** ~5,000 CU */
 /**
  * Create a weekly sale.
  *
@@ -989,13 +1017,17 @@ export function createCreateWeeklySaleInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(32);
+  // week(8) + theme(1) + bonus_type(1) + bonus_value(2) + cats(8) + starts(8) + duration(1) = 29
+  const writer = new BufferWriter(29);
   writer.writeU64(params.weekNumber);
-  writer.writeI64(params.startsAt);
-  writer.writeI64(params.endsAt);
+  writer.writeU8(params.theme);
+  writer.writeU8(params.bonusType);
+  writer.writeU16(params.bonusValueBps);
   for (const discount of params.categoryDiscounts) {
     writer.writeU16(discount);
   }
+  writer.writeI64(params.startsAt);
+  writer.writeU8(params.durationDays);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_WEEKLY_SALE, writer.toBuffer());
 
@@ -1022,14 +1054,23 @@ export interface CreateSeasonalSaleAccounts {
 }
 
 export interface CreateSeasonalSaleParams {
-  /** Global discount in basis points */
+  /** Sale name (max 32 bytes UTF-8) */
+  name: string;
+  /** Global discount in basis points (max 5000) */
   globalDiscountBps: number;
-  /** Featured item IDs */
-  featuredItemIds: number[];
-  /** Featured bundle IDs */
-  featuredBundleIds: number[];
+  /** Start timestamp */
+  startsAt: BN | number | bigint;
+  /** End timestamp */
+  endsAt: BN | number | bigint;
+  /** Spend threshold for exclusive reward (lamports) */
+  spendThreshold: BN | number | bigint;
+  /** Exclusive cosmetic item ID */
+  exclusiveCosmeticId: number;
+  /** Featured items with individual discounts */
+  featuredItems: Array<{ itemId: number; discountBps: number }>;
 }
 
+/** ~5,000 CU */
 /**
  * Create a seasonal sale.
  *
@@ -1050,15 +1091,25 @@ export function createCreateSeasonalSaleInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(4 + params.featuredItemIds.length * 4 + params.featuredBundleIds.length * 4);
+  // name(32) + global_discount(2) + starts(8) + ends(8) + threshold(8) + cosmetic(4) + count(1) + items(6*n)
+  const featuredCount = params.featuredItems.length;
+  const writer = new BufferWriter(63 + featuredCount * 6);
+
+  // Write name as fixed 32-byte buffer
+  const nameBytes = Buffer.alloc(32);
+  nameBytes.write(params.name.slice(0, 32), 'utf8');
+  writer.writeBytes(nameBytes);
+
   writer.writeU16(params.globalDiscountBps);
-  writer.writeU8(params.featuredItemIds.length);
-  for (const itemId of params.featuredItemIds) {
-    writer.writeU32(itemId);
-  }
-  writer.writeU8(params.featuredBundleIds.length);
-  for (const bundleId of params.featuredBundleIds) {
-    writer.writeU32(bundleId);
+  writer.writeI64(params.startsAt);
+  writer.writeI64(params.endsAt);
+  writer.writeU64(params.spendThreshold);
+  writer.writeU32(params.exclusiveCosmeticId);
+  writer.writeU8(featuredCount);
+
+  for (const item of params.featuredItems) {
+    writer.writeU32(item.itemId);
+    writer.writeU16(item.discountBps);
   }
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_SEASONAL_SALE, writer.toBuffer());
@@ -1084,20 +1135,31 @@ export interface CreateDaoPromotionAccounts {
 }
 
 export interface CreateDaoPromotionParams {
-  /** Governance proposal ID */
+  /** Governance proposal ID (used in PDA) */
   proposalId: BN | number | bigint;
-  /** Promotion type */
-  promotionType: number;
-  /** Discount in basis points */
-  discountBps: number;
-  /** Target item/bundle ID */
-  targetId: number;
+  /** Title (max 32 bytes UTF-8) */
+  title: string;
+  /** Equipment category discount in bps (max 5000) */
+  equipmentDiscountBps: number;
+  /** Consumable category discount in bps (max 5000) */
+  consumableDiscountBps: number;
+  /** Material category discount in bps (max 5000) */
+  materialDiscountBps: number;
+  /** Cosmetic category discount in bps (max 5000) */
+  cosmeticDiscountBps: number;
+  /** Global discount in bps (max 5000) */
+  globalDiscountBps: number;
+  /** Max discount in bps (max 5000) */
+  maxDiscountBps: number;
   /** Start timestamp */
   startsAt: BN | number | bigint;
   /** End timestamp */
   endsAt: BN | number | bigint;
+  /** Max discount budget in lamports */
+  maxDiscountBudgetLamports: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Create a DAO promotion.
  *
@@ -1118,13 +1180,23 @@ export function createCreateDaoPromotionInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(31);
+  // proposal_id(8) + title(32) + discounts(12) + starts(8) + ends(8) + budget(8) = 76
+  const writer = new BufferWriter(76);
   writer.writeU64(params.proposalId);
-  writer.writeU8(params.promotionType);
-  writer.writeU16(params.discountBps);
-  writer.writeU32(params.targetId);
+
+  const titleBytes = Buffer.alloc(32);
+  titleBytes.write(params.title.slice(0, 32), 'utf8');
+  writer.writeBytes(titleBytes);
+
+  writer.writeU16(params.equipmentDiscountBps);
+  writer.writeU16(params.consumableDiscountBps);
+  writer.writeU16(params.materialDiscountBps);
+  writer.writeU16(params.cosmeticDiscountBps);
+  writer.writeU16(params.globalDiscountBps);
+  writer.writeU16(params.maxDiscountBps);
   writer.writeI64(params.startsAt);
   writer.writeI64(params.endsAt);
+  writer.writeU64(params.maxDiscountBudgetLamports);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_DAO_PROMOTION, writer.toBuffer());
 
@@ -1157,6 +1229,7 @@ export interface UpdateConfigParams {
   solConfidenceThresholdBps?: number;
 }
 
+/** ~20,000 CU */
 /**
  * Update shop config.
  *
@@ -1168,9 +1241,10 @@ export function createUpdateConfigInstruction(
 ): TransactionInstruction {
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
 
+  // Rust order: dao_authority, game_engine, shop_config
   const keys = [
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: shopConfig, isSigner: false, isWritable: true },
   ];
 
@@ -1211,6 +1285,7 @@ export interface ActivateSaleAccounts {
   saleId: bigint | number;
 }
 
+/** ~5,000 CU */
 /**
  * Activate a flash sale.
  *
@@ -1260,10 +1335,11 @@ export interface CreateAllowedTokenParams {
   maxStalenessSlots: number;
   /** Confidence threshold in basis points */
   confidenceThresholdBps: number;
-  /** Is token active */
-  isActive: boolean;
+  /** Discount in basis points (0-10000) */
+  discountBps: number;
 }
 
+/** ~10,000 CU */
 /**
  * Create an allowed token for shop payments.
  *
@@ -1275,25 +1351,26 @@ export function createCreateAllowedTokenInstruction(
 ): TransactionInstruction {
     const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
+  // Rust order: authority(signer+payer), game_engine, allowed_token, token_mint, system_program
   const keys = [
-    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
-    { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
     { pubkey: allowedToken, isSigner: false, isWritable: true },
+    { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(71);
+  // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) = 70 bytes
+  const writer = new BufferWriter(70);
   writer.writePubkey(params.pythFeed);
   if (params.switchboardFeed) {
     writer.writePubkey(params.switchboardFeed);
   } else {
     writer.writeZeros(32);
   }
-  writer.writeU32(params.maxStalenessSlots);
+  writer.writeU16(params.maxStalenessSlots);
   writer.writeU16(params.confidenceThresholdBps);
-  writer.writeBool(params.isActive);
+  writer.writeU16(params.discountBps);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_ALLOWED_TOKEN, writer.toBuffer());
 
@@ -1326,49 +1403,81 @@ export interface UpdateAllowedTokenParams {
   maxStalenessSlots?: number;
   /** New confidence threshold */
   confidenceThresholdBps?: number;
-  /** Is active */
-  isActive?: boolean;
+  /** New discount in basis points */
+  discountBps?: number;
 }
 
+/** ~5,000 CU */
 /**
  * Update an allowed token configuration.
  *
- * Admin-only.
+ * Admin-only. Rust processor accepts one field per instruction call.
+ * Returns an array of instructions (one per specified field).
  */
 export function createUpdateAllowedTokenInstruction(
   accounts: UpdateAllowedTokenAccounts,
   params: UpdateAllowedTokenParams = {}
-): TransactionInstruction {
-    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+): TransactionInstruction[] {
+  const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
+  // Rust order: authority(signer), game_engine, allowed_token, token_mint
   const keys = [
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: allowedToken, isSigner: false, isWritable: true },
+    { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(71);
+  const instructions: TransactionInstruction[] = [];
+
+  // Field enum: PythFeed=0, SwitchboardFeed=1, MaxStalenessSlots=2, ConfidenceThresholdBps=3, DiscountBps=4
   if (params.pythFeed) {
+    const writer = new BufferWriter(33);
+    writer.writeU8(0); // PythFeed
     writer.writePubkey(params.pythFeed);
-  } else {
-    writer.writeZeros(32);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
   }
   if (params.switchboardFeed) {
+    const writer = new BufferWriter(33);
+    writer.writeU8(1); // SwitchboardFeed
     writer.writePubkey(params.switchboardFeed);
-  } else {
-    writer.writeZeros(32);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
   }
-  writer.writeU32(params.maxStalenessSlots ?? 0);
-  writer.writeU16(params.confidenceThresholdBps ?? 0);
-  writer.writeBool(params.isActive ?? true);
+  if (params.maxStalenessSlots !== undefined) {
+    const writer = new BufferWriter(3);
+    writer.writeU8(2); // MaxStalenessSlots
+    writer.writeU16(params.maxStalenessSlots);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
+  }
+  if (params.confidenceThresholdBps !== undefined) {
+    const writer = new BufferWriter(3);
+    writer.writeU8(3); // ConfidenceThresholdBps
+    writer.writeU16(params.confidenceThresholdBps);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
+  }
+  if (params.discountBps !== undefined) {
+    const writer = new BufferWriter(3);
+    writer.writeU8(4); // DiscountBps
+    writer.writeU16(params.discountBps);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
+  }
 
-  const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  return instructions;
 }
 
 // ============================================================
@@ -1376,9 +1485,7 @@ export function createUpdateAllowedTokenInstruction(
 // ============================================================
 
 export interface CloseAllowedTokenAccounts {
-  /** Rent recipient */
-  rentRecipient: PublicKey;
-  /** DAO authority (signer) */
+  /** DAO authority (signer, receives rent) */
   daoAuthority: PublicKey;
   /** GameEngine account */
   gameEngine: PublicKey;
@@ -1386,6 +1493,7 @@ export interface CloseAllowedTokenAccounts {
   tokenMint: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Close an allowed token.
  *
@@ -1396,11 +1504,12 @@ export function createCloseAllowedTokenInstruction(
 ): TransactionInstruction {
     const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
+  // Rust order: authority(signer), game_engine, allowed_token, token_mint
   const keys = [
-    { pubkey: accounts.rentRecipient, isSigner: false, isWritable: true },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
     { pubkey: allowedToken, isSigner: false, isWritable: true },
+    { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CLOSE_ALLOWED_TOKEN);
@@ -1448,6 +1557,7 @@ export interface PurchaseNoviParams {
   oracleAccounts?: PurchaseNoviOracleAccounts;
 }
 
+/** ~10,000 CU */
 /**
  * Purchase NOVI tokens from the shop.
  *

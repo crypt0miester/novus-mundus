@@ -7,7 +7,8 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize.ts';
+import { BufferReader } from '../utils/deserialize';
+import { BufferWriter } from '../utils/serialize';
 
 // ============================================================
 // Nested Types
@@ -209,10 +210,162 @@ export interface NoviPurchaseConfig {
 }
 
 // ============================================================
+// Arena PvP Configuration
+// ============================================================
+
+export interface ArenaConfig {
+  seasonDuration: BN;
+  claimDeadline: BN;
+  matchExpirySeconds: BN;
+  dailyBaseReward: BN;
+  minPointsForLeaderboard: BN;
+  meleeWeaponPower: BN;
+  rangedWeaponPower: BN;
+  siegeWeaponPower: BN;
+  armorPower: BN;
+  baseWinPoints: BN;
+  baseLossPoints: BN;
+  drawPoints: BN;
+  underdogBonusBps: BN;
+  startingElo: number;
+  eloKFactor: number;
+  prizeDistribution: number[];
+  maxDailyBattles: number;
+  maxBattlesPerOpponent: number;
+  minBattlesForDailyReward: number;
+}
+
+// ============================================================
+// Expedition Configuration
+// ============================================================
+
+export interface ExpeditionConfig {
+  miningNoviCost: BN[];
+  miningFragmentBonus: BN[];
+  fishingNoviCost: BN[];
+  fishingFragmentBonus: BN[];
+  rareFindMultiplier: BN;
+  operativeTier1MultiplierBps: BN;
+  operativeTier2MultiplierBps: BN;
+  operativeTier3MultiplierBps: BN;
+  miningRareChanceBps: number[];
+  fishingRareChanceBps: number[];
+  perfectExpeditionBonusBps: number;
+  miningDurationHours: number[];
+  miningWorkshopReq: number[];
+  fishingDurationHours: number[];
+  fishingDockReq: number[];
+  maxTier: number;
+  perfectScoreThreshold: number;
+}
+
+// ============================================================
+// Dungeon Configuration
+// ============================================================
+
+export interface DungeonConfig {
+  resumeGemCost: BN;
+  unitPower: BN[];
+  unitHealth: BN[];
+  floorMultipliers: number[];
+  relicEffects: number[];
+  synergy2BonusBps: number[];
+  synergy3BonusBps: number[];
+  fleePenaltyBps: number[];
+  treasureLootMultiplierBps: number;
+  trapXpBonusBps: number;
+  darknessDamagePenaltyPerFloorBps: number;
+  darknessCritPenaltyPerFloorBps: number;
+  darknessDefensePenaltyPerFloorBps: number;
+  darknessEnemyBuffPerFloorBps: number;
+  relicSynergyTags: number[];
+  maxMultiAttacks: number;
+  restHealPercent: number;
+  trapDamagePercent: number;
+  darknessCritPenaltyStartFloor: number;
+  darknessDefensePenaltyStartFloor: number;
+  darknessEnemyBuffStartFloor: number;
+}
+
+// ============================================================
+// Castle Configuration
+// ============================================================
+
+export interface CastleConfig {
+  contestDuration: BN;
+  protectionDuration: BN;
+  attackRangeMeters: number;
+  kingNoviPerDay: BN;
+  kingCashPerDay: BN;
+  courtNoviPerDay: BN;
+  courtCashPerDay: BN;
+  memberNoviPerDay: BN;
+  memberCashPerDay: BN;
+  tierMultiplierBps: number[];
+  kingLootCutBps: number;
+  garrisonCapByTier: number[];
+  maxCastlesPerKing: number;
+  maxFortificationLevel: number;
+  maxTreasuryLevel: number;
+  maxChambersLevel: number;
+  maxWatchtowerLevel: number;
+  maxArmoryLevel: number;
+}
+
+// ============================================================
+// Combat Configuration
+// ============================================================
+
+export interface CombatConfig {
+  damagePerSiegeWeapon: BN;
+  maxReinforcementReceive: BN;
+  defensiveUnit1Power: BN;
+  defensiveUnit2Power: BN;
+  defensiveUnit3Power: BN;
+  encounterStaminaCosts: BN[];
+  maxStaminaByTier: BN[];
+  staminaRegenInterval: BN;
+  encounterAttackRangeMeters: number;
+  pvpAttackRangeMeters: number;
+  encountersPerPlayerCount: number;
+  weaponLootRateBps: number;
+  armoryRaidWithOperativesBps: number;
+  armoryRaidUndefendedBps: number;
+  siegeCaptureRateBps: number;
+  baseEncountersPerCity: number;
+  maxEncountersPerCity: number;
+}
+
+// ============================================================
+// Update Flags (bitmask for update_game_config instruction)
+// ============================================================
+
+export const UPDATE_FLAGS = {
+  CAPS: 1 << 0,
+  ECONOMIC: 1 << 1,
+  GAMEPLAY: 1 << 2,
+  SUBSCRIPTIONS: 1 << 3,
+  MINTING: 1 << 4,
+  THEME: 1 << 5,
+  NOVI_PURCHASE: 1 << 6,
+  ARENA: 1 << 7,
+  EXPEDITION: 1 << 8,
+  DUNGEON: 1 << 9,
+  CASTLE: 1 << 10,
+  COMBAT: 1 << 11,
+} as const;
+
+// ============================================================
 // Main GameEngine Interface
 // ============================================================
 
 export interface GameEngine {
+  kingdomId: number;
+  kingdomName: string;
+  kingdomStartTime: BN;
+  registrationOpen: boolean;
+  registrationClosesAt: BN;
+  kingdomTheme: number;
   authority: PublicKey;
   paymentAuthority: PublicKey;
   gameAuthority: PublicKey;
@@ -233,6 +386,11 @@ export interface GameEngine {
   mintingConfig: MintingConfig;
   themeConfig: ThemeModifierConfig;
   noviPurchaseConfig: NoviPurchaseConfig;
+  arenaConfig: ArenaConfig;
+  expeditionConfig: ExpeditionConfig;
+  dungeonConfig: DungeonConfig;
+  castleConfig: CastleConfig;
+  combatConfig: CombatConfig;
 }
 
 // ============================================================
@@ -270,6 +428,7 @@ function deserializeSubscriptionTierConfig(reader: BufferReader): SubscriptionTi
   const maxLockedNovi = reader.readU64();
   const dailyRewardMultiplier = reader.readU64();
   const synchronyBonus = reader.readU32();
+  reader.skip(4); // implicit padding (align u64 to 8-byte boundary)
 
   const novi = reader.readU64();
   const cash = reader.readU64();
@@ -399,6 +558,7 @@ function deserializeEconomicConfig(reader: BufferReader): EconomicConfig {
   const maxOperativesPerExpedition = reader.readU64();
   const miningGemsPerOpHour = reader.readU16Array(5);
   const fishingProducePerOpHour = reader.readU16Array(5);
+  reader.skip(4); // struct trailing padding (alignment to 8)
 
   return {
     costMultiplier,
@@ -476,6 +636,7 @@ function deserializeGameplayConfig(reader: BufferReader): GameplayConfig {
 
   const pvpLootPercentageBase = reader.readU32();
   const pvpLootOscillationAmp = reader.readU32();
+  reader.skip(4); // implicit padding (align i64 to 8-byte boundary)
 
   const newPlayerProtectionDuration = reader.readI64();
   const teleportBaseCost = reader.readU64();
@@ -486,7 +647,7 @@ function deserializeGameplayConfig(reader: BufferReader): GameplayConfig {
   const intracityTravelSpeedKmh = reader.readF32();
 
   const gemCostPerMinuteSpeedup = reader.readU16();
-  reader.skip(2); // padding
+  reader.skip(6); // _padding3 (2) + implicit padding (4) to align i64
 
   const dailyRewardCooldown = reader.readI64();
   const dailyCashBase = reader.readU64();
@@ -612,10 +773,12 @@ function deserializeThemeModifierConfig(reader: BufferReader): ThemeModifierConf
 function deserializeNoviPurchaseConfig(reader: BufferReader): NoviPurchaseConfig {
   const noviBasePriceLamports = reader.readU64();
   const noviMarketUndercutBps = reader.readU16();
+  reader.skip(6); // implicit padding (align [u64;5] to 8-byte boundary)
 
   const noviPurchaseAmounts = reader.readU64Array(5);
   const noviBulkBonusBps = reader.readU16Array(5);
   const noviSubBonusBps = reader.readU16Array(4);
+  reader.skip(6); // implicit padding (align [u64;4] to 8-byte boundary)
   const noviSubDailyCap = reader.readU64Array(4);
   const noviStreakBonusBps = reader.readU16Array(7);
 
@@ -625,7 +788,8 @@ function deserializeNoviPurchaseConfig(reader: BufferReader): NoviPurchaseConfig
   const noviMaxStalenessSlots = reader.readU16();
   const noviConfidenceThresholdBps = reader.readU16();
 
-  reader.skip(4); // padding
+  reader.skip(4); // _padding
+  reader.skip(2); // struct trailing padding (alignment to 8)
 
   // Check if oracle feeds are configured (non-zero)
   const NULL_PUBKEY = new Uint8Array(32).fill(0);
@@ -651,9 +815,336 @@ function deserializeNoviPurchaseConfig(reader: BufferReader): NoviPurchaseConfig
   };
 }
 
+function deserializeArenaConfig(reader: BufferReader): ArenaConfig {
+  const seasonDuration = reader.readI64();
+  const claimDeadline = reader.readI64();
+  const matchExpirySeconds = reader.readI64();
+  const dailyBaseReward = reader.readU64();
+  const minPointsForLeaderboard = reader.readU64();
+  const meleeWeaponPower = reader.readU64();
+  const rangedWeaponPower = reader.readU64();
+  const siegeWeaponPower = reader.readU64();
+  const armorPower = reader.readU64();
+  const baseWinPoints = reader.readU64();
+  const baseLossPoints = reader.readU64();
+  const drawPoints = reader.readU64();
+  const underdogBonusBps = reader.readU64();
+  const startingElo = reader.readU32();
+  const eloKFactor = reader.readU32();
+  const prizeDistribution = reader.readU16Array(10);
+  const maxDailyBattles = reader.readU8();
+  const maxBattlesPerOpponent = reader.readU8();
+  const minBattlesForDailyReward = reader.readU8();
+  reader.skip(1); // padding
+
+  return {
+    seasonDuration, claimDeadline, matchExpirySeconds,
+    dailyBaseReward, minPointsForLeaderboard,
+    meleeWeaponPower, rangedWeaponPower, siegeWeaponPower, armorPower,
+    baseWinPoints, baseLossPoints, drawPoints, underdogBonusBps,
+    startingElo, eloKFactor, prizeDistribution,
+    maxDailyBattles, maxBattlesPerOpponent, minBattlesForDailyReward,
+  };
+}
+
+function deserializeExpeditionConfig(reader: BufferReader): ExpeditionConfig {
+  const miningNoviCost = reader.readU64Array(5);
+  const miningFragmentBonus = reader.readU64Array(5);
+  const fishingNoviCost = reader.readU64Array(5);
+  const fishingFragmentBonus = reader.readU64Array(5);
+  const rareFindMultiplier = reader.readU64();
+  const operativeTier1MultiplierBps = reader.readU64();
+  const operativeTier2MultiplierBps = reader.readU64();
+  const operativeTier3MultiplierBps = reader.readU64();
+  const miningRareChanceBps = reader.readU16Array(5);
+  const fishingRareChanceBps = reader.readU16Array(5);
+  const perfectExpeditionBonusBps = reader.readU16();
+  const miningDurationHours: number[] = [];
+  for (let i = 0; i < 5; i++) miningDurationHours.push(reader.readU8());
+  const miningWorkshopReq: number[] = [];
+  for (let i = 0; i < 5; i++) miningWorkshopReq.push(reader.readU8());
+  const fishingDurationHours: number[] = [];
+  for (let i = 0; i < 5; i++) fishingDurationHours.push(reader.readU8());
+  const fishingDockReq: number[] = [];
+  for (let i = 0; i < 5; i++) fishingDockReq.push(reader.readU8());
+  const maxTier = reader.readU8();
+  const perfectScoreThreshold = reader.readU8();
+  reader.skip(4); // padding
+
+  return {
+    miningNoviCost, miningFragmentBonus, fishingNoviCost, fishingFragmentBonus,
+    rareFindMultiplier, operativeTier1MultiplierBps, operativeTier2MultiplierBps, operativeTier3MultiplierBps,
+    miningRareChanceBps, fishingRareChanceBps, perfectExpeditionBonusBps,
+    miningDurationHours, miningWorkshopReq, fishingDurationHours, fishingDockReq,
+    maxTier, perfectScoreThreshold,
+  };
+}
+
+function deserializeDungeonConfig(reader: BufferReader): DungeonConfig {
+  const resumeGemCost = reader.readU64();
+  const unitPower = reader.readU64Array(3);
+  const unitHealth = reader.readU64Array(3);
+  const floorMultipliers = reader.readU32Array(10);
+  const relicEffects = reader.readU16Array(20);
+  const synergy2BonusBps = reader.readU16Array(9);
+  const synergy3BonusBps = reader.readU16Array(9);
+  const fleePenaltyBps = reader.readU16Array(4);
+  const treasureLootMultiplierBps = reader.readU16();
+  const trapXpBonusBps = reader.readU16();
+  const darknessDamagePenaltyPerFloorBps = reader.readU16();
+  const darknessCritPenaltyPerFloorBps = reader.readU16();
+  const darknessDefensePenaltyPerFloorBps = reader.readU16();
+  const darknessEnemyBuffPerFloorBps = reader.readU16();
+  const relicSynergyTags: number[] = [];
+  for (let i = 0; i < 20; i++) relicSynergyTags.push(reader.readU8());
+  const maxMultiAttacks = reader.readU8();
+  const restHealPercent = reader.readU8();
+  const trapDamagePercent = reader.readU8();
+  const darknessCritPenaltyStartFloor = reader.readU8();
+  const darknessDefensePenaltyStartFloor = reader.readU8();
+  const darknessEnemyBuffStartFloor = reader.readU8();
+  reader.skip(6); // padding
+
+  return {
+    resumeGemCost, unitPower, unitHealth, floorMultipliers,
+    relicEffects, synergy2BonusBps, synergy3BonusBps,
+    fleePenaltyBps, treasureLootMultiplierBps, trapXpBonusBps,
+    darknessDamagePenaltyPerFloorBps, darknessCritPenaltyPerFloorBps,
+    darknessDefensePenaltyPerFloorBps, darknessEnemyBuffPerFloorBps,
+    relicSynergyTags, maxMultiAttacks, restHealPercent, trapDamagePercent,
+    darknessCritPenaltyStartFloor, darknessDefensePenaltyStartFloor,
+    darknessEnemyBuffStartFloor,
+  };
+}
+
+function deserializeCastleConfig(reader: BufferReader): CastleConfig {
+  const contestDuration = reader.readI64();
+  const protectionDuration = reader.readI64();
+  const attackRangeMeters = reader.readF64();
+  const kingNoviPerDay = reader.readU64();
+  const kingCashPerDay = reader.readU64();
+  const courtNoviPerDay = reader.readU64();
+  const courtCashPerDay = reader.readU64();
+  const memberNoviPerDay = reader.readU64();
+  const memberCashPerDay = reader.readU64();
+  const tierMultiplierBps = reader.readU16Array(5);
+  const kingLootCutBps = reader.readU16();
+  const garrisonCapByTier: number[] = [];
+  for (let i = 0; i < 4; i++) garrisonCapByTier.push(reader.readU8());
+  const maxCastlesPerKing = reader.readU8();
+  const maxFortificationLevel = reader.readU8();
+  const maxTreasuryLevel = reader.readU8();
+  const maxChambersLevel = reader.readU8();
+  const maxWatchtowerLevel = reader.readU8();
+  const maxArmoryLevel = reader.readU8();
+  reader.skip(2); // padding
+
+  return {
+    contestDuration, protectionDuration, attackRangeMeters,
+    kingNoviPerDay, kingCashPerDay, courtNoviPerDay, courtCashPerDay,
+    memberNoviPerDay, memberCashPerDay,
+    tierMultiplierBps, kingLootCutBps,
+    garrisonCapByTier, maxCastlesPerKing,
+    maxFortificationLevel, maxTreasuryLevel, maxChambersLevel,
+    maxWatchtowerLevel, maxArmoryLevel,
+  };
+}
+
+function deserializeCombatConfig(reader: BufferReader): CombatConfig {
+  const damagePerSiegeWeapon = reader.readU64();
+  const maxReinforcementReceive = reader.readU64();
+  const defensiveUnit1Power = reader.readU64();
+  const defensiveUnit2Power = reader.readU64();
+  const defensiveUnit3Power = reader.readU64();
+  const encounterStaminaCosts = reader.readU64Array(6);
+  const maxStaminaByTier = reader.readU64Array(4);
+  const staminaRegenInterval = reader.readI64();
+  const encounterAttackRangeMeters = reader.readF64();
+  const pvpAttackRangeMeters = reader.readF64();
+  const encountersPerPlayerCount = reader.readU32();
+  const weaponLootRateBps = reader.readU16();
+  const armoryRaidWithOperativesBps = reader.readU16();
+  const armoryRaidUndefendedBps = reader.readU16();
+  const siegeCaptureRateBps = reader.readU16();
+  const baseEncountersPerCity = reader.readU8();
+  const maxEncountersPerCity = reader.readU8();
+  reader.skip(2); // padding
+
+  return {
+    damagePerSiegeWeapon, maxReinforcementReceive,
+    defensiveUnit1Power, defensiveUnit2Power, defensiveUnit3Power,
+    encounterStaminaCosts, maxStaminaByTier,
+    staminaRegenInterval, encounterAttackRangeMeters, pvpAttackRangeMeters,
+    encountersPerPlayerCount, weaponLootRateBps,
+    armoryRaidWithOperativesBps, armoryRaidUndefendedBps,
+    siegeCaptureRateBps, baseEncountersPerCity, maxEncountersPerCity,
+  };
+}
+
+// ============================================================
+// Config Serializers (for update_game_config instruction)
+// ============================================================
+
+/** Serialize GameCaps to raw #[repr(C)] bytes (64 bytes) */
+export function serializeGameCaps(config: GameCaps): Buffer {
+  const w = new BufferWriter(64);
+  w.writeU64(config.maxReservedNoviPerPlayer);
+  w.writeI64(config.noviExpirationDuration);
+  w.writeU64(config.maxEventMintedPrize);
+  w.writeU64(config.maxDailyMintedPrizePool);
+  w.writeU64(config.maxWeeklyMintedPrizePool);
+  w.writeI64(config.minClaimInterval);
+  w.writeI64(config.maxGenerationTime);
+  w.writeI64(config.minAccountAgeForEvents);
+  return w.toFullBuffer();
+}
+
+/** Serialize ArenaConfig to raw #[repr(C)] bytes (136 bytes) */
+export function serializeArenaConfig(config: ArenaConfig): Buffer {
+  const w = new BufferWriter(136);
+  w.writeI64(config.seasonDuration);
+  w.writeI64(config.claimDeadline);
+  w.writeI64(config.matchExpirySeconds);
+  w.writeU64(config.dailyBaseReward);
+  w.writeU64(config.minPointsForLeaderboard);
+  w.writeU64(config.meleeWeaponPower);
+  w.writeU64(config.rangedWeaponPower);
+  w.writeU64(config.siegeWeaponPower);
+  w.writeU64(config.armorPower);
+  w.writeU64(config.baseWinPoints);
+  w.writeU64(config.baseLossPoints);
+  w.writeU64(config.drawPoints);
+  w.writeU64(config.underdogBonusBps);
+  w.writeU32(config.startingElo);
+  w.writeU32(config.eloKFactor);
+  w.writeU16Array(config.prizeDistribution);
+  w.writeU8(config.maxDailyBattles);
+  w.writeU8(config.maxBattlesPerOpponent);
+  w.writeU8(config.minBattlesForDailyReward);
+  w.writeZeros(1); // padding
+  return w.toFullBuffer();
+}
+
+/** Serialize ExpeditionConfig to raw #[repr(C)] bytes (240 bytes) */
+export function serializeExpeditionConfig(config: ExpeditionConfig): Buffer {
+  const w = new BufferWriter(240);
+  w.writeU64Array(config.miningNoviCost);
+  w.writeU64Array(config.miningFragmentBonus);
+  w.writeU64Array(config.fishingNoviCost);
+  w.writeU64Array(config.fishingFragmentBonus);
+  w.writeU64(config.rareFindMultiplier);
+  w.writeU64(config.operativeTier1MultiplierBps);
+  w.writeU64(config.operativeTier2MultiplierBps);
+  w.writeU64(config.operativeTier3MultiplierBps);
+  w.writeU16Array(config.miningRareChanceBps);
+  w.writeU16Array(config.fishingRareChanceBps);
+  w.writeU16(config.perfectExpeditionBonusBps);
+  w.writeU8Array(config.miningDurationHours);
+  w.writeU8Array(config.miningWorkshopReq);
+  w.writeU8Array(config.fishingDurationHours);
+  w.writeU8Array(config.fishingDockReq);
+  w.writeU8(config.maxTier);
+  w.writeU8(config.perfectScoreThreshold);
+  w.writeZeros(4); // padding
+  return w.toFullBuffer();
+}
+
+/** Serialize DungeonConfig to raw #[repr(C)] bytes (224 bytes) */
+export function serializeDungeonConfig(config: DungeonConfig): Buffer {
+  const w = new BufferWriter(224);
+  w.writeU64(config.resumeGemCost);
+  w.writeU64Array(config.unitPower);
+  w.writeU64Array(config.unitHealth);
+  w.writeU32Array(config.floorMultipliers);
+  w.writeU16Array(config.relicEffects);
+  w.writeU16Array(config.synergy2BonusBps);
+  w.writeU16Array(config.synergy3BonusBps);
+  w.writeU16Array(config.fleePenaltyBps);
+  w.writeU16(config.treasureLootMultiplierBps);
+  w.writeU16(config.trapXpBonusBps);
+  w.writeU16(config.darknessDamagePenaltyPerFloorBps);
+  w.writeU16(config.darknessCritPenaltyPerFloorBps);
+  w.writeU16(config.darknessDefensePenaltyPerFloorBps);
+  w.writeU16(config.darknessEnemyBuffPerFloorBps);
+  w.writeU8Array(config.relicSynergyTags);
+  w.writeU8(config.maxMultiAttacks);
+  w.writeU8(config.restHealPercent);
+  w.writeU8(config.trapDamagePercent);
+  w.writeU8(config.darknessCritPenaltyStartFloor);
+  w.writeU8(config.darknessDefensePenaltyStartFloor);
+  w.writeU8(config.darknessEnemyBuffStartFloor);
+  w.writeZeros(6); // padding
+  return w.toFullBuffer();
+}
+
+/** Serialize CastleConfig to raw #[repr(C)] bytes (96 bytes) */
+export function serializeCastleConfig(config: CastleConfig): Buffer {
+  const w = new BufferWriter(96);
+  w.writeI64(config.contestDuration);
+  w.writeI64(config.protectionDuration);
+  w.writeF64(config.attackRangeMeters);
+  w.writeU64(config.kingNoviPerDay);
+  w.writeU64(config.kingCashPerDay);
+  w.writeU64(config.courtNoviPerDay);
+  w.writeU64(config.courtCashPerDay);
+  w.writeU64(config.memberNoviPerDay);
+  w.writeU64(config.memberCashPerDay);
+  w.writeU16Array(config.tierMultiplierBps);
+  w.writeU16(config.kingLootCutBps);
+  w.writeU8Array(config.garrisonCapByTier);
+  w.writeU8(config.maxCastlesPerKing);
+  w.writeU8(config.maxFortificationLevel);
+  w.writeU8(config.maxTreasuryLevel);
+  w.writeU8(config.maxChambersLevel);
+  w.writeU8(config.maxWatchtowerLevel);
+  w.writeU8(config.maxArmoryLevel);
+  w.writeZeros(2); // padding
+  return w.toFullBuffer();
+}
+
+/** Serialize CombatConfig to raw #[repr(C)] bytes (160 bytes) */
+export function serializeCombatConfig(config: CombatConfig): Buffer {
+  const w = new BufferWriter(160);
+  w.writeU64(config.damagePerSiegeWeapon);
+  w.writeU64(config.maxReinforcementReceive);
+  w.writeU64(config.defensiveUnit1Power);
+  w.writeU64(config.defensiveUnit2Power);
+  w.writeU64(config.defensiveUnit3Power);
+  w.writeU64Array(config.encounterStaminaCosts);
+  w.writeU64Array(config.maxStaminaByTier);
+  w.writeI64(config.staminaRegenInterval);
+  w.writeF64(config.encounterAttackRangeMeters);
+  w.writeF64(config.pvpAttackRangeMeters);
+  w.writeU32(config.encountersPerPlayerCount);
+  w.writeU16(config.weaponLootRateBps);
+  w.writeU16(config.armoryRaidWithOperativesBps);
+  w.writeU16(config.armoryRaidUndefendedBps);
+  w.writeU16(config.siegeCaptureRateBps);
+  w.writeU8(config.baseEncountersPerCity);
+  w.writeU8(config.maxEncountersPerCity);
+  w.writeZeros(2); // padding
+  return w.toFullBuffer();
+}
+
 /** Deserialize GameEngine account from raw bytes */
 export function deserializeGameEngine(data: Uint8Array | Buffer): GameEngine {
   const reader = new BufferReader(data);
+
+  // Kingdom fields (80 bytes)
+  reader.readU8(); // account_key discriminator
+  reader.skip(1); // implicit padding for u16 alignment
+  const kingdomId = reader.readU16();
+  reader.skip(4); // _padding_kingdom (reduced from 6 for account_key)
+  const kingdomNameBytes = reader.readBytes(32);
+  const kingdomNameLen = reader.readU8();
+  reader.skip(7); // _padding_name
+  const kingdomName = new TextDecoder().decode(kingdomNameBytes.slice(0, kingdomNameLen)).replace(/\0/g, '');
+  const kingdomStartTime = reader.readI64();
+  const registrationOpen = reader.readBool();
+  reader.skip(7); // _padding_reg
+  const registrationClosesAt = reader.readI64();
+  const kingdomTheme = reader.readU8();
+  reader.skip(7); // _padding_theme
 
   const authority = reader.readPubkey();
   const paymentAuthority = reader.readPubkey();
@@ -691,8 +1182,19 @@ export function deserializeGameEngine(data: Uint8Array | Buffer): GameEngine {
   const mintingConfig = deserializeMintingConfig(reader);
   const themeConfig = deserializeThemeModifierConfig(reader);
   const noviPurchaseConfig = deserializeNoviPurchaseConfig(reader);
+  const arenaConfig = deserializeArenaConfig(reader);
+  const expeditionConfig = deserializeExpeditionConfig(reader);
+  const dungeonConfig = deserializeDungeonConfig(reader);
+  const castleConfig = deserializeCastleConfig(reader);
+  const combatConfig = deserializeCombatConfig(reader);
 
   return {
+    kingdomId,
+    kingdomName,
+    kingdomStartTime,
+    registrationOpen,
+    registrationClosesAt,
+    kingdomTheme,
     authority,
     paymentAuthority,
     gameAuthority,
@@ -713,6 +1215,11 @@ export function deserializeGameEngine(data: Uint8Array | Buffer): GameEngine {
     mintingConfig,
     themeConfig,
     noviPurchaseConfig,
+    arenaConfig,
+    expeditionConfig,
+    dungeonConfig,
+    castleConfig,
+    combatConfig,
   };
 }
 

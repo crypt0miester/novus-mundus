@@ -17,8 +17,8 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -26,8 +26,8 @@ import {
   deriveEventParticipationPda,
   deriveEventPda,
   deriveUserPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Enums
@@ -58,6 +58,7 @@ export enum CollectionType {
   Cash = 0,
   Mining = 1,
   Fishing = 2,
+  Farming = 3,
 }
 
 // ============================================================
@@ -78,6 +79,7 @@ export interface HireUnitsParams {
   noviAmount: BN | number | bigint;
 }
 
+/** ~40,000 CU */
 /**
  * Hire units by consuming locked NOVI.
  *
@@ -86,10 +88,13 @@ export interface HireUnitsParams {
  * 2. Power converted to units based on unit cost
  * 3. Time-of-day bonus applied (midday = best)
  *
- * Requires Barracks building at specific levels:
- * - Unit 1: Barracks Level 1
- * - Unit 2: Barracks Level 5
- * - Unit 3: Barracks Level 10
+ * Requires Barracks (defensive) or Camp (operative) at specific levels:
+ * - Defensive Unit 1: Barracks Level 1
+ * - Defensive Unit 2: Barracks Level 5
+ * - Defensive Unit 3: Barracks Level 10
+ * - Operative Unit 1: Camp Level 1
+ * - Operative Unit 2: Camp Level 5
+ * - Operative Unit 3: Camp Level 10
  */
 export function createHireUnitsInstruction(
   accounts: HireUnitsAccounts,
@@ -97,7 +102,7 @@ export function createHireUnitsInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
@@ -151,13 +156,15 @@ export interface CollectResourcesParams {
   collectionType: CollectionType;
 }
 
+/** ~45,000 CU */
 /**
  * Operative units collect resources (cash, gems, or produce).
  *
  * Building Bonuses:
  * - Observatory: +10% to +60% collection output based on level
- * - Workshop: Mining bonus
+ * - Mine: Mining bonus (50 bps/level)
  * - Dock: Fishing bonus
+ * - Farm: Farming bonus (50 bps/level), uses defensive units
  */
 export function createCollectResourcesInstruction(
   accounts: CollectResourcesAccounts,
@@ -166,7 +173,7 @@ export function createCollectResourcesInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [user] = deriveUserPda(accounts.owner);
   const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
@@ -222,6 +229,7 @@ export interface PurchaseEquipmentParams {
   payWithCash: boolean;
 }
 
+/** ~20,000 CU */
 /**
  * Purchase equipment using locked NOVI or cash.
  *
@@ -233,7 +241,7 @@ export function createPurchaseEquipmentInstruction(
   params: PurchaseEquipmentParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -280,6 +288,7 @@ export interface PurchaseStaminaParams {
   amount: BN | number | bigint;
 }
 
+/** ~10,000 CU */
 /**
  * Purchase stamina using locked NOVI.
  *
@@ -346,6 +355,7 @@ export interface TransferCashParams {
   amount: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Transfer cash between team members.
  *
@@ -384,7 +394,7 @@ export function createTransferCashInstruction(
   params: TransferCashParams
 ): TransactionInstruction {
   const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [estate] = deriveEstatePda(accounts.sender);
+  const [estate] = deriveEstatePda(senderPlayer);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: true },
@@ -425,6 +435,7 @@ export interface VaultTransferParams {
   toVault: boolean;
 }
 
+/** ~5,000 CU */
 /**
  * Transfer cash between cash_on_hand and vault (safebox).
  *
@@ -445,7 +456,7 @@ export function createVaultTransferInstruction(
   params: VaultTransferParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -480,6 +491,7 @@ export interface UpdateLockedNoviAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Update locked NOVI balance based on time elapsed since last update.
  *
@@ -505,7 +517,7 @@ export function createUpdateLockedNoviInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [user] = deriveUserPda(accounts.owner);
   const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
@@ -559,6 +571,7 @@ export interface MintForPrizeParams {
   purpose: MintPurpose;
 }
 
+/** ~5,000 CU */
 /**
  * Mint NOVI tokens for prizes (DAO controlled).
  *

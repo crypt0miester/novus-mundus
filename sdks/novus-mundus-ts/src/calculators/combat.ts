@@ -26,7 +26,7 @@ import {
   OP1_POWER_COST,
   OP2_POWER_COST,
   OP3_POWER_COST,
-} from './constants.ts';
+} from './constants';
 
 // ============================================================
 // Weapon Set
@@ -394,6 +394,28 @@ export function inflictDamage(
     Math.max(0, unit2 - Math.floor(damage2)),
     Math.max(0, unit3 - Math.floor(damage3)),
   ];
+}
+
+// ============================================================
+// Infirmary Recovery
+// ============================================================
+
+/**
+ * Calculate infirmary passive recovery (reduces unit losses in combat).
+ *
+ * Infirmary building provides 25 bps recovery per level.
+ * Applied after combat to recover a portion of lost units.
+ *
+ * @param unitsLost - Number of units lost in combat
+ * @param infirmaryRecoveryBps - Recovery rate in basis points (25 per level)
+ * @returns Number of units recovered
+ */
+export function calculateInfirmaryRecovery(
+  unitsLost: number,
+  infirmaryRecoveryBps: number
+): number {
+  if (infirmaryRecoveryBps <= 0 || unitsLost <= 0) return 0;
+  return Math.floor((unitsLost * infirmaryRecoveryBps) / 10000);
 }
 
 // ============================================================

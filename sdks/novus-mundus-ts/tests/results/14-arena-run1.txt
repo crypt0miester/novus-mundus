@@ -1,0 +1,1035 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/14-arena.test.ts:
+
+[1m[34m━━━ Arena System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.6s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.3s.
+[2m[onchain][0m [2m26bCsmjaAT..[0m [36m⚡ KingdomArenaSeasonStarted[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. seasonId=1 startTime=1770039447 endTime=1770644247 prizePool=1000000[0m
+[2m[onchain][0m [2m26bCsmjaAT..[0m [35mcreate arena season[0m
+[2m[onchain][0m [2m26bCsmjaAT..[0m [33mTotal 7,311 / 200,000 CU[0m
+[32m  ✓ tx [2m26bCsmjaAT3x..[0m[0m
+[2m  ℹ Arena season 1 created, status=255[0m
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1770039448[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1770039448[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35minit user[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35minit player[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4kFmVTtp4B..[0m [33mTotal 6,438 / 526,293 CU[0m
+[2m[onchain][0m [2m3wRo4rDhbN..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3wRo4rDhbN..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2m3wRo4rDhbN..[0m [33mTotal 5,115 / 200,000 CU[0m
+[2m[onchain][0m [2m3wRo4rDhbN..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Failed to reallocate account data[0m
+[31m  ✗ tx[0m
+[31m    Transaction 3wRo4rDhbNbZNEkqu6b6fmDkpSUtAYbSkHF8QZAM8AcTD8irtvwaCpcsoYyt83t1vtgPyo591QwFdoNbXUZatHJZ resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 3wRo4rDhbNbZNEkqu6b6fmDkpSUtAYbSkHF8QZAM8AcTD8irtvwaCpcsoYyt83t1vtgPyo591QwFdoNbXUZatHJZ resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"InvalidRealloc"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "3wRo4rDhbNbZNEkqu6b6fmDkpSUtAYbSkHF8QZAM8AcTD8irtvwaCpcsoYyt83t1vtgPyo591QwFdoNbXUZatHJZ",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"InvalidRealloc\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Joining Seasons > should join arena season [1528.01ms]
+[PlayerFactory] Initializing player 1 (city 1)
+[2m[onchain][0m [2m38ug5qtSwH..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1770039450[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1770039450[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35minit user[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35minit player[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m38ug5qtSwH..[0m [33mTotal 4,938 / 514,297 CU[0m
+[2m[onchain][0m [2m5pZT85KDoX..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5pZT85KDoX..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2m5pZT85KDoX..[0m [33mTotal 5,115 / 200,000 CU[0m
+[2m[onchain][0m [2m5pZT85KDoX..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Failed to reallocate account data[0m
+[31m  ✗ tx[0m
+[31m    Transaction 5pZT85KDoXQtcr3JvyN4HxUkHeagqJyEyRYEPPhkYpFafY5278VF3yfZmvivg7JPhwLoLzGbSpVncmWzkCGMJgv4 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 5pZT85KDoXQtcr3JvyN4HxUkHeagqJyEyRYEPPhkYpFafY5278VF3yfZmvivg7JPhwLoLzGbSpVncmWzkCGMJgv4 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"InvalidRealloc"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "5pZT85KDoXQtcr3JvyN4HxUkHeagqJyEyRYEPPhkYpFafY5278VF3yfZmvivg7JPhwLoLzGbSpVncmWzkCGMJgv4",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"InvalidRealloc\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Joining Seasons > should reject joining same season twice [1424.53ms]
+[PlayerFactory] Initializing player 2 (city 2)
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [36m⚡ UserCreated[0m [2muser=9at5bmZf.. wallet=FdZDUuCx.. timestamp=1770039451[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=G3A9Y3nc.. owner=FdZDUuCx.. joinedAt=1770039451[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35minit user[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35minit player[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5jrqLDwZNe..[0m [33mTotal 4,938 / 529,292 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction DrUJDC5Gezjb7cURx2RGqUhf6Sf3ENvo1joQGNt35cSqKGbWSDoaMQaoPWRrwwhefVPed9WA4vy4W7zvktcuj8P resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Joining Seasons > should reject joining non-existent season [1463.35ms]
+[2m[onchain][0m [2mDrUJDC5Gez..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mDrUJDC5Gez..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2mDrUJDC5Gez..[0m [33mTotal 2,093 / 200,000 CU[0m
+[2m[onchain][0m [2mDrUJDC5Gez..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+[PlayerFactory] Initializing player 3 (city 3)
+[2m[onchain][0m [2m3pPWeMomPf..[0m [36m⚡ UserCreated[0m [2muser=3hGTQ9FV.. wallet=8WD4WZvV.. timestamp=1770039452[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6CQsHJ5Z.. owner=8WD4WZvV.. joinedAt=1770039452[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35minit user[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35minit player[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3pPWeMomPf..[0m [33mTotal 4,938 / 515,791 CU[0m
+(pass) Arena System > Joining Seasons > should require minimum level to join [1008.44ms]
+[PlayerFactory] Initializing player 4 (city 4)
+[2m[onchain][0m [2m4czFa2bzPh..[0m [36m⚡ UserCreated[0m [2muser=4NuAhWiR.. wallet=65SYutaB.. timestamp=1770039453[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=4W13kdpe.. owner=65SYutaB.. joinedAt=1770039453[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35minit user[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35minit player[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4czFa2bzPh..[0m [33mTotal 4,938 / 508,293 CU[0m
+[2m[onchain][0m [2m27TALWvZiA..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m27TALWvZiA..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2m27TALWvZiA..[0m [33mTotal 2,115 / 200,000 CU[0m
+[2m[onchain][0m [2m27TALWvZiA..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Failed to reallocate account data[0m
+[31m  ✗ tx[0m
+[31m    Transaction 27TALWvZiATQoPuCuaByp6o5yZ58tF7MhPDPv4z1Dp73RiCi3Zwswqqp1jzgRzC4yWUS4dbtmWDqmJ7CD537gNZW resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 27TALWvZiATQoPuCuaByp6o5yZ58tF7MhPDPv4z1Dp73RiCi3Zwswqqp1jzgRzC4yWUS4dbtmWDqmJ7CD537gNZW resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"InvalidRealloc"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "27TALWvZiATQoPuCuaByp6o5yZ58tF7MhPDPv4z1Dp73RiCi3Zwswqqp1jzgRzC4yWUS4dbtmWDqmJ7CD537gNZW",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"InvalidRealloc\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Joining Seasons > should set initial rating on join [1446.37ms]
+[PlayerFactory] Initializing player 5 (city 5)
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [36m⚡ UserCreated[0m [2muser=3ZJcpNxJ.. wallet=GBgayznw.. timestamp=1770039455[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Brp9NHAg.. owner=GBgayznw.. joinedAt=1770039455[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35minit user[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35minit player[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3zM8fEyoT3..[0m [33mTotal 7,938 / 517,293 CU[0m
+[PlayerFactory] Initializing player 6 (city 6)
+[2m[onchain][0m [2m3W1avevBEE..[0m [36m⚡ UserCreated[0m [2muser=9ztT5hcf.. wallet=EeAkWd5F.. timestamp=1770039456[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5gogbbch.. owner=EeAkWd5F.. joinedAt=1770039456[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35minit user[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35minit player[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3W1avevBEE..[0m [33mTotal 4,938 / 523,297 CU[0m
+[2m[onchain][0m [2m2tdkggVnEm..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2tdkggVnEm..[0m [35mhire units[0m
+[2m[onchain][0m [2m2tdkggVnEm..[0m [33mTotal 1,891 / 200,000 CU[0m
+[2m[onchain][0m [2m2tdkggVnEm..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2tdkggVnEmZg8CcLpS8ZCXjM32rGsHQ8iwpaBP5rHwF1QojrNspTZA3y2YnXBnSAtxhf2Ta4fhCaytqtDrV4hfLp resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"IllegalOwner"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2tdkggVnEmZg8CcLpS8ZCXjM32rGsHQ8iwpaBP5rHwF1QojrNspTZA3y2YnXBnSAtxhf2Ta4fhCaytqtDrV4hfLp",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"IllegalOwner\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Challenging Players > should challenge another player [2464.24ms]
+[PlayerFactory] Initializing player 7 (city 7)
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [36m⚡ UserCreated[0m [2muser=595AzQHX.. wallet=5kWiuQEm.. timestamp=1770039457[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BH85q54E.. owner=5kWiuQEm.. joinedAt=1770039457[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35minit user[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35minit player[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4ukHDQwXYM..[0m [33mTotal 7,938 / 514,296 CU[0m
+[PlayerFactory] Initializing player 8 (city 8)
+[2m[onchain][0m [2m53vymRgyz7..[0m [36m⚡ UserCreated[0m [2muser=6mRrqL9e.. wallet=EVAFmJra.. timestamp=1770039458[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6gWC3dgX.. owner=EVAFmJra.. joinedAt=1770039458[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35minit user[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35minit player[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m53vymRgyz7..[0m [33mTotal 7,938 / 523,297 CU[0m
+[2m[onchain][0m [2m2neNzAmKRb..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2neNzAmKRb..[0m [35mhire units[0m
+[2m[onchain][0m [2m2neNzAmKRb..[0m [33mTotal 3,391 / 200,000 CU[0m
+[2m[onchain][0m [2m2neNzAmKRb..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2neNzAmKRbQcVNGnRE6nQX5iXgAhLA5ppPdtTr5qydkvauvTTLKHYCjtAZfX2MzUSB7zjE7epPdKFun6ACPenE99 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"IllegalOwner"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2neNzAmKRbQcVNGnRE6nQX5iXgAhLA5ppPdtTr5qydkvauvTTLKHYCjtAZfX2MzUSB7zjE7epPdKFun6ACPenE99",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"IllegalOwner\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Challenging Players > should reject challenge to non-participant [2492.74ms]
+[PlayerFactory] Initializing player 9 (city 9)
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [36m⚡ UserCreated[0m [2muser=HNCLvXxz.. wallet=AvGnTfgg.. timestamp=1770039460[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BRQMxD9z.. owner=AvGnTfgg.. joinedAt=1770039460[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35minit user[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35minit player[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3tmsPC3vsB..[0m [33mTotal 12,438 / 521,787 CU[0m
+[PlayerFactory] Initializing player 10 (city 10)
+[2m[onchain][0m [2m4qcroepeaF..[0m [36m⚡ UserCreated[0m [2muser=7wWzoTiC.. wallet=DYXXWTjs.. timestamp=1770039461[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5z2B3ngT.. owner=DYXXWTjs.. joinedAt=1770039461[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35minit user[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35minit player[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4qcroepeaF..[0m [33mTotal 4,938 / 526,283 CU[0m
+[2m[onchain][0m [2m2J8hG94bBt..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2J8hG94bBt..[0m [35mhire units[0m
+[2m[onchain][0m [2m2J8hG94bBt..[0m [33mTotal 7,891 / 200,000 CU[0m
+[2m[onchain][0m [2m2J8hG94bBt..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2J8hG94bBt52HrhSMNHS3SZJ1iYmW3zna3NmZzRRpVMTGPUQ4mhFY2q8AfmwQ6cBhk7cGVxaWEAwAPjnADfA26L7 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"IllegalOwner"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2J8hG94bBt52HrhSMNHS3SZJ1iYmW3zna3NmZzRRpVMTGPUQ4mhFY2q8AfmwQ6cBhk7cGVxaWEAwAPjnADfA26L7",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"IllegalOwner\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Challenging Players > should update ratings after challenge [2461.61ms]
+[PlayerFactory] Initializing player 11 (city 11)
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [36m⚡ UserCreated[0m [2muser=iR4Xfgst.. wallet=CzSZgXPE.. timestamp=1770039462[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=HinPXQ2P.. owner=CzSZgXPE.. joinedAt=1770039462[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35minit user[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35minit player[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2zJHHKLWHK..[0m [33mTotal 4,938 / 527,790 CU[0m
+(pass) Arena System > Challenging Players > should track daily challenges [949.31ms]
+[PlayerFactory] Initializing player 12 (city 12)
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [36m⚡ UserCreated[0m [2muser=66vHuTv6.. wallet=2ZkPzNzw.. timestamp=1770039463[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtnzCT8Y.. owner=2ZkPzNzw.. joinedAt=1770039463[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35minit user[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35minit player[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5Rc5RRGAD3..[0m [33mTotal 4,938 / 521,785 CU[0m
+[2m[onchain][0m [2m2SwqwSmmRL..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2SwqwSmmRL..[0m [35mhire units[0m
+[2m[onchain][0m [2m2SwqwSmmRL..[0m [33mTotal 3,391 / 200,000 CU[0m
+[2m[onchain][0m [2m2SwqwSmmRL..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2SwqwSmmRLvRqsx359sNrk8PV24waxaFn7bT2hJH6suFM8Ew8YKApfshVopZPEqoHasndKnLB1MQkcJKMDHbUSrH resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"IllegalOwner"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2SwqwSmmRLvRqsx359sNrk8PV24waxaFn7bT2hJH6suFM8Ew8YKApfshVopZPEqoHasndKnLB1MQkcJKMDHbUSrH",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"IllegalOwner\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Challenging Players > should reject self-challenge [1465.40ms]
+[PlayerFactory] Initializing player 13 (city 13)
+[2m[onchain][0m [2m56HN6SNQVm..[0m [36m⚡ UserCreated[0m [2muser=Ez3gvQrG.. wallet=3bX72y2J.. timestamp=1770039465[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=AsWaCE7q.. owner=3bX72y2J.. joinedAt=1770039465[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35minit user[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35minit player[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m56HN6SNQVm..[0m [33mTotal 4,938 / 529,286 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 5zZcrZ4RBsUZCWtkYrTya4sBWPRRd7GwSYrkzTzYFYBEy17vqNwKSnhqKVWjhG4kNz8dorQ1fsBxh5iqCMM3ETnA resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 5zZcrZ4RBsUZCWtkYrTya4sBWPRRd7GwSYrkzTzYFYBEy17vqNwKSnhqKVWjhG4kNz8dorQ1fsBxh5iqCMM3ETnA resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"InvalidRealloc"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "5zZcrZ4RBsUZCWtkYrTya4sBWPRRd7GwSYrkzTzYFYBEy17vqNwKSnhqKVWjhG4kNz8dorQ1fsBxh5iqCMM3ETnA",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"InvalidRealloc\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Daily Rewards > should reject daily claim without enough battles [1526.28ms]
+[2m[onchain][0m [2m5zZcrZ4RBs..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5zZcrZ4RBs..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2m5zZcrZ4RBs..[0m [33mTotal 3,615 / 200,000 CU[0m
+[2m[onchain][0m [2m5zZcrZ4RBs..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Failed to reallocate account data[0m
+[PlayerFactory] Initializing player 14 (city 14)
+[2m[onchain][0m [2mD9XS8CLrap..[0m [36m⚡ UserCreated[0m [2muser=7NQFR5ef.. wallet=HrseJFA2.. timestamp=1770039466[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=79vQ7A9t.. owner=HrseJFA2.. joinedAt=1770039466[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35minit user[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35minit player[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mD9XS8CLrap..[0m [33mTotal 4,938 / 523,282 CU[0m
+[PlayerFactory] Initializing player 16 (city 16)
+[PlayerFactory] Initializing player 17 (city 17)
+[PlayerFactory] Initializing player 15 (city 15)
+[2m[onchain][0m [2m2L93n5j9YB..[0m [36m⚡ UserCreated[0m [2muser=AYb9YPgT.. wallet=9me64sAy.. timestamp=1770039467[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=48J4LZ5S.. owner=9me64sAy.. joinedAt=1770039467[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35minit user[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35minit player[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2L93n5j9YB..[0m [33mTotal 7,938 / 527,777 CU[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [36m⚡ UserCreated[0m [2muser=8CVurC2D.. wallet=hcUZgyue.. timestamp=1770039467[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=3MXrHtu4.. owner=hcUZgyue.. joinedAt=1770039467[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35minit user[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35minit player[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3aaNbg8BZe..[0m [33mTotal 4,938 / 517,289 CU[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [36m⚡ UserCreated[0m [2muser=QwD7AtAm.. wallet=AXdSzPWq.. timestamp=1770039467[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtpBkFpW.. owner=AXdSzPWq.. joinedAt=1770039467[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35minit user[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35minit player[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m27XG7ZsKVs..[0m [33mTotal 4,938 / 521,780 CU[0m
+[2m[onchain][0m [2m2BckC5beT3..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2BckC5beT3..[0m [35mhire units[0m
+[2m[onchain][0m [2m2BckC5beT3..[0m [33mTotal 3,391 / 200,000 CU[0m
+[2m[onchain][0m [2m2BckC5beT3..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2BckC5beT3yVsuweg7qLnnh25LWKyRra74DgcubbkbC4eHsTxNbVmvWTDeHwrJTMHCqsdU6whUr8SV3VmbJEJdY resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"IllegalOwner"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2BckC5beT3yVsuweg7qLnnh25LWKyRra74DgcubbkbC4eHsTxNbVmvWTDeHwrJTMHCqsdU6whUr8SV3VmbJEJdY",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"IllegalOwner\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Daily Rewards > should claim daily arena reward after enough battles [2391.54ms]
+[PlayerFactory] Initializing player 18 (city 18)
+[2m[onchain][0m [2m3WjPPenTH6..[0m [36m⚡ UserCreated[0m [2muser=6KXCNkMp.. wallet=4N9TLrMB.. timestamp=1770039469[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5PVabmGR.. owner=4N9TLrMB.. joinedAt=1770039469[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35minit user[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35minit player[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3WjPPenTH6..[0m [33mTotal 4,938 / 514,289 CU[0m
+(pass) Arena System > Daily Rewards > should scale reward with ranking [1016.05ms]
+[PlayerFactory] Initializing player 19 (city 19)
+[2m[onchain][0m [2m67cjGouBSA..[0m [36m⚡ UserCreated[0m [2muser=4Qr2bYoT.. wallet=8gvVLjuc.. timestamp=1770039470[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=96tTNkFM.. owner=8gvVLjuc.. joinedAt=1770039470[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35minit user[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35minit player[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m67cjGouBSA..[0m [33mTotal 6,438 / 521,775 CU[0m
+(pass) Arena System > Daily Rewards > should reset daily claim at midnight [1033.65ms]
+[PlayerFactory] Initializing player 20 (city 0)
+[2m[onchain][0m [2mpW2wnU1j18..[0m [36m⚡ UserCreated[0m [2muser=7HDjfChr.. wallet=412ZTyAq.. timestamp=1770039471[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=ErPwgxyS.. owner=412ZTyAq.. joinedAt=1770039471[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35minit user[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35minit player[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mpW2wnU1j18..[0m [33mTotal 4,938 / 522,810 CU[0m
+[2m[onchain][0m [2mzCNbGmA7TN..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mzCNbGmA7TN..[0m [35mjoin arena season[0m
+[2m[onchain][0m [2mzCNbGmA7TN..[0m [33mTotal 3,615 / 200,000 CU[0m
+[2m[onchain][0m [2mzCNbGmA7TN..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Failed to reallocate account data[0m
+[31m  ✗ tx[0m
+[31m    Transaction zCNbGmA7TNWgzwScev3PhvLkpnDuLZGqEKEEVcLBJmYYPmaUvFWkKeJd2wZJkzS1Q7oUYcukgjAtS3uTmxhmkQ5 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction zCNbGmA7TNWgzwScev3PhvLkpnDuLZGqEKEEVcLBJmYYPmaUvFWkKeJd2wZJkzS1Q7oUYcukgjAtS3uTmxhmkQ5 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,"InvalidRealloc"]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "zCNbGmA7TNWgzwScev3PhvLkpnDuLZGqEKEEVcLBJmYYPmaUvFWkKeJd2wZJkzS1Q7oUYcukgjAtS3uTmxhmkQ5",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,\"InvalidRealloc\"]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Arena System > Master Rewards > should reject master claim before season finalized [1436.28ms]
+[PlayerFactory] Initializing player 21 (city 1)
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [36m⚡ UserCreated[0m [2muser=9azoAwKf.. wallet=FQVgunZ7.. timestamp=1770039472[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=7kSdaHSY.. owner=FQVgunZ7.. joinedAt=1770039472[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35minit user[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35minit player[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2ii79ZVQUy..[0m [33mTotal 6,438 / 528,818 CU[0m
+(pass) Arena System > Master Rewards > should reject master claim before season end [947.48ms]
+[PlayerFactory] Initializing player 22 (city 2)
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [36m⚡ UserCreated[0m [2muser=AErip4KY.. wallet=VHgEfMJS.. timestamp=1770039473[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FYasvKLM.. owner=VHgEfMJS.. joinedAt=1770039473[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35minit user[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35minit player[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mMbQkmwmxAg..[0m [33mTotal 4,938 / 519,812 CU[0m
+(pass) Arena System > Master Rewards > should scale with final ranking [1010.72ms]
+[PlayerFactory] Initializing player 23 (city 3)
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [36m⚡ UserCreated[0m [2muser=2jyhHvLo.. wallet=AnNuCk3h.. timestamp=1770039474[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Cr5HUCM2.. owner=AnNuCk3h.. joinedAt=1770039474[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35minit user[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35minit player[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mCc5uhc8hwX..[0m [33mTotal 4,938 / 510,812 CU[0m
+(pass) Arena System > Master Rewards > should have rank thresholds for rewards [938.83ms]
+[2m[onchain][0m [2mKYwZqPCQLS..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mKYwZqPCQLS..[0m [35mclose arena season[0m
+[2m[onchain][0m [2mKYwZqPCQLS..[0m [33mTotal 2,060 / 200,000 CU[0m
+[2m[onchain][0m [2mKYwZqPCQLS..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1ef7[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction KYwZqPCQLSuM5fXMUAYw863Qs6y1fgexUQyuJ7NiRK3R1VTXKCMmrHYAY2KthF4RAb4gvT2h45bCMyraBKyUZGp resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Season Closing > should reject close before deadline [512.42ms]
+[PlayerFactory] Initializing player 24 (city 4)
+[2m[onchain][0m [2m5JVdVtceVv..[0m [36m⚡ UserCreated[0m [2muser=BN8z5nQw.. wallet=4FRH2EXp.. timestamp=1770039476[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=1u3oxWwi.. owner=4FRH2EXp.. joinedAt=1770039476[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35minit user[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35minit player[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5JVdVtceVv..[0m [33mTotal 6,438 / 516,812 CU[0m
+[2m[onchain][0m [2m3utq7ACxT7..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3utq7ACxT7..[0m [35mclose arena season[0m
+[2m[onchain][0m [2m3utq7ACxT7..[0m [33mTotal 2,037 / 200,000 CU[0m
+[2m[onchain][0m [2m3utq7ACxT7..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1771[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 3utq7ACxT7KRchButPuYQKTPPkHqFTNVkSnxR3v7LtwCNrMeeXJGmkH9uqS6ZpEk5HwDJftatdixnuxzrmtV6wxQ resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Season Closing > should reject close with wrong authority [1440.53ms]
+[PlayerFactory] Initializing player 25 (city 5)
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [36m⚡ UserCreated[0m [2muser=7vTx9u93.. wallet=CFqbx9ie.. timestamp=1770039477[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=9xC5u4qF.. owner=CFqbx9ie.. joinedAt=1770039477[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35minit user[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35minit player[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2pHJRDVr4u..[0m [33mTotal 4,938 / 507,812 CU[0m
+(pass) Arena System > Season Closing > should freeze rankings on close [1028.06ms]
+[PlayerFactory] Initializing player 26 (city 6)
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [36m⚡ UserCreated[0m [2muser=2XoPeJLU.. wallet=FkZKtXj3.. timestamp=1770039478[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=35rtuNWK.. owner=FkZKtXj3.. joinedAt=1770039478[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35minit user[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35minit player[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2zQrtKjgPL..[0m [33mTotal 9,438 / 518,314 CU[0m
+(pass) Arena System > Season Closing > should enable master rewards on close [1013.70ms]
+[PlayerFactory] Initializing player 27 (city 7)
+[2m[onchain][0m [2m46SF6MJp48..[0m [36m⚡ UserCreated[0m [2muser=12hcVRDt.. wallet=94ebzxt3.. timestamp=1770039479[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Ao7wMMdq.. owner=94ebzxt3.. joinedAt=1770039479[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35minit user[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35minit player[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m46SF6MJp48..[0m [33mTotal 4,938 / 525,817 CU[0m
+(pass) Arena System > Rating System > should use ELO-like rating [951.81ms]
+[PlayerFactory] Initializing player 28 (city 8)
+[2m[onchain][0m [2m4DesALoCbS..[0m [36m⚡ UserCreated[0m [2muser=GRUqHLhM.. wallet=umd7TTp5.. timestamp=1770039480[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=3oMQtskd.. owner=umd7TTp5.. joinedAt=1770039480[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35minit user[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35minit player[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4DesALoCbS..[0m [33mTotal 6,438 / 524,316 CU[0m
+(pass) Arena System > Rating System > should have rating floors [1019.08ms]
+[PlayerFactory] Initializing player 29 (city 9)
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [36m⚡ UserCreated[0m [2muser=4Cjkhnf6.. wallet=DS65eY3o.. timestamp=1770039481[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FTei7ged.. owner=DS65eY3o.. joinedAt=1770039481[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35minit user[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35minit player[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3SMtwoCQc1..[0m [33mTotal 12,438 / 516,814 CU[0m
+(pass) Arena System > Rating System > should track wins and losses [931.37ms]
+[PlayerFactory] Initializing player 30 (city 10)
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [36m⚡ UserCreated[0m [2muser=4EopHHRS.. wallet=EaT6dqM5.. timestamp=1770039482[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FJcBzs7a.. owner=EaT6dqM5.. joinedAt=1770039482[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35minit user[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35minit player[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2dbBFGsTCd..[0m [33mTotal 4,938 / 521,315 CU[0m
+(pass) Arena System > Rating System > should update leaderboard [1016.32ms]
+[PlayerFactory] Initializing player 31 (city 11)
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [36m⚡ UserCreated[0m [2muser=8Qu5VbRC.. wallet=5oSM4AMT.. timestamp=1770039483[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6vFv2j3K.. owner=5oSM4AMT.. joinedAt=1770039483[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35minit user[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35minit player[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4z1Dxd1FcN..[0m [33mTotal 7,938 / 512,322 CU[0m
+(pass) Arena System > Arena Loadouts > should use snapshot loadout for defense [959.58ms]
+[PlayerFactory] Initializing player 32 (city 12)
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [36m⚡ UserCreated[0m [2muser=HrCkyNiw.. wallet=Dy12Tvy5.. timestamp=1770039484[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=AyopVpo5.. owner=Dy12Tvy5.. joinedAt=1770039484[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35minit user[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35minit player[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5BAUSNpAuE..[0m [33mTotal 4,938 / 522,816 CU[0m
+(pass) Arena System > Arena Loadouts > should allow loadout updates [1025.63ms]
+[PlayerFactory] Initializing player 33 (city 13)
+[2m[onchain][0m [2m56t2i5FLiv..[0m [36m⚡ UserCreated[0m [2muser=2miRQgGd.. wallet=TJ7MSXY1.. timestamp=1770039485[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=7t6CianA.. owner=TJ7MSXY1.. joinedAt=1770039485[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35minit user[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35minit player[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m56t2i5FLiv..[0m [33mTotal 4,938 / 518,317 CU[0m
+(pass) Arena System > Arena Loadouts > should include hero in loadout [950.77ms]
+
+ 19 pass
+ 10 fail
+ 16 expect() calls
+Ran 29 tests across 1 files. [43.51s]

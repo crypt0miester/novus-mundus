@@ -11,14 +11,14 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveUserPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Reserved to Locked
@@ -36,6 +36,7 @@ export interface ReservedToLockedParams {
   amount: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Convert reserved NOVI to locked NOVI.
  *
@@ -110,6 +111,7 @@ export interface WithdrawReservedParams {
   amount: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Withdraw reserved NOVI to wallet.
  *

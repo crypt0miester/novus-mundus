@@ -4,13 +4,13 @@
  * Stamina regeneration, consumption, and management calculations.
  */
 
-import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time.ts';
-import { applyBpsBonus } from './constants.ts';
+import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
+import { applyBpsBonus } from './constants';
 import {
   STAMINA_REGEN_INTERVAL,
   ENCOUNTER_STAMINA_COSTS,
   MAX_STAMINA_BY_TIER,
-} from '../constants.ts';
+} from '../constants';
 
 // Re-export constants from main module for convenience
 export { STAMINA_REGEN_INTERVAL, ENCOUNTER_STAMINA_COSTS, MAX_STAMINA_BY_TIER };

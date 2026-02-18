@@ -1,0 +1,101 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/09-hero.test.ts:
+
+[1m[34m━━━ Hero System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.2s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.4s.
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m3ronAqBeMv..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1770019018[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1770019018[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35minit user[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35minit player[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3ronAqBeMv..[0m [33mTotal 6,438 / 526,293 CU[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [36m⚡ HeroMinted[0m [2mheroMint=3bpf8RfA.. heroName=Warrior player=8368TZj8.. playerName=Player #1 templateId=1 rarity=0 timestamp=1770019019[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [35mmint hero[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [35mInstruction: Create[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [35mprograms/mpl-core/src/state/collection.rs:139:Approve[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [35mInstruction: AddPlugin[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [35mprograms/mpl-core/src/state/collection.rs:160:Approve[0m
+[2m[onchain][0m [2mZStmcsEgwS..[0m [33mTotal 43,368 / 200,000 CU[0m
+[32m  ✓ tx [2mZStmcsEgwS6g..[0m[0m
+Plugin header at offset=137, byte=3, data.len=309
+Registry offset=290, byte_at_reg=4
+Registry len=1
+  Plugin[0]: type=6 auth=2 offset=146
+Attributes offset=146
+Attribute count=2310
+294 |         const keyLen = data.readUInt32LE(attrPos);
+295 |         attrPos += 4;
+296 |         const key = data.subarray(attrPos, attrPos + keyLen).toString('utf8');
+297 |         attrPos += keyLen;
+298 | 
+299 |         const valLen = data.readUInt32LE(attrPos);
+                ^
+RangeError: The value of "offset" is out of range. It must be >= 0 and <= 305. Received 1434
+ code: "ERR_OUT_OF_RANGE"
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/09-hero.test.ts:299:29)
+(fail) Hero System > Hero Minting > should mint a new hero [1445.48ms]
+(skip) Hero System > Hero Minting > should reject minting without enough resources
+(skip) Hero System > Hero Minting > should reject minting non-existent template
+(skip) Hero System > Hero Minting > should mint multiple heroes from same template
+(skip) Hero System > Hero Level Up > should level up hero with fragments
+(skip) Hero System > Hero Level Up > should reject level up without enough fragments
+(skip) Hero System > Hero Level Up > should reject level up at max level
+(skip) Hero System > Hero Level Up > should increase stats on level up
+(skip) Hero System > Hero Lock/Unlock > should lock hero for expedition
+(skip) Hero System > Hero Lock/Unlock > should unlock hero after expedition
+(skip) Hero System > Hero Lock/Unlock > should lock and unlock without expedition
+(skip) Hero System > Hero Lock/Unlock > should reject lock on occupied slot
+(skip) Hero System > Hero Assignment > should assign hero for defense
+(skip) Hero System > Hero Assignment > should remove defensive assignment
+(skip) Hero System > Hero Assignment > should reject assigning empty slot
+(skip) Hero System > Hero Stats > should have correct base stats from template
+(skip) Hero System > Hero Stats > should apply hero bonuses when locked
+(skip) Hero System > Hero Stats > should have specialization bonuses
+(skip) Hero System > Hero Equipment > should lock hero for equipment readiness
+(skip) Hero System > Hero Equipment > should unlock hero after removing equipment
+(skip) Hero System > Hero Equipment > should reject equipping to non-locked hero slot
+(skip) Hero System > Hero Collection > should reject duplicate collection creation
+(skip) Hero System > Hero Collection > should reject collection creation by non-DAO
+(skip) Hero System > Hero Experience > should gain XP from locking hero
+(skip) Hero System > Hero Experience > should gain XP from expeditions
+(skip) Hero System > Hero Experience > should calculate XP to next level
+(skip) Hero System > Hero Rarity > should mint heroes with rarity from template
+(skip) Hero System > Hero Rarity > should apply rarity stat multipliers when locked
+(skip) Hero System > Hero Trading > should mint hero to wallet
+(skip) Hero System > Hero Trading > should reject unlock with wrong slot
+(skip) Hero System > Hero Trading > should verify locked hero is owned by PDA
+
+ 0 pass
+ 30 skip
+ 1 fail
+ 9 expect() calls
+Ran 31 tests across 1 files. [6.18s]

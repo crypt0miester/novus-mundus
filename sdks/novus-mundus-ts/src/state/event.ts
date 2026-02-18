@@ -7,7 +7,7 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize.ts';
+import { BufferReader } from '../utils/deserialize';
 
 // ============================================================
 // Event Enums
@@ -41,6 +41,7 @@ export interface EventLeaderboardEntry {
 // ============================================================
 
 export interface EventAccount {
+  gameEngine: PublicKey;
   id: BN;
   name: string;
   startTime: BN;
@@ -61,14 +62,15 @@ export interface EventAccount {
   bump: number;
 }
 
-/** EventAccount size in bytes */
-export const EVENT_ACCOUNT_SIZE = 600;
+/** EventAccount size in bytes (1 + 32 + 7pad + 8 + 64+1+7 + 8+8+1+1+6 + 1+7 + 1+7+8+1+7 + 400+1+7 + 1+7+8+8+32 + 4+1+3 = 648) */
+export const EVENT_ACCOUNT_SIZE = 648;
 
 // ============================================================
 // Event Participation Interface
 // ============================================================
 
 export interface EventParticipation {
+  gameEngine: PublicKey;
   eventId: BN;
   player: PublicKey;
   score: BN;
@@ -77,8 +79,8 @@ export interface EventParticipation {
   bump: number;
 }
 
-/** EventParticipation size in bytes */
-export const EVENT_PARTICIPATION_SIZE = 72;
+/** EventParticipation size in bytes (1 + 32 + 7pad + 8 + 32 + 8 + 8 + 8 + 1 + 7 = 112) */
+export const EVENT_PARTICIPATION_SIZE = 112;
 
 // ============================================================
 // Deserialization
@@ -88,6 +90,9 @@ export const EVENT_PARTICIPATION_SIZE = 72;
 export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key discriminator
+  const gameEngine = reader.readPubkey();
+  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
   const id = reader.readU64();
   const nameBytes = reader.readBytes(64);
   const nameLen = reader.readU8();
@@ -133,6 +138,7 @@ export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
   reader.skip(3); // padding
 
   return {
+    gameEngine,
     id,
     name,
     startTime,
@@ -158,6 +164,9 @@ export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
 export function deserializeEventParticipation(data: Uint8Array | Buffer): EventParticipation {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key discriminator
+  const gameEngine = reader.readPubkey();
+  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
   const eventId = reader.readU64();
   const player = reader.readPubkey();
   const score = reader.readU64();
@@ -167,6 +176,7 @@ export function deserializeEventParticipation(data: Uint8Array | Buffer): EventP
   reader.skip(7); // padding
 
   return {
+    gameEngine,
     eventId,
     player,
     score,

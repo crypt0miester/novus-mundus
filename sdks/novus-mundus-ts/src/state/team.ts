@@ -1,16 +1,16 @@
 /**
  * Team Accounts
  *
- * TeamAccount - Team metadata and configuration (240 bytes)
- * TeamMemberSlot - Individual member slot PDA (96 bytes)
- * TeamInviteAccount - Pending invite PDA (128 bytes)
- * TreasuryRequest - Pending withdrawal request (104 bytes)
+ * TeamAccount - Team metadata and configuration (280 bytes)
+ * TeamMemberSlot - Individual member slot PDA (104 bytes)
+ * TeamInviteAccount - Pending invite PDA (136 bytes)
+ * TreasuryRequest - Pending withdrawal request (112 bytes)
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { TeamMemberRank } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { TeamMemberRank } from '../types/enums';
 
 // ============================================================
 // Team Settings & Permissions
@@ -57,7 +57,7 @@ export interface TeamAccount {
 }
 
 /** TeamAccount size in bytes */
-export const TEAM_ACCOUNT_SIZE = 240;
+export const TEAM_ACCOUNT_SIZE = 280;
 
 // ============================================================
 // Team Member Slot Interface
@@ -75,7 +75,7 @@ export interface TeamMemberSlot {
 }
 
 /** TeamMemberSlot size in bytes */
-export const TEAM_MEMBER_SLOT_SIZE = 96;
+export const TEAM_MEMBER_SLOT_SIZE = 104;
 
 // ============================================================
 // Team Invite Account Interface
@@ -91,7 +91,7 @@ export interface TeamInviteAccount {
 }
 
 /** TeamInviteAccount size in bytes */
-export const TEAM_INVITE_ACCOUNT_SIZE = 128;
+export const TEAM_INVITE_ACCOUNT_SIZE = 136;
 
 // ============================================================
 // Treasury Request Interface
@@ -107,7 +107,7 @@ export interface TreasuryRequest {
 }
 
 /** TreasuryRequest size in bytes */
-export const TREASURY_REQUEST_SIZE = 104;
+export const TREASURY_REQUEST_SIZE = 112;
 
 // ============================================================
 // Deserialization Functions
@@ -116,6 +116,10 @@ export const TREASURY_REQUEST_SIZE = 104;
 /** Deserialize TeamAccount from raw bytes */
 export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+  reader.skip(32); // game_engine
+  reader.skip(7); // implicit padding for u64 alignment
 
   const id = reader.readU64();
   const leader = reader.readPubkey();
@@ -179,8 +183,11 @@ export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
 export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMemberSlot {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key
+
   const team = reader.readPubkey();
   const player = reader.readPubkey();
+  reader.skip(7); // implicit padding for i64 alignment
   const joinedAt = reader.readI64();
   const slotIndex = reader.readU16();
   const bump = reader.readU8();
@@ -207,12 +214,15 @@ export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMember
 export function deserializeTeamInvite(data: Uint8Array | Buffer): TeamInviteAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key
+
   const team = reader.readPubkey();
   const invitee = reader.readPubkey();
   const bump = reader.readU8();
-  reader.skip(7); // padding
+  reader.skip(7); // _padding0
 
   const inviter = reader.readPubkey();
+  reader.skip(7); // implicit padding for i64 alignment
   const createdAt = reader.readI64();
   const expiresAt = reader.readI64();
   reader.skip(8); // _reserved
@@ -231,8 +241,11 @@ export function deserializeTeamInvite(data: Uint8Array | Buffer): TeamInviteAcco
 export function deserializeTreasuryRequest(data: Uint8Array | Buffer): TreasuryRequest {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key
+
   const team = reader.readPubkey();
   const requester = reader.readPubkey();
+  reader.skip(7); // implicit padding for u64 alignment
   const amount = reader.readU64();
   const createdAt = reader.readI64();
   const executableAt = reader.readI64();

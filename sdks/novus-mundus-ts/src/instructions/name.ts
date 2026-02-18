@@ -15,8 +15,8 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, ALT_NAME_SERVICE_PROGRAM_ID, TLD_HOUSE_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, ALT_NAME_SERVICE_PROGRAM_ID, TLD_HOUSE_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveNameAccountPda,
@@ -25,7 +25,7 @@ import {
   deriveTldStatePda,
   deriveTldHousePda,
   getHashedName,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Set Player Name
@@ -42,6 +42,7 @@ export interface SetPlayerNameAccounts {
   domainName: string;
 }
 
+/** ~10,000 CU */
 /**
  * Set a domain name as the player's display name.
  *
@@ -126,6 +127,7 @@ export interface UpdatePlayerNameAccounts {
   oldTld: string;
 }
 
+/** ~10,000 CU */
 /**
  * Update player's display name to a different domain.
  *
@@ -196,6 +198,7 @@ export interface RemovePlayerNameAccounts {
   domainName: string;
 }
 
+/** ~5,000 CU */
 /**
  * Remove player's display name (transfer domain back to wallet).
  *
@@ -267,6 +270,7 @@ export interface SetTeamNameAccounts {
   domainName: string;
 }
 
+/** ~10,000 CU */
 /**
  * Set a domain name as the team's display name.
  *
@@ -338,6 +342,7 @@ export interface UpdateTeamNameAccounts {
   oldDomainName: string;
 }
 
+/** ~10,000 CU */
 /**
  * Update team's display name to a different domain.
  */
@@ -408,6 +413,7 @@ export interface RemoveTeamNameAccounts {
   domainName: string;
 }
 
+/** ~5,000 CU */
 /**
  * Remove team's display name (transfer domain back to leader).
  */

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
 import BN from 'bn.js';
-import { BufferReader, NULL_PUBKEY, isNullPubkey } from '../../src/utils/deserialize.ts';
+import { BufferReader, NULL_PUBKEY, isNullPubkey } from '../../src/utils/deserialize';
 
 describe('BufferReader', () => {
   describe('integer reads', () => {
@@ -322,7 +322,7 @@ describe('BufferReader', () => {
 describe('roundtrip serialization', () => {
   it('should roundtrip integers', () => {
     // Import writer dynamically to avoid circular dependency issues in test
-    const { BufferWriter } = require('../../src/utils/serialize.ts');
+    const { BufferWriter } = require('../../src/utils/serialize');
 
     const writer = new BufferWriter(50);
     writer.writeU8(255);
@@ -347,7 +347,7 @@ describe('roundtrip serialization', () => {
   });
 
   it('should roundtrip floats', () => {
-    const { BufferWriter } = require('../../src/utils/serialize.ts');
+    const { BufferWriter } = require('../../src/utils/serialize');
 
     const writer = new BufferWriter(12);
     writer.writeF32(3.14159);
@@ -360,7 +360,7 @@ describe('roundtrip serialization', () => {
   });
 
   it('should roundtrip pubkeys and strings', () => {
-    const { BufferWriter } = require('../../src/utils/serialize.ts');
+    const { BufferWriter } = require('../../src/utils/serialize');
 
     const keypair = Keypair.generate();
     const writer = new BufferWriter(64);

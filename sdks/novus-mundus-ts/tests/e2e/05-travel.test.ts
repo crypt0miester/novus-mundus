@@ -9,7 +9,7 @@
  * - Speedup mechanics
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
 
@@ -25,6 +25,7 @@ import {
   derivePlayerPda,
   deriveLocationPda,
   TravelType,
+  BuildingType,
 } from '../../src/index';
 
 import {
@@ -47,19 +48,63 @@ import {
 import {
   fetchPlayer,
 } from '../utils/accounts';
+import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
 } from '../fixtures/time';
+
+// Grid precision matching on-chain LocationAccount::GRID_PRECISION
+const GRID_PRECISION = 10000.0;
+
+/** Convert f64 coordinate to grid i32 (matching on-chain to_grid) */
+function toGrid(coord: number): number {
+  return Math.round(coord * GRID_PRECISION);
+}
+
+/** Helper to get origin location PDA from player account */
+function getOriginLocationPda(gameEngine: PublicKey, cityId: number, currentLat: number, currentLong: number) {
+  const originGridLat = toGrid(currentLat);
+  const originGridLong = toGrid(currentLong);
+  return deriveLocationPda(gameEngine, cityId, originGridLat, originGridLong);
+}
+
+/** Helper to speedup travel multiple times */
+async function speedupTravel(
+  connection: any,
+  gameEngine: PublicKey,
+  player: TestPlayer,
+  times: number = 12
+) {
+  for (let i = 0; i < times; i++) {
+    try {
+      await sendTransaction(
+        connection,
+        new Transaction().add(
+          createTravelSpeedupInstruction(
+            { gameEngine, owner: player.publicKey },
+            { speedupTier: 2 }
+          )
+        ),
+        [player.keypair]
+      );
+    } catch {
+      break;
+    }
+  }
+}
 
 // ============================================================
 // Test Suite
 // ============================================================
 
 describe('Travel System', () => {
+  setDefaultTimeout(120_000);
+
   let ctx: TestContext;
   let factory: PlayerFactory;
 
   beforeAll(async () => {
+    log.section('Travel System');
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: true });
   });
@@ -74,270 +119,182 @@ describe('Travel System', () => {
 
   describe('Intracity Travel', () => {
     it('should start intracity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 100.0;
-      const destLong = 100.0;
+      const city = CITIES[cityId]!;
+      const destLat = city.lat + 0.005;
+      const destLong = city.lon + 0.005;
 
-      // Derive location PDAs (simplified grid calculation)
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-      const destGridLat = Math.floor(destLat);
-      const destGridLong = Math.floor(destLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
-      const gameEngine = ctx.gameEngine;
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       const ix = createIntracityStartInstruction(
         {
-          gameEngine,
+          gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           cityId,
           originLocation,
           destinationLocation,
-          originCreatorRefund: gameEngine, // Refund to game engine
+          originCreatorRefund: player.publicKey,
         },
-        {
-          destinationLat: destLat,
-          destinationLong: destLong,
-        }
+        { destinationLat: destLat, destinationLong: destLong }
       );
 
-      const tx = new Transaction().add(ix);
+      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
 
-      try {
-        await sendTransaction(ctx.connection, tx, [player.keypair]);
-
-        // Verify travel started
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.Intracity);
-      } catch {
-        // Location PDAs may not exist yet
-        console.warn('Intracity start failed - location accounts may not exist');
-      }
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.Intracity);
     });
 
-    it('should complete intracity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should complete intracity travel after speedup', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 50.0;
-      const destLong = 50.0;
+      const city = CITIES[cityId]!;
+      // Use very short distance for quick travel time
+      const destLat = city.lat + 0.0002;
+      const destLong = city.lon + 0.0002;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-      const destGridLat = Math.floor(destLat);
-      const destGridLong = Math.floor(destLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
-      const gameEngine = ctx.gameEngine;
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       // Start travel
-      const startIx = createIntracityStartInstruction(
-        {
-          gameEngine,
-          owner: player.publicKey,
-          cityId,
-          originLocation,
-          destinationLocation,
-          originCreatorRefund: gameEngine,
-        },
-        {
-          destinationLat: destLat,
-          destinationLong: destLong,
-        }
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
       );
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Speedup to reduce travel time (use as many as gems allow)
+      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
 
-        // Wait for travel to complete (in real test, we'd advance time)
-        // For now, try to complete immediately - might fail if not enough time passed
-        const completeIx = createIntracityCompleteInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          cityId,
-          destinationLocation,
-        });
+      // Wait for validator clock to advance past arrival time
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-        await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
+      // Complete travel
+      const completeIx = createIntracityCompleteInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        cityId,
+        destinationLocation,
+      });
+      await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
 
-        // Verify travel completed
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.None);
-      } catch {
-        // Expected if travel not complete yet or location accounts don't exist
-        console.warn('Intracity travel completion failed - travel may not be complete yet');
-      }
-    });
-
-    it('should cancel intracity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
-      const cityId = 1;
-      const destLat = 100.0;
-      const destLong = 100.0;
-
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-      const destGridLat = Math.floor(destLat);
-      const destGridLong = Math.floor(destLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
-      const gameEngine = ctx.gameEngine;
-
-      try {
-        // Start travel
-        const startIx = createIntracityStartInstruction(
-          {
-            gameEngine,
-            owner: player.publicKey,
-            cityId,
-            originLocation,
-            destinationLocation,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: destLat,
-            destinationLong: destLong,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
-
-        // Cancel
-        const cancelIx = createIntracityCancelInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          cityId,
-          originLocation,
-          destinationLocation,
-          destinationCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(cancelIx), [player.keypair]);
-
-        // Verify cancelled
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.None);
-      } catch {
-        // Location accounts may not exist
-        console.warn('Intracity cancel failed - location accounts may not exist');
-      }
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.None);
     });
 
     it('should reject travel while already traveling', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
+      const city = CITIES[cityId]!;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const dest1Lat = city.lat + 0.008;
+      const dest1Long = city.lon + 0.008;
+      const dest2Lat = city.lat - 0.008;
+      const dest2Long = city.lon - 0.008;
+      const [destinationLocation1] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest1Lat), toGrid(dest1Long));
+      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest2Lat), toGrid(dest2Long));
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation1] = deriveLocationPda(ctx.gameEngine, cityId, 100, 100);
-      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, cityId, 200, 200);
-      const gameEngine = ctx.gameEngine;
+      // Start first travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation: destinationLocation1,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: dest1Lat, destinationLong: dest1Long }
+          )
+        ),
+        [player.keypair]
+      );
 
-      try {
-        // Start first travel
-        const startIx1 = createIntracityStartInstruction(
-          {
-            gameEngine,
-            owner: player.publicKey,
-            cityId,
-            originLocation,
-            destinationLocation: destinationLocation1,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: 100.0,
-            destinationLong: 100.0,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx1), [player.keypair]);
-
-        // Try to start second travel
-        const startIx2 = createIntracityStartInstruction(
-          {
-            gameEngine,
-            owner: player.publicKey,
-            cityId,
-            originLocation,
-            destinationLocation: destinationLocation2,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: 200.0,
-            destinationLong: 200.0,
-          }
-        );
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(startIx2),
-          [player.keypair]
-        );
-      } catch {
-        // Location accounts may not exist
-        console.warn('Travel rejection test skipped - location accounts may not exist');
-      }
+      // Try to start second travel — should fail (AlreadyTraveling)
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation: destinationLocation2,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: dest2Lat, destinationLong: dest2Long }
+          )
+        ),
+        [player.keypair]
+      );
     });
 
     it('should reject complete before travel finishes', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 10000.0;
-      const destLong = 10000.0;
+      const city = CITIES[cityId]!;
+      const destLat = city.lat + 0.05;
+      const destLong = city.lon + 0.05;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-      const destGridLat = Math.floor(destLat);
-      const destGridLong = Math.floor(destLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
-      const gameEngine = ctx.gameEngine;
+      // Start travel to far location
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
+      );
 
-      try {
-        // Start travel to far location
-        const startIx = createIntracityStartInstruction(
-          {
-            gameEngine,
+      // Immediately try to complete — should fail (TravelNotComplete)
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityCompleteInstruction({
+            gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             cityId,
-            originLocation,
             destinationLocation,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: destLat,
-            destinationLong: destLong,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
-
-        // Immediately try to complete
-        const completeIx = createIntracityCompleteInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          cityId,
-          destinationLocation,
-        });
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(completeIx),
-          [player.keypair]
-        );
-      } catch {
-        // Location accounts may not exist
-        console.warn('Travel completion rejection test skipped - location accounts may not exist');
-      }
+          })
+        ),
+        [player.keypair]
+      );
     });
   });
 
@@ -347,140 +304,160 @@ describe('Travel System', () => {
 
   describe('Intercity Travel', () => {
     it('should start intercity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
       const targetCityId = 2;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      // Destination is city center (0, 0)
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-      const ix = createIntercityStartInstruction({
-        gameEngine,
-        owner: player.publicKey,
-        originCityId,
-        destinationCityId: targetCityId,
-        originLocation,
-        destinationLocation,
-        originCreatorRefund: gameEngine,
-      });
-
-      const tx = new Transaction().add(ix);
-
-      try {
-        await sendTransaction(ctx.connection, tx, [player.keypair]);
-
-        // Verify travel started
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.Intercity);
-        expect(account!.destinationCity).toBe(targetCityId);
-      } catch {
-        // Location accounts may not exist
-        console.warn('Intercity start failed - location accounts may not exist');
-      }
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.Intercity);
+      expect(account!.destinationCity).toBe(targetCityId);
     });
 
-    it('should complete intercity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should complete intercity travel after speedup', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const targetCityId = 2;
+      const targetCityId = 3;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      // Start travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-      try {
-        // Start travel
-        const startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId: targetCityId,
-          originLocation,
-          destinationLocation,
-          originCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Speedup travel repeatedly
+      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
 
-        // Try to complete (might fail if not enough time)
-        const completeIx = createIntercityCompleteInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId: targetCityId,
-          destinationLocation,
-        });
+      // Wait for validator clock to advance past arrival time
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-        await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
+      // Complete
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityCompleteInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            destinationLocation,
+          })
+        ),
+        [player.keypair]
+      );
 
-        // Verify arrived at new city
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.None);
-        expect(account!.currentCity).toBe(targetCityId);
-      } catch {
-        // Expected if travel not complete yet or location accounts don't exist
-        console.warn('Intercity travel completion failed - travel may not be complete yet');
-      }
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.None);
+      expect(account!.currentCity).toBe(targetCityId);
     });
 
-    it('should cancel intercity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should cancel intercity travel and reverse direction', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const destinationCityId = 2;
+      const destinationCityId = 4;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[destinationCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      // Return location is at origin city CENTER (not player's original position)
+      const originCity = CITIES[originCityId]!;
+      const [returnLocation] = deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
 
-      try {
-        // Start travel
-        const startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId,
-          originLocation,
-          destinationLocation,
-          originCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Start travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-        // Cancel
-        const cancelIx = createIntercityCancelInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId,
-          originLocation,
-          destinationLocation,
-          destinationCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(cancelIx), [player.keypair]);
+      // Verify traveling to destination
+      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.Intercity);
+      expect(account!.destinationCity).toBe(destinationCityId);
 
-        // Verify cancelled (still in original city)
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.None);
-        expect(account!.currentCity).toBe(1);
-      } catch {
-        // Location accounts may not exist
-        console.warn('Intercity cancel failed - location accounts may not exist');
-      }
+      // Cancel intercity travel — player enters return journey to origin city
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityCancelInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId,
+            originLocation: returnLocation,
+            destinationLocation,
+            destinationCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // After cancel, player is on return journey — destination_city is now origin_city
+      account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.destinationCity).toBe(originCityId);
     });
 
     it('should reject intercity travel to same city', async () => {
@@ -488,26 +465,27 @@ describe('Travel System', () => {
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
-
-      const ix = createIntercityStartInstruction({
-        gameEngine,
-        owner: player.publicKey,
-        originCityId: cityId,
-        destinationCityId: cityId, // Same city - should fail
-        originLocation,
-        destinationLocation,
-        originCreatorRefund: gameEngine,
-      });
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[cityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
         ctx.connection,
-        new Transaction().add(ix),
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId: cityId,
+            destinationCityId: cityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
         [player.keypair]
       );
     });
@@ -518,26 +496,24 @@ describe('Travel System', () => {
       const originCityId = 1;
       const invalidCityId = 999;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, invalidCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
-
-      const ix = createIntercityStartInstruction({
-        gameEngine,
-        owner: player.publicKey,
-        originCityId,
-        destinationCityId: invalidCityId,
-        originLocation,
-        destinationLocation,
-        originCreatorRefund: gameEngine,
-      });
 
       await expectTransactionToFail(
         ctx.connection,
-        new Transaction().add(ix),
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: invalidCityId,
+            destGridLat: 0,
+            destGridLong: 0,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
         [player.keypair]
       );
     });
@@ -549,69 +525,69 @@ describe('Travel System', () => {
 
   describe('Teleportation', () => {
     it('should teleport between cities instantly', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      // Teleport requires EXT_INVENTORY (unlocked via estate/shop) + Stables Lv 10
+      // Stables is Tier 2 (50k base), upgrade cost scales as base×2.618^level → ~467M NOVI total for Lv 10
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      await factory.fundNovi(player, 500_000_000); // Fund 500M NOVI for expensive upgrades
+      await factory.upgradeAndCompleteBuilding(player, BuildingType.Stables, 10);
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const targetCityId = 3;
+      const targetCityId = 5;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityTeleportInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            originLocation,
+            destinationLocation,
+          })
+        ),
+        [player.keypair]
+      );
 
-      const ix = createIntercityTeleportInstruction({
-        gameEngine,
-        owner: player.publicKey,
-        originCityId,
-        destinationCityId: targetCityId,
-        originLocation,
-        destinationLocation,
-      });
-
-      const tx = new Transaction().add(ix);
-
-      try {
-        await sendTransaction(ctx.connection, tx, [player.keypair]);
-
-        // Verify instant arrival
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        expect(account!.travelType).toBe(TravelType.None);
-        expect(account!.currentCity).toBe(targetCityId);
-      } catch {
-        // Might fail if player doesn't have teleport item or location accounts don't exist
-        console.warn('Teleport failed - player may not have teleport resources');
-      }
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.None);
+      expect(account!.currentCity).toBe(targetCityId);
     });
 
-    it('should require teleport resource', async () => {
+    it('should fail teleport without required extension', async () => {
+      // Player without estate/shop — no EXT_INVENTORY
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const destinationCityId = 2;
+      const targetCityId = 2;
 
-      // New player might not have teleport scrolls
-      expect(playerAccount).not.toBeNull();
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, 0, 0);
-
-      // Attempting teleport without resources should fail
-      const ix = createIntercityTeleportInstruction({
-        gameEngine: ctx.gameEngine,
-        owner: player.publicKey,
-        originCityId,
-        destinationCityId,
-        originLocation,
-        destinationLocation,
-      });
-
-      // This might succeed or fail depending on starter resources
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityTeleportInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            originLocation,
+            destinationLocation,
+          })
+        ),
+        [player.keypair]
+      );
     });
   });
 
@@ -620,64 +596,69 @@ describe('Travel System', () => {
   // ============================================================
 
   describe('Travel Speedup', () => {
-    it('should speedup ongoing travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should speedup ongoing intercity travel', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const destinationCityId = 3;
+      const destinationCityId = 6;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[destinationCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      // Start intercity travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-      try {
-        // Start intercity travel (longer duration)
-        const startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId,
-          originLocation,
-          destinationLocation,
-          originCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Verify traveling
+      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.Intercity);
 
-        // Get travel info before speedup
-        let account = await fetchPlayer(ctx.connection, player.playerPda);
-        const originalDepartureTime = account!.departureTime.toNumber();
+      // Apply speedup
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createTravelSpeedupInstruction(
+            { gameEngine: ctx.gameEngine, owner: player.publicKey },
+            { speedupTier: 2 }
+          )
+        ),
+        [player.keypair]
+      );
 
-        // Apply speedup (tier 2 = 25% of time remains)
-        const speedupIx = createTravelSpeedupInstruction(
-          { gameEngine, owner: player.publicKey },
-          { speedupTier: 2 }
-        );
-
-        await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
-
-        // Verify speedup was applied (departure time stays same, but travel duration reduced)
-        account = await fetchPlayer(ctx.connection, player.playerPda);
-        // Note: The exact behavior depends on the program implementation
-      } catch {
-        // Might fail if no speedup items available or location accounts don't exist
-        console.warn('Speedup failed - player may not have speedup resources');
-      }
+      // Verify still traveling (speedup reduces time, doesn't complete)
+      account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.Intercity);
     });
 
     it('should reject speedup when not traveling', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
 
-      const speedupIx = createTravelSpeedupInstruction(
-        { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { speedupTier: 2 }
-      );
-
       await expectTransactionToFail(
         ctx.connection,
-        new Transaction().add(speedupIx),
+        new Transaction().add(
+          createTravelSpeedupInstruction(
+            { gameEngine: ctx.gameEngine, owner: player.publicKey },
+            { speedupTier: 2 }
+          )
+        ),
         [player.keypair]
       );
     });
@@ -689,89 +670,173 @@ describe('Travel System', () => {
 
   describe('Travel State', () => {
     it('should track travel departure time', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 100.0;
-      const destLong = 100.0;
+      const city = CITIES[cityId]!;
+      const destLat = city.lat + 0.015;
+      const destLong = city.lon + 0.015;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, Math.floor(destLat), Math.floor(destLong));
-      const gameEngine = ctx.gameEngine;
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       const beforeTime = await getCurrentTimestamp(ctx.connection);
 
-      try {
-        const startIx = createIntracityStartInstruction(
-          {
-            gameEngine,
-            owner: player.publicKey,
-            cityId,
-            originLocation,
-            destinationLocation,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: destLat,
-            destinationLong: destLong,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
+      );
 
-        const afterTime = await getCurrentTimestamp(ctx.connection);
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterTime = await getCurrentTimestamp(ctx.connection);
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
 
-        expect(account).not.toBeNull();
-        const departureTime = account!.departureTime.toNumber();
-        expect(departureTime).toBeGreaterThanOrEqual(beforeTime - 10);
-        expect(departureTime).toBeLessThanOrEqual(afterTime + 10);
-      } catch {
-        // Location accounts may not exist
-        console.warn('Travel departure time test skipped - location accounts may not exist');
-      }
+      expect(account).not.toBeNull();
+      const departureTime = account!.departureTime.toNumber();
+      expect(departureTime).toBeGreaterThanOrEqual(beforeTime - 10);
+      expect(departureTime).toBeLessThanOrEqual(afterTime + 10);
     });
 
-    it('should store destination coordinates', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should store destination info during intracity travel', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 150.0;
-      const destLong = 250.0;
+      const city = CITIES[cityId]!;
+      const destLat = city.lat + 0.006;
+      const destLong = city.lon - 0.003;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
+      );
+
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.travelType).toBe(TravelType.Intracity);
+      // Departure and arrival should be set
+      expect(account!.departureTime.toNumber()).toBeGreaterThan(0);
+      expect(account!.arrivalTime.toNumber()).toBeGreaterThan(account!.departureTime.toNumber());
+    });
+  });
+
+  // ============================================================
+  // Intracity Cancel Tests
+  // ============================================================
+
+  describe('Intracity Cancel', () => {
+    it('should cancel intracity travel and return to origin', async () => {
+      // Use city 11 to avoid collision with other tests
+      const player = await factory.createPlayer({ cityId: 11, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const cityId = 11;
+      const city = CITIES[cityId]!;
+
+      const originLat = playerAccount!.currentLat;
+      const originLong = playerAccount!.currentLong;
+      const originGridLat = toGrid(originLat);
+      const originGridLong = toGrid(originLong);
       const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, Math.floor(destLat), Math.floor(destLong));
-      const gameEngine = ctx.gameEngine;
 
-      try {
-        const startIx = createIntracityStartInstruction(
-          {
-            gameEngine,
+      const destLat = city.lat + 0.02;
+      const destLong = city.lon + 0.02;
+      const destGridLat = toGrid(destLat);
+      const destGridLong = toGrid(destLong);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
+
+      // Start intracity travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
+      );
+
+      // Verify player is traveling
+      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.Intracity);
+
+      // Return location is the origin location PDA (re-reserved on cancel)
+      const [returnLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
+
+      // Cancel travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityCancelInstruction({
+            gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             cityId,
-            originLocation,
+            originLocation: returnLocation,
             destinationLocation,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: destLat,
-            destinationLong: destLong,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+            destinationCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        // Note: destination coords stored as f64
-      } catch {
-        // Location accounts may not exist
-        console.warn('Travel destination coordinates test skipped - location accounts may not exist');
-      }
+      // Speedup the return journey
+      await speedupTravel(ctx.connection, ctx.gameEngine, player, 10);
+
+      // Wait for validator clock to advance
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Complete the return (intracity complete at origin)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityCompleteInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            cityId,
+            destinationLocation: returnLocation,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Verify player is back at origin, not traveling
+      account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.None);
+      expect(account!.currentCity).toBe(cityId);
     });
   });
 
@@ -780,57 +845,137 @@ describe('Travel System', () => {
   // ============================================================
 
   describe('Travel Restrictions', () => {
-    it('should prevent actions while traveling', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should prevent starting second travel while already traveling', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const cityId = 1;
-      const destLat = 100.0;
-      const destLong = 100.0;
+      const city = CITIES[cityId]!;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destLat = city.lat + 0.012;
+      const destLong = city.lon + 0.012;
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, Math.floor(destLat), Math.floor(destLong));
-      const gameEngine = ctx.gameEngine;
+      // Start intracity travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntracityStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              cityId,
+              originLocation,
+              destinationLocation,
+              originCreatorRefund: player.publicKey,
+            },
+            { destinationLat: destLat, destinationLong: destLong }
+          )
+        ),
+        [player.keypair]
+      );
 
-      try {
-        // Start travel
-        const startIx = createIntracityStartInstruction(
-          {
-            gameEngine,
+      // Verify traveling
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).not.toBe(TravelType.None);
+
+      // Try to start intercity travel while already traveling — should fail
+      const destCity2 = CITIES[2]!;
+      const destGridLat2 = toGrid(destCity2.lat);
+      const destGridLong2 = toGrid(destCity2.lon);
+      const [originLocation2] = getOriginLocationPda(ctx.gameEngine, cityId, account!.currentLat, account!.currentLong);
+      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, 2, destGridLat2, destGridLong2);
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
             owner: player.publicKey,
-            cityId,
-            originLocation,
-            destinationLocation,
-            originCreatorRefund: gameEngine,
-          },
-          {
-            destinationLat: destLat,
-            destinationLong: destLong,
-          }
-        );
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
-
-        // Verify player is traveling
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account!.travelType).not.toBe(TravelType.None);
-
-        // Various actions should be restricted while traveling
-        // (Combat, resource collection, etc. - would need those instructions to test)
-      } catch {
-        // Location accounts may not exist
-        console.warn('Travel restrictions test skipped - location accounts may not exist');
-      }
+            originCityId: cityId,
+            destinationCityId: 2,
+            destGridLat: destGridLat2,
+            destGridLong: destGridLong2,
+            originLocation: originLocation2,
+            destinationLocation: destinationLocation2,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
     });
 
-    it('should require stamina for travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should require Stables building for intercity travel', async () => {
+      // Player without Stables should fail intercity travel
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true });
+      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const originCityId = 1;
+      const targetCityId = 2;
 
-      // Check player has stamina
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
+    });
+
+    it('should allow intercity travel with Stables', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const originCityId = 1;
+      const targetCityId = 13; // Use city 13 to avoid CellOccupied collision with other tests using city 2
+
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[targetCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: targetCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
+
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.Intercity);
+    });
+
+    it('should verify new player has encounter stamina', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true });
       const account = await fetchPlayer(ctx.connection, player.playerPda);
       expect(account).not.toBeNull();
-      assertBnGreaterThan(account!.encounterStamina, 0, 'Should have stamina for travel');
+      assertBnGreaterThan(account!.encounterStamina, 0, 'New player should have encounter stamina');
     });
   });
 
@@ -839,119 +984,173 @@ describe('Travel System', () => {
   // ============================================================
 
   describe('Multi-city Travel', () => {
-    it('should travel through multiple cities', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should travel between cities with start cancel complete start pattern', async () => {
+      // Use city 10 as origin to avoid return-location collision with other tests
+      const player = await factory.createPlayer({ cityId: 10, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
-      const originCityId = 1;
+      const originCityId = 10;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
 
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, 2, 0, 0);
-      const [destinationLocation3] = deriveLocationPda(ctx.gameEngine, 3, 0, 0);
-      const gameEngine = ctx.gameEngine;
+      const destCity7 = CITIES[7]!;
+      const destGridLat7 = toGrid(destCity7.lat);
+      const destGridLong7 = toGrid(destCity7.lon);
+      const [destinationLocation7] = deriveLocationPda(ctx.gameEngine, 7, destGridLat7, destGridLong7);
 
-      try {
-        // Travel to city 2
-        let startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId: 2,
-          originLocation,
-          destinationLocation: destinationLocation2,
-          originCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Return location is at origin city CENTER
+      const originCity = CITIES[originCityId]!;
+      const [returnLocation] = deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
 
-        // Cancel (shortcut for testing)
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(createIntercityCancelInstruction({
-            gameEngine,
+      const destCity8 = CITIES[8]!;
+      const destGridLat8 = toGrid(destCity8.lat);
+      const destGridLong8 = toGrid(destCity8.lon);
+      const [destinationLocation8] = deriveLocationPda(ctx.gameEngine, 8, destGridLat8, destGridLong8);
+
+      // Start travel to city 7
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
-            destinationCityId: 2,
+            destinationCityId: 7,
+            destGridLat: destGridLat7,
+            destGridLong: destGridLong7,
             originLocation,
-            destinationLocation: destinationLocation2,
-            destinationCreatorRefund: gameEngine,
-          })),
-          [player.keypair]
-        );
+            destinationLocation: destinationLocation7,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-        // Travel to city 3
-        startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId: 3,
-          originLocation,
-          destinationLocation: destinationLocation3,
-          originCreatorRefund: gameEngine,
-        });
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Cancel — player enters return journey to origin
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityCancelInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: 7,
+            originLocation: returnLocation,
+            destinationLocation: destinationLocation7,
+            destinationCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account!.destinationCity).toBe(3);
-      } catch {
-        // Location accounts may not exist
-        console.warn('Multi-city travel test skipped - location accounts may not exist');
-      }
+      // Speedup return journey to ensure it completes quickly
+      await speedupTravel(ctx.connection, ctx.gameEngine, player, 10);
+
+      // Wait for clock to advance past arrival time
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Complete the return journey
+      // After cancel: origin_city=1, destination_city=1 (set by cancel to origin)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityCompleteInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: originCityId,
+            destinationLocation: returnLocation,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Verify back in origin city, not traveling
+      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.travelType).toBe(TravelType.None);
+      expect(account!.currentCity).toBe(originCityId);
+
+      // Now start travel to city 8
+      // After completing return, player is at origin city center
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId: 8,
+            destGridLat: destGridLat8,
+            destGridLong: destGridLong8,
+            originLocation: returnLocation,
+            destinationLocation: destinationLocation8,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
+
+      account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account!.destinationCity).toBe(8);
+      expect(account!.travelType).toBe(TravelType.Intercity);
     });
 
-    it('should maintain position in destination city', async () => {
-      // After arriving in a new city, player should have position within that city
-      const player = await factory.createPlayer({ cityId: 1, initialize: true });
+    it('should arrive in destination city with correct position', async () => {
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
       const originCityId = 1;
-      const destinationCityId = 2;
+      const destinationCityId = 9;
 
-      const originGridLat = Math.floor(playerAccount!.currentLat);
-      const originGridLong = Math.floor(playerAccount!.currentLong);
-
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, 0, 0);
-      const gameEngine = ctx.gameEngine;
-
-      // Get initial position
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
-      const initialLat = account!.currentLat;
-      const initialLong = account!.currentLong;
+      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const destCity = CITIES[destinationCityId]!;
+      const destGridLat = toGrid(destCity.lat);
+      const destGridLong = toGrid(destCity.lon);
+      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
       // Start intercity travel
-      try {
-        const startIx = createIntercityStartInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId,
-          originLocation,
-          destinationLocation,
-          originCreatorRefund: gameEngine,
-        });
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityStartInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId,
+            destGridLat,
+            destGridLong,
+            originLocation,
+            destinationLocation,
+            originCreatorRefund: player.publicKey,
+          })
+        ),
+        [player.keypair]
+      );
 
-        await sendTransaction(ctx.connection, new Transaction().add(startIx), [player.keypair]);
+      // Speedup travel
+      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
 
-        // Complete travel (or teleport for testing)
-        const completeIx = createIntercityCompleteInstruction({
-          gameEngine,
-          owner: player.publicKey,
-          originCityId,
-          destinationCityId,
-          destinationLocation,
-        });
+      // Wait for validator clock to advance past arrival time
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-        await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
+      // Complete travel
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createIntercityCompleteInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            originCityId,
+            destinationCityId,
+            destinationLocation,
+          })
+        ),
+        [player.keypair]
+      );
 
-        // Check position in new city
-        account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-        // Position should be valid within destination city bounds
-      } catch {
-        // Travel might not be allowed, time not elapsed, or location accounts don't exist
-        console.warn('Maintain position test skipped - travel may not be complete');
-      }
+      // Verify position in new city
+      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.currentCity).toBe(destinationCityId);
+      expect(account!.travelType).toBe(TravelType.None);
     });
   });
 });

@@ -1,0 +1,13 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/09-hero.test.ts:
+
+[1m[34m━━━ Hero System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.6s.

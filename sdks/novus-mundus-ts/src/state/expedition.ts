@@ -2,18 +2,18 @@
  * ExpeditionAccount
  *
  * Temporary PDA for active mining/fishing expeditions.
- * Size: 104 bytes
+ * Size: 112 bytes
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { ExpeditionType } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ExpeditionType } from '../types/enums';
 import {
   MINING_DURATION_HOURS,
   FISHING_DURATION_HOURS,
   SECONDS_PER_HOUR,
-} from '../constants.ts';
+} from '../constants';
 
 // ============================================================
 // Mining/Fishing Tiers
@@ -55,7 +55,7 @@ export interface ExpeditionAccount {
 }
 
 /** ExpeditionAccount size in bytes */
-export const EXPEDITION_ACCOUNT_SIZE = 104;
+export const EXPEDITION_ACCOUNT_SIZE = 112;
 
 // ============================================================
 // Deserialization
@@ -65,6 +65,7 @@ export const EXPEDITION_ACCOUNT_SIZE = 104;
 export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key discriminator
   const player = reader.readPubkey();
   const heroMint = reader.readPubkey();
   const expeditionTypeValue = reader.readU8();
@@ -72,8 +73,10 @@ export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAcco
   const tier = reader.readU8();
   const strikes = reader.readU8();
   const bump = reader.readU8();
+  reader.skip(1); // implicit padding for u16 alignment (offset 69 -> 70)
   const score = reader.readU16();
   const cityId = reader.readU16();
+  reader.skip(6); // implicit padding for i64 alignment (offset 74 -> 80)
   const startTime = reader.readI64();
   const operativeUnit1 = reader.readU64();
   const operativeUnit2 = reader.readU64();

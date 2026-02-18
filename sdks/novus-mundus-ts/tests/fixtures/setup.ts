@@ -18,10 +18,11 @@ import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { startValidator, stopValidator } from './validator';
+import { startProgramLogListener, stopProgramLogListener } from '../utils/logger';
 
 import {
   createInitGameEngineInstruction,
-  createInitCityInstruction,
+  createBatchCitiesInstruction,
   createCreateCollectionInstruction,
   createCreateTemplateInstruction,
   createInitializeTemplateInstruction,
@@ -81,28 +82,79 @@ let globalContext: TestContext | null = null;
 // Test Data
 // ============================================================
 
+/** Cities matching Rust INITIAL_CITIES constants (IDs 0-19) */
 export const CITIES = [
-  { id: 1, name: 'Novus Prime', lat: 40.7128, lon: -74.0060 },       // New York
-  { id: 2, name: 'Solana City', lat: 37.7749, lon: -122.4194 },      // San Francisco
-  { id: 3, name: 'Epoch Harbor', lat: 51.5074, lon: -0.1278 },       // London
-  { id: 4, name: 'Validator Point', lat: 35.6762, lon: 139.6503 },   // Tokyo
-  { id: 5, name: 'Stake Station', lat: 48.8566, lon: 2.3522 },       // Paris
-  { id: 6, name: 'Block Heights', lat: -33.8688, lon: 151.2093 },    // Sydney
-  { id: 7, name: 'Hash Haven', lat: 52.5200, lon: 13.4050 },         // Berlin
-  { id: 8, name: 'Ledger Landing', lat: 55.7558, lon: 37.6173 },     // Moscow
-  { id: 9, name: 'Consensus Cove', lat: 1.3521, lon: 103.8198 },     // Singapore
-  { id: 10, name: 'Finality Falls', lat: -22.9068, lon: -43.1729 },  // Rio
-  { id: 11, name: 'Merkle Meadows', lat: 19.4326, lon: -99.1332 },   // Mexico City
-  { id: 12, name: 'Protocol Plains', lat: 25.2048, lon: 55.2708 },   // Dubai
-  { id: 13, name: 'Shard Shore', lat: 22.3193, lon: 114.1694 },      // Hong Kong
-  { id: 14, name: 'Anchor Atoll', lat: -6.2088, lon: 106.8456 },     // Jakarta
-  { id: 15, name: 'Signature Summit', lat: 41.9028, lon: 12.4964 },  // Rome
-  { id: 16, name: 'Cluster Creek', lat: 59.3293, lon: 18.0686 },     // Stockholm
-  { id: 17, name: 'Token Terrace', lat: 31.2304, lon: 121.4737 },    // Shanghai
-  { id: 18, name: 'Proof Pier', lat: 43.6532, lon: -79.3832 },       // Toronto
-  { id: 19, name: 'Mint Mesa', lat: -34.6037, lon: -58.3816 },       // Buenos Aires
-  { id: 20, name: 'Burn Bay', lat: 28.6139, lon: 77.2090 },          // Delhi
+  { id: 0, name: 'New York', lat: 40.7128, lon: -74.0060 },
+  { id: 1, name: 'Los Angeles', lat: 34.0522, lon: -118.2437 },
+  { id: 2, name: 'Chicago', lat: 41.8781, lon: -87.6298 },
+  { id: 3, name: 'Toronto', lat: 43.6532, lon: -79.3832 },
+  { id: 4, name: 'Mexico City', lat: 19.4326, lon: -99.1332 },
+  { id: 5, name: 'Miami', lat: 25.7617, lon: -80.1918 },
+  { id: 6, name: 'San Francisco', lat: 37.7749, lon: -122.4194 },
+  { id: 7, name: 'Vancouver', lat: 49.2827, lon: -123.1207 },
+  { id: 8, name: 'Houston', lat: 29.7604, lon: -95.3698 },
+  { id: 9, name: 'Seattle', lat: 47.6062, lon: -122.3321 },
+  { id: 10, name: 'São Paulo', lat: -23.5505, lon: -46.6333 },
+  { id: 11, name: 'Buenos Aires', lat: -34.6037, lon: -58.3816 },
+  { id: 12, name: 'Rio de Janeiro', lat: -22.9068, lon: -43.1729 },
+  { id: 13, name: 'Lima', lat: -12.0464, lon: -77.0428 },
+  { id: 14, name: 'Bogotá', lat: 4.7110, lon: -74.0721 },
+  { id: 15, name: 'London', lat: 51.5074, lon: -0.1278 },
+  { id: 16, name: 'Paris', lat: 48.8566, lon: 2.3522 },
+  { id: 17, name: 'Berlin', lat: 52.5200, lon: 13.4050 },
+  { id: 18, name: 'Madrid', lat: 40.4168, lon: -3.7038 },
+  { id: 19, name: 'Rome', lat: 41.9028, lon: 12.4964 },
 ] as const;
+
+/** Remaining cities matching Rust INITIAL_CITIES constants (IDs 20-49) */
+export const OTHER_CITIES = [
+  // Europe (continued)
+  { id: 20, name: 'Amsterdam', lat: 52.3676, lon: 4.9041 },
+  { id: 21, name: 'Moscow', lat: 55.7558, lon: 37.6173 },
+  { id: 22, name: 'Istanbul', lat: 41.0082, lon: 28.9784 },
+  { id: 23, name: 'Athens', lat: 37.9838, lon: 23.7275 },
+  { id: 24, name: 'Vienna', lat: 48.2082, lon: 16.3738 },
+
+  // Africa
+  { id: 25, name: 'Cairo', lat: 30.0444, lon: 31.2357 },
+  { id: 26, name: 'Lagos', lat: 6.5244, lon: 3.3792 },
+  { id: 27, name: 'Johannesburg', lat: -26.2041, lon: 28.0473 },
+  { id: 28, name: 'Nairobi', lat: -1.2921, lon: 36.8219 },
+  { id: 29, name: 'Casablanca', lat: 33.5731, lon: -7.5898 },
+
+  // Middle East
+  { id: 30, name: 'Dubai', lat: 25.2048, lon: 55.2708 },
+  { id: 31, name: 'Tel Aviv', lat: 32.0853, lon: 34.7818 },
+  { id: 32, name: 'Riyadh', lat: 24.7136, lon: 46.6753 },
+
+  // Asia - East
+  { id: 33, name: 'Tokyo', lat: 35.6762, lon: 139.6503 },
+  { id: 34, name: 'Seoul', lat: 37.5665, lon: 126.9780 },
+  { id: 35, name: 'Beijing', lat: 39.9042, lon: 116.4074 },
+  { id: 36, name: 'Shanghai', lat: 31.2304, lon: 121.4737 },
+  { id: 37, name: 'Hong Kong', lat: 22.3193, lon: 114.1694 },
+  { id: 38, name: 'Taipei', lat: 25.0330, lon: 121.5654 },
+  { id: 39, name: 'Osaka', lat: 34.6937, lon: 135.5023 },
+
+  // Asia - South & Southeast
+  { id: 40, name: 'Singapore', lat: 1.3521, lon: 103.8198 },
+  { id: 41, name: 'Mumbai', lat: 19.0760, lon: 72.8777 },
+  { id: 42, name: 'Delhi', lat: 28.7041, lon: 77.1025 },
+  { id: 43, name: 'Bangkok', lat: 13.7563, lon: 100.5018 },
+  { id: 44, name: 'Jakarta', lat: -6.2088, lon: 106.8456 },
+  { id: 45, name: 'Manila', lat: 14.5995, lon: 120.9842 },
+
+  // Oceania
+  { id: 46, name: 'Sydney', lat: -33.8688, lon: 151.2093 },
+  { id: 47, name: 'Melbourne', lat: -37.8136, lon: 144.9631 },
+  { id: 48, name: 'Auckland', lat: -36.8485, lon: 174.7633 },
+
+  // Neo Cities
+  { id: 49, name: 'Neo Tokyo', lat: 35.6762, lon: 139.6503 },
+] as const;
+
+/** All 50 cities (CITIES + OTHER_CITIES) */
+export const ALL_CITIES = [...CITIES, ...OTHER_CITIES] as const;
 
 /**
  * Test shop item that grants gems (for travel speedup in tests).
@@ -111,7 +163,7 @@ export const CITIES = [
 export const TEST_GEMS_ITEM = {
   itemId: 9999,
   itemType: 50,           // Type 50 = grants gems
-  category: 4,            // Currency
+  category: 1,            // Consumable (ShopCategory only has 0-3)
   rarity: 0,              // Common
   quantityPerPurchase: 1000, // 1000 gems per purchase
   baseStatsBps: 0,
@@ -120,11 +172,45 @@ export const TEST_GEMS_ITEM = {
   isFeatured: false,
 } as const;
 
-// Hero stat indices for buffs
-const HERO_STAT_ATTACK = 1;
-const HERO_STAT_DEFENSE = 2;
-const HERO_STAT_HEALTH = 3;
-const HERO_STAT_CRIT = 4;
+/**
+ * Test shop item that grants fragments (for hero level-up in tests).
+ * Item type 52 = grants fragments to player.
+ */
+export const TEST_FRAGMENTS_ITEM = {
+  itemId: 9998,
+  itemType: 52,           // Type 52 = grants fragments
+  category: 1,            // Consumable
+  rarity: 0,              // Common
+  quantityPerPurchase: 100, // 100 fragments per purchase
+  baseStatsBps: 0,
+  priceSolLamports: new BN(1000), // 0.000001 SOL (basically free)
+  isActive: true,
+  isFeatured: false,
+} as const;
+
+/**
+ * Test shop item that grants common materials (for forge crafting in tests).
+ * Item type 200 = grants common_materials to player.
+ */
+export const TEST_MATERIALS_ITEM = {
+  itemId: 9997,
+  itemType: 200,          // Type 200 = grants common_materials
+  category: 1,            // Consumable
+  rarity: 0,              // Common
+  quantityPerPurchase: 100, // 100 common materials per purchase
+  baseStatsBps: 0,
+  priceSolLamports: new BN(1000), // 0.000001 SOL (basically free)
+  isActive: true,
+  isFeatured: false,
+} as const;
+
+// Hero stat indices for buffs (must match Rust BuffStat enum)
+const HERO_STAT_ATTACK = 1;   // AttackPower
+const HERO_STAT_DEFENSE = 2;  // DefensePower
+const HERO_STAT_ECONOMY = 3;  // CashCollectionRate
+const HERO_STAT_CRIT = 7;     // CriticalHitChance
+const HERO_STAT_LOOT = 15;    // LootBonus
+const HERO_STAT_ENCOUNTER = 14; // EncounterDamage
 
 export const HERO_TEMPLATES = [
   {
@@ -141,7 +227,7 @@ export const HERO_TEMPLATES = [
     buffs: [
       { stat: HERO_STAT_ATTACK, baseBps: 100 },
       { stat: HERO_STAT_DEFENSE, baseBps: 80 },
-      { stat: HERO_STAT_HEALTH, baseBps: 1000 },
+      { stat: HERO_STAT_ECONOMY, baseBps: 1000 },
       { stat: HERO_STAT_CRIT, baseBps: 500 },
     ],
   },
@@ -159,7 +245,7 @@ export const HERO_TEMPLATES = [
     buffs: [
       { stat: HERO_STAT_ATTACK, baseBps: 120 },
       { stat: HERO_STAT_DEFENSE, baseBps: 50 },
-      { stat: HERO_STAT_HEALTH, baseBps: 800 },
+      { stat: HERO_STAT_ENCOUNTER, baseBps: 800 },
       { stat: HERO_STAT_CRIT, baseBps: 800 },
     ],
   },
@@ -177,7 +263,7 @@ export const HERO_TEMPLATES = [
     buffs: [
       { stat: HERO_STAT_ATTACK, baseBps: 150 },
       { stat: HERO_STAT_DEFENSE, baseBps: 40 },
-      { stat: HERO_STAT_HEALTH, baseBps: 600 },
+      { stat: HERO_STAT_LOOT, baseBps: 600 },
       { stat: HERO_STAT_CRIT, baseBps: 600 },
     ],
   },
@@ -195,7 +281,7 @@ export const HERO_TEMPLATES = [
     buffs: [
       { stat: HERO_STAT_ATTACK, baseBps: 130 },
       { stat: HERO_STAT_DEFENSE, baseBps: 100 },
-      { stat: HERO_STAT_HEALTH, baseBps: 1200 },
+      { stat: HERO_STAT_ECONOMY, baseBps: 1200 },
       { stat: HERO_STAT_CRIT, baseBps: 700 },
     ],
   },
@@ -212,8 +298,8 @@ export const HERO_TEMPLATES = [
     meditationCityId: 0,
     buffs: [
       { stat: HERO_STAT_ATTACK, baseBps: 180 },
-      { stat: HERO_STAT_DEFENSE, baseBps: 30 },
-      { stat: HERO_STAT_HEALTH, baseBps: 500 },
+      { stat: HERO_STAT_ENCOUNTER, baseBps: 30 },
+      { stat: HERO_STAT_LOOT, baseBps: 500 },
       { stat: HERO_STAT_CRIT, baseBps: 1500 },
     ],
   },
@@ -223,62 +309,101 @@ export const RESEARCH_TEMPLATES = [
   {
     researchType: 0,
     category: 0,
+    maxLevel: 10,
+    baseTimeSeconds: 300,
     baseCost: new BN(100),
-    baseDuration: new BN(300),
     buffType: 0,
     buffPerLevelBps: 200,
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: -1,
     prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
   },
   {
     researchType: 1,
     category: 0,
+    maxLevel: 10,
+    baseTimeSeconds: 600,
     baseCost: new BN(200),
-    baseDuration: new BN(600),
     buffType: 1,
     buffPerLevelBps: 200,
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: 0,
     prerequisiteLevel: 3,
+    gemCostPerMinute: 2,
   },
   {
     researchType: 2,
     category: 1,
+    maxLevel: 10,
+    baseTimeSeconds: 300,
     baseCost: new BN(100),
-    baseDuration: new BN(300),
     buffType: 4,
     buffPerLevelBps: 300,
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: -1,
     prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
   },
   {
     researchType: 3,
     category: 1,
+    maxLevel: 10,
+    baseTimeSeconds: 450,
     baseCost: new BN(150),
-    baseDuration: new BN(450),
     buffType: 5,
     buffPerLevelBps: 500,
-    maxLevel: 10,
-    requiredPlayerLevel: 2,
     prerequisiteType: 2,
     prerequisiteLevel: 2,
+    gemCostPerMinute: 2,
   },
   {
     researchType: 4,
     category: 2,
+    maxLevel: 10,
+    baseTimeSeconds: 600,
     baseCost: new BN(200),
-    baseDuration: new BN(600),
     buffType: 6,
     buffPerLevelBps: 200,
-    maxLevel: 10,
-    requiredPlayerLevel: 3,
     prerequisiteType: -1,
     prerequisiteLevel: 0,
+    gemCostPerMinute: 2,
+  },
+  // DailyRewardsSystem research (buff_type 20 sets has_daily_rewards on level 1)
+  {
+    researchType: 20,
+    category: 0,            // Battle category = Academy Lv 1 sufficient
+    maxLevel: 10,
+    baseTimeSeconds: 60,    // Short for testing
+    baseCost: new BN(100),
+    buffType: 20,           // DailyRewardsSystem → sets has_daily_rewards on level 1
+    buffPerLevelBps: 200,
+    prerequisiteType: -1,
+    prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
+  },
+  // Growth research templates for expedition unlock (category=0 Battle for test convenience
+  // so only Academy Lv 1 is needed, but buff_type 21/22 still sets has_mining/has_fishing)
+  {
+    researchType: 21,
+    category: 0,            // Battle category = Academy Lv 1 sufficient
+    maxLevel: 10,
+    baseTimeSeconds: 60,    // Short for testing
+    baseCost: new BN(100),
+    buffType: 21,           // MiningOperations → sets has_mining on level 1
+    buffPerLevelBps: 200,
+    prerequisiteType: -1,
+    prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
+  },
+  {
+    researchType: 22,
+    category: 0,            // Battle category = Academy Lv 1 sufficient
+    maxLevel: 10,
+    baseTimeSeconds: 60,    // Short for testing
+    baseCost: new BN(100),
+    buffType: 22,           // FishingIndustry → sets has_fishing on level 1
+    buffPerLevelBps: 200,
+    prerequisiteType: -1,
+    prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
   },
 ] as const;
 
@@ -338,10 +463,24 @@ export async function sendTx(
 ): Promise<string> {
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   tx.feePayer = signers[0]!.publicKey;
-  return await sendAndConfirmTransaction(connection, tx, signers, {
-    skipPreflight: config.skipPreflight,
-    commitment: config.commitment,
-  });
+  try {
+    return await sendAndConfirmTransaction(connection, tx, signers, {
+      skipPreflight: config.skipPreflight,
+      commitment: config.commitment,
+    });
+  } catch (error: any) {
+    // Resolve Custom error codes to human-readable names
+    const msg = error?.message ?? '';
+    const match = msg.match(/custom program error: (0x[0-9a-fA-F]+)/i);
+    if (match?.[1]) {
+      const code = parseInt(match[1], 16);
+      const { GameError, parseErrorMessage } = await import('../../src/errors');
+      const name = GameError[code] || `Custom:${code}`;
+      const description = parseErrorMessage(code);
+      error.message = `${name} (${code}): ${description}\n${msg}`;
+    }
+    throw error;
+  }
 }
 
 export async function accountExists(
@@ -414,6 +553,54 @@ async function setupTestGemsItem(ctx: TestContext): Promise<void> {
   }
 }
 
+async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
+  const [fragmentsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
+
+  if (await accountExists(ctx.connection, fragmentsItemPda)) {
+    return;
+  }
+
+  const ix = createCreateItemInstruction(
+    {
+      payer: ctx.daoAuthority.publicKey,
+      daoAuthority: ctx.daoAuthority.publicKey,
+      gameEngine: ctx.gameEngine,
+    },
+    TEST_FRAGMENTS_ITEM
+  );
+
+  const tx = new Transaction().add(ix);
+  try {
+    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+  } catch (err) {
+    console.warn(`Test fragments item setup failed: ${err}`);
+  }
+}
+
+async function setupTestMaterialsItem(ctx: TestContext): Promise<void> {
+  const [materialsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_MATERIALS_ITEM.itemId);
+
+  if (await accountExists(ctx.connection, materialsItemPda)) {
+    return;
+  }
+
+  const ix = createCreateItemInstruction(
+    {
+      payer: ctx.daoAuthority.publicKey,
+      daoAuthority: ctx.daoAuthority.publicKey,
+      gameEngine: ctx.gameEngine,
+    },
+    TEST_MATERIALS_ITEM
+  );
+
+  const tx = new Transaction().add(ix);
+  try {
+    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+  } catch (err) {
+    console.warn(`Test materials item setup failed: ${err}`);
+  }
+}
+
 async function setupHeroCollection(ctx: TestContext): Promise<void> {
   if (await accountExists(ctx.connection, ctx.heroCollection)) {
     return;
@@ -429,82 +616,123 @@ async function setupHeroCollection(ctx: TestContext): Promise<void> {
 }
 
 async function setupHeroTemplates(ctx: TestContext): Promise<void> {
+  // Populate map and collect templates that need creation
+  const toCreate: typeof HERO_TEMPLATES = [];
   for (const template of HERO_TEMPLATES) {
     const [templatePda] = deriveHeroTemplatePda(template.templateId);
     ctx.heroTemplates.set(template.templateId, templatePda);
-
-    if (await accountExists(ctx.connection, templatePda)) {
-      continue;
+    if (!(await accountExists(ctx.connection, templatePda))) {
+      toCreate.push(template);
     }
+  }
 
+  // Create all missing templates in parallel
+  await Promise.all(toCreate.map(async (template) => {
     const ix = createCreateTemplateInstruction(
       { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
       template
     );
-
     const tx = new Transaction().add(ix);
     try {
       await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
     } catch (err) {
       // Template may already exist
     }
-  }
+  }));
 }
 
 async function setupCities(ctx: TestContext): Promise<void> {
+  const BATCH_SIZE = 8;
+
+  // Populate ctx.cities map with PDAs
   for (const city of CITIES) {
     const [cityPda] = deriveCityPda(ctx.gameEngine, city.id);
     ctx.cities.set(city.id, cityPda);
+  }
 
-    if (await accountExists(ctx.connection, cityPda)) {
-      continue;
+  // Check if first city already exists (all-or-nothing with --reset)
+  const [firstCityPda] = deriveCityPda(ctx.gameEngine, CITIES[0].id);
+  if (await accountExists(ctx.connection, firstCityPda)) {
+    return;
+  }
+
+  // Create all city batches in parallel
+  const batchPromises = [];
+  for (let i = 0; i < CITIES.length; i += BATCH_SIZE) {
+    const batchCount = Math.min(BATCH_SIZE, CITIES.length - i);
+    const startCityId = CITIES[i]!.id;
+
+    const cityAccounts: PublicKey[] = [];
+    for (let j = 0; j < batchCount; j++) {
+      const [cityPda] = deriveCityPda(ctx.gameEngine, startCityId + j);
+      cityAccounts.push(cityPda);
     }
 
-    const ix = createInitCityInstruction(
+    const batchCities = CITIES.slice(i, i + batchCount).map(c => ({
+      name: c.name,
+      lat: c.lat,
+      lon: c.lon,
+      radiusKm: 50,
+      cityType: 0,
+    }));
+
+    const ix = createBatchCitiesInstruction(
       {
         authority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
+        cityAccounts,
       },
       {
-        cityId: city.id,
-        name: city.name,
-        latitude: city.lat,
-        longitude: city.lon,
-        radiusKm: 10, // Default 10km radius
-        cityType: 0,  // Capital type
+        startCityId,
+        cities: batchCities,
       }
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+    batchPromises.push(sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config));
   }
+
+  await Promise.all(batchPromises);
 }
 
 async function setupResearchTemplates(ctx: TestContext): Promise<void> {
+  // Populate map and collect templates that need creation
+  const toCreate = [];
   for (const template of RESEARCH_TEMPLATES) {
     const [templatePda] = deriveResearchTemplatePda(template.researchType);
     ctx.researchTemplates.set(template.researchType, templatePda);
-
-    if (await accountExists(ctx.connection, templatePda)) {
-      continue;
+    if (!(await accountExists(ctx.connection, templatePda))) {
+      toCreate.push(template);
     }
+  }
 
+  // Create all missing templates in parallel
+  await Promise.all(toCreate.map(async (template) => {
     const ix = createInitializeTemplateInstruction(
       {
-        payer: ctx.daoAuthority.publicKey,
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
       },
       template
     );
 
-    const tx = new Transaction().add(ix);
-    try {
-      await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
-    } catch (err) {
-      // Template may already exist
+    // Retry up to 3 times (blockhash/timing issues on fresh validator)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const tx = new Transaction().add(ix);
+        await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+        break; // success
+      } catch (err: any) {
+        const msg = err?.transactionMessage || err?.message || '';
+        if (msg.includes('already in use')) break; // already exists
+        if (attempt === 2) {
+          console.error(`[setup] Research template ${template.researchType} FAILED after 3 attempts:`, msg);
+        }
+        // Wait before retry
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
-  }
+  }));
 }
 
 // ============================================================
@@ -544,37 +772,39 @@ export async function setupTestContext(
   };
 
   if (fullConfig.autoSetup) {
-    console.log('[setup] Airdropping SOL to DAO authority...');
-    await airdropIfNeeded(connection, daoAuthority.publicKey, 50 * LAMPORTS_PER_SOL);
+    const t0 = performance.now();
 
-    console.log('[setup] Initializing GameEngine...');
+    // Phase 1: Airdrops (parallel)
+    console.log('[setup] Airdropping SOL...');
+    await Promise.all([
+      airdropIfNeeded(connection, daoAuthority.publicKey, 50 * LAMPORTS_PER_SOL),
+      airdropIfNeeded(connection, treasury.publicKey, 1 * LAMPORTS_PER_SOL),
+    ]);
+
+    // Phase 2: GameEngine + ShopConfig (sequential - ShopConfig depends on GameEngine)
+    console.log('[setup] Initializing GameEngine + ShopConfig...');
     await setupGameEngine(ctx);
-
-    console.log('[setup] Initializing ShopConfig...');
     await setupShopConfig(ctx);
 
-    try {
-      console.log('[setup] Creating Hero Collection...');
-      await setupHeroCollection(ctx);
-    } catch (err) {
-      console.warn(`[setup] Hero collection setup failed (MPL Core CPI): ${err}`);
+    // Phase 3: Everything else in parallel (all depend only on GameEngine existing)
+    console.log('[setup] Initializing cities, heroes, research, shop items (parallel)...');
+    const results = await Promise.allSettled([
+      setupCities(ctx),
+      setupHeroCollection(ctx).then(() => setupHeroTemplates(ctx)),
+      setupResearchTemplates(ctx),
+      setupTestGemsItem(ctx),
+      setupTestFragmentsItem(ctx),
+      setupTestMaterialsItem(ctx),
+    ]);
+
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        console.warn(`[setup] Non-critical setup failed: ${r.reason}`);
+      }
     }
 
-    try {
-      console.log(`[setup] Creating ${HERO_TEMPLATES.length} Hero Templates...`);
-      await setupHeroTemplates(ctx);
-    } catch (err) {
-      console.warn(`[setup] Hero templates setup failed: ${err}`);
-    }
-
-    console.log(`[setup] Initializing ${CITIES.length} Cities...`);
-    await setupCities(ctx);
-
-    console.log(`[setup] Initializing ${RESEARCH_TEMPLATES.length} Research Templates...`);
-    await setupResearchTemplates(ctx);
-
-    await setupTestGemsItem(ctx);
-    console.log('[setup] All infrastructure ready.');
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    console.log(`[setup] All infrastructure ready in ${elapsed}s.`);
 
     ctx.initialized = true;
   }
@@ -602,9 +832,26 @@ export async function beforeAllTests(): Promise<TestContext> {
   await startValidator();
   // Force re-setup since validator was reset
   globalContext = null;
-  return await getGlobalContext();
+  const ctx = await getGlobalContext();
+
+  // Start real-time program log listener (WebSocket)
+  startProgramLogListener(ctx.connection, PROGRAM_ID);
+
+  return ctx;
 }
 
 export async function afterAllTests(): Promise<void> {
+  if (globalContext) {
+    stopProgramLogListener(globalContext.connection);
+  }
   stopValidator();
 }
+
+// Clean up on SIGINT (Cmd+C) so WebSocket doesn't hang
+process.on('SIGINT', () => {
+  if (globalContext) {
+    stopProgramLogListener(globalContext.connection);
+  }
+  stopValidator();
+  process.exit(1);
+});

@@ -1,0 +1,165 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/00-initialization.test.ts:
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.4s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.3s.
+1 | (function (module, exports) {
+2 |   'use strict';
+3 | 
+4 |   // Utils
+5 |   function assert (val, msg) {
+6 |     if (!val) throw new Error(msg || 'Assertion failed');
+                        ^
+error: Number can only safely store up to 53 bits
+      at assert (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:6:21)
+      at toNumber (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:547:7)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:43:30)
+(fail) Initialization > GameEngine defaults > should have initialized GameEngine with default configs [3.04ms]
+47 |     it('should have default ArenaConfig values', async () => {
+48 |       const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+49 |       expect(engine).not.toBeNull();
+50 | 
+51 |       const arena = engine!.arenaConfig;
+52 |       expect(arena.seasonDuration.toNumber()).toBe(7 * 86400);     // 7 days
+                                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 604800
+Received: 6553600000
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:52:47)
+(fail) Initialization > GameEngine defaults > should have default ArenaConfig values [1.31ms]
+68 |     });
+69 | 
+70 |     it('should have default ExpeditionConfig values', async () => {
+71 |       const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+72 |       const exp = engine!.expeditionConfig;
+73 |       expect(exp.maxTier).toBe(4);
+                               ^
+error: expect(received).toBe(expected)
+
+Expected: 4
+Received: 48
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:73:27)
+(fail) Initialization > GameEngine defaults > should have default ExpeditionConfig values [0.80ms]
+81 |     });
+82 | 
+83 |     it('should have default DungeonConfig values', async () => {
+84 |       const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+85 |       const dg = engine!.dungeonConfig;
+86 |       expect(dg.resumeGemCost.toNumber()).toBe(500);
+                                               ^
+error: expect(received).toBe(expected)
+
+Expected: 500
+Received: 65536
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:86:43)
+(fail) Initialization > GameEngine defaults > should have default DungeonConfig values [0.57ms]
+1 | (function (module, exports) {
+2 |   'use strict';
+3 | 
+4 |   // Utils
+5 |   function assert (val, msg) {
+6 |     if (!val) throw new Error(msg || 'Assertion failed');
+                        ^
+error: Number can only safely store up to 53 bits
+      at assert (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:6:21)
+      at toNumber (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:547:7)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:98:37)
+(fail) Initialization > GameEngine defaults > should have default CastleConfig values [0.49ms]
+1 | (function (module, exports) {
+2 |   'use strict';
+3 | 
+4 |   // Utils
+5 |   function assert (val, msg) {
+6 |     if (!val) throw new Error(msg || 'Assertion failed');
+                        ^
+error: Number can only safely store up to 53 bits
+      at assert (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:6:21)
+      at toNumber (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:547:7)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:110:42)
+(fail) Initialization > GameEngine defaults > should have default CombatConfig values [0.49ms]
+1 | (function (module, exports) {
+2 |   'use strict';
+3 | 
+4 |   // Utils
+5 |   function assert (val, msg) {
+6 |     if (!val) throw new Error(msg || 'Assertion failed');
+                        ^
+error: Number can only safely store up to 53 bits
+      at assert (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:6:21)
+      at toNumber (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:547:7)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:131:51)
+(fail) Initialization > update_game_config > should update ArenaConfig via DAO authority [0.53ms]
+[2m[onchain][0m [2mkvUbcyCFzs..[0m [35mupdate game config[0m
+[2m[onchain][0m [2mkvUbcyCFzs..[0m [33mTotal 336 / 399,700 CU[0m
+[32m  ✓ tx [2mkvUbcyCFzsF7..[0m[0m
+185 | 
+186 |       const tx = buildTransaction([ix]);
+187 |       await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+188 | 
+189 |       const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+190 |       expect(engineAfter!.combatConfig.maxEncountersPerCity).toBe(100);
+                                                                   ^
+error: expect(received).toBe(expected)
+
+Expected: 100
+Received: 47
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:190:62)
+(fail) Initialization > update_game_config > should update CombatConfig via DAO authority [517.93ms]
+1 | (function (module, exports) {
+2 |   'use strict';
+3 | 
+4 |   // Utils
+5 |   function assert (val, msg) {
+6 |     if (!val) throw new Error(msg || 'Assertion failed');
+                        ^
+error: Number can only safely store up to 53 bits
+      at assert (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:6:21)
+      at toNumber (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/bn.js/lib/bn.js:547:7)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:201:51)
+(fail) Initialization > update_game_config > should update multiple configs in single transaction [0.60ms]
+[2m[onchain][0m [2m5RsbTd8smj..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m5RsbTd8smj..[0m [33mTotal 334 / 399,700 CU[0m
+[32m  ✓ tx [2m5RsbTd8smjh3..[0m[0m
+263 | 
+264 |       const tx = buildTransaction([ix]);
+265 |       await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+266 | 
+267 |       const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+268 |       expect(engineAfter!.dungeonConfig.resumeGemCost.toNumber()).toBe(1000);
+                                                                        ^
+error: expect(received).toBe(expected)
+
+Expected: 1000
+Received: 65536
+
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/00-initialization.test.ts:268:67)
+(fail) Initialization > update_game_config > should update DungeonConfig via DAO authority [400.55ms]
+[31m  ✗ unauthorized update[0m
+[31m    Unauthorized (6001): You are not authorized to perform this action[0m
+[33m  ⊘ unauthorized update [2m(expected failure)[0m
+(pass) Initialization > update_game_config > should reject update from non-authority signer [1004.82ms]
+[2m[onchain][0m [2m2GkEXUT7Rt..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2GkEXUT7Rt..[0m [35mupdate game config[0m
+[2m[onchain][0m [2m2GkEXUT7Rt..[0m [33mTotal 244 / 399,700 CU[0m
+[2m[onchain][0m [2m2GkEXUT7Rt..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1771[0m
+[validator] Stopping validator (pid 93743)...
+
+ 1 pass
+ 10 fail
+ 7 expect() calls
+Ran 11 tests across 1 files. [5.93s]

@@ -6,7 +6,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
-import type { PlayerCore } from '../state/player.ts';
+import type { PlayerCore } from '../state/player';
 import {
   isTraveling,
   hasArrived,
@@ -18,14 +18,14 @@ import {
   getTotalUnits,
   getTotalWeapons,
   getEffectiveTier,
-} from '../state/player.ts';
-import { SubscriptionTier } from '../types/enums.ts';
+} from '../state/player';
+import { SubscriptionTier } from '../types/enums';
 import {
   type ValidationResult,
   valid,
   invalid,
   combine,
-} from './common.ts';
+} from './common';
 
 // ============================================================
 // Location Validation

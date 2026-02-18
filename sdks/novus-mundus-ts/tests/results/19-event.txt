@@ -1,0 +1,1001 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/19-event.test.ts:
+
+[1m[34m━━━ Event System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.4s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.3s.
+[2m[onchain][0m [2mM5E2qjkSvF..[0m [36m⚡ KingdomEventCreated[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. eventId=1 eventType=0 startTime=1770271893 endTime=1770361893 prizePool=10000[0m
+[2m[onchain][0m [2mM5E2qjkSvF..[0m [35mcreate event[0m
+[2m[onchain][0m [2mM5E2qjkSvF..[0m [33mTotal 3,858 / 200,000 CU[0m
+[32m  ✓ tx [2mM5E2qjkSvFhP..[0m[0m
+[2m[onchain][0m [2m3DTXrCB963..[0m [36m⚡ KingdomEventCreated[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. eventId=2 eventType=0 startTime=1770268293 endTime=1770271893 prizePool=5000[0m
+[2m[onchain][0m [2m3DTXrCB963..[0m [35mcreate event[0m
+[2m[onchain][0m [2m3DTXrCB963..[0m [33mTotal 5,358 / 200,000 CU[0m
+[32m  ✓ tx [2m3DTXrCB963FA..[0m[0m
+[2m[onchain][0m [2m42W8CXwEkB..[0m [36m⚡ KingdomEventCreated[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. eventId=3 eventType=0 startTime=1770271893 endTime=1770361893 prizePool=1000[0m
+[2m[onchain][0m [2m42W8CXwEkB..[0m [35mcreate event[0m
+[2m[onchain][0m [2m42W8CXwEkB..[0m [33mTotal 6,858 / 200,000 CU[0m
+[32m  ✓ tx [2m42W8CXwEkBak..[0m[0m
+(pass) Event System > Event Creation > should create event with correct parameters [1.70ms]
+(pass) Event System > Event Creation > should create ended event with correct timestamps [0.74ms]
+(pass) Event System > Event Creation > should create event with high level requirement [0.72ms]
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1770275495[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1770275495[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35minit user[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35minit player[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2zYzrCV3Si..[0m [33mTotal 6,437 / 526,293 CU[0m
+[2m[onchain][0m [2meYG9BaAZYX..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2meYG9BaAZYX..[0m [35mcreate event[0m
+[2m[onchain][0m [2meYG9BaAZYX..[0m [33mTotal 321 / 200,000 CU[0m
+[2m[onchain][0m [2meYG9BaAZYX..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1772[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction eYG9BaAZYXMhyXpjW7CRZScWqVThZ7xQjrh3dXCc6kyLrjDTMHRmzbBTPBDm5hY7Shn7bkcpuaNhvC9Hes1SEHn resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Event Creation > should reject event creation by non-authority [1438.72ms]
+[PlayerFactory] Initializing player 1 (city 1)
+[2m[onchain][0m [2m5Zac5QQGND..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1770275497[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1770275497[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35minit user[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35minit player[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5Zac5QQGND..[0m [33mTotal 4,937 / 514,297 CU[0m
+[2m[onchain][0m [2m2yzosWThsy..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=DTpJZyJQ.. playerName=Player #2 entryFee=0 participantCount=1 timestamp=1770275497[0m
+[2m[onchain][0m [2m2yzosWThsy..[0m [35mjoin event[0m
+[2m[onchain][0m [2m2yzosWThsy..[0m [33mTotal 4,090 / 200,000 CU[0m
+[32m  ✓ tx [2m2yzosWThsyk1..[0m[0m
+(pass) Event System > Joining Events > should join active event and create participation account [1443.68ms]
+[PlayerFactory] Initializing player 2 (city 2)
+[2m[onchain][0m [2mF31gjXsJZS..[0m [36m⚡ UserCreated[0m [2muser=9at5bmZf.. wallet=FdZDUuCx.. timestamp=1770275498[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=G3A9Y3nc.. owner=FdZDUuCx.. joinedAt=1770275498[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35minit user[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35minit player[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mF31gjXsJZS..[0m [33mTotal 4,937 / 529,292 CU[0m
+[2m[onchain][0m [2m2zbZzq8wLW..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=G3A9Y3nc.. playerName=Player #3 entryFee=0 participantCount=2 timestamp=1770275499[0m
+[2m[onchain][0m [2m2zbZzq8wLW..[0m [35mjoin event[0m
+[2m[onchain][0m [2m2zbZzq8wLW..[0m [33mTotal 4,081 / 200,000 CU[0m
+[32m  ✓ tx [2m2zbZzq8wLWhJ..[0m[0m
+[2m[onchain][0m [2m2yRL5HkVR5..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2yRL5HkVR5..[0m [35mjoin event[0m
+[2m[onchain][0m [2m2yRL5HkVR5..[0m [33mTotal 494 / 200,000 CU[0m
+[2m[onchain][0m [2m2yRL5HkVR5..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x18a0[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2yRL5HkVR5MV8LNKQMKUZGySBVWunDvcYwhBeGSrCNP5iEzNBs8udkS1iJ3bwdgN63CARZJ3fzKJLEWZJtb8obEn resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Joining Events > should reject joining when already in an event [9344.29ms]
+[PlayerFactory] Initializing player 3 (city 3)
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [36m⚡ UserCreated[0m [2muser=3hGTQ9FV.. wallet=8WD4WZvV.. timestamp=1770275508[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6CQsHJ5Z.. owner=8WD4WZvV.. joinedAt=1770275508[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35minit user[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35minit player[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3zgLfPZVnk..[0m [33mTotal 4,937 / 515,791 CU[0m
+[2m[onchain][0m [2m5Sy3LusvTZ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5Sy3LusvTZ..[0m [35mjoin event[0m
+[2m[onchain][0m [2m5Sy3LusvTZ..[0m [33mTotal 488 / 200,000 CU[0m
+[2m[onchain][0m [2m5Sy3LusvTZ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x19ca[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 5Sy3LusvTZf7JcxqpqP2EowK4hJmMTwyhV1e84mx9cthCERqq87R1rSSm9KwJyywXFodVAEyiKYCJZEJdZ7d65Cs resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Joining Events > should reject joining ended event [1462.03ms]
+[PlayerFactory] Initializing player 4 (city 4)
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [36m⚡ UserCreated[0m [2muser=4NuAhWiR.. wallet=65SYutaB.. timestamp=1770275509[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=4W13kdpe.. owner=65SYutaB.. joinedAt=1770275509[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35minit user[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35minit player[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3F7rVfjnMz..[0m [33mTotal 4,937 / 508,293 CU[0m
+[2m[onchain][0m [2m5cZ1jKMnF4..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5cZ1jKMnF4..[0m [35mjoin event[0m
+[2m[onchain][0m [2m5cZ1jKMnF4..[0m [33mTotal 454 / 200,000 CU[0m
+[2m[onchain][0m [2m5cZ1jKMnF4..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 5cZ1jKMnF4fswQgtRNUpF6dBNzHGK8EK6ESY7dzpzgKDFtQVCdUBhyaYj9nnkjARTJHTLbXbwXKX3SrnKMRYtCVv resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Joining Events > should reject joining non-existent event [1446.09ms]
+[PlayerFactory] Initializing player 5 (city 5)
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [36m⚡ UserCreated[0m [2muser=3ZJcpNxJ.. wallet=GBgayznw.. timestamp=1770275511[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Brp9NHAg.. owner=GBgayznw.. joinedAt=1770275511[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35minit user[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35minit player[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5Yw9W9GwMQ..[0m [33mTotal 7,937 / 517,293 CU[0m
+[2m[onchain][0m [2m5qjjRnMDSF..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5qjjRnMDSF..[0m [35mjoin event[0m
+[2m[onchain][0m [2m5qjjRnMDSF..[0m [33mTotal 509 / 200,000 CU[0m
+[2m[onchain][0m [2m5qjjRnMDSF..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x17e3[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 5qjjRnMDSFT56Ec1GHMAAW5iTjX27BRbqHvjb33GiKyp4ovHKJ278h5jcspL4CNmkY8qnAKf4e1qHZMcXV4hNAAR resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Joining Events > should reject joining event when level requirement not met [1468.72ms]
+[PlayerFactory] Initializing player 6 (city 6)
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [36m⚡ UserCreated[0m [2muser=9ztT5hcf.. wallet=EeAkWd5F.. timestamp=1770275512[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5gogbbch.. owner=EeAkWd5F.. joinedAt=1770275512[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35minit user[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35minit player[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4Bsjp2igDS..[0m [33mTotal 4,937 / 523,297 CU[0m
+[PlayerFactory] Initializing player 7 (city 7)
+[2m[onchain][0m [2m3xeu81EmkY..[0m [36m⚡ UserCreated[0m [2muser=595AzQHX.. wallet=5kWiuQEm.. timestamp=1770275513[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BH85q54E.. owner=5kWiuQEm.. joinedAt=1770275513[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35minit user[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35minit player[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3xeu81EmkY..[0m [33mTotal 7,937 / 514,296 CU[0m
+[2m[onchain][0m [2m4Qg1DVSpXk..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=5gogbbch.. playerName=Player #7 entryFee=0 participantCount=3 timestamp=1770275514[0m
+[2m[onchain][0m [2m4Qg1DVSpXk..[0m [35mjoin event[0m
+[2m[onchain][0m [2m4Qg1DVSpXk..[0m [33mTotal 4,079 / 200,000 CU[0m
+[32m  ✓ tx [2m4Qg1DVSpXkWL..[0m[0m
+(pass) Event System > Joining Events > should allow different payer than player owner [2448.04ms]
+[PlayerFactory] Initializing player 8 (city 8)
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [36m⚡ UserCreated[0m [2muser=6mRrqL9e.. wallet=EVAFmJra.. timestamp=1770275515[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6gWC3dgX.. owner=EVAFmJra.. joinedAt=1770275515[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35minit user[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35minit player[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3Cwj3bUq7J..[0m [33mTotal 7,937 / 523,297 CU[0m
+[2m[onchain][0m [2m3o7qE5KiSb..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=6gWC3dgX.. playerName=Player #9 entryFee=0 participantCount=4 timestamp=1770275515[0m
+[2m[onchain][0m [2m3o7qE5KiSb..[0m [35mjoin event[0m
+[2m[onchain][0m [2m3o7qE5KiSb..[0m [33mTotal 5,581 / 200,000 CU[0m
+[32m  ✓ tx [2m3o7qE5KiSb5Z..[0m[0m
+(pass) Event System > Participation Tracking > should initialize participation with zero score [1454.69ms]
+[PlayerFactory] Initializing player 9 (city 9)
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [36m⚡ UserCreated[0m [2muser=HNCLvXxz.. wallet=AvGnTfgg.. timestamp=1770275516[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BRQMxD9z.. owner=AvGnTfgg.. joinedAt=1770275516[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35minit user[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35minit player[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3Uj5uVQkb3..[0m [33mTotal 12,437 / 521,787 CU[0m
+[PlayerFactory] Initializing player 10 (city 10)
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [36m⚡ UserCreated[0m [2muser=7wWzoTiC.. wallet=DYXXWTjs.. timestamp=1770275517[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5z2B3ngT.. owner=DYXXWTjs.. joinedAt=1770275517[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35minit user[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35minit player[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2WQnr4H6iv..[0m [33mTotal 4,937 / 526,283 CU[0m
+[32m  ✓ tx [2muPWYAgYABpic..[0m[0m
+[2m[onchain][0m [2muPWYAgYABp..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=BRQMxD9z.. playerName=Player #10 entryFee=0 participantCount=5 timestamp=1770275517[0m
+[2m[onchain][0m [2muPWYAgYABp..[0m [35mjoin event[0m
+[2m[onchain][0m [2muPWYAgYABp..[0m [33mTotal 4,081 / 200,000 CU[0m
+[2m[onchain][0m [2m313EEiuSHN..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=5z2B3ngT.. playerName=Player #11 entryFee=0 participantCount=6 timestamp=1770275518[0m
+[2m[onchain][0m [2m313EEiuSHN..[0m [35mjoin event[0m
+[2m[onchain][0m [2m313EEiuSHN..[0m [33mTotal 7,081 / 200,000 CU[0m
+[32m  ✓ tx [2m313EEiuSHNM4..[0m[0m
+(pass) Event System > Participation Tracking > should track multiple participants independently [2988.61ms]
+[PlayerFactory] Initializing player 11 (city 11)
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [36m⚡ UserCreated[0m [2muser=iR4Xfgst.. wallet=CzSZgXPE.. timestamp=1770275519[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=HinPXQ2P.. owner=CzSZgXPE.. joinedAt=1770275519[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35minit user[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35minit player[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4kiBZWcD2a..[0m [33mTotal 4,937 / 527,790 CU[0m
+[2m[onchain][0m [2m4yECGNwJVX..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=HinPXQ2P.. playerName=Player #12 entryFee=0 participantCount=7 timestamp=1770275519[0m
+[2m[onchain][0m [2m4yECGNwJVX..[0m [35mjoin event[0m
+[2m[onchain][0m [2m4yECGNwJVX..[0m [33mTotal 7,081 / 200,000 CU[0m
+[32m  ✓ tx [2m4yECGNwJVX8C..[0m[0m
+(pass) Event System > Participation Tracking > should increment event participant count per join [1459.89ms]
+[PlayerFactory] Initializing player 12 (city 12)
+[2m[onchain][0m [2m23gSrfrb1c..[0m [36m⚡ UserCreated[0m [2muser=66vHuTv6.. wallet=2ZkPzNzw.. timestamp=1770275520[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtnzCT8Y.. owner=2ZkPzNzw.. joinedAt=1770275520[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35minit user[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35minit player[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m23gSrfrb1c..[0m [33mTotal 4,937 / 521,785 CU[0m
+[2m[onchain][0m [2m2aHNtmwMaX..[0m [36m⚡ GameEventFinalized[0m [2mevent=7ZGbE1sH.. totalParticipants=0 totalPrizes=5000 timestamp=1770275521[0m
+[2m[onchain][0m [2m2aHNtmwMaX..[0m [35mfinalize event[0m
+[2m[onchain][0m [2m2aHNtmwMaX..[0m [33mTotal 690 / 200,000 CU[0m
+[32m  ✓ tx [2m2aHNtmwMaXXT..[0m[0m
+(pass) Event System > Event Finalization > should finalize ended event (permissionless) [1445.98ms]
+[PlayerFactory] Initializing player 13 (city 13)
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [36m⚡ UserCreated[0m [2muser=Ez3gvQrG.. wallet=3bX72y2J.. timestamp=1770275522[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=AsWaCE7q.. owner=3bX72y2J.. joinedAt=1770275522[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35minit user[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35minit player[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mEN1eNqWqKx..[0m [33mTotal 4,937 / 529,286 CU[0m
+[2m[onchain][0m [2m84vf89LXgY..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m84vf89LXgY..[0m [35mfinalize event[0m
+[2m[onchain][0m [2m84vf89LXgY..[0m [33mTotal 369 / 200,000 CU[0m
+[2m[onchain][0m [2m84vf89LXgY..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x19cf[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 84vf89LXgYc4b7YyWUvmco8rLpqSXpqoh9U7S372qVW4QPHPc3hWiAEEzN48xLcDeYqvJCh4NJZ74jBgqeu58CJ resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Event Finalization > should reject finalizing active event (not ended) [1450.69ms]
+[PlayerFactory] Initializing player 14 (city 14)
+[2m[onchain][0m [2m59ED6T4mfk..[0m [36m⚡ UserCreated[0m [2muser=7NQFR5ef.. wallet=HrseJFA2.. timestamp=1770275523[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=79vQ7A9t.. owner=HrseJFA2.. joinedAt=1770275523[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35minit user[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35minit player[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m59ED6T4mfk..[0m [33mTotal 4,937 / 523,282 CU[0m
+[2m[onchain][0m [2m2qts7f9shc..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2qts7f9shc..[0m [35mfinalize event[0m
+[2m[onchain][0m [2m2qts7f9shc..[0m [33mTotal 367 / 200,000 CU[0m
+[2m[onchain][0m [2m2qts7f9shc..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x19cf[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2qts7f9shcugRYSut5Joae2auxVCR9WG518QHUva9vUTL4bmLor2iRNK1G8yzmwDm9KjDSSy16FGBVeqq5EMdbnK resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Event Finalization > should reject finalizing already finalized event [1537.42ms]
+[PlayerFactory] Initializing player 15 (city 15)
+[2m[onchain][0m [2m4cAmsssfNa..[0m [36m⚡ UserCreated[0m [2muser=QwD7AtAm.. wallet=AXdSzPWq.. timestamp=1770275525[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtpBkFpW.. owner=AXdSzPWq.. joinedAt=1770275525[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35minit user[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35minit player[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4cAmsssfNa..[0m [33mTotal 4,937 / 521,780 CU[0m
+[2m[onchain][0m [2mVLLJW6Fq5g..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mVLLJW6Fq5g..[0m [35mfinalize event[0m
+[2m[onchain][0m [2mVLLJW6Fq5g..[0m [33mTotal 340 / 200,000 CU[0m
+[2m[onchain][0m [2mVLLJW6Fq5g..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction VLLJW6Fq5guowHgUW55PkoKrRb5bVh49gV5FWEgK3rszMTdPS8bdghe96DifMHZBx1eWwjWB6rf9K87zEWjHDUs resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Event Finalization > should reject finalizing non-existent event [1440.65ms]
+(pass) Event System > Event Finalization > should preserve participant count after finalization [0.75ms]
+[PlayerFactory] Initializing player 16 (city 16)
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [36m⚡ UserCreated[0m [2muser=AYb9YPgT.. wallet=9me64sAy.. timestamp=1770275526[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=48J4LZ5S.. owner=9me64sAy.. joinedAt=1770275526[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35minit user[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35minit player[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3d9ndi8a9U..[0m [33mTotal 7,937 / 527,777 CU[0m
+[2m[onchain][0m [2m2TabBXszvs..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=48J4LZ5S.. playerName=Player #17 entryFee=0 participantCount=8 timestamp=1770275527[0m
+[2m[onchain][0m [2m2TabBXszvs..[0m [35mjoin event[0m
+[2m[onchain][0m [2m2TabBXszvs..[0m [33mTotal 5,581 / 200,000 CU[0m
+[32m  ✓ tx [2m2TabBXszvsqT..[0m[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 3dJEzXLLtF3uND2qgjioNSHNTZT8ywM4SQzQcQXqZVnQH9DghwqJNZXo3FJp9daafHtkZDX3KuzzsUCFeCV5LXyk resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Claiming Prizes > should reject claim for non-finalized event [1982.08ms]
+[2m[onchain][0m [2m3dJEzXLLtF..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3dJEzXLLtF..[0m [35mclaim event prize[0m
+[2m[onchain][0m [2m3dJEzXLLtF..[0m [33mTotal 450 / 200,000 CU[0m
+[2m[onchain][0m [2m3dJEzXLLtF..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x19cf[0m
+[PlayerFactory] Initializing player 17 (city 17)
+[2m[onchain][0m [2m2ws67GDU8S..[0m [36m⚡ UserCreated[0m [2muser=8CVurC2D.. wallet=hcUZgyue.. timestamp=1770275528[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=3MXrHtu4.. owner=hcUZgyue.. joinedAt=1770275528[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35minit user[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35minit player[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2ws67GDU8S..[0m [33mTotal 4,937 / 517,289 CU[0m
+[2m[onchain][0m [2m49pkS9jFJN..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m49pkS9jFJN..[0m [35mclaim event prize[0m
+[2m[onchain][0m [2m49pkS9jFJN..[0m [33mTotal 394 / 200,000 CU[0m
+[2m[onchain][0m [2m49pkS9jFJN..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 49pkS9jFJNHiNXFwZzzeWJdPHCSBNua5XriWESNm41BaBeoGJ76CYLhnAXAKyko7SBtVSBfQD2MQZfkrFg38M8Lh resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Claiming Prizes > should reject claim by non-participant [1423.04ms]
+[PlayerFactory] Initializing player 18 (city 18)
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [36m⚡ UserCreated[0m [2muser=6KXCNkMp.. wallet=4N9TLrMB.. timestamp=1770275530[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5PVabmGR.. owner=4N9TLrMB.. joinedAt=1770275530[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35minit user[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35minit player[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mKdFtcyxSw5..[0m [33mTotal 4,937 / 514,289 CU[0m
+[2m[onchain][0m [2mi6193s2qov..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mi6193s2qov..[0m [35mclaim event prize[0m
+[2m[onchain][0m [2mi6193s2qov..[0m [33mTotal 394 / 200,000 CU[0m
+[2m[onchain][0m [2mi6193s2qov..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction i6193s2qovdyM2AhRrNutiho9bQt2Tp8SSN1mpJqA5MRRz7Ew7d6M6XjTgbPWKFrg6jmExCxotNcTqUnW8LEUXS resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Claiming Prizes > should reject claim for non-existent event [1467.04ms]
+[PlayerFactory] Initializing player 19 (city 19)
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [36m⚡ UserCreated[0m [2muser=4Qr2bYoT.. wallet=8gvVLjuc.. timestamp=1770275531[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=96tTNkFM.. owner=8gvVLjuc.. joinedAt=1770275531[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35minit user[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35minit player[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5LKvCpvxTr..[0m [33mTotal 6,437 / 521,775 CU[0m
+[2m[onchain][0m [2m2NRuU6SrDL..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2NRuU6SrDL..[0m [35mclaim event prize[0m
+[2m[onchain][0m [2m2NRuU6SrDL..[0m [33mTotal 394 / 200,000 CU[0m
+[2m[onchain][0m [2m2NRuU6SrDL..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2NRuU6SrDLJ48se3938u1uL1Nu8d4yEjcVDLraJLh8UrpUzw6tn1uB5sbwNgo55SSZ7nyhmwoH8RssPxyFgXq3a4 resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Claiming Prizes > should reject claim on finalized event with no participation [1542.79ms]
+(pass) Event System > Event Account State > should store start and end times correctly [0.97ms]
+(pass) Event System > Event Account State > should have correct prize pool configuration [0.53ms]
+(pass) Event System > Event Account State > should track leaderboard entries [0.50ms]
+(pass) Event System > Event Account State > should have different event types [0.85ms]
+[PlayerFactory] Initializing player 20 (city 0)
+[2m[onchain][0m [2miNNFxSZDaS..[0m [36m⚡ UserCreated[0m [2muser=7HDjfChr.. wallet=412ZTyAq.. timestamp=1770275533[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=ErPwgxyS.. owner=412ZTyAq.. joinedAt=1770275533[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35minit user[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35minit player[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2miNNFxSZDaS..[0m [33mTotal 4,937 / 522,810 CU[0m
+[2m[onchain][0m [2m55xtGMkvY6..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=ErPwgxyS.. playerName=Player #21 entryFee=0 participantCount=9 timestamp=1770275533[0m
+[2m[onchain][0m [2m55xtGMkvY6..[0m [35mjoin event[0m
+[2m[onchain][0m [2m55xtGMkvY6..[0m [33mTotal 8,581 / 200,000 CU[0m
+[32m  ✓ tx [2m55xtGMkvY6mH..[0m[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction Dop7mmYPgwqwF2875hrg3VkTed6LbkEFMPdaurc8qfXVfMqmfW9AMid1whFf3uJ1StrJhsfzojkr6FMkvcW68kF resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Event System > Multiple Events > should reject joining second event while in first [1953.53ms]
+[2m[onchain][0m [2mDop7mmYPgw..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mDop7mmYPgw..[0m [35mjoin event[0m
+[2m[onchain][0m [2mDop7mmYPgw..[0m [33mTotal 503 / 200,000 CU[0m
+[2m[onchain][0m [2mDop7mmYPgw..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x18a0[0m
+[PlayerFactory] Initializing player 21 (city 1)
+[2m[onchain][0m [2m49xn4LHbCc..[0m [36m⚡ UserCreated[0m [2muser=9azoAwKf.. wallet=FQVgunZ7.. timestamp=1770275535[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=7kSdaHSY.. owner=FQVgunZ7.. joinedAt=1770275535[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35minit user[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35minit player[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m49xn4LHbCc..[0m [33mTotal 6,437 / 528,818 CU[0m
+[2m[onchain][0m [2m37eJqxvU6o..[0m [36m⚡ GameEventJoined[0m [2mevent=5wmcoDAi.. player=7kSdaHSY.. playerName=Player #22 entryFee=0 participantCount=10 timestamp=1770275535[0m
+[2m[onchain][0m [2m37eJqxvU6o..[0m [35mjoin event[0m
+[2m[onchain][0m [2m37eJqxvU6o..[0m [33mTotal 5,581 / 200,000 CU[0m
+[32m  ✓ tx [2m37eJqxvU6o98..[0m[0m
+(pass) Event System > Multiple Events > should keep participation accounts separate per event [1447.29ms]
+(pass) Event System > Multiple Events > should derive unique PDAs per event+player combination [1.18ms]
+(pass) Event System > PDA Derivation > should derive consistent event PDAs [0.18ms]
+(pass) Event System > PDA Derivation > should derive unique PDAs per event ID [0.03ms]
+(pass) Event System > PDA Derivation > should derive consistent participation PDAs [0.21ms]
+[PlayerFactory] Initializing player 22 (city 1)
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [36m⚡ UserCreated[0m [2muser=AErip4KY.. wallet=VHgEfMJS.. timestamp=1770275536[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FYasvKLM.. owner=VHgEfMJS.. joinedAt=1770275536[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35minit user[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35minit player[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5uKnGSCkDm..[0m [33mTotal 4,937 / 521,316 CU[0m
+[2m[onchain][0m [2m3crVXXASEJ..[0m [36m⚡ EstateCreated[0m [2mestate=FCQap4ey.. player=FYasvKLM.. playerName=Player #23 timestamp=1770275537[0m
+[2m[onchain][0m [2m3crVXXASEJ..[0m [36m⚡ ItemPurchased[0m [2mplayer=FYasvKLM.. playerName=Player #23 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770275537[0m
+[2m[onchain][0m [2m3crVXXASEJ..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m3crVXXASEJ..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3crVXXASEJ..[0m [33mTotal 12,566 / 392,999 CU[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [36m⚡ BuildingStarted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=0 plot=0 completesAt=1770289937 timestamp=1770275537[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [36m⚡ BuildingCompleted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=0 level=1 plot=0 timestamp=1770275537[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3zgebvW9ke..[0m [33mTotal 1,071 / 300,530 CU[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [36m⚡ BuildingStarted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=1 plot=1 completesAt=1770289939 timestamp=1770275539[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [36m⚡ BuildingCompleted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=1 level=1 plot=1 timestamp=1770275539[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4SLHeRaXYv..[0m [33mTotal 1,133 / 300,528 CU[0m
+[2m[onchain][0m [2m4XHEbdTDDw..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4XHEbdTDDw..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4XHEbdTDDw..[0m [33mTotal 359 / 399,850 CU[0m
+[2m[onchain][0m [2m4XHEbdTDDw..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1a[0m
+[buildAndCompleteBuilding] Building 0 already exists, continuing
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [36m⚡ BuildingStarted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=6 plot=2 completesAt=1770318743 timestamp=1770275543[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [33mTotal 590 / 300,475 CU[0m
+[2m[onchain][0m [2mKHoSDyQxpu..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[buildAndCompleteBuilding] Building 6 needs split build...
+[2m[onchain][0m [2m45j7dq5CbF..[0m [36m⚡ BuildingStarted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=6 plot=2 completesAt=1770318743 timestamp=1770275543[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m45j7dq5CbF..[0m [33mTotal 13,211 / 313,686 CU[0m
+[2m[onchain][0m [2mtsb72zYxrZ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mtsb72zYxrZ..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mtsb72zYxrZ..[0m [33mTotal 590 / 199,850 CU[0m
+[2m[onchain][0m [2mtsb72zYxrZ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m3JScgHjXQH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3JScgHjXQH..[0m [33mTotal 13,195 / 199,850 CU[0m
+[2m[onchain][0m [2m58Ztfmm4XY..[0m [36m⚡ BuildingCompleted[0m [2mplayer=FYasvKLM.. playerName=Player #23 buildingType=6 level=1 plot=2 timestamp=1770275545[0m
+[2m[onchain][0m [2m58Ztfmm4XY..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m58Ztfmm4XY..[0m [33mTotal 1,184 / 199,850 CU[0m
+[PlayerFactory] Initializing player 23 (city 2)
+[2m[onchain][0m [2m2ozErnjF4H..[0m [36m⚡ UserCreated[0m [2muser=2jyhHvLo.. wallet=AnNuCk3h.. timestamp=1770275547[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Cr5HUCM2.. owner=AnNuCk3h.. joinedAt=1770275547[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35minit user[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35minit player[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2ozErnjF4H..[0m [33mTotal 4,937 / 509,312 CU[0m
+[2m[onchain][0m [2mkKeQrDyZqs..[0m [36m⚡ EstateCreated[0m [2mestate=AqXftD3t.. player=Cr5HUCM2.. playerName=Player #24 timestamp=1770275548[0m
+[2m[onchain][0m [2mkKeQrDyZqs..[0m [36m⚡ ItemPurchased[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770275548[0m
+[2m[onchain][0m [2mkKeQrDyZqs..[0m [35mcreate estate[0m
+[2m[onchain][0m [2mkKeQrDyZqs..[0m [35mpurchase item[0m
+[2m[onchain][0m [2mkKeQrDyZqs..[0m [33mTotal 11,066 / 394,499 CU[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [36m⚡ BuildingStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=0 plot=0 completesAt=1770289948 timestamp=1770275548[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [36m⚡ BuildingCompleted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=0 level=1 plot=0 timestamp=1770275548[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m35Q4xmfrXz..[0m [33mTotal 1,071 / 321,530 CU[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [36m⚡ BuildingStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=1 plot=1 completesAt=1770289950 timestamp=1770275550[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [36m⚡ BuildingCompleted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=1 level=1 plot=1 timestamp=1770275550[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mSgdzKACKoG..[0m [33mTotal 1,133 / 321,528 CU[0m
+[2m[onchain][0m [2m9oKQbfQkJv..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m9oKQbfQkJv..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m9oKQbfQkJv..[0m [33mTotal 359 / 399,850 CU[0m
+[2m[onchain][0m [2m9oKQbfQkJv..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1a[0m
+[buildAndCompleteBuilding] Building 0 already exists, continuing
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [36m⚡ BuildingStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=6 plot=2 completesAt=1770318754 timestamp=1770275554[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [33mTotal 590 / 321,475 CU[0m
+[2m[onchain][0m [2m2XRzXTmL6V..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[buildAndCompleteBuilding] Building 6 needs split build...
+[2m[onchain][0m [2m3LS5MU2zck..[0m [36m⚡ BuildingStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=6 plot=2 completesAt=1770318755 timestamp=1770275555[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3LS5MU2zck..[0m [33mTotal 10,211 / 331,686 CU[0m
+[2m[onchain][0m [2m2CfNmuSACx..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2CfNmuSACx..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2CfNmuSACx..[0m [33mTotal 590 / 199,850 CU[0m
+[2m[onchain][0m [2m2CfNmuSACx..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m5ymYvN3kQi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5ymYvN3kQi..[0m [33mTotal 10,195 / 199,850 CU[0m
+[2m[onchain][0m [2m2sJY578F42..[0m [36m⚡ BuildingCompleted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 buildingType=6 level=1 plot=2 timestamp=1770275556[0m
+[2m[onchain][0m [2m2sJY578F42..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2sJY578F42..[0m [33mTotal 1,184 / 199,850 CU[0m
+[2m[onchain][0m [2m5ZDFLM6RBJ..[0m [36m⚡ UnitsHired[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 unitType=0 baseQuantity=21 finalQuantity=33 noviBurned=100 timeBonusBps=5714 timestamp=1770275558[0m
+[2m[onchain][0m [2m5ZDFLM6RBJ..[0m [35mhire units[0m
+[2m[onchain][0m [2m5ZDFLM6RBJ..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5ZDFLM6RBJ..[0m [33mTotal 19,876 / 200,000 CU[0m
+[2m[onchain][0m [2m2g6LnExPG6..[0m [36m⚡ UnitsHired[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 unitType=1 baseQuantity=12 finalQuantity=19 noviBurned=50 timeBonusBps=5833 timestamp=1770275559[0m
+[2m[onchain][0m [2m2g6LnExPG6..[0m [35mhire units[0m
+[2m[onchain][0m [2m2g6LnExPG6..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2g6LnExPG6..[0m [33mTotal 19,094 / 200,000 CU[0m
+[2m[onchain][0m [2m53oPgUmXgR..[0m [36m⚡ EquipmentPurchased[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 slot=0 tier=1 noviBurned=4004 timestamp=1770275559[0m
+[2m[onchain][0m [2m53oPgUmXgR..[0m [35mpurchase equipment[0m
+[2m[onchain][0m [2m53oPgUmXgR..[0m [33mTotal 9,737 / 200,000 CU[0m
+[2m[onchain][0m [2m4nYk2kkp8Z..[0m [36m⚡ EquipmentPurchased[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 slot=1 tier=1 noviBurned=3844 timestamp=1770275560[0m
+[2m[onchain][0m [2m4nYk2kkp8Z..[0m [35mpurchase equipment[0m
+[2m[onchain][0m [2m4nYk2kkp8Z..[0m [33mTotal 9,785 / 200,000 CU[0m
+[2m[onchain][0m [2mK59CfKNe4y..[0m [36m⚡ UnitsHired[0m [2mplayer=FYasvKLM.. playerName=Player #23 unitType=0 baseQuantity=32 finalQuantity=51 noviBurned=150 timeBonusBps=5937 timestamp=1770275560[0m
+[2m[onchain][0m [2mK59CfKNe4y..[0m [35mhire units[0m
+[2m[onchain][0m [2mK59CfKNe4y..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mK59CfKNe4y..[0m [33mTotal 21,389 / 200,000 CU[0m
+[2m[onchain][0m [2m2HgvtUegiX..[0m [36m⚡ UnitsHired[0m [2mplayer=FYasvKLM.. playerName=Player #23 unitType=1 baseQuantity=18 finalQuantity=29 noviBurned=75 timeBonusBps=6111 timestamp=1770275561[0m
+[2m[onchain][0m [2m2HgvtUegiX..[0m [35mhire units[0m
+[2m[onchain][0m [2m2HgvtUegiX..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2HgvtUegiX..[0m [33mTotal 20,599 / 200,000 CU[0m
+[2m[onchain][0m [2m5CPT3mhu2P..[0m [36m⚡ EquipmentPurchased[0m [2mplayer=FYasvKLM.. playerName=Player #23 slot=3 tier=1 noviBurned=3203 timestamp=1770275561[0m
+[2m[onchain][0m [2m5CPT3mhu2P..[0m [35mpurchase equipment[0m
+[2m[onchain][0m [2m5CPT3mhu2P..[0m [33mTotal 11,274 / 200,000 CU[0m
+[buyGems] PRE: data_len=1698 lamports=12708960
+[2m[onchain][0m [2m3FDsfpKArT..[0m [36m⚡ ItemPurchased[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 itemId=9999 quantity=1 price=1000 currency=0 timestamp=1770275562[0m
+[2m[onchain][0m [2m3FDsfpKArT..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3FDsfpKArT..[0m [33mTotal 9,630 / 200,000 CU[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 fromCity=35g3sAdw.. toCity=Fwu2aMRY.. arrivalAt=1770376504 timestamp=1770275562[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m21jekN6gu3..[0m [33mTotal 44,366 / 200,000 CU[0m
+[2m[onchain][0m [2m2rsSMczkdH..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=3366 newEta=1770300798 timestamp=1770275563[0m
+[2m[onchain][0m [2m2rsSMczkdH..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2rsSMczkdH..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m2tkU9XUaeG..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=842 newEta=1770281871 timestamp=1770275563[0m
+[2m[onchain][0m [2m2tkU9XUaeG..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2tkU9XUaeG..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m2Pne1T1jRo..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=212 newEta=1770277140 timestamp=1770275564[0m
+[2m[onchain][0m [2m2Pne1T1jRo..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2Pne1T1jRo..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m3XyRxMYKiL..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=54 newEta=1770275958 timestamp=1770275564[0m
+[2m[onchain][0m [2m3XyRxMYKiL..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3XyRxMYKiL..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m5AcBG5YqCR..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=14 newEta=1770275663 timestamp=1770275565[0m
+[2m[onchain][0m [2m5AcBG5YqCR..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5AcBG5YqCR..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m3TJ15ypFHP..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=4 newEta=1770275589 timestamp=1770275565[0m
+[2m[onchain][0m [2m3TJ15ypFHP..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3TJ15ypFHP..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m2KovpHYcYQ..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770275571 timestamp=1770275566[0m
+[2m[onchain][0m [2m2KovpHYcYQ..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2KovpHYcYQ..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m28iuGoNZ3C..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770275567 timestamp=1770275566[0m
+[2m[onchain][0m [2m28iuGoNZ3C..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m28iuGoNZ3C..[0m [33mTotal 7,482 / 200,000 CU[0m
+[2m[onchain][0m [2m2DQpZHj3fD..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2DQpZHj3fD..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2DQpZHj3fD..[0m [33mTotal 6,630 / 200,000 CU[0m
+[2m[onchain][0m [2m2DQpZHj3fD..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[2m[onchain][0m [2m4HUBdZMk2H..[0m [36m⚡ XpGained[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 amount=2803 source=3 totalXp=266 timestamp=1770275569[0m
+[2m[onchain][0m [2m4HUBdZMk2H..[0m [36m⚡ PlayerLeveledUp[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 oldLevel=1 newLevel=5 timestamp=1770275569[0m
+[2m[onchain][0m [2m4HUBdZMk2H..[0m [36m⚡ IntercityTravelCompleted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 city=Fwu2aMRY.. timestamp=1770275569[0m
+[2m[onchain][0m [2m4HUBdZMk2H..[0m [35mcomplete intercity travel[0m
+[2m[onchain][0m [2m4HUBdZMk2H..[0m [33mTotal 39,011 / 200,000 CU[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 city=Fwu2aMRY.. destX=340524 destY=-1182436 arrivalAt=1770275575 timestamp=1770275569[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m41BHzSjM9G..[0m [33mTotal 42,290 / 200,000 CU[0m
+[2m[onchain][0m [2m2dhK62iuXj..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=false speedupTier=2 gemsSpent=2 newEta=1770275571 timestamp=1770275570[0m
+[2m[onchain][0m [2m2dhK62iuXj..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2dhK62iuXj..[0m [33mTotal 7,483 / 200,000 CU[0m
+[2m[onchain][0m [2m27pcsFtmmT..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 isIntercity=false speedupTier=2 gemsSpent=2 newEta=1770275570 timestamp=1770275570[0m
+[2m[onchain][0m [2m27pcsFtmmT..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m27pcsFtmmT..[0m [33mTotal 7,467 / 200,000 CU[0m
+[2m[onchain][0m [2m5RkHeRqFHB..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5RkHeRqFHB..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5RkHeRqFHB..[0m [33mTotal 6,630 / 200,000 CU[0m
+[2m[onchain][0m [2m5RkHeRqFHB..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[2m[onchain][0m [2m32J8SyK54c..[0m [36m⚡ IntracityTravelCompleted[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 x=340524 y=-1182436 timestamp=1770275573[0m
+[2m[onchain][0m [2m32J8SyK54c..[0m [35mcomplete intracity travel[0m
+[2m[onchain][0m [2m32J8SyK54c..[0m [33mTotal 8,193 / 200,000 CU[0m
+[2m[onchain][0m [2mLpNFKR9RNd..[0m [36m⚡ KingdomEventCreated[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. eventId=4 eventType=0 startTime=1770271973 endTime=1770275593 prizePool=10000[0m
+[2m[onchain][0m [2mLpNFKR9RNd..[0m [35mcreate event[0m
+[2m[onchain][0m [2mLpNFKR9RNd..[0m [33mTotal 3,858 / 200,000 CU[0m
+[32m  ✓ tx [2mLpNFKR9RNdDq..[0m[0m
+[2m[onchain][0m [2m4AtaqftmH5..[0m [36m⚡ GameEventJoined[0m [2mevent=6xRj2ujy.. player=Cr5HUCM2.. playerName=Player #24 entryFee=0 participantCount=1 timestamp=1770275574[0m
+[2m[onchain][0m [2m4AtaqftmH5..[0m [35mjoin event[0m
+[2m[onchain][0m [2m4AtaqftmH5..[0m [33mTotal 4,090 / 200,000 CU[0m
+[32m  ✓ tx [2m4AtaqftmH59e..[0m[0m
+[31m  ✗ tx[0m
+[31m    Transaction wvrCM9HbxV1cw8F5EmyeMzirFzD5jXoEJW4fXHTqWno9fAtU82BXNUwNZL4zuYc972fVWftcgsCqaJVD2QDp6MT resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction wvrCM9HbxV1cw8F5EmyeMzirFzD5jXoEJW4fXHTqWno9fAtU82BXNUwNZL4zuYc972fVWftcgsCqaJVD2QDp6MT resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "wvrCM9HbxV1cw8F5EmyeMzirFzD5jXoEJW4fXHTqWno9fAtU82BXNUwNZL4zuYc972fVWftcgsCqaJVD2QDp6MT",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Event System > Event Lifecycle > should complete full lifecycle: create, join, score via PvP, finalize, verify claim eligibility [39718.24ms]
+[2m[onchain][0m [2mwvrCM9HbxV..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mwvrCM9HbxV..[0m [36m⚡ XpGained[0m [2mplayer=Cr5HUCM2.. playerName=Player #24 amount=60 source=0 totalXp=326 timestamp=1770275575[0m
+[2m[onchain][0m [2mwvrCM9HbxV..[0m [35mattack player[0m
+[2m[onchain][0m [2mwvrCM9HbxV..[0m [33mTotal 70,150 / 200,000 CU[0m
+[2m[onchain][0m [2mwvrCM9HbxV..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+
+1 tests failed:
+(fail) Event System > Event Lifecycle > should complete full lifecycle: create, join, score via PvP, finalize, verify claim eligibility [39718.24ms]
+
+ 32 pass
+ 1 fail
+ 87 expect() calls
+Ran 33 tests across 1 files. [86.86s]

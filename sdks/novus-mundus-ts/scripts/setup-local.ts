@@ -31,7 +31,7 @@ import {
   deriveResearchTemplatePda,
   deriveCityPda,
   derivePlayerPda,
-} from '../src/index.ts';
+} from '../src/index';
 
 // ============================================================
 // Configuration
@@ -127,62 +127,62 @@ const RESEARCH_TEMPLATES = [
   {
     researchType: 0,
     category: 0, // Battle
+    maxLevel: 10,
+    baseTimeSeconds: 300, // 5 minutes
     baseCost: new BN(100), // 10 NOVI
-    baseDuration: new BN(300), // 5 minutes
     buffType: 0, // Attack
     buffPerLevelBps: 200, // +2% per level
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: -1, // None
     prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
   },
   {
     researchType: 1,
     category: 0, // Battle
+    maxLevel: 10,
+    baseTimeSeconds: 600, // 10 minutes
     baseCost: new BN(200),
-    baseDuration: new BN(600), // 10 minutes
     buffType: 1, // Defense
     buffPerLevelBps: 200,
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: 0, // Requires Attack I
     prerequisiteLevel: 3,
+    gemCostPerMinute: 2,
   },
   {
     researchType: 2,
     category: 1, // Economy
+    maxLevel: 10,
+    baseTimeSeconds: 300,
     baseCost: new BN(100),
-    baseDuration: new BN(300),
     buffType: 4, // Resource Rate
     buffPerLevelBps: 300, // +3% per level
-    maxLevel: 10,
-    requiredPlayerLevel: 1,
     prerequisiteType: -1,
     prerequisiteLevel: 0,
+    gemCostPerMinute: 1,
   },
   {
     researchType: 3,
     category: 1, // Economy
+    maxLevel: 10,
+    baseTimeSeconds: 450,
     baseCost: new BN(150),
-    baseDuration: new BN(450),
     buffType: 5, // Capacity
     buffPerLevelBps: 500, // +5% per level
-    maxLevel: 10,
-    requiredPlayerLevel: 2,
     prerequisiteType: 2, // Requires Resource I
     prerequisiteLevel: 2,
+    gemCostPerMinute: 2,
   },
   {
     researchType: 4,
     category: 2, // Growth
+    maxLevel: 10,
+    baseTimeSeconds: 600,
     baseCost: new BN(200),
-    baseDuration: new BN(600),
     buffType: 6, // XP Rate
     buffPerLevelBps: 200, // +2% per level
-    maxLevel: 10,
-    requiredPlayerLevel: 3,
     prerequisiteType: -1,
     prerequisiteLevel: 0,
+    gemCostPerMinute: 2,
   },
 ];
 
@@ -374,10 +374,11 @@ async function setupResearchTemplates(
       continue;
     }
 
+    const [gameEnginePda] = deriveGameEnginePda();
     const ix = createInitializeTemplateInstruction(
       {
-        payer: daoAuthority.publicKey,
         daoAuthority: daoAuthority.publicKey,
+        gameEngine: gameEnginePda,
       },
       template
     );

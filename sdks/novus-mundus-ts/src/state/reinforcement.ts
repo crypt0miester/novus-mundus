@@ -2,13 +2,13 @@
  * ReinforcementAccount
  *
  * Tracks units/weapons/hero sent to defend another player or castle.
- * Size: 216 bytes
+ * Size: 256 bytes
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { ReinforcementStatus } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ReinforcementStatus } from '../types/enums';
 
 // ============================================================
 // Reinforcement Target Type
@@ -59,6 +59,11 @@ export interface ReinforcementAccount {
   returnStartedAt: BN;
   returnDuration: number;
 
+  // Wounded tracking (set during recall, transferred to estate on return)
+  woundedDef1: number;
+  woundedDef2: number;
+  woundedDef3: number;
+
   // Status
   status: ReinforcementStatus;
   relievedByDestination: boolean;
@@ -67,8 +72,8 @@ export interface ReinforcementAccount {
   combatsParticipated: BN;
 }
 
-/** ReinforcementAccount size in bytes */
-export const REINFORCEMENT_ACCOUNT_SIZE = 216;
+/** ReinforcementAccount size in bytes (repr(C) layout including account_key + game_engine) */
+export const REINFORCEMENT_ACCOUNT_SIZE = 256;
 
 // ============================================================
 // Deserialization
@@ -78,17 +83,24 @@ export const REINFORCEMENT_ACCOUNT_SIZE = 216;
 export function deserializeReinforcement(data: Uint8Array | Buffer): ReinforcementAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key discriminator
+
+  // Kingdom Reference (32 bytes)
+  reader.readPubkey(); // game_engine (skip, not in interface)
+
   // Identity (64 bytes)
   const sender = reader.readPubkey();
   const destination = reader.readPubkey();
 
-  // Type & Location (8 bytes)
+  // Type & Location
   const destinationTypeValue = reader.readU8();
   const destinationType = destinationTypeValue as ReinforcementTargetType;
   const bump = reader.readU8();
+  reader.skip(1); // implicit padding for u16 alignment (offset 99 -> 100)
   const senderCity = reader.readU16();
   const destinationCity = reader.readU16();
-  reader.skip(2); // padding
+  reader.skip(2); // explicit _padding_loc
+  reader.skip(6); // implicit padding for u64 alignment (offset 106 -> 112)
 
   // Units (24 bytes)
   const unitsDef1 = reader.readU64();
@@ -110,19 +122,20 @@ export function deserializeReinforcement(data: Uint8Array | Buffer): Reinforceme
   // Travel timing (24 bytes)
   const sentAt = reader.readI64();
   const travelDuration = reader.readI32();
-  reader.skip(4); // padding
+  const woundedDef1 = reader.readU32(); // was padding
   const arrivesAt = reader.readI64();
 
   // Return timing (16 bytes)
   const returnStartedAt = reader.readI64();
   const returnDuration = reader.readI32();
-  reader.skip(4); // padding
+  const woundedDef2 = reader.readU32(); // was padding
 
   // Status (8 bytes)
   const statusValue = reader.readU8();
   const status = statusValue as ReinforcementStatus;
   const relievedByDestination = reader.readBool();
-  reader.skip(6); // padding
+  reader.skip(2); // padding
+  const woundedDef3 = reader.readU32(); // was padding
 
   // Stats (8 bytes)
   const combatsParticipated = reader.readU64();
@@ -149,6 +162,9 @@ export function deserializeReinforcement(data: Uint8Array | Buffer): Reinforceme
     arrivesAt,
     returnStartedAt,
     returnDuration,
+    woundedDef1,
+    woundedDef2,
+    woundedDef3,
     status,
     relievedByDestination,
     combatsParticipated,

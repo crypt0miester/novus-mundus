@@ -8,11 +8,11 @@ import {
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Claim Daily Reward
@@ -25,6 +25,7 @@ export interface ClaimDailyRewardAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~15,000 CU */
 /**
  * Claim daily login reward.
  *

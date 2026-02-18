@@ -2,12 +2,12 @@
  * LootAccount
  *
  * Physical rewards from encounters/PvP/rallies.
- * Size: 192 bytes
+ * Size: 200 bytes
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize.ts';
+import { BufferReader } from '../utils/deserialize';
 
 // ============================================================
 // Loot Source Type
@@ -55,7 +55,7 @@ export interface LootAccount {
 }
 
 /** LootAccount size in bytes */
-export const LOOT_ACCOUNT_SIZE = 192;
+export const LOOT_ACCOUNT_SIZE = 200;
 
 /** Loot expiration duration (30 days in seconds) */
 export const LOOT_EXPIRATION_DURATION = 30 * 86400;
@@ -68,9 +68,12 @@ export const LOOT_EXPIRATION_DURATION = 30 * 86400;
 export function deserializeLoot(data: Uint8Array | Buffer): LootAccount {
   const reader = new BufferReader(data);
 
-  // Identity & Security (80 bytes)
+  reader.readU8(); // account_key discriminator
+
+  // Identity & Security
   const owner = reader.readPubkey();
   const creator = reader.readPubkey();
+  reader.skip(7); // implicit padding for u64 alignment (offset 65 -> 72)
   const lootId = reader.readU64();
   const bump = reader.readU8();
   const sourceTypeValue = reader.readU8();

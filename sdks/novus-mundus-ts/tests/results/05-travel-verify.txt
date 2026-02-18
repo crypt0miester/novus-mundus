@@ -1,0 +1,841 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/05-travel.test.ts:
+
+[1m[34m━━━ Travel System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.6s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.3s.
+[PlayerFactory] Initializing player 0 (city 1)
+[2m[onchain][0m [2mJS61F29z4c..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1770119464[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1770119464[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35minit user[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35minit player[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mJS61F29z4c..[0m [33mTotal 6,438 / 526,297 CU[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 city=Fwu2aMRY.. destX=340572 destY=-1182387 arrivalAt=1770120304 timestamp=1770119465[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m5YFFSCwPix..[0m [33mTotal 42,759 / 200,000 CU[0m
+[32m  ✓ tx [2m5YFFSCwPixja..[0m[0m
+(pass) Travel System > Intracity Travel > should start intracity travel [1513.93ms]
+[PlayerFactory] Initializing player 1 (city 1)
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1770119466[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1770119466[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35minit user[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35minit player[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4xbbMmcxpF..[0m [33mTotal 4,938 / 513,828 CU[0m
+[2m[onchain][0m [2mv23Xk95RjE..[0m [36m⚡ EstateCreated[0m [2mestate=CJVxU1P5.. player=DTpJZyJQ.. playerName=Player #2 timestamp=1770119466[0m
+[2m[onchain][0m [2mv23Xk95RjE..[0m [36m⚡ ItemPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119466[0m
+[2m[onchain][0m [2mv23Xk95RjE..[0m [35mcreate estate[0m
+[2m[onchain][0m [2mv23Xk95RjE..[0m [35mpurchase item[0m
+[2m[onchain][0m [2mv23Xk95RjE..[0m [33mTotal 12,568 / 396,001 CU[0m
+[32m  ✓ tx [2m4ccNkYeCkiJD..[0m[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 city=Fwu2aMRY.. destX=340524 destY=-1182435 arrivalAt=1770119491 timestamp=1770119467[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m4ccNkYeCki..[0m [33mTotal 44,144 / 200,000 CU[0m
+[32m  ✓ tx [2m5ftLvG6Vc3js..[0m[0m
+[2m[onchain][0m [2m5ftLvG6Vc3..[0m [36m⚡ TravelSpeedup[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 isIntercity=false speedupTier=2 gemsSpent=2 newEta=1770119473 timestamp=1770119467[0m
+[2m[onchain][0m [2m5ftLvG6Vc3..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5ftLvG6Vc3..[0m [33mTotal 8,984 / 200,000 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 3SHB369erETwXFNpyTUf5kEKtvqzWX43cNpoGUVsD9JPPJtjPsCpNXzjbfigRxCxZcGc1SAiXMd8vUwiVHLetQ3r resulted in an error. [0m
+[2m[onchain][0m [2m3SHB369erE..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3SHB369erE..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3SHB369erE..[0m [33mTotal 8,131 / 200,000 CU[0m
+[2m[onchain][0m [2m3SHB369erE..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[32m  ✓ tx [2m2t1Cf8yjpZTx..[0m[0m
+[2m[onchain][0m [2m2t1Cf8yjpZ..[0m [36m⚡ IntracityTravelCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 x=340524 y=-1182435 timestamp=1770119480[0m
+[2m[onchain][0m [2m2t1Cf8yjpZ..[0m [35mcomplete intracity travel[0m
+[2m[onchain][0m [2m2t1Cf8yjpZ..[0m [33mTotal 11,195 / 200,000 CU[0m
+(pass) Travel System > Intracity Travel > should complete intracity travel after speedup [15720.88ms]
+[PlayerFactory] Initializing player 2 (city 1)
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [36m⚡ UserCreated[0m [2muser=9at5bmZf.. wallet=FdZDUuCx.. timestamp=1770119481[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=G3A9Y3nc.. owner=FdZDUuCx.. joinedAt=1770119481[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35minit user[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35minit player[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4VFh1NyJtr..[0m [33mTotal 4,938 / 528,826 CU[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 city=Fwu2aMRY.. destX=340602 destY=-1182357 arrivalAt=1770120807 timestamp=1770119482[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m3XFp2yjEZN..[0m [33mTotal 45,851 / 200,000 CU[0m
+[32m  ✓ tx [2m3XFp2yjEZNT8..[0m[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2TJRFXYDYnkrxo4v6N7JLqfGjgRzzYPyU6byHhHg8ByeYQjmCY9UzNvF4Y26Mk3h9ZpuEQXKi86XsTSBRwt19HrJ resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intracity Travel > should reject travel while already traveling [1962.09ms]
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [33mTotal 5,291 / 200,000 CU[0m
+[2m[onchain][0m [2m2TJRFXYDYn..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x191a[0m
+[PlayerFactory] Initializing player 3 (city 1)
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [36m⚡ UserCreated[0m [2muser=3hGTQ9FV.. wallet=8WD4WZvV.. timestamp=1770119483[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6CQsHJ5Z.. owner=8WD4WZvV.. joinedAt=1770119483[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35minit user[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35minit player[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5Y5bqRSrJp..[0m [33mTotal 4,938 / 518,324 CU[0m
+[32m  ✓ tx [2m2wPoN8cQ1pDA..[0m[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 city=Fwu2aMRY.. destX=341022 destY=-1181937 arrivalAt=1770127863 timestamp=1770119484[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m2wPoN8cQ1p..[0m [33mTotal 42,427 / 200,000 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2YxZbpmZwxicPnuDxSrvuWwC2t2s6RyqchkerJsqUGajFhj5f46h1zAcRArtDdcBivTCZcJ9QGuvMtRMQ3CcMeS1 resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intracity Travel > should reject complete before travel finishes [1959.97ms]
+[2m[onchain][0m [2m2YxZbpmZwx..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2YxZbpmZwx..[0m [35mcomplete intracity travel[0m
+[2m[onchain][0m [2m2YxZbpmZwx..[0m [33mTotal 6,506 / 200,000 CU[0m
+[2m[onchain][0m [2m2YxZbpmZwx..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[PlayerFactory] Initializing player 4 (city 1)
+[2m[onchain][0m [2m4pdCWjhKen..[0m [36m⚡ UserCreated[0m [2muser=4NuAhWiR.. wallet=65SYutaB.. timestamp=1770119485[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=4W13kdpe.. owner=65SYutaB.. joinedAt=1770119485[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35minit user[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35minit player[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4pdCWjhKen..[0m [33mTotal 4,938 / 504,826 CU[0m
+[32m  ✓ tx [2m4KyEGZ31M4yw..[0m[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=4W13kdpe.. playerName=Player #5 fromCity=Fwu2aMRY.. toCity=35g3sAdw.. arrivalAt=1770282813 timestamp=1770119486[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m4KyEGZ31M4..[0m [33mTotal 35,514 / 200,000 CU[0m
+(pass) Travel System > Intercity Travel > should start intercity travel [1463.87ms]
+[PlayerFactory] Initializing player 5 (city 1)
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [36m⚡ UserCreated[0m [2muser=3ZJcpNxJ.. wallet=GBgayznw.. timestamp=1770119487[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Brp9NHAg.. owner=GBgayznw.. joinedAt=1770119487[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35minit user[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35minit player[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mZrFyM4zhgU..[0m [33mTotal 7,938 / 516,824 CU[0m
+[2m[onchain][0m [2m4oqec5boz8..[0m [36m⚡ EstateCreated[0m [2mestate=6sk4PbFP.. player=Brp9NHAg.. playerName=Player #6 timestamp=1770119487[0m
+[2m[onchain][0m [2m4oqec5boz8..[0m [36m⚡ ItemPurchased[0m [2mplayer=Brp9NHAg.. playerName=Player #6 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119487[0m
+[2m[onchain][0m [2m4oqec5boz8..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m4oqec5boz8..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m4oqec5boz8..[0m [33mTotal 9,568 / 391,501 CU[0m
+[32m  ✓ tx [2m5qnj3gooZiWg..[0m[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 fromCity=Fwu2aMRY.. toCity=14amRhQJ.. arrivalAt=1770323031 timestamp=1770119488[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m5qnj3gooZi..[0m [33mTotal 35,488 / 200,000 CU[0m
+[32m  ✓ tx [2m3ekdabNDbNPF..[0m[0m
+[2m[onchain][0m [2m3ekdabNDbN..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=6786 newEta=1770170373 timestamp=1770119488[0m
+[2m[onchain][0m [2m3ekdabNDbN..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3ekdabNDbN..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2mzy3BoPZCKMR3..[0m[0m
+[2m[onchain][0m [2mzy3BoPZCKM..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=1698 newEta=1770132210 timestamp=1770119489[0m
+[2m[onchain][0m [2mzy3BoPZCKM..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2mzy3BoPZCKM..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m3ZbKa3BsSFG2..[0m[0m
+[2m[onchain][0m [2m3ZbKa3BsSF..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=426 newEta=1770122669 timestamp=1770119489[0m
+[2m[onchain][0m [2m3ZbKa3BsSF..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3ZbKa3BsSF..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2mXPHmJ1F8xDW1..[0m[0m
+[2m[onchain][0m [2mXPHmJ1F8xD..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=106 newEta=1770120284 timestamp=1770119490[0m
+[2m[onchain][0m [2mXPHmJ1F8xD..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2mXPHmJ1F8xD..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m3q1xZ2WYFnHs..[0m[0m
+[2m[onchain][0m [2m3q1xZ2WYFn..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=28 newEta=1770119688 timestamp=1770119490[0m
+[2m[onchain][0m [2m3q1xZ2WYFn..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3q1xZ2WYFn..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m61f8xvfz4Zb4..[0m[0m
+[2m[onchain][0m [2m61f8xvfz4Z..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=8 newEta=1770119540 timestamp=1770119491[0m
+[2m[onchain][0m [2m61f8xvfz4Z..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m61f8xvfz4Z..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m5gg8KCpXVtV3..[0m[0m
+[2m[onchain][0m [2m5gg8KCpXVt..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119503 timestamp=1770119491[0m
+[2m[onchain][0m [2m5gg8KCpXVt..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5gg8KCpXVt..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2mbXS3uSLxq532..[0m[0m
+[2m[onchain][0m [2mbXS3uSLxq5..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119494 timestamp=1770119492[0m
+[2m[onchain][0m [2mbXS3uSLxq5..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2mbXS3uSLxq5..[0m [33mTotal 5,983 / 200,000 CU[0m
+[2m[onchain][0m [2m3pjDucahjT..[0m [36m⚡ TravelSpeedup[0m [2mplayer=Brp9NHAg.. playerName=Player #6 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119492 timestamp=1770119492[0m
+[2m[onchain][0m [2m3pjDucahjT..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m3pjDucahjT..[0m [33mTotal 5,967 / 200,000 CU[0m
+[32m  ✓ tx [2m3pjDucahjTjR..[0m[0m
+[31m  ✗ tx[0m
+[31m    Transaction 42DpUyzWGPNn2RXAELwPGEE2iHbkHXqcQonrver8wQ7quMCY5Fu41cd3eQVxFAN7NuYFSyje35jAH9sZNyXDJxf4 resulted in an error. [0m
+[2m[onchain][0m [2m42DpUyzWGP..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m42DpUyzWGP..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m42DpUyzWGP..[0m [33mTotal 5,131 / 200,000 CU[0m
+[2m[onchain][0m [2m42DpUyzWGP..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[32m  ✓ tx [2m3ubJxpjVLsVR..[0m[0m
+[2m[onchain][0m [2m3ubJxpjVLs..[0m [36m⚡ XpGained[0m [2mplayer=Brp9NHAg.. playerName=Player #6 amount=3494 source=3 totalXp=957 timestamp=1770119495[0m
+[2m[onchain][0m [2m3ubJxpjVLs..[0m [36m⚡ PlayerLeveledUp[0m [2mplayer=Brp9NHAg.. playerName=Player #6 oldLevel=1 newLevel=5 timestamp=1770119495[0m
+[2m[onchain][0m [2m3ubJxpjVLs..[0m [36m⚡ IntercityTravelCompleted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 city=14amRhQJ.. timestamp=1770119495[0m
+[2m[onchain][0m [2m3ubJxpjVLs..[0m [35mcomplete intercity travel[0m
+[2m[onchain][0m [2m3ubJxpjVLs..[0m [33mTotal 37,497 / 200,000 CU[0m
+(pass) Travel System > Intercity Travel > should complete intercity travel after speedup [9384.27ms]
+[PlayerFactory] Initializing player 6 (city 1)
+[2m[onchain][0m [2m2WgXXYJY65..[0m [36m⚡ UserCreated[0m [2muser=9ztT5hcf.. wallet=EeAkWd5F.. timestamp=1770119496[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5gogbbch.. owner=EeAkWd5F.. joinedAt=1770119496[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35minit user[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35minit player[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2WgXXYJY65..[0m [33mTotal 4,938 / 525,820 CU[0m
+[32m  ✓ tx [2m26Ck3YsMy9ya..[0m[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=5gogbbch.. playerName=Player #7 fromCity=Fwu2aMRY.. toCity=FCuJrVzw.. arrivalAt=1770264565 timestamp=1770119497[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m26Ck3YsMy9..[0m [33mTotal 32,748 / 200,000 CU[0m
+[32m  ✓ tx [2m3ZkkjayCBtqe..[0m[0m
+[2m[onchain][0m [2m3ZkkjayCBt..[0m [36m⚡ TravelCancelled[0m [2mplayer=5gogbbch.. playerName=Player #7 isIntercity=true wasBumped=false timestamp=1770119497[0m
+[2m[onchain][0m [2m3ZkkjayCBt..[0m [35mcancel intercity travel[0m
+[2m[onchain][0m [2m3ZkkjayCBt..[0m [33mTotal 21,183 / 200,000 CU[0m
+(pass) Travel System > Intercity Travel > should cancel intercity travel and reverse direction [1931.52ms]
+[PlayerFactory] Initializing player 7 (city 1)
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [36m⚡ UserCreated[0m [2muser=595AzQHX.. wallet=5kWiuQEm.. timestamp=1770119498[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BH85q54E.. owner=5kWiuQEm.. joinedAt=1770119498[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35minit user[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35minit player[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2mGZEw5Qdq..[0m [33mTotal 7,938 / 510,822 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 3yHav5XLeFuYQoZ4iH52iM9uCyR83qc92Nj6Hqu9drm3ZXxnLAXd4sbGENbxu9FL9xFueUpvKLSwMJGXj41V8kFv resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intercity Travel > should reject intercity travel to same city [1471.96ms]
+[2m[onchain][0m [2m3yHav5XLeF..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3yHav5XLeF..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m3yHav5XLeF..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m3yHav5XLeF..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m3yHav5XLeF..[0m [33mTotal 6,795 / 200,000 CU[0m
+[2m[onchain][0m [2m3yHav5XLeF..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1777[0m
+[PlayerFactory] Initializing player 8 (city 1)
+[2m[onchain][0m [2m4i5WARdPxs..[0m [36m⚡ UserCreated[0m [2muser=6mRrqL9e.. wallet=EVAFmJra.. timestamp=1770119500[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6gWC3dgX.. owner=EVAFmJra.. joinedAt=1770119500[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35minit user[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35minit player[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4i5WARdPxs..[0m [33mTotal 7,938 / 521,326 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 2D38qZPdB2PaJmQbyj3YGtnhNy2c8nAWZeFmARkS5S2iHxxrk2MW6tfqoxNnQqaTnRh7pKdyVBTHBmjbAaaKMv9d resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intercity Travel > should reject intercity travel to invalid city [1444.30ms]
+[2m[onchain][0m [2m2D38qZPdB2..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2D38qZPdB2..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m2D38qZPdB2..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m2D38qZPdB2..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2D38qZPdB2..[0m [33mTotal 9,757 / 200,000 CU[0m
+[2m[onchain][0m [2m2D38qZPdB2..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+[PlayerFactory] Initializing player 9 (city 1)
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [36m⚡ UserCreated[0m [2muser=HNCLvXxz.. wallet=AvGnTfgg.. timestamp=1770119501[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BRQMxD9z.. owner=AvGnTfgg.. joinedAt=1770119501[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35minit user[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35minit player[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3wH9FKwgw4..[0m [33mTotal 12,438 / 521,319 CU[0m
+[2m[onchain][0m [2m2J8yP2QGPb..[0m [36m⚡ EstateCreated[0m [2mestate=9t5qRmcK.. player=BRQMxD9z.. playerName=Player #10 timestamp=1770119501[0m
+[2m[onchain][0m [2m2J8yP2QGPb..[0m [36m⚡ ItemPurchased[0m [2mplayer=BRQMxD9z.. playerName=Player #10 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119501[0m
+[2m[onchain][0m [2m2J8yP2QGPb..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m2J8yP2QGPb..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m2J8yP2QGPb..[0m [33mTotal 15,568 / 396,001 CU[0m
+[32m  ✓ tx [2m4eEYjKE4Pc9k..[0m[0m
+[2m[onchain][0m [2m4eEYjKE4Pc..[0m [36m⚡ PlayerTeleported[0m [2mplayer=BRQMxD9z.. playerName=Player #10 fromCity=Fwu2aMRY.. toCity=EX5m5nJn.. gemsSpent=39000 timestamp=1770119502[0m
+[2m[onchain][0m [2m4eEYjKE4Pc..[0m [35mintercity teleport[0m
+[2m[onchain][0m [2m4eEYjKE4Pc..[0m [33mTotal 30,859 / 200,000 CU[0m
+(pass) Travel System > Teleportation > should teleport between cities instantly [1952.60ms]
+[PlayerFactory] Initializing player 10 (city 1)
+[2m[onchain][0m [2m677Y7Dghkh..[0m [36m⚡ UserCreated[0m [2muser=7wWzoTiC.. wallet=DYXXWTjs.. timestamp=1770119503[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5z2B3ngT.. owner=DYXXWTjs.. joinedAt=1770119503[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35minit user[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35minit player[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m677Y7Dghkh..[0m [33mTotal 4,938 / 521,312 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction yei9TTHCmf9iqcUgrLrGXSuasFzTRyxvyLKVDK6zurruBqZsyQJbUZFcwwzpRB6QZYTVm5xRikBFU6e6dQ1mNrt resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Teleportation > should fail teleport without required extension [1460.98ms]
+[2m[onchain][0m [2myei9TTHCmf..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2myei9TTHCmf..[0m [35mintercity teleport[0m
+[2m[onchain][0m [2myei9TTHCmf..[0m [33mTotal 5,040 / 200,000 CU[0m
+[2m[onchain][0m [2myei9TTHCmf..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1d7e[0m
+[PlayerFactory] Initializing player 11 (city 1)
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [36m⚡ UserCreated[0m [2muser=iR4Xfgst.. wallet=CzSZgXPE.. timestamp=1770119504[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=HinPXQ2P.. owner=CzSZgXPE.. joinedAt=1770119504[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35minit user[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35minit player[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2f7zDwzrkA..[0m [33mTotal 4,938 / 524,312 CU[0m
+[2m[onchain][0m [2m3kFaQcWz4L..[0m [36m⚡ EstateCreated[0m [2mestate=AkJYkExh.. player=HinPXQ2P.. playerName=Player #12 timestamp=1770119505[0m
+[2m[onchain][0m [2m3kFaQcWz4L..[0m [36m⚡ ItemPurchased[0m [2mplayer=HinPXQ2P.. playerName=Player #12 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119505[0m
+[2m[onchain][0m [2m3kFaQcWz4L..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m3kFaQcWz4L..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3kFaQcWz4L..[0m [33mTotal 9,568 / 396,001 CU[0m
+[32m  ✓ tx [2m3QvGKieW4MQJ..[0m[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=HinPXQ2P.. playerName=Player #12 fromCity=Fwu2aMRY.. toCity=B25CPmpV.. arrivalAt=1770152072 timestamp=1770119505[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m3QvGKieW4M..[0m [33mTotal 38,728 / 200,000 CU[0m
+[2m[onchain][0m [2m2c2dpqSqkY..[0m [36m⚡ TravelSpeedup[0m [2mplayer=HinPXQ2P.. playerName=Player #12 isIntercity=true speedupTier=2 gemsSpent=1086 newEta=1770127647 timestamp=1770119506[0m
+[2m[onchain][0m [2m2c2dpqSqkY..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2c2dpqSqkY..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m2c2dpqSqkYjb..[0m[0m
+(pass) Travel System > Travel Speedup > should speedup ongoing intercity travel [2469.87ms]
+[PlayerFactory] Initializing player 12 (city 1)
+[2m[onchain][0m [2m3uveTveMdx..[0m [36m⚡ UserCreated[0m [2muser=66vHuTv6.. wallet=2ZkPzNzw.. timestamp=1770119507[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtnzCT8Y.. owner=2ZkPzNzw.. joinedAt=1770119507[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35minit user[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35minit player[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3uveTveMdx..[0m [33mTotal 4,938 / 525,812 CU[0m
+[2m[onchain][0m [2m65qWXJMUyM..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m65qWXJMUyM..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m65qWXJMUyM..[0m [33mTotal 6,462 / 200,000 CU[0m
+[2m[onchain][0m [2m65qWXJMUyM..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1919[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 65qWXJMUyMLi2taLT8P6UpyN88UBscUnNTamtTcofe66G2S1NZ7p5cAjBZNhniv5gwnZs3fp86VawGM3ikyqqWdF resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Travel Speedup > should reject speedup when not traveling [1449.25ms]
+[PlayerFactory] Initializing player 13 (city 1)
+[2m[onchain][0m [2m41A4nfKkD9..[0m [36m⚡ UserCreated[0m [2muser=Ez3gvQrG.. wallet=3bX72y2J.. timestamp=1770119508[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=AsWaCE7q.. owner=3bX72y2J.. joinedAt=1770119508[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35minit user[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35minit player[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m41A4nfKkD9..[0m [33mTotal 4,938 / 528,811 CU[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=AsWaCE7q.. playerName=Player #14 city=Fwu2aMRY.. destX=340672 destY=-1182287 arrivalAt=1770121903 timestamp=1770119509[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m5SWZc7NAWi..[0m [33mTotal 42,717 / 200,000 CU[0m
+[32m  ✓ tx [2m5SWZc7NAWifm..[0m[0m
+(pass) Travel System > Travel State > should track travel departure time [1527.68ms]
+[PlayerFactory] Initializing player 14 (city 1)
+[2m[onchain][0m [2mnAQhYHszdk..[0m [36m⚡ UserCreated[0m [2muser=7NQFR5ef.. wallet=HrseJFA2.. timestamp=1770119510[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=79vQ7A9t.. owner=HrseJFA2.. joinedAt=1770119510[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35minit user[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35minit player[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mnAQhYHszdk..[0m [33mTotal 4,938 / 518,313 CU[0m
+[32m  ✓ tx [2mnnZMgpNnShXu..[0m[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=79vQ7A9t.. playerName=Player #15 city=Fwu2aMRY.. destX=340582 destY=-1182467 arrivalAt=1770120186 timestamp=1770119510[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2mnnZMgpNnSh..[0m [33mTotal 44,170 / 200,000 CU[0m
+(pass) Travel System > Travel State > should store destination info during intracity travel [1453.76ms]
+[PlayerFactory] Initializing player 15 (city 1)
+[2m[onchain][0m [2mTj5tva4tBg..[0m [36m⚡ UserCreated[0m [2muser=QwD7AtAm.. wallet=AXdSzPWq.. timestamp=1770119511[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtpBkFpW.. owner=AXdSzPWq.. joinedAt=1770119511[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35minit user[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35minit player[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mTj5tva4tBg..[0m [33mTotal 4,938 / 521,311 CU[0m
+[32m  ✓ tx [2m5bN2NSDqmgBz..[0m[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [36m⚡ IntracityTravelStarted[0m [2mplayer=FtpBkFpW.. playerName=Player #16 city=Fwu2aMRY.. destX=340642 destY=-1182317 arrivalAt=1770121384 timestamp=1770119512[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: CPI done ok[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: closing origin[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [35mINTRA_START: close done ok[0m
+[2m[onchain][0m [2m5bN2NSDqmg..[0m [33mTotal 39,716 / 200,000 CU[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 633Z5f6d98brNb9SSU81GomgNb2sFFgqRngV5btyj1jLjcW7DzAi5eodW6iNDPmWLtVz58TDwndwBedQJama6Umn resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Travel Restrictions > should prevent starting second travel while already traveling [1962.83ms]
+[2m[onchain][0m [2m633Z5f6d98..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m633Z5f6d98..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m633Z5f6d98..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m633Z5f6d98..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m633Z5f6d98..[0m [33mTotal 5,278 / 200,000 CU[0m
+[2m[onchain][0m [2m633Z5f6d98..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x191a[0m
+[PlayerFactory] Initializing player 16 (city 1)
+[2m[onchain][0m [2m2TpDReK9np..[0m [36m⚡ UserCreated[0m [2muser=AYb9YPgT.. wallet=9me64sAy.. timestamp=1770119513[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=48J4LZ5S.. owner=9me64sAy.. joinedAt=1770119513[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35minit user[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35minit player[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2TpDReK9np..[0m [33mTotal 7,938 / 524,318 CU[0m
+(pass) Travel System > Travel Restrictions > should verify new player has encounter stamina [953.70ms]
+[PlayerFactory] Initializing player 17 (city 10)
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [36m⚡ UserCreated[0m [2muser=8CVurC2D.. wallet=hcUZgyue.. timestamp=1770119514[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=3MXrHtu4.. owner=hcUZgyue.. joinedAt=1770119514[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35minit user[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35minit player[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5xR7NSCoVN..[0m [33mTotal 4,938 / 517,283 CU[0m
+[2m[onchain][0m [2mwkqskkVrxw..[0m [36m⚡ EstateCreated[0m [2mestate=6efbgVc8.. player=3MXrHtu4.. playerName=Player #18 timestamp=1770119515[0m
+[2m[onchain][0m [2mwkqskkVrxw..[0m [36m⚡ ItemPurchased[0m [2mplayer=3MXrHtu4.. playerName=Player #18 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119515[0m
+[2m[onchain][0m [2mwkqskkVrxw..[0m [35mcreate estate[0m
+[2m[onchain][0m [2mwkqskkVrxw..[0m [35mpurchase item[0m
+[2m[onchain][0m [2mwkqskkVrxw..[0m [33mTotal 17,068 / 391,501 CU[0m
+[32m  ✓ tx [2m2KwjcEERgtXQ..[0m[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=3MXrHtu4.. playerName=Player #18 fromCity=5MnViEpu.. toCity=DxUYqYAK.. arrivalAt=1770517365 timestamp=1770119515[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m2KwjcEERgt..[0m [33mTotal 42,142 / 200,000 CU[0m
+[32m  ✓ tx [2m344CrXRzNbvw..[0m[0m
+[2m[onchain][0m [2m344CrXRzNb..[0m [36m⚡ TravelCancelled[0m [2mplayer=3MXrHtu4.. playerName=Player #18 isIntercity=true wasBumped=false timestamp=1770119516[0m
+[2m[onchain][0m [2m344CrXRzNb..[0m [35mcancel intercity travel[0m
+[2m[onchain][0m [2m344CrXRzNb..[0m [33mTotal 30,753 / 200,000 CU[0m
+[32m  ✓ tx [2m5Udwk9GHud11..[0m[0m
+[2m[onchain][0m [2m5Udwk9GHud..[0m [36m⚡ TravelSpeedup[0m [2mplayer=3MXrHtu4.. playerName=Player #18 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119516 timestamp=1770119516[0m
+[2m[onchain][0m [2m5Udwk9GHud..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5Udwk9GHud..[0m [33mTotal 13,467 / 200,000 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 45VMfWtbLu9zqqP8UZWNPSY81BzckGFLv2hPBuispoET7ZJnom8Me76y351wCMy3eXFtF9KPrGVRKuGP4HvUGX1c resulted in an error. [0m
+[2m[onchain][0m [2m45VMfWtbLu..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m45VMfWtbLu..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m45VMfWtbLu..[0m [33mTotal 12,631 / 200,000 CU[0m
+[2m[onchain][0m [2m45VMfWtbLu..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[32m  ✓ tx [2m3jjWouoyAhoT..[0m[0m
+[2m[onchain][0m [2m3jjWouoyAh..[0m [36m⚡ XpGained[0m [2mplayer=3MXrHtu4.. playerName=Player #18 amount=0 source=3 totalXp=0 timestamp=1770119519[0m
+[2m[onchain][0m [2m3jjWouoyAh..[0m [36m⚡ IntercityTravelCompleted[0m [2mplayer=3MXrHtu4.. playerName=Player #18 city=5MnViEpu.. timestamp=1770119519[0m
+[2m[onchain][0m [2m3jjWouoyAh..[0m [35mcomplete intercity travel[0m
+[2m[onchain][0m [2m3jjWouoyAh..[0m [33mTotal 18,761 / 200,000 CU[0m
+[32m  ✓ tx [2m4MgFANHfg5R3..[0m[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=3MXrHtu4.. playerName=Player #18 fromCity=5MnViEpu.. toCity=92GTwstW.. arrivalAt=1770403503 timestamp=1770119520[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2m4MgFANHfg5..[0m [33mTotal 41,764 / 200,000 CU[0m
+(pass) Travel System > Multi-city Travel > should travel between cities with start cancel complete start pattern [6399.46ms]
+[PlayerFactory] Initializing player 18 (city 1)
+[2m[onchain][0m [2m5md6j6Rerq..[0m [36m⚡ UserCreated[0m [2muser=6KXCNkMp.. wallet=4N9TLrMB.. timestamp=1770119521[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5PVabmGR.. owner=4N9TLrMB.. joinedAt=1770119521[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35minit user[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35minit player[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5md6j6Rerq..[0m [33mTotal 4,938 / 518,315 CU[0m
+[2m[onchain][0m [2m2j96wbCSHe..[0m [36m⚡ EstateCreated[0m [2mestate=AJJYmoVK.. player=5PVabmGR.. playerName=Player #19 timestamp=1770119521[0m
+[2m[onchain][0m [2m2j96wbCSHe..[0m [36m⚡ ItemPurchased[0m [2mplayer=5PVabmGR.. playerName=Player #19 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770119521[0m
+[2m[onchain][0m [2m2j96wbCSHe..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m2j96wbCSHe..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m2j96wbCSHe..[0m [33mTotal 9,568 / 396,001 CU[0m
+[32m  ✓ tx [2mvvyGZ96KKpf6..[0m[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [36m⚡ IntercityTravelStarted[0m [2mplayer=5PVabmGR.. playerName=Player #19 fromCity=Fwu2aMRY.. toCity=DX6Z7odG.. arrivalAt=1770209534 timestamp=1770119522[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: validating origin occupant[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: origin validated ok[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: closing origin location[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [35mIC_START: close done ok[0m
+[2m[onchain][0m [2mvvyGZ96KKp..[0m [33mTotal 33,153 / 200,000 CU[0m
+[32m  ✓ tx [2m2wTqXApEsjrV..[0m[0m
+[2m[onchain][0m [2m2wTqXApEsj..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=3002 newEta=1770142025 timestamp=1770119522[0m
+[2m[onchain][0m [2m2wTqXApEsj..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2wTqXApEsj..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2mAG54eE7Zmk7h..[0m[0m
+[2m[onchain][0m [2mAG54eE7Zmk..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=752 newEta=1770125148 timestamp=1770119523[0m
+[2m[onchain][0m [2mAG54eE7Zmk..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2mAG54eE7Zmk..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m4cAFMv7dixki..[0m[0m
+[2m[onchain][0m [2m4cAFMv7dix..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=188 newEta=1770120929 timestamp=1770119523[0m
+[2m[onchain][0m [2m4cAFMv7dix..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m4cAFMv7dix..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2moH7no8Xkqv8o..[0m[0m
+[2m[onchain][0m [2moH7no8Xkqv..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=48 newEta=1770119875 timestamp=1770119524[0m
+[2m[onchain][0m [2moH7no8Xkqv..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2moH7no8Xkqv..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m52JGm1pHNZdg..[0m[0m
+[2m[onchain][0m [2m52JGm1pHNZ..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=12 newEta=1770119611 timestamp=1770119524[0m
+[2m[onchain][0m [2m52JGm1pHNZ..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m52JGm1pHNZ..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m5sbQyQCMR3pf..[0m[0m
+[2m[onchain][0m [2m5sbQyQCMR3..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=4 newEta=1770119546 timestamp=1770119525[0m
+[2m[onchain][0m [2m5sbQyQCMR3..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m5sbQyQCMR3..[0m [33mTotal 5,983 / 200,000 CU[0m
+[2m[onchain][0m [2m4ce6TUGSde..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119530 timestamp=1770119525[0m
+[2m[onchain][0m [2m4ce6TUGSde..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m4ce6TUGSde..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m4ce6TUGSdeB3..[0m[0m
+[32m  ✓ tx [2m46EKv9too1kN..[0m[0m
+[2m[onchain][0m [2m46EKv9too1..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119527 timestamp=1770119526[0m
+[2m[onchain][0m [2m46EKv9too1..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m46EKv9too1..[0m [33mTotal 5,983 / 200,000 CU[0m
+[32m  ✓ tx [2m2ZoJipteuohQ..[0m[0m
+[2m[onchain][0m [2m2ZoJipteuo..[0m [36m⚡ TravelSpeedup[0m [2mplayer=5PVabmGR.. playerName=Player #19 isIntercity=true speedupTier=2 gemsSpent=2 newEta=1770119526 timestamp=1770119526[0m
+[2m[onchain][0m [2m2ZoJipteuo..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m2ZoJipteuo..[0m [33mTotal 5,967 / 200,000 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 4A2eu36HrEEji25f96ZbBqEHnZQNFeQtytqCYarmoMCzY4RmGHTW3V3ZazLUkgMAT4DxVq5z7ywxiEB65N5fbjMm resulted in an error. [0m
+[2m[onchain][0m [2m4A2eu36HrE..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4A2eu36HrE..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2m4A2eu36HrE..[0m [33mTotal 5,131 / 200,000 CU[0m
+[2m[onchain][0m [2m4A2eu36HrE..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1918[0m
+[32m  ✓ tx [2m3fmEZujLwtDh..[0m[0m
+[2m[onchain][0m [2m3fmEZujLwt..[0m [36m⚡ XpGained[0m [2mplayer=5PVabmGR.. playerName=Player #19 amount=1545 source=3 totalXp=570 timestamp=1770119529[0m
+[2m[onchain][0m [2m3fmEZujLwt..[0m [36m⚡ PlayerLeveledUp[0m [2mplayer=5PVabmGR.. playerName=Player #19 oldLevel=1 newLevel=4 timestamp=1770119529[0m
+[2m[onchain][0m [2m3fmEZujLwt..[0m [36m⚡ IntercityTravelCompleted[0m [2mplayer=5PVabmGR.. playerName=Player #19 city=DX6Z7odG.. timestamp=1770119529[0m
+[2m[onchain][0m [2m3fmEZujLwt..[0m [35mcomplete intercity travel[0m
+[2m[onchain][0m [2m3fmEZujLwt..[0m [33mTotal 28,271 / 200,000 CU[0m
+(pass) Travel System > Multi-city Travel > should arrive in destination city with correct position [9311.40ms]
+
+ 19 pass
+ 0 fail
+ 36 expect() calls
+Ran 19 tests across 1 files. [71.23s]

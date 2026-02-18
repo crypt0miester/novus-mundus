@@ -12,7 +12,7 @@ import {
   PHI_SQUARED,
   PHI_INVERSE,
   PHI_SQUARED_INVERSE,
-} from './constants.ts';
+} from './constants';
 
 // ============================================================
 // Time Periods
@@ -141,161 +141,120 @@ export function isDeepNight(time: TimeOfDay): boolean {
  * @returns Multiplier as a decimal (1.0 = normal, >1 = bonus, <1 = penalty)
  */
 export function getActivityMultiplier(activity: ActivityType, time: TimeOfDay): number {
+  // Matches Rust get_time_multiplier() in logic/time_cycle.rs exactly.
+  // Most combos return 1.0 with only specific bonuses/penalties.
   switch (activity) {
     case ActivityType.Hiring:
     case ActivityType.Purchasing:
-      // Best during day, penalty at night
+      // Peak at Midday, worst at DeepNight
       switch (time) {
-        case TimeOfDay.Midday: return PHI; // 1.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Afternoon: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Dawn:
+        case TimeOfDay.DeepNight: return PHI_INVERSE;  // 0.618
+        case TimeOfDay.Dawn: return 1.0;
+        case TimeOfDay.Morning: return GOLDEN_ROOT;    // 1.272
+        case TimeOfDay.Midday: return PHI;             // 1.618
+        case TimeOfDay.Afternoon: return GOLDEN_ROOT;  // 1.272
         case TimeOfDay.Dusk: return 1.0;
-        case TimeOfDay.Evening: return PHI_INVERSE; // 0.618
-        case TimeOfDay.DeepNight: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.Evening: return PHI_INVERSE;    // 0.618
         default: return 1.0;
       }
 
     case ActivityType.Collecting:
-      // Golden hours give φ² bonus
+      // Cash collection — penalties at night, baseline otherwise
       switch (time) {
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Dusk: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Midday: return PHI; // 1.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Afternoon: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Evening: return PHI_INVERSE; // 0.618
-        case TimeOfDay.DeepNight: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.DeepNight: return PHI_INVERSE;  // 0.618
+        case TimeOfDay.Evening: return PHI_INVERSE;    // 0.618
         default: return 1.0;
       }
 
     case ActivityType.Mining:
-      // Better at night (cooler, less distraction)
+      // Best at DeepNight only
       switch (time) {
-        case TimeOfDay.DeepNight: return PHI; // 1.618
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Evening: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Dusk: return 1.0;
-        case TimeOfDay.Morning:
-        case TimeOfDay.Afternoon: return PHI_INVERSE; // 0.618
-        case TimeOfDay.Midday: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.DeepNight: return PHI;          // 1.618
         default: return 1.0;
       }
 
     case ActivityType.Fishing:
-      // Best at dawn/dusk (feeding times)
+      // Best at Dawn only (morning feeding frenzy)
       switch (time) {
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Dusk: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Evening: return PHI; // 1.618
-        case TimeOfDay.Afternoon: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Midday: return 1.0;
-        case TimeOfDay.DeepNight: return PHI_INVERSE; // 0.618
+        case TimeOfDay.Dawn: return PHI;               // 1.618
         default: return 1.0;
       }
 
     case ActivityType.Attacking:
-      // Stealth advantage at night
+      // Stealth advantage at night only
       switch (time) {
-        case TimeOfDay.DeepNight: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Evening: return PHI; // 1.618
-        case TimeOfDay.Dusk: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Morning: return PHI_INVERSE; // 0.618
-        case TimeOfDay.Afternoon: return PHI_SQUARED_INVERSE; // 0.382
-        case TimeOfDay.Midday: return PHI_SQUARED_INVERSE; // 0.382 (worst for stealth)
+        case TimeOfDay.DeepNight: return PHI;          // 1.618
+        case TimeOfDay.Dawn: return GOLDEN_ROOT;       // 1.272
         default: return 1.0;
       }
 
     case ActivityType.Defending:
       // Alertness advantage during day
       switch (time) {
-        case TimeOfDay.Midday: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Afternoon: return PHI; // 1.618
-        case TimeOfDay.Dusk: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Evening: return PHI_INVERSE; // 0.618
-        case TimeOfDay.DeepNight: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.DeepNight: return PHI_INVERSE;  // 0.618
+        case TimeOfDay.Dawn: return 1.0;
+        case TimeOfDay.Morning: return GOLDEN_ROOT;    // 1.272
+        case TimeOfDay.Midday: return PHI;             // 1.618
+        case TimeOfDay.Afternoon: return GOLDEN_ROOT;  // 1.272
+        case TimeOfDay.Dusk: return 1.0;
+        case TimeOfDay.Evening: return 1.0;
         default: return 1.0;
       }
 
     case ActivityType.Traveling:
-      // Faster at night (empty roads)
+      // Faster at night (empty roads), slower during rush hours
       switch (time) {
-        case TimeOfDay.DeepNight: return PHI; // 1.618
-        case TimeOfDay.Evening:
-        case TimeOfDay.Dawn: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Morning:
-        case TimeOfDay.Dusk: return 1.0;
-        case TimeOfDay.Afternoon: return PHI_INVERSE; // 0.618
-        case TimeOfDay.Midday: return PHI_SQUARED_INVERSE; // 0.382 (traffic)
+        case TimeOfDay.DeepNight: return PHI;          // 1.618
+        case TimeOfDay.Dawn: return GOLDEN_ROOT;       // 1.272
+        case TimeOfDay.Morning: return PHI_INVERSE;    // 0.618
+        case TimeOfDay.Afternoon: return PHI_INVERSE;  // 0.618
         default: return 1.0;
       }
 
     case ActivityType.Consuming:
-      // Best during day (peak efficiency)
+      // NOVI → Power conversion
       switch (time) {
-        case TimeOfDay.Midday: return PHI; // 1.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Afternoon: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Dusk: return 1.0;
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Evening: return PHI_INVERSE; // 0.618
-        case TimeOfDay.DeepNight: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.DeepNight: return PHI_INVERSE;  // 0.618
+        case TimeOfDay.Dawn: return GOLDEN_ROOT;       // 1.272
+        case TimeOfDay.Evening: return PHI_INVERSE;    // 0.618
         default: return 1.0;
       }
 
     case ActivityType.Researching:
       // Best at night (quiet study time)
       switch (time) {
-        case TimeOfDay.DeepNight: return PHI; // 1.618
-        case TimeOfDay.Evening:
-        case TimeOfDay.Dawn: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Morning:
-        case TimeOfDay.Dusk: return 1.0;
-        case TimeOfDay.Afternoon: return PHI_INVERSE; // 0.618
-        case TimeOfDay.Midday: return PHI_SQUARED_INVERSE; // 0.382
+        case TimeOfDay.DeepNight: return PHI;          // 1.618
+        case TimeOfDay.Dawn: return GOLDEN_ROOT;       // 1.272
+        case TimeOfDay.Morning: return GOLDEN_ROOT;    // 1.272
+        case TimeOfDay.Midday: return PHI_INVERSE;     // 0.618
+        case TimeOfDay.Afternoon: return PHI_INVERSE;  // 0.618
         default: return 1.0;
       }
 
     case ActivityType.XPGain:
-      // Best at golden hours (enlightenment)
+      // Modest night wisdom bonus only
       switch (time) {
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Dusk: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Evening: return PHI; // 1.618
-        case TimeOfDay.Midday:
-        case TimeOfDay.DeepNight: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Afternoon: return 1.0;
+        case TimeOfDay.DeepNight: return GOLDEN_ROOT;  // 1.272
+        case TimeOfDay.Evening: return GOLDEN_ROOT;    // 1.272
         default: return 1.0;
       }
 
     case ActivityType.StaminaRegen:
       // Best at night (rest/sleep)
       switch (time) {
-        case TimeOfDay.DeepNight: return PHI_SQUARED; // 2.618
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Evening: return PHI; // 1.618
-        case TimeOfDay.Morning:
-        case TimeOfDay.Dusk: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Afternoon: return 1.0;
-        case TimeOfDay.Midday: return PHI_INVERSE; // 0.618 (busy time)
+        case TimeOfDay.DeepNight: return PHI;          // 1.618
+        case TimeOfDay.Dawn: return GOLDEN_ROOT;       // 1.272
+        case TimeOfDay.Midday: return PHI_INVERSE;     // 0.618
+        case TimeOfDay.Afternoon: return PHI_INVERSE;  // 0.618
         default: return 1.0;
       }
 
     case ActivityType.LootDrop:
-      // Best at golden hours
+      // Morning is best, night has modest bonus
       switch (time) {
-        case TimeOfDay.Dawn:
-        case TimeOfDay.Dusk: return PHI_SQUARED; // 2.618
-        case TimeOfDay.DeepNight: return PHI; // 1.618 (legendary spawns)
-        case TimeOfDay.Evening:
-        case TimeOfDay.Morning: return GOLDEN_ROOT; // 1.272
-        case TimeOfDay.Midday:
-        case TimeOfDay.Afternoon: return 1.0;
+        case TimeOfDay.DeepNight: return GOLDEN_ROOT;  // 1.272
+        case TimeOfDay.Morning: return PHI;            // 1.618
+        case TimeOfDay.Evening: return GOLDEN_ROOT;    // 1.272
         default: return 1.0;
       }
 

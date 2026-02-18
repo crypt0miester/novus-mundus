@@ -1,0 +1,64 @@
+(pass) Arena System > Joining Seasons > should join arena season [1433.50ms]
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Joining Seasons > should reject joining same season twice [11736.87ms]
+[2m[onchain][0m [2m5vhQA7aaTF..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5vhQA7aaTF..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1efa[0m
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Joining Seasons > should reject joining non-existent season [1544.25ms]
+[2m[onchain][0m [2mwHGhwiuC8Y..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mwHGhwiuC8Y..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+(pass) Arena System > Joining Seasons > should require minimum level to join [926.52ms]
+(pass) Arena System > Joining Seasons > should set initial rating on join [1448.23ms]
+(pass) Arena System > Challenging Players > should challenge another player [13308.86ms]
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Challenging Players > should reject challenge to non-participant [7343.55ms]
+[2m[onchain][0m [2m3pv7L5mvtU..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3pv7L5mvtU..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+(pass) Arena System > Challenging Players > should update ratings after challenge [13239.03ms]
+(pass) Arena System > Challenging Players > should track daily challenges [962.73ms]
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Challenging Players > should reject self-challenge [6897.40ms]
+[2m[onchain][0m [2m4Bm4okiqMB..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4Bm4okiqMB..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: instruction tries to borrow reference for an account which is already borrowed[0m
+[2m[onchain][0m [2m4vB6R9MEoz..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4vB6R9MEoz..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1eec[0m
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Daily Rewards > should reject daily claim without enough battles [1957.68ms]
+(pass) Arena System > Daily Rewards > should claim daily arena reward after enough battles [18130.76ms]
+(pass) Arena System > Daily Rewards > should scale reward with ranking [934.68ms]
+(pass) Arena System > Daily Rewards > should reset daily claim at midnight [1006.60ms]
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Master Rewards > should reject master claim before season finalized [1963.27ms]
+[2m[onchain][0m [2m2dvkJrSpWo..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2dvkJrSpWo..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1ede[0m
+(pass) Arena System > Master Rewards > should reject master claim before season end [1026.91ms]
+(pass) Arena System > Master Rewards > should scale with final ranking [937.17ms]
+(pass) Arena System > Master Rewards > should have rank thresholds for rewards [1027.34ms]
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Season Closing > should reject close before deadline [425.85ms]
+[2m[onchain][0m [2m8dfzjDarfa..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m8dfzjDarfa..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1ef7[0m
+[31m  ✗ tx (expect fail)[0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Arena System > Season Closing > should reject close with wrong authority [1536.45ms]
+[2m[onchain][0m [2m3iLDoWhmFL..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3iLDoWhmFL..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1771[0m
+(pass) Arena System > Season Closing > should freeze rankings on close [924.02ms]
+(pass) Arena System > Season Closing > should enable master rewards on close [1040.58ms]
+(pass) Arena System > Rating System > should use ELO-like rating [911.24ms]
+(pass) Arena System > Rating System > should have rating floors [952.04ms]
+(pass) Arena System > Rating System > should track wins and losses [1021.07ms]
+(pass) Arena System > Rating System > should update leaderboard [1034.67ms]
+(pass) Arena System > Arena Loadouts > should use snapshot loadout for defense [919.04ms]
+(pass) Arena System > Arena Loadouts > should allow loadout updates [1034.40ms]
+(pass) Arena System > Arena Loadouts > should include hero in loadout [945.76ms]
+ 29 pass
+ 0 fail
+Ran 29 tests across 1 files. [102.34s]

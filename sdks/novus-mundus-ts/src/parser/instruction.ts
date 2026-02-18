@@ -7,8 +7,8 @@
 
 import { PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program.ts';
-import { BufferReader } from '../utils/deserialize.ts';
+import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program';
+import { BufferReader } from '../utils/deserialize';
 
 // ============================================================
 // Types

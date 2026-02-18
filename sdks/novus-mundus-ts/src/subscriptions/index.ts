@@ -5,7 +5,7 @@
  */
 
 // Core subscription utilities
-export * from './account.ts';
+export * from './account';
 
 // Game-specific subscription helpers
-export * from './game.ts';
+export * from './game';

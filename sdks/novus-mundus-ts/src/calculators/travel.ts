@@ -4,7 +4,7 @@
  * Distance and travel time calculations using Haversine formula.
  */
 
-import { EARTH_RADIUS_KM } from './constants.ts';
+import { EARTH_RADIUS_KM } from './constants';
 
 // ============================================================
 // Distance Calculations
@@ -134,6 +134,24 @@ export function calculateIntracityTravelTime(
 ): number {
   const distanceKm = distanceMeters / 1000;
   return calculateTravelTime(distanceKm, intracitySpeedKmh);
+}
+
+/**
+ * Apply stables travel time reduction.
+ *
+ * Stables building reduces travel time by 50 bps per level.
+ *
+ * @param travelTimeSeconds - Base travel time in seconds
+ * @param stablesReductionBps - Stables reduction in basis points (50 per level)
+ * @returns Reduced travel time in seconds
+ */
+export function applyStablesTravelReduction(
+  travelTimeSeconds: number,
+  stablesReductionBps: number
+): number {
+  if (stablesReductionBps <= 0) return travelTimeSeconds;
+  const reduction = Math.floor((travelTimeSeconds * stablesReductionBps) / 10000);
+  return Math.max(1, travelTimeSeconds - reduction);
 }
 
 // ============================================================

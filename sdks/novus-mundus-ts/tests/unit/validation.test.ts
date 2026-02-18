@@ -36,7 +36,7 @@ import {
   allValid,
   getAllErrors,
   assertValid,
-} from '../../src/validation/common.ts';
+} from '../../src/validation/common';
 
 describe('ValidationResult helpers', () => {
   describe('valid', () => {

@@ -1,12 +1,53 @@
 {
   "version": 1,
+  "buildingScales": {
+    "academy_t2": 1,
+    "academy_t1": 0.5,
+    "market_t2": 0.5,
+    "sanctuary_t2": 1,
+    "sanctuary_t1": 0.7,
+    "treasury_t4": 1,
+    "arena_t1": 1
+  },
+  "assetOverrides": {
+    "forge_t4": true,
+    "barracks_t4": true,
+    "mansion_t4": true,
+    "sanctuary_t1": true,
+    "sanctuary_t4": true,
+    "market_t1": true,
+    "market_t4": true,
+    "market_t3": true,
+    "market_t2": true,
+    "sanctuary_t2": true,
+    "sanctuary_t3": true,
+    "academy_t1": true,
+    "academy_t2": true,
+    "academy_t3": true,
+    "arena_t1": true,
+    "arena_t2": true,
+    "arena_t3": true,
+    "arena_t4": true,
+    "barracks_t1": true,
+    "barracks_t2": true,
+    "barracks_t3": true,
+    "treasury_t1": true,
+    "treasury_t2": true,
+    "treasury_t3": true,
+    "treasury_t4": true,
+    "vault_t1": true,
+    "vault_t2": true,
+    "vault_t3": true,
+    "vault_t4": true,
+    "academy_t4": true
+  },
   "townSquare": {
     "x": 0.51,
     "z": 0.27,
-    "radius": 0.8,
+    "radius": 2,
     "style": "cobblestone",
-    "fountainScale": 2,
-    "lampPostCount": 9,
+    "fountainScale": 5,
+    "lampPostCount": 3,
     "lampPostRadius": 0.42,
     "lampColor": "#ffeeaa",
     "stoneColor": "#a09880",
@@ -20,33 +61,44 @@
       "id": 0,
       "label": "Starter",
       "tier": "1",
-      "x": -2.62,
-      "z": 3.23,
-      "rotation": 0,
+      "x": 3.421920639196689,
+      "z": -1.9730751781195233,
       "scale": 1,
       "padSize": 0.58,
       "padColor": "#6a8a55",
       "borderColor": "#887766",
+      "buildings": [
+        0,
+        1,
+        2,
+        3
+      ],
       "slots": [
         {
-          "dx": -0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": -4.984640145071131,
+          "dz": 0.8165072336155745,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 320
         },
         {
-          "dx": 0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": -5.57595653767269,
+          "dz": -2.191130844422527,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 45
         },
         {
-          "dx": -0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": -8.68,
+          "dz": 1.04,
+          "yOffset": 0,
+          "scaleOverride": 1
         },
         {
-          "dx": 0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": -7.18,
+          "dz": 1.29,
+          "yOffset": 0,
+          "scaleOverride": 1
         }
       ]
     },
@@ -54,33 +106,45 @@
       "id": 1,
       "label": "Tier 1",
       "tier": "1",
-      "x": 2.9,
-      "z": 3.17,
-      "rotation": 0,
+      "x": -2.155219932834532,
+      "z": 4.8706579483716945,
       "scale": 1,
       "padSize": 0.58,
       "padColor": "#6a8a55",
       "borderColor": "#887766",
+      "buildings": [
+        4,
+        5,
+        6
+      ],
       "slots": [
         {
-          "dx": -0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": 5.328151339329107,
+          "dz": 1.4728019769670837,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 220
         },
         {
-          "dx": 0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": -2.339014032401609,
+          "dz": -1.8975994790565038,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 215
         },
         {
-          "dx": -0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": 2.994181749825546,
+          "dz": -0.6547860615992551,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "tierOverride": 4,
+          "rotation": 315
         },
         {
-          "dx": 0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": 0.6085224852940225,
+          "dz": -1.15948458568191,
+          "yOffset": 0,
+          "scaleOverride": 1
         }
       ]
     },
@@ -88,33 +152,44 @@
       "id": 2,
       "label": "Tier 2",
       "tier": "2",
-      "x": -2.58,
-      "z": -2.07,
-      "rotation": 0,
+      "x": -2.3757181995321215,
+      "z": -1.2614976329835295,
       "scale": 1,
       "padSize": 0.58,
       "padColor": "#6a8a55",
       "borderColor": "#887766",
+      "buildings": [
+        7,
+        8
+      ],
       "slots": [
         {
-          "dx": -0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": 8.800062668196933,
+          "dz": 1.7326258204180454,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 300,
+          "tierOverride": 4
         },
         {
-          "dx": 0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": 3.308737009563815,
+          "dz": -1.378641414093614,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "tierOverride": 1,
+          "rotation": 310
         },
         {
-          "dx": -0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": -3.7350168148195437,
+          "dz": 1.985444551273977,
+          "yOffset": 0,
+          "scaleOverride": 1
         },
         {
-          "dx": 0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": 2.0522465266011616,
+          "dz": 3.5476008638737144,
+          "yOffset": 0,
+          "scaleOverride": 1
         }
       ]
     },
@@ -122,33 +197,43 @@
       "id": 3,
       "label": "Tier 2",
       "tier": "2",
-      "x": 3.26,
-      "z": -1.36,
-      "rotation": 0,
+      "x": 5.17,
+      "z": -1.65,
       "scale": 1,
       "padSize": 0.58,
       "padColor": "#6a8a55",
       "borderColor": "#887766",
+      "buildings": [
+        9,
+        10
+      ],
       "slots": [
         {
-          "dx": -0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": -7.222661990500917,
+          "dz": 8.567190935107874,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 305,
+          "tierOverride": 3
         },
         {
-          "dx": 0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": -9.42,
+          "dz": 7.4,
+          "yOffset": 0,
+          "scaleOverride": 1
         },
         {
-          "dx": -0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": 1.5292760015106377,
+          "dz": -0.7239654281454482,
+          "yOffset": 0,
+          "scaleOverride": 1.5,
+          "rotation": 130
         },
         {
-          "dx": 0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": -5.243419206924368,
+          "dz": 8.063643902247893,
+          "yOffset": 0,
+          "scaleOverride": 1
         }
       ]
     },
@@ -156,43 +241,299 @@
       "id": 4,
       "label": "Prestige",
       "tier": "3",
-      "x": 0.19,
-      "z": -1.64,
-      "rotation": 0,
+      "x": -4.101644772183259,
+      "z": 3.535890785884328,
       "scale": 1,
-      "padSize": 0.58,
+      "padSize": 0.37,
       "padColor": "#6a8a55",
       "borderColor": "#887766",
+      "buildings": [
+        11,
+        12
+      ],
       "slots": [
         {
-          "dx": -0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": 6.585427950221162,
+          "dz": -3.723731820333194,
+          "yOffset": 0,
+          "scaleOverride": 0.75,
+          "rotation": 310
         },
         {
-          "dx": 0.17,
-          "dz": -0.17,
-          "rotation": 0
+          "dx": 7.101644772183259,
+          "dz": -6.0358907858843285,
+          "yOffset": 0,
+          "scaleOverride": 1
         },
         {
-          "dx": -0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": 8.35164477218326,
+          "dz": -3.785890785884328,
+          "yOffset": 0,
+          "scaleOverride": 1,
+          "rotation": 225
         },
         {
-          "dx": 0.17,
-          "dz": 0.17,
-          "rotation": 0
+          "dx": -0.56,
+          "dz": -0.93,
+          "yOffset": 0,
+          "scaleOverride": 1
         }
       ]
     }
   ],
+  "lamps": {
+    "custom": [
+      {
+        "x": 0.8413177430187465,
+        "z": 0.49290497767403596,
+        "height": 0.06,
+        "color": "#ffeeaa"
+      },
+      {
+        "x": 0.4651434904831366,
+        "z": 0.961935108523285,
+        "height": 0.06,
+        "color": "#ffeeaa"
+      }
+    ]
+  },
   "roads": {
     "width": 0.23,
     "height": 0.008,
     "color": "#9a9080",
     "style": "cobblestone",
-    "customPaths": []
+    "customPaths": [
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 0,
+            "z": 0
+          },
+          {
+            "x": -4,
+            "z": 1
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 0,
+            "z": 0
+          },
+          {
+            "x": 1.5,
+            "z": 1.25
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 0,
+            "z": 0
+          },
+          {
+            "x": -0.25,
+            "z": -2.25
+          },
+          {
+            "x": -1.75,
+            "z": -4
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 1.5,
+            "z": 1.25
+          },
+          {
+            "x": 2.0543597875124435,
+            "z": 1.9664233323200007
+          },
+          {
+            "x": 1.25,
+            "z": 4.5
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 3.25,
+            "z": 1.5
+          },
+          {
+            "x": 4.5,
+            "z": 1
+          },
+          {
+            "x": 6.5,
+            "z": 0.5
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 1.5,
+            "z": 1.25
+          },
+          {
+            "x": 2.51,
+            "z": 1.67
+          },
+          {
+            "x": 3.25,
+            "z": 1.5
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": -1.43,
+            "z": -1.12
+          },
+          {
+            "x": -0.93,
+            "z": -0.62
+          },
+          {
+            "x": 0,
+            "z": 0
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": -3.75,
+            "z": -0.75
+          },
+          {
+            "x": -3.5,
+            "z": 0
+          },
+          {
+            "x": -2,
+            "z": 0.5
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": 1.25,
+            "z": 4.5
+          },
+          {
+            "x": 1.87,
+            "z": 5.69
+          },
+          {
+            "x": 2.75,
+            "z": 6
+          }
+        ]
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": -5.25,
+            "z": -1
+          },
+          {
+            "x": -4.75,
+            "z": -0.25
+          },
+          {
+            "x": -4.5,
+            "z": 0.5
+          }
+        ],
+        "closed": false
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": -6.009256007676781,
+            "z": 0.7427633563918353
+          },
+          {
+            "x": -5.5,
+            "z": 1
+          },
+          {
+            "x": -5,
+            "z": 1
+          }
+        ],
+        "closed": false
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "points": [
+          {
+            "x": -4.507325472814433,
+            "z": 2.971066121228207
+          },
+          {
+            "x": -4.5,
+            "z": 1.5
+          }
+        ],
+        "closed": false
+      },
+      {
+        "width": 0.1,
+        "style": "main",
+        "closed": true,
+        "points": [
+          {
+            "x": -4,
+            "z": 1
+          },
+          {
+            "x": -4.5,
+            "z": 1.5
+          },
+          {
+            "x": -5,
+            "z": 1
+          },
+          {
+            "x": -4.5,
+            "z": 0.5
+          }
+        ]
+      }
+    ]
   },
   "trees": {
     "count": 48,
@@ -206,7 +547,168 @@
       "#3a7a35",
       "#4a8a40"
     ],
-    "custom": []
+    "custom": [
+      {
+        "x": 3.8817257711038353,
+        "z": 3.8374476887959243,
+        "type": "oak",
+        "scale": 1,
+        "count": 40,
+        "spread": 0.8
+      },
+      {
+        "x": -3.5,
+        "z": -3,
+        "type": "pine",
+        "scale": 1.2,
+        "count": 100,
+        "spread": 1
+      },
+      {
+        "x": -1.4130708415735005,
+        "z": 5.545382267219682,
+        "type": "pine",
+        "scale": 0.9,
+        "count": 60,
+        "spread": 1
+      },
+      {
+        "x": 4.571188374428689,
+        "z": -1.4325334762339001,
+        "type": "birch",
+        "scale": 1,
+        "count": 10,
+        "spread": 0.12
+      },
+      {
+        "x": -3.3651953199314115,
+        "z": 5.4301385502577055,
+        "type": "pine",
+        "scale": 1.2,
+        "count": 50,
+        "spread": 1
+      },
+      {
+        "x": 2.7046436012779966,
+        "z": 2.9064005103613524,
+        "type": "oak",
+        "scale": 1,
+        "count": 30,
+        "spread": 0.5
+      },
+      {
+        "x": -2.789626912317074,
+        "z": 2.1892764365075355,
+        "type": "pine",
+        "scale": 1.1,
+        "count": 35,
+        "spread": 0.6
+      },
+      {
+        "x": -1.4411067114259315,
+        "z": -0.1400258534857629,
+        "type": "oak",
+        "scale": 0.8,
+        "count": 12,
+        "spread": 0.35
+      },
+      {
+        "x": 1.9233794713803134,
+        "z": -3.918042765759301,
+        "type": "birch",
+        "scale": 0.9,
+        "count": 18,
+        "spread": 0.5
+      },
+      {
+        "x": 3.8,
+        "z": -3.8,
+        "type": "pine",
+        "scale": 1.3,
+        "count": 45,
+        "spread": 0.9
+      },
+      {
+        "x": -2,
+        "z": -4.2,
+        "type": "pine",
+        "scale": 1.1,
+        "count": 55,
+        "spread": 0.8
+      },
+      {
+        "x": 0.5,
+        "z": -4,
+        "type": "pine",
+        "scale": 1,
+        "count": 30,
+        "spread": 0.6
+      },
+      {
+        "x": -6.279511283650871,
+        "z": -1.2699987742616887,
+        "type": "pine",
+        "scale": 1.3,
+        "count": 40,
+        "spread": 0.7
+      },
+      {
+        "x": 5.254786167786565,
+        "z": 2.288725218176692,
+        "type": "oak",
+        "scale": 0.85,
+        "count": 40,
+        "spread": 0.6
+      },
+      {
+        "x": -0.2721938386475249,
+        "z": 4.855850627658571,
+        "type": "pine",
+        "scale": 0.9,
+        "count": 8,
+        "spread": 0.4
+      },
+      {
+        "x": 1.5430452089193973,
+        "z": -0.6942613478403763,
+        "type": "oak",
+        "scale": 1,
+        "count": 30,
+        "spread": 0.3
+      },
+      {
+        "x": -3.1703350898093987,
+        "z": 3.6775328355309798,
+        "type": "pine",
+        "scale": 1,
+        "count": 20,
+        "spread": 0.6
+      },
+      {
+        "x": -5.342566956124445,
+        "z": 4.598986401209336,
+        "type": "pine",
+        "scale": 1,
+        "count": 50,
+        "spread": 1
+      },
+      {
+        "x": 2.7866558670546446,
+        "z": 4.467706881760702,
+        "type": "oak",
+        "scale": 1,
+        "count": 30,
+        "spread": 0.6
+      },
+      {
+        "x": 3.745460632517035,
+        "z": 2.2607243708354448,
+        "type": "oak",
+        "scale": 1,
+        "count": 40,
+        "spread": 0.5
+      }
+    ]
   },
   "decorations": [
     {
@@ -224,16 +726,232 @@
       "scale": 1,
       "rotation": 0,
       "color": "#777777"
+    },
+    {
+      "type": "rock",
+      "x": 4.43,
+      "z": 2.68,
+      "scale": 1,
+      "rotation": 0,
+      "color": "#777777"
+    },
+    {
+      "type": "rock",
+      "x": -4.3,
+      "z": -2.8,
+      "scale": 2.5,
+      "rotation": 45,
+      "color": "#888880"
+    },
+    {
+      "type": "rock",
+      "x": -4.8,
+      "z": -2.2,
+      "scale": 1.6,
+      "rotation": 200,
+      "color": "#7a7a72"
+    },
+    {
+      "type": "rock",
+      "x": -0.8,
+      "z": -3.9,
+      "scale": 2,
+      "rotation": 90,
+      "color": "#808078"
+    },
+    {
+      "type": "rock",
+      "x": 0.3,
+      "z": -3.4,
+      "scale": 1.4,
+      "rotation": 170,
+      "color": "#777777"
+    },
+    {
+      "type": "rock",
+      "x": 3.2,
+      "z": -3.5,
+      "scale": 1.8,
+      "rotation": 60,
+      "color": "#858580"
+    },
+    {
+      "type": "rock",
+      "x": -5.2,
+      "z": -0.3,
+      "scale": 1.5,
+      "rotation": 120,
+      "color": "#7a7a72"
+    },
+    {
+      "type": "rock",
+      "x": 5.5,
+      "z": -2.5,
+      "scale": 2.2,
+      "rotation": 30,
+      "color": "#888880"
+    },
+    {
+      "type": "rock",
+      "x": -3.8,
+      "z": -3.6,
+      "scale": 1.2,
+      "rotation": 260,
+      "color": "#777777"
+    },
+    {
+      "type": "well",
+      "x": -0.6,
+      "z": 0.9,
+      "scale": 1.2,
+      "rotation": 0,
+      "color": "#8a7a6a"
+    },
+    {
+      "type": "well",
+      "x": -1.3561525076276089,
+      "z": 4.217201777576832,
+      "scale": 1,
+      "rotation": 45,
+      "color": "#8a7a6a"
+    },
+    {
+      "type": "barrel",
+      "x": 0.25,
+      "z": 0.55,
+      "scale": 1,
+      "rotation": 15,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "barrel",
+      "x": 2.3,
+      "z": -0.4,
+      "scale": 0.9,
+      "rotation": 80,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "barrel",
+      "x": -4.2,
+      "z": 1.3,
+      "scale": 1,
+      "rotation": 200,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "crate",
+      "x": 0.4,
+      "z": 0.6,
+      "scale": 0.8,
+      "rotation": 40,
+      "color": "#7a5a3a"
+    },
+    {
+      "type": "crate",
+      "x": 1.7,
+      "z": 1.6,
+      "scale": 0.9,
+      "rotation": 10,
+      "color": "#7a5a3a"
+    },
+    {
+      "type": "crate",
+      "x": -3.6,
+      "z": 0.2,
+      "scale": 1,
+      "rotation": 160,
+      "color": "#7a5a3a"
+    },
+    {
+      "type": "sign",
+      "x": 1.1,
+      "z": 1.9,
+      "scale": 1,
+      "rotation": 210,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "sign",
+      "x": -2.6,
+      "z": 0.6,
+      "scale": 1,
+      "rotation": 135,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "sign",
+      "x": -0.4,
+      "z": -1.8,
+      "scale": 0.9,
+      "rotation": 0,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "fence",
+      "x": -1.6,
+      "z": -0.2,
+      "scale": 1.2,
+      "rotation": 30,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "fence",
+      "x": 3.5,
+      "z": 1.2,
+      "scale": 1,
+      "rotation": 150,
+      "color": "#5a3a1a"
+    },
+    {
+      "type": "campfire",
+      "x": -3.2,
+      "z": -1.8,
+      "scale": 1.2,
+      "rotation": 0,
+      "color": "#aa5522"
+    },
+    {
+      "type": "campfire",
+      "x": -1.0202024533371012,
+      "z": 3.914033445428167,
+      "scale": 1.4,
+      "rotation": 0,
+      "color": "#aa5522"
+    },
+    {
+      "type": "cart",
+      "x": -3.8,
+      "z": 0.9,
+      "scale": 1,
+      "rotation": 70,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "cart",
+      "x": 2.6,
+      "z": 0.8,
+      "scale": 0.9,
+      "rotation": 220,
+      "color": "#6b4a2a"
+    },
+    {
+      "type": "banner",
+      "x": 0.9,
+      "z": -0.1,
+      "scale": 1.2,
+      "rotation": 0,
+      "color": "#cc3333"
+    },
+    {
+      "type": "banner",
+      "x": -4.3,
+      "z": 3.8,
+      "scale": 1,
+      "rotation": 90,
+      "color": "#3355aa"
     }
   ],
-  "walls": {
-    "enabled": true,
-    "points": [],
-    "height": 0.13,
-    "thickness": 0.075,
-    "color": "#887766",
-    "gatePositions": []
-  },
   "lighting": {
     "sunColor": "#ffeedd",
     "sunIntensity": 2,
@@ -263,13 +981,95 @@
     "meshSize": 10,
     "resolution": 32,
     "patchRadius": 0,
-    "maxHeight": 0.01,
+    "maxHeight": 0,
     "waterOpacity": 0,
     "waterColor": "#2266aa",
     "skirtColor": "#4a6b35"
   },
+  "buildingRotation": 45,
   "buildingScale": {
-    "baseUnit": 0.1,
+    "baseUnit": 0.3,
     "levelScaleFactor": 0.1
+  },
+  "mountains": {
+    "T": {
+      "height": 3,
+      "density": 8,
+      "snowLine": 0.55,
+      "rock": "rock-cliff"
+    },
+    "TL": {
+      "height": 4,
+      "density": 5,
+      "snowLine": 0.55,
+      "rock": "rock-cliff"
+    },
+    "TR": {
+      "height": 2,
+      "density": 4,
+      "snowLine": 0.55,
+      "rock": "rock-cliff"
+    },
+    "ML": {
+      "height": 1,
+      "density": 3,
+      "snowLine": 1,
+      "rock": "rock-cliff"
+    },
+    "MR": {
+      "height": 2,
+      "density": 0,
+      "snowLine": 0.55,
+      "rock": "rock-cliff"
+    },
+    "BL": {
+      "height": 1,
+      "density": 0,
+      "snowLine": 0,
+      "rock": "rock-cliff"
+    },
+    "B": {
+      "height": 0,
+      "density": 0,
+      "snowLine": 0,
+      "rock": "rock-cliff"
+    },
+    "BR": {
+      "height": 1,
+      "density": 0,
+      "snowLine": 0.9,
+      "rock": "rock-cliff"
+    }
+  },
+  "sea": {
+    "enabled": true,
+    "angle": 310,
+    "spread": 90,
+    "reach": 3,
+    "depth": 1,
+    "beachWidth": 0.5,
+    "height": -0.08
+  },
+  "cameraBounds": {
+    "minX": -5.5,
+    "maxX": 5.58,
+    "minZ": -5,
+    "maxZ": 6.11
+  },
+  "grass": {
+    "enabled": true,
+    "density": 54000,
+    "bladesPerUnit": 540,
+    "minHeight": 0.018,
+    "maxHeight": 0.075,
+    "windStrength": 1,
+    "bladeWidth": 0.002,
+    "colorBrightness": 1
+  },
+  "textures": {
+    "grass": "grass-lush",
+    "dirt": "ground-dirt",
+    "rock": "rock-cliff",
+    "sand": "ground-sand"
   }
 }

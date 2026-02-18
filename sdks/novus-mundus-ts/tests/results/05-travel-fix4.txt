@@ -1,0 +1,313 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/05-travel.test.ts:
+
+[1m[34m━━━ Travel System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.4s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.3s.
+[PlayerFactory] Initializing player 0 (city 1)
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1771136477[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1771136477[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35minit user[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35minit player[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3wnNpHaA5w..[0m [33mTotal 6,437 / 524,341 CU[0m
+[2m[onchain][0m [2m5pKGyynN7A..[0m [36m⚡ EstateCreated[0m [2mestate=2zEozDGn.. player=8368TZj8.. playerName=Player #1 timestamp=1771136478[0m
+[2m[onchain][0m [2m5pKGyynN7A..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1771136478[0m
+[2m[onchain][0m [2m5pKGyynN7A..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m5pKGyynN7A..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m5pKGyynN7A..[0m [33mTotal 12,566 / 396,001 CU[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=0 plot=0 completesAt=1771150878 timestamp=1771136478[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=0 level=1 plot=0 timestamp=1771136478[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5SWezZ166b..[0m [33mTotal 1,071 / 321,551 CU[0m
+[buildAndCompleteBuilding] Building 17 needs split build...
+[2m[onchain][0m [2m5xFhHo56dY..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=17 plot=1 completesAt=1771179680 timestamp=1771136480[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [33mTotal 564 / 321,533 CU[0m
+[2m[onchain][0m [2m5xFhHo56dY..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=17 plot=1 completesAt=1771179681 timestamp=1771136481[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5oBr33QetM..[0m [33mTotal 10,203 / 331,736 CU[0m
+[2m[onchain][0m [2m5u4QQjNVcY..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5u4QQjNVcY..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5u4QQjNVcY..[0m [33mTotal 564 / 199,850 CU[0m
+[2m[onchain][0m [2m5u4QQjNVcY..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m52dCQsQAvA..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m52dCQsQAvA..[0m [33mTotal 10,187 / 199,850 CU[0m
+7233 |   async getLatestBlockhash(commitmentOrConfig) {
+7234 |     try {
+7235 |       const res = await this.getLatestBlockhashAndContext(commitmentOrConfig);
+7236 |       return res.value;
+7237 |     } catch (e) {
+7238 |       throw new Error('failed to get recent blockhash: ' + e);
+                   ^
+error: failed to get recent blockhash: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:7238:13)
+(fail) Travel System > Intracity Travel > should start intracity travel [12804.56ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 78AzdeTP5KjsEonGCoa8FF7Yzy7Dvn935WfuaXQXg3xM: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intracity Travel > should complete intracity travel after speedup [1.70ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account FdZDUuCxKAqqLgEBvwbrqZqzUqqtxQx3MU2LgAiNjW1J: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intracity Travel > should reject travel while already traveling [1.35ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 8WD4WZvVWn3jRPPKbcMETqGfrLgYFNfLbytHJ1Ttwuii: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intracity Travel > should reject complete before travel finishes [1.02ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 65SYutaBCKvHpMsdpwfjEiE9HXo6CL1jh3MFMVyzEhBM: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intercity Travel > should start intercity travel [1.25ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account GBgayznwwNZifqsDVCS394ohpR3AFD2VLZyJZ9MPYfBq: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intercity Travel > should complete intercity travel after speedup [1.11ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account EeAkWd5FnBoT6VbRC4hdveL6nWHN1Mj3ZpdzXN4o7CAL: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intercity Travel > should cancel intercity travel and reverse direction [1.00ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 5kWiuQEm6kwrJZzUDomUFmn6cRvdu5S7SDhpdM7N21m3: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intercity Travel > should reject intercity travel to same city [1.04ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account EVAFmJraVc2dzfVZ9cTyP5pN4G2L8uc9gA99Axia5Rhi: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intercity Travel > should reject intercity travel to invalid city [0.92ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account AvGnTfggU6MRGQX9hMHUVvQ4ALxmJM1jXLkMUg4Wc9MU: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Teleportation > should teleport between cities instantly [1.03ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account DYXXWTjshTiZj8aEQd2qgkVTwFCTF6hS8hVL2NYnabbM: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Teleportation > should fail teleport without required extension [0.68ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account CzSZgXPE7tR7HGbQ3rJRt3hmGtYLbcNt4rZezZS1JM61: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Speedup > should speedup ongoing intercity travel [0.84ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 2ZkPzNzwj3Quj9yPjk4XiMG4vqqEFgXpNopuxH3L8fUx: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Speedup > should reject speedup when not traveling [0.76ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 3bX72y2J2VTtu64FiCDuDCRW479enjVgpaAhxjQgySXQ: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel State > should track travel departure time [0.86ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account HrseJFA28ipvfTvUuWGSfDZkUbe1RLa4WnEz2kG6mRum: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel State > should store destination info during intracity travel [0.88ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account AXdSzPWqqcoGcinYzU8uaZWrQVWJhSaZpKV8epu4YXZX: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Intracity Cancel > should cancel intracity travel and return to origin [0.70ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 9me64sAyNnGTZvbmpCnXwhYzkmPBqtBgq64AWVPMt1G5: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Restrictions > should prevent starting second travel while already traveling [0.77ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account hcUZgyue9gNKqtRGUSHacY5r3bFacoap3TYTLnzS3zD: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Restrictions > should require Stables building for intercity travel [1.25ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 4N9TLrMBdMEZwg3z35k2L2pYNTaNaJLEFqqUNoMQFvnt: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Restrictions > should allow intercity travel with Stables [0.77ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 8gvVLjucxUBMcKTo2nfkYJWSYnQuGt5FQYqJZtAWYHXv: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Travel Restrictions > should verify new player has encounter stamina [0.69ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account 412ZTyAqfGappQKUL7wipCFk1bsaDNeCKKrTCC4WyDMi: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Multi-city Travel > should travel between cities with start cancel complete start pattern [0.95ms]
+6152 |   /**
+6153 |    * Fetch the balance for the specified public key
+6154 |    */
+6155 |   async getBalance(publicKey, commitmentOrConfig) {
+6156 |     return await this.getBalanceAndContext(publicKey, commitmentOrConfig).then(x => x.value).catch(e => {
+6157 |       throw new Error('failed to get balance of account ' + publicKey.toBase58() + ': ' + e);
+                   ^
+error: failed to get balance of account FQVgunZ7ox8YfZXmXSmX4wH4PaouTPt1Z4x6kC2bGLvx: Error: Unable to connect. Is the computer able to access the url?
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:6157:13)
+(fail) Travel System > Multi-city Travel > should arrive in destination city with correct position [0.96ms]
+
+ 0 pass
+ 22 fail
+Ran 22 tests across 1 files. [17.85s]

@@ -5,7 +5,7 @@
  */
 
 import BN from 'bn.js';
-import type { PlayerCore } from '../state/player.ts';
+import type { PlayerCore } from '../state/player';
 import {
   type ValidationResult,
   valid,
@@ -13,14 +13,14 @@ import {
   combine,
   validateRange,
   validateMinimumBN,
-} from './common.ts';
+} from './common';
 import {
   validateHasCash,
   validateHasGems,
   validateHasFragments,
   validateHasMaterials,
   validateHasLockedNovi,
-} from './player.ts';
+} from './player';
 
 // ============================================================
 // Constants
@@ -68,6 +68,16 @@ export function validateHireableUnitType(unitType: number): ValidationResult {
     return invalid(`Invalid unit type: ${unitType}. Must be 0-5.`);
   }
   return valid();
+}
+
+/**
+ * Get the required building for a unit type.
+ *
+ * Defensive units (0-2) require Barracks.
+ * Operative units (3-5) require Camp.
+ */
+export function getRequiredBuildingForUnit(unitType: number): 'Barracks' | 'Camp' {
+  return unitType <= 2 ? 'Barracks' : 'Camp';
 }
 
 /** Validate hire amount is within range */
@@ -193,39 +203,6 @@ export function validateHasCraftingMaterials(
   }
 
   return results.length > 0 ? combine(...results) : valid();
-}
-
-// ============================================================
-// Tax/Fee Validation
-// ============================================================
-
-/** Tax rate basis points (100 = 1%) */
-const MAX_TAX_BPS = 5000; // 50%
-
-/** Validate tax rate is within bounds */
-export function validateTaxRate(taxBps: number): ValidationResult {
-  return validateRange(taxBps, 0, MAX_TAX_BPS, 'Tax rate');
-}
-
-/** Calculate and validate after-tax amount */
-export function validateAfterTax(
-  grossAmount: BN,
-  taxBps: number
-): { netAmount: BN; taxAmount: BN } & ValidationResult {
-  const result = validateTaxRate(taxBps);
-  if (!result.valid) {
-    return { ...result, netAmount: new BN(0), taxAmount: new BN(0) };
-  }
-
-  const taxAmount = grossAmount.muln(taxBps).divn(10000);
-  const netAmount = grossAmount.sub(taxAmount);
-
-  return {
-    valid: true,
-    errors: [],
-    netAmount,
-    taxAmount,
-  };
 }
 
 // ============================================================

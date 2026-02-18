@@ -6,13 +6,14 @@
 
 import {
   PHI,
+  PHI_SQUARED,
   GOLDEN_ROOT,
   applyBps,
   applyBpsPenalty,
   NOVI_BASE_MULTIPLIER,
   NOVI_GOLDEN_MULTIPLIER,
-} from './constants.ts';
-import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time.ts';
+} from './constants';
+import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 
 // ============================================================
 // Unit Hiring Costs
@@ -150,36 +151,42 @@ export function calculatePurchaseCost(
 /**
  * Calculate building upgrade cost.
  *
- * Uses exponential scaling: baseCost * φ^(level-1)
+ * Matches Rust: cost = baseCost × (φ²)^currentLevel
+ * Uses integer approximation matching on-chain: multiply by 2618, divide by 1000 per level.
  *
- * @param baseCost - Base cost at level 1
- * @param currentLevel - Current building level
- * @param scalingFactor - Scaling factor per level (default φ = 1.618)
+ * @param baseCost - Base cost for the building type
+ * @param currentLevel - Current building level (0 = first upgrade costs baseCost)
+ * @param scalingFactor - Scaling factor per level (default φ² = 2.618)
  * @returns Cost to upgrade to next level
  */
 export function calculateUpgradeCost(
   baseCost: number,
   currentLevel: number,
-  scalingFactor: number = PHI
+  scalingFactor: number = PHI_SQUARED
 ): number {
-  return Math.floor(baseCost * Math.pow(scalingFactor, currentLevel - 1));
+  // Match Rust integer math: cost * 2618 / 1000 per level
+  let cost = baseCost;
+  for (let i = 0; i < currentLevel; i++) {
+    cost = Math.floor(cost * 2618 / 1000);
+  }
+  return cost;
 }
 
 /**
- * Calculate cumulative upgrade cost (total cost to reach a level from level 1).
+ * Calculate cumulative upgrade cost (total cost to reach a level from level 0).
  *
- * @param baseCost - Base cost at level 1
+ * @param baseCost - Base cost for the building type
  * @param targetLevel - Target level to reach
  * @param scalingFactor - Scaling factor per level
- * @returns Total cost from level 1 to targetLevel
+ * @returns Total cost from level 0 to targetLevel
  */
 export function calculateCumulativeUpgradeCost(
   baseCost: number,
   targetLevel: number,
-  scalingFactor: number = PHI
+  scalingFactor: number = PHI_SQUARED
 ): number {
   let total = 0;
-  for (let level = 1; level < targetLevel; level++) {
+  for (let level = 0; level < targetLevel; level++) {
     total += calculateUpgradeCost(baseCost, level, scalingFactor);
   }
   return total;
@@ -365,4 +372,44 @@ export function getCostTimeBonusDescription(timeOfDay: TimeOfDay): string {
   }
 
   return 'Normal prices';
+}
+
+// ============================================================
+// Troop Recovery Costs (Infirmary)
+// ============================================================
+
+/** Recovery cost discount: 50% of normal hire cost */
+const RECOVERY_COST_DISCOUNT_BPS = 5000;
+
+/**
+ * Calculate cost to recover wounded troops from Infirmary.
+ *
+ * Cost = base_hire_cost × 50% × (1 - infirmary_level_discount) × (1 - daily_buff_discount)
+ *
+ * @param baseUnitCost - Base hiring cost for the unit type
+ * @param infirmaryRecoveryBps - Infirmary level discount (25 bps per level)
+ * @param infirmaryDailyBps - Daily Infirmary buff discount
+ * @param amount - Number of units to recover
+ * @returns Total NOVI cost
+ */
+export function calculateRecoveryCost(
+  baseUnitCost: number,
+  infirmaryRecoveryBps: number,
+  infirmaryDailyBps: number,
+  amount: number
+): number {
+  // 50% base discount
+  let perUnit = applyBps(baseUnitCost, RECOVERY_COST_DISCOUNT_BPS);
+
+  // Infirmary level discount
+  if (infirmaryRecoveryBps > 0) {
+    perUnit = perUnit * (10000 - infirmaryRecoveryBps) / 10000;
+  }
+
+  // Daily buff discount
+  if (infirmaryDailyBps > 0) {
+    perUnit = perUnit * (10000 - infirmaryDailyBps) / 10000;
+  }
+
+  return Math.max(1, Math.floor(perUnit)) * amount;
 }

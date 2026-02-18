@@ -17,7 +17,7 @@ import {
   parseEventsFromLogs,
   getEventName,
   isEventType,
-} from '../../src/events/parser.ts';
+} from '../../src/events/parser';
 
 describe('Event Discriminator', () => {
   describe('computeEventDiscriminator', () => {
@@ -70,13 +70,13 @@ describe('Event Discriminator', () => {
         'UnitsHired',
         'TeamCreated',
         'TeamJoined',
-        'TravelStarted',
-        'TravelCompleted',
+        'IntercityTravelStarted',
+        'IntercityTravelCompleted',
         'RallyCreated',
         'ReinforcementSent',
         'ExpeditionStarted',
         'LootClaimed',
-        'PlayerInitialized',
+        'PlayerCreated',
         'HeroMinted',
         'ItemPurchased',
         'DungeonEntered',
@@ -248,27 +248,27 @@ describe('Event Parsing', () => {
       expect(parseNovusMundusEvent(data)).toBeNull();
     });
 
-    it('should parse PlayerInitialized event', () => {
-      // Build a mock PlayerInitialized event
-      const disc = computeEventDiscriminator('PlayerInitialized');
+    it('should parse PlayerCreated event', () => {
+      // Build a mock PlayerCreated event: player(32) + user(32) + city(32) + timestamp(8)
+      const disc = computeEventDiscriminator('PlayerCreated');
       const player = Keypair.generate().publicKey;
-      const owner = Keypair.generate().publicKey;
+      const user = Keypair.generate().publicKey;
       const city = Keypair.generate().publicKey;
       const timestamp = new BN(Date.now() / 1000);
 
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
       player.toBuffer().copy(data, 8);
-      owner.toBuffer().copy(data, 40);
+      user.toBuffer().copy(data, 40);
       city.toBuffer().copy(data, 72);
       timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
 
       const event = parseNovusMundusEvent(data);
 
       expect(event).not.toBeNull();
-      expect(event!.name).toBe('PlayerInitialized');
+      expect(event!.name).toBe('PlayerCreated');
       expect((event!.data as any).player.equals(player)).toBe(true);
-      expect((event!.data as any).owner.equals(owner)).toBe(true);
+      expect((event!.data as any).user.equals(user)).toBe(true);
       expect((event!.data as any).city.equals(city)).toBe(true);
     });
 
@@ -276,12 +276,12 @@ describe('Event Parsing', () => {
       const disc = computeEventDiscriminator('TeamCreated');
       const team = Keypair.generate().publicKey;
       const teamName = 'TestTeam';
-      const leader = Keypair.generate().publicKey;
-      const leaderName = 'LeaderPlayer';
+      const founder = Keypair.generate().publicKey;
+      const noviBurned = new BN(1000);
       const timestamp = new BN(Date.now() / 1000);
 
-      // team(32) + teamName(32) + leader(32) + leaderName(48) + timestamp(8)
-      const data = Buffer.alloc(8 + 32 + 32 + 32 + 48 + 8);
+      // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
+      const data = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
       let offset = 0;
 
       Buffer.from(disc).copy(data, offset);
@@ -295,13 +295,11 @@ describe('Event Parsing', () => {
       nameBuffer.copy(data, offset);
       offset += 32;
 
-      leader.toBuffer().copy(data, offset);
+      founder.toBuffer().copy(data, offset);
       offset += 32;
 
-      const leaderNameBuffer = Buffer.alloc(48);
-      leaderNameBuffer.write(leaderName, 0, 'utf8');
-      leaderNameBuffer.copy(data, offset);
-      offset += 48;
+      noviBurned.toArrayLike(Buffer, 'le', 8).copy(data, offset);
+      offset += 8;
 
       timestamp.toArrayLike(Buffer, 'le', 8).copy(data, offset);
 
@@ -311,23 +309,23 @@ describe('Event Parsing', () => {
       expect(event!.name).toBe('TeamCreated');
       expect((event!.data as any).team.equals(team)).toBe(true);
       expect((event!.data as any).teamName).toBe(teamName);
-      expect((event!.data as any).leader.equals(leader)).toBe(true);
-      expect((event!.data as any).leaderName).toBe(leaderName);
+      expect((event!.data as any).founder.equals(founder)).toBe(true);
+      expect((event!.data as any).noviBurned.toNumber()).toBe(1000);
     });
   });
 
   describe('parseEventFromBase64', () => {
     it('should parse base64-encoded event', () => {
-      const disc = computeEventDiscriminator('PlayerInitialized');
+      const disc = computeEventDiscriminator('PlayerCreated');
       const player = Keypair.generate().publicKey;
-      const owner = Keypair.generate().publicKey;
+      const user = Keypair.generate().publicKey;
       const city = Keypair.generate().publicKey;
       const timestamp = new BN(Date.now() / 1000);
 
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
       player.toBuffer().copy(data, 8);
-      owner.toBuffer().copy(data, 40);
+      user.toBuffer().copy(data, 40);
       city.toBuffer().copy(data, 72);
       timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
 
@@ -335,14 +333,14 @@ describe('Event Parsing', () => {
       const event = parseEventFromBase64(base64);
 
       expect(event).not.toBeNull();
-      expect(event!.name).toBe('PlayerInitialized');
+      expect(event!.name).toBe('PlayerCreated');
     });
   });
 
   describe('parseEventsFromLogs', () => {
     it('should extract events from program logs', () => {
-      // Build a mock event
-      const disc = computeEventDiscriminator('PlayerInitialized');
+      // Build a mock PlayerCreated event
+      const disc = computeEventDiscriminator('PlayerCreated');
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
       // Fill with random pubkeys and timestamp
@@ -362,7 +360,7 @@ describe('Event Parsing', () => {
       const events = parseEventsFromLogs(logs);
 
       expect(events.length).toBe(1);
-      expect(events[0]!.name).toBe('PlayerInitialized');
+      expect(events[0]!.name).toBe('PlayerCreated');
     });
 
     it('should return empty array for logs without events', () => {
@@ -391,7 +389,8 @@ describe('Event Parsing', () => {
 
     it('should parse multiple events', () => {
       // Create two different events
-      const disc1 = computeEventDiscriminator('PlayerInitialized');
+      const disc1 = computeEventDiscriminator('PlayerCreated');
+      // player(32) + user(32) + city(32) + timestamp(8)
       const data1 = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc1).copy(data1, 0);
       Keypair.generate().publicKey.toBuffer().copy(data1, 8);
@@ -400,14 +399,14 @@ describe('Event Parsing', () => {
       new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data1, 104);
 
       const disc2 = computeEventDiscriminator('TeamCreated');
-      // team(32) + teamName(32) + leader(32) + leaderName(48) + timestamp(8)
-      const data2 = Buffer.alloc(8 + 32 + 32 + 32 + 48 + 8);
+      // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
+      const data2 = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
       Buffer.from(disc2).copy(data2, 0);
       Keypair.generate().publicKey.toBuffer().copy(data2, 8);
       Buffer.alloc(32).copy(data2, 40); // team name
       Keypair.generate().publicKey.toBuffer().copy(data2, 72);
-      Buffer.alloc(48).copy(data2, 104); // leader name
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data2, 152);
+      new BN(0).toArrayLike(Buffer, 'le', 8).copy(data2, 104); // noviBurned
+      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data2, 112);
 
       const logs = [
         `Program data: ${data1.toString('base64')}`,
@@ -417,7 +416,7 @@ describe('Event Parsing', () => {
       const events = parseEventsFromLogs(logs);
 
       expect(events.length).toBe(2);
-      expect(events[0]!.name).toBe('PlayerInitialized');
+      expect(events[0]!.name).toBe('PlayerCreated');
       expect(events[1]!.name).toBe('TeamCreated');
     });
   });

@@ -10,6 +10,7 @@ import {
   Transaction,
   PublicKey,
   LAMPORTS_PER_SOL,
+  ComputeBudgetProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import * as fs from 'fs';
@@ -17,6 +18,7 @@ import * as path from 'path';
 
 import {
   createInitPlayerInstruction,
+  createInitUserInstruction,
   createHireUnitsInstruction,
   createPurchaseEquipmentInstruction,
   createCreateEstateInstruction,
@@ -26,8 +28,21 @@ import {
   createIntracityCompleteInstruction,
   createTravelSpeedupInstruction,
   createPurchaseItemInstruction,
+  createBuildBuildingInstruction,
+  createUpgradeBuildingInstruction,
+  createCompleteBuildingInstruction,
+  createBuildingSpeedupInstruction,
+  createCreateProgressInstruction,
+  createStartResearchInstruction,
+  createSpeedUpResearchInstruction,
+  createCompleteResearchInstruction,
+  createMintForPrizeInstruction,
+  MintPurpose,
+  createReservedToLockedInstruction,
+  BuildingType,
   derivePlayerPda,
   deriveEstatePda,
+  deriveUserPda,
   deriveLocationPda,
   deriveGameEnginePda,
   deriveCityPda,
@@ -36,7 +51,7 @@ import {
   PROGRAM_ID,
 } from '../../src/index';
 
-import { CITIES, TEST_GEMS_ITEM } from './setup';
+import { CITIES, TEST_GEMS_ITEM, TEST_FRAGMENTS_ITEM } from './setup';
 
 import { type TestContext, airdropIfNeeded, sendTx } from './setup';
 
@@ -74,7 +89,7 @@ export interface PlayerFactoryConfig {
 const DEFAULT_FACTORY_CONFIG: PlayerFactoryConfig = {
   poolSize: 10,
   autoCycleCities: true, // Each player gets a unique city to avoid spawn collision
-  defaultCityId: 1,
+  defaultCityId: 0,
   autoInit: true,
   autoEstate: false,
   initialBalance: 5 * LAMPORTS_PER_SOL,
@@ -133,20 +148,22 @@ export class PlayerFactory {
       initialize?: boolean;
       createEstate?: boolean;
       customKeypair?: Keypair;
+      /** Building types to auto-construct after estate creation */
+      buildings?: (BuildingType | number)[];
     } = {}
   ): Promise<TestPlayer> {
     const index = this.nextIndex++;
     const keypair = options.customKeypair || loadOrCreatePlayerKeypair(index);
     const [playerPda, playerBump] = derivePlayerPda(this.ctx.gameEngine, keypair.publicKey);
-    const [estatePda, estateBump] = deriveEstatePda(keypair.publicKey);
+    const [estatePda, estateBump] = deriveEstatePda(playerPda);
 
     // Auto-assign unique city if autoCycleCities is enabled and no explicit cityId
     let cityId: number;
     if (options.cityId !== undefined) {
       cityId = options.cityId;
     } else if (this.config.autoCycleCities) {
-      // Cycle through available cities (1-indexed, mod by CITIES.length)
-      cityId = (index % CITIES.length) + 1;
+      // Cycle through available cities (0-indexed, matching Rust INITIAL_CITIES)
+      cityId = index % CITIES.length;
     } else {
       cityId = this.config.defaultCityId;
     }
@@ -170,16 +187,26 @@ export class PlayerFactory {
       this.config.initialBalance
     );
 
-    // Initialize player if requested
     const shouldInit = options.initialize ?? this.config.autoInit;
-    if (shouldInit) {
-      await this.initializePlayer(player);
-    }
-
-    // Create estate if requested
     const shouldEstate = options.createEstate ?? this.config.autoEstate;
-    if (shouldEstate && player.initialized) {
-      await this.createPlayerEstate(player);
+
+    if (shouldInit) {
+      // Batch: initUser + initPlayer + unlockResearch in ONE transaction
+      console.log(`[PlayerFactory] Initializing player ${index} (city ${cityId})`);
+      await this.initializePlayerBatched(player);
+
+      // Batch: createEstate + buyGems in ONE transaction
+      // Always buy gems to unlock EXT_INVENTORY (required for team/rally/etc)
+      if (shouldEstate) {
+        await this.createEstateBatched(player, true);
+      }
+
+      // Buildings: each is already a single tx (build + 7×speedup + complete)
+      if (options.buildings && player.hasEstate) {
+        for (const buildingType of options.buildings) {
+          await this.buildAndCompleteBuilding(player, buildingType);
+        }
+      }
     }
 
     this.players.set(index, player);
@@ -203,6 +230,97 @@ export class PlayerFactory {
       players.push(player);
     }
     return players;
+  }
+
+  /**
+   * Batched init: initUser + initPlayer + unlockResearch in ONE transaction.
+   * Within a single Solana tx, instructions execute sequentially and see
+   * state changes from previous instructions.
+   */
+  async initializePlayerBatched(player: TestPlayer): Promise<void> {
+    if (player.initialized) return;
+
+    // Check if already initialized on-chain
+    const accountInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    if (accountInfo !== null && accountInfo.data.length > 0) {
+      player.initialized = true;
+      return;
+    }
+
+    const city = CITIES.find(c => c.id === player.startingCityId);
+    if (!city) throw new Error(`City ${player.startingCityId} not found`);
+
+    const spawnIndex = this.citySpawnCount.get(player.startingCityId) ?? 0;
+    this.citySpawnCount.set(player.startingCityId, spawnIndex + 1);
+    const spawnLat = city.lat + spawnIndex * 0.0001;
+    const spawnLon = city.lon;
+
+    const tx = new Transaction();
+
+    // 1. Init user (creates user PDA)
+    tx.add(createInitUserInstruction({
+      owner: player.publicKey,
+      gameEngine: this.ctx.gameEngine,
+    }));
+
+    // 2. Init player (reads user PDA created above)
+    tx.add(createInitPlayerInstruction({
+      owner: player.publicKey,
+      gameEngine: this.ctx.gameEngine,
+      startingCityId: player.startingCityId,
+      cityLatitude: spawnLat,
+      cityLongitude: spawnLon,
+    }));
+
+    // 3. Unlock research (reads player PDA created above)
+    tx.add(createCreateProgressInstruction({
+      owner: player.publicKey,
+      gameEngine: this.ctx.gameEngine,
+    }));
+
+    // Request extra compute for 3 account-creating instructions
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }));
+
+    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    player.initialized = true;
+  }
+
+  /**
+   * Batched estate: createEstate + buyGems in ONE transaction.
+   */
+  async createEstateBatched(player: TestPlayer, includeGems: boolean = false): Promise<void> {
+    if (player.hasEstate) return;
+
+    const accountInfo = await this.ctx.connection.getAccountInfo(player.estatePda);
+    if (accountInfo !== null && accountInfo.data.length > 0) {
+      player.hasEstate = true;
+      return;
+    }
+
+    const tx = new Transaction();
+
+    // 1. Create estate
+    tx.add(createCreateEstateInstruction(
+      { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+      { cityId: 1 }
+    ));
+
+    // 2. Buy gems (for building speedups)
+    if (includeGems) {
+      tx.add(createPurchaseItemInstruction(
+        {
+          buyer: player.publicKey,
+          gameEngine: this.ctx.gameEngine,
+          itemId: TEST_GEMS_ITEM.itemId,
+          treasury: this.ctx.treasury.publicKey,
+        },
+        { quantity: 10 }
+      ));
+      this.playerGemsReady.add(player.publicKey.toBase58());
+    }
+
+    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    player.hasEstate = true;
   }
 
   /**
@@ -244,6 +362,54 @@ export class PlayerFactory {
     const tx = new Transaction().add(ix);
     await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
     player.initialized = true;
+  }
+
+  /**
+   * Initialize a user account for the player (subscription/reserved NOVI).
+   */
+  async initializeUser(player: TestPlayer): Promise<void> {
+    const [userPda] = deriveUserPda(player.publicKey);
+
+    // Check if already initialized
+    const accountInfo = await this.ctx.connection.getAccountInfo(userPda);
+    if (accountInfo !== null && accountInfo.data.length > 0) {
+      return;
+    }
+
+    const ix = createInitUserInstruction({
+      owner: player.publicKey,
+      gameEngine: this.ctx.gameEngine,
+    });
+
+    const tx = new Transaction().add(ix);
+    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+  }
+
+  /**
+   * Unlock EXT_RESEARCH extension by creating research progress.
+   * This is the first extension in the user journey.
+   */
+  async unlockResearch(player: TestPlayer): Promise<void> {
+    if (!player.initialized) {
+      throw new Error('Player must be initialized before unlocking research');
+    }
+
+    const ix = createCreateProgressInstruction({
+      owner: player.publicKey,
+      gameEngine: this.ctx.gameEngine,
+    });
+
+    const tx = new Transaction().add(ix);
+    try {
+      await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    } catch (e: any) {
+      console.error('[unlockResearch] Failed:', e.transactionMessage || e.message);
+      if (e.getLogs) {
+        const logs = await e.getLogs(this.ctx.connection);
+        console.error('[unlockResearch] Logs:', logs);
+      }
+      throw e;
+    }
   }
 
   /**
@@ -329,20 +495,28 @@ export class PlayerFactory {
     originCityId: number,
     destinationCityId: number,
     originGridLat: number,
-    originGridLong: number
+    originGridLong: number,
+    destGridLat?: number,
+    destGridLong?: number
   ): Promise<void> {
     const [originLocation] = deriveLocationPda(this.ctx.gameEngine, originCityId, originGridLat, originGridLong);
-    // Destination location will be derived based on city center
-    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, destinationCityId, 0, 0);
+    // Use provided destination grid coords, or default to city center
+    const destCity = CITIES[destinationCityId]!;
+    const GRID_PRECISION = 10000.0;
+    const finalDestGridLat = destGridLat ?? Math.round(destCity.lat * GRID_PRECISION);
+    const finalDestGridLong = destGridLong ?? Math.round(destCity.lon * GRID_PRECISION);
+    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, destinationCityId, finalDestGridLat, finalDestGridLong);
 
     const ix = createIntercityStartInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       originCityId,
       destinationCityId,
+      destGridLat: finalDestGridLat,
+      destGridLong: finalDestGridLong,
       originLocation,
       destinationLocation,
-      originCreatorRefund: this.ctx.gameEngine,
+      originCreatorRefund: player.publicKey,
     });
 
     const tx = new Transaction().add(ix);
@@ -386,9 +560,9 @@ export class PlayerFactory {
     destLat: number,
     destLong: number
   ): Promise<void> {
-    // Grid coords are different from actual lat/long
-    const destGridLat = Math.floor(destLat / 100);
-    const destGridLong = Math.floor(destLong / 100);
+    // Convert f64 coords to grid: grid = round(coord * 10000)
+    const destGridLat = Math.round(destLat * 10000);
+    const destGridLong = Math.round(destLong * 10000);
     const [originLocation] = deriveLocationPda(this.ctx.gameEngine, cityId, originGridLat, originGridLong);
     const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, cityId, destGridLat, destGridLong);
 
@@ -461,6 +635,12 @@ export class PlayerFactory {
    * Used for travel speedup in tests.
    */
   async buyGems(player: TestPlayer, purchases: number = 1): Promise<void> {
+    // Debug: check player account state before purchase
+    const preInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    if (preInfo) {
+      console.log(`[buyGems] PRE: data_len=${preInfo.data.length} lamports=${preInfo.lamports}`);
+    }
+
     const ix = createPurchaseItemInstruction(
       {
         buyer: player.publicKey,
@@ -472,7 +652,72 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
+    try {
+      await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    } catch (e: any) {
+      console.error('[buyGems] Failed:', e.transactionMessage || e.message);
+      if (e.getLogs) {
+        const logs = await e.getLogs(this.ctx.connection);
+        console.error('[buyGems] Logs:', logs);
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Buy fragments for hero level-up.
+   * Each purchase gives 100 fragments.
+   */
+  async buyFragments(player: TestPlayer, purchases: number = 1): Promise<void> {
+    const ix = createPurchaseItemInstruction(
+      {
+        buyer: player.publicKey,
+        gameEngine: this.ctx.gameEngine,
+        itemId: TEST_FRAGMENTS_ITEM.itemId,
+        treasury: this.ctx.treasury.publicKey,
+      },
+      { quantity: purchases }
+    );
+
+    const tx = new Transaction().add(ix);
     await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+  }
+
+  /**
+   * Complete a research type: start → speedup → complete.
+   * Requires: player initialized, estate with Academy (Lv 1+), research progress PDA created.
+   */
+  async completeResearch(player: TestPlayer, researchType: number): Promise<void> {
+    // Ensure gems for speedup
+    const playerKey = player.publicKey.toBase58();
+    if (!this.playerGemsReady.has(playerKey)) {
+      await this.buyGems(player, 10);
+      this.playerGemsReady.add(playerKey);
+    }
+
+    // Start research
+    const startIx = createStartResearchInstruction({
+      gameEngine: this.ctx.gameEngine,
+      owner: player.publicKey,
+      researchType,
+    });
+    await sendTx(this.ctx.connection, new Transaction().add(startIx), [player.keypair], this.ctx.config);
+
+    // Speedup to completion (0 = complete all remaining)
+    const speedupIx = createSpeedUpResearchInstruction(
+      { gameEngine: this.ctx.gameEngine, owner: player.publicKey, researchType },
+      { speedUpSeconds: new BN(0) }
+    );
+    await sendTx(this.ctx.connection, new Transaction().add(speedupIx), [player.keypair], this.ctx.config);
+
+    // Complete research
+    const completeIx = createCompleteResearchInstruction({
+      gameEngine: this.ctx.gameEngine,
+      payer: player.publicKey,
+      playerOwner: player.publicKey,
+      researchType,
+    });
+    await sendTx(this.ctx.connection, new Transaction().add(completeIx), [player.keypair], this.ctx.config);
   }
 
   /**
@@ -487,6 +732,303 @@ export class PlayerFactory {
 
     const tx = new Transaction().add(ix);
     await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+  }
+
+  /** Track which buildings each player has built (for prerequisite handling) */
+  private playerBuildings = new Map<string, Set<number>>();
+  /** Track which players have already purchased gems (avoid redundant buys) */
+  private playerGemsReady = new Set<string>();
+
+  /**
+   * Build a building and instantly complete it in a SINGLE transaction.
+   * Automatically builds prerequisite buildings (Mansion) if needed.
+   *
+   * Uses tier 2 speedup (25% remains) × 7 applications within the same tx.
+   * All instructions share the same Clock::get() timestamp, so after 7 speedups
+   * integer truncation brings remaining to 0, allowing immediate completion.
+   *
+   * Single tx: build + 7×speedup_tier2 + complete = 9 instructions
+   */
+  async buildAndCompleteBuilding(player: TestPlayer, buildingType: BuildingType | number): Promise<void> {
+    const playerKey = player.publicKey.toBase58();
+    const built = this.playerBuildings.get(playerKey) ?? new Set();
+
+    // Skip if already built (in-memory)
+    if (built.has(buildingType as number)) {
+      return;
+    }
+
+    // Check on-chain estate for existing building
+    const estateInfo = await this.ctx.connection.getAccountInfo(player.estatePda);
+    if (estateInfo && estateInfo.data.length > 0) {
+      // Scan building slots (last portion of account data)
+      // Each BuildingSlot is 36 bytes: [building_type(u8), status(u8), ...]
+      // Status 0 = Empty, anything else = building exists
+      const SLOT_SIZE = 36;
+      const MAX_SLOTS = 20;
+      const slotsData = estateInfo.data.slice(estateInfo.data.length - MAX_SLOTS * SLOT_SIZE);
+      for (let i = 0; i < MAX_SLOTS; i++) {
+        const offset = i * SLOT_SIZE;
+        const slotType = slotsData[offset]!;
+        const slotStatus = slotsData[offset + 1]!;
+        if (slotType === (buildingType as number) && slotStatus !== 0) {
+          built.add(buildingType as number);
+          this.playerBuildings.set(playerKey, built);
+          return;
+        }
+      }
+    }
+
+    // Auto-build Mansion prerequisite if not already built
+    if (buildingType !== BuildingType.Mansion && !built.has(BuildingType.Mansion)) {
+      await this.buildAndCompleteBuilding(player, BuildingType.Mansion);
+    }
+
+    // Ensure player has gems for speedup (buy once, not per-building)
+    if (!this.playerGemsReady.has(playerKey)) {
+      await this.buyGems(player, 10);
+      this.playerGemsReady.add(playerKey);
+    }
+
+    // Two-phase build: (1) build + 7×speedup, (2) more speedups + complete
+    // Phase 1 always succeeds. Phase 2 handles longer build times that need extra speedups.
+    const tx1 = new Transaction();
+    tx1.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+
+    // 1. Build
+    tx1.add(createBuildBuildingInstruction(
+      { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+      { buildingType }
+    ));
+
+    // 2. Speedup ×7 (tier 2: 25% remains each time)
+    for (let i = 0; i < 7; i++) {
+      tx1.add(createBuildingSpeedupInstruction(
+        { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+        { buildingType, speedupTier: 2 }
+      ));
+    }
+
+    // 3. Complete (may fail for longer builds where 7 speedups isn't enough)
+    tx1.add(createCompleteBuildingInstruction(
+      { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+      { buildingType }
+    ));
+
+    try {
+      await sendTx(this.ctx.connection, tx1, [player.keypair], this.ctx.config);
+    } catch (e: any) {
+      const errCode = this.extractCustomError(e);
+      if (errCode === 7706) {
+        // BuildingAlreadyExists — fully built, just skip
+        console.log(`[buildAndCompleteBuilding] Building ${buildingType} already exists, continuing`);
+      } else if (errCode === 7708) {
+        // ConstructionNotComplete — first tx rolled back, need to split into two txs
+        console.log(`[buildAndCompleteBuilding] Building ${buildingType} needs split build...`);
+
+        // Tx A: build + 7×speedup (no complete)
+        const txA = new Transaction();
+        txA.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+        txA.add(createBuildBuildingInstruction(
+          { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+          { buildingType }
+        ));
+        for (let i = 0; i < 7; i++) {
+          txA.add(createBuildingSpeedupInstruction(
+            { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+            { buildingType, speedupTier: 2 }
+          ));
+        }
+        await sendTx(this.ctx.connection, txA, [player.keypair], this.ctx.config);
+
+        // Tx B: remaining speedups + complete
+        await this.completeExistingBuilding(player, buildingType);
+      } else {
+        throw e;
+      }
+    }
+
+    // Wait for validator to produce a new block after heavy building tx
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Track built buildings for prerequisite handling
+    built.add(buildingType as number);
+    this.playerBuildings.set(playerKey, built);
+  }
+
+  /**
+   * Extract Custom error code from a SendTransactionError.
+   * Returns the numeric code or null if not found.
+   */
+  private extractCustomError(e: any): number | null {
+    const txMsg = e?.transactionMessage ?? '';
+    const match = txMsg.match(/"Custom":(\d+)/);
+    return match?.[1] ? parseInt(match[1], 10) : null;
+  }
+
+  /**
+   * Complete an already-started building with 1 extra speedup + complete.
+   * Used when the first build+7xspeedup+complete tx fails with ConstructionNotComplete
+   * (the tx rolled back, so we split: txA = build+7xspeedup, txB = 1xspeedup+complete).
+   */
+  private async completeExistingBuilding(player: TestPlayer, buildingType: BuildingType | number): Promise<void> {
+    // After 7 speedups, remaining is ~5s. Each retry does 1 speedup + complete.
+    // Speedup reduces remaining by 75% (tier 2: 25% remains).
+    // When remaining < 4s, speedup truncates to 0 → complete succeeds.
+    // Strategy: try 1 speedup + complete per round. If speedup causes InvalidParameter
+    // (already at 0), just try complete alone. Retry up to 8 times.
+    for (let round = 0; round < 8; round++) {
+      // First, try complete alone (in case construction already ended)
+      try {
+        const completeTx = new Transaction();
+        completeTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
+        completeTx.add(createCompleteBuildingInstruction(
+          { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+          { buildingType }
+        ));
+        await sendTx(this.ctx.connection, completeTx, [player.keypair], this.ctx.config);
+        return; // Success!
+      } catch (e: any) {
+        const errCode = this.extractCustomError(e);
+        if (errCode !== 7708) {
+          throw e; // Unexpected error
+        }
+        // ConstructionNotComplete — need more speedups
+      }
+
+      // Send 1 speedup to reduce remaining time
+      try {
+        const speedupTx = new Transaction();
+        speedupTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
+        speedupTx.add(createBuildingSpeedupInstruction(
+          { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+          { buildingType, speedupTier: 2 }
+        ));
+        await sendTx(this.ctx.connection, speedupTx, [player.keypair], this.ctx.config);
+      } catch {
+        // Speedup may fail with InvalidParameter if already at 0 — that's fine
+      }
+    }
+  }
+
+  /**
+   * Upgrade a building to the specified level using upgrade + speedup + complete cycles.
+   * Each cycle: upgrade + 7×speedup_tier2 + complete (same pattern as buildAndCompleteBuilding).
+   * Buys additional gems as needed for speedup costs.
+   */
+  async upgradeAndCompleteBuilding(
+    player: TestPlayer,
+    buildingType: BuildingType | number,
+    toLevel: number
+  ): Promise<void> {
+    // Buy extra gems for all the speedup cycles (10 gems per purchase × 5 purchases = 50 gems)
+    for (let i = 0; i < 5; i++) {
+      await this.buyGems(player, 10);
+    }
+
+    // Each cycle upgrades by 1 level. Repeat until we reach toLevel.
+    for (let level = 2; level <= toLevel; level++) {
+      const tx = new Transaction();
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+
+      // 1. Start upgrade
+      tx.add(createUpgradeBuildingInstruction(
+        { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+        { buildingType }
+      ));
+
+      // 2. Speedup ×7 (tier 2: 25% remains each time)
+      for (let i = 0; i < 7; i++) {
+        tx.add(createBuildingSpeedupInstruction(
+          { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+          { buildingType, speedupTier: 2 }
+        ));
+      }
+
+      // 3. Complete
+      tx.add(createCompleteBuildingInstruction(
+        { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+        { buildingType }
+      ));
+
+      try {
+        await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+      } catch (e: any) {
+        const errCode = this.extractCustomError(e);
+        if (errCode === 7708) {
+          // ConstructionNotComplete — split build
+          const txA = new Transaction();
+          txA.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+          txA.add(createUpgradeBuildingInstruction(
+            { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+            { buildingType }
+          ));
+          for (let i = 0; i < 7; i++) {
+            txA.add(createBuildingSpeedupInstruction(
+              { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+              { buildingType, speedupTier: 2 }
+            ));
+          }
+          await sendTx(this.ctx.connection, txA, [player.keypair], this.ctx.config);
+          await this.completeExistingBuilding(player, buildingType);
+        } else {
+          throw e;
+        }
+      }
+
+      // Brief wait between upgrade levels
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  /**
+   * Fund a player with additional locked NOVI via DAO minting.
+   * Uses mintForPrize across multiple allocation purposes, then converts
+   * reserved NOVI to locked NOVI.
+   *
+   * Allocation caps: Development 150M, Liquidity 200M, Marketing 100M,
+   * Partnership 50M, Treasury 50M, Prize 50M = 600M total.
+   */
+  async fundNovi(player: TestPlayer, amount: number): Promise<void> {
+    const MAX_PER_CALL = 100_000_000; // 100M per proposal cap
+    const purposes: { purpose: MintPurpose; cap: number }[] = [
+      { purpose: MintPurpose.Development, cap: 150_000_000 },
+      { purpose: MintPurpose.Liquidity,   cap: 200_000_000 },
+      { purpose: MintPurpose.Marketing,   cap: 100_000_000 },
+      { purpose: MintPurpose.Partnership, cap: 50_000_000 },
+      { purpose: MintPurpose.Treasury,    cap: 50_000_000 },
+      { purpose: MintPurpose.Prize,       cap: 50_000_000 },
+    ];
+
+    let remaining = amount;
+    for (const { purpose, cap } of purposes) {
+      if (remaining <= 0) break;
+      let allocated = 0;
+      while (allocated < cap && remaining > 0) {
+        const thisAmount = Math.min(MAX_PER_CALL, cap - allocated, remaining);
+
+        // Mint to reserved_novi (DAO signs)
+        const mintTx = new Transaction().add(
+          createMintForPrizeInstruction(
+            { authority: this.ctx.daoAuthority.publicKey, gameEngine: this.ctx.gameEngine, recipientOwner: player.publicKey },
+            { amount: new BN(thisAmount), purpose }
+          )
+        );
+        await sendTx(this.ctx.connection, mintTx, [this.ctx.daoAuthority], this.ctx.config);
+
+        // Convert reserved → locked (player signs)
+        const convertTx = new Transaction().add(
+          createReservedToLockedInstruction(
+            { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
+            { amount: new BN(thisAmount) }
+          )
+        );
+        await sendTx(this.ctx.connection, convertTx, [player.keypair], this.ctx.config);
+
+        allocated += thisAmount;
+        remaining -= thisAmount;
+      }
+    }
   }
 
   /**
@@ -515,46 +1057,49 @@ export class PlayerFactory {
 
     // If in different cities, need intercity travel first
     if (moverLocation.cityId !== targetLocation.cityId) {
-      // Start intercity travel
+      // Offset destination by +1 gridLong to avoid colliding with target player's cell
+      // (Use longitude offset to avoid collision with factory's latitude-based spawn offsets)
+      const destGridLat = targetLocation.gridLat;
+      const destGridLong = targetLocation.gridLong + 2;
+
+      // Start intercity travel to offset cell near target
       await this.startIntercityTravel(
         mover,
         moverLocation.cityId,
         targetLocation.cityId,
         moverLocation.gridLat,
-        moverLocation.gridLong
+        moverLocation.gridLong,
+        destGridLat,
+        destGridLong
       );
 
-      // Speedup travel (tier 2 = 25% time remains)
-      try {
-        await this.speedupTravel(mover, 2);
-      } catch {
-        // May fail if travel time is already very short
+      // Speedup travel repeatedly (tier 2 = 25% time remains per application)
+      // Need ~12 applications to reduce multi-hour intercity travel to under 1s
+      for (let i = 0; i < 12; i++) {
+        try {
+          await this.speedupTravel(mover, 2);
+        } catch {
+          break; // Already fast enough
+        }
       }
 
-      // Speedup again if needed (reduces to ~6% of original)
-      try {
-        await this.speedupTravel(mover, 2);
-      } catch {
-        // May fail if already fast enough
-      }
+      // Delay to let remaining time elapse
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Small delay to let remaining time elapse
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Complete intercity travel
+      // Complete intercity travel at the offset destination
       await this.completeIntercityTravel(
         mover,
         moverLocation.cityId,
         targetLocation.cityId,
-        targetLocation.gridLat,
-        targetLocation.gridLong
+        destGridLat,
+        destGridLong
       );
     }
 
     // Now in same city - move to adjacent cell for combat range
-    // Use intracity travel to get within 10m of target
-    const adjacentLat = targetLocation.gridLat + 1; // ~11m offset, within 10m range
-    const adjacentLong = targetLocation.gridLong;
+    // Use longitude offset to avoid colliding with factory's latitude-based spawn positions
+    const adjacentLat = targetLocation.gridLat;
+    const adjacentLong = targetLocation.gridLong + 1; // ~11m offset
     // Get current location after potential intercity travel
     const currentLocation = await this.getPlayerLocation(mover);
     const currentGridLat = currentLocation?.gridLat || moverLocation.gridLat;
@@ -565,19 +1110,21 @@ export class PlayerFactory {
       targetLocation.cityId,
       currentGridLat,
       currentGridLong,
-      adjacentLat * 100 + 50, // Convert grid to approx lat
-      adjacentLong * 100 + 50  // Convert grid to approx long
+      adjacentLat / 10000, // Convert grid to f64 (grid = round(coord * 10000))
+      adjacentLong / 10000  // Convert grid to f64
     );
 
     // Speedup intracity travel
-    try {
-      await this.speedupTravel(mover, 2);
-    } catch {
-      // May fail if travel time is already very short
+    for (let i = 0; i < 10; i++) {
+      try {
+        await this.speedupTravel(mover, 2);
+      } catch {
+        break;
+      }
     }
 
-    // Small delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Delay to let remaining time elapse
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Complete intracity travel
     await this.completeIntracityTravel(
@@ -647,15 +1194,15 @@ export async function createCombatReadyPlayers(
 ): Promise<CombatReadyPlayers> {
   const moveToRange = options.moveToRange ?? true;
 
-  // Create defender first (in city 1)
-  const defender = await factory.createPlayer({ initialize: true, cityId: 1 });
+  // Create defender first (in city 1) - needs Barracks for units, Market for equipment
+  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
 
-  // Create attacker in a DIFFERENT city (to avoid spawn collision)
-  const attacker = await factory.createPlayer({ initialize: true, cityId: 2 });
+  // Create attacker in a DIFFERENT city (to avoid spawn collision) - needs Stables for travel
+  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
 
   // Give attacker more operatives
-  await factory.hireUnits(attacker, 3, 100); // operative unit 1
-  await factory.hireUnits(attacker, 4, 50);  // operative unit 2
+  await factory.hireUnits(attacker, 0, 100); // operative unit 1
+  await factory.hireUnits(attacker, 1, 50);  // operative unit 2
   await factory.purchaseEquipment(attacker, 0, 50); // melee weapons
   await factory.purchaseEquipment(attacker, 1, 30); // ranged weapons
 
@@ -703,25 +1250,41 @@ export async function createRallyReadyPlayers(
   factory: PlayerFactory,
   participantCount: number = 3
 ): Promise<RallyReadyPlayers> {
-  // Each player gets auto-assigned a unique city
-  const creator = await factory.createPlayer({ initialize: true });
+  // Creator needs estate + Barracks (for units) + Market (for equipment) + Citadel (to CREATE rallies) + Stables (for travel)
+  // Extension chain: Research → Inventory (estate+gems) → Team → Rally
+  const creator = await factory.createPlayer({
+    initialize: true,
+    createEstate: true,
+    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Citadel, BuildingType.Stables],
+  });
+
   const participants: TestPlayer[] = [];
 
   for (let i = 0; i < participantCount; i++) {
-    const participant = await factory.createPlayer({ initialize: true });
-    // Give each participant some operatives
-    await factory.hireUnits(participant, 3, 50);
+    // Participants need estate+gems (for EXT_INVENTORY → EXT_TEAM) + Barracks (for units) + Stables (for travel) to JOIN rallies
+    const participant = await factory.createPlayer({
+      initialize: true,
+      createEstate: true,
+      buildings: [BuildingType.Barracks, BuildingType.Stables],
+    });
+    // Give each participant some defensive units (type 0 = defensive_unit_1)
+    await factory.hireUnits(participant, 0, 50000);
     participants.push(participant);
   }
 
-  // Create a strong defender as target
-  const target = await factory.createPlayer({ initialize: true });
-  await factory.hireUnits(target, 0, 500);
-  await factory.hireUnits(target, 1, 250);
+  // Create a strong defender as target (needs Barracks for units, Market for equipment, Stables for travel)
+  const target = await factory.createPlayer({
+    initialize: true,
+    createEstate: true,
+    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables],
+  });
+  await factory.hireUnits(target, 0, 100000);
+  await factory.hireUnits(target, 1, 50000);
   await factory.purchaseEquipment(target, 3, 300);
 
-  // Give creator operatives too
-  await factory.hireUnits(creator, 3, 100);
+  // Give creator defensive units (type 0 = defensive_unit_1) and equipment
+  // Use large NOVI amount to ensure enough units are produced
+  await factory.hireUnits(creator, 0, 50000);
   await factory.purchaseEquipment(creator, 0, 50);
 
   return { creator, participants, target };

@@ -25,7 +25,6 @@ export const MAX_TEAM_NAME_LENGTH = 32;
 export const MAX_LOCATION_NAME_LENGTH = 32;
 export const MAX_EVENT_NAME_LENGTH = 64;
 export const MAX_EVENT_DESCRIPTION_LENGTH = 256;
-export const DISCRIMINATOR_SIZE = 8;
 
 // ============================================================
 // Vector Capacity Limits
@@ -228,16 +227,6 @@ export const WEAPON_PRICE = 1_000;
 export const PRODUCE_PRICE = 500;
 export const VEHICLE_PRICE = 5_000;
 
-// ============================================================
-// Unit Hiring Costs (cash per unit)
-// ============================================================
-
-export const DEFENSIVE_UNIT_1_COST = 100;
-export const DEFENSIVE_UNIT_2_COST = 200;
-export const DEFENSIVE_UNIT_3_COST = 500;
-export const OPERATIVE_UNIT_1_COST = 150;
-export const OPERATIVE_UNIT_2_COST = 300;
-export const OPERATIVE_UNIT_3_COST = 750;
 
 // ============================================================
 // Combat Power Multipliers
@@ -294,6 +283,10 @@ export const FISHING_RARE_CHANCE_BPS = [100, 300, 500, 1000, 2000] as const;
 export const FISHING_DOCK_REQ = [1, 5, 10, 15, 20] as const;
 export const FISHING_NOVI_COST = [100, 500, 2_000, 8_000, 30_000] as const;
 export const FISHING_FRAGMENT_BONUS = [1, 2, 5, 12, 30] as const;
+
+export const FARMING_DURATION_HOURS = [1, 2, 4, 8, 16] as const;
+export const FARMING_FARM_REQ = [1, 5, 10, 15, 20] as const;
+export const FARMING_NOVI_COST = [100, 500, 2_000, 8_000, 30_000] as const;
 
 export const RARE_FIND_MULTIPLIER = 5;
 export const STRIKES_PER_HOUR = 1;

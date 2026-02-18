@@ -15,14 +15,14 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveExpeditionPda,
   deriveEstatePda,
-} from '../pda.ts';
-import { ExpeditionType } from '../types/enums.ts';
+} from '../pda';
+import { ExpeditionType } from '../types/enums';
 
 /** MPL Core program ID */
 const P_CORE_PROGRAM_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
@@ -55,6 +55,7 @@ export interface ExpeditionStartParams {
   operativeUnit3: BN | number | bigint;
 }
 
+/** ~10,000 CU */
 /**
  * Start an expedition (mining or fishing).
  *
@@ -78,7 +79,7 @@ export function createExpeditionStartInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -135,6 +136,7 @@ export interface ExpeditionStrikeParams {
   score: number;
 }
 
+/** ~5,000 CU */
 /**
  * Strike during expedition (active engagement mini-game).
  *
@@ -187,6 +189,7 @@ export interface ExpeditionClaimAccounts {
   heroCollection?: PublicKey;
 }
 
+/** ~15,000 CU */
 /**
  * Claim expedition rewards after completion.
  *
@@ -208,7 +211,7 @@ export function createExpeditionClaimInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -250,6 +253,7 @@ export interface ExpeditionAbortAccounts {
   heroCollection?: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Abort an ongoing expedition.
  *
@@ -306,6 +310,7 @@ export interface ExpeditionSpeedupParams {
   speedupTier: 1 | 2;
 }
 
+/** ~5,000 CU */
 /**
  * Speed up expedition by spending gems.
  *

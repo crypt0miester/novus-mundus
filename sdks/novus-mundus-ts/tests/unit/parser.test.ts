@@ -16,9 +16,9 @@ import {
   type IntracityStartData,
   type TeamCreateData,
   type RallyJoinData,
-} from '../../src/parser/instruction.ts';
-import { DISCRIMINATORS } from '../../src/program.ts';
-import { BufferWriter, createInstructionData } from '../../src/utils/serialize.ts';
+} from '../../src/parser/instruction';
+import { DISCRIMINATORS } from '../../src/program';
+import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
 
 describe('Instruction Parser', () => {
   describe('parseInstructionData', () => {

@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "name": "terrain-builder",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "check:watch": "tsc --noEmit --watch",
+    "optimize:buildings": "./scripts/optimize-buildings.sh"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.3.0",
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
+    "@gltf-transform/functions": "^4.3.0",
+    "draco3d": "^1.5.7",
+    "sharp": "^0.34.5",
+    "three": "^0.170.0",
+    "typescript": "^5.7.0"
+  }
+}

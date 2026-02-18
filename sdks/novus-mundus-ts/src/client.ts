@@ -21,13 +21,14 @@ import type {
   AddressLookupTableAccount,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID } from './program.ts';
+import { PROGRAM_ID } from './program';
 import {
   derivePlayerPda,
   deriveTeamPda,
   deriveRallyPda,
   deriveReinforcementPda,
   deriveExpeditionPda,
+  deriveEstatePda,
   deriveLootPda,
   deriveGameEnginePda,
   deriveCityPda,
@@ -36,43 +37,50 @@ import {
   deriveArenaSeasonPda,
   deriveArenaParticipantPda,
   deriveShopConfigPda,
-} from './pda.ts';
-import { parseGameEngine } from './state/game-engine.ts';
-import type { GameEngine } from './state/game-engine.ts';
-import { parsePlayer } from './state/player.ts';
-import type { PlayerAccount } from './state/player.ts';
-import { parseTeam } from './state/team.ts';
-import type { TeamAccount } from './state/team.ts';
-import { parseRally } from './state/rally.ts';
-import type { RallyAccount } from './state/rally.ts';
-import { parseReinforcement } from './state/reinforcement.ts';
-import type { ReinforcementAccount } from './state/reinforcement.ts';
-import { parseExpedition } from './state/expedition.ts';
-import type { ExpeditionAccount } from './state/expedition.ts';
-import { parseLoot } from './state/loot.ts';
-import type { LootAccount } from './state/loot.ts';
-import { parseCity } from './state/city.ts';
-import type { CityAccount } from './state/city.ts';
-import { parseEncounter } from './state/encounter.ts';
-import type { EncounterAccount } from './state/encounter.ts';
-import { parseUser } from './state/user.ts';
-import type { UserAccount } from './state/user.ts';
-import { parseArenaSeason, parseArenaParticipant } from './state/arena.ts';
-import type { ArenaSeasonAccount, ArenaParticipantAccount } from './state/arena.ts';
-import { parseShopConfig } from './state/shop.ts';
-import type { ShopConfigAccount } from './state/shop.ts';
-import { parseEventsFromLogs } from './events/index.ts';
-import type { NovusMundusEvent } from './events/index.ts';
-import { parseTeamMemberSlot, parseTeamInvite, TEAM_MEMBER_SLOT_SIZE, TEAM_INVITE_ACCOUNT_SIZE } from './state/team.ts';
-import type { TeamMemberSlot, TeamInviteAccount } from './state/team.ts';
-import { parseRallyParticipant, RALLY_ACCOUNT_SIZE, RALLY_PARTICIPANT_SIZE } from './state/rally.ts';
-import type { RallyParticipant } from './state/rally.ts';
-import { LOOT_ACCOUNT_SIZE } from './state/loot.ts';
-import { ENCOUNTER_ACCOUNT_BASE_SIZE } from './state/encounter.ts';
-import { CORE_SIZE as PLAYER_CORE_SIZE } from './state/player.ts';
-import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena.ts';
-import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement.ts';
+  deriveShopItemPda,
+  deriveBundlePda,
+  deriveFlashSalePda,
+} from './pda';
+import { parseGameEngine } from './state/game-engine';
+import type { GameEngine } from './state/game-engine';
+import { parsePlayer } from './state/player';
+import type { PlayerAccount } from './state/player';
+import { parseTeam } from './state/team';
+import type { TeamAccount } from './state/team';
+import { parseRally } from './state/rally';
+import type { RallyAccount } from './state/rally';
+import { parseReinforcement } from './state/reinforcement';
+import type { ReinforcementAccount } from './state/reinforcement';
+import { parseExpedition } from './state/expedition';
+import type { ExpeditionAccount } from './state/expedition';
+import { parseEstate } from './state/estate';
+import type { EstateAccount } from './state/estate';
+import { parseLoot } from './state/loot';
+import type { LootAccount } from './state/loot';
+import { parseCity } from './state/city';
+import type { CityAccount } from './state/city';
+import { parseEncounter } from './state/encounter';
+import type { EncounterAccount } from './state/encounter';
+import { parseUser } from './state/user';
+import type { UserAccount } from './state/user';
+import { parseArenaSeason, parseArenaParticipant } from './state/arena';
+import type { ArenaSeasonAccount, ArenaParticipantAccount } from './state/arena';
+import { parseShopConfig, parseShopItem, parseBundle, parseFlashSale } from './state/shop';
+import type { ShopConfigAccount, ShopItemAccount, BundleAccount, FlashSaleAccount } from './state/shop';
+import { SHOP_ITEM_ACCOUNT_SIZE, BUNDLE_ACCOUNT_SIZE, FLASH_SALE_ACCOUNT_SIZE } from './state/shop';
+import { parseEventsFromLogs } from './events/index';
+import type { NovusMundusEvent } from './events/index';
+import { parseTeamMemberSlot, parseTeamInvite, TEAM_MEMBER_SLOT_SIZE, TEAM_INVITE_ACCOUNT_SIZE } from './state/team';
+import type { TeamMemberSlot, TeamInviteAccount } from './state/team';
+import { parseRallyParticipant, RALLY_ACCOUNT_SIZE, RALLY_PARTICIPANT_SIZE } from './state/rally';
+import type { RallyParticipant } from './state/rally';
+import { LOOT_ACCOUNT_SIZE } from './state/loot';
+import { ENCOUNTER_ACCOUNT_BASE_SIZE } from './state/encounter';
+import { CORE_SIZE as PLAYER_CORE_SIZE } from './state/player';
+import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena';
+import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement';
 import bs58 from 'bs58';
+import { AccountKey } from './types/enums';
 
 // ============================================================
 // Types
@@ -354,10 +362,25 @@ export class NovusMundusClient {
   }
 
   /**
+   * Fetch an estate account by player PDA.
+   */
+  async fetchEstate(player: PublicKey): Promise<AccountFetchResult<EstateAccount>> {
+    const [pubkey] = deriveEstatePda(player);
+    const accountInfo = await this.connection.getAccountInfo(pubkey, this.commitment);
+
+    if (!accountInfo) {
+      return { pubkey, account: null, exists: false };
+    }
+
+    const account = parseEstate(accountInfo);
+    return { pubkey, account, exists: true };
+  }
+
+  /**
    * Fetch a loot account.
    */
-  async fetchLoot(encounter: PublicKey, player: PublicKey): Promise<AccountFetchResult<LootAccount>> {
-    const [pubkey] = deriveLootPda(encounter, player);
+  async fetchLoot(playerPda: PublicKey, lootId: number | bigint): Promise<AccountFetchResult<LootAccount>> {
+    const [pubkey] = deriveLootPda(playerPda, lootId);
     const accountInfo = await this.connection.getAccountInfo(pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -414,6 +437,107 @@ export class NovusMundusClient {
   }
 
   /**
+   * Fetch all shop items using AccountKey discriminator filter.
+   * Resolves itemId by reverse-matching PDAs.
+   */
+  async fetchAllShopItems(maxId: number = 200): Promise<(BulkFetchResult<ShopItemAccount> & { itemId: number })[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.ShopItem]));
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { dataSize: SHOP_ITEM_ACCOUNT_SIZE },
+      ],
+    });
+
+    // Build reverse lookup: pubkey base58 -> itemId
+    const pdaToId = new Map<string, number>();
+    for (let i = 0; i < maxId; i++) {
+      const [pda] = deriveShopItemPda(this.gameEngine, i);
+      pdaToId.set(pda.toBase58(), i);
+    }
+
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseShopItem(account);
+        const itemId = pdaToId.get(pubkey.toBase58());
+        if (parsed && itemId !== undefined) {
+          return { pubkey, account: parsed, itemId };
+        }
+        return null;
+      })
+      .filter((r): r is BulkFetchResult<ShopItemAccount> & { itemId: number } => r !== null);
+  }
+
+  /**
+   * Fetch all bundles using AccountKey discriminator filter.
+   * Resolves bundleId by reverse-matching PDAs.
+   */
+  async fetchAllBundles(maxId: number = 100): Promise<(BulkFetchResult<BundleAccount> & { bundleId: number })[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.ShopBundle]));
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { dataSize: BUNDLE_ACCOUNT_SIZE },
+      ],
+    });
+
+    // Build reverse lookup: pubkey base58 -> bundleId
+    const pdaToId = new Map<string, number>();
+    for (let i = 0; i < maxId; i++) {
+      const [pda] = deriveBundlePda(this.gameEngine, i);
+      pdaToId.set(pda.toBase58(), i);
+    }
+
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseBundle(account);
+        const bundleId = pdaToId.get(pubkey.toBase58());
+        if (parsed && bundleId !== undefined) {
+          return { pubkey, account: parsed, bundleId };
+        }
+        return null;
+      })
+      .filter((r): r is BulkFetchResult<BundleAccount> & { bundleId: number } => r !== null);
+  }
+
+  /**
+   * Fetch all flash sales using nextFlashSaleId from shop config.
+   * Derives PDAs for IDs 0..nextFlashSaleId-1 and batch fetches.
+   */
+  async fetchAllFlashSales(): Promise<(BulkFetchResult<FlashSaleAccount> & { saleId: number })[]> {
+    // Get the range from shop config
+    const shopConfigResult = await this.fetchShopConfig();
+    if (!shopConfigResult.account) return [];
+
+    const maxId = shopConfigResult.account.nextFlashSaleId.toNumber();
+    if (maxId === 0) return [];
+
+    const entries = Array.from({ length: maxId }, (_, i) => ({
+      id: i,
+      pubkey: deriveFlashSalePda(this.gameEngine, i)[0],
+    }));
+
+    const infos = await this.connection.getMultipleAccountsInfo(
+      entries.map(e => e.pubkey),
+      this.commitment,
+    );
+
+    const results: (BulkFetchResult<FlashSaleAccount> & { saleId: number })[] = [];
+    for (let i = 0; i < infos.length; i++) {
+      const entry = entries[i];
+      if (infos[i] && entry) {
+        const parsed = parseFlashSale(infos[i]!);
+        if (parsed) {
+          results.push({ pubkey: entry.pubkey, account: parsed, saleId: entry.id });
+        }
+      }
+    }
+    return results;
+  }
+
+  /**
    * Fetch multiple accounts in a single RPC call.
    */
   async fetchMultiple(pubkeys: PublicKey[]): Promise<(Buffer | null)[]> {
@@ -432,11 +556,13 @@ export class NovusMundusClient {
    * @returns Array of team member slots
    */
   async fetchTeamMembers(team: PublicKey): Promise<BulkFetchResult<TeamMemberSlot>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.TeamMemberSlot]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: TEAM_MEMBER_SLOT_SIZE },
-        { memcmp: { offset: 0, bytes: team.toBase58() } },
+        { memcmp: { offset: 1, bytes: team.toBase58() } },
       ],
     });
 
@@ -455,11 +581,13 @@ export class NovusMundusClient {
    * @returns Array of team invites
    */
   async fetchTeamInvites(team: PublicKey): Promise<BulkFetchResult<TeamInviteAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.TeamInvite]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: TEAM_INVITE_ACCOUNT_SIZE },
-        { memcmp: { offset: 0, bytes: team.toBase58() } },
+        { memcmp: { offset: 1, bytes: team.toBase58() } },
       ],
     });
 
@@ -482,11 +610,14 @@ export class NovusMundusClient {
     owner: PublicKey,
     options?: FetchLootOptions
   ): Promise<BulkFetchResult<LootAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Loot]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: LOOT_ACCOUNT_SIZE },
-        { memcmp: { offset: 0, bytes: owner.toBase58() } },
+        // owner is at offset 1 (after account_key u8)
+        { memcmp: { offset: 1, bytes: owner.toBase58() } },
       ],
     });
 
@@ -516,15 +647,17 @@ export class NovusMundusClient {
     cityId: number,
     options?: FetchEncountersOptions
   ): Promise<BulkFetchResult<EncounterAccount>[]> {
-    // cityId is u16 at offset 8 (after u64 id)
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Encounter]));
+    // cityId is u16 at offset 48 (1 account_key + 32 game_engine + 7 padding + 8 id)
     const cityIdBuffer = Buffer.alloc(2);
     cityIdBuffer.writeUInt16LE(cityId, 0);
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
-        // Encounters have variable size, so we filter by minimum size
-        { memcmp: { offset: 8, bytes: bs58.encode(cityIdBuffer) } },
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+        { memcmp: { offset: 48, bytes: bs58.encode(cityIdBuffer) } },
       ],
     });
 
@@ -552,13 +685,16 @@ export class NovusMundusClient {
    * @returns Array of rallies
    */
   async fetchActiveRallies(options?: FetchRalliesOptions): Promise<BulkFetchResult<RallyAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Rally]));
     const filters: Array<{ dataSize: number } | { memcmp: { offset: number; bytes: string } }> = [
+      { memcmp: { offset: 0, bytes: keyByte } },
       { dataSize: RALLY_ACCOUNT_SIZE },
+      { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
     ];
 
-    // Filter by team if specified (team is at offset 40: id(8) + creator(32))
+    // Filter by team if specified (team is at offset 80: 1 account_key + 32 game_engine + 7 pad + 8 id + 32 creator)
     if (options?.team) {
-      filters.push({ memcmp: { offset: 40, bytes: options.team.toBase58() } });
+      filters.push({ memcmp: { offset: 80, bytes: options.team.toBase58() } });
     }
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
@@ -603,12 +739,14 @@ export class NovusMundusClient {
       rallyData = parsed;
     }
 
-    // Filter by rallyCreator at offset 8 (after rallyId which is 8 bytes)
+    // rallyCreator at offset 16 (1 account_key + 7 padding + 8 rallyId)
+    const rpKeyByte = bs58.encode(Buffer.from([AccountKey.RallyParticipant]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: rpKeyByte } },
         { dataSize: RALLY_PARTICIPANT_SIZE },
-        { memcmp: { offset: 8, bytes: rallyData.creator.toBase58() } },
+        { memcmp: { offset: 16, bytes: rallyData.creator.toBase58() } },
       ],
     });
 
@@ -632,16 +770,18 @@ export class NovusMundusClient {
    * @returns Array of arena participants
    */
   async fetchArenaParticipants(seasonId: number): Promise<BulkFetchResult<ArenaParticipantAccount>[]> {
-    // ArenaParticipantAccount layout: player(32) + seasonId(4) + ...
-    // seasonId is at offset 32
+    const keyByte = bs58.encode(Buffer.from([AccountKey.ArenaParticipant]));
     const seasonIdBuffer = Buffer.alloc(4);
     seasonIdBuffer.writeUInt32LE(seasonId, 0);
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: ARENA_PARTICIPANT_ACCOUNT_SIZE },
-        { memcmp: { offset: 32, bytes: bs58.encode(seasonIdBuffer) } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+        // seasonId at offset 68 (1 account_key + 32 game_engine + 32 player + 3 padding)
+        { memcmp: { offset: 68, bytes: bs58.encode(seasonIdBuffer) } },
       ],
     });
 
@@ -660,12 +800,15 @@ export class NovusMundusClient {
    * @returns Array of reinforcements
    */
   async fetchReinforcementsSent(sender: PublicKey): Promise<BulkFetchResult<ReinforcementAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Reinforcement]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: REINFORCEMENT_ACCOUNT_SIZE },
-        // sender is at offset 0
-        { memcmp: { offset: 0, bytes: sender.toBase58() } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+        // sender is at offset 33 (1 account_key + 32 game_engine)
+        { memcmp: { offset: 33, bytes: sender.toBase58() } },
       ],
     });
 
@@ -684,12 +827,15 @@ export class NovusMundusClient {
    * @returns Array of reinforcements
    */
   async fetchReinforcementsReceived(recipient: PublicKey): Promise<BulkFetchResult<ReinforcementAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Reinforcement]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: REINFORCEMENT_ACCOUNT_SIZE },
-        // recipient is at offset 32 (after sender pubkey)
-        { memcmp: { offset: 32, bytes: recipient.toBase58() } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+        // destination is at offset 65 (1 account_key + 32 game_engine + 32 sender)
+        { memcmp: { offset: 65, bytes: recipient.toBase58() } },
       ],
     });
 
@@ -710,11 +856,13 @@ export class NovusMundusClient {
    * @returns Array of all players
    */
   async fetchAllPlayers(): Promise<BulkFetchResult<PlayerAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Player]));
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
-        // Players have minimum CORE_SIZE
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: PLAYER_CORE_SIZE },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
       ],
     });
 
@@ -732,12 +880,13 @@ export class NovusMundusClient {
    * @returns Array of expeditions
    */
   async fetchAllExpeditions(): Promise<BulkFetchResult<ExpeditionAccount>[]> {
-    // Import expedition size
-    const EXPEDITION_ACCOUNT_SIZE = 176; // Based on state structure
+    const EXPEDITION_ACCOUNT_SIZE = 176;
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Expedition]));
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: EXPEDITION_ACCOUNT_SIZE },
       ],
     });
@@ -756,15 +905,16 @@ export class NovusMundusClient {
    * @returns Array of all cities
    */
   async fetchAllCities(): Promise<BulkFetchResult<CityAccount>[]> {
-    // City account size based on structure
-    const CITY_ACCOUNT_SIZE = 256;
+    const keyByte = bs58.encode(Buffer.from([AccountKey.City]));
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
-        { dataSize: CITY_ACCOUNT_SIZE },
+        { memcmp: { offset: 0, bytes: keyByte }, },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
       ],
     });
+    console.log(`Fetched ${accounts.length} city accounts`);
 
     return accounts
       .map(({ pubkey, account }) => {
@@ -782,11 +932,14 @@ export class NovusMundusClient {
    */
   async fetchAllTeams(options?: { activeOnly?: boolean }): Promise<BulkFetchResult<TeamAccount>[]> {
     const TEAM_ACCOUNT_SIZE = 240;
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Team]));
 
     const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
       commitment: this.commitment,
       filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
         { dataSize: TEAM_ACCOUNT_SIZE },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
       ],
     });
 

@@ -7,3 +7,4 @@
 export * from './assertions';
 export * from './transactions';
 export * from './accounts';
+export * from './logger';

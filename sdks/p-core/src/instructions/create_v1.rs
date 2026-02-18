@@ -45,6 +45,8 @@ pub struct CreateV1<'a> {
     pub update_authority: &'a AccountInfo,
     /// The system program
     pub system_program: &'a AccountInfo,
+    /// The SPL Noop Program (pass system_program if not needed)
+    pub log_wrapper: &'a AccountInfo,
 
     // Instruction arguments
     /// Data state (account state or ledger state for compression)
@@ -72,6 +74,7 @@ impl CreateV1<'_> {
             AccountMeta::readonly(self.owner.key()),
             AccountMeta::readonly(self.update_authority.key()),
             AccountMeta::readonly(self.system_program.key()),
+            AccountMeta::readonly(self.log_wrapper.key()),
         ];
 
         // Calculate instruction data size
@@ -129,6 +132,7 @@ impl CreateV1<'_> {
             self.owner,
             self.update_authority,
             self.system_program,
+            self.log_wrapper,
         ];
 
         invoke_signed(&instruction, &account_infos, signers)

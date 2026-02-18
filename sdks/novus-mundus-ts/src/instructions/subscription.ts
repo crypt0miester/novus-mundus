@@ -12,14 +12,14 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveUserPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Purchase Subscription
@@ -49,6 +49,7 @@ export interface PurchaseSubscriptionParams {
   tier: number;
 }
 
+/** ~55,000 CU */
 /**
  * Purchase or upgrade subscription tier.
  *
@@ -185,7 +186,7 @@ export interface SubscriptionTierConfigInput {
  * Calculate the serialized size of a SubscriptionTierConfig.
  * Used internally for buffer allocation.
  */
-const SUBSCRIPTION_TIER_SIZE = 232; // Fixed size from Rust struct
+const SUBSCRIPTION_TIER_SIZE = 256; // repr(C) size including alignment padding
 
 /**
  * Serialize a SubscriptionTierConfig to bytes.
@@ -219,6 +220,8 @@ function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): B
   writer.writeU64(BigInt(config.dailyRewardMultiplier));
   // synchrony_bonus: u32
   writer.writeU32(config.synchronyBonus);
+  // implicit repr(C) alignment padding before next u64
+  writer.writeBytes(Buffer.alloc(4));
 
   // Bonuses
   writer.writeU64(BigInt(config.novi));
@@ -258,6 +261,7 @@ function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): B
   return writer.toBuffer();
 }
 
+/** ~5,000 CU */
 /**
  * Update subscription tier configuration (DAO ONLY).
  *
@@ -310,6 +314,7 @@ export interface DowngradeExpiredAccounts {
   playerAccount: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Downgrade expired subscription to Rookie tier.
  *

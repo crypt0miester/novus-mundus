@@ -21,7 +21,11 @@
     "validator:start": "./scripts/start-validator.sh",
     "validator:reset": "./scripts/start-validator.sh --reset",
     "validator:debug": "./scripts/start-validator.sh --debug",
-    "validator:stop": "./scripts/stop-validator.sh"
+    "validator:stop": "./scripts/stop-validator.sh",
+    "novus": "bun run cli/cli.ts",
+    "imagegen": "bun run scripts/imagegen/generate.ts",
+    "imagegen:prompt": "bun run scripts/imagegen/generate.ts --prompt",
+    "start": "bun run terrain-builder/start.sh"
   },
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
@@ -31,6 +35,7 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@solana/web3.js": "^1.98.4",
+    "@google/genai": "^1.0.0",
     "bn.js": "^5.2.2"
   }
 }

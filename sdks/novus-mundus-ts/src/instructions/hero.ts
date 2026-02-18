@@ -16,13 +16,15 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveHeroTemplatePda,
   deriveHeroCollectionPda,
-} from '../pda.ts';
+  deriveHeroMintReceiptPda,
+  deriveEstatePda,
+} from '../pda';
 
 // ============================================================
 // Create Template (Admin)
@@ -68,6 +70,7 @@ export interface CreateTemplateParams {
   buffs: BuffConfig[];
 }
 
+/** ~5,000 CU */
 /**
  * Create a hero template.
  *
@@ -168,6 +171,7 @@ export interface CreateCollectionAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Create the hero collection.
  *
@@ -226,10 +230,27 @@ export interface MintHeroParams {
   templateId: number;
 }
 
+/** ~55,000 CU */
 /**
  * Mint a hero NFT.
  *
  * Requires SOL payment and player level requirement.
+ * Creates a 0-byte mint receipt PDA to enforce 1-per-player-per-template limit.
+ * If player has a Sanctuary (estate level 8+), grants a locked NOVI mint bonus.
+ *
+ * On-chain accounts (12):
+ * 0. [signer, writable] minter: Player wallet
+ * 1. [writable] player_account: PlayerAccount PDA
+ * 2. [] hero_template: HeroTemplate PDA (read)
+ * 3. [writable] hero_template: HeroTemplate PDA (write - minted_count)
+ * 4. [signer, writable] hero_mint: Hero NFT mint (Keypair)
+ * 5. [writable] hero_collection: Hero collection PDA
+ * 6. [writable] treasury: Treasury to receive payment
+ * 7. [] game_engine: GameEngine PDA
+ * 8. [] system_program: System program
+ * 9. [] p_core_program: MPL Core program
+ * 10. [writable] mint_receipt: HeroMintReceipt PDA (0-byte, created on mint)
+ * 11. [] estate_account: EstateAccount PDA (for sanctuary bonus)
  */
 export function createMintHeroInstruction(
   accounts: MintHeroAccounts,
@@ -238,6 +259,8 @@ export function createMintHeroInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.minter);
   const [template] = deriveHeroTemplatePda(params.templateId);
   const [heroCollection] = deriveHeroCollectionPda();
+  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
+  const [estateAccount] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.minter, isSigner: true, isWritable: true },
@@ -245,11 +268,13 @@ export function createMintHeroInstruction(
     { pubkey: template, isSigner: false, isWritable: false },
     { pubkey: template, isSigner: false, isWritable: true }, // writable copy
     { pubkey: accounts.heroMint, isSigner: true, isWritable: true },
-    { pubkey: heroCollection, isSigner: false, isWritable: false },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },  // MPL Core modifies collection on mint
     { pubkey: accounts.treasury, isSigner: false, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: mintReceipt, isSigner: false, isWritable: true },
+    { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
   const writer = new BufferWriter(2);
@@ -286,6 +311,7 @@ export interface LockHeroParams {
   slotIndex: number;
 }
 
+/** ~20,000 CU */
 /**
  * Lock a hero to the player account.
  *
@@ -314,11 +340,11 @@ export function createLockHeroInstruction(
   const [heroCollection] = deriveHeroCollectionPda();
 
   const keys = [
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: accounts.heroTemplate, isSigner: false, isWritable: false },
-    { pubkey: heroCollection, isSigner: false, isWritable: false },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: accounts.estateAccount, isSigner: false, isWritable: false },
@@ -359,6 +385,7 @@ export interface UnlockHeroParams {
   slotIndex: number;
 }
 
+/** ~20,000 CU */
 /**
  * Unlock a hero from the player account.
  *
@@ -386,11 +413,11 @@ export function createUnlockHeroInstruction(
   const [heroCollection] = deriveHeroCollectionPda();
 
   const keys = [
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: accounts.heroTemplate, isSigner: false, isWritable: false },
-    { pubkey: heroCollection, isSigner: false, isWritable: false },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: accounts.estateAccount, isSigner: false, isWritable: true },
@@ -426,6 +453,7 @@ export interface LevelUpHeroAccounts {
   estateAccount: PublicKey;
 }
 
+/** ~50,000 CU */
 /**
  * Level up a hero by consuming fragments.
  *
@@ -463,11 +491,11 @@ export function createLevelUpHeroInstruction(
   const CLOCK_SYSVAR = new PublicKey('SysvarC1ock11111111111111111111111111111111');
 
   const keys = [
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.heroMint, isSigner: false, isWritable: true },
     { pubkey: accounts.heroTemplate, isSigner: false, isWritable: false },
-    { pubkey: heroCollection, isSigner: false, isWritable: false },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: CLOCK_SYSVAR, isSigner: false, isWritable: false },
@@ -500,6 +528,7 @@ export interface AssignDefensiveHeroParams {
   slotIndex: number;
 }
 
+/** ~5,000 CU */
 /**
  * Assign which locked hero is used for defense.
  *
@@ -529,6 +558,137 @@ export function createAssignDefensiveHeroInstruction(
   writer.writeU8(params.slotIndex);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Burn Hero
+// ============================================================
+
+export interface BurnHeroAccounts {
+  /** Hero owner's wallet (signer) */
+  owner: PublicKey;
+  /** GameEngine PDA (for player PDA derivation) */
+  gameEngine: PublicKey;
+  /** Hero NFT asset account (destroyed) */
+  heroAsset: PublicKey;
+}
+
+export interface BurnHeroParams {
+  /** Template ID of the hero being burned */
+  templateId: number;
+}
+
+/** ~30,000 CU */
+/**
+ * Burn a hero NFT.
+ *
+ * Destroys a hero NFT and credits locked NOVI based on tier and level.
+ * Decrements template.minted_count (recyclable supply) and closes
+ * the mint receipt PDA (allowing re-mint of same template).
+ *
+ * Hero must be in the owner's wallet (not locked in an active slot).
+ *
+ * On-chain accounts (8):
+ * 0. [signer, writable] owner: Player wallet
+ * 1. [writable] player_account: PlayerAccount PDA (receives locked NOVI)
+ * 2. [writable] hero_asset: Hero NFT account (destroyed)
+ * 3. [writable] hero_template: HeroTemplate PDA (minted_count decremented)
+ * 4. [writable] hero_collection: Hero collection PDA
+ * 5. [writable] mint_receipt: HeroMintReceipt PDA (closed, rent refunded)
+ * 6. [] system_program: System program
+ * 7. [] p_core_program: MPL Core program
+ *
+ * On-chain data (2 bytes):
+ * - [0..2] template_id: u16 (little-endian)
+ */
+export function createBurnHeroInstruction(
+  accounts: BurnHeroAccounts,
+  params: BurnHeroParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = deriveHeroTemplatePda(params.templateId);
+  const [heroCollection] = deriveHeroCollectionPda();
+  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
+
+  const keys = [
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: accounts.heroAsset, isSigner: false, isWritable: true },
+    { pubkey: template, isSigner: false, isWritable: true },
+    { pubkey: heroCollection, isSigner: false, isWritable: true },
+    { pubkey: mintReceipt, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(2);
+  writer.writeU16(params.templateId);
+
+  const data = createInstructionData(DISCRIMINATORS.HERO_BURN, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Supply Cap (DAO Only)
+// ============================================================
+
+export interface UpdateSupplyCapAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine PDA (for DAO verification) */
+  gameEngine: PublicKey;
+}
+
+export interface UpdateSupplyCapParams {
+  /** Template ID */
+  templateId: number;
+  /** New supply cap (must be greater than current) */
+  newSupplyCap: number;
+}
+
+/** ~5,000 CU */
+/**
+ * Update a hero template's supply cap.
+ *
+ * DAO-only. Can only increase supply cap, never decrease.
+ *
+ * On-chain accounts (3):
+ * 0. [signer] dao_authority: DAO authority
+ * 1. [writable] hero_template: HeroTemplate PDA
+ * 2. [] game_engine: GameEngine PDA (for DAO verification)
+ *
+ * On-chain data (6 bytes):
+ * - [0..2] template_id: u16 (little-endian)
+ * - [2..6] new_supply_cap: u32 (little-endian)
+ */
+export function createUpdateSupplyCapInstruction(
+  accounts: UpdateSupplyCapAccounts,
+  params: UpdateSupplyCapParams
+): TransactionInstruction {
+  const [template] = deriveHeroTemplatePda(params.templateId);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: template, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(6);
+  writer.writeU16(params.templateId);
+  writer.writeU32(params.newSupplyCap);
+
+  const data = createInstructionData(DISCRIMINATORS.HERO_UPDATE_SUPPLY_CAP, writer.toBuffer());
 
   return new TransactionInstruction({
     keys,

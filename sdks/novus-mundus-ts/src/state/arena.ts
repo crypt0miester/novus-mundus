@@ -1,15 +1,15 @@
 /**
  * Arena Accounts
  *
- * ArenaSeasonAccount - Season state and leaderboard (560 bytes)
- * ArenaParticipantAccount - Per-player, per-season state (488 bytes)
- * ArenaLoadoutAccount - Player's configured loadout (128 bytes)
+ * ArenaSeasonAccount - Season state and leaderboard (608 bytes with repr(C) padding)
+ * ArenaParticipantAccount - Per-player, per-season state (536 bytes with repr(C) padding)
+ * ArenaLoadoutAccount - Player's configured loadout (168 bytes with repr(C) padding)
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize.ts';
-import { ArenaSeasonStatus } from '../types/enums.ts';
+import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ArenaSeasonStatus } from '../types/enums';
 
 // ============================================================
 // Arena Leaderboard Entry
@@ -47,8 +47,8 @@ export interface ArenaSeasonAccount {
   bump: number;
 }
 
-/** ArenaSeasonAccount size in bytes */
-export const ARENA_SEASON_ACCOUNT_SIZE = 560;
+/** ArenaSeasonAccount size in bytes (with repr(C) alignment padding) */
+export const ARENA_SEASON_ACCOUNT_SIZE = 608;
 
 // ============================================================
 // Arena Participant Account Interface
@@ -70,8 +70,8 @@ export interface ArenaParticipantAccount {
   bump: number;
 }
 
-/** ArenaParticipantAccount size in bytes */
-export const ARENA_PARTICIPANT_ACCOUNT_SIZE = 488;
+/** ArenaParticipantAccount size in bytes (with repr(C) alignment padding) */
+export const ARENA_PARTICIPANT_ACCOUNT_SIZE = 536;
 
 // ============================================================
 // Arena Loadout Account Interface
@@ -88,21 +88,64 @@ export interface ArenaLoadoutAccount {
   armorPieces: BN;
 }
 
-/** ArenaLoadoutAccount size in bytes */
-export const ARENA_LOADOUT_ACCOUNT_SIZE = 128;
+/** ArenaLoadoutAccount size in bytes (with repr(C) alignment padding) */
+export const ARENA_LOADOUT_ACCOUNT_SIZE = 168;
 
 // ============================================================
 // Deserialization
 // ============================================================
 
-/** Deserialize ArenaSeasonAccount from raw bytes */
+/**
+ * Deserialize ArenaSeasonAccount from raw bytes.
+ *
+ * Rust repr(C) layout (608 bytes):
+ *   0: account_key u8 (1)
+ *   1: game_engine Pubkey (32)
+ *  33: PADDING (3) -- align u32
+ *  36: season_id u32 (4)
+ *  40: city_id u16 (2)
+ *  42: authority Pubkey (32)
+ *  74: PADDING (6) -- align i64
+ *  80: start_time i64 (8)
+ *  88: end_time i64 (8)
+ *  96: claim_deadline i64 (8)
+ * 104: status u8 (1)
+ * 105: PADDING (7) -- align ArenaLeaderboardEntry (8)
+ * 112: leaderboard [ArenaLeaderboardEntry; 10] (400)
+ * 512: leaderboard_count u8 (1)
+ * 513: leaderboard_claimed [bool; 10] (10)
+ * 523: PADDING (5) -- align u64
+ * 528: master_prize_pool u64 (8)
+ * 536: daily_prize_pool u64 (8)
+ * 544: daily_distribution_cap u64 (8)
+ * 552: distributed_today u64 (8)
+ * 560: last_distribution_day u32 (4)
+ * 564: _padding1 [u8; 4] (4)
+ * 568: prize_remaining u64 (8)
+ * 576: min_level_required u8 (1)
+ * 577: _padding2 [u8; 7] (7)
+ * 584: min_points_for_leaderboard u64 (8)
+ * 592: total_battles u64 (8)
+ * 600: bump u8 (1)
+ * 601: _reserved [u8; 7] (7)
+ * 608: END
+ */
 export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+
+  // Kingdom reference (skip for interface)
+  reader.skip(32); // game_engine
+  reader.skip(3); // implicit padding for u32 alignment
 
   // Identity
   const seasonId = reader.readU32();
   const cityId = reader.readU16();
   const authority = reader.readPubkey();
+
+  // repr(C) padding before i64
+  reader.skip(6);
 
   // Timing
   const startTime = reader.readI64();
@@ -110,6 +153,9 @@ export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAc
   const claimDeadline = reader.readI64();
   const statusValue = reader.readU8();
   const status = statusValue as ArenaSeasonStatus;
+
+  // repr(C) padding before leaderboard array (align 8)
+  reader.skip(7);
 
   // Leaderboard
   const leaderboard: ArenaLeaderboardEntry[] = [];
@@ -124,18 +170,21 @@ export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAc
     leaderboardClaimed.push(reader.readBool());
   }
 
+  // repr(C) padding before u64
+  reader.skip(5);
+
   // Prize pool
   const masterPrizePool = reader.readU64();
   const dailyPrizePool = reader.readU64();
   const dailyDistributionCap = reader.readU64();
   const distributedToday = reader.readU64();
   const lastDistributionDay = reader.readU32();
-  reader.skip(4); // padding
+  reader.skip(4); // _padding1
   const prizeRemaining = reader.readU64();
 
   // Thresholds
   const minLevelRequired = reader.readU8();
-  reader.skip(7); // padding
+  reader.skip(7); // _padding2
   const minPointsForLeaderboard = reader.readU64();
   const totalBattles = reader.readU64();
   const bump = reader.readU8();
@@ -165,17 +214,53 @@ export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAc
   };
 }
 
-/** Deserialize ArenaParticipantAccount from raw bytes */
+/**
+ * Deserialize ArenaParticipantAccount from raw bytes.
+ *
+ * Rust repr(C) layout (536 bytes):
+ *   0: account_key u8 (1)
+ *   1: game_engine Pubkey (32)
+ *  33: player Pubkey (32)
+ *  65: PADDING (3) -- align u32
+ *  68: season_id u32 (4)
+ *  72: battle_timestamps [i64; 10] (80)
+ * 152: battle_opponents [Pubkey; 10] (320)
+ * 472: battle_index u8 (1)
+ * 473: PADDING (7) -- align u64
+ * 480: last_match_id u64 (8)
+ * 488: daily_reward_claimed_day u32 (4)
+ * 492: elo_rating u32 (4)
+ * 496: total_points u64 (8)
+ * 504: wins u32 (4)
+ * 508: losses u32 (4)
+ * 512: master_reward_claimed bool (1)
+ * 513: bump u8 (1)
+ * 514: _reserved [u8; 17] (17)
+ * 531: TAIL PADDING (5) -- align struct to 8
+ * 536: END
+ */
 export function deserializeArenaParticipant(data: Uint8Array | Buffer): ArenaParticipantAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key
+
+  // Kingdom reference (skip for interface)
+  reader.skip(32); // game_engine
+
   const player = reader.readPubkey();
+
+  // implicit padding for u32 alignment
+  reader.skip(3);
+
   const seasonId = reader.readU32();
 
   // Battle tracking
   const battleTimestamps = reader.readI64Array(10);
   const battleOpponents = reader.readPubkeyArray(10);
   const battleIndex = reader.readU8();
+
+  // repr(C) padding before u64
+  reader.skip(7);
 
   // Matchmaking
   const lastMatchId = reader.readU64();
@@ -211,13 +296,40 @@ export function deserializeArenaParticipant(data: Uint8Array | Buffer): ArenaPar
   };
 }
 
-/** Deserialize ArenaLoadoutAccount from raw bytes */
+/**
+ * Deserialize ArenaLoadoutAccount from raw bytes.
+ *
+ * Rust repr(C) layout (168 bytes):
+ *   0: account_key u8 (1)
+ *   1: game_engine Pubkey (32)
+ *  33: player Pubkey (32)
+ *  65: bump u8 (1)
+ *  66: arena_hero Pubkey (32)
+ *  98: PADDING (6) -- align u64
+ * 104: defensive_units [u64; 3] (24)
+ * 128: melee_weapons u64 (8)
+ * 136: ranged_weapons u64 (8)
+ * 144: siege_weapons u64 (8)
+ * 152: armor_pieces u64 (8)
+ * 160: _reserved [u8; 7] (7)
+ * 167: TAIL PADDING (1) -- align struct to 8
+ * 168: END
+ */
 export function deserializeArenaLoadout(data: Uint8Array | Buffer): ArenaLoadoutAccount {
   const reader = new BufferReader(data);
+
+  reader.readU8(); // account_key
+
+  // Kingdom reference (skip for interface)
+  reader.skip(32); // game_engine
 
   const player = reader.readPubkey();
   const bump = reader.readU8();
   const arenaHero = reader.readPubkey();
+
+  // repr(C) padding before u64 array
+  reader.skip(6);
+
   const defensiveUnits = reader.readU64Array(3);
   const meleeWeapons = reader.readU64();
   const rangedWeapons = reader.readU64();

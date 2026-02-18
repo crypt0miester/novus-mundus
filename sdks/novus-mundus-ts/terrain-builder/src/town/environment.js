@@ -190,8 +190,41 @@ export function buildPlotPad(parent, plotIdx, ctx) {
 
   const L = ctx.layout;
   const plotCfg = L && L.plots && L.plots[plotIdx] ? L.plots[plotIdx] : null;
-  const padSize = plotCfg ? plotCfg.padSize : 0.58;
+  const maxPadSize = plotCfg ? plotCfg.padSize : 0.58;
+
+  // Scale pad proportionally with building levels on this plot
+  let maxLevel = 0;
+  let hasCatacombs = false;
+  if (owned && estate.buildings) {
+    for (let s = 0; s < 4; s++) {
+      const b = estate.buildings[plotIdx * 4 + s];
+      if (b && b.type >= 0 && b.status > 0) {
+        maxLevel = Math.max(maxLevel, b.level || 1);
+        if (b.type === 15) hasCatacombs = true;
+      }
+    }
+  }
+  const minPadFraction = 0.3; // minimum 30% of configured size
+  const tierFactor = Math.min(1, maxLevel / 20);
+  const padSize = owned
+    ? maxPadSize * (minPadFraction + (1 - minPadFraction) * tierFactor)
+    : maxPadSize;
   const padH = owned ? 0.015 : 0.008;
+
+  // Catacombs has its own rocky ground — skip the green pad, border, corners
+  if (hasCatacombs) {
+    const div = document.createElement('div');
+    div.innerHTML = `<span style="font:bold 11px monospace;color:#9988bb;
+      text-shadow:0 1px 3px rgba(0,0,0,0.8)">Catacombs</span>`;
+    div.style.cssText = 'text-align:center;white-space:nowrap;user-select:none;pointer-events:none;';
+    const label = new CSS2DObject(div);
+    label.position.set(0, 0.14, 0);
+    g.add(label);
+    ctx.labels.push(label);
+    g.position.set(pp.x, 0, pp.z);
+    parent.add(g);
+    return g;
+  }
 
   // Stone foundation pad
   const padColor = plotCfg && plotCfg.padColor ? plotCfg.padColor : (owned ? 0x6a8a55 : 0x555555);
@@ -200,11 +233,15 @@ export function buildPlotPad(parent, plotIdx, ctx) {
     roughness: 0.75, metalness: 0,
     transparent: !owned, opacity: owned ? 1 : 0.35,
   });
+  // Store per-plot texture pack for async loading
+  padMat.userData = { texturePackOverride: plotCfg?.groundTexture || null };
   const pad = new THREE.Mesh(new THREE.BoxGeometry(padSize, padH, padSize), padMat);
   pad.position.y = padH / 2;
   pad.receiveShadow = true; pad.castShadow = true;
   pad.userData = { plotIdx, type: 'plot-pad' };
   g.add(pad);
+  // Expose pad material for async texturing
+  g.userData.padMaterial = padMat;
 
   // Stone edge border
   const borderColor = plotCfg && plotCfg.borderColor ? plotCfg.borderColor : 0x887766;
@@ -231,15 +268,17 @@ export function buildPlotPad(parent, plotIdx, ctx) {
     }
   }
 
-  // Slot markers
+  // Slot markers (size scales with pad, positions stay fixed for building placement)
   if (owned) {
     const slotMat = new THREE.MeshStandardMaterial({
       color: 0xaabb88, roughness: 0.6, transparent: true, opacity: 0.35
     });
     const slotDefs = plotCfg && plotCfg.slots ? plotCfg.slots : SLOT_OFFSETS;
+    const padScale = padSize / maxPadSize; // 0.3 to 1.0
+    const markerSize = 0.13 * padScale;
     for (let s = 0; s < slotDefs.length; s++) {
       const so = slotDefs[s];
-      const marker = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.003, 0.13), slotMat);
+      const marker = new THREE.Mesh(new THREE.BoxGeometry(markerSize, 0.003, markerSize), slotMat);
       marker.position.set(so.dx, padH + 0.003, so.dz);
       if (so.rotation) marker.rotation.y = so.rotation * DEG;
       marker.receiveShadow = true;

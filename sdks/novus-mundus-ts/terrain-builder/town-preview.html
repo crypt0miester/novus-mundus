@@ -1,0 +1,2104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Town Preview</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f1a; color: #e0e0e0; height: 100vh; overflow: hidden; }
+
+#viewport { position: absolute; inset: 0; }
+
+/* ─── Controls overlay ─── */
+#controls {
+  position: absolute; top: 16px; right: 16px; z-index: 10;
+  background: rgba(16, 16, 32, 0.92); border: 1px solid #333; border-radius: 8px;
+  padding: 14px 16px; width: 280px; max-height: calc(100vh - 32px); overflow-y: auto;
+  font-size: 12px;
+}
+#controls h1 { font-size: 15px; color: #7ec8e3; margin-bottom: 10px; }
+#controls h2 { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 4px; }
+.ctrl-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.ctrl-row label { flex: 0 0 80px; color: #999; font-size: 11px; }
+.ctrl-row input[type=range] { flex: 1; accent-color: #7ec8e3; }
+.ctrl-row .val { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: #7ec8e3; font-size: 11px; }
+.ctrl-row select { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 3px 6px; border-radius: 3px; font-size: 11px; }
+.btn-row { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; }
+button { background: #7ec8e3; color: #000; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+button:hover { background: #5ab0d0; }
+button.secondary { background: #3a3a5e; color: #ccc; }
+button.secondary:hover { background: #4a4a6e; }
+button.active { background: #4af; color: #000; }
+.toggle-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.toggle-row input[type=checkbox] { accent-color: #7ec8e3; width: 14px; height: 14px; }
+.toggle-row label { color: #ccc; font-size: 11px; cursor: pointer; margin: 0; }
+.separator { border-top: 1px solid #333; margin: 10px 0; }
+
+/* ─── Props panel inputs ─── */
+#props-panel .prop-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#props-panel .prop-row label { flex: 0 0 52px; color: #999; font-size: 10px; }
+#props-panel .prop-row input { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 6px; border-radius: 3px; font-size: 11px; width: 60px; }
+#props-panel h3 { font-size: 11px; color: #7ec8e3; margin: 6px 0 2px; }
+
+#sea-panel h3 { font-size: 11px; color: #7ec8e3; margin: 8px 0 4px; }
+#sea-panel .sea-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+#sea-panel .sea-row label { flex: 0 0 52px; color: #888; font-size: 10px; }
+#sea-panel .sea-row input { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; width: 50px; }
+#sea-panel .sea-row input[type="checkbox"] { flex: 0; width: auto; }
+#sea-panel .sea-row select { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
+
+#bounds-panel h3 { font-size: 11px; color: #7ec8e3; margin: 8px 0 4px; }
+#bounds-panel .bounds-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+#bounds-panel .bounds-row label { flex: 0 0 52px; color: #888; font-size: 10px; }
+#bounds-panel .bounds-row input { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; width: 50px; }
+
+#audio-sliders { margin-top: 4px; }
+#audio-sliders .audio-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+#audio-sliders .audio-row label { flex: 0 0 64px; color: #888; font-size: 10px; }
+#audio-sliders .audio-row input[type="range"] { flex: 1; width: 80px; accent-color: #7ec8e3; }
+#audio-sliders .audio-row .val { flex: 0 0 36px; color: #aaa; font-size: 10px; text-align: right; }
+
+#textures-panel h3 { font-size: 11px; color: #7ec8e3; margin: 8px 0 4px; }
+#textures-panel .tex-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+#textures-panel .tex-row label { flex: 0 0 52px; color: #888; font-size: 10px; }
+#textures-panel .tex-row select { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
+
+#roads-panel h3 { font-size: 11px; color: #7ec8e3; margin: 8px 0 4px; }
+#roads-panel .roads-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+#roads-panel .roads-row label { flex: 0 0 64px; color: #888; font-size: 10px; }
+#roads-panel .roads-row input { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; width: 50px; }
+#roads-panel .roads-row select { flex: 1; background: #1a1a2e; border: 1px solid #444; color: #ccc; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
+#roads-panel .roads-row input[type="range"] { flex: 1; width: 80px; }
+#roads-panel .roads-row .val { flex: 0 0 36px; color: #aaa; font-size: 10px; text-align: right; }
+
+/* ─── Status bar ─── */
+#status {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+  background: rgba(16, 16, 32, 0.85); border-top: 1px solid #333;
+  padding: 6px 16px; display: flex; gap: 24px; font-size: 11px; color: #666;
+}
+#status .stat { color: #7ec8e3; }
+#fps { font-variant-numeric: tabular-nums; }
+
+/* ─── Loading overlay ─── */
+#loading {
+  position: absolute; inset: 0; z-index: 100;
+  background: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+#loading h1 { font-size: 20px; color: #7ec8e3; margin-bottom: 12px; }
+#loading p { color: #666; font-size: 13px; }
+#loading .spinner {
+  width: 36px; height: 36px; border: 3px solid #333; border-top-color: #7ec8e3;
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading.hidden { display: none; }
+
+/* ─── Terrain selector dropdown ─── */
+#terrain-select { width: 100%; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <h1>Town Preview</h1>
+  <p id="load-status">Initializing...</p>
+</div>
+
+<div id="viewport"></div>
+
+<div id="controls">
+  <h1>Town Preview</h1>
+
+  <h2>Terrain</h2>
+  <div class="ctrl-row">
+    <label>City</label>
+    <select id="terrain-select"><option value="">Loading...</option></select>
+  </div>
+
+  <div class="separator"></div>
+  <h2>Time &amp; Atmosphere</h2>
+  <div class="ctrl-row">
+    <label>Time of Day</label>
+    <input type="range" id="sl-time" min="0" max="24" step="0.25" value="10">
+    <span class="val" id="val-time">10:00</span>
+  </div>
+  <div class="ctrl-row">
+    <label>Weather</label>
+    <select id="sel-weather">
+      <option value="clear">Clear</option>
+      <option value="overcast">Overcast</option>
+      <option value="rain">Rain</option>
+      <option value="storm">Storm</option>
+      <option value="snow">Snow</option>
+      <option value="fog">Fog</option>
+      <option value="windy">Windy</option>
+    </select>
+  </div>
+  <div class="ctrl-row">
+    <label>Theme</label>
+    <select id="sel-theme">
+      <option value="">Default</option>
+      <option value="desert">Desert</option>
+      <option value="snow">Snow</option>
+      <option value="swamp">Swamp</option>
+      <option value="volcanic">Volcanic</option>
+      <option value="forest">Forest</option>
+    </select>
+  </div>
+
+  <div class="separator"></div>
+  <h2>Estate</h2>
+  <div class="ctrl-row">
+    <label>Estate Level</label>
+    <input type="range" id="sl-level" min="0" max="60" step="1" value="15">
+    <span class="val" id="val-level">15</span>
+  </div>
+  <div class="ctrl-row">
+    <label>Plots Owned</label>
+    <input type="range" id="sl-plots" min="1" max="5" step="1" value="3">
+    <span class="val" id="val-plots">3</span>
+  </div>
+
+  <h2>Building Presets</h2>
+  <div class="btn-row">
+    <button onclick="setPreset('empty')">Empty</button>
+    <button onclick="setPreset('starter')">Starter</button>
+    <button onclick="setPreset('mid')">Mid-Game</button>
+    <button onclick="setPreset('full')">Full</button>
+    <button onclick="setPreset('maxed')">Maxed</button>
+  </div>
+
+  <div class="separator"></div>
+  <h2>Debug</h2>
+  <!-- <h2>Systems</h2>
+  <div class="toggle-row"><input type="checkbox" id="cb-textures" checked><label for="cb-textures">Textures</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-buildings" checked><label for="cb-buildings">Buildings</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-townsquare" checked><label for="cb-townsquare">Town Square</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-mountains" checked><label for="cb-mountains">Mountains</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-roads" checked><label for="cb-roads">Roads</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-trees" checked><label for="cb-trees">Trees</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-grass" checked><label for="cb-grass">Grass</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-flowers" checked><label for="cb-flowers">Flowers</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-decorations" checked><label for="cb-decorations">Decorations</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-npcs" checked><label for="cb-npcs">NPCs &amp; Animals</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-weather" checked><label for="cb-weather">Weather</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-particles" checked><label for="cb-particles">Particles</label></div>
+  <div class="toggle-row"><input type="checkbox" id="cb-water" checked><label for="cb-water">Water</label></div> -->
+  <div class="toggle-row"><input type="checkbox" id="cb-audio"><label for="cb-audio">Audio</label></div>
+  <div id="audio-sliders" style="display:none"></div>
+  <div class="btn-row">
+    <button class="secondary" onclick="townRenderer && townRenderer.focusOverview()">Overview</button>
+    <button class="secondary" onclick="reloadTown()">Reload</button>
+  </div>
+
+  <div class="separator"></div>
+  <h2>Layout Editor</h2>
+  <div class="toggle-row">
+    <input type="checkbox" id="cb-edit">
+    <label for="cb-edit">Edit Mode</label>
+  </div>
+  <div id="edit-tools" style="display:none">
+    <div class="btn-row">
+      <button id="btn-add-lamp">+ Lamp</button>
+      <button id="btn-add-tree">+ Tree</button>
+      <select id="sel-decor-type" style="background:#1a1a2e;border:1px solid #444;color:#ccc;padding:3px 4px;border-radius:3px;font-size:10px;width:70px;">
+        <option value="rock">Rock</option>
+        <option value="well">Well</option>
+        <option value="barrel">Barrel</option>
+        <option value="crate">Crate</option>
+        <option value="banner">Banner</option>
+        <option value="campfire">Campfire</option>
+        <option value="cart">Cart</option>
+        <option value="sign">Sign</option>
+        <option value="fence">Fence</option>
+      </select><button id="btn-add-decor">+ Add</button>
+      <button id="btn-add-road">+ Road</button>
+      <button id="btn-add-roundabout" class="secondary">+ Roundabout</button>
+    </div>
+    <div class="btn-row">
+      <button class="secondary" id="btn-delete">Delete</button>
+      <button class="secondary" id="btn-undo">Undo</button>
+      <button id="btn-save">Save</button>
+    </div>
+    <div class="toggle-row"><input type="checkbox" id="cb-snap"><label for="cb-snap">Snap to Grid</label></div>
+    <div class="toggle-row"><input type="checkbox" id="cb-grid"><label for="cb-grid">Show Grid</label></div>
+    <div class="ctrl-row" id="grid-size-row" style="display:none">
+      <label>Grid Size</label>
+      <input type="range" id="sl-grid" min="0.1" max="2.0" step="0.05" value="0.25">
+      <span class="val" id="val-grid">0.25</span>
+    </div>
+    <div id="props-panel" style="margin-top:8px;"></div>
+    <!-- <div id="sea-panel" style="margin-top:12px;"></div> -->
+    <!-- <div id="bounds-panel" style="margin-top:12px;"></div> -->
+    <div id="roads-panel" style="margin-top:12px;"></div>
+    <div id="textures-panel" style="margin-top:12px;"></div>
+  </div>
+  </div>
+</div>
+
+<div id="building-labels" style="display:none;pointer-events:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:50;"></div>
+
+<div id="status">
+  <span>FPS: <span class="stat" id="fps">--</span></span>
+  <span>Estate Lv: <span class="stat" id="estate-lv">--</span></span>
+  <span>Pop: <span class="stat" id="pop">--</span></span>
+</div>
+
+<!-- Import map for Three.js 0.170.0 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Terrain math — mirrors on-chain Rust + TS SDK (integer fixed-point)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function terrainHash(seed, x, y) {
+  let h = (seed ^ (x >>> 0) ^ rotl(y >>> 0, 16)) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0x45D9F3B) >>> 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x45D9F3B) >>> 0;
+  h ^= h >>> 16;
+  return h & 0xFF;
+}
+
+function rotl(v, n) { return ((v << n) | (v >>> (32 - n))) >>> 0; }
+
+function smoothstep256(t) {
+  return (t * t * (768 - 2 * t)) >>> 16;
+}
+
+function smoothOctave(seed, x, y, shift) {
+  const s = 1 << shift;
+  const gx = Math.floor(x / s), gy = Math.floor(y / s);
+  const fx = ((((x % s) + s) % s) * 256 / s) | 0;
+  const fy = ((((y % s) + s) % s) * 256 / s) | 0;
+  const v00 = terrainHash(seed, gx, gy);
+  const v10 = terrainHash(seed, gx + 1, gy);
+  const v01 = terrainHash(seed, gx, gy + 1);
+  const v11 = terrainHash(seed, gx + 1, gy + 1);
+  const tx = smoothstep256(fx), ty = smoothstep256(fy);
+  const itx = 256 - tx, ity = 256 - ty;
+  return (v00 * itx * ity + v10 * tx * ity + v01 * itx * ty + v11 * tx * ty) / (256 * 256) | 0;
+}
+
+function noise(seed, x, y) {
+  const o1 = smoothOctave(seed, x, y, 10);
+  const o2 = smoothOctave((seed ^ 0x9E3779B9) >>> 0, x, y, 7);
+  const o3 = smoothOctave((seed ^ 0x517CC1B7) >>> 0, x, y, 4);
+  return ((o1 * 4 + o2 * 2 + o3) / 7) | 0;
+}
+
+function buoyancy(mass, lift) {
+  return ((lift * (255 - mass)) / 255) | 0;
+}
+
+function twoNearest(anchors, ox, oy) {
+  let bi = 0, bd = 1e18, si = 0, sd = 1e18;
+  for (let i = 0; i < anchors.length; i++) {
+    const dx = ox - anchors[i].x, dy = oy - anchors[i].y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { sd = bd; si = bi; bd = d; bi = i; }
+    else if (d < sd) { sd = d; si = i; }
+  }
+  return [bi, si, bd, sd];
+}
+
+function pressureEffect(nearest, second, dn, ds) {
+  const total = dn + ds;
+  if (total === 0) return 0;
+  const prox = ((dn * 128) / total) | 0;
+  if (prox < 32) return 0;
+  const str = Math.min((prox - 32) * 8, 255);
+  const rpx = nearest.pushX - second.pushX;
+  const rpy = nearest.pushY - second.pushY;
+  if (rpx === 0 && rpy === 0) return 0;
+  const bx = second.x - nearest.x, by = second.y - nearest.y;
+  const mag = Math.max(Math.abs(bx) + Math.abs(by), 1);
+  const nx = ((bx * 64) / mag) | 0, ny = ((by * 64) / mag) | 0;
+  const dot = rpx * nx + rpy * ny;
+  const eff = Math.max(-60, Math.min(60, (dot / 128) | 0));
+  return (eff * str / 256) | 0;
+}
+
+function elevation(config, ox, oy) {
+  const a = config.anchors;
+  if (a.length < 2) return a.length === 1 ? buoyancy(a[0].mass, a[0].lift) : 128;
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const b1 = buoyancy(a[ni].mass, a[ni].lift);
+  const b2 = buoyancy(a[si].mass, a[si].lift);
+  const total = dn + ds;
+  const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
+  const base = b1 + (((b2 - b1) * t / 256) | 0);
+  const pres = pressureEffect(a[ni], a[si], dn, ds);
+  const tex = ((noise(config.seed, ox, oy) - 128) / 4) | 0;
+  return Math.max(0, Math.min(255, base + pres + tex));
+}
+
+function moisture(config, ox, oy) {
+  const a = config.anchors;
+  if (a.length < 2) return a.length === 1 ? (a[0].moisture ?? 128) : 128;
+  const [ni, si, dn, ds] = twoNearest(a, ox, oy);
+  const m1 = a[ni].moisture ?? 128;
+  const m2 = a[si].moisture ?? 128;
+  const total = dn + ds;
+  const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
+  return Math.max(0, Math.min(255, m1 + (((m2 - m1) * t / 256) | 0)));
+}
+
+function elevColor(e, wl, pl, m) {
+  m = m ?? 128;
+  if (e <= wl) {
+    const d = wl > 0 ? (wl - e) / wl : 0;
+    return [20 + 40 * (1 - d) | 0, 60 + 80 * (1 - d) | 0, 120 + 100 * (1 - d) | 0];
+  }
+  if (e >= pl) {
+    const h = (255 - pl) ? (e - pl) / (255 - pl) : 0;
+    const v = 160 + 80 * h | 0;
+    return [v, v, v];
+  }
+  const range = (pl - wl) || 1;
+  const t = (e - wl) / range;
+  const f = m / 255;
+  if (t < 0.1) return [210, 200, 160];
+  if (t < 0.5) {
+    const h = (t - 0.1) / 0.4;
+    const ar = 210 - 35*h, ag = 190 - 45*h, ab = 140 - 40*h;
+    const lr = 100 - 40*h, lg = 180 - 60*h, lb = 60 - 20*h;
+    return [ar + (lr-ar)*f|0, ag + (lg-ag)*f|0, ab + (lb-ab)*f|0];
+  }
+  const h = (t - 0.5) / 0.5;
+  const ar = 175 + 20*h, ag = 150 + 15*h, ab = 105 + 20*h;
+  const lr = 100 + 50*h, lg = 80 + 30*h, lb = 40 + 30*h;
+  return [ar + (lr-ar)*f|0, ag + (lg-ag)*f|0, ab + (lb-ab)*f|0];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo building/estate state generators
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BUILDING_TYPES = {
+  MANSION: 0, BARRACKS: 1, WORKSHOP: 2, VAULT: 3, DOCK: 4,
+  FORGE: 5, MARKET: 6, ACADEMY: 7, ARENA: 8, SANCTUARY: 9,
+  OBSERVATORY: 10, TREASURY: 11, CITADEL: 12,
+  CAMP: 13, MINE: 14, CATACOMBS: 15, FARM: 16, STABLES: 17, INFIRMARY: 18,
+};
+
+const BUILDING_NAMES = [
+  'Mansion', 'Barracks', 'Workshop', 'Vault', 'Dock',
+  'Forge', 'Market', 'Academy', 'Arena', 'Sanctuary',
+  'Observatory', 'Treasury', 'Citadel',
+  'Camp', 'Mine', 'Catacombs', 'Farm', 'Stables', 'Infirmary',
+];
+
+/** Build asset override key for a building type + level. */
+function buildingAssetKey(typeId, level) {
+  if (typeId < 0 || typeId > 18) return null;
+  const names = ['mansion','barracks','workshop','vault','dock','forge','market','academy','arena','sanctuary','observatory','treasury','citadel','camp','mine','catacombs','farm','stables','infirmary'];
+  const tier = level <= 5 ? 1 : level <= 12 ? 2 : level <= 18 ? 3 : 4;
+  return `${names[typeId]}_t${tier}`;
+}
+
+const STATUS_EMPTY = 0;
+const STATUS_BUILDING = 1;
+const STATUS_ACTIVE = 2;
+const STATUS_UPGRADING = 3;
+
+function generateBuildings(preset) {
+  const buildings = new Array(20).fill(null).map(() => ({
+    type: -1, status: STATUS_EMPTY, level: 0, mastery: 0,
+    constructionProgress: 0, noviInvested: 0,
+  }));
+
+  if (preset === 'empty') return buildings;
+
+  // Building type assignments per slot — matches JSON plots[].buildings
+  // Each of the 13 building types appears exactly once.
+  const typeMap = [
+    // Plot 0 (4 buildings) — Foundation
+    BUILDING_TYPES.MANSION, BUILDING_TYPES.BARRACKS,
+    BUILDING_TYPES.WORKSHOP, BUILDING_TYPES.VAULT,
+    // Plot 1 (4 buildings) — now full
+    BUILDING_TYPES.DOCK, BUILDING_TYPES.FORGE,
+    BUILDING_TYPES.MARKET, BUILDING_TYPES.CAMP,
+    // Plot 2 (4 buildings) — now full
+    BUILDING_TYPES.ACADEMY, BUILDING_TYPES.ARENA,
+    BUILDING_TYPES.MINE, BUILDING_TYPES.FARM,
+    // Plot 3 (4 buildings) — now full
+    BUILDING_TYPES.SANCTUARY, BUILDING_TYPES.OBSERVATORY,
+    BUILDING_TYPES.CATACOMBS, BUILDING_TYPES.STABLES,
+    // Plot 4 (3 buildings) — 1 slot reserved
+    BUILDING_TYPES.TREASURY, BUILDING_TYPES.CITADEL,
+    BUILDING_TYPES.INFIRMARY, -1,
+  ];
+
+  const configs = {
+    starter: { slots: 4, level: [1, 2], status: STATUS_ACTIVE },
+    mid:     { slots: 12, level: [2, 5], status: STATUS_ACTIVE },
+    full:    { slots: 20, level: [5, 10], status: STATUS_ACTIVE },
+    maxed:   { slots: 20, level: [15, 20], status: STATUS_ACTIVE },
+  };
+
+  const cfg = configs[preset] || configs.starter;
+
+  let placed = 0;
+  for (let i = 0; i < 20 && placed < cfg.slots; i++) {
+    if (typeMap[i] === -1) continue; // empty slot
+    const lvMin = cfg.level[0], lvMax = cfg.level[1];
+    const range = lvMax - lvMin + 1;
+    const lv = lvMin + (i % range);   // deterministic — stable across reloads
+    buildings[i] = {
+      type: typeMap[i],
+      status: cfg.status,
+      level: lv,
+      mastery: (i * 13 + 7) % 100,   // deterministic
+      constructionProgress: 100,
+      noviInvested: lv * 1000,
+    };
+    placed++;
+    // Occasionally show one building/upgrading
+    if (placed === cfg.slots && preset !== 'maxed') {
+      buildings[i].status = STATUS_BUILDING;
+      buildings[i].constructionProgress = 65;
+    }
+    if (placed === cfg.slots - 1 && cfg.slots > 4 && preset !== 'maxed') {
+      buildings[i].status = STATUS_UPGRADING;
+    }
+  }
+
+  return buildings;
+}
+
+function buildVisualState(preset, estateLevel, plotsOwned) {
+  const buildings = generateBuildings(preset);
+
+  // Sum levels for estate level if not manually set
+  if (estateLevel == null) {
+    estateLevel = buildings.reduce((s, b) => s + (b.status >= STATUS_ACTIVE ? b.level : 0), 0);
+  }
+
+  return {
+    buildings,
+    plotsOwned: plotsOwned || Math.min(5, Math.ceil(buildings.filter(b => b.status > 0).length / 4)),
+    estateLevel,
+    attackBps: 500 + estateLevel * 50,
+    defenseBps: 400 + estateLevel * 40,
+    resourceGenBps: 300 + estateLevel * 30,
+    craftSuccessBps: 200 + estateLevel * 20,
+    windowsCompleted: 0b101, // dawn + dusk
+    loginStreak: 5,
+    permanentBonus: 10,
+    activeCraft: null,
+    activeResearch: null,
+    meditatingHeroes: 1,
+    playerLevel: Math.max(1, Math.floor(estateLevel / 3)),
+    subscriptionTier: estateLevel > 30 ? 1 : 0,
+    networth: BigInt(estateLevel * 50000),
+    terrain: null,
+    terrainAffinity: null,
+    theme: null,
+    currentTime: 10,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global state
+// ─────────────────────────────────────────────────────────────────────────────
+
+let townRenderer = null;
+let currentTerrain = null;
+let currentPreset = 'mid';
+let terrainConfigs = {};
+let layoutConfig = null;
+
+// Expose for button onclick handlers
+window.townRenderer = null;
+window.setPreset = setPreset;
+window.reloadTown = reloadTown;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Initialization
+// ─────────────────────────────────────────────────────────────────────────────
+
+const loadingEl = document.getElementById('loading');
+const loadStatus = document.getElementById('load-status');
+
+async function init() {
+  loadStatus.textContent = 'Loading terrain data...';
+
+  // Load available terrain configs from the server
+  let fileList = [];
+  try {
+    const res = await fetch('/api/files');
+    const data = await res.json();
+    fileList = (data.files || []).filter(f =>
+      f.name !== 'coastlines.json' &&
+      f.name !== 'coastlines-50m.json' &&
+      !f.name.startsWith('town-')
+    );
+  } catch (e) {
+    console.warn('Could not load file list from server:', e.message);
+  }
+
+  // Populate terrain selector
+  const terrainSelect = document.getElementById('terrain-select');
+  terrainSelect.innerHTML = '';
+
+  if (fileList.length === 0) {
+    // Fallback: use embedded demo terrain
+    const opt = document.createElement('option');
+    opt.value = '__demo__';
+    opt.textContent = 'Demo Terrain';
+    terrainSelect.appendChild(opt);
+    terrainConfigs.__demo__ = makeDemoTerrain();
+  } else {
+    for (const f of fileList) {
+      const opt = document.createElement('option');
+      opt.value = f.name;
+      opt.textContent = f.name.replace('.json', '');
+      terrainSelect.appendChild(opt);
+    }
+  }
+
+  // Load first terrain
+  const firstName = terrainSelect.value;
+  loadStatus.textContent = `Loading ${firstName}...`;
+
+  if (firstName === '__demo__') {
+    currentTerrain = terrainConfigs.__demo__;
+  } else {
+    currentTerrain = await loadTerrainConfig(firstName);
+  }
+
+  if (!currentTerrain) {
+    loadStatus.textContent = 'Failed to load terrain. Using fallback.';
+    currentTerrain = makeDemoTerrain();
+  }
+
+  loadStatus.textContent = 'Loading layout config...';
+
+  // Load town-layout.json
+  try {
+    const layoutRes = await fetch('/api/files/town-layout.json');
+    if (layoutRes.ok) {
+      layoutConfig = await layoutRes.json();
+    }
+  } catch (e) {
+    console.warn('Could not load town-layout.json:', e.message);
+  }
+
+  loadStatus.textContent = 'Building town scene...';
+
+  // Import TownRenderer
+  try {
+    const mod = await import('./src/town/TownRenderer.js?v=' + Date.now());
+    const TownRenderer = mod.TownRenderer;
+
+    const container = document.getElementById('viewport');
+    const vs = buildVisualState(currentPreset, null, 3);
+
+    townRenderer = new TownRenderer({
+      container,
+      terrainFunctions: { elevation, moisture, elevColor, noise, buoyancy, twoNearest },
+      callbacks: {
+        onBuildingClick: (idx) => console.log('Building clicked:', idx),
+      },
+    });
+
+    await townRenderer.load(currentTerrain, vs, { layoutConfig });
+
+    window.townRenderer = townRenderer;
+
+    // Hide loading overlay
+    loadingEl.classList.add('hidden');
+
+    // Start FPS counter
+    startFPSCounter();
+    setupControls();
+    setupEditor();
+
+    // Start building labels immediately
+    if (window._updateBuildingLabels) window._updateBuildingLabels();
+
+    // Build audio panel after a short delay (audio init is async)
+    setTimeout(() => { if (window._buildAudioPanel) window._buildAudioPanel(); }, 500);
+
+  } catch (err) {
+    loadStatus.textContent = 'Error: ' + err.message;
+    console.error('Failed to initialize TownRenderer:', err);
+  }
+}
+
+async function loadTerrainConfig(name) {
+  if (terrainConfigs[name]) return terrainConfigs[name];
+  try {
+    const res = await fetch(`/api/files/${encodeURIComponent(name)}`);
+    if (!res.ok) return null;
+    const cfg = await res.json();
+    terrainConfigs[name] = cfg;
+    return cfg;
+  } catch {
+    return null;
+  }
+}
+
+function makeDemoTerrain() {
+  return {
+    seed: 1279872052,
+    waterLine: 90,
+    peakLine: 245,
+    radiusKm: 50,
+    anchorCount: 6,
+    version: 1,
+    anchors: [
+      { x: -200, y: 200, mass: 88, lift: 172, pushX: 0, pushY: 0, moisture: 180 },
+      { x: 600, y: 800, mass: 85, lift: 168, pushX: 0, pushY: 0, moisture: 170 },
+      { x: -1200, y: -400, mass: 82, lift: 175, pushX: 0, pushY: 0, moisture: 190 },
+      { x: -600, y: -2200, mass: 72, lift: 192, pushX: 0, pushY: 2, moisture: 160 },
+      { x: -1800, y: 1800, mass: 70, lift: 195, pushX: 1, pushY: -1, moisture: 200 },
+      { x: 700, y: 2500, mass: 80, lift: 178, pushX: 0, pushY: 0, moisture: 185 },
+    ],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls wiring
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setupControls() {
+  // Time of day
+  const slTime = document.getElementById('sl-time');
+  const valTime = document.getElementById('val-time');
+  slTime.addEventListener('input', () => {
+    const h = parseFloat(slTime.value);
+    const hh = Math.floor(h);
+    const mm = Math.round((h - hh) * 60);
+    valTime.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    if (townRenderer) townRenderer.setTimeOfDay(h);
+  });
+
+  // Weather
+  document.getElementById('sel-weather').addEventListener('change', (e) => {
+    if (townRenderer) townRenderer.setWeather(e.target.value);
+  });
+
+  // Theme
+  document.getElementById('sel-theme').addEventListener('change', (e) => {
+    if (townRenderer) townRenderer.setTheme(e.target.value || null);
+  });
+
+  // Estate level (display only — requires reload to change buildings)
+  const slLevel = document.getElementById('sl-level');
+  const valLevel = document.getElementById('val-level');
+  slLevel.addEventListener('input', () => {
+    valLevel.textContent = slLevel.value;
+  });
+
+  // Plots
+  const slPlots = document.getElementById('sl-plots');
+  const valPlots = document.getElementById('val-plots');
+  slPlots.addEventListener('input', () => {
+    valPlots.textContent = slPlots.value;
+  });
+
+  // System toggles — uncomment HTML above to re-enable
+  // for (const id of ['cb-textures','cb-buildings','cb-townsquare','cb-mountains','cb-roads','cb-trees','cb-grass','cb-flowers','cb-decorations','cb-npcs','cb-weather','cb-particles','cb-water']) {
+  //   document.getElementById(id).addEventListener('change', () => reloadTown());
+  // }
+
+  // Audio toggle
+  document.getElementById('cb-audio').addEventListener('change', (e) => {
+    if (!townRenderer) return;
+    const on = e.target.checked;
+    townRenderer.setAudioEnabled(on);
+    const slidersDiv = document.getElementById('audio-sliders');
+    if (on) {
+      // Also resume AudioContext if suspended (user gesture)
+      const audio = townRenderer._audio;
+      if (audio && audio._ctx && audio._ctx.state === 'suspended') {
+        audio._ctx.resume();
+      }
+      // Build sliders
+      let html = '';
+      html += `<div class="audio-row"><label>Master</label><input type="range" min="0" max="1" step="0.05" id="audio-master-vol" value="${audio?._masterVolume ?? 0.5}"><span class="val" id="audio-master-vol-val">${(audio?._masterVolume ?? 0.5).toFixed(2)}</span></div>`;
+      html += `<div class="audio-row"><label>Ambience</label><input type="range" min="0" max="1" step="0.05" id="audio-music-vol" value="${audio?._musicVolume ?? 0.6}"><span class="val" id="audio-music-vol-val">${(audio?._musicVolume ?? 0.6).toFixed(2)}</span></div>`;
+      html += `<div class="audio-row"><label>SFX</label><input type="range" min="0" max="1" step="0.05" id="audio-sfx-vol" value="${audio?._sfxVolume ?? 0.7}"><span class="val" id="audio-sfx-vol-val">${(audio?._sfxVolume ?? 0.7).toFixed(2)}</span></div>`;
+      slidersDiv.innerHTML = html;
+      slidersDiv.style.display = 'block';
+      document.getElementById('audio-master-vol').addEventListener('input', (ev) => {
+        const v = parseFloat(ev.target.value);
+        document.getElementById('audio-master-vol-val').textContent = v.toFixed(2);
+        if (audio) audio.setMasterVolume(v);
+      });
+      document.getElementById('audio-music-vol').addEventListener('input', (ev) => {
+        const v = parseFloat(ev.target.value);
+        document.getElementById('audio-music-vol-val').textContent = v.toFixed(2);
+        if (audio) audio.setMusicVolume(v);
+      });
+      document.getElementById('audio-sfx-vol').addEventListener('input', (ev) => {
+        const v = parseFloat(ev.target.value);
+        document.getElementById('audio-sfx-vol-val').textContent = v.toFixed(2);
+        if (audio) audio.setSFXVolume(v);
+      });
+    } else {
+      slidersDiv.innerHTML = '';
+      slidersDiv.style.display = 'none';
+    }
+  });
+
+  // Terrain selector
+  document.getElementById('terrain-select').addEventListener('change', async (e) => {
+    const name = e.target.value;
+    if (name === '__demo__') {
+      currentTerrain = terrainConfigs.__demo__;
+    } else {
+      currentTerrain = await loadTerrainConfig(name);
+    }
+    if (currentTerrain) reloadTown();
+  });
+}
+
+function setPreset(preset) {
+  currentPreset = preset;
+  reloadTown();
+}
+
+async function reloadTown() {
+  if (!townRenderer || !currentTerrain) return;
+
+  // Save camera state before teardown
+  const camState = townRenderer.cameraController?.getState();
+
+  const estateLevel = parseInt(document.getElementById('sl-level').value, 10);
+  const plotsOwned = parseInt(document.getElementById('sl-plots').value, 10);
+  const timeOfDay = parseFloat(document.getElementById('sl-time').value);
+
+  const vs = buildVisualState(currentPreset, estateLevel, plotsOwned);
+  vs.currentTime = timeOfDay;
+
+  // Apply per-slot tier overrides from layout config
+  if (layoutConfig?.plots) {
+    const tierLevels = [1, 6, 13, 19]; // representative levels for tiers 1-4
+    for (let i = 0; i < vs.buildings.length; i++) {
+      if (!vs.buildings[i] || vs.buildings[i].type < 0) continue;
+      const plotIndex = Math.floor(i / 4);
+      const slotIndex = i % 4;
+      const slot = layoutConfig.plots[plotIndex]?.slots?.[slotIndex];
+      if (slot?.tierOverride != null) {
+        vs.buildings[i].level = tierLevels[slot.tierOverride - 1] || 1;
+      }
+    }
+  }
+
+  const editOn = document.getElementById('cb-edit')?.checked;
+  // const skip = {
+  //   textures:    !document.getElementById('cb-textures')?.checked,
+  //   buildings:   !document.getElementById('cb-buildings')?.checked,
+  //   townSquare:  !document.getElementById('cb-townsquare')?.checked,
+  //   mountains:   !document.getElementById('cb-mountains')?.checked,
+  //   roads:       !document.getElementById('cb-roads')?.checked,
+  //   trees:       !document.getElementById('cb-trees')?.checked,
+  //   grass:       !document.getElementById('cb-grass')?.checked,
+  //   flowers:     !document.getElementById('cb-flowers')?.checked,
+  //   decorations: !document.getElementById('cb-decorations')?.checked,
+  //   npcs:        !document.getElementById('cb-npcs')?.checked,
+  //   weather:     !document.getElementById('cb-weather')?.checked,
+  //   particles:   !document.getElementById('cb-particles')?.checked,
+  //   water:       !document.getElementById('cb-water')?.checked,
+  // };
+  await townRenderer.load(currentTerrain, vs, { layoutConfig, editMode: editOn });
+
+  // Restore camera state after reload
+  if (camState && townRenderer.cameraController) {
+    townRenderer.cameraController.setState(camState);
+  }
+
+  // Restore road handle visibility if edit mode is on
+  if (editOn && townRenderer.customRoads) {
+    for (const road of townRenderer.customRoads) {
+      for (const handle of road.handles) handle.visible = true;
+    }
+  }
+
+  // Restart building labels after reload
+  if (window._updateBuildingLabels && !window._labelRafId) window._updateBuildingLabels();
+
+  // Re-add grid after reload if visible
+  if (document.getElementById('cb-grid')?.checked) {
+    const gs = parseFloat(document.getElementById('sl-grid')?.value) || 0.5;
+    const divisions = Math.round(20 / gs);
+    const gh = new THREE.GridHelper(20, divisions, 0x444466, 0x333355);
+    gh.position.y = 0.005;
+    gh.material.transparent = true;
+    gh.material.opacity = 0.4;
+    townRenderer.scene.add(gh);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FPS counter
+// ─────────────────────────────────────────────────────────────────────────────
+
+function startFPSCounter() {
+  let frameCount = 0;
+  let lastTime = performance.now();
+  const fpsEl = document.getElementById('fps');
+  const lvEl = document.getElementById('estate-lv');
+  const popEl = document.getElementById('pop');
+
+  function tick() {
+    frameCount++;
+    const now = performance.now();
+    if (now - lastTime >= 1000) {
+      const fps = Math.round(frameCount * 1000 / (now - lastTime));
+      fpsEl.textContent = fps;
+      frameCount = 0;
+      lastTime = now;
+
+      // Update status bar
+      if (townRenderer) {
+        const lv = document.getElementById('sl-level').value;
+        lvEl.textContent = lv;
+        const pop = populationForLevel(parseInt(lv, 10));
+        popEl.textContent = Math.floor(pop);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function populationForLevel(estateLevel) {
+  if (estateLevel <= 10) return Math.max(5, estateLevel * 2);
+  if (estateLevel <= 25) return 20 + (estateLevel - 10) * 2.5;
+  if (estateLevel <= 40) return 57 + (estateLevel - 25) * 4;
+  if (estateLevel <= 55) return 117 + (estateLevel - 40) * 6;
+  return Math.min(300, 207 + (estateLevel - 55) * 8);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout Editor
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setupEditor() {
+  let editMode = false;
+  let selectedObject = null;
+  let isDragging = false;
+  let dragStart = null;
+  const undoStack = [];
+  const MAX_UNDO = 20;
+  let highlightMesh = null;
+  let reloadTimer = null;
+
+  // ── Grid snap state ──
+  let snapEnabled = false;
+  let gridVisible = false;
+  let gridSize = 0.25;
+  let gridHelper = null;
+  let gridCellHighlight = null;
+
+  // ── Texture pack lists ──
+  const TEX_WALL = ['','brick-castle-red','brick-classic','plaster-white','stone-cobble','stone-marble','stone-medieval','stone-wall','wall-block-rough','wall-castle-mixed','wall-rock-stacked','wall-stone-clean','wood-aged','wood-dark'];
+  const TEX_ROOF = ['','roof-clay','roof-clay-warm','roof-slate','roof-thatch','stone-paving','tile-floor','wood-dark'];
+  const TEX_FLOOR = ['','tile-floor','stone-cobble','stone-paving','stone-pebbles','wood-floor','ground-dirt','ground-gravel'];
+  const TEX_GROUND = ['','grass-lush','grass-wild','ground-dirt','ground-forest','ground-gravel','ground-rocky','ground-sand','stone-cobble','stone-pebbles','stone-rubble','snow-fresh','snow-packed'];
+  const TEX_ROAD = ['','stone-cobble','stone-paving','stone-pebbles','ground-gravel','ground-dirt','ground-rocky','brick-classic'];
+  const TEX_TERRAIN = ['','grass-lush','grass-wild','ground-dirt','ground-forest','ground-gravel','ground-rocky','ground-sand','rock-cliff','rock-mossy','rock-aerial-dark','rock-aerial-light','terrain-rocky-dark','terrain-rocky-light','snow-fresh','snow-packed','lava-cooled','lava-ember','lava-molten'];
+
+  function texSelect(id, label, packs, current) {
+    let html = `<div class="prop-row"><label>${label}</label><select id="${id}" style="flex:1;background:#1a1a2e;border:1px solid #444;color:#ccc;padding:2px 4px;border-radius:3px;font-size:10px;">`;
+    for (const p of packs) {
+      const name = p || '(default)';
+      html += `<option value="${p}" ${current === p ? 'selected' : ''}>${name}</option>`;
+    }
+    html += `</select></div>`;
+    return html;
+  }
+
+  function snapToGrid(value) {
+    return Math.round(value / gridSize) * gridSize;
+  }
+
+  function createGrid() {
+    removeGrid();
+    const divisions = Math.round(20 / gridSize);
+    gridHelper = new THREE.GridHelper(20, divisions, 0x444466, 0x333355);
+    gridHelper.position.y = 0.005;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.4;
+    townRenderer.scene.add(gridHelper);
+  }
+
+  function createCellHighlight() {
+    removeCellHighlight();
+    const geo = new THREE.PlaneGeometry(gridSize, gridSize);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.25, depthWrite: false });
+    gridCellHighlight = new THREE.Mesh(geo, mat);
+    gridCellHighlight.position.y = 0.006;
+    gridCellHighlight.visible = false;
+    townRenderer.scene.add(gridCellHighlight);
+  }
+
+  function removeCellHighlight() {
+    if (gridCellHighlight) {
+      townRenderer.scene.remove(gridCellHighlight);
+      gridCellHighlight.geometry.dispose();
+      gridCellHighlight.material.dispose();
+      gridCellHighlight = null;
+    }
+  }
+
+  function showCellAt(worldX, worldZ) {
+    if (!gridCellHighlight) createCellHighlight();
+    const sx = snapToGrid(worldX);
+    const sz = snapToGrid(worldZ);
+    gridCellHighlight.position.x = sx;
+    gridCellHighlight.position.z = sz;
+    gridCellHighlight.visible = true;
+  }
+
+  function hideCellHighlight() {
+    if (gridCellHighlight) gridCellHighlight.visible = false;
+  }
+
+  function removeGrid() {
+    if (gridHelper) {
+      townRenderer.scene.remove(gridHelper);
+      gridHelper.geometry.dispose();
+      gridHelper.material.dispose();
+      gridHelper = null;
+    }
+    removeCellHighlight();
+  }
+
+  const editToolsEl = document.getElementById('edit-tools');
+  const propsPanel = document.getElementById('props-panel');
+
+  const cbEdit = document.getElementById('cb-edit');
+  const canvas = townRenderer.canvas;
+
+  // ── Block TownRenderer's click handler in edit mode ──
+  // TownRenderer listens for 'click' and calls focusBuilding/focusOverview.
+  // We intercept in capture phase to prevent the camera from jumping.
+  canvas.addEventListener('click', (e) => {
+    if (editMode) e.stopImmediatePropagation();
+  }, true);
+
+  // ── Building labels overlay ──
+  const labelsContainer = document.getElementById('building-labels');
+  let labelRafId = null;
+  window._labelRafId = null;
+
+  function updateBuildingLabels() {
+    if (!townRenderer) {
+      labelsContainer.style.display = 'none';
+      if (labelRafId) { cancelAnimationFrame(labelRafId); labelRafId = null; window._labelRafId = null; }
+      return;
+    }
+    labelsContainer.style.display = 'block';
+    labelsContainer.innerHTML = '';
+    const cam = townRenderer.camera;
+    const canvas = townRenderer.canvas;
+    const tmpV = new THREE.Vector3();
+
+    for (const [idx, group] of townRenderer.buildingGroups) {
+      const bType = group.userData.buildingType;
+      const name = BUILDING_NAMES[bType] ?? `#${idx}`;
+
+      // Project building position to screen — below the building
+      tmpV.setFromMatrixPosition(group.matrixWorld);
+      tmpV.y -= 0.06;
+      tmpV.project(cam);
+
+      if (tmpV.z > 1) continue; // behind camera
+
+      const x = (tmpV.x * 0.5 + 0.5) * canvas.clientWidth;
+      const y = (-tmpV.y * 0.5 + 0.5) * canvas.clientHeight;
+
+      const label = document.createElement('div');
+      if (editMode) {
+        const plotIdx = group.userData.plotIndex ?? Math.floor(idx / 4);
+        const slotIdx = group.userData.slotIndex ?? (idx % 4);
+        const plotNames = ['Starter', 'Tier 1', 'Tier 2', 'Tier 2', 'Prestige'];
+        const plotLabel = plotNames[plotIdx] ?? `Plot ${plotIdx}`;
+        label.innerHTML = `${name}<br><span style="color:#8cf;font-size:9px;">P${plotIdx} (${plotLabel}) · S${slotIdx}</span>`;
+      } else {
+        label.textContent = name;
+      }
+      label.style.cssText = `position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,0);
+        background:rgba(0,0,0,0.6);color:#ddd;padding:2px 6px;border-radius:3px;
+        font-size:10px;font-family:monospace;white-space:nowrap;text-align:center;line-height:1.4;`;
+      labelsContainer.appendChild(label);
+    }
+    labelRafId = requestAnimationFrame(updateBuildingLabels);
+    window._labelRafId = labelRafId;
+  }
+  window._updateBuildingLabels = updateBuildingLabels;
+
+  // ── Toggle edit mode ──
+  cbEdit.addEventListener('change', () => {
+    editMode = cbEdit.checked;
+    editToolsEl.style.display = editMode ? 'block' : 'none';
+    if (!editMode) {
+      deselectObject();
+      removeGrid();
+    } else {
+      if (gridVisible) createGrid();
+    }
+    // Labels always run, but content changes based on editMode
+    if (!labelRafId) updateBuildingLabels();
+    // Toggle road control point handle visibility
+    if (townRenderer && townRenderer.customRoads) {
+      for (const road of townRenderer.customRoads) {
+        for (const handle of road.handles) handle.visible = editMode;
+      }
+    }
+  });
+
+  // ── Grid controls ──
+  const cbSnap = document.getElementById('cb-snap');
+  const cbGrid = document.getElementById('cb-grid');
+  const slGrid = document.getElementById('sl-grid');
+  const valGrid = document.getElementById('val-grid');
+  const gridSizeRow = document.getElementById('grid-size-row');
+
+  cbSnap.addEventListener('change', () => {
+    snapEnabled = cbSnap.checked;
+    // Show grid size slider when either snap or grid is on
+    gridSizeRow.style.display = (snapEnabled || gridVisible) ? 'flex' : 'none';
+  });
+
+  cbGrid.addEventListener('change', () => {
+    gridVisible = cbGrid.checked;
+    gridSizeRow.style.display = (snapEnabled || gridVisible) ? 'flex' : 'none';
+    if (gridVisible) createGrid();
+    else removeGrid();
+  });
+
+  slGrid.addEventListener('input', () => {
+    gridSize = parseFloat(slGrid.value);
+    valGrid.textContent = gridSize.toFixed(2);
+    removeCellHighlight(); // recreated on next drag with new size
+    if (gridVisible) createGrid();
+  });
+
+  // ── Undo ──
+  function pushUndo() {
+    if (!layoutConfig) return;
+    undoStack.push(JSON.stringify(layoutConfig));
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+  }
+
+  document.getElementById('btn-undo').addEventListener('click', () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack.pop();
+    layoutConfig = JSON.parse(prev);
+    deselectObject();
+    // if (cbEdit.checked) { buildRoadsPanel(); buildTexturesPanel(); }
+    debouncedReload();
+  });
+
+  // ── Save ──
+  document.getElementById('btn-save').addEventListener('click', async () => {
+    if (!layoutConfig) return;
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/files/town-layout.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(layoutConfig, null, 2),
+      });
+      if (res.ok) {
+        btn.textContent = 'Saved!';
+        btn.style.background = '#4a4';
+        reloadTown();
+        setTimeout(() => {
+          btn.textContent = 'Save';
+          btn.style.background = '';
+          btn.disabled = false;
+        }, 1200);
+      } else {
+        btn.textContent = 'Error!';
+        btn.style.background = '#a44';
+        setTimeout(() => {
+          btn.textContent = 'Save';
+          btn.style.background = '';
+          btn.disabled = false;
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Save failed:', e);
+      btn.textContent = 'Error!';
+      btn.style.background = '#a44';
+      setTimeout(() => {
+        btn.textContent = 'Save';
+        btn.style.background = '';
+        btn.disabled = false;
+      }, 2000);
+    }
+  });
+
+  // ── Debounced reload ──
+  function debouncedReload() {
+    if (reloadTimer) clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => {
+      reloadTown();
+      reloadTimer = null;
+    }, 300);
+  }
+
+  // ── Sea editor panel (uncomment to re-enable) ──
+  // const seaPanel = document.getElementById('sea-panel');
+  // const SEA_DEFAULTS = { enabled: false, angle: 135, spread: 60, reach: 3.0, depth: 0.15, height: -0.04, beachWidth: 1.5 };
+  //
+  // function buildSeaPanel() {
+  //   if (!layoutConfig) layoutConfig = {};
+  //   if (!layoutConfig.sea) {
+  //     layoutConfig.sea = { ...SEA_DEFAULTS };
+  //   }
+  //   const sea = layoutConfig.sea;
+  //   let html = '<h3>Sea &amp; Beach</h3>';
+  //   html += `<div class="sea-row"><label>Enabled</label><input type="checkbox" id="sea-enabled" ${sea.enabled ? 'checked' : ''}></div>`;
+  //   html += `<div class="sea-row"><label>Angle</label><input type="number" step="5" min="0" max="360" id="sea-angle" value="${sea.angle ?? 135}"></div>`;
+  //   html += `<div class="sea-row"><label>Spread</label><input type="number" step="5" min="10" max="180" id="sea-spread" value="${sea.spread ?? 60}"></div>`;
+  //   html += `<div class="sea-row"><label>Reach</label><input type="number" step="0.5" min="0.5" max="8" id="sea-reach" value="${sea.reach ?? 3.0}"></div>`;
+  //   html += `<div class="sea-row"><label>Depth</label><input type="number" step="0.01" min="0.01" max="0.5" id="sea-depth" value="${sea.depth ?? 0.15}"></div>`;
+  //   html += `<div class="sea-row"><label>Height</label><input type="number" step="0.01" min="-0.3" max="0.1" id="sea-height" value="${sea.height ?? -0.04}"></div>`;
+  //   html += `<div class="sea-row"><label>Beach W</label><input type="number" step="0.25" min="0.5" max="5" id="sea-beach" value="${sea.beachWidth ?? 1.5}"></div>`;
+  //   seaPanel.innerHTML = html;
+  //
+  //   seaPanel.querySelectorAll('input').forEach(input => {
+  //     input.addEventListener('change', () => {
+  //       pushUndo();
+  //       const sea = layoutConfig.sea;
+  //       sea.enabled = document.getElementById('sea-enabled').checked;
+  //       sea.angle = parseFloat(document.getElementById('sea-angle').value);
+  //       sea.spread = parseFloat(document.getElementById('sea-spread').value);
+  //       sea.reach = parseFloat(document.getElementById('sea-reach').value);
+  //       sea.depth = parseFloat(document.getElementById('sea-depth').value);
+  //       sea.height = parseFloat(document.getElementById('sea-height').value);
+  //       sea.beachWidth = parseFloat(document.getElementById('sea-beach').value);
+  //       debouncedReload();
+  //     });
+  //   });
+  // }
+
+  cbEdit.addEventListener('change', () => {
+    // if (cbEdit.checked) { buildRoadsPanel(); buildTexturesPanel(); }
+    // else { roadsPanel.innerHTML = ''; texturesPanel.innerHTML = ''; }
+    debouncedReload();
+  });
+
+  // ── Camera bounds editor panel (uncomment to re-enable) ──
+  // const boundsPanel = document.getElementById('bounds-panel');
+  // const BOUNDS_DEFAULTS = { minX: -3, maxX: 3, minZ: -3, maxZ: 3 };
+  //
+  // function buildBoundsPanel() {
+  //   if (!layoutConfig) layoutConfig = {};
+  //   if (!layoutConfig.cameraBounds) {
+  //     layoutConfig.cameraBounds = { ...BOUNDS_DEFAULTS };
+  //   }
+  //   const b = layoutConfig.cameraBounds;
+  //   let html = '<h3>Camera Bounds</h3>';
+  //   html += `<div class="bounds-row"><label>Min X</label><input type="number" step="0.5" id="bounds-minX" value="${b.minX}"></div>`;
+  //   html += `<div class="bounds-row"><label>Max X</label><input type="number" step="0.5" id="bounds-maxX" value="${b.maxX}"></div>`;
+  //   html += `<div class="bounds-row"><label>Min Z</label><input type="number" step="0.5" id="bounds-minZ" value="${b.minZ}"></div>`;
+  //   html += `<div class="bounds-row"><label>Max Z</label><input type="number" step="0.5" id="bounds-maxZ" value="${b.maxZ}"></div>`;
+  //   boundsPanel.innerHTML = html;
+  //
+  //   boundsPanel.querySelectorAll('input').forEach(input => {
+  //     input.addEventListener('change', () => {
+  //       pushUndo();
+  //       layoutConfig.cameraBounds.minX = parseFloat(document.getElementById('bounds-minX').value);
+  //       layoutConfig.cameraBounds.maxX = parseFloat(document.getElementById('bounds-maxX').value);
+  //       layoutConfig.cameraBounds.minZ = parseFloat(document.getElementById('bounds-minZ').value);
+  //       layoutConfig.cameraBounds.maxZ = parseFloat(document.getElementById('bounds-maxZ').value);
+  //       debouncedReload();
+  //     });
+  //   });
+  // }
+
+  // ── Roads editor panel ──
+  const roadsPanel = document.getElementById('roads-panel');
+  const ROADS_DEFAULTS = { width: 0.23, height: 0.008, color: '#9a9080', style: 'cobblestone' };
+
+  function buildRoadsPanel() {
+    if (!layoutConfig) layoutConfig = {};
+    if (!layoutConfig.roads) {
+      layoutConfig.roads = { ...ROADS_DEFAULTS, customPaths: [] };
+    }
+    const r = layoutConfig.roads;
+    let html = '<h3>Roads</h3>';
+    html += `<div class="roads-row"><label>Width</label><input type="range" min="0.02" max="0.6" step="0.01" id="roads-width" value="${r.width ?? 0.23}"><span class="val" id="roads-width-val">${(r.width ?? 0.23).toFixed(2)}</span></div>`;
+    html += `<div class="roads-row"><label>Height</label><input type="number" step="0.002" min="0" max="0.05" id="roads-height" value="${r.height ?? 0.008}"></div>`;
+    html += `<div class="roads-row"><label>Color</label><input type="color" id="roads-color" value="${r.color || '#9a9080'}" style="flex:0 0 32px;height:20px;padding:0;border:none;cursor:pointer;"></div>`;
+    html += `<div class="roads-row"><label>Style</label><select id="roads-style">
+      <option value="cobblestone" ${r.style !== 'path' ? 'selected' : ''}>Cobblestone</option>
+      <option value="path" ${r.style === 'path' ? 'selected' : ''}>Path</option>
+    </select></div>`;
+    roadsPanel.innerHTML = html;
+
+    // Live value display for width slider
+    document.getElementById('roads-width').addEventListener('input', (e) => {
+      document.getElementById('roads-width-val').textContent = parseFloat(e.target.value).toFixed(2);
+    });
+
+    // Commit on change
+    roadsPanel.querySelectorAll('input, select').forEach(input => {
+      input.addEventListener('change', () => {
+        pushUndo();
+        const r = layoutConfig.roads;
+        r.width = parseFloat(document.getElementById('roads-width').value);
+        r.height = parseFloat(document.getElementById('roads-height').value);
+        r.color = document.getElementById('roads-color').value;
+        r.style = document.getElementById('roads-style').value;
+        debouncedReload();
+      });
+    });
+  }
+
+  // ── Terrain textures panel ──
+  const texturesPanel = document.getElementById('textures-panel');
+
+  function buildTexturesPanel() {
+    if (!layoutConfig) return;
+    if (!layoutConfig.textures) layoutConfig.textures = {};
+    const t = layoutConfig.textures;
+    let html = '<h3>Terrain Textures</h3>';
+    html += `<div class="tex-row"><label>Grass</label><select id="tex-grass">`;
+    for (const p of TEX_TERRAIN) html += `<option value="${p}" ${(t.grass||'') === p ? 'selected' : ''}>${p || '(default)'}</option>`;
+    html += `</select></div>`;
+    html += `<div class="tex-row"><label>Dirt</label><select id="tex-dirt">`;
+    for (const p of TEX_TERRAIN) html += `<option value="${p}" ${(t.dirt||'') === p ? 'selected' : ''}>${p || '(default)'}</option>`;
+    html += `</select></div>`;
+    html += `<div class="tex-row"><label>Rock</label><select id="tex-rock">`;
+    for (const p of TEX_TERRAIN) html += `<option value="${p}" ${(t.rock||'') === p ? 'selected' : ''}>${p || '(default)'}</option>`;
+    html += `</select></div>`;
+    html += `<div class="tex-row"><label>Sand</label><select id="tex-sand">`;
+    for (const p of TEX_TERRAIN) html += `<option value="${p}" ${(t.sand||'') === p ? 'selected' : ''}>${p || '(default)'}</option>`;
+    html += `</select></div>`;
+    texturesPanel.innerHTML = html;
+
+    texturesPanel.querySelectorAll('select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        pushUndo();
+        const t = layoutConfig.textures;
+        t.grass = document.getElementById('tex-grass').value || undefined;
+        t.dirt = document.getElementById('tex-dirt').value || undefined;
+        t.rock = document.getElementById('tex-rock').value || undefined;
+        t.sand = document.getElementById('tex-sand').value || undefined;
+        debouncedReload();
+      });
+    });
+  }
+
+  // ── Grass editor panel ──
+
+  // ── Camera bounds anchor dragging (uncomment to re-enable) ──
+  // let boundsDragTarget = null;
+
+  // ── Selection highlight ──
+  function highlightObject(obj) {
+    removeHighlight();
+    if (!obj) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 0.02);
+    const geo = new THREE.SphereGeometry(maxDim * 0.8, 8, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x44aaff, wireframe: true, transparent: true, opacity: 0.5 });
+    highlightMesh = new THREE.Mesh(geo, mat);
+    highlightMesh.position.copy(center);
+    highlightMesh.name = 'editor-highlight';
+    townRenderer.scene.add(highlightMesh);
+  }
+
+  function removeHighlight() {
+    if (highlightMesh) {
+      townRenderer.scene.remove(highlightMesh);
+      highlightMesh.geometry.dispose();
+      highlightMesh.material.dispose();
+      highlightMesh = null;
+    }
+  }
+
+  function deselectObject() {
+    selectedObject = null;
+    removeHighlight();
+    propsPanel.innerHTML = '';
+  }
+
+  // ── Properties panel ──
+  function showProperties(obj) {
+    propsPanel.innerHTML = '';
+    if (!obj || !obj.userData.editType) return;
+
+    const type = obj.userData.editType;
+    const idx = obj.userData.editIndex;
+    let html = `<h3>${type} #${idx}</h3>`;
+
+    if (type === 'building') {
+      const plotIndex = obj.userData.plotIndex;
+      const slotIndex = obj.userData.slotIndex;
+      const bType = obj.userData.buildingType;
+      const bName = BUILDING_NAMES[bType] || `Type ${bType}`;
+      const plot = layoutConfig.plots[plotIndex];
+      const slot = plot?.slots[slotIndex];
+      html = `<h3>${bName}</h3><div style="color:#aaa;font-size:10px;margin:-4px 0 6px">Plot ${plotIndex}, Slot ${slotIndex}</div>`;
+
+      // Tier selector — determines building visual tier and GLB asset
+      const curLevel = obj.userData.buildingLevel || 1;
+      const currentTier = slot?.tierOverride ?? (curLevel <= 5 ? 1 : curLevel <= 12 ? 2 : curLevel <= 18 ? 3 : 4);
+      const tierNames = ['Foundation', 'Established', 'Grand', 'Legendary'];
+      html += `<div class="prop-row"><label>Tier</label><select id="prop-tier" style="flex:1;background:#1a1a2e;border:1px solid #444;color:#ccc;padding:2px 6px;border-radius:3px;font-size:11px;">`;
+      for (let t = 1; t <= 4; t++) {
+        html += `<option value="${t}" ${currentTier === t ? 'selected' : ''}>T${t} — ${tierNames[t-1]}</option>`;
+      }
+      html += `</select></div>`;
+
+      // 3D Asset toggle — uses selected tier
+      const manifestNames = ['mansion','barracks','workshop','vault','dock','forge','market','academy','arena','sanctuary','observatory','treasury','citadel','camp','mine','catacombs','farm','stables','infirmary'];
+      const manifestName = bType <= 18 ? manifestNames[bType] : null;
+      if (manifestName) {
+        if (!layoutConfig.assetOverrides) layoutConfig.assetOverrides = {};
+        const assetKey = `${manifestName}_t${currentTier}`;
+        const checked = !!layoutConfig.assetOverrides[assetKey];
+        html += `<div class="prop-row"><label>3D Asset</label><input type="checkbox" id="prop-asset-toggle" ${checked ? 'checked' : ''} style="flex:0;width:auto;"><span style="color:#888;font-size:10px;margin-left:6px;">${assetKey}.glb</span></div>`;
+      }
+
+      html += propRow('Plot X', 'prop-px', plot?.x ?? 0);
+      html += propRow('Plot Z', 'prop-pz', plot?.z ?? 0);
+      html += propRow('Slot dX', 'prop-dx', slot?.dx ?? 0);
+      html += propRow('Slot dZ', 'prop-dz', slot?.dz ?? 0);
+      html += propRow('Y Offset', 'prop-yo', slot?.yOffset ?? 0);
+      // Scale is per type+tier (e.g. mansion_t1), not per slot
+      const scaleKey = manifestName ? `${manifestName}_t${currentTier}` : null;
+      if (!layoutConfig.buildingScales) layoutConfig.buildingScales = {};
+      const curScale = scaleKey ? (layoutConfig.buildingScales[scaleKey] ?? 1) : 1;
+      html += propRow('Scale', 'prop-sc', curScale);
+      if (scaleKey) html += `<span style="color:#666;font-size:9px;margin:-4px 0 2px;display:block;">scale for all ${scaleKey}</span>`;
+      const curRot = slot?.rotation ?? layoutConfig.buildingRotation ?? 0;
+      html += `<div class="prop-row"><label>Rotation</label><input type="range" id="prop-rot" min="0" max="360" step="5" value="${curRot}" style="flex:1;"><span class="val" id="val-rot" style="width:28px;text-align:right;color:#ccc;font-size:10px;">${curRot}&deg;</span></div>`;
+      // html += `<div style="color:#666;font-size:9px;margin:6px 0 2px;text-transform:uppercase;letter-spacing:0.5px;">Textures</div>`;
+      // html += texSelect('prop-b-wall', 'Wall', TEX_WALL, slot?.wallTexture || '');
+      // html += texSelect('prop-b-roof', 'Roof', TEX_ROOF, slot?.roofTexture || '');
+      // html += texSelect('prop-b-floor', 'Floor', TEX_FLOOR, slot?.floorTexture || '');
+      // const plotGround = plot?.groundTexture || '';
+      // html += texSelect('prop-b-ground', 'Ground', TEX_GROUND, plotGround);
+    } else if (type === 'lamp') {
+      const lamp = layoutConfig.lamps?.custom[idx];
+      if (!lamp) return;
+      html += propRow('X', 'prop-lx', lamp.x);
+      html += propRow('Z', 'prop-lz', lamp.z);
+      html += propRow('Height', 'prop-lh', lamp.height);
+    } else if (type === 'tree') {
+      const tree = layoutConfig.trees?.custom[idx];
+      if (!tree) return;
+      const TREE_TYPES = ['oak','pine','birch'];
+      html += `<div class="prop-row"><label>Type</label><select id="prop-tt" style="flex:1;background:#1a1a2e;border:1px solid #444;color:#ccc;padding:2px 6px;border-radius:3px;font-size:11px;">`;
+      for (const tt of TREE_TYPES) html += `<option value="${tt}" ${tree.type === tt ? 'selected' : ''}>${tt.charAt(0).toUpperCase() + tt.slice(1)}</option>`;
+      html += `</select></div>`;
+      html += propRow('X', 'prop-tx', tree.x);
+      html += propRow('Z', 'prop-tz', tree.z);
+      html += propRow('Scale', 'prop-ts', tree.scale ?? 1);
+      html += propRow('Count', 'prop-tc', tree.count ?? 5);
+      html += propRow('Spread', 'prop-tsp', tree.spread ?? 0.3);
+    } else if (type === 'decoration') {
+      const dec = layoutConfig.decorations?.[idx];
+      if (!dec) return;
+      const DECOR_TYPES = ['rock','well','barrel','crate','banner','campfire','cart','sign','fence'];
+      html += `<div class="prop-row"><label>Type</label><select id="prop-dct" style="flex:1;background:#1a1a2e;border:1px solid #444;color:#ccc;padding:2px 6px;border-radius:3px;font-size:11px;">`;
+      for (const dt of DECOR_TYPES) html += `<option value="${dt}" ${dec.type === dt ? 'selected' : ''}>${dt.charAt(0).toUpperCase() + dt.slice(1)}</option>`;
+      html += `</select></div>`;
+      html += propRow('X', 'prop-dcx', dec.x);
+      html += propRow('Z', 'prop-dcz', dec.z);
+      html += propRow('Scale', 'prop-dcs', dec.scale);
+      html += propRow('Rotation', 'prop-dcr', dec.rotation);
+      html += `<div class="prop-row"><label>Color</label><input type="color" id="prop-dcc" value="${dec.color || '#777777'}" style="flex:1;height:24px;border:none;background:none;padding:0;cursor:pointer;"></div>`;
+    } else if (type === 'road') {
+      const road = layoutConfig.roads?.customPaths[idx];
+      if (!road) return;
+      html += propRow('Width', 'prop-rw', road.width || 0.04);
+      html += `<div class="prop-row"><label>Style</label><select id="prop-rs" style="flex:1;background:#1a1a2e;border:1px solid #444;color:#ccc;padding:2px 6px;border-radius:3px;font-size:11px;">
+        <option value="main" ${road.style !== 'path' ? 'selected' : ''}>Main</option>
+        <option value="path" ${road.style === 'path' ? 'selected' : ''}>Path</option>
+      </select></div>`;
+      html += `<div class="prop-row"><label>Closed</label><input type="checkbox" id="prop-rd-closed" ${road.closed ? 'checked' : ''} style="flex:0;width:auto;"></div>`;
+      html += texSelect('prop-rd-tex', 'Texture', TEX_ROAD, road.texture || '');
+      html += `<div style="color:#888;font-size:10px;margin-top:4px">${road.points.length} control points</div>`;
+      html += `<div class="btn-row" style="margin-top:4px"><button id="btn-add-point" class="secondary">+ Control Point</button></div>`;
+    } else if (type === 'roadPoint') {
+      const roadIndex = idx;
+      const pointIndex = obj.userData.pointIndex;
+      const path = layoutConfig.roads?.customPaths[roadIndex];
+      if (!path) return;
+      const pt = path.points[pointIndex];
+      html = `<h3>Road ${roadIndex}, Point ${pointIndex}</h3>`;
+      html += propRow('X', 'prop-rpx', pt.x);
+      html += propRow('Z', 'prop-rpz', pt.z);
+      html += `<div style="color:#888;font-size:10px;margin-top:4px">Road: ${path.points.length} points, width ${path.width || 0.04}</div>`;
+    } else if (type === 'plot') {
+      const plot = layoutConfig.plots[idx];
+      if (!plot) return;
+      const defaultNames = ['Starter', 'Tier 1', 'Tier 2', 'Tier 2', 'Prestige'];
+      html = `<h3>Plot ${idx} — ${plot.label || defaultNames[idx] || ''}</h3>`;
+      html += propRow('X', 'prop-plx', plot.x);
+      html += propRow('Z', 'prop-plz', plot.z);
+      html += propRow('Pad Size', 'prop-plpad', plot.padSize ?? 0.58);
+      html += texSelect('prop-pl-ground', 'Ground', TEX_GROUND, plot.groundTexture || '');
+      const bldgs = (plot.buildings || []).length;
+      const slots = (plot.slots || []).length;
+      html += `<div style="color:#888;font-size:10px;margin-top:4px">${bldgs} buildings, ${slots} slots</div>`;
+    }
+
+    propsPanel.innerHTML = html;
+
+    // Bind input events
+    propsPanel.querySelectorAll('input').forEach(input => {
+      input.addEventListener('change', () => {
+        pushUndo();
+        applyPropertyChange(type, idx, obj);
+      });
+    });
+
+    // Live rotation slider label update
+    const rotSlider = document.getElementById('prop-rot');
+    if (rotSlider) {
+      rotSlider.addEventListener('input', () => {
+        document.getElementById('val-rot').textContent = rotSlider.value + '\u00b0';
+      });
+    }
+
+    // Bind tier selector
+    const tierSelect = document.getElementById('prop-tier');
+    if (tierSelect) {
+      tierSelect.addEventListener('change', () => {
+        const plotIndex = obj.userData.plotIndex;
+        const slotIndex = obj.userData.slotIndex;
+        const slot = layoutConfig.plots[plotIndex]?.slots?.[slotIndex];
+        if (!slot) return;
+        pushUndo();
+        slot.tierOverride = parseInt(tierSelect.value, 10);
+        debouncedReload();
+      });
+    }
+
+    // Bind select/color dropdowns
+    for (const selId of ['prop-rs', 'prop-dct', 'prop-dcc', 'prop-rd-closed', 'prop-tt', 'prop-rd-tex', 'prop-pl-ground']) {
+      const el = document.getElementById(selId);
+      if (el) {
+        el.addEventListener('change', () => {
+          pushUndo();
+          applyPropertyChange(type, idx, obj);
+        });
+      }
+    }
+
+    // Bind 3D asset toggle — uses the tier from the dropdown (or current tier)
+    const assetToggle = document.getElementById('prop-asset-toggle');
+    if (assetToggle) {
+      assetToggle.addEventListener('change', () => {
+        const bType = obj.userData.buildingType;
+        if (bType < 0 || bType > 18) return;
+        const names = ['mansion','barracks','workshop','vault','dock','forge','market','academy','arena','sanctuary','observatory','treasury','citadel','camp','mine','catacombs','farm','stables','infirmary'];
+        const tierEl = document.getElementById('prop-tier');
+        const tier = tierEl ? parseInt(tierEl.value, 10) : 1;
+        const key = `${names[bType]}_t${tier}`;
+        pushUndo();
+        if (!layoutConfig.assetOverrides) layoutConfig.assetOverrides = {};
+        layoutConfig.assetOverrides[key] = assetToggle.checked;
+        debouncedReload();
+      });
+    }
+
+    // Bind + Control Point button
+    const addPointBtn = document.getElementById('btn-add-point');
+    if (addPointBtn) {
+      addPointBtn.addEventListener('click', () => {
+        const road = layoutConfig.roads?.customPaths[idx];
+        if (!road || road.points.length < 2) return;
+        pushUndo();
+        const mid = Math.floor(road.points.length / 2);
+        const p1 = road.points[mid - 1];
+        const p2 = road.points[mid];
+        road.points.splice(mid, 0, {
+          x: +((p1.x + p2.x) / 2).toFixed(2),
+          z: +((p1.z + p2.z) / 2).toFixed(2),
+        });
+        deselectObject();
+        debouncedReload();
+      });
+    }
+  }
+
+  function propRow(label, id, value) {
+    return `<div class="prop-row"><label>${label}</label><input type="number" step="0.01" id="${id}" value="${value}"></div>`;
+  }
+
+  function applyPropertyChange(type, idx, obj) {
+    if (type === 'building') {
+      const plotIndex = obj.userData.plotIndex;
+      const slotIndex = obj.userData.slotIndex;
+      const bType = obj.userData.buildingType;
+      const plot = layoutConfig.plots[plotIndex];
+      if (plot) {
+        plot.x = parseFloat(document.getElementById('prop-px').value);
+        plot.z = parseFloat(document.getElementById('prop-pz').value);
+        const slot = plot.slots[slotIndex];
+        if (slot) {
+          slot.dx = parseFloat(document.getElementById('prop-dx').value);
+          slot.dz = parseFloat(document.getElementById('prop-dz').value);
+          slot.yOffset = parseFloat(document.getElementById('prop-yo').value);
+          slot.rotation = parseFloat(document.getElementById('prop-rot').value);
+        }
+        // Scale is per type+tier — write to buildingScales
+        const tierEl = document.getElementById('prop-tier');
+        const tier = tierEl ? parseInt(tierEl.value, 10) : 1;
+        const manifestNames = ['mansion','barracks','workshop','vault','dock','forge','market','academy','arena','sanctuary','observatory','treasury','citadel','camp','mine','catacombs','farm','stables','infirmary'];
+        const mName = bType <= 18 ? manifestNames[bType] : null;
+        if (mName) {
+          if (!layoutConfig.buildingScales) layoutConfig.buildingScales = {};
+          const scaleVal = parseFloat(document.getElementById('prop-sc').value);
+          layoutConfig.buildingScales[`${mName}_t${tier}`] = scaleVal;
+        }
+      }
+    } else if (type === 'lamp') {
+      const lamp = layoutConfig.lamps.custom[idx];
+      if (lamp) {
+        lamp.x = parseFloat(document.getElementById('prop-lx').value);
+        lamp.z = parseFloat(document.getElementById('prop-lz').value);
+        lamp.height = parseFloat(document.getElementById('prop-lh').value);
+      }
+    } else if (type === 'tree') {
+      const tree = layoutConfig.trees.custom[idx];
+      if (tree) {
+        tree.type = document.getElementById('prop-tt').value;
+        tree.x = parseFloat(document.getElementById('prop-tx').value);
+        tree.z = parseFloat(document.getElementById('prop-tz').value);
+        tree.scale = parseFloat(document.getElementById('prop-ts').value);
+        tree.count = parseInt(document.getElementById('prop-tc').value, 10);
+        tree.spread = parseFloat(document.getElementById('prop-tsp').value);
+      }
+    } else if (type === 'decoration') {
+      const dec = layoutConfig.decorations[idx];
+      if (dec) {
+        const typeEl = document.getElementById('prop-dct');
+        if (typeEl) dec.type = typeEl.value;
+        dec.x = parseFloat(document.getElementById('prop-dcx').value);
+        dec.z = parseFloat(document.getElementById('prop-dcz').value);
+        dec.scale = parseFloat(document.getElementById('prop-dcs').value);
+        dec.rotation = parseFloat(document.getElementById('prop-dcr').value);
+        const colorEl = document.getElementById('prop-dcc');
+        if (colorEl) dec.color = colorEl.value;
+      }
+    } else if (type === 'road') {
+      const road = layoutConfig.roads.customPaths[idx];
+      if (road) {
+        road.width = parseFloat(document.getElementById('prop-rw').value);
+        const styleEl = document.getElementById('prop-rs');
+        if (styleEl) road.style = styleEl.value;
+        const closedEl = document.getElementById('prop-rd-closed');
+        if (closedEl) road.closed = closedEl.checked;
+        const rdTex = document.getElementById('prop-rd-tex')?.value;
+        road.texture = rdTex || undefined;
+      }
+    } else if (type === 'roadPoint') {
+      const roadIndex = idx;
+      const pointIndex = obj.userData.pointIndex;
+      const path = layoutConfig.roads?.customPaths[roadIndex];
+      if (path && path.points[pointIndex]) {
+        path.points[pointIndex].x = parseFloat(document.getElementById('prop-rpx').value);
+        path.points[pointIndex].z = parseFloat(document.getElementById('prop-rpz').value);
+      }
+    } else if (type === 'plot') {
+      const plot = layoutConfig.plots[idx];
+      if (plot) {
+        plot.x = parseFloat(document.getElementById('prop-plx').value);
+        plot.z = parseFloat(document.getElementById('prop-plz').value);
+        plot.padSize = parseFloat(document.getElementById('prop-plpad').value);
+        const plg = document.getElementById('prop-pl-ground')?.value;
+        plot.groundTexture = plg || undefined;
+      }
+    }
+    debouncedReload();
+  }
+
+  // ── Collect all editable meshes ──
+  function getEditableMeshes() {
+    const meshes = [];
+    if (!townRenderer) return meshes;
+
+    // Buildings
+    for (const [idx, group] of townRenderer.buildingGroups) {
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.userData.editType = child.userData.editType || 'building';
+          child.userData.editIndex = child.userData.editIndex ?? idx;
+          child.userData.plotIndex = child.userData.plotIndex ?? group.userData.plotIndex;
+          child.userData.slotIndex = child.userData.slotIndex ?? group.userData.slotIndex;
+          child.userData._editGroup = group;
+          meshes.push(child);
+        }
+      });
+    }
+
+    // Custom lamps
+    for (const group of townRenderer.customLamps) {
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.userData.editType = 'lamp';
+          child.userData.editIndex = group.userData.editIndex;
+          child.userData._editGroup = group;
+          meshes.push(child);
+        }
+      });
+    }
+
+    // Custom trees
+    for (const group of townRenderer.customTrees) {
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.userData.editType = 'tree';
+          child.userData.editIndex = group.userData.editIndex;
+          child.userData._editGroup = group;
+          meshes.push(child);
+        }
+      });
+    }
+
+    // Custom decorations
+    for (const group of townRenderer.customDecorations) {
+      group.traverse(child => {
+        if (child.isMesh && child.name !== 'select-ring') {
+          child.userData.editType = 'decoration';
+          child.userData.editIndex = group.userData.editIndex;
+          child.userData._editGroup = group;
+          meshes.push(child);
+        }
+      });
+    }
+
+    // Custom roads + control point handles
+    for (const road of townRenderer.customRoads) {
+      road.group.traverse(child => {
+        if (child.isMesh) {
+          if (child.userData.editType === 'roadPoint') {
+            meshes.push(child);
+          } else {
+            child.userData.editType = 'road';
+            child.userData.editIndex = road.pathIndex;
+            child.userData._editGroup = road.group;
+            meshes.push(child);
+          }
+        }
+      });
+    }
+
+    // Plot center markers
+    for (const marker of townRenderer.plotMarkers) {
+      marker.userData.editType = 'plot';
+      marker.userData._editGroup = marker;
+      meshes.push(marker);
+    }
+
+    return meshes;
+  }
+
+  // ── Raycasting ──
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  function getMouseWorld(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  function raycastEditables(e) {
+    getMouseWorld(e);
+    raycaster.setFromCamera(mouse, townRenderer.camera);
+    const meshes = getEditableMeshes();
+    return raycaster.intersectObjects(meshes, false);
+  }
+
+  function raycastGround(e) {
+    getMouseWorld(e);
+    raycaster.setFromCamera(mouse, townRenderer.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const point = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, point);
+    return point;
+  }
+
+  // ── Pointer events for selection and dragging ──
+  let pointerDownPos = { x: 0, y: 0 };
+  let dragTarget = null;
+  let dragOriginal = null; // original config values at drag start
+
+  function captureDragOriginal(type, idx, obj) {
+    if (type === 'building') {
+      const plot = layoutConfig.plots[obj.userData.plotIndex];
+      const slot = plot?.slots[obj.userData.slotIndex];
+      if (slot) return { dx: slot.dx, dz: slot.dz };
+    } else if (type === 'lamp') {
+      const lamp = layoutConfig.lamps?.custom[idx];
+      if (lamp) return { x: lamp.x, z: lamp.z };
+    } else if (type === 'tree') {
+      const tree = layoutConfig.trees?.custom[idx];
+      if (tree) return { x: tree.x, z: tree.z };
+    } else if (type === 'decoration') {
+      const dec = layoutConfig.decorations?.[idx];
+      if (dec) return { x: dec.x, z: dec.z };
+    } else if (type === 'roadPoint') {
+      const path = layoutConfig.roads?.customPaths[obj.userData.editIndex];
+      const pt = path?.points[obj.userData.pointIndex];
+      if (pt) return { x: pt.x, z: pt.z };
+    } else if (type === 'plot') {
+      const plot = layoutConfig.plots[idx];
+      if (plot) return { x: plot.x, z: plot.z };
+    }
+    return null;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!editMode) return;
+    pointerDownPos = { x: e.clientX, y: e.clientY };
+
+    // Check bounds anchors first (uncomment to re-enable)
+    // if (townRenderer.boundsAnchors && townRenderer.boundsAnchors.length > 0) {
+    //   getMouseWorld(e);
+    //   raycaster.setFromCamera(mouse, townRenderer.camera);
+    //   const boundsHits = raycaster.intersectObjects(townRenderer.boundsAnchors, false);
+    //   if (boundsHits.length > 0) {
+    //     const anchor = boundsHits[0].object;
+    //     boundsDragTarget = { anchor, axis: anchor.userData.axis };
+    //     dragStart = raycastGround(e).clone();
+    //     e.stopImmediatePropagation();
+    //     return;
+    //   }
+    // }
+
+    const hits = raycastEditables(e);
+    if (hits.length > 0) {
+      const hit = hits[0].object;
+      const editGroup = hit.userData._editGroup || hit;
+      dragTarget = { obj: editGroup, type: hit.userData.editType, idx: hit.userData.editIndex };
+      dragStart = raycastGround(e).clone();
+      e.stopImmediatePropagation();
+    } else {
+      dragTarget = null;
+    }
+  }, true); // capture phase to intercept before orbit controls
+
+  canvas.addEventListener('pointermove', (e) => {
+    // Handle bounds anchor dragging (uncomment to re-enable)
+    // if (editMode && boundsDragTarget && dragStart) {
+    //   const worldPos = raycastGround(e);
+    //   if (!worldPos) return;
+    //   const { axis } = boundsDragTarget;
+    //   const b = layoutConfig.cameraBounds;
+    //   if (axis === 'minX' || axis === 'maxX') b[axis] = +worldPos.x.toFixed(2);
+    //   else b[axis] = +worldPos.z.toFixed(2);
+    //   if (townRenderer.updateBoundsVisual) townRenderer.updateBoundsVisual(b);
+    //   const el = document.getElementById('bounds-' + axis);
+    //   if (el) el.value = b[axis];
+    //   return;
+    // }
+
+    if (!editMode || !dragTarget || !dragStart) return;
+    const dx = e.clientX - pointerDownPos.x;
+    const dy = e.clientY - pointerDownPos.y;
+    if (dx * dx + dy * dy < 25 && !isDragging) return; // threshold before drag starts
+
+    if (!isDragging) {
+      isDragging = true;
+      pushUndo();
+      dragOriginal = captureDragOriginal(dragTarget.type, dragTarget.idx, dragTarget.obj);
+    }
+
+    const worldPos = raycastGround(e);
+    if (!worldPos) return;
+
+    // Total offset from drag start (not frame delta)
+    const totalDx = worldPos.x - dragStart.x;
+    const totalDz = worldPos.z - dragStart.z;
+
+    // Helper: compute final world position for snap highlight
+    let finalX, finalZ;
+
+    const { type, idx, obj } = dragTarget;
+    if (type === 'building' && dragOriginal) {
+      const plot = layoutConfig.plots[obj.userData.plotIndex];
+      const slot = plot?.slots[obj.userData.slotIndex];
+      if (slot) {
+        // Snap the final world position, then derive slot offset
+        const rawWorldX = plot.x + dragOriginal.dx + totalDx;
+        const rawWorldZ = plot.z + dragOriginal.dz + totalDz;
+        if (snapEnabled) {
+          finalX = snapToGrid(rawWorldX);
+          finalZ = snapToGrid(rawWorldZ);
+          slot.dx = finalX - plot.x;
+          slot.dz = finalZ - plot.z;
+        } else {
+          slot.dx = dragOriginal.dx + totalDx;
+          slot.dz = dragOriginal.dz + totalDz;
+          finalX = plot.x + slot.dx;
+          finalZ = plot.z + slot.dz;
+        }
+        obj.position.set(plot.x + slot.dx, slot.yOffset ?? 0, plot.z + slot.dz);
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    } else if (type === 'lamp' && dragOriginal) {
+      const lamp = layoutConfig.lamps?.custom[idx];
+      if (lamp) {
+        lamp.x = snapEnabled ? snapToGrid(dragOriginal.x + totalDx) : dragOriginal.x + totalDx;
+        lamp.z = snapEnabled ? snapToGrid(dragOriginal.z + totalDz) : dragOriginal.z + totalDz;
+        finalX = lamp.x; finalZ = lamp.z;
+        obj.position.x = lamp.x;
+        obj.position.z = lamp.z;
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    } else if (type === 'decoration' && dragOriginal) {
+      const dec = layoutConfig.decorations?.[idx];
+      if (dec) {
+        dec.x = snapEnabled ? snapToGrid(dragOriginal.x + totalDx) : dragOriginal.x + totalDx;
+        dec.z = snapEnabled ? snapToGrid(dragOriginal.z + totalDz) : dragOriginal.z + totalDz;
+        finalX = dec.x; finalZ = dec.z;
+        obj.position.x = dec.x;
+        obj.position.z = dec.z;
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    } else if (type === 'tree' && dragOriginal) {
+      const tree = layoutConfig.trees?.custom[idx];
+      if (tree) {
+        tree.x = snapEnabled ? snapToGrid(dragOriginal.x + totalDx) : dragOriginal.x + totalDx;
+        tree.z = snapEnabled ? snapToGrid(dragOriginal.z + totalDz) : dragOriginal.z + totalDz;
+        finalX = tree.x; finalZ = tree.z;
+        obj.position.x = tree.x;
+        obj.position.z = tree.z;
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    } else if (type === 'roadPoint' && dragOriginal) {
+      const path = layoutConfig.roads?.customPaths[obj.userData.editIndex];
+      const pt = path?.points[obj.userData.pointIndex];
+      if (pt) {
+        pt.x = snapEnabled ? snapToGrid(dragOriginal.x + totalDx) : dragOriginal.x + totalDx;
+        pt.z = snapEnabled ? snapToGrid(dragOriginal.z + totalDz) : dragOriginal.z + totalDz;
+        finalX = pt.x; finalZ = pt.z;
+        obj.position.x = pt.x;
+        obj.position.z = pt.z;
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    } else if (type === 'plot' && dragOriginal) {
+      const plot = layoutConfig.plots[idx];
+      if (plot) {
+        plot.x = snapEnabled ? snapToGrid(dragOriginal.x + totalDx) : dragOriginal.x + totalDx;
+        plot.z = snapEnabled ? snapToGrid(dragOriginal.z + totalDz) : dragOriginal.z + totalDz;
+        finalX = plot.x; finalZ = plot.z;
+        obj.position.x = plot.x;
+        obj.position.z = plot.z;
+      }
+      if (highlightMesh) highlightMesh.position.copy(obj.position);
+    }
+
+    // Show blue cell highlight at snap target
+    if (snapEnabled && finalX != null) showCellAt(finalX, finalZ);
+    else hideCellHighlight();
+  });
+
+  canvas.addEventListener('pointerup', (e) => {
+    if (!editMode) return;
+
+    // Finalize bounds anchor drag (uncomment to re-enable)
+    // if (boundsDragTarget) {
+    //   pushUndo();
+    //   boundsDragTarget = null;
+    //   dragStart = null;
+    //   debouncedReload();
+    //   return;
+    // }
+
+    if (isDragging) {
+      isDragging = false;
+      dragTarget = null;
+      dragStart = null;
+      dragOriginal = null;
+      hideCellHighlight();
+      debouncedReload();
+      return;
+    }
+
+    // Click (not drag) — select
+    const dx = e.clientX - pointerDownPos.x;
+    const dy = e.clientY - pointerDownPos.y;
+    if (dx * dx + dy * dy > 25) {
+      dragTarget = null;
+      dragStart = null;
+      return;
+    }
+
+    if (dragTarget) {
+      const editGroup = dragTarget.obj;
+      selectedObject = editGroup;
+      highlightObject(editGroup);
+      showProperties(editGroup);
+    } else {
+      deselectObject();
+    }
+
+    dragTarget = null;
+    dragStart = null;
+  });
+
+  // ── Add buttons ──
+  function getCameraLookAtPos() {
+    // Place new item at camera look-at center (ground intersection)
+    const center = new THREE.Vector2(0, 0);
+    raycaster.setFromCamera(center, townRenderer.camera);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const pt = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, pt);
+    return pt;
+  }
+
+  document.getElementById('btn-add-lamp').addEventListener('click', () => {
+    if (!layoutConfig) return;
+    pushUndo();
+    const pos = getCameraLookAtPos();
+    if (!layoutConfig.lamps) layoutConfig.lamps = { custom: [] };
+    layoutConfig.lamps.custom.push({ x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), height: 0.06, color: '#ffeeaa' });
+    debouncedReload();
+  });
+
+  document.getElementById('btn-add-tree').addEventListener('click', () => {
+    if (!layoutConfig) return;
+    pushUndo();
+    const pos = getCameraLookAtPos();
+    if (!layoutConfig.trees.custom) layoutConfig.trees.custom = [];
+    layoutConfig.trees.custom.push({ x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), type: 'oak', scale: 1.0, count: 8, spread: 0.12 });
+    debouncedReload();
+  });
+
+  document.getElementById('btn-add-decor').addEventListener('click', () => {
+    if (!layoutConfig) return;
+    pushUndo();
+    const pos = getCameraLookAtPos();
+    const decorType = document.getElementById('sel-decor-type').value || 'rock';
+    if (!layoutConfig.decorations) layoutConfig.decorations = [];
+    const defaults = {
+      rock: { color: '#777777', scale: 1 },
+      well: { color: '#888888', scale: 1.5 },
+      barrel: { color: '#7a5a30', scale: 2 },
+      crate: { color: '#9a7a50', scale: 2 },
+      banner: { color: '#cc2222', scale: 1.5 },
+      campfire: { color: '#ff4400', scale: 1.5 },
+      cart: { color: '#8b6914', scale: 1.5 },
+      sign: { color: '#d4c090', scale: 1.5 },
+      fence: { color: '#8b6914', scale: 1.5 },
+    };
+    const d = defaults[decorType] || { color: '#777777', scale: 1 };
+    const entry = { type: decorType, x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), scale: d.scale, rotation: 0, color: d.color };
+    if (decorType === 'fence') {
+      entry.points = [
+        [+pos.x.toFixed(2), +(pos.z - 0.2).toFixed(2)],
+        [+(pos.x + 0.3).toFixed(2), +pos.z.toFixed(2)],
+        [+pos.x.toFixed(2), +(pos.z + 0.2).toFixed(2)],
+      ];
+    }
+    layoutConfig.decorations.push(entry);
+    debouncedReload();
+  });
+
+  document.getElementById('btn-add-road').addEventListener('click', () => {
+    if (!layoutConfig) return;
+    pushUndo();
+    const pos = getCameraLookAtPos();
+    if (!layoutConfig.roads) layoutConfig.roads = { customPaths: [] };
+    if (!layoutConfig.roads.customPaths) layoutConfig.roads.customPaths = [];
+    layoutConfig.roads.customPaths.push({
+      width: 0.04,
+      style: 'main',
+      points: [
+        { x: +(pos.x - 0.5).toFixed(2), z: +(pos.z - 0.3).toFixed(2) },
+        { x: +(pos.x).toFixed(2), z: +(pos.z + 0.2).toFixed(2) },
+        { x: +(pos.x + 0.5).toFixed(2), z: +(pos.z - 0.1).toFixed(2) },
+      ],
+    });
+    debouncedReload();
+  });
+
+  document.getElementById('btn-add-roundabout').addEventListener('click', () => {
+    if (!layoutConfig) return;
+    pushUndo();
+    const pos = getCameraLookAtPos();
+    if (!layoutConfig.roads) layoutConfig.roads = { customPaths: [] };
+    if (!layoutConfig.roads.customPaths) layoutConfig.roads.customPaths = [];
+    const cx = snapToGrid(pos.x), cz = snapToGrid(pos.z);
+    const r = 0.4;
+    const n = 8;
+    const points = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      points.push({ x: +(cx + Math.cos(a) * r).toFixed(4), z: +(cz + Math.sin(a) * r).toFixed(4) });
+    }
+    layoutConfig.roads.customPaths.push({
+      width: 0.06,
+      style: 'main',
+      closed: true,
+      points,
+    });
+    debouncedReload();
+  });
+
+  // ── Delete ──
+  document.getElementById('btn-delete').addEventListener('click', () => {
+    if (!selectedObject || !layoutConfig) return;
+    const type = selectedObject.userData.editType;
+    const idx = selectedObject.userData.editIndex;
+    pushUndo();
+
+    if (type === 'lamp' && layoutConfig.lamps?.custom) {
+      layoutConfig.lamps.custom.splice(idx, 1);
+    } else if (type === 'tree' && layoutConfig.trees?.custom) {
+      layoutConfig.trees.custom.splice(idx, 1);
+    } else if (type === 'decoration' && layoutConfig.decorations) {
+      layoutConfig.decorations.splice(idx, 1);
+    } else if (type === 'road' && layoutConfig.roads?.customPaths) {
+      layoutConfig.roads.customPaths.splice(idx, 1);
+    } else if (type === 'roadPoint') {
+      const roadIndex = selectedObject.userData.editIndex;
+      const pointIndex = selectedObject.userData.pointIndex;
+      const path = layoutConfig.roads?.customPaths[roadIndex];
+      if (path && path.points.length > 2) {
+        path.points.splice(pointIndex, 1);
+      }
+    }
+
+    deselectObject();
+    debouncedReload();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────────
+
+init();
+</script>
+</body>
+</html>

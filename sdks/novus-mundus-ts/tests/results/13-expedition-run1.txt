@@ -1,0 +1,27 @@
+bun test v1.2.10 (db2e7d7f)
+
+sdks/novus-mundus-ts/tests/e2e/13-expedition.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+419 |       const claimIx = createExpeditionClaimInstruction({
+            ^
+error: Expected "finally" but found "const"
+    at /Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/13-expedition.test.ts:419:7
+
+419 |       const claimIx = createExpeditionClaimInstruction({
+                  ^
+error: Expected "{" but found "claimIx"
+    at /Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/13-expedition.test.ts:419:13
+
+419 |       const claimIx = createExpeditionClaimInstruction({
+                          ^
+error: Unexpected =
+    at /Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/tests/e2e/13-expedition.test.ts:419:21
+-------------------------------
+
+
+ 0 pass
+ 1 fail
+ 1 error
+Ran 1 tests across 1 files. [34.00ms]

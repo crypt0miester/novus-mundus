@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
 import BN from 'bn.js';
-import { BufferWriter, createInstructionData } from '../../src/utils/serialize.ts';
+import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
 
 describe('BufferWriter', () => {
   describe('integer writes', () => {

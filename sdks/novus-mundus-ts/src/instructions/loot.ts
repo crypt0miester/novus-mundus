@@ -8,12 +8,12 @@ import {
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveUserPda,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Claim Loot
@@ -30,6 +30,7 @@ export interface ClaimLootAccounts {
   creator: PublicKey;
 }
 
+/** ~10,000 CU */
 /**
  * Claim rewards from a loot account.
  *

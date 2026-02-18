@@ -1,0 +1,1150 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/23-lifecycle.test.ts:
+
+[1m[34m━━━ Full Game Lifecycle - Setup ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.2s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.7s.
+[36m  ▸ Admin: Creating castle[0m
+[2m[onchain][0m [2m51ydDZ3hpS..[0m [36m⚡ CastleCreated[0m [2mcastle=CjJwhqmN.. castleName=TestCastle cityId=0 castleId=0 tier=0 timestamp=1770131472[0m
+[2m[onchain][0m [2m51ydDZ3hpS..[0m [35mcreate castle[0m
+[2m[onchain][0m [2m51ydDZ3hpS..[0m [33mTotal 4,064 / 200,000 CU[0m
+[32m  ✓ Castle created[0m
+[36m  ▸ Admin: Creating arena season[0m
+[2m[onchain][0m [2m2PFtRTRWi9..[0m [36m⚡ KingdomArenaSeasonStarted[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. seasonId=0 startTime=1770131472 endTime=1770736272 prizePool=0[0m
+[2m[onchain][0m [2m2PFtRTRWi9..[0m [35mcreate arena season[0m
+[2m[onchain][0m [2m2PFtRTRWi9..[0m [33mTotal 7,313 / 200,000 CU[0m
+[32m  ✓ Arena season created[0m
+[36m  ▸ Admin: Creating dungeon template[0m
+[2m[onchain][0m [2mPxWKiUddKW..[0m [35mcreate dungeon template[0m
+[2m[onchain][0m [2mPxWKiUddKW..[0m [33mTotal 6,501 / 200,000 CU[0m
+[32m  ✓ Dungeon template created[0m
+[36m  ▸ Admin: Creating event[0m
+[2m[onchain][0m [2m33fGo7vDEG..[0m [36m⚡ KingdomEventCreated[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. eventId=0 eventType=0 startTime=1770127874 endTime=1770217874 prizePool=10000[0m
+[2m[onchain][0m [2m33fGo7vDEG..[0m [35mcreate event[0m
+[2m[onchain][0m [2m33fGo7vDEG..[0m [33mTotal 5,359 / 200,000 CU[0m
+[32m  ✓ Event created[0m
+[36m  ▸ Admin: Creating bundle[0m
+[2m[onchain][0m [2m53k64BsF2H..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m53k64BsF2H..[0m [35mcreate bundle[0m
+[2m[onchain][0m [2m53k64BsF2H..[0m [33mTotal 281 / 200,000 CU[0m
+[2m[onchain][0m [2m53k64BsF2H..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1777[0m
+[33m  ⚠ Admin: createBundle[0m
+[90m    Transaction 53k64BsF2Hmybz2E8cKmp8KGR7be8dNdugPxUEEGnWooYajanfrCTYhQak6Do9TUjCzRZJX3asBSoBkzchDFqEu6 resulted in an error. [0m
+[36m  ▸ Admin: Creating flash sale[0m
+[2m[onchain][0m [2m3p1WD8QskY..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3p1WD8QskY..[0m [35mcreate flash sale[0m
+[2m[onchain][0m [2m3p1WD8QskY..[0m [33mTotal 230 / 200,000 CU[0m
+[2m[onchain][0m [2m3p1WD8QskY..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: insufficient account keys for instruction[0m
+[33m  ⚠ Admin: createFlashSale (SDK missing flash_sale PDA)[0m
+[90m    Transaction 3p1WD8QskYMPdxQu2qqw3Pm1mjpwNR7qVCssW3YQuPZHx5fKcBAsmsuRcuudVg7DLoR96fuK4Az3w4a6xYWcqKie resulted in an error. [0m
+
+[1m[34m━━━ Layer 1: Player Init ━━━[0m
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m5WuSkTNszR..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1770131476[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1770131476[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35minit user[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35minit player[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5WuSkTNszR..[0m [33mTotal 6,438 / 526,293 CU[0m
+[PlayerFactory] Initializing player 1 (city 0)
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1770131477[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1770131477[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35minit user[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35minit player[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2DPV7ZttBY..[0m [33mTotal 4,938 / 513,820 CU[0m
+[PlayerFactory] Initializing player 2 (city 2)
+[2m[onchain][0m [2m3iLGYfZUea..[0m [36m⚡ UserCreated[0m [2muser=9at5bmZf.. wallet=FdZDUuCx.. timestamp=1770131478[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=G3A9Y3nc.. owner=FdZDUuCx.. joinedAt=1770131478[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35minit user[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35minit player[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3iLGYfZUea..[0m [33mTotal 4,938 / 529,292 CU[0m
+[PlayerFactory] Initializing player 3 (city 3)
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [36m⚡ UserCreated[0m [2muser=3hGTQ9FV.. wallet=8WD4WZvV.. timestamp=1770131479[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6CQsHJ5Z.. owner=8WD4WZvV.. joinedAt=1770131479[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35minit user[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35minit player[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5vXzV6mrBM..[0m [33mTotal 4,938 / 515,791 CU[0m
+[PlayerFactory] Initializing player 4 (city 4)
+[2m[onchain][0m [2m554VhNTEs8..[0m [36m⚡ UserCreated[0m [2muser=4NuAhWiR.. wallet=65SYutaB.. timestamp=1770131480[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=4W13kdpe.. owner=65SYutaB.. joinedAt=1770131480[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35minit user[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35minit player[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m554VhNTEs8..[0m [33mTotal 4,938 / 508,293 CU[0m
+[PlayerFactory] Initializing player 5 (city 0)
+[2m[onchain][0m [2m2TGsptXwan..[0m [36m⚡ UserCreated[0m [2muser=3ZJcpNxJ.. wallet=GBgayznw.. timestamp=1770131481[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Brp9NHAg.. owner=GBgayznw.. joinedAt=1770131481[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35minit user[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35minit player[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2TGsptXwan..[0m [33mTotal 7,938 / 510,822 CU[0m
+[32m  ✓ All 6 players initialized and verified[0m
+
+[1m[34m━━━ Layer 2: Estate + Buildings ━━━[0m
+[2m[onchain][0m [2maMppDk5bSp..[0m [36m⚡ EstateCreated[0m [2mestate=2zEozDGn.. player=8368TZj8.. playerName=Player #1 timestamp=1770131482[0m
+[2m[onchain][0m [2maMppDk5bSp..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131482[0m
+[2m[onchain][0m [2maMppDk5bSp..[0m [35mcreate estate[0m
+[2m[onchain][0m [2maMppDk5bSp..[0m [35mpurchase item[0m
+[2m[onchain][0m [2maMppDk5bSp..[0m [33mTotal 12,568 / 396,001 CU[0m
+[2m[onchain][0m [2m4Wixrto7yb..[0m [36m⚡ EstateCreated[0m [2mestate=CJVxU1P5.. player=DTpJZyJQ.. playerName=Player #2 timestamp=1770131482[0m
+[2m[onchain][0m [2m4Wixrto7yb..[0m [36m⚡ ItemPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131482[0m
+[2m[onchain][0m [2m4Wixrto7yb..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m4Wixrto7yb..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m4Wixrto7yb..[0m [33mTotal 12,568 / 396,001 CU[0m
+[2m[onchain][0m [2m3CyFzBj7sN..[0m [36m⚡ EstateCreated[0m [2mestate=6zmWpktK.. player=G3A9Y3nc.. playerName=Player #3 timestamp=1770131483[0m
+[2m[onchain][0m [2m3CyFzBj7sN..[0m [36m⚡ ItemPurchased[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131483[0m
+[2m[onchain][0m [2m3CyFzBj7sN..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m3CyFzBj7sN..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3CyFzBj7sN..[0m [33mTotal 9,568 / 396,001 CU[0m
+[2m[onchain][0m [2m3woqkx4E28..[0m [36m⚡ EstateCreated[0m [2mestate=BG4gZFto.. player=6CQsHJ5Z.. playerName=Player #4 timestamp=1770131483[0m
+[2m[onchain][0m [2m3woqkx4E28..[0m [36m⚡ ItemPurchased[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131483[0m
+[2m[onchain][0m [2m3woqkx4E28..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m3woqkx4E28..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3woqkx4E28..[0m [33mTotal 14,068 / 396,001 CU[0m
+[2m[onchain][0m [2m3M1Fy8VDxS..[0m [36m⚡ EstateCreated[0m [2mestate=BgfVFaur.. player=4W13kdpe.. playerName=Player #5 timestamp=1770131484[0m
+[2m[onchain][0m [2m3M1Fy8VDxS..[0m [36m⚡ ItemPurchased[0m [2mplayer=4W13kdpe.. playerName=Player #5 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131484[0m
+[2m[onchain][0m [2m3M1Fy8VDxS..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m3M1Fy8VDxS..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m3M1Fy8VDxS..[0m [33mTotal 9,568 / 387,001 CU[0m
+[2m[onchain][0m [2m2pxMbZGbtj..[0m [36m⚡ EstateCreated[0m [2mestate=6sk4PbFP.. player=Brp9NHAg.. playerName=Player #6 timestamp=1770131484[0m
+[2m[onchain][0m [2m2pxMbZGbtj..[0m [36m⚡ ItemPurchased[0m [2mplayer=Brp9NHAg.. playerName=Player #6 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1770131484[0m
+[2m[onchain][0m [2m2pxMbZGbtj..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m2pxMbZGbtj..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m2pxMbZGbtj..[0m [33mTotal 9,568 / 391,501 CU[0m
+[32m  ✓ All estates created[0m
+[36m  ▸ Alpha: Buying extra plots[0m
+[2m[onchain][0m [2m38qNaAtCEM..[0m [36m⚡ PlotPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 plot=1 cost=100000 totalPlots=2 timestamp=1770131485[0m
+[2m[onchain][0m [2m38qNaAtCEM..[0m [35mbuy plot[0m
+[2m[onchain][0m [2m38qNaAtCEM..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m38qNaAtCEM..[0m [33mTotal 6,821 / 200,000 CU[0m
+[32m  ✓ Alpha: bought plot 2[0m
+[32m  ✓ Alpha: bought plot 3[0m
+[36m  ▸ Bravo: Buying extra plot[0m
+[2m[onchain][0m [2mMrf9eXCAqL..[0m [36m⚡ PlotPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 plot=2 cost=261800 totalPlots=3 timestamp=1770131487[0m
+[2m[onchain][0m [2mMrf9eXCAqL..[0m [35mbuy plot[0m
+[2m[onchain][0m [2mMrf9eXCAqL..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mMrf9eXCAqL..[0m [33mTotal 6,821 / 200,000 CU[0m
+[32m  ✓ Bravo: bought plot 2[0m
+[2m[onchain][0m [2m51TFQpAKa9..[0m [36m⚡ PlotPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 plot=1 cost=100000 totalPlots=2 timestamp=1770131487[0m
+[2m[onchain][0m [2m51TFQpAKa9..[0m [35mbuy plot[0m
+[2m[onchain][0m [2m51TFQpAKa9..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m51TFQpAKa9..[0m [33mTotal 6,821 / 200,000 CU[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=0 plot=0 completesAt=1770145888 timestamp=1770131488[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=0 level=1 plot=0 timestamp=1770131488[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mbsSzE9p5Kb..[0m [33mTotal 1,176 / 321,455 CU[0m
+[32m  ✓ Alpha built Mansion[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=1 plot=1 completesAt=1770145889 timestamp=1770131489[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=1 level=1 plot=1 timestamp=1770131489[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3sD3kjz7nK..[0m [33mTotal 1,238 / 321,483 CU[0m
+[32m  ✓ Alpha built Barracks[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=2 plot=2 completesAt=1770145891 timestamp=1770131491[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=2 level=1 plot=2 timestamp=1770131491[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5H2qvZunur..[0m [33mTotal 1,281 / 321,446 CU[0m
+[32m  ✓ Alpha built Workshop[0m
+[buildAndCompleteBuilding] Building 6 needs split build...
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=6 plot=3 completesAt=1770174693 timestamp=1770131493[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [33mTotal 618 / 321,330 CU[0m
+[2m[onchain][0m [2m5E4iR9H7YE..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=6 plot=3 completesAt=1770174693 timestamp=1770131493[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mV7xpsDZz1n..[0m [33mTotal 10,223 / 331,553 CU[0m
+[2m[onchain][0m [2m472SMSqLjk..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m472SMSqLjk..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m472SMSqLjk..[0m [33mTotal 618 / 199,850 CU[0m
+[2m[onchain][0m [2m472SMSqLjk..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m4rg9Y8V1tv..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4rg9Y8V1tv..[0m [33mTotal 10,207 / 199,850 CU[0m
+[2m[onchain][0m [2m3wzi2oLZt3..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=6 level=1 plot=3 timestamp=1770131495[0m
+[2m[onchain][0m [2m3wzi2oLZt3..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3wzi2oLZt3..[0m [33mTotal 1,332 / 199,850 CU[0m
+[32m  ✓ Alpha built Market[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=3 plot=4 completesAt=1770145896 timestamp=1770131496[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=3 level=1 plot=4 timestamp=1770131496[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5WCo4MCPkz..[0m [33mTotal 1,394 / 321,279 CU[0m
+[32m  ✓ Alpha built Vault[0m
+[buildAndCompleteBuilding] Building 7 needs split build...
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=7 plot=5 completesAt=1770174698 timestamp=1770131498[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [33mTotal 672 / 321,246 CU[0m
+[2m[onchain][0m [2m4GKDhQZXV9..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=7 plot=5 completesAt=1770174699 timestamp=1770131499[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mTkckbnMTSx..[0m [33mTotal 10,234 / 331,480 CU[0m
+[2m[onchain][0m [2m2NehPLvRnQ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2NehPLvRnQ..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2NehPLvRnQ..[0m [33mTotal 672 / 199,850 CU[0m
+[2m[onchain][0m [2m2NehPLvRnQ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m4T4dPqmeDu..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4T4dPqmeDu..[0m [33mTotal 10,218 / 199,850 CU[0m
+[2m[onchain][0m [2m37AiqXErpa..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=7 level=1 plot=5 timestamp=1770131500[0m
+[2m[onchain][0m [2m37AiqXErpa..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m37AiqXErpa..[0m [33mTotal 1,443 / 199,850 CU[0m
+[32m  ✓ Alpha built Academy[0m
+[buildAndCompleteBuilding] Building 9 needs split build...
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=9 plot=6 completesAt=1770174702 timestamp=1770131502[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [33mTotal 699 / 321,209 CU[0m
+[2m[onchain][0m [2mj6ZQsuPyFW..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=9 plot=6 completesAt=1770174702 timestamp=1770131502[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3xvJRSaNpi..[0m [33mTotal 10,239 / 331,448 CU[0m
+[2m[onchain][0m [2mLEaUSkReVG..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mLEaUSkReVG..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mLEaUSkReVG..[0m [33mTotal 699 / 199,850 CU[0m
+[2m[onchain][0m [2mLEaUSkReVG..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2mZJmv8qd5Dw..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mZJmv8qd5Dw..[0m [33mTotal 10,223 / 199,850 CU[0m
+[2m[onchain][0m [2m4J1HPT3meW..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=9 level=1 plot=6 timestamp=1770131504[0m
+[2m[onchain][0m [2m4J1HPT3meW..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4J1HPT3meW..[0m [33mTotal 1,486 / 199,850 CU[0m
+[32m  ✓ Alpha built Sanctuary[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=12 plot=7 completesAt=1770174706 timestamp=1770131506[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [33mTotal 726 / 321,109 CU[0m
+[2m[onchain][0m [2m3a3mdbqFSB..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[buildAndCompleteBuilding] Building 12 needs split build...
+[2m[onchain][0m [2m7kNgC697Lb..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=12 plot=7 completesAt=1770174706 timestamp=1770131506[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m7kNgC697Lb..[0m [33mTotal 10,253 / 331,362 CU[0m
+[2m[onchain][0m [2m65fDcCsq86..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m65fDcCsq86..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m65fDcCsq86..[0m [33mTotal 726 / 199,850 CU[0m
+[2m[onchain][0m [2m65fDcCsq86..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m5dwwmr9VD4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5dwwmr9VD4..[0m [33mTotal 10,237 / 199,850 CU[0m
+[2m[onchain][0m [2m5LwHVEMEMd..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=12 level=1 plot=7 timestamp=1770131508[0m
+[2m[onchain][0m [2m5LwHVEMEMd..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5LwHVEMEMd..[0m [33mTotal 1,550 / 199,850 CU[0m
+[32m  ✓ Alpha built Citadel[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=5 plot=8 completesAt=1770217909 timestamp=1770131509[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [33mTotal 753 / 321,042 CU[0m
+[2m[onchain][0m [2m4BafNkgGUr..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[buildAndCompleteBuilding] Building 5 needs split build...
+[2m[onchain][0m [2m4FL6pCikUE..[0m [36m⚡ BuildingStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=5 plot=8 completesAt=1770217910 timestamp=1770131510[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4FL6pCikUE..[0m [33mTotal 10,262 / 331,304 CU[0m
+[2m[onchain][0m [2m3X4Ad1RN6d..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3X4Ad1RN6d..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3X4Ad1RN6d..[0m [33mTotal 753 / 199,850 CU[0m
+[2m[onchain][0m [2m3X4Ad1RN6d..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m2cugWX4CXa..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2cugWX4CXa..[0m [33mTotal 10,262 / 199,850 CU[0m
+[2m[onchain][0m [2m5YahtByrFs..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5YahtByrFs..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5YahtByrFs..[0m [33mTotal 753 / 199,850 CU[0m
+[2m[onchain][0m [2m5YahtByrFs..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m2ed8UFCCAi..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2ed8UFCCAi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2ed8UFCCAi..[0m [33mTotal 9,848 / 199,850 CU[0m
+[2m[onchain][0m [2m2ed8UFCCAi..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1777[0m
+[2m[onchain][0m [2m5QiLXqhoTJ..[0m [36m⚡ BuildingCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 buildingType=5 level=1 plot=8 timestamp=1770131513[0m
+[2m[onchain][0m [2m5QiLXqhoTJ..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5QiLXqhoTJ..[0m [33mTotal 1,600 / 199,850 CU[0m
+[32m  ✓ Alpha built Forge[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=0 plot=0 completesAt=1770145914 timestamp=1770131514[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [36m⚡ BuildingCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=0 level=1 plot=0 timestamp=1770131514[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mpKW1wLMzuf..[0m [33mTotal 1,124 / 321,499 CU[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=1 plot=1 completesAt=1770145916 timestamp=1770131516[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [36m⚡ BuildingCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=1 level=1 plot=1 timestamp=1770131516[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3ctMTLxo3c..[0m [33mTotal 1,186 / 321,512 CU[0m
+[buildAndCompleteBuilding] Building 6 needs split build...
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=6 plot=2 completesAt=1770174717 timestamp=1770131517[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [33mTotal 591 / 321,459 CU[0m
+[2m[onchain][0m [2m4dKNWG6MHM..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=6 plot=2 completesAt=1770174718 timestamp=1770131518[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5gRHoL54WH..[0m [33mTotal 10,209 / 331,668 CU[0m
+[2m[onchain][0m [2m4Ss1vDqftx..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4Ss1vDqftx..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4Ss1vDqftx..[0m [33mTotal 591 / 199,850 CU[0m
+[2m[onchain][0m [2m4Ss1vDqftx..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m2X66hqpoH1..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2X66hqpoH1..[0m [33mTotal 10,193 / 199,850 CU[0m
+[2m[onchain][0m [2m4iZmpV1Gbt..[0m [36m⚡ BuildingCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=6 level=1 plot=2 timestamp=1770131520[0m
+[2m[onchain][0m [2m4iZmpV1Gbt..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4iZmpV1Gbt..[0m [33mTotal 1,237 / 199,850 CU[0m
+[buildAndCompleteBuilding] Building 9 needs split build...
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=9 plot=3 completesAt=1770174721 timestamp=1770131521[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [33mTotal 618 / 321,359 CU[0m
+[2m[onchain][0m [2m2qJLWg2LWi..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=9 plot=3 completesAt=1770174722 timestamp=1770131522[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5wHg5uw4p4..[0m [33mTotal 10,223 / 331,582 CU[0m
+[2m[onchain][0m [2m4PmPjeZjqV..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4PmPjeZjqV..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4PmPjeZjqV..[0m [33mTotal 618 / 199,850 CU[0m
+[2m[onchain][0m [2m4PmPjeZjqV..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2mm623LMupva..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mm623LMupva..[0m [33mTotal 10,207 / 199,850 CU[0m
+[2m[onchain][0m [2mA1EyjZBkJo..[0m [36m⚡ BuildingCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=9 level=1 plot=3 timestamp=1770131523[0m
+[2m[onchain][0m [2mA1EyjZBkJo..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mA1EyjZBkJo..[0m [33mTotal 1,280 / 199,850 CU[0m
+[buildAndCompleteBuilding] Building 8 needs split build...
+[2m[onchain][0m [2m4DUSAyacrh..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=8 plot=4 completesAt=1770217925 timestamp=1770131525[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [33mTotal 645 / 321,292 CU[0m
+[2m[onchain][0m [2m4DUSAyacrh..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [36m⚡ BuildingStarted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=8 plot=4 completesAt=1770217926 timestamp=1770131526[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mHDJoCzoZL7..[0m [33mTotal 10,232 / 331,524 CU[0m
+[2m[onchain][0m [2m2bdnsRfhB8..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2bdnsRfhB8..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2bdnsRfhB8..[0m [33mTotal 645 / 199,850 CU[0m
+[2m[onchain][0m [2m2bdnsRfhB8..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m2SQdrTYmmM..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2SQdrTYmmM..[0m [33mTotal 10,232 / 199,850 CU[0m
+[2m[onchain][0m [2m2hD6Ne7CDL..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2hD6Ne7CDL..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2hD6Ne7CDL..[0m [33mTotal 645 / 199,850 CU[0m
+[2m[onchain][0m [2m2hD6Ne7CDL..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m21M7bm7xFJ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m21M7bm7xFJ..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m21M7bm7xFJ..[0m [33mTotal 9,818 / 199,850 CU[0m
+[2m[onchain][0m [2m21M7bm7xFJ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1777[0m
+[2m[onchain][0m [2m42kmx6K3pL..[0m [36m⚡ BuildingCompleted[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 buildingType=8 level=1 plot=4 timestamp=1770131528[0m
+[2m[onchain][0m [2m42kmx6K3pL..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m42kmx6K3pL..[0m [33mTotal 1,329 / 199,850 CU[0m
+[32m  ✓ Bravo: all buildings constructed[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [36m⚡ BuildingStarted[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 buildingType=0 plot=0 completesAt=1770145930 timestamp=1770131530[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [36m⚡ BuildingCompleted[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 buildingType=0 level=1 plot=0 timestamp=1770131530[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mRhWwE1TeRF..[0m [33mTotal 1,072 / 342,543 CU[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [36m⚡ BuildingStarted[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 buildingType=1 plot=1 completesAt=1770145932 timestamp=1770131532[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [36m⚡ BuildingCompleted[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 buildingType=1 level=1 plot=1 timestamp=1770131532[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2KFGw3n5NK..[0m [33mTotal 1,134 / 342,541 CU[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [36m⚡ BuildingStarted[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 buildingType=0 plot=0 completesAt=1770145933 timestamp=1770131533[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [36m⚡ BuildingCompleted[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 buildingType=0 level=1 plot=0 timestamp=1770131533[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4PgZ59VsoC..[0m [33mTotal 1,072 / 311,043 CU[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [36m⚡ BuildingStarted[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 buildingType=1 plot=1 completesAt=1770145935 timestamp=1770131535[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [36m⚡ BuildingCompleted[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 buildingType=1 level=1 plot=1 timestamp=1770131535[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m34iRo7nAB4..[0m [33mTotal 1,134 / 311,041 CU[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [36m⚡ BuildingStarted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=0 plot=0 completesAt=1770145936 timestamp=1770131536[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [36m⚡ BuildingCompleted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=0 level=1 plot=0 timestamp=1770131536[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m4KkG86BMXS..[0m [33mTotal 1,072 / 279,543 CU[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [36m⚡ BuildingStarted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=1 plot=1 completesAt=1770145938 timestamp=1770131538[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [36m⚡ BuildingCompleted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=1 level=1 plot=1 timestamp=1770131538[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m2uifXsvVxL..[0m [33mTotal 1,134 / 279,541 CU[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [36m⚡ BuildingStarted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=8 plot=2 completesAt=1770217940 timestamp=1770131540[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [33mTotal 591 / 279,488 CU[0m
+[2m[onchain][0m [2m586n5xrAiK..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[buildAndCompleteBuilding] Building 8 needs split build...
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [36m⚡ BuildingStarted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=8 plot=2 completesAt=1770217940 timestamp=1770131540[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m4QWwRg6qaN..[0m [33mTotal 16,209 / 295,697 CU[0m
+[2m[onchain][0m [2m46d4c7FKGS..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m46d4c7FKGS..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m46d4c7FKGS..[0m [33mTotal 591 / 199,850 CU[0m
+[2m[onchain][0m [2m46d4c7FKGS..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
+[2m[onchain][0m [2m51CtEtmXRV..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m51CtEtmXRV..[0m [33mTotal 16,209 / 199,850 CU[0m
+[2m[onchain][0m [2m3Nbuh8KpmG..[0m [36m⚡ BuildingCompleted[0m [2mplayer=4W13kdpe.. playerName=Player #5 buildingType=8 level=1 plot=2 timestamp=1770131542[0m
+[2m[onchain][0m [2m3Nbuh8KpmG..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m3Nbuh8KpmG..[0m [33mTotal 1,183 / 199,850 CU[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [36m⚡ BuildingStarted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 buildingType=0 plot=0 completesAt=1770145944 timestamp=1770131544[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [36m⚡ BuildingCompleted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 buildingType=0 level=1 plot=0 timestamp=1770131544[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [35mcomplete building[0m
+[2m[onchain][0m [2mCFmVWQik3d..[0m [33mTotal 1,072 / 311,043 CU[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [36m⚡ BuildingStarted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 buildingType=1 plot=1 completesAt=1770145945 timestamp=1770131545[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [36m⚡ BuildingCompleted[0m [2mplayer=Brp9NHAg.. playerName=Player #6 buildingType=1 level=1 plot=1 timestamp=1770131545[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mbuild on estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mspeedup estate[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [35mcomplete building[0m
+[2m[onchain][0m [2m5XKkfHBUNs..[0m [33mTotal 1,134 / 311,041 CU[0m
+[32m  ✓ All buildings constructed[0m
+
+[1m[34m━━━ Layer 3: Economy ━━━[0m
+[32m  ✓ Alpha: updateLockedNovi[0m
+[2m[onchain][0m [2m3y6ombsu1N..[0m [35mupdate locked novi[0m
+[2m[onchain][0m [2m3y6ombsu1N..[0m [33mTotal 536 / 200,000 CU[0m
+[2m  ℹ lockedNovi diff: none (fresh player)[0m
+[36m  ▸ Hiring units for all players[0m
+[2m[onchain][0m [2m3ojHSp3Dmw..[0m [36m⚡ UnitsHired[0m [2mplayer=8368TZj8.. playerName=Player #1 unitType=0 baseQuantity=26 finalQuantity=16 noviBurned=200 timeBonusBps=0 timestamp=1770131547[0m
+[2m[onchain][0m [2m3ojHSp3Dmw..[0m [35mhire units[0m
+[2m[onchain][0m [2m3ojHSp3Dmw..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3ojHSp3Dmw..[0m [33mTotal 21,739 / 200,000 CU[0m
+[2m[onchain][0m [2mRzK9txLX45..[0m [36m⚡ UnitsHired[0m [2mplayer=8368TZj8.. playerName=Player #1 unitType=1 baseQuantity=15 finalQuantity=9 noviBurned=100 timeBonusBps=0 timestamp=1770131548[0m
+[2m[onchain][0m [2mRzK9txLX45..[0m [35mhire units[0m
+[2m[onchain][0m [2mRzK9txLX45..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mRzK9txLX45..[0m [33mTotal 21,323 / 200,000 CU[0m
+[2m[onchain][0m [2m58PPhsu7D2..[0m [36m⚡ UnitsHired[0m [2mplayer=8368TZj8.. playerName=Player #1 unitType=3 baseQuantity=24 finalQuantity=14 noviBurned=200 timeBonusBps=0 timestamp=1770131548[0m
+[2m[onchain][0m [2m58PPhsu7D2..[0m [35mhire units[0m
+[2m[onchain][0m [2m58PPhsu7D2..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m58PPhsu7D2..[0m [33mTotal 21,270 / 200,000 CU[0m
+[2m[onchain][0m [2m3xj25HQNCb..[0m [36m⚡ UnitsHired[0m [2mplayer=8368TZj8.. playerName=Player #1 unitType=4 baseQuantity=15 finalQuantity=9 noviBurned=100 timeBonusBps=0 timestamp=1770131549[0m
+[2m[onchain][0m [2m3xj25HQNCb..[0m [35mhire units[0m
+[2m[onchain][0m [2m3xj25HQNCb..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m3xj25HQNCb..[0m [33mTotal 20,900 / 200,000 CU[0m
+[32m  ✓ Alpha: units hired[0m
+[2m[onchain][0m [2m2ctQSL85jM..[0m [36m⚡ UnitsHired[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 unitType=0 baseQuantity=13 finalQuantity=8 noviBurned=100 timeBonusBps=0 timestamp=1770131550[0m
+[2m[onchain][0m [2m2ctQSL85jM..[0m [35mhire units[0m
+[2m[onchain][0m [2m2ctQSL85jM..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2ctQSL85jM..[0m [33mTotal 21,413 / 200,000 CU[0m
+[32m  ✓ Bravo: units hired[0m
+[2m[onchain][0m [2m58qKEkMZf9..[0m [36m⚡ UnitsHired[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 unitType=3 baseQuantity=6 finalQuantity=3 noviBurned=50 timeBonusBps=0 timestamp=1770131550[0m
+[2m[onchain][0m [2m58qKEkMZf9..[0m [35mhire units[0m
+[2m[onchain][0m [2m58qKEkMZf9..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m58qKEkMZf9..[0m [33mTotal 20,172 / 200,000 CU[0m
+[2m[onchain][0m [2mTa756XPg3N..[0m [36m⚡ UnitsHired[0m [2mplayer=G3A9Y3nc.. playerName=Player #3 unitType=0 baseQuantity=7 finalQuantity=4 noviBurned=50 timeBonusBps=0 timestamp=1770131551[0m
+[2m[onchain][0m [2mTa756XPg3N..[0m [35mhire units[0m
+[2m[onchain][0m [2mTa756XPg3N..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mTa756XPg3N..[0m [33mTotal 17,690 / 200,000 CU[0m
+[32m  ✓ Charlie: units hired[0m
+[2m[onchain][0m [2mrVukd3ERMf..[0m [36m⚡ UnitsHired[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 unitType=0 baseQuantity=39 finalQuantity=24 noviBurned=300 timeBonusBps=0 timestamp=1770131551[0m
+[2m[onchain][0m [2mrVukd3ERMf..[0m [35mhire units[0m
+[2m[onchain][0m [2mrVukd3ERMf..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mrVukd3ERMf..[0m [33mTotal 23,983 / 200,000 CU[0m
+[32m  ✓ Delta: units hired[0m
+[2m[onchain][0m [2mMfUPwRcr2Z..[0m [36m⚡ UnitsHired[0m [2mplayer=6CQsHJ5Z.. playerName=Player #4 unitType=1 baseQuantity=22 finalQuantity=13 noviBurned=150 timeBonusBps=0 timestamp=1770131552[0m
+[2m[onchain][0m [2mMfUPwRcr2Z..[0m [35mhire units[0m
+[2m[onchain][0m [2mMfUPwRcr2Z..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mMfUPwRcr2Z..[0m [33mTotal 22,829 / 200,000 CU[0m
+[2m[onchain][0m [2m4Y9u9RoTmw..[0m [36m⚡ UnitsHired[0m [2mplayer=4W13kdpe.. playerName=Player #5 unitType=3 baseQuantity=32 finalQuantity=32 noviBurned=150 timeBonusBps=0 timestamp=1770131552[0m
+[2m[onchain][0m [2m4Y9u9RoTmw..[0m [35mhire units[0m
+[2m[onchain][0m [2m4Y9u9RoTmw..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4Y9u9RoTmw..[0m [33mTotal 17,963 / 200,000 CU[0m
+[32m  ✓ Echo: units hired[0m
+[2m[onchain][0m [2mLsTEipjGi7..[0m [36m⚡ UnitsHired[0m [2mplayer=4W13kdpe.. playerName=Player #5 unitType=0 baseQuantity=11 finalQuantity=11 noviBurned=50 timeBonusBps=0 timestamp=1770131553[0m
+[2m[onchain][0m [2mLsTEipjGi7..[0m [35mhire units[0m
+[2m[onchain][0m [2mLsTEipjGi7..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mLsTEipjGi7..[0m [33mTotal 17,653 / 200,000 CU[0m
+[32m  ✓ Foxtrot: units hired[0m
+[2m[onchain][0m [2m4FCzEik3Cm..[0m [36m⚡ UnitsHired[0m [2mplayer=Brp9NHAg.. playerName=Player #6 unitType=0 baseQuantity=4 finalQuantity=2 noviBurned=30 timeBonusBps=0 timestamp=1770131553[0m
+[2m[onchain][0m [2m4FCzEik3Cm..[0m [35mhire units[0m
+[2m[onchain][0m [2m4FCzEik3Cm..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m4FCzEik3Cm..[0m [33mTotal 16,955 / 200,000 CU[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [36m⚡ XpGained[0m [2mplayer=8368TZj8.. playerName=Player #1 amount=115 source=1 totalXp=46 timestamp=1770131554[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [36m⚡ PlayerLeveledUp[0m [2mplayer=8368TZj8.. playerName=Player #1 oldLevel=1 newLevel=2 timestamp=1770131554[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [36m⚡ ResourcesCollected[0m [2mplayer=8368TZj8.. playerName=Player #1 collectionType=0 noviConsumed=50 baseOutput=115310 finalOutput=115310 gemsEarned=0 fragmentsEarned=0 xpGained=115 timestamp=1770131554[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [35mcollect resources[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5KkwwFP5GC..[0m [33mTotal 32,823 / 200,000 CU[0m
+[2m  ℹ Cash change: "no change"[0m
+[32m  ✓ Alpha: collectResources (cash)[0m
+[2m[onchain][0m [2mfaBMSMW5ND..[0m [36m⚡ EquipmentPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 slot=0 tier=1 noviBurned=1529 timestamp=1770131554[0m
+[2m[onchain][0m [2mfaBMSMW5ND..[0m [35mpurchase equipment[0m
+[2m[onchain][0m [2mfaBMSMW5ND..[0m [33mTotal 11,319 / 200,000 CU[0m
+[2m[onchain][0m [2m3KYG79kLFp..[0m [36m⚡ EquipmentPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 slot=1 tier=1 noviBurned=2447 timestamp=1770131555[0m
+[2m[onchain][0m [2m3KYG79kLFp..[0m [35mpurchase equipment[0m
+[2m[onchain][0m [2m3KYG79kLFp..[0m [33mTotal 11,315 / 200,000 CU[0m
+[2m  ℹ Equipment purchased, fields changed: lockedNovi, meleeWeapons, rangedWeapons, networth[0m
+[32m  ✓ Alpha: equipment purchased[0m
+[32m  ✓ Alpha: purchaseStamina[0m
+[2m[onchain][0m [2m551WdXmEvB..[0m [36m⚡ StaminaPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 stamina=0 gemsSpent=0 timestamp=1770131555[0m
+[2m[onchain][0m [2m551WdXmEvB..[0m [35mpurchase stamina[0m
+[2m[onchain][0m [2m551WdXmEvB..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m551WdXmEvB..[0m [33mTotal 6,859 / 200,000 CU[0m
+[2m[onchain][0m [2mKKMrpKA7EP..[0m [36m⚡ VaultTransfer[0m [2mplayer=8368TZj8.. playerName=Player #1 amount=1000 toVault=true vaultBalance=1000 timestamp=1770131556[0m
+[2m[onchain][0m [2mKKMrpKA7EP..[0m [35mvault transfer[0m
+[2m[onchain][0m [2mKKMrpKA7EP..[0m [33mTotal 1,098 / 200,000 CU[0m
+[2m  ℹ Vault transfer: {"before":"00","after":"03e8"}[0m
+[32m  ✓ Alpha: vaultTransfer (deposit)[0m
+
+[1m[34m━━━ Layer 4: Shop ━━━[0m
+[2m[onchain][0m [2m4GTYBhcmyL..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=1 price=1000 currency=0 timestamp=1770131557[0m
+[2m[onchain][0m [2m4GTYBhcmyL..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m4GTYBhcmyL..[0m [33mTotal 11,132 / 200,000 CU[0m
+[32m  ✓ Alpha: purchaseItem (gems)[0m
+[33m  ⚠ Alpha: purchaseBundle[0m
+[90m    Transaction 62boBG3sEkmM4LDM29jT81Eci1EVj93Fp5nUP5Z6pE3jM4tY9s6dkbhof952yid5PyzdwFHmL5SntMrBuK1beTEB resulted in an error. [0m
+[2m[onchain][0m [2m62boBG3sEk..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m62boBG3sEk..[0m [35mpurchase bundle[0m
+[2m[onchain][0m [2m62boBG3sEk..[0m [33mTotal 1,925 / 200,000 CU[0m
+[2m[onchain][0m [2m62boBG3sEk..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: account data too small for instruction[0m
+[33m  ⚠ Alpha: purchaseFlashSale (SDK bug)[0m
+[90m    Transaction 5x465rtKA7ShVx58BeH4FzdjBvhhNEbzn9zmrbpyowJVucCkCe6c36oA88Aa12qW3ghvLeYNkQhcBfdwpsdaq19p resulted in an error. [0m
+
+[1m[34m━━━ Layer 5: Team ━━━[0m
+[2m[onchain][0m [2m5x465rtKA7..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5x465rtKA7..[0m [35mpurchase flash sale[0m
+[2m[onchain][0m [2m5x465rtKA7..[0m [33mTotal 8,064 / 200,000 CU[0m
+[2m[onchain][0m [2m5x465rtKA7..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+[2m[onchain][0m [2m2STdP6L8ST..[0m [36m⚡ TeamCreated[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam founder=8368TZj8.. noviBurned=50000 timestamp=1770131558[0m
+[2m[onchain][0m [2m2STdP6L8ST..[0m [35mcreate team[0m
+[2m[onchain][0m [2m2STdP6L8ST..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2STdP6L8ST..[0m [33mTotal 28,724 / 200,000 CU[0m
+[32m  ✓ Alpha: team created[0m
+[2m[onchain][0m [2m55QCf4GSAL..[0m [36m⚡ InviteSent[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam invitee=DTpJZyJQ.. inviter=8368TZj8.. timestamp=1770131559[0m
+[2m[onchain][0m [2m55QCf4GSAL..[0m [35minvite to team[0m
+[2m[onchain][0m [2m55QCf4GSAL..[0m [33mTotal 16,522 / 200,000 CU[0m
+[2m[onchain][0m [2m3dGAkWq37y..[0m [36m⚡ InviteAccepted[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam player=DTpJZyJQ.. memberCount=2 timestamp=1770131559[0m
+[2m[onchain][0m [2m3dGAkWq37y..[0m [35maccept team invite[0m
+[2m[onchain][0m [2m3dGAkWq37y..[0m [33mTotal 17,967 / 200,000 CU[0m
+[32m  ✓ Bravo: accepted invite (slot 1)[0m
+[2m[onchain][0m [2m3wtAQ75RgV..[0m [36m⚡ InviteSent[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam invitee=G3A9Y3nc.. inviter=8368TZj8.. timestamp=1770131560[0m
+[2m[onchain][0m [2m3wtAQ75RgV..[0m [35minvite to team[0m
+[2m[onchain][0m [2m3wtAQ75RgV..[0m [33mTotal 13,522 / 200,000 CU[0m
+[2m[onchain][0m [2m5XATfMqDNE..[0m [36m⚡ InviteAccepted[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam player=G3A9Y3nc.. memberCount=3 timestamp=1770131560[0m
+[2m[onchain][0m [2m5XATfMqDNE..[0m [35maccept team invite[0m
+[2m[onchain][0m [2m5XATfMqDNE..[0m [33mTotal 16,467 / 200,000 CU[0m
+[32m  ✓ Charlie: accepted invite (slot 2)[0m
+[2m[onchain][0m [2m2tNb6BbTE7..[0m [36m⚡ InviteSent[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam invitee=Brp9NHAg.. inviter=8368TZj8.. timestamp=1770131561[0m
+[2m[onchain][0m [2m2tNb6BbTE7..[0m [35minvite to team[0m
+[2m[onchain][0m [2m2tNb6BbTE7..[0m [33mTotal 16,522 / 200,000 CU[0m
+[2m[onchain][0m [2m6uWduh6sSA..[0m [36m⚡ InviteAccepted[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam player=Brp9NHAg.. memberCount=4 timestamp=1770131561[0m
+[2m[onchain][0m [2m6uWduh6sSA..[0m [35maccept team invite[0m
+[2m[onchain][0m [2m6uWduh6sSA..[0m [33mTotal 14,967 / 200,000 CU[0m
+[32m  ✓ Foxtrot: accepted invite (slot 3)[0m
+[32m  ✓ Bravo: depositTreasury(5000)[0m
+[2m[onchain][0m [2mJdyFCziecy..[0m [36m⚡ TreasuryDeposit[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam depositor=DTpJZyJQ.. amount=5000 newBalance=5000 timestamp=1770131562[0m
+[2m[onchain][0m [2mJdyFCziecy..[0m [35mdeposit treasury[0m
+[2m[onchain][0m [2mJdyFCziecy..[0m [33mTotal 8,608 / 200,000 CU[0m
+[32m  ✓ Alpha: setMotd[0m
+[2m[onchain][0m [2m3CHvNemobV..[0m [36m⚡ MotdUpdated[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam updatedBy=8368TZj8.. timestamp=1770131563[0m
+[2m[onchain][0m [2m3CHvNemobV..[0m [35mset team motd[0m
+[2m[onchain][0m [2m3CHvNemobV..[0m [33mTotal 10,467 / 200,000 CU[0m
+[2m[onchain][0m [2m54k1Prhzeq..[0m [36m⚡ TeamSettingsUpdated[0m [2mteam=ELCjjLKA.. teamName=LifecycleTeam updatedBy=8368TZj8.. timestamp=1770131563[0m
+[2m[onchain][0m [2m54k1Prhzeq..[0m [35mupdate team settings[0m
+[2m[onchain][0m [2m54k1Prhzeq..[0m [33mTotal 10,200 / 200,000 CU[0m
+[32m  ✓ Alpha: updateSettings[0m
+
+[1m[34m━━━ Layer 6: Rally ━━━[0m
+[2m[onchain][0m [2m2wmcNY8Yqu..[0m [36m⚡ RallyCreated[0m [2mrally=J5wR4sNM.. team=ELCjjLKA.. teamName=LifecycleTeam leader=8368TZj8.. target=6CQsHJ5Z.. gatherAt=1770131624 timestamp=1770131564[0m
+[2m[onchain][0m [2m2wmcNY8Yqu..[0m [35mcreate rally[0m
+[2m[onchain][0m [2m2wmcNY8Yqu..[0m [33mTotal 31,892 / 200,000 CU[0m
+[32m  ✓ Alpha: createRally[0m
+[2m[onchain][0m [2m2kEnDZusbi..[0m [36m⚡ RallyJoined[0m [2mrally=J5wR4sNM.. teamName=LifecycleTeam player=DTpJZyJQ.. participantCount=2 timestamp=1770131564[0m
+[2m[onchain][0m [2m2kEnDZusbi..[0m [35mjoin rally[0m
+[2m[onchain][0m [2m2kEnDZusbi..[0m [33mTotal 28,132 / 200,000 CU[0m
+[32m  ✓ Bravo: joinRally[0m
+[2m[onchain][0m [2m45LUjSxStm..[0m [36m⚡ RallyCancelled[0m [2mrally=J5wR4sNM.. teamName= cancelledBy=8368TZj8.. timestamp=1770131565[0m
+[2m[onchain][0m [2m45LUjSxStm..[0m [35mcancel rally[0m
+[2m[onchain][0m [2m45LUjSxStm..[0m [33mTotal 16,489 / 200,000 CU[0m
+[2m  ℹ Rally cancel diff: none[0m
+[32m  ✓ Alpha: cancelRally (units returned)[0m
+
+[1m[34m━━━ Layer 7: Heroes ━━━[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [36m⚡ HeroMinted[0m [2mheroMint=2sdjbwr1.. heroName=Warrior player=8368TZj8.. playerName=Player #1 templateId=1 rarity=0 timestamp=1770131565[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [35mmint hero[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [35mInstruction: Create[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [35mprograms/mpl-core/src/state/collection.rs:139:Approve[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [35mInstruction: AddPlugin[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [35mprograms/mpl-core/src/state/collection.rs:160:Approve[0m
+[2m[onchain][0m [2m3bbsz7rfRE..[0m [33mTotal 43,430 / 200,000 CU[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [36m⚡ HeroMinted[0m [2mheroMint=5gq5qb4A.. heroName=Archer player=8368TZj8.. playerName=Player #1 templateId=2 rarity=0 timestamp=1770131566[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [35mmint hero[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [35mInstruction: Create[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [35mprograms/mpl-core/src/state/collection.rs:139:Approve[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [35mInstruction: AddPlugin[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [35mprograms/mpl-core/src/state/collection.rs:160:Approve[0m
+[2m[onchain][0m [2m549YjE8Euz..[0m [33mTotal 41,873 / 200,000 CU[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [36m⚡ HeroMinted[0m [2mheroMint=GSKzzBwF.. heroName=Mage player=8368TZj8.. playerName=Player #1 templateId=3 rarity=0 timestamp=1770131566[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [35mmint hero[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [35mInstruction: Create[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [35mprograms/mpl-core/src/state/collection.rs:139:Approve[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [35mInstruction: AddPlugin[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [35mprograms/mpl-core/src/state/collection.rs:160:Approve[0m
+[2m[onchain][0m [2m4jU6iVvRqx..[0m [33mTotal 44,744 / 200,000 CU[0m
+[32m  ✓ Alpha: 3 heroes minted[0m
+[32m  ✓ Alpha: warrior locked to slot 0[0m
+[2m[onchain][0m [2m3cw7GqpnF2..[0m [36m⚡ HeroLocked[0m [2mheroMint=2sdjbwr1.. heroName=Warrior player=8368TZj8.. playerName=Player #1 slot=0 timestamp=1770131567[0m
+[2m[onchain][0m [2m3cw7GqpnF2..[0m [35mlock hero[0m
+[2m[onchain][0m [2m3cw7GqpnF2..[0m [35mInstruction: Transfer[0m
+[2m[onchain][0m [2m3cw7GqpnF2..[0m [35mprograms/mpl-core/src/state/asset.rs:293:Approve[0m
+[2m[onchain][0m [2m3cw7GqpnF2..[0m [33mTotal 13,680 / 200,000 CU[0m
+[2m[onchain][0m [2m4rj5Cwws9w..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4rj5Cwws9w..[0m [35mlevel up hero[0m
+[2m[onchain][0m [2m4rj5Cwws9w..[0m [33mTotal 3,463 / 200,000 CU[0m
+[2m[onchain][0m [2m4rj5Cwws9w..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x17ed[0m
+[33m  ⚠ Alpha: levelUpHero (insufficient fragments)[0m
+[90m    Transaction 4rj5Cwws9wmfsRXy7pWWryKm3hbudTJ8GSGkmb4pjdHsAcpSAMPUBiZyJ8o8QzaaxUsBw694AjDNfbaZaiSkuKQZ resulted in an error. [0m
+[32m  ✓ Alpha: warrior assigned as defensive hero[0m
+[2m[onchain][0m [2m4w54gaDzDn..[0m [36m⚡ HeroAssignedDefensive[0m [2mheroMint=2sdjbwr1.. heroName= player=8368TZj8.. playerName=Player #1 assigned=true timestamp=1770131568[0m
+[2m[onchain][0m [2m4w54gaDzDn..[0m [35massign defensive hero[0m
+[2m[onchain][0m [2m4w54gaDzDn..[0m [33mTotal 898 / 200,000 CU[0m
+[2m[onchain][0m [2m3a4Naypeo6..[0m [36m⚡ HeroUnlocked[0m [2mheroMint=2sdjbwr1.. heroName=Warrior player=8368TZj8.. playerName=Player #1 timestamp=1770131569[0m
+[2m[onchain][0m [2m3a4Naypeo6..[0m [35munlock hero[0m
+[2m[onchain][0m [2m3a4Naypeo6..[0m [35mInstruction: Transfer[0m
+[2m[onchain][0m [2m3a4Naypeo6..[0m [35mprograms/mpl-core/src/state/asset.rs:293:Approve[0m
+[2m[onchain][0m [2m3a4Naypeo6..[0m [33mTotal 13,478 / 200,000 CU[0m
+[2m[onchain][0m [2mRn1vgtnfhj..[0m [36m⚡ HeroLocked[0m [2mheroMint=2sdjbwr1.. heroName=Warrior player=8368TZj8.. playerName=Player #1 slot=0 timestamp=1770131569[0m
+[2m[onchain][0m [2mRn1vgtnfhj..[0m [35mlock hero[0m
+[2m[onchain][0m [2mRn1vgtnfhj..[0m [35mInstruction: Transfer[0m
+[2m[onchain][0m [2mRn1vgtnfhj..[0m [35mprograms/mpl-core/src/state/asset.rs:293:Approve[0m
+[2m[onchain][0m [2mRn1vgtnfhj..[0m [33mTotal 13,621 / 200,000 CU[0m
+[32m  ✓ Alpha: warrior unlock/re-lock cycle[0m
+[33m  ⚠ Alpha: extra hero locks (MaxHeroesLocked at Sanctuary L1)[0m
+[90m    Transaction 4aVhAkrNAeJtt9bMZJP4m37g9UEunC73zcQ79LzPcTXQgzmDavSAQVoJozitLE6EQRdSWBisUCWM2441dyGkVqNR resulted in an error. [0m
+[2m[onchain][0m [2m4aVhAkrNAe..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4aVhAkrNAe..[0m [35mlock hero[0m
+[2m[onchain][0m [2m4aVhAkrNAe..[0m [33mTotal 580 / 200,000 CU[0m
+[2m[onchain][0m [2m4aVhAkrNAe..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e2c[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [36m⚡ HeroMinted[0m [2mheroMint=GcsqSQMm.. heroName=Warrior player=DTpJZyJQ.. playerName=Player #2 templateId=1 rarity=0 timestamp=1770131570[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [35mmint hero[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [35mInstruction: Create[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [35mprograms/mpl-core/src/state/collection.rs:139:Approve[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [35mInstruction: AddPlugin[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [35mprograms/mpl-core/src/state/collection.rs:160:Approve[0m
+[2m[onchain][0m [2m2E5CwWEGzQ..[0m [33mTotal 43,440 / 200,000 CU[0m
+[2m[onchain][0m [2m3yrLhb2MST..[0m [36m⚡ HeroLocked[0m [2mheroMint=GcsqSQMm.. heroName=Warrior player=DTpJZyJQ.. playerName=Player #2 slot=0 timestamp=1770131571[0m
+[2m[onchain][0m [2m3yrLhb2MST..[0m [35mlock hero[0m
+[2m[onchain][0m [2m3yrLhb2MST..[0m [35mInstruction: Transfer[0m
+[2m[onchain][0m [2m3yrLhb2MST..[0m [35mprograms/mpl-core/src/state/asset.rs:293:Approve[0m
+[2m[onchain][0m [2m3yrLhb2MST..[0m [33mTotal 13,648 / 200,000 CU[0m
+[32m  ✓ Bravo: warrior minted and locked[0m
+
+[1m[34m━━━ Layer 8: Research ━━━[0m
+[2m[onchain][0m [2msYixpoTAdH..[0m [36m⚡ ResearchStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=0 level=1 completesAt=1770132021 timestamp=1770131571[0m
+[2m[onchain][0m [2msYixpoTAdH..[0m [35mstart research[0m
+[2m[onchain][0m [2msYixpoTAdH..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2msYixpoTAdH..[0m [33mTotal 8,498 / 200,000 CU[0m
+[32m  ✓ Alpha: startResearch (type 0)[0m
+[2m[onchain][0m [2m4YcQtxQGDJ..[0m [36m⚡ ResearchSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=0 speedupSeconds=449 gemsSpent=8 newEta=1770131572 timestamp=1770131572[0m
+[2m[onchain][0m [2m4YcQtxQGDJ..[0m [35mspeedup research[0m
+[2m[onchain][0m [2m4YcQtxQGDJ..[0m [33mTotal 1,086 / 200,000 CU[0m
+[32m  ✓ Alpha: speedUpResearch[0m
+[32m  ✓ Alpha: completeResearch[0m
+
+[1m[34m━━━ Layer 9: Subscription ━━━[0m
+[2m[onchain][0m [2m2vgh7S7XgE..[0m [36m⚡ ResearchCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=0 level=1 timestamp=1770131572[0m
+[2m[onchain][0m [2m2vgh7S7XgE..[0m [35mcomplete research[0m
+[2m[onchain][0m [2m2vgh7S7XgE..[0m [33mTotal 5,447 / 200,000 CU[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [36m⚡ XpGained[0m [2mplayer=8368TZj8.. playerName=Player #1 amount=500 source=4 totalXp=432 timestamp=1770131573[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [36m⚡ PlayerLeveledUp[0m [2mplayer=8368TZj8.. playerName=Player #1 oldLevel=2 newLevel=3 timestamp=1770131573[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [36m⚡ SubscriptionPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 tier=1 durationDays=30 noviPaid=1000 expiresAt=1772723573 timestamp=1770131573[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [36m⚡ SubscriptionTierUpdated[0m [2mplayer=8368TZj8.. playerName=Player #1 oldTier=0 newTier=1 expiresAt=1772723573 timestamp=1770131573[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [35mpurchase subscription[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4BmmMP1c3m..[0m [33mTotal 17,276 / 200,000 CU[0m
+[32m  ✓ Alpha: subscription purchased (Expert)[0m
+[2m[onchain][0m [2m21XcjCKZ8a..[0m [35mdowngrade expired sub[0m
+[2m[onchain][0m [2m21XcjCKZ8a..[0m [33mTotal 1,759 / 200,000 CU[0m
+[32m  ✓ Echo: downgradeExpired (no-op)[0m
+
+[1m[34m━━━ Layer 10: Progression ━━━[0m
+[2m[onchain][0m [2m2hQLaXU3AK..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2hQLaXU3AK..[0m [35mclaim daily reward[0m
+[2m[onchain][0m [2m2hQLaXU3AK..[0m [33mTotal 422 / 200,000 CU[0m
+[2m[onchain][0m [2m2hQLaXU3AK..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177c[0m
+[33m  ⚠ Alpha: claimDailyReward (requires has_daily_rewards research)[0m
+[90m    Transaction 2hQLaXU3AK8hxnVw1xpfvUYhznx7QudUJ51sp6uFNQrtM21GrHA1pdarNV85eJ3HhRhhVmwxPu9BKDeUijjoo4nX resulted in an error. [0m
+
+[1m[34m━━━ Layer 11: Travel ━━━[0m
+[36m  ▸ Charlie: intercity travel city 2 → city 0[0m
+[33m  ⚠ Charlie: intercity travel[0m
+[90m    Transaction 65cYR2DM2uhMcuDvKaWtTj3AwjaqGPiAJwssE6VTPwCTi9A185srfF9WuCb8cU7m7vrXnaXUfunx5MCjvjMkytug resulted in an error. [0m
+[36m  ▸ Alpha: moving to Delta for combat positioning[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [33mTotal 27,373 / 200,000 CU[0m
+[2m[onchain][0m [2m65cYR2DM2u..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x190d[0m
+[buyGems] PRE: data_len=1818 lamports=13544160
+[2m[onchain][0m [2m5AwuJkFLaX..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=1 price=940 currency=0 timestamp=1770131575[0m
+[2m[onchain][0m [2m5AwuJkFLaX..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m5AwuJkFLaX..[0m [33mTotal 11,139 / 200,000 CU[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [33mTotal 8,281 / 200,000 CU[0m
+[2m[onchain][0m [2m2VwKW7QhnJ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x18b1[0m
+[33m  ⚠ Alpha: movePlayerToPlayer[0m
+[90m    Transaction 2VwKW7QhnJ6gdiRW3wfLksWgXrYhFoWFW3d8kDUdU4etvrZXPpPiubUoEQvJPdhaLpVnW6MvYNFg9jqaagtpZPJ6 resulted in an error. [0m
+
+[1m[34m━━━ Layer 12: Combat ━━━[0m
+[33m  ⚠ Echo: encounter flow[0m
+[90m    Transaction TJ4B7zsdwwEG7P494g1Vk2mAhZtgF9MkECMqkeg66YpBGUzqpNYxrpxbS3LtzcV55aCmPwgySZ64ymAx8JK9acw resulted in an error. [0m
+[2m[onchain][0m [2mTJ4B7zsdww..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mTJ4B7zsdww..[0m [35mspawn encounter[0m
+[2m[onchain][0m [2mTJ4B7zsdww..[0m [90mUnknown program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA[0m
+[2m[onchain][0m [2mTJ4B7zsdww..[0m [33mTotal 2,880 / 200,000 CU[0m
+[2m[onchain][0m [2mTJ4B7zsdww..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: An account required by the instruction is missing[0m
+[33m  ⚠ Alpha: attackPlayer(Delta)[0m
+[90m    Transaction 3N63Lu9YcfidRxyATDtviqKF2C3QMW5KqNRmK852SwhV2mR9eQTq8EHcJnR1cc9BAZsb2c4Pf5q8d2LmpiCwe1hq resulted in an error. [0m
+
+[1m[34m━━━ Layer 13: Reinforcement ━━━[0m
+[2m[onchain][0m [2m3N63Lu9Ycf..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3N63Lu9Ycf..[0m [35mattack player[0m
+[2m[onchain][0m [2m3N63Lu9Ycf..[0m [33mTotal 11,016 / 200,000 CU[0m
+[2m[onchain][0m [2m3N63Lu9Ycf..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x18b1[0m
+[2m[onchain][0m [2m59mN9j7bzP..[0m [36m⚡ ReinforcementSent[0m [2msender=78AzdeTP.. senderName=Player #2 receiver=G9Qrv1ad.. receiverName=Player #1 arrivesAt=1770131577 timestamp=1770131577[0m
+[2m[onchain][0m [2m59mN9j7bzP..[0m [35msend reinforcement[0m
+[2m[onchain][0m [2m59mN9j7bzP..[0m [33mTotal 9,267 / 200,000 CU[0m
+[32m  ✓ Bravo: sendReinforcement to Alpha (5 DU1)[0m
+[2m  ℹ Reinforcement account exists[0m
+[2m  ℹ Bravo DU1 change: {"before":"0d","after":"08"}[0m
+[32m  ✓ Reinforcement: processArrival[0m
+[2m[onchain][0m [2m3Dn9cfeWvX..[0m [36m⚡ ReinforcementArrived[0m [2mreinforcement=9BhHCxhd.. sender=78AzdeTP.. senderName= receiver=G9Qrv1ad.. receiverName=Player #1 timestamp=1770131578[0m
+[2m[onchain][0m [2m3Dn9cfeWvX..[0m [35mprocess reinforcement arrival[0m
+[2m[onchain][0m [2m3Dn9cfeWvX..[0m [33mTotal 1,185 / 200,000 CU[0m
+[32m  ✓ Bravo: recallReinforcement[0m
+[2m[onchain][0m [2m37aHneZbWG..[0m [36m⚡ ReinforcementRecalled[0m [2mreinforcement=9BhHCxhd.. sender=78AzdeTP.. senderName= receiver=G9Qrv1ad.. receiverName= timestamp=1770131578[0m
+[2m[onchain][0m [2m37aHneZbWG..[0m [35mrecall reinforcement[0m
+[2m[onchain][0m [2m37aHneZbWG..[0m [33mTotal 1,725 / 200,000 CU[0m
+[32m  ✓ Reinforcement: processReturn[0m
+
+[1m[34m━━━ Layer 14: Expedition ━━━[0m
+[2m[onchain][0m [2m2CxucNm3TF..[0m [36m⚡ ReinforcementReturned[0m [2msender=78AzdeTP.. senderName=Player #2 timestamp=1770131579[0m
+[2m[onchain][0m [2m2CxucNm3TF..[0m [35mprocess reinforcement return[0m
+[2m[onchain][0m [2m2CxucNm3TF..[0m [33mTotal 1,072 / 200,000 CU[0m
+[32m  ✓ Alpha: startResearch (type 21 - Mining)[0m
+[2m[onchain][0m [2mS1byvXYVWk..[0m [36m⚡ ResearchStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=21 level=1 completesAt=1770131669 timestamp=1770131579[0m
+[2m[onchain][0m [2mS1byvXYVWk..[0m [35mstart research[0m
+[2m[onchain][0m [2mS1byvXYVWk..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mS1byvXYVWk..[0m [33mTotal 8,498 / 200,000 CU[0m
+[2m[onchain][0m [2m2cb2SFKEDY..[0m [36m⚡ ResearchSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=21 speedupSeconds=89 gemsSpent=2 newEta=1770131580 timestamp=1770131580[0m
+[2m[onchain][0m [2m2cb2SFKEDY..[0m [35mspeedup research[0m
+[2m[onchain][0m [2m2cb2SFKEDY..[0m [33mTotal 1,085 / 200,000 CU[0m
+[32m  ✓ Alpha: completeResearch (type 21 - Mining unlocked)[0m
+[2m[onchain][0m [2m64D8bAVDmC..[0m [36m⚡ ResearchCompleted[0m [2mplayer=8368TZj8.. playerName=Player #1 researchId=21 level=1 timestamp=1770131580[0m
+[2m[onchain][0m [2m64D8bAVDmC..[0m [35mcomplete research[0m
+[2m[onchain][0m [2m64D8bAVDmC..[0m [33mTotal 5,452 / 200,000 CU[0m
+[buyGems] PRE: data_len=1818 lamports=13544160
+[2m[onchain][0m [2m5xyWttMaUe..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=5 price=4655 currency=0 timestamp=1770131581[0m
+[2m[onchain][0m [2m5xyWttMaUe..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m5xyWttMaUe..[0m [33mTotal 11,139 / 200,000 CU[0m
+[32m  ✓ Alpha: bought gems for expedition speedups[0m
+[2m[onchain][0m [2m5VMnadYwfJ..[0m [36m⚡ ExpeditionStarted[0m [2mplayer=8368TZj8.. playerName=Player #1 expeditionType=1 nodeId=0 duration=3600 timestamp=1770131582[0m
+[2m[onchain][0m [2m5VMnadYwfJ..[0m [35mstart expedition[0m
+[2m[onchain][0m [2m5VMnadYwfJ..[0m [33mTotal 4,162 / 200,000 CU[0m
+[2m  ℹ Expedition start: OP1 change = {"before":"31","after":"27"}[0m
+[32m  ✓ Alpha: startExpedition (Mining)[0m
+[32m  ✓ Alpha: expeditionStrike[0m
+[2m[onchain][0m [2mp1Tm8fceJn..[0m [36m⚡ ExpeditionStrike[0m [2mplayer=8368TZj8.. playerName=Player #1 strikeNum=1 yieldAmount=0 quality=75 timestamp=1770131582[0m
+[2m[onchain][0m [2mp1Tm8fceJn..[0m [35mexpedition strike[0m
+[2m[onchain][0m [2mp1Tm8fceJn..[0m [33mTotal 2,517 / 200,000 CU[0m
+[2m[onchain][0m [2m2aKgmUTsuw..[0m [36m⚡ ExpeditionSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 speedupSeconds=2699 gemsSpent=8800 newEta=1770132483 timestamp=1770131583[0m
+[2m[onchain][0m [2m2aKgmUTsuw..[0m [35mspeedup expedition[0m
+[2m[onchain][0m [2m2aKgmUTsuw..[0m [33mTotal 2,584 / 200,000 CU[0m
+[2m[onchain][0m [2m4SQqJPyHwb..[0m [36m⚡ ExpeditionSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 speedupSeconds=675 gemsSpent=2200 newEta=1770131808 timestamp=1770131583[0m
+[2m[onchain][0m [2m4SQqJPyHwb..[0m [35mspeedup expedition[0m
+[2m[onchain][0m [2m4SQqJPyHwb..[0m [33mTotal 2,584 / 200,000 CU[0m
+[2m[onchain][0m [2m3LUasZf48m..[0m [36m⚡ ExpeditionSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 speedupSeconds=168 gemsSpent=400 newEta=1770131640 timestamp=1770131584[0m
+[2m[onchain][0m [2m3LUasZf48m..[0m [35mspeedup expedition[0m
+[2m[onchain][0m [2m3LUasZf48m..[0m [33mTotal 2,584 / 200,000 CU[0m
+[2m[onchain][0m [2m4MQzfm6HNZ..[0m [36m⚡ ExpeditionSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 speedupSeconds=42 gemsSpent=200 newEta=1770131598 timestamp=1770131584[0m
+[2m[onchain][0m [2m4MQzfm6HNZ..[0m [35mspeedup expedition[0m
+[2m[onchain][0m [2m4MQzfm6HNZ..[0m [33mTotal 2,585 / 200,000 CU[0m
+[2m[onchain][0m [2m5CRuQp2UmP..[0m [36m⚡ ExpeditionSpeedup[0m [2mplayer=8368TZj8.. playerName=Player #1 speedupSeconds=9 gemsSpent=200 newEta=1770131589 timestamp=1770131585[0m
+[2m[onchain][0m [2m5CRuQp2UmP..[0m [35mspeedup expedition[0m
+[2m[onchain][0m [2m5CRuQp2UmP..[0m [33mTotal 2,585 / 200,000 CU[0m
+[32m  ✓ Alpha: expeditionSpeedup ×5[0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 4JUe2LERMqhNenG9yq5RgKHR2vm9viY9EJ4ZVTpU1aRbntMXXp3uiWwL88wfx1YN6ydntSdgy9PK2Hffy4a3hGYY resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":7802}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "4JUe2LERMqhNenG9yq5RgKHR2vm9viY9EJ4ZVTpU1aRbntMXXp3uiWwL88wfx1YN6ydntSdgy9PK2Hffy4a3hGYY",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":7802}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Full Game Lifecycle > runs the complete game lifecycle across all 24 systems [110788.82ms]
+
+ 0 pass
+ 1 fail
+ 24 expect() calls
+Ran 1 tests across 1 files. [119.14s]

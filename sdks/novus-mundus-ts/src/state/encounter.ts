@@ -2,13 +2,13 @@
  * EncounterAccount
  *
  * PvE encounter with dynamic attacker list.
- * Base size: 80 bytes + 32 bytes per attacker
+ * Base size: 120 bytes + 32 bytes per attacker
  */
 
 import { PublicKey, type AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize.ts';
-import { EncounterType } from '../types/enums.ts';
+import { BufferReader } from '../utils/deserialize';
+import { EncounterType } from '../types/enums';
 
 // ============================================================
 // Encounter Account Interface
@@ -33,7 +33,7 @@ export interface EncounterAccount {
 }
 
 /** EncounterAccount base size in bytes (without attackers) */
-export const ENCOUNTER_ACCOUNT_BASE_SIZE = 80;
+export const ENCOUNTER_ACCOUNT_BASE_SIZE = 120;
 
 /** Calculate total encounter account size */
 export function calculateEncounterAccountSize(attackerCount: number): number {
@@ -48,6 +48,9 @@ export function calculateEncounterAccountSize(attackerCount: number): number {
 export function deserializeEncounter(data: Uint8Array | Buffer): EncounterAccount {
   const reader = new BufferReader(data);
 
+  reader.readU8(); // account_key discriminator
+  reader.skip(32); // game_engine (Pubkey, not in interface)
+  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
   const id = reader.readU64();
   const cityId = reader.readU16();
   const level = reader.readU8();

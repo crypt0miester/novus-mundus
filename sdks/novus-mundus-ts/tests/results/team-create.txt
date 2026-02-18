@@ -1,0 +1,97 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/04-team.test.ts:
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.2s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.4s.
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1769936420[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1769936420[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35minit user[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35minit player[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5oJYm3SH8z..[0m [33mTotal 6,438 / 526,293 CU[0m
+[2m[onchain][0m [2m24MLxgfz7o..[0m [36m⚡ EstateCreated[0m [2mestate=2zEozDGn.. player=8368TZj8.. playerName=Player #1 timestamp=1769936421[0m
+[2m[onchain][0m [2m24MLxgfz7o..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1769936421[0m
+[2m[onchain][0m [2m24MLxgfz7o..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m24MLxgfz7o..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m24MLxgfz7o..[0m [33mTotal 12,566 / 396,001 CU[0m
+[2m[onchain][0m [2mJGteT6vp9s..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mJGteT6vp9s..[0m [35mcreate team[0m
+[2m[onchain][0m [2mJGteT6vp9s..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2mJGteT6vp9s..[0m [33mTotal 18,829 / 200,000 CU[0m
+[2m[onchain][0m [2mJGteT6vp9s..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[31m  ✗ tx[0m
+[31m    Transaction JGteT6vp9sTZ2WRaaGTDdTqgayBNSCJsP3wahivRxVTRYz1iMXMyHqcmk56BoFThBUTAKpMFoLf3sWc8Lowqgan resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction JGteT6vp9sTZ2WRaaGTDdTqgayBNSCJsP3wahivRxVTRYz1iMXMyHqcmk56BoFThBUTAKpMFoLf3sWc8Lowqgan resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "JGteT6vp9sTZ2WRaaGTDdTqgayBNSCJsP3wahivRxVTRYz1iMXMyHqcmk56BoFThBUTAKpMFoLf3sWc8Lowqgan",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Team System > Team Creation > should create a new team [1948.04ms]
+(skip) Team System > Team Creation > should reject duplicate team creation for same player
+(skip) Team System > Team Creation > should reject empty team name
+(skip) Team System > Team Creation > should reject team name exceeding max length
+(skip) Team System > Invitations > should invite player to team
+(skip) Team System > Invitations > should accept team invitation
+(skip) Team System > Invitations > should decline team invitation
+(skip) Team System > Invitations > should cancel team invitation
+(skip) Team System > Member Management > should kick member from team
+(skip) Team System > Member Management > should allow member to leave team
+(skip) Team System > Member Management > should promote member to officer
+(skip) Team System > Member Management > should demote officer to member
+(skip) Team System > Member Management > should transfer leadership
+(skip) Team System > Member Management > should reject leader from leaving without transfer
+(skip) Team System > Team Disbanding > should disband team when only leader remains
+(skip) Team System > Team Disbanding > should reject disband if members remain
+(skip) Team System > Team Settings > should set team MOTD
+(skip) Team System > Team Settings > should update team settings
+(skip) Team System > Treasury > should deposit to treasury
+(skip) Team System > Treasury > should withdraw from treasury (leader)
+(skip) Team System > Treasury > should request treasury withdrawal (member)
+(skip) Team System > Treasury > should approve treasury request
+(skip) Team System > Treasury > should reject treasury request
+(skip) Team System > Treasury > should update treasury settings
+(skip) Team System > Open Join > should join open team
+(skip) Team System > Open Join > should reject join if below min level
+(skip) Team System > Open Join > should reject join if team not joinable
+
+ 0 pass
+ 26 skip
+ 1 fail
+Ran 27 tests across 1 files. [6.67s]

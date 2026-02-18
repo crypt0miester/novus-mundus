@@ -5,6 +5,66 @@
  */
 
 // ============================================================
+// Account Key Discriminator
+// ============================================================
+// Every on-chain account stores this as byte 0 so that a single
+// `onProgramAccountChange` subscription can route raw bytes to
+// the correct deserializer without knowing the PDA seeds.
+// Must match the Rust AccountKey enum in state/mod.rs exactly.
+// ============================================================
+
+export enum AccountKey {
+  GameEngine = 1,
+  Player = 2,
+  User = 3,
+  City = 4,
+  Team = 5,
+  TeamMemberSlot = 6,
+  TeamInvite = 7,
+  TreasuryRequest = 8,
+  Location = 9,
+  Encounter = 10,
+  Loot = 11,
+  Rally = 12,
+  RallyParticipant = 13,
+  Reinforcement = 14,
+  Event = 15,
+  EventParticipation = 16,
+  ResearchTemplate = 17,
+  ResearchProgress = 18,
+  HeroTemplate = 19,
+  HeroCollection = 20,
+  HeroMintReceipt = 21,
+  ShopConfig = 22,
+  ShopItem = 23,
+  ShopBundle = 24,
+  FlashSale = 25,
+  DailyDeal = 26,
+  WeeklySale = 27,
+  SeasonalSale = 28,
+  DaoPromotion = 29,
+  AllowedToken = 30,
+  PlayerPurchase = 31,
+  Estate = 32,
+  Expedition = 33,
+  ArenaSeason = 34,
+  ArenaParticipant = 35,
+  ArenaLoadout = 36,
+  DungeonRun = 37,
+  DungeonTemplate = 38,
+  DungeonLeaderboard = 39,
+  Castle = 40,
+  CastleGarrison = 41,
+  KingRegistry = 42,
+  CourtPosition = 43,
+  TeamCastleReward = 44,
+  ForgeConfig = 45,
+  ForgeSession = 46,
+  NameRecord = 47,
+  SanctuaryMeditation = 48,
+}
+
+// ============================================================
 // Subscription Tiers
 // ============================================================
 
@@ -184,21 +244,25 @@ export enum TeamMemberRank {
 // ============================================================
 
 export enum BuildingType {
-  None = 0,
-  Mansion = 1,
-  Barracks = 2,
-  Workshop = 3,
-  Vault = 4,
-  Dock = 5,
-  Forge = 6,
-  Market = 7,
-  Academy = 8,
-  Arena = 9,
-  Sanctuary = 10,
-  Observatory = 11,
-  Treasury = 12,
-  Citadel = 13,
-  Catacombs = 14,
+  Mansion = 0,
+  Barracks = 1,
+  Workshop = 2,
+  Vault = 3,
+  Dock = 4,
+  Forge = 5,
+  Market = 6,
+  Academy = 7,
+  Arena = 8,
+  Sanctuary = 9,
+  Observatory = 10,
+  Treasury = 11,
+  Citadel = 12,
+  Camp = 13,
+  Mine = 14,
+  Catacombs = 15,
+  Farm = 16,
+  Stables = 17,
+  Infirmary = 18,
 }
 
 // ============================================================

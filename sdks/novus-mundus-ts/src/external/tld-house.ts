@@ -9,18 +9,18 @@ import type { Connection } from '@solana/web3.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 // Re-export program IDs from main program module
-export { TLD_HOUSE_PROGRAM_ID, ALT_NAME_SERVICE_PROGRAM_ID } from '../program.ts';
+export { TLD_HOUSE_PROGRAM_ID, ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
 
 // Re-export PDA functions from main pda module
 export {
   deriveTldHousePda,
   deriveNameAccountPda,
   deriveMainDomainPda,
-} from '../pda.ts';
+} from '../pda';
 
 // Import for internal use
-import { ALT_NAME_SERVICE_PROGRAM_ID } from '../program.ts';
-import { deriveTldHousePda, deriveNameAccountPda, deriveMainDomainPda } from '../pda.ts';
+import { ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
+import { deriveTldHousePda, deriveNameAccountPda, deriveMainDomainPda } from '../pda';
 
 // ============================================================
 // Constants

@@ -17,8 +17,8 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -26,8 +26,8 @@ import {
   deriveArenaSeasonPda,
   deriveArenaParticipantPda,
   deriveArenaLoadoutPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Create Season (Admin)
@@ -38,9 +38,7 @@ export interface CreateSeasonAccounts {
   authority: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
-  /** City ID for the season */
-  cityId: number;
-  /** Season ID (auto-incremented, must be city.arena_season_id + 1) */
+  /** Season ID (must not already exist) */
   seasonId: number;
 }
 
@@ -55,6 +53,7 @@ export interface CreateSeasonParams {
   minLevelRequired: number;
 }
 
+/** ~10,000 CU */
 /**
  * Create a new arena season.
  *
@@ -67,30 +66,27 @@ export function createCreateSeasonInstruction(
   params: CreateSeasonParams
 ): TransactionInstruction {
   const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
 
-  // Rust account order (5 accounts):
+  // Rust account order (4 accounts):
   // 0. arena_season (WRITE)
   // 1. authority (SIGNER, WRITE)
   // 2. game_engine (READ)
-  // 3. city_account (WRITE)
-  // 4. system_program
+  // 3. system_program
   const keys = [
     { pubkey: season, isSigner: false, isWritable: true },
     { pubkey: accounts.authority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: city, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data (27 bytes):
-  // - city_id (u16)
+  // Instruction data (29 bytes):
+  // - season_id (u32)
   // - master_prize_pool (u64)
   // - daily_prize_pool (u64)
   // - daily_distribution_cap (u64)
   // - min_level_required (u8)
-  const writer = new BufferWriter(27);
-  writer.writeU16(accounts.cityId);
+  const writer = new BufferWriter(29);
+  writer.writeU32(accounts.seasonId);
   writer.writeU64(params.masterPrizePool);
   writer.writeU64(params.dailyPrizePool);
   writer.writeU64(params.dailyDistributionCap);
@@ -120,6 +116,7 @@ export interface JoinSeasonAccounts {
   seasonId: number;
 }
 
+/** ~30,000 CU */
 /**
  * Join an arena season.
  *
@@ -131,8 +128,8 @@ export function createJoinSeasonInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, accounts.owner);
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, accounts.owner);
+  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. arena_season (WRITE)
@@ -187,6 +184,7 @@ export interface UpdateLoadoutParams {
   armorPieces: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Update arena loadout for combat.
  *
@@ -197,7 +195,8 @@ export function createUpdateLoadoutInstruction(
   accounts: UpdateLoadoutAccounts,
   params: UpdateLoadoutParams
 ): TransactionInstruction {
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, accounts.owner);
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. loadout_account (WRITE)
@@ -267,6 +266,7 @@ export interface ChallengePlayerParams {
   matchTimestamp: BN | number | bigint;
 }
 
+/** ~40,000 CU */
 /**
  * Challenge another player in arena combat.
  *
@@ -281,10 +281,10 @@ export function createChallengePlayerInstruction(
   const [challengerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.challenger);
   const [defenderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.defenderAuthority);
   const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [challengerParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, accounts.challenger);
-  const [defenderParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, accounts.defenderAuthority);
-  const [challengerLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, accounts.challenger);
-  const [defenderLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, accounts.defenderAuthority);
+  const [challengerParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, challengerPlayer);
+  const [defenderParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, defenderPlayer);
+  const [challengerLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, challengerPlayer);
+  const [defenderLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, defenderPlayer);
 
   // Rust account order (14 accounts):
   // 0. challenger_authority (SIGNER)
@@ -351,6 +351,7 @@ export interface ClaimArenaDailyRewardAccounts {
   seasonId: number;
 }
 
+/** ~20,000 CU */
 /**
  * Claim daily arena reward.
  *
@@ -364,7 +365,7 @@ export function createClaimArenaDailyRewardInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
   const [noviMint] = deriveNoviMintPda();
   const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, accounts.playerOwner);
+  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
   const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
@@ -415,6 +416,7 @@ export interface ClaimMasterRewardAccounts {
   seasonId: number;
 }
 
+/** ~10,000 CU */
 /**
  * Claim end-of-season master reward.
  *
@@ -428,7 +430,7 @@ export function createClaimMasterRewardInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
   const [noviMint] = deriveNoviMintPda();
   const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, accounts.playerOwner);
+  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
   const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
@@ -479,6 +481,7 @@ export interface CloseSeasonAccounts {
   cityId: number;
 }
 
+/** ~5,000 CU */
 /**
  * Close an arena season.
  *

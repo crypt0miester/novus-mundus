@@ -17,9 +17,21 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 const MIME = {
   '.html': 'text/html',
   '.js':   'application/javascript',
+  '.mjs':  'application/javascript',
   '.json': 'application/json',
   '.css':  'text/css',
   '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg':  'image/svg+xml',
+  '.glb':  'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.ogg':  'audio/ogg',
+  '.mp3':  'audio/mpeg',
+  '.wav':  'audio/wav',
+  '.hdr':  'application/octet-stream',
+  '.wasm': 'application/wasm',
 };
 
 function sendJSON(res, status, obj) {
@@ -140,7 +152,12 @@ const server = http.createServer(async (req, res) => {
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
     const mime = MIME[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime });
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    });
     fs.createReadStream(filePath).pipe(res);
   } else {
     res.writeHead(404); res.end('Not found');

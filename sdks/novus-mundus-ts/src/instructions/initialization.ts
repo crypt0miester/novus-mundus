@@ -14,8 +14,8 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -23,8 +23,8 @@ import {
   deriveUserPda,
   deriveCityPda,
   deriveLocationPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Initialize Game Engine
@@ -50,6 +50,7 @@ export interface InitGameEngineParams {
   registrationClosesAt?: number;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize a kingdom GameEngine account and NOVI token mint.
  *
@@ -144,6 +145,7 @@ export interface InitPlayerAccounts {
   cityLongitude: number;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize a new player account.
  *
@@ -177,6 +179,9 @@ export function createInitPlayerInstruction(
   // Spawn location PDA derived from quantized spawn coordinates
   const [spawnLocation] = deriveLocationPda(accounts.gameEngine, accounts.startingCityId, spawnGridLat, spawnGridLong);
 
+  // User account PDA - must be created before player init
+  const [user] = deriveUserPda(accounts.owner);
+
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -185,6 +190,7 @@ export function createInitPlayerInstruction(
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: startingCity, isSigner: false, isWritable: true },
     { pubkey: spawnLocation, isSigner: false, isWritable: true },
+    { pubkey: user, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: getAssociatedTokenProgramId(), isSigner: false, isWritable: false },
@@ -216,6 +222,7 @@ export interface InitUserAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize a user account.
  *
@@ -266,10 +273,10 @@ export function createInitUserInstruction(
 // Initialize City
 // ============================================================
 
-// CityType is imported from '../types/enums.ts' via '../index.ts'
+// CityType is imported from '../types/enums' via '../index'
 // Re-export for convenience
-export { CityType } from '../types/enums.ts';
-import { CityType } from '../types/enums.ts';
+export { CityType } from '../types/enums';
+import { CityType } from '../types/enums';
 
 export interface InitCityAccounts {
   /** DAO authority (signer) - must match GameEngine.authority */
@@ -293,6 +300,7 @@ export interface InitCityParams {
   cityType: CityType;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize a new city account.
  * Only callable by DAO authority.
@@ -368,6 +376,7 @@ export interface CloseRegistrationAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Close kingdom registration.
  *
@@ -411,17 +420,31 @@ export interface BatchCitiesAccounts {
   cityAccounts: PublicKey[];
 }
 
+export interface CityInfo {
+  /** City name (max 32 bytes UTF-8) */
+  name: string;
+  /** Latitude */
+  lat: number;
+  /** Longitude */
+  lon: number;
+  /** Radius in km */
+  radiusKm: number;
+  /** City type: 0=Capital, 1=Trade, 2=Combat, 3=Resource */
+  cityType: number;
+}
+
 export interface BatchCitiesParams {
   /** First city ID in batch (e.g., 0, 8, 16, 24) */
   startCityId: number;
-  /** Number of cities to create (1-8) */
-  count: number;
+  /** City data for each city in the batch */
+  cities: CityInfo[];
 }
 
+/** ~5,000 CU */
 /**
  * Initialize multiple cities in a single transaction.
  *
- * Uses predefined city data from INITIAL_CITIES constant in Rust.
+ * City data (name, coordinates, radius, type) is passed via instruction data.
  * Call multiple times to initialize all cities (8 per batch due to account limits).
  *
  * Accounts:
@@ -433,16 +456,18 @@ export interface BatchCitiesParams {
  * Instruction data:
  * - start_city_id: u16
  * - count: u8
+ * - Per city: name_len (u8) + name (bytes) + lat (f64) + lon (f64) + radius (f32) + type (u8)
  */
 export function createBatchCitiesInstruction(
   accounts: BatchCitiesAccounts,
   params: BatchCitiesParams
 ): TransactionInstruction {
-  if (params.count < 1 || params.count > 8) {
+  const count = params.cities.length;
+  if (count < 1 || count > 8) {
     throw new Error('Count must be between 1 and 8');
   }
-  if (accounts.cityAccounts.length !== params.count) {
-    throw new Error(`Expected ${params.count} city accounts, got ${accounts.cityAccounts.length}`);
+  if (accounts.cityAccounts.length !== count) {
+    throw new Error(`Expected ${count} city accounts, got ${accounts.cityAccounts.length}`);
   }
 
   const keys = [
@@ -458,12 +483,281 @@ export function createBatchCitiesInstruction(
   // Add system program
   keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
 
-  // Instruction data: start_city_id (u16) + count (u8)
-  const writer = new BufferWriter(3);
+  // Calculate buffer size: header (3) + per city (1 + name_len + 8 + 8 + 4 + 1)
+  let bufSize = 3;
+  for (const city of params.cities) {
+    const nameBytes = Buffer.from(city.name, 'utf-8');
+    bufSize += 1 + nameBytes.length + 21; // name_len + name + lat + lon + radius + type
+  }
+
+  const writer = new BufferWriter(bufSize);
   writer.writeU16(params.startCityId);
-  writer.writeU8(params.count);
+  writer.writeU8(count);
+
+  // Write each city's data
+  for (const city of params.cities) {
+    const nameBytes = Buffer.from(city.name, 'utf-8');
+    if (nameBytes.length > 32) {
+      throw new Error(`City name "${city.name}" exceeds 32 bytes`);
+    }
+    writer.writeU8(nameBytes.length);
+    writer.writeBytes(nameBytes);
+    writer.writeF64(city.lat);
+    writer.writeF64(city.lon);
+    writer.writeF32(city.radiusKm);
+    writer.writeU8(city.cityType);
+  }
 
   const data = createInstructionData(DISCRIMINATORS.BATCH_CITIES, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Update Game Config
+// ============================================================
+
+import type {
+  GameCaps,
+  ArenaConfig,
+  ExpeditionConfig,
+  DungeonConfig,
+  CastleConfig,
+  CombatConfig,
+} from '../state/game-engine';
+
+import {
+  UPDATE_FLAGS,
+  serializeGameCaps,
+  serializeArenaConfig,
+  serializeExpeditionConfig,
+  serializeDungeonConfig,
+  serializeCastleConfig,
+  serializeCombatConfig,
+} from '../state/game-engine';
+
+export interface UpdateGameConfigAccounts {
+  /** DAO governance authority (signer) */
+  authority: PublicKey;
+  /** GameEngine PDA (writable) */
+  gameEngine: PublicKey;
+}
+
+export interface UpdateGameConfigParams {
+  /** Game caps (64 bytes) — min_account_age, prize caps, claim intervals */
+  capsConfig?: GameCaps;
+  /** Arena PvP config (136 bytes) */
+  arenaConfig?: ArenaConfig;
+  /** Expedition mining/fishing config (240 bytes) */
+  expeditionConfig?: ExpeditionConfig;
+  /** Dungeon config (224 bytes) */
+  dungeonConfig?: DungeonConfig;
+  /** Castle config (96 bytes) */
+  castleConfig?: CastleConfig;
+  /** Combat config (160 bytes) */
+  combatConfig?: CombatConfig;
+}
+
+/**
+ * Update GameEngine sub-configurations via DAO governance.
+ *
+ * Uses a u16 bitfield to selectively update configs.
+ * Only include the configs you want to change.
+ *
+ * Accounts:
+ * 0. [writable] game_engine: GameEngine PDA
+ * 1. [signer] authority: DAO governance authority
+ *
+ * Instruction data:
+ * - update_flags: u16 (bitfield)
+ * - For each set bit: raw #[repr(C)] struct bytes
+ */
+export function createUpdateGameConfigInstruction(
+  accounts: UpdateGameConfigAccounts,
+  params: UpdateGameConfigParams
+): TransactionInstruction {
+  const keys = [
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: true },
+    { pubkey: accounts.authority, isSigner: true, isWritable: false },
+  ];
+
+  // Build update flags and collect serialized config buffers.
+  // IMPORTANT: buffers must be in bit order (caps=0, arena=7, expedition=8, ...)
+  // because the on-chain code reads them sequentially by bit position.
+  let updateFlags = 0;
+  const configBuffers: Buffer[] = [];
+
+  if (params.capsConfig) {
+    updateFlags |= UPDATE_FLAGS.CAPS;
+    configBuffers.push(serializeGameCaps(params.capsConfig));
+  }
+  if (params.arenaConfig) {
+    updateFlags |= UPDATE_FLAGS.ARENA;
+    configBuffers.push(serializeArenaConfig(params.arenaConfig));
+  }
+  if (params.expeditionConfig) {
+    updateFlags |= UPDATE_FLAGS.EXPEDITION;
+    configBuffers.push(serializeExpeditionConfig(params.expeditionConfig));
+  }
+  if (params.dungeonConfig) {
+    updateFlags |= UPDATE_FLAGS.DUNGEON;
+    configBuffers.push(serializeDungeonConfig(params.dungeonConfig));
+  }
+  if (params.castleConfig) {
+    updateFlags |= UPDATE_FLAGS.CASTLE;
+    configBuffers.push(serializeCastleConfig(params.castleConfig));
+  }
+  if (params.combatConfig) {
+    updateFlags |= UPDATE_FLAGS.COMBAT;
+    configBuffers.push(serializeCombatConfig(params.combatConfig));
+  }
+
+  if (updateFlags === 0) {
+    throw new Error('At least one config must be provided');
+  }
+
+  // Instruction data: update_flags (u16) + concatenated config bytes
+  const flagsBuf = Buffer.alloc(2);
+  flagsBuf.writeUInt16LE(updateFlags);
+  const instructionPayload = Buffer.concat([flagsBuf, ...configBuffers]);
+
+  const data = createInstructionData(DISCRIMINATORS.UPDATE_GAME_CONFIG, instructionPayload);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Set Terrain
+// ============================================================
+
+import { type CityTerrain, serializeTerrain } from '../calculators/terrain';
+
+export interface SetTerrainAccounts {
+  /** DAO authority (signer, payer for realloc) */
+  daoAuthority: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+}
+
+export interface SetTerrainParams {
+  /** City ID */
+  cityId: number;
+  /** Terrain configuration */
+  terrain: CityTerrain;
+}
+
+/**
+ * Set or replace terrain data on an existing city account.
+ * DAO-only instruction. Reallocates the city account to fit anchors.
+ *
+ * Accounts:
+ * 0. [signer, writable] dao_authority: Must match GameEngine.authority
+ * 1. [] game_engine: GameEngine account
+ * 2. [writable] city: City PDA
+ * 3. [] system_program
+ *
+ * Instruction data:
+ * - city_id: u16 (2 bytes)
+ * - terrain payload: seed(4) + waterLine(1) + peakLine(1) + anchorCount(2) + version(1) + reserved(7) + anchors(N×8)
+ */
+export function createSetTerrainInstruction(
+  accounts: SetTerrainAccounts,
+  params: SetTerrainParams,
+): TransactionInstruction {
+  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: city, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // city_id (2 bytes) + serialized terrain (header + anchors)
+  const terrainBuf = serializeTerrain(params.terrain);
+  const writer = new BufferWriter(2 + terrainBuf.length);
+  writer.writeU16(params.cityId);
+  writer.writeBytes(terrainBuf);
+
+  const data = createInstructionData(DISCRIMINATORS.SET_TERRAIN, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// ============================================================
+// Append Terrain Anchors
+// ============================================================
+
+import { type Anchor, ANCHOR_SIZE } from '../calculators/terrain';
+
+export interface AppendTerrainAccounts {
+  /** DAO authority (signer, payer for realloc) */
+  daoAuthority: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+}
+
+export interface AppendTerrainParams {
+  /** City ID */
+  cityId: number;
+  /** Anchors to append */
+  anchors: Anchor[];
+}
+
+/**
+ * Append terrain anchors to an existing city account.
+ * The city must already have terrain configured via set_terrain.
+ * Use this to add more anchors than fit in a single transaction.
+ *
+ * Accounts:
+ * 0. [signer, writable] dao_authority
+ * 1. [] game_engine
+ * 2. [writable] city PDA
+ * 3. [] system_program
+ *
+ * Instruction data:
+ * - city_id: u16 (2 bytes)
+ * - anchors: N × 8 bytes (raw anchor data)
+ */
+export function createAppendTerrainInstruction(
+  accounts: AppendTerrainAccounts,
+  params: AppendTerrainParams,
+): TransactionInstruction {
+  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: city, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // city_id (2 bytes) + raw anchor bytes (N × 8)
+  const writer = new BufferWriter(2 + params.anchors.length * ANCHOR_SIZE);
+  writer.writeU16(params.cityId);
+
+  for (const a of params.anchors) {
+    writer.writeI16(a.x);
+    writer.writeI16(a.y);
+    writer.writeU8(a.mass);
+    writer.writeU8(a.lift);
+    writer.writeI8(a.pushX);
+    writer.writeI8(a.pushY);
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.APPEND_TERRAIN, writer.toBuffer());
 
   return new TransactionInstruction({
     keys,

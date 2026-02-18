@@ -4,8 +4,8 @@
  * Networth, resource generation, and consumption calculations.
  */
 
-import { BPS_100, applyBps, applyBpsBonus, mulDiv } from './constants.ts';
-import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time.ts';
+import { BPS_100, applyBps, applyBpsBonus, mulDiv } from './constants';
+import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 
 // ============================================================
 // Networth Calculation
@@ -220,6 +220,32 @@ export function calculateFishingWithTimeBonus(
   return amount;
 }
 
+/**
+ * Calculate farming output with time bonus.
+ *
+ * Farming uses defensive units (not operatives).
+ * Farm building provides produce bonus (50 bps/level).
+ *
+ * Note: On-chain, farming uses the Fishing activity multiplier
+ * (CollectionType::Fishing | CollectionType::Farming => ActivityType::Fishing).
+ */
+export function calculateFarmingWithTimeBonus(
+  baseAmount: number,
+  timestamp: number,
+  longitude: number,
+  farmingBonusBps: number = 0
+): number {
+  const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
+  const multiplier = getActivityMultiplier(ActivityType.Fishing, timeOfDay);
+  let amount = Math.floor(baseAmount * multiplier);
+
+  if (farmingBonusBps > 0) {
+    amount = applyBpsBonus(amount, farmingBonusBps);
+  }
+
+  return amount;
+}
+
 // ============================================================
 // Resource Consumption
 // ============================================================
@@ -312,40 +338,6 @@ export function calculateStorageCapacity(
 // ============================================================
 // Resource Transfer Calculations
 // ============================================================
-
-/**
- * Calculate vault transfer fee.
- *
- * @param amount - Amount to transfer
- * @param feeBps - Fee in basis points
- * @returns Fee amount
- */
-export function calculateVaultFee(amount: number, feeBps: number): number {
-  return applyBps(amount, feeBps);
-}
-
-/**
- * Calculate amount after vault fee.
- *
- * @param amount - Gross amount
- * @param feeBps - Fee in basis points
- * @returns Net amount after fee
- */
-export function calculateAmountAfterFee(amount: number, feeBps: number): number {
-  const fee = applyBps(amount, feeBps);
-  return amount - fee;
-}
-
-/**
- * Calculate cash transfer tax.
- *
- * @param amount - Amount to transfer
- * @param taxBps - Tax in basis points
- * @returns Tax amount
- */
-export function calculateTransferTax(amount: number, taxBps: number): number {
-  return applyBps(amount, taxBps);
-}
 
 // ============================================================
 // Resource Ratio Calculations

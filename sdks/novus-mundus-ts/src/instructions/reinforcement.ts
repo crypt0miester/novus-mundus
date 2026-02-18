@@ -16,14 +16,14 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveReinforcementPda,
   deriveCityPda,
   deriveTeamPda,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Send Reinforcements
@@ -63,6 +63,7 @@ export interface SendReinforcementParams {
   heroSlot: number;
 }
 
+/** ~30,000 CU */
 /**
  * Send reinforcements to a teammate.
  *
@@ -159,6 +160,7 @@ export interface ProcessArrivalAccounts {
   destinationPlayer: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Process reinforcement arrival at destination.
  *
@@ -205,6 +207,7 @@ export interface RecallReinforcementAccounts {
   destinationCityId: number;
 }
 
+/** ~20,000 CU */
 /**
  * Recall reinforcements back to sender.
  *
@@ -265,6 +268,7 @@ export interface RelieveReinforcementAccounts {
   destinationCityId: number;
 }
 
+/** ~20,000 CU */
 /**
  * Relieve (send back) reinforcements from destination.
  *
@@ -319,8 +323,11 @@ export interface ProcessReturnAccounts {
   senderPlayer: PublicKey;
   /** Sender's wallet (receives rent refund) */
   senderOwner: PublicKey;
+  /** Sender's estate account (for wounded tracking) */
+  estateAccount: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Process reinforcement return to sender.
  *
@@ -328,10 +335,11 @@ export interface ProcessReturnAccounts {
  * Returns surviving units/weapons to sender and closes the reinforcement account.
  * Rent is refunded to sender.
  *
- * On-chain accounts (3):
+ * On-chain accounts (4):
  * 0. [writable] reinforcement: ReinforcementAccount PDA
  * 1. [writable] sender_player: Sender's PlayerAccount PDA
  * 2. [writable] sender_owner: Sender's wallet (receives rent)
+ * 3. [writable] estate_account: Sender's EstateAccount PDA (wounded tracking)
  *
  * On-chain data: None
  */
@@ -342,6 +350,7 @@ export function createProcessReturnInstruction(
     { pubkey: accounts.reinforcement, isSigner: false, isWritable: true },
     { pubkey: accounts.senderPlayer, isSigner: false, isWritable: true },
     { pubkey: accounts.senderOwner, isSigner: false, isWritable: true },
+    { pubkey: accounts.estateAccount, isSigner: false, isWritable: true },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.REINFORCEMENT_PROCESS_RETURN);
@@ -371,6 +380,7 @@ export interface ReinforcementSpeedupParams {
   speedupTier: 1 | 2;
 }
 
+/** ~5,000 CU */
 /**
  * Speed up reinforcement travel by spending gems.
  *

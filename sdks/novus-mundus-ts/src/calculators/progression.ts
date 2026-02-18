@@ -4,8 +4,8 @@
  * XP, leveling, and progression calculations.
  */
 
-import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time.ts';
-import { applyBpsBonus } from './constants.ts';
+import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
+import { applyBpsBonus } from './constants';
 
 // ============================================================
 // XP Requirements

@@ -8,8 +8,8 @@ import {
   GOLDEN_ROOT,
   applyBps,
   chainBps,
-} from './constants.ts';
-import { getActivityMultiplier, TimeOfDay, ActivityType } from './time.ts';
+} from './constants';
+import { getActivityMultiplier, TimeOfDay, ActivityType } from './time';
 
 // ============================================================
 // Oscillation Multiplier

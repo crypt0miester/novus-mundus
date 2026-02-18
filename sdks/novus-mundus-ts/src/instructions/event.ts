@@ -14,16 +14,16 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
   deriveEventPda,
   deriveEventParticipationPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Create Event (Admin)
@@ -63,6 +63,7 @@ export interface CreateEventParams {
   autoActivate: boolean;
 }
 
+/** ~10,000 CU */
 /**
  * Create a new event.
  *
@@ -75,10 +76,17 @@ export function createCreateEventInstruction(
 ): TransactionInstruction {
   const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
 
+  // Rust account order:
+  // 0. payer (SIGNER, WRITE)
+  // 1. game_engine (READ)
+  // 2. event (WRITE)
+  // 3. dao_authority (SIGNER)
+  // 4. system_program (READ)
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: event, isSigner: false, isWritable: true },
+    { pubkey: accounts.authority, isSigner: true, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
@@ -93,12 +101,10 @@ export function createCreateEventInstruction(
   }
 
   // Instruction data
-  const writer = new BufferWriter(100);
-  writer.writeU32(accounts.eventId);
+  const writer = new BufferWriter(200);
+  writer.writeU64(accounts.eventId);
   writer.writeU8(nameBytes.length);
   writer.writeBytes(nameBytes);
-  // Pad to 64 bytes
-  writer.writeZeros(64 - nameBytes.length);
   writer.writeI64(params.startTime);
   writer.writeI64(params.endTime);
   writer.writeU8(params.eventType);
@@ -107,6 +113,12 @@ export function createCreateEventInstruction(
   writer.writeU8(params.requiredSubscriptionTier);
   writer.writeU8(params.prizeType);
   writer.writeU64(params.prizeAmount);
+  // Prize token mint (32 bytes, zeroed for non-SPL prizes)
+  if (params.prizeTokenMint) {
+    writer.writeBytes(params.prizeTokenMint.toBuffer());
+  } else {
+    writer.writeZeros(32);
+  }
   writer.writeBool(params.autoActivate);
 
   const data = createInstructionData(DISCRIMINATORS.EVENT_CREATE, writer.toBuffer());
@@ -133,6 +145,7 @@ export interface JoinEventAccounts {
   eventId: number;
 }
 
+/** ~10,000 CU */
 /**
  * Join an event to start tracking progress.
  *
@@ -187,6 +200,7 @@ export interface FinalizeEventAccounts {
   eventId: number;
 }
 
+/** ~5,000 CU */
 /**
  * Finalize an event after it ends.
  *
@@ -232,6 +246,7 @@ export interface ClaimPrizeAccounts {
   winnerSplTokenAccount?: PublicKey;
 }
 
+/** ~10,000 CU */
 /**
  * Claim event prize for leaderboard placement.
  *
@@ -256,7 +271,7 @@ export function createClaimPrizeInstruction(
   const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
   const [participation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.winnerOwner);
   const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(accounts.winnerOwner);
+  const [estate] = deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 

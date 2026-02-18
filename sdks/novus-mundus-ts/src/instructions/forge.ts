@@ -14,16 +14,16 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
   deriveCraftedEquipmentPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
-import { CraftableEquipment, QualityTier } from '../types/enums.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { CraftableEquipment, QualityTier } from '../types/enums';
 
 // ============================================================
 // Initialize Crafted Equipment
@@ -36,6 +36,7 @@ export interface InitializeForgeAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~10,000 CU */
 /**
  * Initialize crafted equipment account.
  *
@@ -53,7 +54,7 @@ export function createInitializeForgeInstruction(
   accounts: InitializeForgeAccounts
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
 
   const keys = [
@@ -91,6 +92,7 @@ export interface StartCraftParams {
   qualityTier: QualityTier | number;
 }
 
+/** ~10,000 CU */
 /**
  * Start a staged tempering craft.
  *
@@ -102,7 +104,7 @@ export function createStartCraftInstruction(
   params: StartCraftParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
   const [noviMint] = deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
@@ -142,6 +144,7 @@ export interface StrikeAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Strike during a tempering window.
  *
@@ -152,7 +155,7 @@ export function createStrikeInstruction(
   accounts: StrikeAccounts
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
 
   // Rust account order:
@@ -187,6 +190,7 @@ export interface AbandonCraftAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Abandon an in-progress craft.
  *
@@ -235,6 +239,7 @@ export interface EquipParams {
   qualityTier: QualityTier | number;
 }
 
+/** ~5,000 CU */
 /**
  * Equip a crafted item.
  *

@@ -15,8 +15,8 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -25,8 +25,8 @@ import {
   deriveTeamSlotPda,
   deriveTeamInvitePda,
   deriveTreasuryRequestPda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // ============================================================
 // Team Create
@@ -45,6 +45,7 @@ export interface TeamCreateParams {
   name: string;
 }
 
+/** ~50,000 CU */
 /**
  * Create a new team.
  *
@@ -69,7 +70,7 @@ export function createTeamCreateInstruction(
 
   const teamIdBuffer = teamIdBn.toArrayLike(Buffer, 'le', 8);
   const [team] = PublicKey.findProgramAddressSync(
-    [Buffer.from('team'), teamIdBuffer],
+    [Buffer.from('team'), accounts.gameEngine.toBuffer(), teamIdBuffer],
     PROGRAM_ID
   );
 
@@ -89,12 +90,13 @@ export function createTeamCreateInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: name_len (u8) + name (bytes)
+  // Instruction data: team_id (u64) + name_len (u8) + name (bytes)
   const nameBytes = Buffer.from(params.name, 'utf8');
   if (nameBytes.length > 32) {
     throw new Error('Team name too long (max 32 bytes)');
   }
-  const writer = new BufferWriter(1 + nameBytes.length);
+  const writer = new BufferWriter(8 + 1 + nameBytes.length);
+  writer.writeU64(teamIdBn);
   writer.writeU8(nameBytes.length);
   writer.writeBytes(nameBytes);
 
@@ -124,6 +126,7 @@ export interface TeamJoinAccounts {
   slotIndex: number;
 }
 
+/** ~5,000 CU */
 /**
  * Join an open team (no invite required).
  *
@@ -185,6 +188,7 @@ export interface TeamLeaveAccounts {
   slotIndex: number;
 }
 
+/** ~5,000 CU */
 /**
  * Leave a team.
  *
@@ -242,6 +246,7 @@ export interface TeamDisbandAccounts {
   teamId: BN | number | bigint;
 }
 
+/** ~10,000 CU */
 /**
  * Disband a team. Only leader can do this.
  *
@@ -303,6 +308,7 @@ export interface TeamInviteParams {
   expiresInSeconds?: BN | number | bigint;
 }
 
+/** ~30,000 CU */
 /**
  * Invite a player to join the team.
  *
@@ -379,6 +385,7 @@ export interface TeamAcceptInviteAccounts {
   inviteRefund: PublicKey;
 }
 
+/** ~35,000 CU */
 /**
  * Accept a team invite.
  *
@@ -445,6 +452,7 @@ export interface TeamDeclineInviteAccounts {
   inviterRefund: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Decline a team invite.
  *
@@ -502,6 +510,7 @@ export interface TeamCancelInviteAccounts {
   inviteePlayer: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Cancel a pending team invite.
  *
@@ -573,6 +582,7 @@ export interface TeamKickMemberAccounts {
   kickedOwner: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Kick a member from the team.
  *
@@ -650,6 +660,7 @@ export interface TeamPromoteMemberParams {
   newRank: number;
 }
 
+/** ~5,000 CU */
 /**
  * Promote a team member to a higher rank.
  *
@@ -725,6 +736,7 @@ export interface TeamDemoteMemberParams {
   newRank: number;
 }
 
+/** ~5,000 CU */
 /**
  * Demote a team member to a lower rank.
  *
@@ -797,6 +809,7 @@ export interface TeamTransferLeadershipAccounts {
   newSlotIndex: number;
 }
 
+/** ~5,000 CU */
 /**
  * Transfer team leadership to another member.
  *
@@ -868,6 +881,7 @@ export interface TeamSetMotdParams {
   motd: string;
 }
 
+/** ~15,000 CU */
 /**
  * Set the team's Message of the Day.
  *
@@ -948,6 +962,7 @@ export interface TeamUpdateSettingsParams {
   minLevelToJoin: number;
 }
 
+/** ~15,000 CU */
 /**
  * Update team settings (public/private, min level).
  *
@@ -1014,6 +1029,7 @@ export interface TeamDepositTreasuryParams {
   amount: BN | number | bigint;
 }
 
+/** ~10,000 CU */
 /**
  * Deposit cash into the team treasury.
  *
@@ -1075,6 +1091,7 @@ export interface TeamWithdrawTreasuryParams {
   amount: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Withdraw cash from team treasury (instant - within limits).
  *
@@ -1142,6 +1159,7 @@ export interface TeamTreasuryRequestWithdrawParams {
   amount: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Request a treasury withdrawal (requires approval).
  *
@@ -1215,6 +1233,7 @@ export interface TeamTreasuryApproveRequestAccounts {
   requesterRefund: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Approve a treasury withdrawal request.
  *
@@ -1287,6 +1306,7 @@ export interface TeamTreasuryRejectRequestAccounts {
   requesterRefund: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Reject a treasury withdrawal request.
  *
@@ -1355,6 +1375,7 @@ export interface TeamTreasuryExecuteRequestAccounts {
   slotIndex: number;
 }
 
+/** ~5,000 CU */
 /**
  * Execute a treasury withdrawal request after cooldown.
  *
@@ -1417,6 +1438,7 @@ export interface TeamTreasuryCancelRequestAccounts {
   teamId: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Cancel own pending treasury withdrawal request.
  *
@@ -1484,6 +1506,7 @@ export interface TeamUpdateTreasurySettingsParams {
   cooldownHours: number;
 }
 
+/** ~5,000 CU */
 /**
  * Update team treasury security settings (leader only).
  *

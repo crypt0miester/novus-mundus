@@ -14,16 +14,16 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
   deriveResearchPda,
   deriveResearchTemplatePda,
-} from '../pda.ts';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
+} from '../pda';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // Note: TOKEN_PROGRAM_ID used for start_research
 // Note: getAssociatedTokenAddressSyncForPda used for start_research
@@ -33,9 +33,7 @@ import { getAssociatedTokenAddressSyncForPda } from '../utils/token.ts';
 // ============================================================
 
 export interface InitializeTemplateAccounts {
-  /** Payer for account creation */
-  payer: PublicKey;
-  /** DAO authority (signer) */
+  /** DAO authority (signer + payer) */
   daoAuthority: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
@@ -46,28 +44,32 @@ export interface InitializeTemplateParams {
   researchType: number;
   /** Research category (0=Battle, 1=Economy, 2=Growth) */
   category: number;
-  /** Base NOVI cost */
+  /** Max level for this research (5-25) */
+  maxLevel: number;
+  /** Base time in seconds for level 1 */
+  baseTimeSeconds: number;
+  /** Base NOVI cost for level 1 */
   baseCost: BN | number | bigint;
-  /** Base duration in seconds */
-  baseDuration: BN | number | bigint;
   /** Buff type for this research */
   buffType: number;
   /** Buff per level in basis points */
   buffPerLevelBps: number;
-  /** Max level for this research */
-  maxLevel: number;
-  /** Required level to unlock */
-  requiredPlayerLevel: number;
-  /** Prerequisite research type (-1 for none) */
+  /** Prerequisite research type (255 or -1 for none) */
   prerequisiteType: number;
   /** Required level of prerequisite */
   prerequisiteLevel: number;
+  /** Gem cost per minute for speed-up */
+  gemCostPerMinute: number;
 }
 
+/** ~5,000 CU */
 /**
  * Initialize a research template.
  *
  * Admin-only. Creates a research node definition.
+ *
+ * Rust account order: [dao_authority, research_template, game_engine, system_program]
+ * Rust instruction data: 22 bytes
  */
 export function createInitializeTemplateInstruction(
   accounts: InitializeTemplateAccounts,
@@ -75,25 +77,36 @@ export function createInitializeTemplateInstruction(
 ): TransactionInstruction {
   const [template] = deriveResearchTemplatePda(params.researchType);
 
+  // Rust: [dao_authority, research_template, game_engine, system_program]
   const keys = [
-    { pubkey: accounts.payer, isSigner: true, isWritable: true },
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(28);
+  // Rust expects exactly 22 bytes:
+  // [0] research_type: u8
+  // [1] category: u8
+  // [2] max_level: u8
+  // [3..7] base_time_seconds: u32
+  // [7..15] base_novi_cost: u64
+  // [15] buff_type: u8
+  // [16..18] buff_per_level_bps: u16
+  // [18] prerequisite_research: u8
+  // [19] prerequisite_level: u8
+  // [20..22] gem_cost_per_minute: u16
+  const writer = new BufferWriter(22);
   writer.writeU8(params.researchType);
   writer.writeU8(params.category);
+  writer.writeU8(params.maxLevel);
+  writer.writeU32(params.baseTimeSeconds);
   writer.writeU64(params.baseCost);
-  writer.writeI64(params.baseDuration);
   writer.writeU8(params.buffType);
   writer.writeU16(params.buffPerLevelBps);
-  writer.writeU8(params.maxLevel);
-  writer.writeU8(params.requiredPlayerLevel);
-  writer.writeI8(params.prerequisiteType);
+  writer.writeU8(params.prerequisiteType === -1 ? 255 : params.prerequisiteType);
   writer.writeU8(params.prerequisiteLevel);
+  writer.writeU16(params.gemCostPerMinute);
 
   const data = createInstructionData(DISCRIMINATORS.RESEARCH_INIT_TEMPLATE, writer.toBuffer());
 
@@ -128,6 +141,7 @@ export interface UpdateTemplateParams {
   maxLevel?: number;
 }
 
+/** ~5,000 CU */
 /**
  * Update a research template.
  *
@@ -171,6 +185,7 @@ export interface CreateProgressAccounts {
   gameEngine: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Create research progress account.
  *
@@ -182,10 +197,12 @@ export function createCreateProgressInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [research] = deriveResearchPda(player);
 
+  // Rust order: [player_owner, research_progress, player_account, payer, system_program]
   const keys = [
-    { pubkey: accounts.owner, isSigner: true, isWritable: true },
-    { pubkey: player, isSigner: false, isWritable: false },
-    { pubkey: research, isSigner: false, isWritable: true },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },   // player_owner + payer
+    { pubkey: research, isSigner: false, isWritable: true },         // research_progress
+    { pubkey: player, isSigner: false, isWritable: true },           // player_account (for extension unlock)
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },    // payer (same as owner)
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
@@ -211,6 +228,7 @@ export interface StartResearchAccounts {
   researchType: number;
 }
 
+/** ~15,000 CU */
 /**
  * Start researching a node.
  *
@@ -222,7 +240,7 @@ export function createStartResearchInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [research] = deriveResearchPda(player);
   const [template] = deriveResearchTemplatePda(accounts.researchType);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
   const [noviMint] = deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
@@ -266,6 +284,7 @@ export interface CompleteResearchAccounts {
   researchType: number;
 }
 
+/** ~15,000 CU */
 /**
  * Complete research and claim buffs.
  *
@@ -312,6 +331,7 @@ export interface SpeedUpResearchParams {
   speedUpSeconds: BN | number | bigint;
 }
 
+/** ~5,000 CU */
 /**
  * Speed up active research using gems.
  *
@@ -366,6 +386,7 @@ export interface CancelResearchAccounts {
   researchType: number;
 }
 
+/** ~5,000 CU */
 /**
  * Cancel active research.
  *
@@ -418,6 +439,7 @@ export interface AscendParams {
   researchType: number;
 }
 
+/** ~10,000 CU */
 /**
  * Ascend a maxed research node.
  *
@@ -441,7 +463,7 @@ export function createAscendInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [research] = deriveResearchPda(player);
   const [template] = deriveResearchTemplatePda(params.researchType);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

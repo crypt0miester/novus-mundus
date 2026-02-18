@@ -1,0 +1,129 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/11-estate.test.ts:
+
+[1m[34m━━━ Estate System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.8s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.4s.
+(skip) Estate System > Estate Creation > should create new estate
+(skip) Estate System > Estate Creation > should reject duplicate estate creation
+(skip) Estate System > Estate Creation > should start with base plots
+(skip) Estate System > Building Construction > should start building construction
+(skip) Estate System > Building Construction > should reject building duplicate type
+(skip) Estate System > Building Construction > should reject building invalid type
+(skip) Estate System > Building Construction > should complete building construction
+(skip) Estate System > Building Upgrades > should upgrade existing building
+(skip) Estate System > Building Upgrades > should reject upgrade of max level building
+(skip) Estate System > Building Upgrades > should reject upgrade while another upgrade in progress
+(skip) Estate System > Building Upgrades > should increase bonuses on upgrade
+[PlayerFactory] Initializing player 0 (city 0)
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1771315567[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1771315567[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35minit user[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35minit player[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4gvrFEKyWN..[0m [33mTotal 6,445 / 524,346 CU[0m
+[2m[onchain][0m [2m59GjN571hx..[0m [36m⚡ EstateCreated[0m [2mestate=2zEozDGn.. player=8368TZj8.. playerName=Player #1 timestamp=1771315567[0m
+[2m[onchain][0m [2m59GjN571hx..[0m [36m⚡ ItemPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1771315567[0m
+[2m[onchain][0m [2m59GjN571hx..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m59GjN571hx..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m59GjN571hx..[0m [33mTotal 12,564 / 395,983 CU[0m
+[2m[onchain][0m [2m5UPHkDnoA6..[0m [36m⚡ PlotPurchased[0m [2mplayer=8368TZj8.. playerName=Player #1 plot=1 cost=100000 totalPlots=2 timestamp=1771315568[0m
+[2m[onchain][0m [2m5UPHkDnoA6..[0m [35mbuy plot[0m
+[2m[onchain][0m [2m5UPHkDnoA6..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5UPHkDnoA6..[0m [33mTotal 6,819 / 200,000 CU[0m
+[32m  ✓ tx [2m5UPHkDnoA6dj..[0m[0m
+(pass) Estate System > Plot Purchases > should buy additional plot [1884.32ms]
+(skip) Estate System > Plot Purchases > should reject buying when at max plots
+[PlayerFactory] Initializing player 1 (city 1)
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1771315569[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1771315569[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35minit user[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35minit player[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2NbVuHTCsq..[0m [33mTotal 4,945 / 512,354 CU[0m
+[2m[onchain][0m [2m2BHVmQYXue..[0m [36m⚡ EstateCreated[0m [2mestate=CJVxU1P5.. player=DTpJZyJQ.. playerName=Player #2 timestamp=1771315569[0m
+[2m[onchain][0m [2m2BHVmQYXue..[0m [36m⚡ ItemPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 itemId=9999 quantity=10 price=10000 currency=0 timestamp=1771315569[0m
+[2m[onchain][0m [2m2BHVmQYXue..[0m [35mcreate estate[0m
+[2m[onchain][0m [2m2BHVmQYXue..[0m [35mpurchase item[0m
+[2m[onchain][0m [2m2BHVmQYXue..[0m [33mTotal 12,564 / 395,983 CU[0m
+[32m  ✓ tx [2m2isVwscb9EhE..[0m[0m
+[2m[onchain][0m [2m2isVwscb9E..[0m [36m⚡ PlotPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 plot=1 cost=100000 totalPlots=2 timestamp=1771315570[0m
+[2m[onchain][0m [2m2isVwscb9E..[0m [35mbuy plot[0m
+[2m[onchain][0m [2m2isVwscb9E..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m2isVwscb9E..[0m [33mTotal 6,819 / 200,000 CU[0m
+[32m  ✓ tx [2m5qrfUa7sjG7s..[0m[0m
+[2m[onchain][0m [2m5qrfUa7sjG..[0m [36m⚡ PlotPurchased[0m [2mplayer=DTpJZyJQ.. playerName=Player #2 plot=2 cost=261800 totalPlots=3 timestamp=1771315580[0m
+[2m[onchain][0m [2m5qrfUa7sjG..[0m [35mbuy plot[0m
+[2m[onchain][0m [2m5qrfUa7sjG..[0m [35mInstruction: Burn[0m
+[2m[onchain][0m [2m5qrfUa7sjG..[0m [33mTotal 6,819 / 200,000 CU[0m
+(pass) Estate System > Plot Purchases > should scale plot cost with count [11633.46ms]
+(skip) Estate System > Daily Activities > should perform daily activity
+(skip) Estate System > Daily Activities > should reject duplicate daily activity
+(skip) Estate System > Daily Activities > requires clock advancement to test midnight reset
+(skip) Estate System > Daily Claims > should claim daily rewards
+(skip) Estate System > Daily Claims > should scale rewards with building levels
+(skip) Estate System > Daily Claims > should track claim streak
+(skip) Estate System > Building Types > should build barracks for unit bonuses
+(skip) Estate System > Building Types > should build market for trade bonuses
+(skip) Estate System > Building Types > should build research lab for research speed
+(skip) Estate System > Building Types > should build workshop for production
+(skip) Estate System > Building Types > should build observatory for collection bonus
+(skip) Estate System > Building Types > should build camp for operative hiring
+(skip) Estate System > Building Types > should build mine for mining expeditions
+(skip) Estate System > Building Types > should build catacombs for dungeon access
+(skip) Estate System > Building Types > should build farm for produce collection
+(skip) Estate System > Building Types > should build stables for travel gating
+(skip) Estate System > Building Types > should build infirmary for unit recovery
+(skip) Estate System > Resource Production > should generate passive resources
+(skip) Estate System > Resource Production > requires building upgrade infrastructure to compare levels
+(skip) Estate System > Resource Production > requires time advancement to hit production cap
+(skip) Estate System > Estate Bonuses > should apply synchrony bonus
+(skip) Estate System > Estate Bonuses > should apply building-specific bonuses
+(skip) Estate System > Estate Bonuses > requires many max-level buildings to hit bonus cap
+
+ 2 pass
+ 35 skip
+ 0 fail
+ 5 expect() calls
+Ran 37 tests across 1 files. [17.88s]

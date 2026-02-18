@@ -6,7 +6,7 @@
  */
 
 import BN from 'bn.js';
-import type { NoviPurchaseConfig } from '../state/game-engine.ts';
+import type { NoviPurchaseConfig } from '../state/game-engine';
 
 // ============================================================
 // Types

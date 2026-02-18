@@ -10,15 +10,15 @@ import {
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveCityPda,
   deriveEstatePda,
   deriveEventParticipationPda,
   deriveEventPda,
-} from '../pda.ts';
+} from '../pda';
 
 // ============================================================
 // Attack Player (PvP)
@@ -48,6 +48,7 @@ export interface AttackPlayerParams {
   driveBy: boolean;
 }
 
+/** ~75,000 CU */
 /**
  * Attack another player (PvP combat).
  *
@@ -73,6 +74,8 @@ export function createAttackPlayerInstruction(
   const [attackerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.attacker);
   const [attackerCity] = deriveCityPda(accounts.gameEngine, accounts.attackerCityId);
   const [defenderCity] = deriveCityPda(accounts.gameEngine, accounts.defenderCityId);
+  const [attackerEstate] = deriveEstatePda(attackerPlayer);
+  const [defenderEstate] = deriveEstatePda(accounts.defenderPlayer);
 
   const keys = [
     { pubkey: attackerPlayer, isSigner: false, isWritable: true },
@@ -81,6 +84,8 @@ export function createAttackPlayerInstruction(
     { pubkey: attackerCity, isSigner: false, isWritable: false },
     { pubkey: defenderCity, isSigner: false, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: attackerEstate, isSigner: false, isWritable: true },
+    { pubkey: defenderEstate, isSigner: false, isWritable: true },
   ];
 
   // Optional attacker event accounts (must be paired)
@@ -127,7 +132,7 @@ export interface AttackEncounterAccounts {
   eventId?: number;
   /**
    * Optional: Loot account (required if encounter will die).
-   * Derive using deriveLootPda(owner, lootId) where lootId = player.lootCounter
+   * Derive using deriveLootPda(playerPda, lootId) where lootId = player.lootCounter
    */
   loot?: PublicKey;
   /**
@@ -147,6 +152,7 @@ export interface AttackEncounterParams {
   encounterId: bigint | number;
 }
 
+/** ~50,000 CU */
 /**
  * Attack an encounter (PvE combat).
  *
@@ -177,7 +183,7 @@ export function createAttackEncounterInstruction(
   params: AttackEncounterParams
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   // Base accounts (always required)
   const keys = [

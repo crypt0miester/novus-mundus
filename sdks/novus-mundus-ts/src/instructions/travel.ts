@@ -13,14 +13,15 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
   deriveCityPda,
   deriveLocationPda,
-} from '../pda.ts';
+  deriveEstatePda,
+} from '../pda';
 
 // ============================================================
 // Intercity Start
@@ -35,9 +36,13 @@ export interface IntercityStartAccounts {
   originCityId: number;
   /** Destination city ID */
   destinationCityId: number;
+  /** Destination grid latitude (i32) */
+  destGridLat: number;
+  /** Destination grid longitude (i32) */
+  destGridLong: number;
   /** Origin location PDA (player's current cell) */
   originLocation: PublicKey;
-  /** Destination location PDA (city center cell) */
+  /** Destination location PDA */
   destinationLocation: PublicKey;
   /** Account to receive origin location rent refund */
   originCreatorRefund: PublicKey;
@@ -45,6 +50,7 @@ export interface IntercityStartAccounts {
   bumpedPlayer?: PublicKey;
 }
 
+/** ~55,000 CU */
 /**
  * Start intercity travel (between cities).
  *
@@ -52,7 +58,7 @@ export interface IntercityStartAccounts {
  * Supports speed-based reservation stealing: if destination is occupied by a
  * traveling player and we would arrive BEFORE them, we can steal the reservation.
  *
- * On-chain accounts (9 required + 1 optional):
+ * On-chain accounts (10 required + 1 optional):
  * 0. [writable] player: PlayerAccount PDA
  * 1. [signer, writable] owner: Player's wallet (pays destination location rent)
  * 2. [writable] origin_city: CityAccount PDA (decrement players_present)
@@ -62,10 +68,13 @@ export interface IntercityStartAccounts {
  * 6. [writable] destination_location: LocationAccount for destination center (to reserve)
  * 7. [writable] origin_creator_refund: Account to receive origin location rent
  * 8. [] system_program: System Program
- * 9. [writable] (optional) bumped_player: PlayerAccount being bumped
+ * 9. [] estate_account: EstateAccount PDA (for Stables requirement)
+ * 10. [writable] (optional) bumped_player: PlayerAccount being bumped
  *
- * On-chain data (2 bytes):
+ * On-chain data (10 bytes):
  * - destination_city_id: u16
+ * - dest_grid_lat: i32
+ * - dest_grid_long: i32
  */
 export function createIntercityStartInstruction(
   accounts: IntercityStartAccounts
@@ -73,7 +82,8 @@ export function createIntercityStartInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
   const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  
+  const [estateAccount] = deriveEstatePda(player);
+
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -84,6 +94,7 @@ export function createIntercityStartInstruction(
     { pubkey: accounts.destinationLocation, isSigner: false, isWritable: true },
     { pubkey: accounts.originCreatorRefund, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
   // Optional: bumped player when stealing reservation
@@ -91,9 +102,11 @@ export function createIntercityStartInstruction(
     keys.push({ pubkey: accounts.bumpedPlayer, isSigner: false, isWritable: true });
   }
 
-  // Instruction data: destination_city_id (u16)
-  const writer = new BufferWriter(2);
+  // Instruction data: destination_city_id (u16) + dest_grid_lat (i32) + dest_grid_long (i32)
+  const writer = new BufferWriter(10);
   writer.writeU16(accounts.destinationCityId);
+  writer.writeI32(accounts.destGridLat);
+  writer.writeI32(accounts.destGridLong);
 
   const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, writer.toBuffer());
 
@@ -123,6 +136,7 @@ export interface IntercityCompleteAccounts {
   heroAccounts?: PublicKey[];
 }
 
+/** ~50,000 CU */
 /**
  * Complete intercity travel (arrive at destination).
  *
@@ -193,6 +207,7 @@ export interface IntercityCancelAccounts {
   destinationCreatorRefund: PublicKey;
 }
 
+/** ~40,000 CU */
 /**
  * Cancel intercity travel and return to origin.
  *
@@ -261,13 +276,14 @@ export interface IntercityTeleportAccounts {
   heroAccounts?: PublicKey[];
 }
 
+/** ~40,000 CU */
 /**
  * Teleport instantly to another city (costs Locked NOVI).
  *
  * Cost = base_cost + (distance / 100km) * per_km_cost (in Locked NOVI)
  * Instant arrival - no travel time.
  *
- * On-chain accounts (8 base + variable hero accounts):
+ * On-chain accounts (9 base + variable hero accounts):
  * 0. [writable] player: PlayerAccount PDA
  * 1. [signer, writable] owner: Player's wallet
  * 2. [writable] origin_city: CityAccount PDA (decrement players_present)
@@ -276,7 +292,8 @@ export interface IntercityTeleportAccounts {
  * 5. [writable] origin_location: LocationAccount (to vacate)
  * 6. [writable] destination_location: LocationAccount (to occupy)
  * 7. [] system_program: System Program
- * 8+. hero accounts (optional): [hero_nft, hero_template] pairs
+ * 8. [] estate_account: EstateAccount PDA (for Stables requirement)
+ * 9+. hero accounts (optional): [hero_nft, hero_template] pairs
  *
  * On-chain data (2 bytes):
  * - destination_city_id: u16
@@ -287,9 +304,10 @@ export function createIntercityTeleportInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
   const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  
+  const [estateAccount] = deriveEstatePda(player);
+
   // Rust account order: player, owner, origin_city, destination_city, game_engine,
-  //                     origin_location, destination_location, system_program, [hero_accounts]
+  //                     origin_location, destination_location, system_program, estate_account, [hero_accounts]
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -299,6 +317,7 @@ export function createIntercityTeleportInstruction(
     { pubkey: accounts.originLocation, isSigner: false, isWritable: true },
     { pubkey: accounts.destinationLocation, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
   // Add optional hero accounts
@@ -344,6 +363,7 @@ export interface TravelSpeedupParams {
   speedupTier: 1 | 2;
 }
 
+/** ~20,000 CU */
 /**
  * Speed up travel by spending gems.
  *
@@ -410,13 +430,14 @@ export interface IntracityStartParams {
   destinationLong: number;
 }
 
+/** ~60,000 CU */
 /**
  * Start intracity travel (within same city).
  *
  * Walking speed (~5 km/h) with time-of-day bonuses.
  * Supports speed-based reservation stealing.
  *
- * On-chain accounts (8 required + 1 optional):
+ * On-chain accounts (9 required + 1 optional):
  * 0. [writable] player: PlayerAccount PDA
  * 1. [signer, writable] owner: Player's wallet (pays destination rent)
  * 2. [writable] current_city: CityAccount PDA
@@ -425,7 +446,8 @@ export interface IntracityStartParams {
  * 5. [writable] destination_location: LocationAccount (to reserve)
  * 6. [writable] origin_creator_refund: Account to receive origin rent
  * 7. [] system_program: System Program
- * 8. [writable] (optional) bumped_player: PlayerAccount being bumped
+ * 8. [] estate_account: EstateAccount PDA (for Stables requirement)
+ * 9. [writable] (optional) bumped_player: PlayerAccount being bumped
  *
  * On-chain data (16 bytes):
  * - destination_lat: f64 (8)
@@ -437,7 +459,8 @@ export function createIntracityStartInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [currentCity] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  
+  const [estateAccount] = deriveEstatePda(player);
+
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -447,6 +470,7 @@ export function createIntracityStartInstruction(
     { pubkey: accounts.destinationLocation, isSigner: false, isWritable: true },
     { pubkey: accounts.originCreatorRefund, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
   // Optional: bumped player when stealing reservation
@@ -483,6 +507,7 @@ export interface IntracityCompleteAccounts {
   destinationLocation: PublicKey;
 }
 
+/** ~15,000 CU */
 /**
  * Complete intracity travel (arrive at destination cell).
  *
@@ -538,6 +563,7 @@ export interface IntracityCancelAccounts {
   destinationCreatorRefund: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Cancel intracity travel and return to origin.
  *

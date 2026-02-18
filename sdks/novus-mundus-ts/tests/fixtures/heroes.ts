@@ -18,6 +18,7 @@ import {
   createUnlockHeroInstruction,
   createLevelUpHeroInstruction,
   createAssignDefensiveHeroInstruction,
+  createBurnHeroInstruction,
   derivePlayerPda,
   deriveHeroTemplatePda,
   deriveEstatePda,
@@ -115,7 +116,7 @@ export class HeroFactory {
     slotIndex: number = 0
   ): Promise<void> {
     const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.publicKey);
+    const [estateAccount] = deriveEstatePda(player.playerPda);
 
     const ix = createLockHeroInstruction(
       {
@@ -143,7 +144,7 @@ export class HeroFactory {
     slotIndex: number = 0
   ): Promise<void> {
     const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.publicKey);
+    const [estateAccount] = deriveEstatePda(player.playerPda);
 
     const ix = createUnlockHeroInstruction(
       {
@@ -169,7 +170,7 @@ export class HeroFactory {
     hero: TestHero
   ): Promise<void> {
     const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.publicKey);
+    const [estateAccount] = deriveEstatePda(player.playerPda);
 
     const ix = createLevelUpHeroInstruction({
       owner: player.publicKey,
@@ -200,6 +201,27 @@ export class HeroFactory {
 
     const tx = new Transaction().add(ix);
     await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+  }
+
+  /**
+   * Burn a hero NFT (destroys it, credits locked NOVI).
+   */
+  async burnHero(
+    player: TestPlayer,
+    hero: TestHero
+  ): Promise<void> {
+    const ix = createBurnHeroInstruction(
+      {
+        owner: player.publicKey,
+        gameEngine: this.ctx.gameEngine,
+        heroAsset: hero.mintPubkey,
+      },
+      { templateId: hero.templateId }
+    );
+
+    const tx = new Transaction().add(ix);
+    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    this.heroes.delete(hero.mintPubkey.toBase58());
   }
 
   /**

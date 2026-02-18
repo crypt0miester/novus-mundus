@@ -52,6 +52,7 @@ export enum GameError {
   MaxUnitsReached = 6124,
   InsufficientFragments = 6125,
   MaxPlayersReached = 6126,
+  UserAccountNotCreated = 6127,
 
   // Team Errors (6200-6233)
   TeamNameTaken = 6200,
@@ -348,6 +349,11 @@ export enum GameError {
   DailyActivityNotAvailable = 7732,
   DailyWindowExpired = 7733,
   WrongTimeWindow = 7734,
+  CampRequired = 7735,
+  MineRequired = 7736,
+  FarmRequired = 7737,
+  StablesRequired = 7738,
+  InfirmaryRequired = 7739,
 
   // Staged Tempering Errors (7740-7743)
   StrikeTooEarly = 7740,
@@ -517,6 +523,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.MaxUnitsReached]: 'Maximum units reached',
   [GameError.InsufficientFragments]: 'Insufficient fragments',
   [GameError.MaxPlayersReached]: 'Maximum players reached',
+  [GameError.UserAccountNotCreated]: 'Must create user account before player',
 
   // Team Errors
   [GameError.TeamNameTaken]: 'Team name is already taken',
@@ -714,6 +721,13 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.InvalidRelicId]: 'Invalid relic ID',
   [GameError.RelicAlreadyOwned]: 'Relic already owned',
   [GameError.CatacombsRequired]: 'Catacombs building required',
+
+  // New Building Requirement Errors
+  [GameError.CampRequired]: 'Camp building required',
+  [GameError.MineRequired]: 'Mine building required',
+  [GameError.FarmRequired]: 'Farm building required',
+  [GameError.StablesRequired]: 'Stables building required',
+  [GameError.InfirmaryRequired]: 'Infirmary building required',
 };
 
 // ============================================================

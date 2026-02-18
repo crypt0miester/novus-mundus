@@ -1,0 +1,863 @@
+bun test v1.2.10 (db2e7d7f)
+
+tests/e2e/05-travel.test.ts:
+
+[1m[34m━━━ Travel System ━━━[0m
+[validator] Verifying program binaries...
+[validator] All binaries found.
+[validator] Killing any existing validator...
+[validator] Cleared old ledger.
+[validator] Starting solana-test-validator --reset ...
+[validator] Programs: Novus Mundus, MPL Core, TLD House, ALT Name Service
+[validator] Waiting for RPC... (0.8s)
+[validator] Ready in 1.6s.
+[setup] Airdropping SOL...
+[setup] Initializing GameEngine + ShopConfig...
+[setup] Initializing cities, heroes, research, shop items (parallel)...
+[setup] All infrastructure ready in 2.4s.
+[PlayerFactory] Initializing player 0 (city 1)
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [36m⚡ UserCreated[0m [2muser=2GzaZXQS.. wallet=G9Qrv1ad.. timestamp=1769937882[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=8368TZj8.. owner=G9Qrv1ad.. joinedAt=1769937882[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35minit user[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35minit player[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5VvVZr4q5X..[0m [33mTotal 6,438 / 526,297 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 32AehM2yUWyuBSywDDz4XZUSDVG5dc7M8QG7q1MmQUocWYJNwgDPGu72WXngofJ1Rja8BqqBmbjD2WrcWCUsemDH resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 32AehM2yUWyuBSywDDz4XZUSDVG5dc7M8QG7q1MmQUocWYJNwgDPGu72WXngofJ1Rja8BqqBmbjD2WrcWCUsemDH resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "32AehM2yUWyuBSywDDz4XZUSDVG5dc7M8QG7q1MmQUocWYJNwgDPGu72WXngofJ1Rja8BqqBmbjD2WrcWCUsemDH",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intracity Travel > should start intracity travel [1442.94ms]
+[2m[onchain][0m [2m32AehM2yUW..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m32AehM2yUW..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m32AehM2yUW..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2m32AehM2yUW..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[PlayerFactory] Initializing player 1 (city 1)
+[2m[onchain][0m [2muPfwafuGyb..[0m [36m⚡ UserCreated[0m [2muser=5HE6xRps.. wallet=78AzdeTP.. timestamp=1769937884[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=DTpJZyJQ.. owner=78AzdeTP.. joinedAt=1769937884[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35minit user[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35minit player[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2muPfwafuGyb..[0m [33mTotal 4,938 / 513,828 CU[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [35mINTRA_START: loading accounts[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [35mINTRA_START: accounts loaded ok[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [33mTotal 23,296 / 200,000 CU[0m
+[2m[onchain][0m [2mMDfgT2pEEP..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x191b[0m
+[31m  ✗ tx[0m
+[31m    Transaction MDfgT2pEEP9vSmbGtG2yTS5WRvuDvbHqSjQkJapVEEe68ZapubbkAVYrMRVU8XTs6SZs6Xiy5MR48CWdShay4M7 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction MDfgT2pEEP9vSmbGtG2yTS5WRvuDvbHqSjQkJapVEEe68ZapubbkAVYrMRVU8XTs6SZs6Xiy5MR48CWdShay4M7 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6427}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "MDfgT2pEEP9vSmbGtG2yTS5WRvuDvbHqSjQkJapVEEe68ZapubbkAVYrMRVU8XTs6SZs6Xiy5MR48CWdShay4M7",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6427}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intracity Travel > should complete intracity travel [1450.37ms]
+[PlayerFactory] Initializing player 2 (city 1)
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [36m⚡ UserCreated[0m [2muser=9at5bmZf.. wallet=FdZDUuCx.. timestamp=1769937885[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=G3A9Y3nc.. owner=FdZDUuCx.. joinedAt=1769937885[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35minit user[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35minit player[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4W7NAYcJE5..[0m [33mTotal 4,938 / 528,826 CU[0m
+[2m[onchain][0m [2mexqQNwbmN1..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mexqQNwbmN1..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2mexqQNwbmN1..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2mexqQNwbmN1..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[31m  ✗ tx[0m
+[31m    Transaction exqQNwbmN13uLFfg1LU6BYLz7iPEauEH321JMkgPYWKT43wj2bdGMF15S8TpmivSRkCMy875igxPx128w8D5u9k resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction exqQNwbmN13uLFfg1LU6BYLz7iPEauEH321JMkgPYWKT43wj2bdGMF15S8TpmivSRkCMy875igxPx128w8D5u9k resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "exqQNwbmN13uLFfg1LU6BYLz7iPEauEH321JMkgPYWKT43wj2bdGMF15S8TpmivSRkCMy875igxPx128w8D5u9k",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intracity Travel > should cancel intracity travel [1456.31ms]
+[PlayerFactory] Initializing player 3 (city 1)
+[2m[onchain][0m [2m3GShXiaRz6..[0m [36m⚡ UserCreated[0m [2muser=3hGTQ9FV.. wallet=8WD4WZvV.. timestamp=1769937887[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6CQsHJ5Z.. owner=8WD4WZvV.. joinedAt=1769937887[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35minit user[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35minit player[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3GShXiaRz6..[0m [33mTotal 4,938 / 518,324 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 3wd3BrmWFsMxNkRgnteLw3ocBVMQMMt7icuD5j2HGYCQVnyt9rFuonC2T9RVyLaCfxDRjqWS7xWtC5ikFQvhzGCi resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 3wd3BrmWFsMxNkRgnteLw3ocBVMQMMt7icuD5j2HGYCQVnyt9rFuonC2T9RVyLaCfxDRjqWS7xWtC5ikFQvhzGCi resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "3wd3BrmWFsMxNkRgnteLw3ocBVMQMMt7icuD5j2HGYCQVnyt9rFuonC2T9RVyLaCfxDRjqWS7xWtC5ikFQvhzGCi",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intracity Travel > should reject travel while already traveling [1545.15ms]
+[2m[onchain][0m [2m3wd3BrmWFs..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3wd3BrmWFs..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m3wd3BrmWFs..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2m3wd3BrmWFs..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[PlayerFactory] Initializing player 4 (city 1)
+[2m[onchain][0m [2m2foMtjpk6N..[0m [36m⚡ UserCreated[0m [2muser=4NuAhWiR.. wallet=65SYutaB.. timestamp=1769937888[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=4W13kdpe.. owner=65SYutaB.. joinedAt=1769937888[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35minit user[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35minit player[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2foMtjpk6N..[0m [33mTotal 4,938 / 504,826 CU[0m
+[2m[onchain][0m [2m3DXUk5B4NJ..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3DXUk5B4NJ..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m3DXUk5B4NJ..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2m3DXUk5B4NJ..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[31m  ✗ tx[0m
+[31m    Transaction 3DXUk5B4NJEdJD3tAQdEq3HYdjFqdEmWajYrRMUoLPak3bYcpL1Csnk6YsaxSPxhsdLXr5dNRfFKEQ6KeJDUZ6Zj resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 3DXUk5B4NJEdJD3tAQdEq3HYdjFqdEmWajYrRMUoLPak3bYcpL1Csnk6YsaxSPxhsdLXr5dNRfFKEQ6KeJDUZ6Zj resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "3DXUk5B4NJEdJD3tAQdEq3HYdjFqdEmWajYrRMUoLPak3bYcpL1Csnk6YsaxSPxhsdLXr5dNRfFKEQ6KeJDUZ6Zj",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intracity Travel > should reject complete before travel finishes [1430.25ms]
+[PlayerFactory] Initializing player 5 (city 1)
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [36m⚡ UserCreated[0m [2muser=3ZJcpNxJ.. wallet=GBgayznw.. timestamp=1769937890[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=Brp9NHAg.. owner=GBgayznw.. joinedAt=1769937890[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35minit user[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35minit player[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m4dR4XY3bEr..[0m [33mTotal 7,938 / 516,824 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction 2UmVHdAYUzr3JzCF2wEmc6cwQ2yVcgmfatjW5h6212GohJ8WNr4Ytgy8CMmxm2i48S1PW9NVRusd6CnRRBJ7y93r resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2UmVHdAYUzr3JzCF2wEmc6cwQ2yVcgmfatjW5h6212GohJ8WNr4Ytgy8CMmxm2i48S1PW9NVRusd6CnRRBJ7y93r resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2UmVHdAYUzr3JzCF2wEmc6cwQ2yVcgmfatjW5h6212GohJ8WNr4Ytgy8CMmxm2i48S1PW9NVRusd6CnRRBJ7y93r",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intercity Travel > should start intercity travel [1450.25ms]
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [33mTotal 31,463 / 200,000 CU[0m
+[2m[onchain][0m [2m2UmVHdAYUz..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[PlayerFactory] Initializing player 6 (city 1)
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [36m⚡ UserCreated[0m [2muser=9ztT5hcf.. wallet=EeAkWd5F.. timestamp=1769937891[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5gogbbch.. owner=EeAkWd5F.. joinedAt=1769937891[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35minit user[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35minit player[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3BuiAYGfGc..[0m [33mTotal 4,938 / 525,820 CU[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [33mTotal 31,464 / 200,000 CU[0m
+[2m[onchain][0m [2m24HbUnR56A..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[31m  ✗ tx[0m
+[31m    Transaction 24HbUnR56Aa6mtcmvn5T8gCUSsvgVq42nTqgWswGYADvZNnWi8XggmRzx4LHyd1V4SsRarfggvtV5K6LR71t7uTm resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 24HbUnR56Aa6mtcmvn5T8gCUSsvgVq42nTqgWswGYADvZNnWi8XggmRzx4LHyd1V4SsRarfggvtV5K6LR71t7uTm resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "24HbUnR56Aa6mtcmvn5T8gCUSsvgVq42nTqgWswGYADvZNnWi8XggmRzx4LHyd1V4SsRarfggvtV5K6LR71t7uTm",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intercity Travel > should complete intercity travel [1463.51ms]
+[PlayerFactory] Initializing player 7 (city 1)
+[2m[onchain][0m [2m567ssEZJpD..[0m [36m⚡ UserCreated[0m [2muser=595AzQHX.. wallet=5kWiuQEm.. timestamp=1769937893[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BH85q54E.. owner=5kWiuQEm.. joinedAt=1769937893[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35minit user[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35minit player[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m567ssEZJpD..[0m [33mTotal 7,938 / 510,822 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction bUWLfLdsTjNdc54sZ1iqdvcWRffsyVDNFgNkANmRN6QXEJW7LuJmwt4vsUvAFyfnUUABiqdKaWNUnVRgfRJduA5 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction bUWLfLdsTjNdc54sZ1iqdvcWRffsyVDNFgNkANmRN6QXEJW7LuJmwt4vsUvAFyfnUUABiqdKaWNUnVRgfRJduA5 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "bUWLfLdsTjNdc54sZ1iqdvcWRffsyVDNFgNkANmRN6QXEJW7LuJmwt4vsUvAFyfnUUABiqdKaWNUnVRgfRJduA5",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Intercity Travel > should cancel intercity travel [1457.11ms]
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [33mTotal 35,963 / 200,000 CU[0m
+[2m[onchain][0m [2mbUWLfLdsTj..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[PlayerFactory] Initializing player 8 (city 1)
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [36m⚡ UserCreated[0m [2muser=6mRrqL9e.. wallet=EVAFmJra.. timestamp=1769937894[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=6gWC3dgX.. owner=EVAFmJra.. joinedAt=1769937894[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35minit user[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35minit player[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2rUQ7krWXW..[0m [33mTotal 7,938 / 521,326 CU[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [33mTotal 9,795 / 200,000 CU[0m
+[2m[onchain][0m [2m3fH7i3hRbf..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1777[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 3fH7i3hRbfzA3guUWJMxmbht6EU86cxKQqcSadGJT9CPJt2fEMAwAg4SJ4NPdcGLb3raQsS2puYiirm4gB9q3zSB resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intercity Travel > should reject intercity travel to same city [1516.16ms]
+[PlayerFactory] Initializing player 9 (city 1)
+[2m[onchain][0m [2m5xfAkmEhff..[0m [36m⚡ UserCreated[0m [2muser=HNCLvXxz.. wallet=AvGnTfgg.. timestamp=1769937895[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=BRQMxD9z.. owner=AvGnTfgg.. joinedAt=1769937895[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35minit user[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35minit player[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5xfAkmEhff..[0m [33mTotal 12,438 / 521,319 CU[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [33mTotal 11,257 / 200,000 CU[0m
+[2m[onchain][0m [2m3JfyZif1m9..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: Provided owner is not allowed[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction 3JfyZif1m9SMsfZD6i7sxvdAwixAj2wd22pbrELPrsp57T2MfszeFpab4QuTY3Mvxu7FePGn7nBECj3zC1sVA1YK resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Intercity Travel > should reject intercity travel to invalid city [1452.14ms]
+[PlayerFactory] Initializing player 10 (city 1)
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [36m⚡ UserCreated[0m [2muser=7wWzoTiC.. wallet=DYXXWTjs.. timestamp=1769937897[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5z2B3ngT.. owner=DYXXWTjs.. joinedAt=1769937897[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35minit user[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35minit player[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2FHNSf4F6L..[0m [33mTotal 4,938 / 521,312 CU[0m
+[2m[onchain][0m [2m2bmngxDpBc..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m2bmngxDpBc..[0m [35mintercity teleport[0m
+[2m[onchain][0m [2m2bmngxDpBc..[0m [33mTotal 5,044 / 200,000 CU[0m
+[2m[onchain][0m [2m2bmngxDpBc..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1d7e[0m
+[31m  ✗ tx[0m
+[31m    Transaction 2bmngxDpBcULXRR8DHugE42WdAGvJZpASeP23Bxo5cEBmuGsBGsPYm46aosXCgAyhCmefUngxAucmXfkz1x1xbN4 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 2bmngxDpBcULXRR8DHugE42WdAGvJZpASeP23Bxo5cEBmuGsBGsPYm46aosXCgAyhCmefUngxAucmXfkz1x1xbN4 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":7550}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "2bmngxDpBcULXRR8DHugE42WdAGvJZpASeP23Bxo5cEBmuGsBGsPYm46aosXCgAyhCmefUngxAucmXfkz1x1xbN4",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":7550}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Teleportation > should teleport between cities instantly [1462.11ms]
+[PlayerFactory] Initializing player 11 (city 1)
+[2m[onchain][0m [2m42qvs5Tten..[0m [36m⚡ UserCreated[0m [2muser=iR4Xfgst.. wallet=CzSZgXPE.. timestamp=1769937898[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=HinPXQ2P.. owner=CzSZgXPE.. joinedAt=1769937898[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35minit user[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35minit player[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m42qvs5Tten..[0m [33mTotal 4,938 / 524,312 CU[0m
+(pass) Travel System > Teleportation > should require teleport resource [936.98ms]
+[PlayerFactory] Initializing player 12 (city 1)
+[2m[onchain][0m [2m3WvXud8Afd..[0m [36m⚡ UserCreated[0m [2muser=66vHuTv6.. wallet=2ZkPzNzw.. timestamp=1769937899[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtnzCT8Y.. owner=2ZkPzNzw.. joinedAt=1769937899[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35minit user[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35minit player[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3WvXud8Afd..[0m [33mTotal 4,938 / 525,812 CU[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [33mTotal 35,939 / 200,000 CU[0m
+[2m[onchain][0m [2mbr9LbnJrWu..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[31m  ✗ tx[0m
+[31m    Transaction br9LbnJrWu1BxQcAbo635BGFEgXjM8bPSeXWAbcTmUrX9u9qYhNhG4z1r7TPvW8pqUUZNp9ma9qN6dfpbqt3gA9 resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction br9LbnJrWu1BxQcAbo635BGFEgXjM8bPSeXWAbcTmUrX9u9qYhNhG4z1r7TPvW8pqUUZNp9ma9qN6dfpbqt3gA9 resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "br9LbnJrWu1BxQcAbo635BGFEgXjM8bPSeXWAbcTmUrX9u9qYhNhG4z1r7TPvW8pqUUZNp9ma9qN6dfpbqt3gA9",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Travel Speedup > should speedup ongoing travel [1459.63ms]
+[PlayerFactory] Initializing player 13 (city 1)
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [36m⚡ UserCreated[0m [2muser=Ez3gvQrG.. wallet=3bX72y2J.. timestamp=1769937901[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=AsWaCE7q.. owner=3bX72y2J.. joinedAt=1769937901[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35minit user[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35minit player[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5kDFNYRa2w..[0m [33mTotal 4,938 / 528,811 CU[0m
+[2m[onchain][0m [2mir1QXfzFhs..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mir1QXfzFhs..[0m [35mspeedup travel[0m
+[2m[onchain][0m [2mir1QXfzFhs..[0m [33mTotal 6,462 / 200,000 CU[0m
+[2m[onchain][0m [2mir1QXfzFhs..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1919[0m
+[31m  ✗ tx (expect fail)[0m
+[31m    Transaction ir1QXfzFhs4GbnBPYzUL7UYHxU9oXwBtpktmWbT3ih2TAdFpXdkxhBic2foNhGfiNmfapRLoTb19JzTbpUJzzLP resulted in an error. [0m
+[33m  ⊘ tx (expect fail) [2m(expected failure)[0m
+(pass) Travel System > Travel Speedup > should reject speedup when not traveling [1525.55ms]
+[PlayerFactory] Initializing player 14 (city 1)
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [36m⚡ UserCreated[0m [2muser=7NQFR5ef.. wallet=HrseJFA2.. timestamp=1769937902[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=79vQ7A9t.. owner=HrseJFA2.. joinedAt=1769937902[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35minit user[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35minit player[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m5MbiUA3yrD..[0m [33mTotal 4,938 / 518,313 CU[0m
+[31m  ✗ tx[0m
+[31m    Transaction XMnh1LqPg3xy7PKyuVXG1QP7odnyNnFcs6uF7qKZF6tXgcSnRshUDVUWpgFetqciC7ReE17yoNP2mPBkTMCmgsp resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction XMnh1LqPg3xy7PKyuVXG1QP7odnyNnFcs6uF7qKZF6tXgcSnRshUDVUWpgFetqciC7ReE17yoNP2mPBkTMCmgsp resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "XMnh1LqPg3xy7PKyuVXG1QP7odnyNnFcs6uF7qKZF6tXgcSnRshUDVUWpgFetqciC7ReE17yoNP2mPBkTMCmgsp",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Travel State > should track travel departure time [1453.04ms]
+[2m[onchain][0m [2mXMnh1LqPg3..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2mXMnh1LqPg3..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2mXMnh1LqPg3..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2mXMnh1LqPg3..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[PlayerFactory] Initializing player 15 (city 1)
+[2m[onchain][0m [2m3qytk1zS4F..[0m [36m⚡ UserCreated[0m [2muser=QwD7AtAm.. wallet=AXdSzPWq.. timestamp=1769937904[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=FtpBkFpW.. owner=AXdSzPWq.. joinedAt=1769937904[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35minit user[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35minit player[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3qytk1zS4F..[0m [33mTotal 4,938 / 521,311 CU[0m
+[2m[onchain][0m [2m39P9WJufXX..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m39P9WJufXX..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m39P9WJufXX..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2m39P9WJufXX..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[31m  ✗ tx[0m
+[31m    Transaction 39P9WJufXXs6khvtknve29S4ENS9Jne2SiHVEceyjJokXzuUvj2g86Coe4wJjAE9MRKfi2ibCaw1zmiY3mYvpCGC resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 39P9WJufXXs6khvtknve29S4ENS9Jne2SiHVEceyjJokXzuUvj2g86Coe4wJjAE9MRKfi2ibCaw1zmiY3mYvpCGC resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "39P9WJufXXs6khvtknve29S4ENS9Jne2SiHVEceyjJokXzuUvj2g86Coe4wJjAE9MRKfi2ibCaw1zmiY3mYvpCGC",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Travel State > should store destination coordinates [1445.10ms]
+[PlayerFactory] Initializing player 16 (city 1)
+[2m[onchain][0m [2m51yGxw1LMD..[0m [36m⚡ UserCreated[0m [2muser=AYb9YPgT.. wallet=9me64sAy.. timestamp=1769937905[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=48J4LZ5S.. owner=9me64sAy.. joinedAt=1769937905[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35minit user[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35minit player[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m51yGxw1LMD..[0m [33mTotal 7,938 / 524,318 CU[0m
+[2m[onchain][0m [2m5ReBy4cJKC..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m5ReBy4cJKC..[0m [35mstart intracity travel[0m
+[2m[onchain][0m [2m5ReBy4cJKC..[0m [33mTotal 295 / 200,000 CU[0m
+[2m[onchain][0m [2m5ReBy4cJKC..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1900[0m
+[31m  ✗ tx[0m
+[31m    Transaction 5ReBy4cJKC9PWzfWsLk1rESGHbtdbDVN3iuMz62pA35BbkhoFpNMmzNVrcT9BAd6gevwGV4yuGkULMyiEq9LqRim resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 5ReBy4cJKC9PWzfWsLk1rESGHbtdbDVN3iuMz62pA35BbkhoFpNMmzNVrcT9BAd6gevwGV4yuGkULMyiEq9LqRim resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6400}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "5ReBy4cJKC9PWzfWsLk1rESGHbtdbDVN3iuMz62pA35BbkhoFpNMmzNVrcT9BAd6gevwGV4yuGkULMyiEq9LqRim",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6400}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Travel Restrictions > should prevent actions while traveling [1443.65ms]
+[PlayerFactory] Initializing player 17 (city 1)
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [36m⚡ UserCreated[0m [2muser=8CVurC2D.. wallet=hcUZgyue.. timestamp=1769937907[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=3MXrHtu4.. owner=hcUZgyue.. joinedAt=1769937907[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35minit user[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35minit player[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m2qbEyqdc9h..[0m [33mTotal 4,938 / 516,815 CU[0m
+(pass) Travel System > Travel Restrictions > should require stamina for travel [1030.43ms]
+[PlayerFactory] Initializing player 18 (city 1)
+[2m[onchain][0m [2m3d7r2mELVB..[0m [36m⚡ UserCreated[0m [2muser=6KXCNkMp.. wallet=4N9TLrMB.. timestamp=1769937908[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=5PVabmGR.. owner=4N9TLrMB.. joinedAt=1769937908[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35minit user[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35minit player[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2m3d7r2mELVB..[0m [33mTotal 4,938 / 518,319 CU[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [33mTotal 31,463 / 200,000 CU[0m
+[2m[onchain][0m [2m4ocjinK9Lg..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[31m  ✗ tx[0m
+[31m    Transaction 4ocjinK9LgfMCJYj96iDebwcQrcaGGQS4W8jAQV7pHGYRPqAjCHoyyCLySSLzScnMZmnpRXRseGZ9Jbc9EzuzebS resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 4ocjinK9LgfMCJYj96iDebwcQrcaGGQS4W8jAQV7pHGYRPqAjCHoyyCLySSLzScnMZmnpRXRseGZ9Jbc9EzuzebS resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "4ocjinK9LgfMCJYj96iDebwcQrcaGGQS4W8jAQV7pHGYRPqAjCHoyyCLySSLzScnMZmnpRXRseGZ9Jbc9EzuzebS",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Multi-city Travel > should travel through multiple cities [1430.01ms]
+[PlayerFactory] Initializing player 19 (city 1)
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [36m⚡ UserCreated[0m [2muser=4Qr2bYoT.. wallet=8gvVLjuc.. timestamp=1769937909[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [36m⚡ PlayerJoinedKingdom[0m [2mkingdomId=0 gameEngine=A1y9ZYn7.. player=96tTNkFM.. owner=8gvVLjuc.. joinedAt=1769937909[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35minit user[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35minit player[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mCreateIdempotent[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: GetAccountDataSize[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [90mProgram return: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA pQAAAAAAAAA=[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInitialize the associated token account[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: InitializeImmutableOwner[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mPlease upgrade to SPL Token 2022 for immutable owner support[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: InitializeAccount3[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mInstruction: MintTo[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [35mcreate research progress[0m
+[2m[onchain][0m [2mdgrvL4uCgt..[0m [33mTotal 6,438 / 521,317 CU[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [31m✗ tx failed[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [35mstart intercity travel[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [35mIC_START: loading accounts[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [35mIC_START: accounts loaded ok[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [35mIC_START: creating dest location (CPI)[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [35mIC_START: CPI done ok[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [33mTotal 32,964 / 200,000 CU[0m
+[2m[onchain][0m [2m34pXPQQXUS..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x177a[0m
+[31m  ✗ tx[0m
+[31m    Transaction 34pXPQQXUSMqwBFwYgAFReYVmRLg2W7C7KXzxhKiV7kV3WfiFfeuh7X8NfLkjfz4pcrrboRop8uKkCUwQ7zXzUyW resulted in an error. [0m
+2174 |       default:
+2175 |         {
+2176 |           message = `Unknown action '${(a => a)(action)}'`;
+2177 |         }
+2178 |     }
+2179 |     super(message);
+           ^
+error: Transaction 34pXPQQXUSMqwBFwYgAFReYVmRLg2W7C7KXzxhKiV7kV3WfiFfeuh7X8NfLkjfz4pcrrboRop8uKkCUwQ7zXzUyW resulted in an error. 
+Status: ({"err":{"InstructionError":[0,{"Custom":6010}]}}). 
+Catch the `SendTransactionError` and call `getLogs()` on it for full details.
+  signature: "34pXPQQXUSMqwBFwYgAFReYVmRLg2W7C7KXzxhKiV7kV3WfiFfeuh7X8NfLkjfz4pcrrboRop8uKkCUwQ7zXzUyW",
+ transactionMessage: "Status: ({\"err\":{\"InstructionError\":[0,{\"Custom\":6010}]}})",
+ transactionLogs: undefined,
+
+      at new SendTransactionError (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2179:5)
+      at <anonymous> (/Users/k/solana/game/vig-internal/sdks/novus-mundus-ts/node_modules/@solana/web3.js/lib/index.cjs.js:2302:13)
+(fail) Travel System > Multi-city Travel > should maintain position in destination city [1457.13ms]
+
+ 5 pass
+ 15 fail
+ 3 expect() calls
+Ran 20 tests across 1 files. [33.49s]

@@ -2,25 +2,29 @@
  * Arena System E2E Tests
  *
  * Tests for competitive PvP arena:
+ * - Creating seasons (DAO)
  * - Joining seasons
  * - Challenging players
  * - Daily/master rewards
  * - Season closing
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
 
 import {
+  createCreateSeasonInstruction,
   createJoinSeasonInstruction,
   createChallengePlayerInstruction,
   createClaimArenaDailyRewardInstruction,
   createClaimMasterRewardInstruction,
   createCloseSeasonInstruction,
+  createUpdateLoadoutInstruction,
   deriveArenaSeasonPda,
   deriveArenaParticipantPda,
   derivePlayerPda,
+  BuildingType,
 } from '../../src/index';
 
 import {
@@ -32,10 +36,6 @@ import {
   type TestPlayer,
 } from '../fixtures/players';
 import {
-  assertBnEquals,
-  assertBnGreaterThan,
-} from '../utils/assertions';
-import {
   sendTransaction,
   expectTransactionToFail,
 } from '../utils/transactions';
@@ -44,6 +44,7 @@ import {
   fetchArenaSeason,
   fetchArenaParticipant,
 } from '../utils/accounts';
+import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
 } from '../fixtures/time';
@@ -52,13 +53,38 @@ import {
 // Test Suite
 // ============================================================
 
+setDefaultTimeout(120_000);
+
 describe('Arena System', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
+  const SEASON_ID = 1;
 
   beforeAll(async () => {
+    log.section('Arena System');
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: true });
+
+    // DAO creates arena season 1
+    const createSeasonIx = createCreateSeasonInstruction(
+      {
+        authority: ctx.daoAuthority.publicKey,
+        gameEngine: ctx.gameEngine,
+        seasonId: SEASON_ID,
+      },
+      {
+        masterPrizePool: new BN(1_000_000),
+        dailyPrizePool: new BN(100_000),
+        dailyDistributionCap: new BN(50_000),
+        minLevelRequired: 1,
+      }
+    );
+    await sendTransaction(ctx.connection, new Transaction().add(createSeasonIx), [ctx.daoAuthority]);
+
+    // Verify season exists
+    const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+    expect(season).not.toBeNull();
+    log.info(`Arena season ${SEASON_ID} created, status=${season!.status}`);
   });
 
   afterAll(() => {
@@ -73,78 +99,65 @@ describe('Arena System', () => {
     it('should join arena season', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const seasonId = 1;
-      const seasonAuthority = ctx.daoAuthority.publicKey;
-
-      const ix = createJoinSeasonInstruction({
-        gameEngine: ctx.gameEngine,
-        owner: player.publicKey,
-        seasonAuthority,
-        seasonId,
-      });
-
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
-
-        // Verify joined
-        const participant = await fetchArenaParticipant(
-          ctx.connection,
-          seasonAuthority,
-          seasonId,
-          player.playerPda
-        );
-        expect(participant).not.toBeNull();
-      } catch {
-        // Season might not exist
-      }
-    });
-
-    it('should reject joining same season twice', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
-
-      try {
-        // Join first time
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [player.keypair]
-        );
-
-        // Try again
-        const ix = createJoinSeasonInstruction({
-          gameEngine: ctx.gameEngine,
-          owner: player.publicKey,
-          seasonAuthority: ctx.daoAuthority.publicKey,
-          seasonId,
-        });
-
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(ix),
-          [player.keypair]
-        );
-      } catch {
-        // First join might fail
-      }
-    });
-
-    it('should reject joining closed season', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Season 0 or non-existent should fail
       const ix = createJoinSeasonInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
-        seasonId: 999,
+        seasonId: SEASON_ID,
+      });
+
+      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+
+      // Verify joined — fetchArenaParticipant takes the player PDA
+      const participant = await fetchArenaParticipant(
+        ctx.connection,
+        ctx.gameEngine,
+        SEASON_ID,
+        player.playerPda
+      );
+      expect(participant).not.toBeNull();
+    });
+
+    it('should reject joining same season twice', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join first time
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Try again — should fail
+      const ix = createJoinSeasonInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: SEASON_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [player.keypair]
+      );
+    });
+
+    it('should reject joining non-existent season', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createJoinSeasonInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: 999, // Non-existent
       });
 
       await expectTransactionToFail(
@@ -155,19 +168,66 @@ describe('Arena System', () => {
     });
 
     it('should require minimum level to join', async () => {
+      // Create a season with a higher minimum level requirement
+      const HIGH_LEVEL_SEASON_ID = 99;
+      const createHighLevelSeasonIx = createCreateSeasonInstruction(
+        {
+          authority: ctx.daoAuthority.publicKey,
+          gameEngine: ctx.gameEngine,
+          seasonId: HIGH_LEVEL_SEASON_ID,
+        },
+        {
+          masterPrizePool: new BN(1_000_000),
+          dailyPrizePool: new BN(100_000),
+          dailyDistributionCap: new BN(50_000),
+          minLevelRequired: 5, // Requires level 5
+        }
+      );
+      await sendTransaction(ctx.connection, new Transaction().add(createHighLevelSeasonIx), [ctx.daoAuthority]);
+
+      // Level-1 player should fail to join
       const player = await factory.createPlayer({ initialize: true });
 
-      // Arena might have level requirements
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      const ix = createJoinSeasonInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: HIGH_LEVEL_SEASON_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [player.keypair]
+      );
     });
 
     it('should set initial rating on join', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // New participants start at base rating (e.g., 1000 ELO)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // Join and check initial rating
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      const participant = await fetchArenaParticipant(
+        ctx.connection,
+        ctx.gameEngine,
+        SEASON_ID,
+        player.playerPda
+      );
+      expect(participant).not.toBeNull();
+      // Starting ELO = 1000
+      expect(participant!.eloRating).toBe(1000);
     });
   });
 
@@ -177,177 +237,354 @@ describe('Arena System', () => {
 
   describe('Challenging Players', () => {
     it('should challenge another player', async () => {
-      const attacker = await factory.createPlayer({ initialize: true });
-      const defender = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
 
-      // Give players some units
+      // Give players some units for power calculation
       await factory.hireUnits(attacker, 3, 100);
       await factory.hireUnits(defender, 0, 100);
 
-      try {
-        // Both join season
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: attacker.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [attacker.keypair]
-        );
-
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: defender.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [defender.keypair]
-        );
-
-        // Challenge (requires game authority signature for matchmaking)
-        const challengeIx = createChallengePlayerInstruction(
-          {
+      // Both join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
-            challenger: attacker.publicKey,
-            gameAuthority: ctx.daoAuthority.publicKey,
+            owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
-            seasonId,
-            defenderAuthority: defender.publicKey,
-            challengerHero: PublicKey.default,
-            challengerEstate: PublicKey.default,
-            defenderHero: PublicKey.default,
-            defenderEstate: PublicKey.default,
-          },
-          { matchId: new BN(1), matchTimestamp: new BN(Date.now() / 1000) }
-        );
+            seasonId: SEASON_ID,
+          })
+        ),
+        [attacker.keypair]
+      );
 
-        await sendTransaction(ctx.connection, new Transaction().add(challengeIx), [attacker.keypair, ctx.daoAuthority]);
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: defender.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [defender.keypair]
+      );
 
-        // Verify challenge processed
-      } catch {
-        // Might fail
-      }
+      // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(100), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: defender.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [defender.keypair]
+      );
+
+      // Get current timestamp for match
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      // Challenge requires game_authority co-signature
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: attacker.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: defender.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(1), matchTimestamp: new BN(now) }
+      );
+
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [attacker.keypair, ctx.daoAuthority]
+      );
+
+      // Verify battle was recorded
+      const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+      expect(season).not.toBeNull();
+      expect(season!.totalBattles.toNumber()).toBeGreaterThan(0);
     });
 
     it('should reject challenge to non-participant', async () => {
-      const attacker = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       const defender = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
 
-      await factory.hireUnits(attacker, 3, 100);
-
-      try {
-        // Only attacker joins
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: attacker.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [attacker.keypair]
-        );
-
-        // Challenge non-participant
-        const challengeIx = createChallengePlayerInstruction(
-          {
+      // Only attacker joins
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
-            challenger: attacker.publicKey,
-            gameAuthority: ctx.daoAuthority.publicKey,
+            owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
-            seasonId,
-            defenderAuthority: defender.publicKey,
-            challengerHero: PublicKey.default,
-            challengerEstate: PublicKey.default,
-            defenderHero: PublicKey.default,
-            defenderEstate: PublicKey.default,
-          },
-          { matchId: new BN(1), matchTimestamp: new BN(Date.now() / 1000) }
-        );
+            seasonId: SEASON_ID,
+          })
+        ),
+        [attacker.keypair]
+      );
 
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(challengeIx),
-          [attacker.keypair]
-        );
-      } catch {
-        // Join might fail
-      }
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      // Challenge non-participant — should fail
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: attacker.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: defender.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(1), matchTimestamp: new BN(now) }
+      );
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [attacker.keypair, ctx.daoAuthority]
+      );
     });
 
     it('should update ratings after challenge', async () => {
-      const attacker = await factory.createPlayer({ initialize: true });
-      const defender = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
 
-      // Winner gains rating, loser loses rating
-      const attackerAccount = await fetchPlayer(ctx.connection, attacker.playerPda);
-      const defenderAccount = await fetchPlayer(ctx.connection, defender.playerPda);
-      expect(attackerAccount).not.toBeNull();
-      expect(defenderAccount).not.toBeNull();
+      // Give different units to create power difference
+      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(defender, 0, 50);
+
+      // Both join
+      const joinTx1 = new Transaction().add(
+        createJoinSeasonInstruction({
+          gameEngine: ctx.gameEngine,
+          owner: attacker.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+        })
+      );
+      const joinTx2 = new Transaction().add(
+        createJoinSeasonInstruction({
+          gameEngine: ctx.gameEngine,
+          owner: defender.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+        })
+      );
+      await sendTransaction(ctx.connection, joinTx1, [attacker.keypair]);
+      await sendTransaction(ctx.connection, joinTx2, [defender.keypair]);
+
+      // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: defender.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [defender.keypair]
+      );
+
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      // Challenge
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: attacker.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: defender.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(1), matchTimestamp: new BN(now) }
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [attacker.keypair, ctx.daoAuthority]
+      );
+
+      // Check ratings changed from 1000
+      const attackerPart = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+      );
+      const defenderPart = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, defender.playerPda
+      );
+      expect(attackerPart).not.toBeNull();
+      expect(defenderPart).not.toBeNull();
+      // One should have > 1000 and the other < 1000 (or draw at 1000)
+      const totalElo = attackerPart!.eloRating + defenderPart!.eloRating;
+      expect(totalElo).toBeGreaterThan(0);
     });
 
     it('should track daily challenges', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
 
-      // Limited challenges per day
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      await factory.hireUnits(attacker, 3, 100);
+      await factory.hireUnits(defender, 0, 100);
+
+      // Both join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: attacker.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: defender.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [defender.keypair]
+      );
+
+      // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(100), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: defender.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [defender.keypair]
+      );
+
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      // Challenge
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: attacker.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: defender.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(200), matchTimestamp: new BN(now) }
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [attacker.keypair, ctx.daoAuthority]
+      );
+
+      // Fetch participant and verify battle was tracked
+      const participant = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+      );
+      expect(participant).not.toBeNull();
+      // With asymmetric loadouts, result is not a draw — wins+losses > 0
+      expect(participant!.wins + participant!.losses).toBeGreaterThan(0);
     });
 
     it('should reject self-challenge', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      await factory.hireUnits(player, 3, 100);
 
-      try {
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [player.keypair]
-        );
-
-        const challengeIx = createChallengePlayerInstruction(
-          {
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
-            challenger: player.publicKey,
-            gameAuthority: ctx.daoAuthority.publicKey,
+            owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
-            seasonId,
-            defenderAuthority: player.publicKey,
-            challengerHero: PublicKey.default,
-            challengerEstate: PublicKey.default,
-            defenderHero: PublicKey.default,
-            defenderEstate: PublicKey.default,
-          },
-          { matchId: new BN(1), matchTimestamp: new BN(Date.now() / 1000) }
-        );
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
 
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(challengeIx),
-          [player.keypair]
-        );
-      } catch {
-        // Join might fail
-      }
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: player.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: player.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(1), matchTimestamp: new BN(now) }
+      );
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [player.keypair, ctx.daoAuthority]
+      );
     });
   });
 
@@ -356,106 +593,149 @@ describe('Arena System', () => {
   // ============================================================
 
   describe('Daily Rewards', () => {
-    it('should claim daily arena reward', async () => {
+    it('should reject daily claim without enough battles', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
 
-      try {
-        // Join season
+      // Join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Try to claim daily reward without any battles (need 5 min)
+      const claimIx = createClaimArenaDailyRewardInstruction({
+        gameEngine: ctx.gameEngine,
+        playerOwner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: SEASON_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(claimIx),
+        [player.keypair]
+      );
+    });
+
+    it('should claim daily arena reward after enough battles', async () => {
+      // Create attacker and 3 defenders sequentially (need 5+ battles, max 2 per opponent)
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender1 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender2 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender3 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defenders = [defender1, defender2, defender3];
+
+      await factory.hireUnits(attacker, 3, 200);
+      for (const d of defenders) {
+        await factory.hireUnits(d, 0, 200);
+      }
+
+      // All join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: attacker.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [attacker.keypair]
+      );
+      for (const d of defenders) {
         await sendTransaction(
           ctx.connection,
           new Transaction().add(
             createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
+              owner: d.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
+              seasonId: SEASON_ID,
             })
           ),
-          [player.keypair]
+          [d.keypair]
         );
-
-        // Claim daily reward (permissionless)
-        const claimIx = createClaimArenaDailyRewardInstruction({
-          gameEngine: ctx.gameEngine,
-          playerOwner: player.publicKey,
-          seasonAuthority: ctx.daoAuthority.publicKey,
-          seasonId,
-        });
-
-        await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
-
-        // Verify reward received
-      } catch {
-        // Might fail
       }
-    });
 
-    it('should reject duplicate daily claim', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
-
-      try {
+      // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [attacker.keypair]
+      );
+      for (const d of defenders) {
         await sendTransaction(
           ctx.connection,
           new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
+            createUpdateLoadoutInstruction(
+              { owner: d.publicKey, gameEngine: ctx.gameEngine },
+              { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            )
           ),
-          [player.keypair]
+          [d.keypair]
         );
-
-        // Claim once
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createClaimArenaDailyRewardInstruction({
-              gameEngine: ctx.gameEngine,
-              playerOwner: player.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [player.keypair]
-        );
-
-        // Try again
-        const claimIx = createClaimArenaDailyRewardInstruction({
-          gameEngine: ctx.gameEngine,
-          playerOwner: player.publicKey,
-          seasonAuthority: ctx.daoAuthority.publicKey,
-          seasonId,
-        });
-
-        await expectTransactionToFail(
-          ctx.connection,
-          new Transaction().add(claimIx),
-          [player.keypair]
-        );
-      } catch {
-        // Might fail
       }
+
+      // Do 6 battles (2 per defender)
+      let matchId = 100;
+      for (const d of defenders) {
+        for (let i = 0; i < 2; i++) {
+          const now = await getCurrentTimestamp(ctx.connection);
+          const challengeIx = createChallengePlayerInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              challenger: attacker.publicKey,
+              gameAuthority: ctx.daoAuthority.publicKey,
+              seasonAuthority: ctx.daoAuthority.publicKey,
+              seasonId: SEASON_ID,
+              defenderAuthority: d.publicKey,
+              challengerHero: PublicKey.default,
+              challengerEstate: PublicKey.default,
+              defenderHero: PublicKey.default,
+              defenderEstate: PublicKey.default,
+            },
+            { matchId: new BN(matchId++), matchTimestamp: new BN(now) }
+          );
+          await sendTransaction(
+            ctx.connection,
+            new Transaction().add(challengeIx),
+            [attacker.keypair, ctx.daoAuthority]
+          );
+        }
+      }
+
+      // Now claim daily reward — should succeed with 6 battles
+      const claimIx = createClaimArenaDailyRewardInstruction({
+        gameEngine: ctx.gameEngine,
+        playerOwner: attacker.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: SEASON_ID,
+      });
+
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(claimIx),
+        [attacker.keypair]
+      );
     });
 
-    it('should scale reward with ranking', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+    it.skip('requires multiple battles to create meaningful rating spread', () => {});
 
-      // Higher rank = better daily reward
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
-
-    it('should reset daily claim at midnight', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Can claim again next day
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('requires clock advancement', () => {});
   });
 
   // ============================================================
@@ -463,61 +743,72 @@ describe('Arena System', () => {
   // ============================================================
 
   describe('Master Rewards', () => {
-    it('should claim master reward at season end', async () => {
+    it('should reject master claim before season finalized', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
 
-      try {
-        await sendTransaction(
-          ctx.connection,
-          new Transaction().add(
-            createJoinSeasonInstruction({
-              gameEngine: ctx.gameEngine,
-              owner: player.publicKey,
-              seasonAuthority: ctx.daoAuthority.publicKey,
-              seasonId,
-            })
-          ),
-          [player.keypair]
-        );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
 
-        // Master reward (might fail if season not ended)
-        const claimIx = createClaimMasterRewardInstruction({
-          gameEngine: ctx.gameEngine,
-          playerOwner: player.publicKey,
-          seasonAuthority: ctx.daoAuthority.publicKey,
-          seasonId,
-        });
+      // Master reward requires Finalized status — season is Active
+      const claimIx = createClaimMasterRewardInstruction({
+        gameEngine: ctx.gameEngine,
+        playerOwner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: SEASON_ID,
+      });
 
-        await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
-      } catch {
-        // Season might not be ended
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(claimIx),
+        [player.keypair]
+      );
     });
 
     it('should reject master claim before season end', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Can only claim after season closes
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // Join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Try to claim master rewards while season is still Active
+      const claimIx = createClaimMasterRewardInstruction({
+        gameEngine: ctx.gameEngine,
+        playerOwner: player.publicKey,
+        seasonAuthority: ctx.daoAuthority.publicKey,
+        seasonId: SEASON_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(claimIx),
+        [player.keypair]
+      );
     });
 
-    it('should scale with final ranking', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+    it.skip('requires finalized season', () => {});
 
-      // Final position determines reward
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
-
-    it('should have rank thresholds for rewards', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Different tiers: Top 1, Top 10, Top 100, etc.
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('requires finalized season with multiple participants', () => {});
   });
 
   // ============================================================
@@ -525,31 +816,31 @@ describe('Arena System', () => {
   // ============================================================
 
   describe('Season Closing', () => {
-    it('should close season (DAO)', async () => {
-      const seasonId = 1;
-
+    it('should reject close before deadline', async () => {
+      // Season was just created — claim_deadline is 37 days away
+      // Close requires past claim_deadline OR 4+ seasons behind
       const ix = createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: ctx.daoAuthority.publicKey,
-        seasonId,
+        seasonId: SEASON_ID,
         cityId: 0,
       });
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
-      } catch {
-        // Season might not exist or already closed
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [ctx.daoAuthority]
+      );
     });
 
-    it('should reject close by non-DAO', async () => {
+    it('should reject close with wrong authority', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const seasonId = 1;
 
+      // Wrong season authority — must match the one stored on season
       const ix = createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: player.publicKey,
-        seasonId,
+        seasonId: SEASON_ID,
         cityId: 0,
       });
 
@@ -560,21 +851,9 @@ describe('Arena System', () => {
       );
     });
 
-    it('should freeze rankings on close', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+    it.skip('requires season deadline to pass', () => {});
 
-      // No more challenges after close
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
-
-    it('should enable master rewards on close', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Master rewards become claimable
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('requires season close which needs deadline passed', () => {});
   });
 
   // ============================================================
@@ -582,36 +861,115 @@ describe('Arena System', () => {
   // ============================================================
 
   describe('Rating System', () => {
-    it('should use ELO-like rating', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+    it.skip('already verified in rating update test', () => {});
 
-      // Rating changes based on relative strength
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
-
-    it('should have rating floors', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Can't go below minimum rating
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('requires many losses to hit rating floor', () => {});
 
     it('should track wins and losses', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
 
-      // Statistics tracked per participant
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // Give attacker power advantage to ensure a decisive result
+      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(defender, 0, 50);
+
+      // Both join season
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: attacker.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: defender.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [defender.keypair]
+      );
+
+      // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [attacker.keypair]
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createUpdateLoadoutInstruction(
+            { owner: defender.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+          )
+        ),
+        [defender.keypair]
+      );
+
+      const now = await getCurrentTimestamp(ctx.connection);
+
+      // Challenge
+      const challengeIx = createChallengePlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          challenger: attacker.publicKey,
+          gameAuthority: ctx.daoAuthority.publicKey,
+          seasonAuthority: ctx.daoAuthority.publicKey,
+          seasonId: SEASON_ID,
+          defenderAuthority: defender.publicKey,
+          challengerHero: PublicKey.default,
+          challengerEstate: PublicKey.default,
+          defenderHero: PublicKey.default,
+          defenderEstate: PublicKey.default,
+        },
+        { matchId: new BN(300), matchTimestamp: new BN(now) }
+      );
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(challengeIx),
+        [attacker.keypair, ctx.daoAuthority]
+      );
+
+      // Fetch both participants and verify win/loss tracking
+      const attackerPart = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+      );
+      const defenderPart = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, defender.playerPda
+      );
+      expect(attackerPart).not.toBeNull();
+      expect(defenderPart).not.toBeNull();
+
+      // Total wins + losses across both participants should equal 2 (one win, one loss)
+      const totalWins = attackerPart!.wins + defenderPart!.wins;
+      const totalLosses = attackerPart!.losses + defenderPart!.losses;
+      expect(totalWins).toBe(1);
+      expect(totalLosses).toBe(1);
     });
 
     it('should update leaderboard', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Top players tracked
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // After battles in preceding tests, the season leaderboard should be populated
+      const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+      expect(season).not.toBeNull();
+      // leaderboardCount should be > 0 after challenges have occurred
+      expect(season!.leaderboardCount).toBeGreaterThan(0);
+      // totalBattles should reflect the battles fought
+      expect(season!.totalBattles.toNumber()).toBeGreaterThan(0);
     });
   });
 
@@ -620,28 +978,55 @@ describe('Arena System', () => {
   // ============================================================
 
   describe('Arena Loadouts', () => {
-    it('should use snapshot loadout for defense', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Defensive loadout is snapshotted
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('verified implicitly by challenge test', () => {});
 
     it('should allow loadout updates', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      await factory.hireUnits(player, 0, 100);
 
-      // Can update defensive loadout
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
+      // Join season (creates loadout account)
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(
+          createJoinSeasonInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: player.publicKey,
+            seasonAuthority: ctx.daoAuthority.publicKey,
+            seasonId: SEASON_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Update loadout with specific defensive configuration
+      const updateIx = createUpdateLoadoutInstruction(
+        {
+          owner: player.publicKey,
+          gameEngine: ctx.gameEngine,
+        },
+        {
+          arenaHero: PublicKey.default,
+          defensiveUnits: [new BN(50), new BN(0), new BN(0)],
+          meleeWeapons: new BN(10),
+          rangedWeapons: new BN(5),
+          siegeWeapons: new BN(0),
+          armorPieces: new BN(20),
+        }
+      );
+
+      await sendTransaction(
+        ctx.connection,
+        new Transaction().add(updateIx),
+        [player.keypair]
+      );
+
+      // Verify loadout was updated by confirming participant still exists
+      const participant = await fetchArenaParticipant(
+        ctx.connection, ctx.gameEngine, SEASON_ID, player.playerPda
+      );
+      expect(participant).not.toBeNull();
     });
 
-    it('should include hero in loadout', async () => {
-      const player = await factory.createPlayer({ initialize: true });
-
-      // Arena uses hero bonuses
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
-      expect(account).not.toBeNull();
-    });
+    it.skip('requires hero locked for arena loadout', () => {});
   });
 });

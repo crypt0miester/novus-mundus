@@ -21,7 +21,9 @@ import {
 import BN from 'bn.js';
 
 import { parseEventsFromLogs, parseEventFromBase64, type NovusMundusEvent } from '../../src/events/index';
+import { GameError, parseErrorMessage } from '../../src/errors';
 import { type TestConfig } from '../fixtures/setup';
+import { log } from './logger';
 
 // ============================================================
 // Transaction Building
@@ -40,6 +42,8 @@ export interface TransactionOptions {
   commitment?: Finality;
   /** Skip preflight checks */
   skipPreflight?: boolean;
+  /** Label for logging (auto-set by callers) */
+  _label?: string;
 }
 
 const DEFAULT_TX_OPTIONS: TransactionOptions = {
@@ -95,6 +99,7 @@ export async function sendTransaction(
   options: TransactionOptions = {}
 ): Promise<TransactionSignature> {
   const opts = { ...DEFAULT_TX_OPTIONS, ...options };
+  const label = opts._label ?? 'tx';
 
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   tx.feePayer = signers[0]!.publicKey;
@@ -107,10 +112,25 @@ export async function sendTransaction(
     }
   }
 
-  return await sendAndConfirmTransaction(connection, tx, signers, {
-    skipPreflight: opts.skipPreflight ?? true,
-    commitment: opts.commitment,
-  });
+  try {
+    const sig = await sendAndConfirmTransaction(connection, tx, signers, {
+      skipPreflight: opts.skipPreflight ?? true,
+      commitment: opts.commitment,
+    });
+    log.txSuccess(label, sig);
+    return sig;
+  } catch (error: any) {
+    // Try to extract tx logs and resolve error code
+    const txLogs = extractLogsFromError(error);
+    const code = extractErrorCode(error);
+    if (code !== null) {
+      const resolved = resolveErrorCode(code);
+      log.txFail(label, new Error(resolved), txLogs);
+    } else {
+      log.txFail(label, error, txLogs);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -254,20 +274,78 @@ export async function sendTransactionWithResult(
 // ============================================================
 
 /**
+ * Extract transaction logs from a SendTransactionError.
+ */
+function extractLogsFromError(error: any): string[] {
+  // @solana/web3.js SendTransactionError has logs property
+  if (error?.logs && Array.isArray(error.logs)) {
+    return error.logs;
+  }
+  // Some errors embed logs in the message
+  const msg = error?.message ?? '';
+  const logMatch = msg.match(/Transaction simulation failed.*\n([\s\S]*)/);
+  if (logMatch?.[1]) {
+    return logMatch[1].split('\n').filter((l: string) => l.trim());
+  }
+  return [];
+}
+
+/**
  * Extract program error code from transaction error.
  */
 export function extractErrorCode(error: Error): number | null {
-  const match = error.message.match(/custom program error: (0x[0-9a-fA-F]+)/);
-  if (match?.[1]) {
-    return parseInt(match[1], 16);
+  const msg = error.message;
+
+  // Match "custom program error: 0xNNNN" (from logs or preflight)
+  const hexMatch = msg.match(/custom program error: (0x[0-9a-fA-F]+)/);
+  if (hexMatch?.[1]) {
+    return parseInt(hexMatch[1], 16);
   }
 
-  const decimalMatch = error.message.match(/custom program error: (\d+)/);
+  // Match "custom program error: NNNN" (decimal)
+  const decimalMatch = msg.match(/custom program error: (\d+)/);
   if (decimalMatch?.[1]) {
     return parseInt(decimalMatch[1], 10);
   }
 
+  // Match JSON format from SendTransactionError: {"Custom":NNNN}
+  const jsonMatch = msg.match(/"Custom"\s*:\s*(\d+)/);
+  if (jsonMatch?.[1]) {
+    return parseInt(jsonMatch[1], 10);
+  }
+
+  // Check transactionMessage property (SendTransactionError)
+  const txMsg = (error as any).transactionMessage;
+  if (typeof txMsg === 'string') {
+    const txJsonMatch = txMsg.match(/"Custom"\s*:\s*(\d+)/);
+    if (txJsonMatch?.[1]) {
+      return parseInt(txJsonMatch[1], 10);
+    }
+  }
+
+  // Check error logs for hex error code
+  const logs: string[] = (error as any).logs ?? [];
+  for (const log of logs) {
+    const logMatch = log.match(/custom program error: (0x[0-9a-fA-F]+)/);
+    if (logMatch?.[1]) {
+      return parseInt(logMatch[1], 16);
+    }
+  }
+
   return null;
+}
+
+/**
+ * Resolve an error code to its GameError enum name and message.
+ * e.g. 6127 → "UserAccountNotCreated: Must create user account before player"
+ */
+export function resolveErrorCode(code: number): string {
+  const name = GameError[code]; // reverse lookup enum name
+  const message = parseErrorMessage(code);
+  if (name) {
+    return `${name} (${code}): ${message}`;
+  }
+  return `Custom:${code} - ${message}`;
 }
 
 /**
@@ -285,25 +363,31 @@ export async function expectTransactionToFail(
   connection: Connection,
   tx: Transaction,
   signers: Keypair[],
-  expectedErrorCode?: number
+  expectedErrorCode?: number,
+  label?: string
 ): Promise<Error> {
+  const tag = label ?? 'tx (expect fail)';
   try {
-    await sendTransaction(connection, tx, signers);
+    await sendTransaction(connection, tx, signers, { _label: tag });
     throw new Error('Transaction should have failed');
   } catch (error: any) {
     if (error.message === 'Transaction should have failed') {
+      log.txFail(tag, new Error('Transaction succeeded but was expected to fail'));
       throw error;
     }
 
     if (expectedErrorCode !== undefined) {
       const actualCode = extractErrorCode(error);
       if (actualCode !== expectedErrorCode) {
-        throw new Error(
-          `Expected error code ${expectedErrorCode} but got ${actualCode}`
-        );
+        const txLogs = extractLogsFromError(error);
+        const expected = resolveErrorCode(expectedErrorCode);
+        const actual = actualCode !== null ? resolveErrorCode(actualCode) : 'unknown';
+        log.txFail(tag, new Error(`Expected ${expected} but got ${actual}`), txLogs);
+        throw new Error(`Expected ${expected} but got ${actual}`);
       }
     }
 
+    log.txExpectedFail(tag);
     return error;
   }
 }

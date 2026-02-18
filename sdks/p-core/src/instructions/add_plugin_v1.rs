@@ -7,7 +7,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::{write_bytes, UNINIT_BYTE, plugins::{PluginType, PluginAuthority}};
+use crate::{write_bytes, UNINIT_BYTE, plugins::PluginAuthority};
 
 /// Plugin data for adding to an asset
 pub enum PluginData<'a> {
@@ -32,6 +32,8 @@ pub enum PluginData<'a> {
 }
 
 /// Add a plugin to an MPL Core Asset V1.
+///
+/// Borsh-serialized as AddPluginV1Args { plugin: Plugin, init_authority: Option<Authority> }
 ///
 /// ### Accounts:
 ///   0. `[WRITE]` The asset to add the plugin to
@@ -77,8 +79,8 @@ impl AddPluginV1<'_> {
             AccountMeta::readonly(self.log_wrapper.key()),
         ];
 
-        // Allocate instruction data
-        let mut instruction_data = [UNINIT_BYTE; 512]; // Max size
+        // Allocate instruction data - must be large enough for attributes
+        let mut instruction_data = [UNINIT_BYTE; 1024];
 
         let mut offset = 0;
 
@@ -86,95 +88,94 @@ impl AddPluginV1<'_> {
         write_bytes(&mut instruction_data[offset..offset+1], &[2]);
         offset += 1;
 
-        // Write plugin data based on type
+        // Serialize AddPluginV1Args { plugin: Plugin, init_authority: Option<Authority> }
+        // using Borsh format
         match &self.plugin {
             PluginData::Attributes { authority, attributes } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::Attributes as u8]);
+                // Plugin::Attributes is variant 6 in the Plugin enum
+                write_bytes(&mut instruction_data[offset..offset+1], &[6]);
                 offset += 1;
 
-                // Write authority discriminator
-                write_bytes(&mut instruction_data[offset..offset+1], &[authority.discriminator()]);
-                offset += 1;
+                // Attributes { attribute_list: Vec<Attribute> }
+                // Borsh Vec: 4-byte u32 LE length + elements
+                let attr_count = attributes.len().min(10) as u32;
+                write_bytes(&mut instruction_data[offset..offset+4], &attr_count.to_le_bytes());
+                offset += 4;
 
-                // Write authority key if Address type
-                if let PluginAuthority::Address(pubkey) = authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    // Write empty key
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
-
-                // Write number of attributes
-                let attr_count = attributes.len().min(10) as u8;
-                write_bytes(&mut instruction_data[offset..offset+1], &[attr_count]);
-                offset += 1;
-
-                // Write each attribute
+                // Each Attribute { key: String, value: String }
+                // Borsh String: 4-byte u32 LE length + UTF-8 bytes
                 for (key, value) in attributes.iter().take(10) {
-                    // Write key length and key
-                    let key_len = key.len().min(32) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[key_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], &key[..(key_len as usize)]);
+                    let key_len = key.len() as u32;
+                    write_bytes(&mut instruction_data[offset..offset+4], &key_len.to_le_bytes());
+                    offset += 4;
+                    write_bytes(&mut instruction_data[offset..offset+(key_len as usize)], key);
                     offset += key_len as usize;
 
-                    // Write value length and value
-                    let value_len = value.len().min(64) as u8;
-                    write_bytes(&mut instruction_data[offset..offset+1], &[value_len]);
-                    offset += 1;
-                    write_bytes(&mut instruction_data[offset..offset+(value_len as usize)], &value[..(value_len as usize)]);
-                    offset += value_len as usize;
+                    let val_len = value.len() as u32;
+                    write_bytes(&mut instruction_data[offset..offset+4], &val_len.to_le_bytes());
+                    offset += 4;
+                    write_bytes(&mut instruction_data[offset..offset+(val_len as usize)], value);
+                    offset += val_len as usize;
+                }
+
+                // init_authority: Option<Authority>
+                // Borsh Option: 1 byte (0=None, 1=Some) + data if Some
+                write_bytes(&mut instruction_data[offset..offset+1], &[1]); // Some
+                offset += 1;
+
+                // Authority enum: None=0, Owner=1, UpdateAuthority=2, Address{pubkey}=3
+                match authority {
+                    PluginAuthority::None => {
+                        write_bytes(&mut instruction_data[offset..offset+1], &[0]);
+                        offset += 1;
+                    }
+                    PluginAuthority::Owner => {
+                        write_bytes(&mut instruction_data[offset..offset+1], &[1]);
+                        offset += 1;
+                    }
+                    PluginAuthority::UpdateAuthority => {
+                        write_bytes(&mut instruction_data[offset..offset+1], &[2]);
+                        offset += 1;
+                    }
+                    PluginAuthority::Address(pubkey) => {
+                        write_bytes(&mut instruction_data[offset..offset+1], &[3]);
+                        offset += 1;
+                        write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
+                        offset += 32;
+                    }
                 }
             },
             PluginData::FreezeDelegate { authority, frozen } => {
-                // Write plugin type
-                write_bytes(&mut instruction_data[offset..offset+1], &[PluginType::FreezeDelegate as u8]);
+                // Plugin::FreezeDelegate is variant 1
+                write_bytes(&mut instruction_data[offset..offset+1], &[1]);
                 offset += 1;
 
-                // Write frozen state
+                // FreezeDelegate { frozen: bool }
                 write_bytes(&mut instruction_data[offset..offset+1], &[*frozen as u8]);
                 offset += 1;
 
-                // Write authority discriminator
-                write_bytes(&mut instruction_data[offset..offset+1], &[authority.discriminator()]);
-                offset += 1;
-
-                // Write authority key if Address type
-                if let PluginAuthority::Address(pubkey) = authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    // Write empty key
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
+                // init_authority: Option<Authority>
+                offset = Self::write_option_authority(&mut instruction_data, offset, authority);
             },
-            PluginData::BurnDelegate { authority } | PluginData::TransferDelegate { authority } => {
-                // Write plugin type
-                let plugin_type = match &self.plugin {
-                    PluginData::BurnDelegate { .. } => PluginType::BurnDelegate,
-                    PluginData::TransferDelegate { .. } => PluginType::TransferDelegate,
-                    _ => unreachable!(),
-                };
-                write_bytes(&mut instruction_data[offset..offset+1], &[plugin_type as u8]);
+            PluginData::BurnDelegate { authority } => {
+                // Plugin::BurnDelegate is variant 2
+                write_bytes(&mut instruction_data[offset..offset+1], &[2]);
                 offset += 1;
 
-                // Write authority discriminator
-                write_bytes(&mut instruction_data[offset..offset+1], &[authority.discriminator()]);
+                // BurnDelegate has no fields (empty struct)
+
+                // init_authority: Option<Authority>
+                offset = Self::write_option_authority(&mut instruction_data, offset, authority);
+            },
+            PluginData::TransferDelegate { authority } => {
+                // Plugin::TransferDelegate is variant 3
+                write_bytes(&mut instruction_data[offset..offset+1], &[3]);
                 offset += 1;
 
-                // Write authority key if Address type
-                if let PluginAuthority::Address(pubkey) = authority {
-                    write_bytes(&mut instruction_data[offset..offset+32], pubkey.as_ref());
-                    offset += 32;
-                } else {
-                    // Write empty key
-                    write_bytes(&mut instruction_data[offset..offset+32], &[0u8; 32]);
-                    offset += 32;
-                }
+                // TransferDelegate has no fields (empty struct)
+
+                // init_authority: Option<Authority>
+                offset = Self::write_option_authority(&mut instruction_data, offset, authority);
             },
         }
 
@@ -195,5 +196,35 @@ impl AddPluginV1<'_> {
         ];
 
         invoke_signed(&instruction, &account_infos, signers)
+    }
+
+    /// Write Option<Authority> in Borsh format
+    fn write_option_authority(buf: &mut [core::mem::MaybeUninit<u8>], mut offset: usize, authority: &PluginAuthority) -> usize {
+        // Some
+        write_bytes(&mut buf[offset..offset+1], &[1]);
+        offset += 1;
+
+        match authority {
+            PluginAuthority::None => {
+                write_bytes(&mut buf[offset..offset+1], &[0]);
+                offset += 1;
+            }
+            PluginAuthority::Owner => {
+                write_bytes(&mut buf[offset..offset+1], &[1]);
+                offset += 1;
+            }
+            PluginAuthority::UpdateAuthority => {
+                write_bytes(&mut buf[offset..offset+1], &[2]);
+                offset += 1;
+            }
+            PluginAuthority::Address(pubkey) => {
+                write_bytes(&mut buf[offset..offset+1], &[3]);
+                offset += 1;
+                write_bytes(&mut buf[offset..offset+32], pubkey.as_ref());
+                offset += 32;
+            }
+        }
+
+        offset
     }
 }

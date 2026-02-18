@@ -2,12 +2,14 @@
  * Game Account Subscription Helpers
  *
  * Specialized subscriptions for Novus Mundus game accounts.
+ * Includes per-account subscriptions and a unified GameSubscriptionManager
+ * that uses a single onProgramAccountChange with the AccountKey router.
  */
 
 import { PublicKey } from '@solana/web3.js';
 import type { Connection, Context, AccountInfo } from '@solana/web3.js';
 
-import { PROGRAM_ID } from '../program.ts';
+import { PROGRAM_ID } from '../program';
 import {
   derivePlayerPda,
   deriveUserPda,
@@ -20,18 +22,20 @@ import {
   deriveArenaParticipantPda,
   deriveLootPda,
   deriveGameEnginePda,
-} from '../pda.ts';
+} from '../pda';
 
-import { parsePlayer, type PlayerCore } from '../state/player.ts';
-import { parseUser, type UserAccount } from '../state/user.ts';
-import { parseTeam, type TeamAccount } from '../state/team.ts';
-import { parseRally, type RallyAccount } from '../state/rally.ts';
-import { parseReinforcement, type ReinforcementAccount } from '../state/reinforcement.ts';
-import { parseEncounter, type EncounterAccount } from '../state/encounter.ts';
-import { parseExpedition, type ExpeditionAccount } from '../state/expedition.ts';
-import { parseArenaSeason, parseArenaParticipant, type ArenaSeasonAccount, type ArenaParticipantAccount } from '../state/arena.ts';
-import { parseLoot, type LootAccount } from '../state/loot.ts';
-import { parseGameEngine, type GameEngine } from '../state/game-engine.ts';
+import { parsePlayer, type PlayerCore } from '../state/player';
+import { parseUser, type UserAccount } from '../state/user';
+import { parseTeam, type TeamAccount } from '../state/team';
+import { parseRally, type RallyAccount } from '../state/rally';
+import { parseReinforcement, type ReinforcementAccount } from '../state/reinforcement';
+import { parseEncounter, type EncounterAccount } from '../state/encounter';
+import { parseExpedition, type ExpeditionAccount } from '../state/expedition';
+import { parseArenaSeason, parseArenaParticipant, type ArenaSeasonAccount, type ArenaParticipantAccount } from '../state/arena';
+import { parseLoot, type LootAccount } from '../state/loot';
+import { parseGameEngine, type GameEngine } from '../state/game-engine';
+import { AccountKey } from '../types/enums';
+import { tryDeserializeAnyAccount, type RoutedAccount } from '../state/router';
 
 import {
   subscribeToAccountWithParser,
@@ -41,7 +45,7 @@ import {
   type SubscriptionCallback,
   type SubscriptionOptions,
   type LogsCallback,
-} from './account.ts';
+} from './account';
 
 // ============================================================
 // Game Account Subscriptions
@@ -298,20 +302,20 @@ export function subscribeToArenaParticipant(
  * Subscribe to loot account changes.
  *
  * @param connection - Solana connection
- * @param encounter - Encounter pubkey
- * @param attacker - Attacker pubkey
+ * @param playerPda - Player PDA pubkey
+ * @param lootId - Loot ID (from player.lootCounter)
  * @param callback - Callback for loot account changes
  * @param options - Subscription options
  * @returns Subscription handle
  */
 export function subscribeToLoot(
   connection: Connection,
-  encounter: PublicKey,
-  attacker: PublicKey,
+  playerPda: PublicKey,
+  lootId: number | bigint,
   callback: SubscriptionCallback<LootAccount>,
   options: SubscriptionOptions = {}
 ): SubscriptionHandle {
-  const [lootPda] = deriveLootPda(encounter, attacker);
+  const [lootPda] = deriveLootPda(playerPda, lootId);
   return subscribeToAccountWithParser(
     connection,
     lootPda,
@@ -407,124 +411,149 @@ export function subscribeToGameLogs(
 // Subscription Manager
 // ============================================================
 
+/** Handler callback for a specific AccountKey */
+export type AccountHandler<T = unknown> = (
+  account: T,
+  pubkey: PublicKey,
+  context: Context
+) => void;
+
 /**
- * Game subscription manager for managing multiple subscriptions.
+ * Unified game subscription manager using a single `onProgramAccountChange`.
+ *
+ * Instead of creating one WebSocket subscription per account, this manager
+ * uses a single program-wide subscription and routes incoming account updates
+ * to registered handlers based on the AccountKey discriminator (byte 0).
+ *
+ * Usage:
+ * ```ts
+ * const manager = new GameSubscriptionManager(connection, gameEnginePda);
+ * manager.on(AccountKey.Player, (player, pubkey, ctx) => { ... });
+ * manager.on(AccountKey.Encounter, (encounter, pubkey, ctx) => { ... });
+ * manager.start();
+ * // later:
+ * manager.stop();
+ * ```
  */
 export class GameSubscriptionManager {
   private connection: Connection;
   private gameEngine: PublicKey;
-  private subscriptions: Map<string, SubscriptionHandle> = new Map();
+  private handlers: Map<AccountKey, Set<AccountHandler>> = new Map();
+  private subscription: SubscriptionHandle | null = null;
+  private options: SubscriptionOptions;
 
-  constructor(connection: Connection, gameEngine: PublicKey) {
+  constructor(
+    connection: Connection,
+    gameEngine: PublicKey,
+    options: SubscriptionOptions = {}
+  ) {
     this.connection = connection;
     this.gameEngine = gameEngine;
+    this.options = options;
   }
 
   /**
-   * Subscribe to a player account.
+   * Register a handler for a specific AccountKey.
+   * Multiple handlers can be registered per key.
    */
-  subscribeToPlayer(
-    owner: PublicKey,
-    callback: SubscriptionCallback<PlayerCore>,
-    options?: SubscriptionOptions
-  ): string {
-    const key = `player:${owner.toBase58()}`;
-    const handle = subscribeToPlayer(this.connection, this.gameEngine, owner, callback, options);
-    this.subscriptions.set(key, handle);
-    return key;
-  }
-
-  /**
-   * Subscribe to a user account.
-   */
-  subscribeToUser(
-    owner: PublicKey,
-    callback: SubscriptionCallback<UserAccount>,
-    options?: SubscriptionOptions
-  ): string {
-    const key = `user:${owner.toBase58()}`;
-    const handle = subscribeToUser(this.connection, owner, callback, options);
-    this.subscriptions.set(key, handle);
-    return key;
-  }
-
-  /**
-   * Subscribe to a team account.
-   */
-  subscribeToTeam(
-    teamId: number,
-    callback: SubscriptionCallback<TeamAccount>,
-    options?: SubscriptionOptions
-  ): string {
-    const key = `team:${teamId}`;
-    const handle = subscribeToTeam(this.connection, this.gameEngine, teamId, callback, options);
-    this.subscriptions.set(key, handle);
-    return key;
-  }
-
-  /**
-   * Subscribe to a rally account.
-   */
-  subscribeToRally(
-    creator: PublicKey,
-    rallyId: number,
-    callback: SubscriptionCallback<RallyAccount>,
-    options?: SubscriptionOptions
-  ): string {
-    const key = `rally:${creator.toBase58()}:${rallyId}`;
-    const handle = subscribeToRally(this.connection, this.gameEngine, creator, rallyId, callback, options);
-    this.subscriptions.set(key, handle);
-    return key;
-  }
-
-  /**
-   * Subscribe to an encounter account.
-   */
-  subscribeToEncounter(
-    cityId: number,
-    encounterId: number,
-    callback: SubscriptionCallback<EncounterAccount>,
-    options?: SubscriptionOptions
-  ): string {
-    const key = `encounter:${cityId}:${encounterId}`;
-    const handle = subscribeToEncounter(this.connection, this.gameEngine, cityId, encounterId, callback, options);
-    this.subscriptions.set(key, handle);
-    return key;
-  }
-
-  /**
-   * Unsubscribe by key.
-   */
-  async unsubscribe(key: string): Promise<boolean> {
-    const handle = this.subscriptions.get(key);
-    if (handle) {
-      await handle.unsubscribe();
-      this.subscriptions.delete(key);
-      return true;
+  on<K extends AccountKey>(
+    key: K,
+    handler: AccountHandler<Extract<RoutedAccount, { key: K }>['account']>
+  ): void {
+    let set = this.handlers.get(key);
+    if (!set) {
+      set = new Set();
+      this.handlers.set(key, set);
     }
-    return false;
+    set.add(handler as AccountHandler);
   }
 
   /**
-   * Unsubscribe from all subscriptions.
+   * Remove a handler for a specific AccountKey.
    */
-  async unsubscribeAll(): Promise<void> {
-    const promises = Array.from(this.subscriptions.values()).map((h) => h.unsubscribe());
-    await Promise.all(promises);
-    this.subscriptions.clear();
+  off<K extends AccountKey>(
+    key: K,
+    handler: AccountHandler<Extract<RoutedAccount, { key: K }>['account']>
+  ): void {
+    const set = this.handlers.get(key);
+    if (set) {
+      set.delete(handler as AccountHandler);
+      if (set.size === 0) {
+        this.handlers.delete(key);
+      }
+    }
   }
 
   /**
-   * Get all active subscription keys.
+   * Start the program-wide subscription.
+   * All program account changes flow through a single WebSocket.
    */
-  getActiveSubscriptions(): string[] {
-    return Array.from(this.subscriptions.keys());
+  start(): void {
+    if (this.subscription) {
+      return; // already running
+    }
+
+    this.subscription = subscribeToProgramAccounts(
+      this.connection,
+      PROGRAM_ID,
+      (keyedAccountInfo, context) => {
+        const data = keyedAccountInfo.accountInfo.data;
+        if (!data || data.length === 0) {
+          return;
+        }
+
+        const routed = tryDeserializeAnyAccount(Buffer.from(data));
+        if (!routed) {
+          return;
+        }
+
+        const handlers = this.handlers.get(routed.key);
+        if (!handlers || handlers.size === 0) {
+          return;
+        }
+
+        const pubkey = keyedAccountInfo.accountId;
+        for (const handler of handlers) {
+          try {
+            handler(routed.account, pubkey, context);
+          } catch {
+            // swallow handler errors to not break subscription
+          }
+        }
+      },
+      this.options
+    );
   }
 
   /**
-   * Check if a subscription is active.
+   * Stop the program-wide subscription.
    */
-  isSubscribed(key: string): boolean {
-    return this.subscriptions.has(key);
+  async stop(): Promise<void> {
+    if (this.subscription) {
+      await this.subscription.unsubscribe();
+      this.subscription = null;
+    }
+  }
+
+  /**
+   * Check if the subscription is active.
+   */
+  get active(): boolean {
+    return this.subscription !== null;
+  }
+
+  /**
+   * Remove all handlers and stop the subscription.
+   */
+  async destroy(): Promise<void> {
+    await this.stop();
+    this.handlers.clear();
+  }
+
+  /**
+   * Get the set of AccountKeys that have registered handlers.
+   */
+  getRegisteredKeys(): AccountKey[] {
+    return Array.from(this.handlers.keys());
   }
 }

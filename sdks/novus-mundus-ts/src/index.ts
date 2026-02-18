@@ -5,82 +5,88 @@
  */
 
 // Core exports
-export * from './program.ts';
-export * from './constants.ts';
-export * from './pda.ts';
-export * from './errors.ts';
+export * from './program';
+export * from './constants';
+export * from './pda';
+export * from './errors';
 
 // Type exports
-export * from './types/enums.ts';
-export * from './types/common.ts';
+export * from './types/enums';
+export * from './types/common';
 
 // Utility exports
-export * from './utils/deserialize.ts';
+export * from './utils/deserialize';
 
 // State account exports
-export * from './state/game-engine.ts';
-export * from './state/player.ts';
-export * from './state/user.ts';
-export * from './state/city.ts';
-export * from './state/team.ts';
-export * from './state/rally.ts';
-export * from './state/reinforcement.ts';
-export * from './state/encounter.ts';
-export * from './state/expedition.ts';
-export * from './state/arena.ts';
-export * from './state/loot.ts';
-export * from './state/event.ts';
-export * from './state/shop.ts';
-export * from './state/castle.ts';
-export * from './state/dungeon.ts';
+export * from './state/game-engine';
+export * from './state/player';
+export * from './state/user';
+export * from './state/city';
+export * from './state/team';
+export * from './state/rally';
+export * from './state/reinforcement';
+export * from './state/encounter';
+export * from './state/expedition';
+export * from './state/arena';
+export * from './state/loot';
+export * from './state/event';
+export * from './state/shop';
+export * from './state/castle';
+export * from './state/dungeon';
+export * from './state/estate';
+export * from './state/location';
+export * from './state/research';
+export * from './state/hero';
+export * from './state/progression';
+export * from './state/router';
 
 // Utility exports (instruction helpers)
-export * from './utils/serialize.ts';
-export * from './utils/token.ts';
+export * from './utils/serialize';
+export * from './utils/token';
 
 // Instruction exports
-export * from './instructions/initialization.ts';
-export * from './instructions/economy.ts';
-export * from './instructions/team.ts';
-export * from './instructions/travel.ts';
-export * from './instructions/combat.ts';
-export * from './instructions/rally.ts';
-export * from './instructions/reinforcement.ts';
-export * from './instructions/expedition.ts';
-export * from './instructions/loot.ts';
-export * from './instructions/progression.ts';
-export * from './instructions/token.ts';
-export * from './instructions/encounter.ts';
-export * from './instructions/arena.ts';
-export * from './instructions/event.ts';
-export * from './instructions/subscription.ts';
-export * from './instructions/name.ts';
-export * from './instructions/shop.ts';
-export * from './instructions/research.ts';
-export * from './instructions/hero.ts';
-export * from './instructions/sanctuary.ts';
-export * from './instructions/estate.ts';
-export * from './instructions/forge.ts';
-export * from './instructions/dungeon.ts';
-export * from './instructions/castle.ts';
+export * from './instructions/initialization';
+export * from './instructions/economy';
+export * from './instructions/team';
+export * from './instructions/travel';
+export * from './instructions/combat';
+export * from './instructions/rally';
+export * from './instructions/reinforcement';
+export * from './instructions/expedition';
+export * from './instructions/loot';
+export * from './instructions/progression';
+export * from './instructions/token';
+export * from './instructions/encounter';
+export * from './instructions/arena';
+export * from './instructions/event';
+export * from './instructions/subscription';
+export * from './instructions/name';
+export * from './instructions/shop';
+export * from './instructions/research';
+export * from './instructions/hero';
+export * from './instructions/sanctuary';
+export * from './instructions/estate';
+export * from './instructions/forge';
+export * from './instructions/dungeon';
+export * from './instructions/castle';
 
 // Event exports
-export * from './events/index.ts';
+export * from './events/index';
 
 // Parser exports
-export * from './parser/index.ts';
+export * from './parser/index';
 
 // Calculator exports
-export * from './calculators/index.ts';
+export * from './calculators/index';
 
 // External program helpers
-export * from './external/index.ts';
+export * from './external/index';
 
 // Subscriptions exports
-export * from './subscriptions/index.ts';
+export * from './subscriptions/index';
 
 // Validation exports
-export * from './validation/index.ts';
+export * from './validation/index';
 
 // Client exports
-export * from './client.ts';
+export * from './client';

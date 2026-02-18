@@ -18,8 +18,8 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program.ts';
-import { BufferWriter, createInstructionData } from '../utils/serialize.ts';
+import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -30,8 +30,10 @@ import {
   deriveTeamPda,
   deriveTeamSlotPda,
   deriveEstatePda,
-} from '../pda.ts';
-import { RallyTargetType } from '../types/enums.ts';
+  deriveHeroTemplatePda,
+  deriveHeroCollectionPda,
+} from '../pda';
+import { RallyTargetType } from '../types/enums';
 
 // ============================================================
 // Rally Speedup Type (matches on-chain SpeedupType enum)
@@ -81,8 +83,15 @@ export interface RallyCreateParams {
   rangedWeapons: BN | number | bigint;
   /** Siege weapons to commit */
   siegeWeapons: BN | number | bigint;
+  /** Hero slot index (255=no hero, 0-2=commit hero from slot). Defaults to 255. */
+  heroSlotIndex?: number;
+  /** Hero NFT mint address (required if heroSlotIndex is set) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroSlotIndex is set) */
+  heroTemplateId?: number;
 }
 
+/** ~45,000 CU */
 /**
  * Create a new rally for group attacks.
  *
@@ -130,7 +139,7 @@ export function createRallyCreateInstruction(
   const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
   const teamId = typeof accounts.teamId === 'number' ? new BN(accounts.teamId) : new BN(accounts.teamId.toString());
   const [team] = deriveTeamPda(accounts.gameEngine, teamId.toNumber());
-  const [estate] = deriveEstatePda(accounts.owner);
+  const [estate] = deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -144,7 +153,15 @@ export function createRallyCreateInstruction(
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data (107 bytes):
+  // Add optional hero accounts when committing a hero
+  const heroSlot = params.heroSlotIndex ?? 255;
+  if (heroSlot !== 255 && params.heroMint && params.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
+    keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+  }
+
+  // Instruction data (108 bytes):
   // - rally_id: u64 (8)
   // - target: Pubkey (32)
   // - target_type: u8 (1)
@@ -157,7 +174,8 @@ export function createRallyCreateInstruction(
   // - ranged: u64 (8)
   // - siege: u64 (8)
   // - team_id: u64 (8)
-  const writer = new BufferWriter(107);
+  // - hero_slot_index: u8 (1) - 255=no hero, 0-2=commit hero from slot
+  const writer = new BufferWriter(108);
   writer.writeU64(accounts.rallyId);
   writer.writePubkey(accounts.target);
   writer.writeU8(params.targetType);
@@ -170,6 +188,7 @@ export function createRallyCreateInstruction(
   writer.writeU64(params.rangedWeapons);
   writer.writeU64(params.siegeWeapons);
   writer.writeU64(accounts.teamId);
+  writer.writeU8(params.heroSlotIndex ?? 255);
 
   const data = createInstructionData(DISCRIMINATORS.RALLY_CREATE, writer.toBuffer());
 
@@ -214,8 +233,15 @@ export interface RallyJoinParams {
   rangedWeapons: BN | number | bigint;
   /** Siege weapons to commit */
   siegeWeapons: BN | number | bigint;
+  /** Hero slot index (255=no hero, 0-2=commit hero from slot). Defaults to 255. */
+  heroSlotIndex?: number;
+  /** Hero NFT mint address (required if heroSlotIndex is set) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if heroSlotIndex is set) */
+  heroTemplateId?: number;
 }
 
+/** ~35,000 CU */
 /**
  * Join an existing rally.
  *
@@ -266,7 +292,15 @@ export function createRallyJoinInstruction(
     { pubkey: team, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data (56 bytes):
+  // Add optional hero accounts when committing a hero
+  const heroSlot = params.heroSlotIndex ?? 255;
+  if (heroSlot !== 255 && params.heroMint && params.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
+    keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: false });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+  }
+
+  // Instruction data (57 bytes):
   // - units_1: u64 (8)
   // - units_2: u64 (8)
   // - units_3: u64 (8)
@@ -274,7 +308,8 @@ export function createRallyJoinInstruction(
   // - ranged: u64 (8)
   // - siege: u64 (8)
   // - team_id: u64 (8)
-  const writer = new BufferWriter(56);
+  // - hero_slot_index: u8 (1) - 255=no hero, 0-2=commit hero from slot
+  const writer = new BufferWriter(57);
   writer.writeU64(params.defensiveUnit1);
   writer.writeU64(params.defensiveUnit2);
   writer.writeU64(params.defensiveUnit3);
@@ -282,6 +317,7 @@ export function createRallyJoinInstruction(
   writer.writeU64(params.rangedWeapons);
   writer.writeU64(params.siegeWeapons);
   writer.writeU64(accounts.teamId);
+  writer.writeU8(heroSlot);
 
   const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
 
@@ -313,6 +349,7 @@ export interface RallyLeaveAccounts {
   homeCityId: number;
 }
 
+/** ~10,000 CU */
 /**
  * Leave a rally before it executes.
  *
@@ -376,6 +413,7 @@ export interface RallyCancelAccounts {
   rallyCityId: number;
 }
 
+/** ~20,000 CU */
 /**
  * Cancel a rally (creator only).
  *
@@ -385,7 +423,7 @@ export interface RallyCancelAccounts {
  * On-chain accounts (5):
  * 0. [writable] rally: RallyAccount PDA
  * 1. [writable] participant: RallyParticipant PDA (creator's)
- * 2. [] player: PlayerAccount PDA (for validation)
+ * 2. [writable] player: PlayerAccount PDA (decrements rally counter)
  * 3. [signer] owner: Creator's wallet
  * 4. [] rally_city: CityAccount PDA
  *
@@ -402,7 +440,7 @@ export function createRallyCancelInstruction(
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
     { pubkey: participant, isSigner: false, isWritable: true },
-    { pubkey: player, isSigner: false, isWritable: false },
+    { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: rallyCity, isSigner: false, isWritable: false },
   ];
@@ -435,6 +473,7 @@ export interface RallyExecuteAccounts {
   garrisonAccounts?: PublicKey[];
 }
 
+/** ~50,000 CU */
 /**
  * Execute a rally attack.
  *
@@ -503,8 +542,15 @@ export interface RallyProcessReturnAccounts {
   rallyCityId: number;
   /** Participant's home city ID */
   homeCityId: number;
+  /** Hero NFT mint address (required if participant committed a hero) */
+  heroMint?: PublicKey;
+  /** Hero template ID (required if participant committed a hero) */
+  heroTemplateId?: number;
+  /** If true, include hero_collection and system_program for NFT transfer (when all hero slots are full) */
+  heroNeedsTransfer?: boolean;
 }
 
+/** ~10,000 CU */
 /**
  * Process return from rally to receive share of loot.
  *
@@ -513,7 +559,7 @@ export interface RallyProcessReturnAccounts {
  * Awards loot directly to PlayerAccount (if attacker won).
  * Closes the RallyParticipant account.
  *
- * On-chain accounts (7):
+ * On-chain accounts (8):
  * 0. [writable] rally: RallyAccount PDA
  * 1. [writable] participant: RallyParticipant PDA
  * 2. [writable] player: PlayerAccount PDA (receiving loot)
@@ -521,6 +567,7 @@ export interface RallyProcessReturnAccounts {
  * 4. [] game_engine: GameEngine PDA
  * 5. [] rally_city: CityAccount PDA
  * 6. [] home_city: CityAccount PDA
+ * 7. [writable] estate: EstateAccount PDA (wounded tracking)
  *
  * On-chain data: None
  */
@@ -533,6 +580,8 @@ export function createRallyProcessReturnInstruction(
   const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
   const [homeCity] = deriveCityPda(accounts.gameEngine, accounts.homeCityId);
 
+  const [estate] = deriveEstatePda(player);
+
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
     { pubkey: participant, isSigner: false, isWritable: true },
@@ -541,7 +590,24 @@ export function createRallyProcessReturnInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: rallyCity, isSigner: false, isWritable: false },
     { pubkey: homeCity, isSigner: false, isWritable: false },
+    { pubkey: estate, isSigner: false, isWritable: true },
   ];
+
+  // Add optional hero accounts when participant had a committed hero
+  if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
+    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+    // hero_mint is writable in case NFT transfer is needed (all slots full)
+    keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
+    keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
+
+    // If hero needs to be transferred (all hero slots full on player),
+    // include hero_collection and system_program
+    if (accounts.heroNeedsTransfer) {
+      const [heroCollection] = deriveHeroCollectionPda();
+      keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
+      keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
+    }
+  }
 
   const data = createInstructionData(DISCRIMINATORS.RALLY_PROCESS_RETURN);
 
@@ -578,6 +644,7 @@ export interface RallySpeedupParams {
   speedupTier: 1 | 2;
 }
 
+/** ~10,000 CU */
 /**
  * Speed up a rally phase by spending gems.
  *
@@ -644,6 +711,7 @@ export interface RallyCloseAccounts {
   rally: PublicKey;
 }
 
+/** ~5,000 CU */
 /**
  * Close a completed rally to recover rent.
  *

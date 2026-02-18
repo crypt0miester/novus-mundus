@@ -36,6 +36,7 @@ import {
 import {
   fetchPlayer,
 } from '../utils/accounts';
+import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
 } from '../fixtures/time';
@@ -49,6 +50,7 @@ describe('Sanctuary System', () => {
   let factory: PlayerFactory;
 
   beforeAll(async () => {
+    log.section('Sanctuary System');
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: true });
   });
@@ -62,12 +64,12 @@ describe('Sanctuary System', () => {
   // ============================================================
 
   describe('Starting Meditation', () => {
-    it('should start meditation with hero', async () => {
+    it('should reject meditation without real hero in slot', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Meditation requires a hero and sanctuary building
-      // heroSlot: 0-2 (active hero slots)
-      const heroMint = PublicKey.default; // Would be actual hero
+      // Meditation requires an actual hero locked in a slot
+      // Using PublicKey.default (no real hero) should fail with HeroNotInSlot
+      const heroMint = PublicKey.default;
       const heroTemplateId = 1;
       const heroSlot = 0;
 
@@ -76,15 +78,11 @@ describe('Sanctuary System', () => {
         { heroSlot }
       );
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
-
-        // Verify meditation started
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
-        expect(account).not.toBeNull();
-      } catch {
-        // Might fail if no hero or no sanctuary
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(ix),
+        [player.keypair]
+      );
     });
 
     it('should reject meditation without sanctuary building', async () => {
@@ -137,12 +135,12 @@ describe('Sanctuary System', () => {
   // ============================================================
 
   describe('Claiming Meditation', () => {
-    it('should claim meditation rewards', async () => {
+    it('should reject claim when no meditation active', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const heroMint = PublicKey.default;
       const heroTemplateId = 1;
 
-      // Claim requires heroMint and heroTemplateId
+      // Claim without an active meditation should fail
       const claimIx = createClaimMeditationInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -150,11 +148,11 @@ describe('Sanctuary System', () => {
         heroTemplateId,
       });
 
-      try {
-        await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
-      } catch {
-        // Expected if not meditating or duration not elapsed
-      }
+      await expectTransactionToFail(
+        ctx.connection,
+        new Transaction().add(claimIx),
+        [player.keypair]
+      );
     });
 
     it('should reject claim when not meditating', async () => {
