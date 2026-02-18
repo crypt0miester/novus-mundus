@@ -1,0 +1,296 @@
+@import "tailwindcss";
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NOVUS MUNDUS — Black & Gold Elite Theme
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Gold palette */
+  --color-gold-50: #fefce8;
+  --color-gold-100: #fef9c3;
+  --color-gold-200: #fef08a;
+  --color-gold-300: #fde047;
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+  --color-gold-700: #b45309;
+  --color-gold-800: #92400e;
+  --color-gold-900: #78350f;
+
+  /* Semantic tokens */
+  --color-primary: #fbbf24;
+  --color-primary-hover: #f59e0b;
+  --color-primary-dim: #92400e;
+
+  --color-surface: #09090b;
+  --color-surface-raised: #18181b;
+  --color-surface-overlay: #27272a;
+
+  --color-border-default: #27272a;
+  --color-border-gold: #92400e;
+  --color-border-gold-bright: #fbbf24;
+
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-gold: #fbbf24;
+  --color-text-muted: #52525b;
+
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-info: #3b82f6;
+
+  /* Shadows */
+  --shadow-gold-sm: 0 0 8px rgba(251, 191, 36, 0.15);
+  --shadow-gold-md: 0 0 16px rgba(251, 191, 36, 0.2);
+  --shadow-gold-lg: 0 0 32px rgba(251, 191, 36, 0.3);
+  /* Fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Cinzel", serif;
+}
+
+/* ─── Tier CSS Variables ─── */
+
+:root {
+  --tier-accent: #92400e;
+  --tier-accent-bright: #92400e;
+  --tier-accent-glow: rgba(146, 64, 14, 0.15);
+  --tier-border: #27272a;
+  --tier-noise: 0.04;
+  --tier-vignette: 0.5;
+  --tier-vignette-color: 0, 0, 0;
+  --tier-scrollbar: #27272a;
+
+  /* ─── NM Design System Variables ─── */
+  --nm-bg: #09090b;
+  --nm-bg-raised: #18181b;
+  --nm-bg-bar: #111113;
+  --nm-accent: var(--tier-accent);
+  --nm-accent-bright: var(--tier-accent-bright);
+  --nm-text: #fafafa;
+  --nm-text-secondary: #a1a1aa;
+  --nm-text-muted: #52525b;
+  --nm-border: var(--tier-border);
+}
+
+/* ─── NM Tier Overrides ─── */
+body[data-theme="paper"] {
+  --nm-bg: #F5F0E8;
+  --nm-bg-raised: #EDE8DF;
+  --nm-bg-bar: #E5E0D7;
+  --nm-text: #1a1a1a;
+  --nm-text-secondary: #4a4a4a;
+  --nm-text-muted: #8a8a7a;
+  --nm-border: #d4cfc6;
+}
+
+body[data-tier="0"] {
+  --nm-accent: #92400e;
+  --nm-accent-bright: #92400e;
+}
+body[data-tier="1"] {
+  --nm-accent: #B87333;
+  --nm-accent-bright: #D4944A;
+}
+body[data-tier="2"] {
+  --nm-accent: #C0C0C0;
+  --nm-accent-bright: #D4D4D4;
+}
+body[data-tier="3"] {
+  --nm-accent: #CFB53B;
+  --nm-accent-bright: #E5CC5C;
+}
+body[data-tier="4"] {
+  --nm-accent: #8B0000;
+  --nm-accent-bright: #C42B2B;
+}
+
+body[data-tier="1"] {
+  --tier-accent: #CD7F32;
+  --tier-accent-bright: #D4944A;
+  --tier-accent-glow: rgba(205, 127, 50, 0.15);
+  --tier-border: #3D2B1F;
+  --tier-noise: 0.025;
+  --tier-vignette: 0.35;
+  --tier-scrollbar: #5C4033;
+}
+
+body[data-tier="2"] {
+  --tier-accent: #94A3B8;
+  --tier-accent-bright: #B0BEC5;
+  --tier-accent-glow: rgba(148, 163, 184, 0.15);
+  --tier-border: #2D3748;
+  --tier-noise: 0.02;
+  --tier-vignette: 0.25;
+  --tier-scrollbar: #4A5568;
+}
+
+body[data-tier="3"] {
+  --tier-accent: #FBBF24;
+  --tier-accent-bright: #FEF08A;
+  --tier-accent-glow: rgba(251, 191, 36, 0.2);
+  --tier-border: #422006;
+  --tier-noise: 0.01;
+  --tier-vignette: 0.15;
+  --tier-scrollbar: #92400e;
+}
+
+body[data-tier="4"] {
+  --tier-accent: #8B1A1A;
+  --tier-accent-bright: #C42B2B;
+  --tier-accent-glow: rgba(139, 26, 26, 0.25);
+  --tier-border: #3B1111;
+  --tier-noise: 0;
+  --tier-vignette: 0.12;
+  --tier-vignette-color: 40, 8, 8;
+  --tier-scrollbar: #5C1515;
+}
+
+/* ─── Base ─── */
+
+body {
+  @apply bg-surface text-text-primary antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  --color-border-default: var(--tier-border);
+  --color-border-gold: var(--tier-accent);
+  --color-border-gold-bright: var(--tier-accent-bright);
+}
+
+/* ─── Noise overlay ─── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--tier-noise);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tier-scrollbar);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--tier-scrollbar) 70%, white);
+}
+
+/* ─── Gold effects ─── */
+
+.tier-title {
+  color: var(--tier-accent-bright);
+}
+
+
+.accent-border {
+  border: 1px solid var(--nm-accent);
+}
+
+.accent-border-bright {
+  border: 1px solid var(--nm-accent-bright);
+}
+
+
+/* ─── Progress bar animation ─── */
+
+.bar-gold {
+  background: var(--nm-accent);
+}
+
+.tier-bar {
+  background: var(--nm-accent);
+}
+
+
+/* ─── Card styles ─── */
+
+.card {
+  @apply bg-surface-raised rounded-lg border border-border-default p-4;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--nm-accent);
+}
+
+.card-active {
+  border-color: var(--nm-accent-bright);
+}
+
+/* ─── Tier-aware accent utilities ─── */
+
+.tier-accent-text {
+  color: var(--tier-accent-bright);
+}
+
+.tier-hover-text:hover {
+  color: var(--tier-accent-bright);
+}
+
+.tier-accent-border {
+  border-color: var(--tier-accent);
+}
+
+.tier-accent-glow {
+  box-shadow: 0 0 12px var(--tier-accent-glow), 0 0 24px var(--tier-accent-glow);
+}
+
+.tier-border {
+  border: 1px solid var(--tier-accent);
+  box-shadow: inset 0 0 0 1px var(--tier-accent-glow);
+}
+
+.shimmer-tier {
+  color: var(--nm-accent-bright);
+}
+
+/* Free tier: dull accent */
+body[data-tier="0"] .tier-title,
+body:not([data-tier]) .tier-title {
+  color: #52525b;
+}
+
+/* Free tier: disable card hover glow */
+body[data-tier="0"] .card:hover,
+body:not([data-tier]) .card:hover {
+  border-color: #3f3f46;
+  box-shadow: none;
+}
+
+/* Tier badge base */
+.tier-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--tier-accent-bright);
+}
+
+/* Legendary badge — crimson */
+body[data-tier="4"] .tier-badge {
+  color: #C42B2B;
+}
+
+
+/* ─── Tabular nums for all game numbers ─── */
+.game-num {
+  @apply font-mono text-text-gold;
+  font-variant-numeric: tabular-nums;
+}
+
