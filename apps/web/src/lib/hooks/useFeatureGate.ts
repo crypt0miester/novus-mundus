@@ -20,7 +20,7 @@ export const BuildingName: Record<number, string> = {
 };
 
 // ─── Extension flags (matches SDK ExtensionFlags) ────────────
-export const Ext = {
+const Ext = {
   RESEARCH:  1 << 0,
   HEROES:    1 << 1,
   INVENTORY: 1 << 2,
@@ -63,6 +63,7 @@ export const FEATURES = {
   // Heroes
   HERO_MINT: "hero_mint",
   HERO_LOCK: "hero_lock",
+  HERO_LEVEL_UP: "hero_level_up",
   // Research
   RESEARCH_START: "research_start",
   // Forge
@@ -145,13 +146,17 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
   ],
   [FEATURES.HERO_LOCK]: [
     { estate: true },
-    { building: { type: BuildingId.Sanctuary, level: 1 } },
+    { building: { type: BuildingId.Citadel, level: 1 } },
     { extension: Ext.RALLY },
+  ],
+  [FEATURES.HERO_LEVEL_UP]: [
+    { estate: true },
+    { building: { type: BuildingId.Sanctuary, level: 1 } },
+    { extension: Ext.HEROES },
   ],
   [FEATURES.RESEARCH_START]: [
     { estate: true },
     { building: { type: BuildingId.Academy, level: 1 } },
-    { extension: Ext.RESEARCH },
   ],
   [FEATURES.FORGE_CRAFT]: [
     { estate: true },
@@ -179,15 +184,15 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
   [FEATURES.CASTLE_CLAIM]: [{ team: true }],
   [FEATURES.SHOP_PURCHASE]: [
     { estate: true },
-    { building: { type: BuildingId.Market, level: 1 } },
     { extension: Ext.RESEARCH },
+    { building: { type: BuildingId.Market, level: 1 } },
   ],
   [FEATURES.SHOP_BUNDLE]: [
     { estate: true },
-    { building: { type: BuildingId.Market, level: 1 } },
     { extension: Ext.RESEARCH },
+    { building: { type: BuildingId.Market, level: 1 } },
   ],
-  [FEATURES.SUBSCRIPTION]: [{ extension: Ext.RESEARCH }],
+  [FEATURES.SUBSCRIPTION]: [],
 };
 
 // ─── Extension name helper ───────────────────────────────────
@@ -206,7 +211,7 @@ export interface MissingRequirement {
   href: string;
 }
 
-export interface GateResult {
+interface GateResult {
   allowed: boolean;
   missing: MissingRequirement[];
   loading: boolean;
@@ -309,7 +314,7 @@ export function useFeatureGate(feature: string): GateResult {
 }
 
 // ─── Multi-feature hook (page-level: allowed if ANY feature passes) ──
-export function usePageGate(features: string[]): GateResult {
+function usePageGate(features: string[]): GateResult {
   const { data: playerData, isLoading: playerLoading } = usePlayer();
   const { data: estateData, isLoading: estateLoading } = useEstate();
 

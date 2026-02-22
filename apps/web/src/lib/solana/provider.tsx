@@ -12,6 +12,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { NovusMundusClient } from "@/lib/sdk";
 import { startGameSubscriptions } from "@/lib/store/subscriptions";
 import { useAccountStore } from "@/lib/store/accounts";
+import { useTierTheme } from "@/lib/hooks/useTierTheme";
 
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8899";
 
@@ -26,7 +27,7 @@ export function useNovusMundusClient(): NovusMundusClient {
 
 export function GameProviders({ children }: { children: React.ReactNode }) {
   const wallets = useMemo(() => [], []);
-  const endpoint = useMemo(() => RPC_URL, []);
+  const endpoint = RPC_URL;
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
   }));
@@ -38,6 +39,7 @@ export function GameProviders({ children }: { children: React.ReactNode }) {
           <QueryClientProvider client={queryClient}>
             <NovusMundusClientProvider>
               <SubscriptionBridge />
+              <TierThemeBridge />
               {children}
             </NovusMundusClientProvider>
           </QueryClientProvider>
@@ -61,6 +63,12 @@ function NovusMundusClientProvider({ children }: { children: React.ReactNode }) 
       {children}
     </NovusMundusContext.Provider>
   );
+}
+
+/** Sets data-tier and data-theme on body globally */
+function TierThemeBridge() {
+  useTierTheme();
+  return null;
 }
 
 /**

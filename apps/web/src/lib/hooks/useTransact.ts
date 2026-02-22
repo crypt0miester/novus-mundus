@@ -3,11 +3,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { TransactionInstruction } from "@solana/web3.js";
-import { VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
+import { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useNotifications } from "@/lib/store/notifications";
 import { useSettings } from "@/lib/store/settings";
 import { useAccountStore } from "@/lib/store/accounts";
+import { refetchAccounts } from "@/lib/store/refetch";
 import { useEventStore, serializeEventData, type EventEntry } from "@/lib/store/events";
 import { classifyEvent } from "@/lib/events/classify";
 import { formatEventMessage } from "@/lib/events/format";
@@ -75,6 +76,8 @@ interface TransactOptions {
   versionedTx?: VersionedTransaction;
   /** Lookup tables for building a VersionedTransaction from instructions. */
   lookupTables?: AddressLookupTableAccount[];
+  /** Additional keypair signers (e.g. hero mint keypair). Partial-sign before wallet signs. */
+  signers?: Keypair[];
   invalidateKeys?: string[][];
   successMessage?: string;
   onPhase?: (phase: "preparing" | "signing" | "sending") => void;
@@ -113,6 +116,11 @@ export function useTransact() {
         );
       } else {
         throw new Error("Must provide instructions or versionedTx");
+      }
+
+      // Partial-sign with any additional keypairs (e.g. hero mint)
+      if (opts.signers && opts.signers.length > 0) {
+        tx.sign(opts.signers);
       }
 
       onPhase?.("signing");
@@ -214,9 +222,27 @@ export function useTransact() {
       for (const key of keys) {
         queryClient.invalidateQueries({ queryKey: key });
       }
+
+      // Zustand refetch — RPC fetch affected accounts and push to store.
+      // The WS subscription does this too, but can lag or silently fail.
+      if (keys.length > 0 && wallet.publicKey) {
+        const flatKeys = keys.map((k) => k[0]);
+        refetchAccounts(flatKeys, client, wallet.publicKey).catch(() => {});
+      }
     },
 
     onError: (error) => {
+      // Pre-send errors (TypeError, missing accounts, etc.) — show as-is
+      if (error instanceof TypeError || error instanceof RangeError) {
+        addNotification({
+          type: "error",
+          title: "Transaction failed",
+          message: error.message,
+        });
+        return;
+      }
+
+      // On-chain / Solana errors — parse custom program codes
       const parsed = parseTransactionError(error);
       addNotification({
         type: "error",

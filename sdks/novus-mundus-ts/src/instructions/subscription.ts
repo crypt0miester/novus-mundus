@@ -97,7 +97,7 @@ export function createPurchaseSubscriptionInstruction(
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: user, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
-    { pubkey: accounts.paymentAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.paymentAuthority ?? user, isSigner: true, isWritable: false },
     { pubkey: accounts.treasury, isSigner: false, isWritable: true },
     { pubkey: userNoviAta, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
@@ -105,6 +105,7 @@ export function createPurchaseSubscriptionInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
+  console.log("Purchase Subscription Instruction:", keys.map(k => `${k.pubkey.toBase58()}${k.isSigner ? " (signer)" : ""}${k.isWritable ? " (writable)" : ""}`).join(", "));
 
   // Optional accounts for TOKEN payment (payment_type=2)
   if (accounts.paymentMint) {

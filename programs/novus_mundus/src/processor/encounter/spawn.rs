@@ -150,7 +150,12 @@ pub fn process(
 
     // 6. Check City Encounter Limit (Dynamic Scaling)
 
-    if !city_data.can_spawn_encounter() {
+    let combat = &game_engine_data.combat_config;
+    if !city_data.can_spawn_encounter(
+        combat.base_encounters_per_city,
+        combat.encounters_per_player_count,
+        combat.max_encounters_per_city,
+    ) {
         return Err(GameError::CityEncounterLimitReached.into());
     }
 
@@ -399,7 +404,7 @@ pub fn process(
         game_engine: *game_engine_account.key(),
         id: encounter_id,
         city_id: city_data.city_id,
-        level: encounter_level,                 // NEW
+        level: encounter_level,                 
         rarity: encounter_type as u8,
         _padding0: [0; 4],
         location_lat: spawn_lat,
@@ -408,9 +413,9 @@ pub fn process(
         despawn_at: now + encounter_type.despawn_duration(),
         health: total_health,
         max_health: total_health,
-        defense,                                // NEW
+        defense,
         _padding1: [0; 4],
-        attacker_count: 0,                      // Start with 0 attackers
+        attacker_count: 0,
         bump: encounter_bump,
         _padding2: [0; 6],
     };

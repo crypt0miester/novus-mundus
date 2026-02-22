@@ -168,7 +168,7 @@ export class TextureManager {
               // Color and emissive maps are sRGB; all others are linear data
               tex.colorSpace = (prop === 'map' || prop === 'emissiveMap')
                 ? THREE.SRGBColorSpace
-                : THREE.LinearSRGBColorSpace;
+                : THREE.NoColorSpace;
               result[prop] = tex;
             }
           })
@@ -218,7 +218,7 @@ export class TextureManager {
     tex.magFilter = THREE.LinearFilter;
     tex.colorSpace = opts.colorSpace === 'srgb'
       ? THREE.SRGBColorSpace
-      : THREE.LinearSRGBColorSpace;
+      : THREE.NoColorSpace;
 
     return tex;
   }

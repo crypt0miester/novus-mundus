@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { getCachedTier } from "@/lib/hooks/useTierTheme";
 
-export type TransitionPhase = "idle" | "entering" | "holding" | "exiting";
+type TransitionPhase = "idle" | "entering" | "holding" | "exiting";
 
 // ============================================================
 // Transition Messages

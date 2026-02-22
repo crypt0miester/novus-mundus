@@ -96,7 +96,7 @@ function generateNoiseTexture(size = 256) {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipMapLinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
   tex.needsUpdate = true;
   return tex;

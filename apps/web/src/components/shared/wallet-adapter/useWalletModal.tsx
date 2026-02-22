@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-export interface WalletModalContextState {
+interface WalletModalContextState {
   visible: boolean;
   setVisible: (open: boolean) => void;
 }

@@ -21,6 +21,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 import { TownTerrainBuilder } from './terrain/TownTerrainBuilder.js';
 import { WaterSystem } from './terrain/WaterSystem.js';
+import { OceanSystem } from './terrain/OceanSystem.js';
 import { BiomeShaderMaterial } from './terrain/BiomeShader.js';
 import { DistrictSystem } from './layout/DistrictSystem.js';
 
@@ -29,17 +30,16 @@ import { BuildingFactory } from './buildings/BuildingFactory.js';
 import { BuildingAnimator } from './buildings/BuildingAnimator.js';
 import { DayNightCycle } from './atmosphere/DayNightCycle.js';
 import { WeatherSystem } from './atmosphere/WeatherSystem.js';
+import { RainRenderer } from './atmosphere/RainRenderer.js';
 
 import { DailyWindows } from './atmosphere/DailyWindows.js';
 import { NPCManager } from './population/NPCManager.js';
 import { AnimalSystem } from './population/AnimalSystem.js';
 import { EconomyCartSystem } from './population/EconomyCarts.js';
 import { GrassSystem } from './vegetation/GrassSystem.js';
-import { TreeWindSystem } from './vegetation/TreeWind.js';
 import { FlowerFieldSystem } from './vegetation/FlowerFields.js';
 import { PropPhysicsSystem } from './physics/PropPhysics.js';
 import { ClothSimulation } from './physics/ClothSimulation.js';
-import { WaterInteraction } from './physics/WaterInteraction.js';
 import { GPUParticleSystem } from './particles/GPUParticles.js';
 import { IsometricCamera } from './camera/IsometricCamera.js';
 import { CameraTransitions } from './camera/CameraTransitions.js';
@@ -89,20 +89,8 @@ function populationForLevel(estateLevel) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  Edge-mountain 9-point grid constants
+//  Edge-mountain arc-extruded segment constants
 // ═══════════════════════════════════════════════════════
-
-/** Grid key → polar angle (degrees) + radius fraction of half-mesh. */
-const MOUNTAIN_GRID = {
-  TL: { angle: 225, radius: 0.80 },   // NW — screen top-left
-  T:  { angle: 270, radius: 0.78 },   // N  — screen top
-  TR: { angle: 315, radius: 0.80 },   // NE — screen top-right
-  ML: { angle: 180, radius: 0.82 },   // W  — screen mid-left
-  MR: { angle:   0, radius: 0.82 },   // E  — screen mid-right
-  BL: { angle: 135, radius: 0.82 },   // SW — screen bottom-left
-  B:  { angle:  90, radius: 0.85 },   // S  — screen bottom
-  BR: { angle:  45, radius: 0.82 },   // SE — screen bottom-right
-};
 
 /** Fallback flat-color hex per rock texture pack. */
 const ROCK_COLORS = {
@@ -114,20 +102,407 @@ const ROCK_COLORS = {
   'terrain-rocky-light': 0x7a7a6a,
 };
 
-/** Default mountain configuration — reproduces the original visual. */
-export const DEFAULT_MOUNTAIN_CONFIG = {
-  T:  { height: 3, density: 5, snowLine: 0.55, rock: 'rock-cliff' },
-  TL: { height: 4, density: 0, snowLine: 0.55, rock: 'rock-cliff' },
-  TR: { height: 2, density: 0, snowLine: 0.55, rock: 'rock-cliff' },
-  ML: { height: 2, density: 3, snowLine: 0.65, rock: 'rock-cliff' },
-  MR: { height: 2, density: 3, snowLine: 0.55, rock: 'rock-cliff' },
-  BL: { height: 1, density: 1, snowLine: 0.80, rock: 'rock-cliff' },
-  B:  { height: 2, density: 3, snowLine: 1.0,  rock: 'rock-cliff' },
-  BR: { height: 1, density: 0, snowLine: 0.90, rock: 'rock-cliff' },
+/**
+ * Default mountain segments — arc-extruded parametric ranges.
+ *
+ * IMPORTANT: The sea system (_createSea) uses atan2(-z, x) while the mountain
+ * system uses cos/sin → (x, z). To convert: θ_mountain = (360 - θ_sea) % 360.
+ *
+ * Mountain angle → screen position (with camera yaw ≈ 35°):
+ *   ~180°=NW     ~225°=N (top)    ~270°=NE
+ *   ~135°=W                        ~315°=E
+ *    ~90°=SW      ~45°=S (bottom)    ~0°=SE
+ *
+ * Sea config angle 310° → mountain angle 50°.
+ * Sea zone (sea 265°-355°) → mountain zone 5°-95° → screen S/SE (bottom-right).
+ * Non-sea perimeter: mountain 95° to 5° (270° arc, wrapping CW through 360°).
+ */
+export const DEFAULT_MOUNTAIN_SEGMENTS = {
+  segments: [
+    {
+      id: 'west-cliff',             // mt 97°-152° — screen SW to W (left side, steep cliff)
+      arcStart: 97, arcEnd: 152,
+      peaks: [
+        { t: 0.0, height: 2.5, width: 1.2, offset: 0.0 },
+        { t: 0.5, height: 3.8, width: 1.4, offset: -0.1 },
+        { t: 1.0, height: 2.2, width: 1.1, offset: 0.0 },
+      ],
+      radius: 0.93, snowLine: 0.6, rock: 'rock-cliff',
+      profile: 'steep', foothillSpread: 0.5, scree: false,
+    },
+    {
+      id: 'northwest-ridge',        // mt 157°-222° — screen NW to W (upper-left ridge)
+      arcStart: 157, arcEnd: 222,
+      peaks: [
+        { t: 0.0, height: 1.5, width: 1.0, offset: 0.0 },
+        { t: 0.5, height: 2.5, width: 1.3, offset: -0.1 },
+        { t: 1.0, height: 2.0, width: 1.1, offset: 0.0 },
+      ],
+      radius: 0.93, snowLine: 1.0, rock: 'rock-cliff',
+      profile: 'rounded', foothillSpread: 0.6, scree: false,
+    },
+    {
+      id: 'north-range',            // mt 227°-268° — screen N (top center, tallest + snow)
+      arcStart: 227, arcEnd: 268,
+      peaks: [
+        { t: 0.0, height: 4.0, width: 1.4, offset: 0.0 },
+        { t: 0.4, height: 6.0, width: 1.6, offset: -0.2 },
+        { t: 0.8, height: 5.0, width: 1.4, offset: 0.0 },
+        { t: 1.0, height: 3.5, width: 1.2, offset: 0.0 },
+      ],
+      radius: 0.93, snowLine: 0.55, rock: 'rock-cliff',
+      profile: 'rugged', foothillSpread: 0.8, scree: true,
+    },
+    {
+      id: 'northeast-ridge',        // mt 273°-338° — screen NE to E (upper-right, some snow)
+      arcStart: 273, arcEnd: 338,
+      peaks: [
+        { t: 0.0, height: 2.0, width: 1.1, offset: 0.0 },
+        { t: 0.3, height: 3.5, width: 1.4, offset: -0.1 },
+        { t: 0.6, height: 2.8, width: 1.2, offset: 0.0 },
+        { t: 1.0, height: 1.8, width: 1.0, offset: 0.0 },
+      ],
+      radius: 0.93, snowLine: 0.7, rock: 'rock-cliff',
+      profile: 'rugged', foothillSpread: 0.7, scree: true,
+    },
+    {
+      id: 'east-cliffs',            // mt 343°-30° — screen E/SE (right edge, steep, extends into sea taper)
+      arcStart: 343, arcEnd: 30,
+      peaks: [
+        { t: 0.0, height: 2.5, width: 1.2, offset: 0.0 },
+        { t: 0.5, height: 3.8, width: 1.4, offset: -0.1 },
+        { t: 1.0, height: 2.2, width: 1.1, offset: 0.0 },
+      ],
+      radius: 0.93, snowLine: 0.6, rock: 'rock-cliff',
+      profile: 'steep', foothillSpread: 0.5, scree: true,
+    },
+  ],
 };
 
-/** Clockwise adjacency order for backdrop interpolation. */
-const RING_ORDER = ['TL', 'T', 'TR', 'MR', 'BR', 'B', 'BL', 'ML'];
+/**
+ * Old 9-point grid angles for backward-compat migration.
+ * Grid labels map to screen positions. Mountain-system angles for those positions:
+ * T(top)=225, TL=180, TR=270, ML(left)=135, MR(right)=315, BL=90, B(bottom)=45, BR=0
+ */
+const _OLD_GRID_ANGLES = {
+  TL: 180, T: 225, TR: 270, ML: 135, MR: 315, BL: 90, B: 45, BR: 0,
+};
+const _OLD_RING_ORDER = ['TL', 'T', 'TR', 'MR', 'BR', 'B', 'BL', 'ML'];
+
+// ── Angle utilities ──
+function _toRad(deg) { return deg * Math.PI / 180; }
+
+/** Lerp between two angles (degrees) with shortest-path wrapping. */
+function _lerpAngle(a, b, t) {
+  let delta = ((b - a + 540) % 360) - 180;
+  return ((a + delta * t) % 360 + 360) % 360;
+}
+
+/** Signed shortest angular delta from a to b (degrees), result in [-180, 180]. */
+function _angleDelta(a, b) {
+  return ((b - a + 540) % 360) - 180;
+}
+
+/** Check if `angle` lies within the arc from `start` to `end` (CW sweep, degrees). */
+function _isAngleInArc(angle, start, end) {
+  const a = ((angle - start) % 360 + 360) % 360;
+  const e = ((end - start) % 360 + 360) % 360;
+  return a <= e;
+}
+
+// ═══════════════════════════════════════════════════════
+//  Coherent noise helpers for geomorphological features
+// ═══════════════════════════════════════════════════════
+
+/** Smoothstep interpolation (GLSL-style). */
+function _smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** 2D hash for coherent noise lattice — deterministic, returns [0, 1]. */
+function _hash2(ix, iy) {
+  const n = (ix * 73 + iy * 157) | 0;
+  return Math.sin(n * 127.1 + 311.7) * 0.5 + 0.5;
+}
+
+/** 2D value noise with smooth interpolation, range [-1, 1]. */
+function _valueNoise2D(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const n00 = _hash2(ix, iy), n10 = _hash2(ix + 1, iy);
+  const n01 = _hash2(ix, iy + 1), n11 = _hash2(ix + 1, iy + 1);
+  return ((n00 + (n10 - n00) * sx) + ((n01 + (n11 - n01) * sx) - (n00 + (n10 - n00) * sx)) * sy) * 2 - 1;
+}
+
+/**
+ * Ridged multifractal noise — produces sharp ridge/gully features.
+ * 1 - |noise|, squared, with weighted octave stacking. Returns ~[0, 1].
+ */
+function _ridgedNoise(x, y, freq = 2.0, octaves = 4, lacunarity = 2.0, persistence = 0.5) {
+  let sum = 0, weight = 1.0, amplitude = 1.0, maxVal = 0, f = freq;
+  for (let i = 0; i < octaves; i++) {
+    let n = _valueNoise2D(x * f, y * f);
+    n = 1.0 - Math.abs(n);   // fold to create ridges
+    n = n * n;                // sharpen
+    n *= weight;
+    weight = Math.min(1.0, Math.max(0.0, n * 2.0));
+    sum += n * amplitude;
+    maxVal += amplitude;
+    f *= lacunarity;
+    amplitude *= persistence;
+  }
+  return sum / maxVal;
+}
+
+/** Domain warping — fbm-based coordinate distortion for organic shapes. */
+function _domainWarp(x, y, strength = 0.3) {
+  const wx = _valueNoise2D(x * 1.7 + 5.2, y * 1.7 + 1.3) * strength;
+  const wy = _valueNoise2D(x * 1.7 + 8.1, y * 1.7 + 3.9) * strength;
+  return { x: x + wx, y: y + wy };
+}
+
+/**
+ * Multi-factor snow accumulation model.
+ * Height + slope + wind aspect → composite score → boolean.
+ */
+function _snowAccumulation(avgH, localPeakH, snowLine, faceNormal) {
+  if (snowLine >= 1.0) return false;
+  const snowHeight = localPeakH * snowLine;
+  // Height factor: soft transition around snow line
+  const heightFactor = _smoothstep(snowHeight * 0.85, snowHeight * 1.15, avgH);
+  // Slope factor: snow can't stick to steep faces (>38°)
+  const cosAngle = Math.abs(faceNormal.y);
+  const slopeAngle = Math.acos(Math.min(1, cosAngle));
+  const maxSnowAngle = 38 * Math.PI / 180;
+  const slopeFactor = _smoothstep(maxSnowAngle, maxSnowAngle * 0.6, slopeAngle);
+  // Aspect factor: leeward side accumulates more (default wind from +X)
+  const aspectFactor = 0.7 + 0.3 * Math.max(0, -faceNormal.x);
+  return (heightFactor * slopeFactor * aspectFactor) > 0.35;
+}
+
+/**
+ * Thermal erosion pass — iteratively smooth unrealistic spikes, create talus accumulation.
+ * For each interior vertex, checks 4 neighbors. If slope exceeds talus angle (~38°),
+ * transfers height downhill. Rounds off spikes and creates scree at mountain bases.
+ */
+function _thermalErode(rings, iterations) {
+  const tanTalus = Math.tan(38 * Math.PI / 180);
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let ri = 1; ri < rings.length - 1; ri++) {
+      const ring = rings[ri];
+      const pLen = ring.profileLen;
+      for (let pi = 1; pi < pLen - 1; pi++) {
+        const pt = ring.worldPts[pi];
+        if (pt.y < 0) continue;
+        const neighbors = [
+          rings[ri - 1].worldPts[pi],
+          rings[ri + 1].worldPts[pi],
+          ring.worldPts[pi - 1],
+          ring.worldPts[pi + 1],
+        ];
+        for (const nb of neighbors) {
+          if (!nb || nb.y < 0) continue;
+          const dx = pt.x - nb.x, dz = pt.z - nb.z;
+          const dist = Math.sqrt(dx * dx + dz * dz);
+          if (dist < 0.001) continue;
+          const dh = pt.y - nb.y;
+          const maxDh = tanTalus * dist;
+          if (dh > maxDh) {
+            const transfer = (dh - maxDh) * 0.4;
+            pt.y -= transfer;
+            nb.y += transfer;
+          }
+        }
+      }
+    }
+  }
+}
+
+// ── Catmull-Rom interpolation through peak control points ──
+function _interpolatePeaks(peaks, t) {
+  const n = peaks.length;
+  if (n === 0) return { height: 0, width: 1, offset: 0 };
+  if (n === 1) return { height: peaks[0].height, width: peaks[0].width, offset: peaks[0].offset };
+  // Clamp t
+  t = Math.max(0, Math.min(1, t));
+  // Find which segment t falls into
+  let segIdx = 0;
+  for (let i = 0; i < n - 1; i++) {
+    if (t >= peaks[i].t && t <= peaks[i + 1].t) { segIdx = i; break; }
+    if (i === n - 2) segIdx = i; // clamp to last segment
+  }
+  const p0Idx = Math.max(0, segIdx - 1);
+  const p1Idx = segIdx;
+  const p2Idx = Math.min(n - 1, segIdx + 1);
+  const p3Idx = Math.min(n - 1, segIdx + 2);
+  const tRange = peaks[p2Idx].t - peaks[p1Idx].t;
+  const lt = tRange > 0 ? (t - peaks[p1Idx].t) / tRange : 0;
+  // Catmull-Rom per component
+  function cr(v0, v1, v2, v3, s) {
+    const s2 = s * s, s3 = s2 * s;
+    return 0.5 * ((2 * v1) + (-v0 + v2) * s + (2 * v0 - 5 * v1 + 4 * v2 - v3) * s2 + (-v0 + 3 * v1 - 3 * v2 + v3) * s3);
+  }
+  return {
+    height: Math.max(0.1, cr(peaks[p0Idx].height, peaks[p1Idx].height, peaks[p2Idx].height, peaks[p3Idx].height, lt)),
+    width:  Math.max(0.3, cr(peaks[p0Idx].width,  peaks[p1Idx].width,  peaks[p2Idx].width,  peaks[p3Idx].width,  lt)),
+    offset: cr(peaks[p0Idx].offset, peaks[p1Idx].offset, peaks[p2Idx].offset, peaks[p3Idx].offset, lt),
+  };
+}
+
+// ── Cross-section profile generators ──
+// Returns array of { r, h } where r = radial offset from ridgeline (negative=inward toward town),
+// h = height (0 at base). The profile represents a 2D silhouette of the mountain cross-section.
+// Front face uses hw-relative distances (scales with mountain width).
+// Back face uses ABSOLUTE distances (always fills beyond the map edge regardless of width).
+// A below-ground skirt ensures overlap with the terrain (no floating gap).
+function _generateProfile(type, height, width, foothillSpread, terrainH) {
+  const hw = width * 0.5;
+  switch (type) {
+    case 'rugged': return [
+      // Skirt below ground — ensures terrain overlap
+      { r: -(foothillSpread + hw + 0.4), h: -0.5 },
+      { r: -(foothillSpread + hw), h: terrainH },           // foothill start (ground level)
+      { r: -(foothillSpread * 0.6 + hw * 0.5), h: terrainH + height * 0.05 },
+      { r: -(hw * 0.8), h: height * 0.12 },
+      { r: -(hw * 0.7), h: height * 0.22 },
+      { r: -(hw * 0.55), h: height * 0.18 },               // cliff ledge dip
+      { r: -(hw * 0.5), h: height * 0.35 },
+      { r: -(hw * 0.35), h: height * 0.50 },
+      { r: -(hw * 0.25), h: height * 0.45 },               // second ledge dip
+      { r: -(hw * 0.15), h: height * 0.65 },
+      { r: -(hw * 0.05), h: height * 0.82 },
+      { r: 0, h: height },                                  // summit
+      // Back face — absolute distances (always fills beyond map edge)
+      { r: 0.3, h: height * 0.95 },
+      { r: 1.0, h: height * 0.90 },
+      { r: 2.0, h: height * 0.85 },
+      { r: 3.5, h: height * 0.80 },
+      { r: 5.5, h: height * 0.72 },
+    ];
+    case 'rounded': return [
+      { r: -(foothillSpread + hw + 0.4), h: -0.5 },
+      { r: -(foothillSpread + hw), h: terrainH },
+      { r: -(foothillSpread * 0.4 + hw * 0.5), h: terrainH + height * 0.06 },
+      { r: -(hw * 0.8), h: height * 0.15 },
+      { r: -(hw * 0.6), h: height * 0.30 },
+      { r: -(hw * 0.4), h: height * 0.50 },
+      { r: -(hw * 0.2), h: height * 0.72 },
+      { r: -(hw * 0.05), h: height * 0.90 },
+      { r: 0, h: height },
+      { r: 0.3, h: height * 0.96 },
+      { r: 1.0, h: height * 0.92 },
+      { r: 2.0, h: height * 0.86 },
+      { r: 3.5, h: height * 0.80 },
+      { r: 5.5, h: height * 0.70 },
+    ];
+    case 'steep': return [
+      { r: -(foothillSpread + hw + 0.4), h: -0.5 },
+      { r: -(foothillSpread + hw), h: terrainH },
+      { r: -(foothillSpread * 0.3 + hw * 0.4), h: terrainH + height * 0.04 },
+      { r: -(hw * 0.6), h: height * 0.10 },
+      { r: -(hw * 0.3), h: height * 0.60 },               // near-vertical cliff face
+      { r: -(hw * 0.15), h: height * 0.80 },
+      { r: -(hw * 0.05), h: height * 0.92 },
+      { r: 0, h: height },
+      { r: 0.2, h: height * 0.97 },
+      { r: 0.8, h: height * 0.93 },
+      { r: 2.0, h: height * 0.88 },
+      { r: 3.5, h: height * 0.83 },
+      { r: 5.5, h: height * 0.75 },
+    ];
+    default: return _generateProfile('rugged', height, width, foothillSpread, terrainH);
+  }
+}
+
+/** Build a BufferGeometry from flat Float32Array positions, with optional vertex colors, dummy UVs and computed normals. */
+function _buildGeoFromPositions(positions, colors) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (colors && colors.length > 0) {
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  }
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array((positions.length / 3) * 2), 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Migrate old 9-point grid config to new segments format. */
+function _migrateOldConfig(old) {
+  // Group adjacent active grid points into arc segments
+  const active = [];
+  for (const key of _OLD_RING_ORDER) {
+    const cfg = old[key];
+    if (cfg && cfg.density > 0) {
+      active.push({ key, angle: _OLD_GRID_ANGLES[key], cfg });
+    }
+  }
+  if (active.length === 0) return { segments: [] };
+
+  // Walk the ring and group contiguous active positions into segments
+  const segments = [];
+  let group = [active[0]];
+  for (let i = 1; i < active.length; i++) {
+    const prev = group[group.length - 1];
+    const cur = active[i];
+    const gap = Math.abs(_angleDelta(prev.angle, cur.angle));
+    if (gap <= 50) {
+      group.push(cur);
+    } else {
+      segments.push(_groupToSegment(group, segments.length));
+      group = [cur];
+    }
+  }
+  // Check if last and first connect (wrap around)
+  if (segments.length > 0 && group.length > 0) {
+    const lastInGroup = group[group.length - 1];
+    const firstActive = active[0];
+    const gap = Math.abs(_angleDelta(lastInGroup.angle, firstActive.angle));
+    if (gap <= 50 && segments.length > 0) {
+      // Merge group into first segment
+      group.push(...segments[0]._raw);
+      segments.shift();
+    }
+  }
+  segments.push(_groupToSegment(group, segments.length));
+  // Clean up temp _raw references
+  for (const s of segments) delete s._raw;
+  return { segments };
+}
+
+function _groupToSegment(group, idx) {
+  const angles = group.map(g => g.angle);
+  const minA = Math.min(...angles);
+  const maxA = Math.max(...angles);
+  const spread = 20; // degrees padding
+  const peaks = group.map((g, i) => ({
+    t: group.length === 1 ? 0.5 : i / (group.length - 1),
+    height: 1.5 + g.cfg.height * 1.0,
+    width: 0.8 + g.cfg.density * 0.08,
+    offset: 0,
+  }));
+  // Add bookend peaks for smooth taper
+  if (peaks[0].t > 0.05) peaks.unshift({ t: 0, height: peaks[0].height * 0.6, width: peaks[0].width * 0.8, offset: 0 });
+  if (peaks[peaks.length - 1].t < 0.95) peaks.push({ t: 1, height: peaks[peaks.length - 1].height * 0.6, width: peaks[peaks.length - 1].width * 0.8, offset: 0 });
+
+  const avgSnow = group.reduce((s, g) => s + (g.cfg.snowLine || 1), 0) / group.length;
+  const seg = {
+    id: `migrated-${idx}`,
+    arcStart: ((minA - spread) % 360 + 360) % 360,
+    arcEnd: ((maxA + spread) % 360 + 360) % 360,
+    peaks,
+    radius: 0.93,
+    snowLine: avgSnow,
+    rock: group[0].cfg.rock || 'rock-cliff',
+    profile: 'rugged',
+    foothillSpread: 0.8,
+    scree: true,
+  };
+  seg._raw = group; // temp for wrap detection
+  return seg;
+}
 
 export class TownRenderer {
   /**
@@ -157,6 +532,8 @@ export class TownRenderer {
     this._renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this._renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this._renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this._renderer.toneMappingExposure = 1.0;
     this._renderer.shadowMap.enabled = true;
     this._renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this._renderer.domElement);
@@ -178,6 +555,11 @@ export class TownRenderer {
     this._buildingAnimator = null;
     this._dayNight = null;
     this._weather = null;
+    this._rainRenderer = null;
+    this._rainEmitterId = null;
+    this._snowEmitterId = null;
+    this._lightningTimer = 0;
+    this._lightningMesh = null;
     this._dailyWindows = null;
     this._npcs = null;
     this._animals = null;
@@ -487,6 +869,33 @@ export class TownRenderer {
           : 128;
         this._weather.setWeatherFromSeed(cityTerrain.seed, dayOfYear, avgMoisture);
       }
+
+      // InstancedMesh rain renderer
+      this._rainRenderer = new RainRenderer(this._scene, {
+        maxCount: 10000,
+        spread: 10,
+        height: 6,
+        fallSpeed: 5.0,
+        dropWidth: 0.1,
+        dropHeight: 0.5,
+      });
+
+      // Lightning flash mesh — a large bright plane above the scene
+      {
+        const lGeo = new THREE.PlaneGeometry(30, 30);
+        const lMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color('#8886f5').multiplyScalar(80),
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        this._lightningMesh = new THREE.Mesh(lGeo, lMat);
+        this._lightningMesh.position.set(0, 8, 0);
+        this._lightningMesh.rotation.x = -Math.PI / 2;
+        this._lightningMesh.renderOrder = 20;
+        this._scene.add(this._lightningMesh);
+      }
     }
 
     // ── 10. Footprint System ──
@@ -607,8 +1016,6 @@ export class TownRenderer {
     this._propPhysics = new PropPhysicsSystem();
     this._registerBuildingProps(vs);
 
-    this._waterInteraction = new WaterInteraction(this._renderer);
-
     // Cloth (town banner flag)
     this._cloth = new ClothSimulation(0.15, 0.1, 20, 10, {
       damping: 0.97,
@@ -617,20 +1024,20 @@ export class TownRenderer {
     });
     const bannerPolePos = new THREE.Vector3(0, 0.25, 0);
     this._cloth.pinLeftEdge(bannerPolePos, 0.1);
-    this._cloth.mesh.material = new THREE.MeshStandardMaterial({
+    this._cloth.setMaterial(new THREE.MeshStandardMaterial({
       color: 0xcc2222,
       side: THREE.DoubleSide,
       roughness: 0.8,
-    });
+    }));
     this._townGroup.add(this._cloth.mesh);
 
     // ── 18. Camera ──
     // Pan bounds restrict camera to active district area
     let camBounds;
-    if (this._editMode) {
-      camBounds = 999; // unrestricted in edit mode
-    } else if (this._layoutConfig?.cameraBounds) {
+    if (this._layoutConfig?.cameraBounds) {
       camBounds = this._layoutConfig.cameraBounds;
+    } else if (this._editMode) {
+      camBounds = 999; // unrestricted in edit mode
     } else {
       camBounds = this._districts.getActiveBounds(vs.plotsOwned || 1);
     }
@@ -653,7 +1060,7 @@ export class TownRenderer {
     // ── 20. Scene Fog ──
     // Exponential fog softens far edges naturally
     const skyColor = this._dayNight ? this._dayNight.getSkyColor() : new THREE.Color(0x88bbee);
-    this._scene.fog = new THREE.Fog(skyColor, 9, 16);
+    this._scene.fog = new THREE.Fog(skyColor, 20, 60);
 
     // ── 21. State Manager ──
     this._stateManager = new TownStateManager();
@@ -746,9 +1153,12 @@ export class TownRenderer {
   focusBuilding(buildingIndex) {
     const group = this._buildingGroups.get(buildingIndex);
     if (group && this._cameraTransitions) {
-      const box = new THREE.Box3().setFromObject(group);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
+      if (!this._tmpBox) this._tmpBox = new THREE.Box3();
+      if (!this._tmpSize) this._tmpSize = new THREE.Vector3();
+      if (!this._tmpCenter) this._tmpCenter = new THREE.Vector3();
+      this._tmpBox.setFromObject(group);
+      const size = this._tmpBox.getSize(this._tmpSize);
+      const center = this._tmpBox.getCenter(this._tmpCenter);
       this._cameraTransitions.flyToBuilding(center, Math.max(size.x, size.z));
     }
   }
@@ -782,7 +1192,6 @@ export class TownRenderer {
     if (this._cameraTransitions) this._cameraTransitions = null;
     if (this._cameraController) this._cameraController.dispose();
     if (this._cloth) this._cloth.dispose();
-    if (this._waterInteraction) this._waterInteraction.dispose();
     if (this._propPhysics) this._propPhysics.dispose();
     if (this._flowers) this._flowers.dispose();
     if (this._economyCarts) this._economyCarts.dispose();
@@ -793,11 +1202,16 @@ export class TownRenderer {
     if (this._assetLoader) this._assetLoader.dispose();
     if (this._textureManager) this._textureManager.dispose();
     if (this._dailyWindows) this._dailyWindows.dispose();
+    if (this._particles && this._rainEmitterId != null) this._particles.removeEmitter(this._rainEmitterId);
+    if (this._particles && this._snowEmitterId != null) this._particles.removeEmitter(this._snowEmitterId);
+    this._rainEmitterId = null;
+    this._snowEmitterId = null;
     if (this._weather) this._weather.dispose();
     if (this._dayNight) this._dayNight.dispose();
     if (this._buildingAnimator) this._buildingAnimator.dispose();
     if (this._buildingFactory) this._buildingFactory.dispose();
     if (this._townSquare) this._townSquare.dispose();
+    if (this._ocean) this._ocean.dispose();
     if (this._water) this._water.dispose();
     if (this._terrain) this._terrain.dispose();
 
@@ -966,6 +1380,9 @@ export class TownRenderer {
       if (this._disposed) return;
       if (this._water && waterN1 && waterN2) {
         this._water.setWaterNormals(waterN1, waterN2);
+      }
+      if (this._ocean && waterN1 && waterN2) {
+        this._ocean.setNormalMaps(waterN1, waterN2);
       }
     } catch (err) {
       console.warn('[TownRenderer] Environment textures incomplete:', err.message || err);
@@ -1152,6 +1569,66 @@ export class TownRenderer {
     if (this._weather) this._weather.update(clampedDt);
     if (this._dailyWindows) this._dailyWindows.update(clampedDt, timeOfDay);
 
+    // ── Weather visual effects ──
+    if (this._weather) {
+      const rainI = this._weather.getRainIntensity();
+      const snowI = this._weather.getSnowIntensity();
+
+      // InstancedMesh rain renderer
+      if (this._rainRenderer) {
+        this._rainRenderer.setIntensity(rainI);
+        this._rainRenderer.setWind(windDir, windStr);
+        this._rainRenderer.update(clampedDt, this._camera);
+      }
+
+      // Snow particles (GPU particle system — still works for snow)
+      if (snowI > 0.05 && this._particles) {
+        if (this._snowEmitterId == null) {
+          this._snowEmitterId = this._particles.createEmitter('snow',
+            new THREE.Vector3(0, 0, 0), {
+              count: Math.round(5000 * snowI),
+              emitRadius: 12.0,
+              emitHeight: 6.0,
+            });
+        }
+      } else if (this._snowEmitterId != null && this._particles) {
+        this._particles.removeEmitter(this._snowEmitterId);
+        this._snowEmitterId = null;
+      }
+
+      // Fog: adjust near/far based on weather fog density
+      if (this._scene.fog) {
+        const fogD = this._weather.getFogDensity();
+        this._scene.fog.near = 20 - fogD * 28;
+        this._scene.fog.far  = 60 - fogD * 75;
+      }
+
+      // Ambient light dimming from weather
+      if (this._dayNight) {
+        const ambMul = this._weather.getAmbientMultiplier();
+        const sun = this._dayNight.sunLight;
+        const amb = this._dayNight.ambientLight;
+        if (sun) sun.intensity *= ambMul;
+        if (amb) amb.intensity *= ambMul;
+
+        // Lightning flash: visible mesh + light spike, held for ~200ms
+        if (this._weather.isLightningFlash()) {
+          this._lightningTimer = 0.2;
+        }
+        if (this._lightningTimer > 0) {
+          this._lightningTimer -= clampedDt;
+          const flash = Math.max(0, this._lightningTimer / 0.2);
+          if (sun) sun.intensity += 4.0 * flash;
+          if (amb) amb.intensity += 2.0 * flash;
+          if (this._lightningMesh) {
+            this._lightningMesh.material.opacity = flash * 0.3;
+          }
+        } else if (this._lightningMesh) {
+          this._lightningMesh.material.opacity = 0;
+        }
+      }
+    }
+
     // Update scene background and fog color from sky color
     if (this._dayNight) {
       const skyCol = this._dayNight.getSkyColor();
@@ -1173,10 +1650,33 @@ export class TownRenderer {
       this._water.update(clampedDt);
     }
 
+    // Ocean
+    if (this._ocean) {
+      if (this._dayNight) {
+        this._ocean.setSunDirection(this._dayNight.getSunDirection());
+        this._ocean.setSkyColor(this._dayNight.getSkyColor());
+        // Sun color/intensity from the directional light
+        if (this._dayNight._sun) {
+          this._ocean.setSunColor(this._dayNight._sun.color);
+          this._ocean.setSunIntensity(this._dayNight._sun.intensity);
+        }
+      }
+      this._ocean.setWind(windDir, windStr);
+      if (this._weather) {
+        this._ocean.setRainIntensity(this._weather.getRainIntensity());
+      }
+      this._ocean.update(clampedDt);
+    }
+
     // Biome material updates
     if (this._biomeMaterial && this._weather) {
       this._biomeMaterial.setWetness(this._weather.getWetness());
       this._biomeMaterial.setSnowAmount(this._weather.getSnowAmount());
+    }
+
+    // Building snow accumulation (shared uniform — updates all building materials)
+    if (this._weather) {
+      BuildingFactory.setSnowAmount(this._weather.getSnowAmount());
     }
 
     // Town square animation (floating orbs, flames)
@@ -1218,9 +1718,6 @@ export class TownRenderer {
       const windVec = new THREE.Vector3(windDir.x, 0, windDir.y);
       this._cloth.applyWind(windVec, windStr);
       this._cloth.update(clampedDt);
-    }
-    if (this._waterInteraction) {
-      this._waterInteraction.update(clampedDt);
     }
 
     // Footprints — stamp NPC and cart positions, then fade
@@ -1710,108 +2207,59 @@ export class TownRenderer {
   }
 
   /**
-   * Place procedural mountains around the map edge using a 9-point grid.
+   * Place procedural mountains around the map edge using arc-extruded parametric segments.
+   * Each segment defines a continuous mountain range along an angular arc of the perimeter.
    * Merges all geometry per rock-type into a single draw call each.
    * @param {number} meshSize
    * @param {object} terrainSampler
-   * @param {object} [config=DEFAULT_MOUNTAIN_CONFIG]
+   * @param {object} [config]
    */
-  _createEdgeRocks(meshSize, terrainSampler, config = DEFAULT_MOUNTAIN_CONFIG) {
+  _createEdgeRocks(meshSize, terrainSampler, config) {
+    // ── Backward compatibility: detect old 9-point grid format ──
+    if (config && !config.segments && (config.T || config.TL || config.TR || config.ML)) {
+      config = _migrateOldConfig(config);
+    }
+    if (!config || !config.segments) config = DEFAULT_MOUNTAIN_SEGMENTS;
+
     this._edgeRocksGroup = new THREE.Group();
     this._edgeRocksGroup.name = 'edge-mountains';
 
     const half = meshSize * 0.5;
     const PI2 = Math.PI * 2;
-    const toRad = (deg) => deg * Math.PI / 180;
     const rng = (i) => Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5;
 
-    // ── Template geometries ──
-    // Two layer types: flat ledges and tapered slopes
-    const ledgeTpl = new THREE.CylinderGeometry(1, 1, 1, 10, 1);      // flat plateau
-    const slopeTpl = new THREE.CylinderGeometry(0.55, 1, 1, 10, 2);   // tapered frustum (slope face)
-    const capTpl   = new THREE.IcosahedronGeometry(0.4, 0);            // irregular snow lump
-    const screeTpl = new THREE.IcosahedronGeometry(1, 0);              // scree boulders
-
-    // ── Inline helpers ──
-    function deformGeo(geo, seed, amount = 0.25) {
-      const clone = geo.clone();
-      const pos = clone.attributes.position;
-      for (let v = 0; v < pos.count; v++) {
-        const rx = Math.sin((seed * 1000 + v * 7.31) * 127.1 + 311.7) * 0.5 + 0.5;
-        const ry = Math.sin((seed * 1000 + v * 13.17) * 269.3 + 183.1) * 0.5 + 0.5;
-        const rz = Math.sin((seed * 1000 + v * 23.41) * 419.7 + 571.3) * 0.5 + 0.5;
-        pos.setX(v, pos.getX(v) + (rx - 0.5) * amount);
-        pos.setY(v, pos.getY(v) + (ry - 0.5) * amount * 0.2);
-        pos.setZ(v, pos.getZ(v) + (rz - 0.5) * amount);
-      }
-      pos.needsUpdate = true;
-      clone.computeVertexNormals();
-      return clone;
-    }
-
-    // Build a mountain from alternating ledges and slopes — topographic profile
-    function buildMountainLayers(geoArray, seed, x, baseY, z, width, height, rotY) {
-      const layers = 5 + Math.floor(rng(seed * 47) * 3); // 5-7 layers total
-      let curY = baseY;
-      let curR = width; // current radius at this height
-
-      for (let l = 0; l < layers; l++) {
-        const t = l / layers;
-        const isSlope = rng(seed + l * 67) > 0.35; // ~65% slopes, ~35% ledges
-        const tpl = isSlope ? slopeTpl : ledgeTpl;
-
-        // Slopes are taller, ledges are thin
-        const layerH = isSlope
-          ? (height / layers) * (1.0 + rng(seed + l * 31) * 0.6)
-          : (height / layers) * (0.25 + rng(seed + l * 31) * 0.25);
-
-        // Radius shrinks as we go up
-        const nextR = curR * (isSlope ? (0.72 + rng(seed + l * 43) * 0.12) : (0.92 + rng(seed + l * 43) * 0.08));
-
-        // Asymmetric XZ radii for non-circular footprint
-        const rX = curR * (0.9 + rng(seed + l * 17) * 0.2);
-        const rZ = curR * (0.85 + rng(seed + l * 23) * 0.3);
-
-        // Slight XZ offset per layer
-        const ox = (rng(seed + l * 41) - 0.5) * width * 0.08;
-        const oz = (rng(seed + l * 53) - 0.5) * width * 0.08;
-
-        const layer = deformGeo(tpl, seed + l * 100, isSlope ? 0.18 : 0.12);
-        bakeTransform(layer, x + ox, curY + layerH * 0.5, z + oz, rX, layerH, rZ, rotY + rng(seed + l * 61) * 0.4);
-        geoArray.push(layer);
-
-        curY += layerH;
-        curR = nextR;
-      }
-    }
-
-    const _m4 = new THREE.Matrix4();
-    const _pos = new THREE.Vector3();
-    const _quat = new THREE.Quaternion();
-    const _scl = new THREE.Vector3();
-    const _euler = new THREE.Euler();
-
-    function bakeTransform(geo, x, y, z, sx, sy, sz, rotY) {
-      _pos.set(x, y, z);
-      _euler.set(0, rotY, 0);
-      _quat.setFromEuler(_euler);
-      _scl.set(sx, sy, sz);
-      _m4.compose(_pos, _quat, _scl);
-      geo.applyMatrix4(_m4);
+    // ── Sea exclusion zone ──
+    // Sea system uses atan2(-z, x), mountain system uses cos/sin → (x, z).
+    // Convert: θ_mountain = (360 - θ_sea) % 360, and swap start/end.
+    const seaCfg = this._layoutConfig?.sea;
+    let seaStart = -1, seaEnd = -1;
+    if (seaCfg && seaCfg.enabled) {
+      const seaAngle = seaCfg.angle ?? 310;
+      const seaSpread = seaCfg.spread ?? 90;
+      const seaStartSea = ((seaAngle - seaSpread * 0.5) % 360 + 360) % 360; // 265 in sea-space
+      const seaEndSea   = ((seaAngle + seaSpread * 0.5) % 360 + 360) % 360; // 355 in sea-space
+      seaStart = ((360 - seaEndSea)   % 360 + 360) % 360; // 5 in mountain-space
+      seaEnd   = ((360 - seaStartSea) % 360 + 360) % 360; // 95 in mountain-space
     }
 
     // ── Materials ──
     const rockMats = new Map();
-    for (const pos of Object.keys(config)) {
-      const packName = config[pos].rock || 'rock-cliff';
+    for (const seg of config.segments) {
+      const packName = seg.rock || 'rock-cliff';
       if (!rockMats.has(packName)) {
         rockMats.set(packName, new THREE.MeshStandardMaterial({
-          color: ROCK_COLORS[packName] || 0x6a6a5a,
+          color: 0xffffff,
           roughness: 0.95,
           metalness: 0.05,
           flatShading: true,
+          vertexColors: true,
         }));
       }
+    }
+    if (!rockMats.has('rock-cliff')) {
+      rockMats.set('rock-cliff', new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.95, metalness: 0.05, flatShading: true, vertexColors: true,
+      }));
     }
     const snowMat = new THREE.MeshStandardMaterial({
       color: 0xdde8ee,
@@ -1823,149 +2271,241 @@ export class TownRenderer {
     this._edgeSnowMat = snowMat;
 
     // ── Geometry accumulators ──
-    const rockGeoArrays = new Map(); // packName → BufferGeometry[]
+    const rockGeoArrays = new Map();
     for (const name of rockMats.keys()) rockGeoArrays.set(name, []);
     const snowGeoArray = [];
 
-    // ── (c) Front ring — per config grid point ──
-    let seedOffset = 0;
-    for (const [key, cfg] of Object.entries(config)) {
-      if (!cfg.density || cfg.density <= 0) continue;
-      const grid = MOUNTAIN_GRID[key];
-      if (!grid) continue;
+    // ── Jitter amounts per profile type ──
+    const jitterAmounts = { rugged: 0.50, steep: 0.35, rounded: 0.22 };
 
-      const centerAngle = toRad(grid.angle);
-      const centerDist = half * grid.radius;
-      const packName = cfg.rock || 'rock-cliff';
-      const spread = toRad(25); // ±25° angular spread
-
-      for (let c = 0; c < cfg.density; c++) {
-        const clusterSeed = seedOffset + c * 100;
-        const peaksInCluster = 2 + Math.floor(rng(clusterSeed * 31) * 3); // 2-4
-
-        for (let p = 0; p < peaksInCluster; p++) {
-          const i = clusterSeed + p;
-          const angleOff = (rng(i * 7) - 0.5) * spread * 2;
-          const angle = centerAngle + (c / cfg.density - 0.5) * spread * 2 + angleOff;
-          const distJitter = rng(i * 13 + 1) * 0.15;
-          const dist = centerDist + half * distJitter;
-          const x = Math.cos(angle) * dist;
-          const z = Math.sin(angle) * dist;
-          const baseY = terrainSampler.getHeight(x, z);
-
-          // Layered mountain mass
-          const height = 1.5 + rng(i * 11 + 3) * cfg.height;
-          const width = 0.8 + rng(i * 17 + 5) * 1.4;
-          const rotY = rng(i * 19) * PI2;
-          buildMountainLayers(rockGeoArrays.get(packName), i, x, baseY, z, width, height, rotY);
-
-          // Snow cap if above snow line
-          const heightFraction = height / (1.5 + cfg.height);
-          if (heightFraction > cfg.snowLine) {
-            const capClone = deformGeo(capTpl, i + 75, 0.15);
-            bakeTransform(capClone, x, baseY + height * 0.8, z, width * 0.5, 0.8, width * 0.5, rng(i * 37) * Math.PI);
-            snowGeoArray.push(capClone);
-          }
-        }
-
-        // Scree boulders (3-5 per cluster)
-        const screeCount = 3 + Math.floor(rng(clusterSeed * 41) * 3);
-        for (let s = 0; s < screeCount; s++) {
-          const si = clusterSeed + 200 + s;
-          const sAngle = centerAngle + (c / cfg.density - 0.5) * spread * 2 + (rng(si * 3) - 0.5) * spread;
-          const sDist = centerDist + half * rng(si * 5) * 0.12;
-          const sx = Math.cos(sAngle) * sDist;
-          const sz = Math.sin(sAngle) * sDist;
-          const sy = terrainSampler.getHeight(sx, sz);
-          const sScale = 0.15 + rng(si * 9) * 0.35;
-          const screeClone = deformGeo(screeTpl, si, 0.2);
-          bakeTransform(screeClone, sx, sy + sScale * 0.3, sz, sScale, sScale * 0.7, sScale, rng(si * 11) * PI2);
-          rockGeoArrays.get(packName).push(screeClone);
-        }
-      }
-      seedOffset += cfg.density * 100 + 500;
-    }
-
-    // ── (d) Backdrop auto-fill ──
-    for (let ri = 0; ri < RING_ORDER.length; ri++) {
-      const keyA = RING_ORDER[ri];
-      const keyB = RING_ORDER[(ri + 1) % RING_ORDER.length];
-      const cfgA = config[keyA];
-      const cfgB = config[keyB];
-      // Skip backdrop if either neighbor has no mountains — respects density:0 gaps
-      if (!cfgA || cfgA.density <= 0 || !cfgB || cfgB.density <= 0) continue;
-
-      const gridA = MOUNTAIN_GRID[keyA];
-      const gridB = MOUNTAIN_GRID[keyB];
-      let angleA = toRad(gridA.angle);
-      let angleB = toRad(gridB.angle);
-
-      // Handle angle wrapping through 0/360
-      if (angleB < angleA - Math.PI) angleB += PI2;
-      if (angleA < angleB - Math.PI) angleA += PI2;
-
-      const nearerCfg = (cfgA && cfgA.density > 0) ? cfgA : cfgB;
-      const packName = nearerCfg.rock || 'rock-cliff';
+    // ═══════════════════════════════════════════════════════
+    //  buildSegmentMesh — core parametric surface generator
+    // ═══════════════════════════════════════════════════════
+    const buildSegmentMesh = (seg) => {
+      const packName = seg.rock || 'rock-cliff';
       if (!rockGeoArrays.has(packName)) rockGeoArrays.set(packName, []);
 
-      const count = 2 + Math.floor(rng(ri * 71) * 2); // 2-3 peaks
-      for (let b = 0; b < count; b++) {
-        const i = 5000 + ri * 100 + b;
-        const t = (b + 0.5) / count;
-        const angle = angleA + (angleB - angleA) * t + (rng(i * 7) - 0.5) * 0.15;
-        const radiusFrac = 0.88 + rng(i * 13) * 0.10; // 88-98%
-        const dist = half * radiusFrac;
-        const x = Math.cos(angle) * dist;
-        const z = Math.sin(angle) * dist;
-        const baseY = terrainSampler.getHeight(x, z);
+      // Arc angular span — extend by ARC_PAD on each end so adjacent segments
+      // overlap instead of leaving a seam. Sea exclusion handles any overshoot.
+      const ARC_PAD = 5;
+      let arcStartDeg = seg.arcStart - ARC_PAD;
+      let arcEndDeg = seg.arcEnd + ARC_PAD;
+      let arcSpanDeg = ((arcEndDeg - arcStartDeg) % 360 + 360) % 360;
+      if (arcSpanDeg === 0) arcSpanDeg = 360;
 
-        const height = 3.0 + rng(i * 11 + 3) * 4.0;
-        const width = 1.0 + rng(i * 17 + 5) * 1.5;
+      // Number of arc samples — dense enough for craggy detail (1 per 2°, min 20)
+      const N = Math.max(20, Math.ceil(arcSpanDeg / 2));
+      const ridgeRadius = half * (seg.radius || 0.93);
+      const foothillSpread = seg.foothillSpread ?? 0.8;
+      const profileType = seg.profile || 'rugged';
+      const snowLine = seg.snowLine ?? 1.0;
+      const jitter = jitterAmounts[profileType] || 0.3;
 
-        const rotY = rng(i * 19) * PI2;
-        buildMountainLayers(rockGeoArrays.get(packName), i + 300, x, baseY, z, width, height, rotY);
+      // ── Sample arc → rings of profile points ──
+      const rings = [];
+      for (let s = 0; s <= N; s++) {
+        // Randomize arc sample spacing slightly to break regularity
+        const baseArcT = s / N;
+        const arcJitter = (s > 0 && s < N) ? (rng(s * 997 + 13) - 0.5) * (0.6 / N) : 0;
+        const arcT = Math.max(0, Math.min(1, baseArcT + arcJitter));
+        const angleDeg = arcStartDeg + arcSpanDeg * arcT;
 
-        // Snow cap on tall backdrop peaks
-        if (height > 3.5) {
-          const capClone = deformGeo(capTpl, i + 375, 0.15);
-          bakeTransform(capClone, x, baseY + height * 0.8, z, width * 0.6, 1.0, width * 0.6, rng(i * 37) * Math.PI);
-          snowGeoArray.push(capClone);
+        // Sea zone: hard-skip deep interior, taper height at the edges (15° fade)
+        const SEA_TAPER = 20;
+        let seaFade = 1.0;
+        if (seaStart >= 0 && _isAngleInArc(angleDeg, seaStart, seaEnd)) {
+          // How far inside the sea zone is this sample?
+          const distFromStart = ((angleDeg - seaStart) % 360 + 360) % 360;
+          const distFromEnd = ((seaEnd - angleDeg) % 360 + 360) % 360;
+          const distFromEdge = Math.min(distFromStart, distFromEnd);
+          if (distFromEdge >= SEA_TAPER) continue; // deep in sea zone — skip entirely
+          seaFade = 1.0 - (distFromEdge / SEA_TAPER); // taper: 1.0 at boundary → 0.0 at taper depth
+          seaFade = seaFade * seaFade; // ease-in for smoother falloff
+        }
+
+        const angleRad = _toRad(angleDeg);
+        const peak = _interpolatePeaks(seg.peaks, arcT);
+
+        // Per-ring variation — breaks the extruded crate look
+        const ringSeed = Math.floor(angleDeg * 73 + s * 131);
+        const ringHeightVar = 1.0 + (rng(ringSeed) - 0.5) * 0.4;       // ±20% height wobble
+        const ringWidthVar  = 1.0 + (rng(ringSeed + 50) - 0.5) * 0.3;  // ±15% width wobble
+        const variedHeight = peak.height * ringHeightVar * seaFade;      // taper height near sea
+        const variedWidth  = peak.width * ringWidthVar;
+
+        // Per-ring radial offset — shifts whole ring closer/further from center
+        const radialShift = (rng(ringSeed + 77) - 0.5) * 0.25;
+
+        // Ridgeline center position with radial shift
+        const effectiveRadius = ridgeRadius + peak.offset + radialShift;
+        const cx = Math.cos(angleRad) * effectiveRadius;
+        const cz = Math.sin(angleRad) * effectiveRadius;
+
+        // Radial direction (outward from center) and tangent direction (along arc)
+        const dirX = Math.cos(angleRad);
+        const dirZ = Math.sin(angleRad);
+        const tanX = -Math.sin(angleRad); // tangent (perpendicular to radial, along arc)
+        const tanZ = Math.cos(angleRad);
+
+        // Per-ring tangential shift — slides ring along the arc direction
+        const tangentialShift = (rng(ringSeed + 200) - 0.5) * 0.3;
+
+        // Sample terrain height at foothill edge
+        const foothillX = cx - dirX * (foothillSpread + variedWidth * 0.5);
+        const foothillZ = cz - dirZ * (foothillSpread + variedWidth * 0.5);
+        const terrainH = terrainSampler.getHeight(foothillX, foothillZ);
+
+        // Generate cross-section profile
+        const profile = _generateProfile(profileType, variedHeight, variedWidth, foothillSpread, Math.max(0, terrainH));
+
+        // Transform profile to world space with per-vertex displacement
+        const worldPts = [];
+        const seedBase = Math.floor(angleDeg * 100 + s * 37);
+        for (let p = 0; p < profile.length; p++) {
+          const { r, h } = profile[p];
+          const wx = cx + dirX * r + tanX * tangentialShift;
+          const wz = cz + dirZ * r + tanZ * tangentialShift;
+
+          // Height fraction drives displacement intensity (summit=full, skirt=none)
+          const heightFrac = Math.max(0, h) / Math.max(0.1, variedHeight);
+          const noiseScale = jitter * (0.15 + heightFrac * 0.85);
+          const ji = seedBase + p * 17;
+
+          // Domain-warped ridged noise for correlated ridge/gully features
+          const warped = _domainWarp(wx * 3.0, wz * 3.0, 0.4);
+          const ridgeVal = (_ridgedNoise(warped.x, warped.y, 2.0, 4, 2.0, 0.5) - 0.5) * 2.0;
+
+          // Radial displacement from ridged noise (correlated features)
+          const radialDisp = ridgeVal * noiseScale * 0.7;
+          // Small tangential rng jitter to break grid regularity
+          const tangentJit = (rng(ji + 3) - 0.5) * noiseScale * 0.4;
+          // Vertical displacement from ridged noise
+          const vertDisp = ridgeVal * noiseScale * 0.6;
+
+          const fx = wx + dirX * radialDisp + tanX * tangentJit;
+          const fz = wz + dirZ * radialDisp + tanZ * tangentJit;
+          // Skirt points (h < 0) get no displacement to stay below ground
+          const fy = h < 0 ? h : h + vertDisp;
+
+          worldPts.push({ x: fx, y: fy, z: fz });
+        }
+        rings.push({ worldPts, peakH: variedHeight, profileLen: profile.length });
+      }
+
+      // ── Thermal erosion pass — smooth spikes, create talus accumulation ──
+      _thermalErode(rings, seg.scree ? 60 : 30);
+
+      if (rings.length < 2) return;
+
+      // ── Connect adjacent rings into triangle mesh ──
+      const rockPositions = [];
+      const rockColors = [];
+      const snowPositions = [];
+
+      for (let ri = 0; ri < rings.length - 1; ri++) {
+        const ringA = rings[ri];
+        const ringB = rings[ri + 1];
+        const pLen = Math.min(ringA.profileLen, ringB.profileLen);
+
+        for (let pi = 0; pi < pLen - 1; pi++) {
+          const a0 = ringA.worldPts[pi];
+          const a1 = ringA.worldPts[pi + 1];
+          const b0 = ringB.worldPts[pi];
+          const b1 = ringB.worldPts[pi + 1];
+          if (!a0 || !a1 || !b0 || !b1) continue;
+
+          const avgH = (a0.y + a1.y + b0.y + b1.y) * 0.25;
+          const localPeakH = (ringA.peakH + ringB.peakH) * 0.5;
+
+          // Compute face normal from triangle 1 (a0, b0, a1)
+          const e1x = b0.x - a0.x, e1y = b0.y - a0.y, e1z = b0.z - a0.z;
+          const e2x = a1.x - a0.x, e2y = a1.y - a0.y, e2z = a1.z - a0.z;
+          const fnx = e1y * e2z - e1z * e2y;
+          const fny = e1z * e2x - e1x * e2z;
+          const fnz = e1x * e2y - e1y * e2x;
+          const fnl = Math.sqrt(fnx * fnx + fny * fny + fnz * fnz) || 1;
+          const faceNormal = { x: fnx / fnl, y: fny / fnl, z: fnz / fnl };
+
+          // Multi-factor snow accumulation (height + slope + wind aspect)
+          const isSnow = _snowAccumulation(avgH, localPeakH, snowLine, faceNormal);
+
+          if (isSnow) {
+            const sOff = 0.03;
+            snowPositions.push(
+              a0.x, a0.y + sOff, a0.z,
+              b0.x, b0.y + sOff, b0.z,
+              a1.x, a1.y + sOff, a1.z,
+              a1.x, a1.y + sOff, a1.z,
+              b0.x, b0.y + sOff, b0.z,
+              b1.x, b1.y + sOff, b1.z,
+            );
+          } else {
+            // Slope-based vertex color with strata banding
+            const slopeAngle = Math.acos(Math.min(1, Math.abs(faceNormal.y)));
+            const steepThresh = 0.7854; // 45° in radians
+            const gentleThresh = 0.5236; // 30° in radians
+
+            const baseHex = ROCK_COLORS[packName] || 0x6a6a5a;
+            const bR = ((baseHex >> 16) & 0xff) / 255;
+            const bG = ((baseHex >> 8) & 0xff) / 255;
+            const bB = (baseHex & 0xff) / 255;
+
+            let cr, cg, cb;
+            if (slopeAngle > steepThresh) {
+              // Steep cliff: lighter exposed rock + horizontal strata banding
+              const strata = Math.sin(avgH * 12.0) * 0.5 + 0.5;
+              cr = bR * 1.3 + strata * 0.06;
+              cg = bG * 1.25 + strata * 0.04;
+              cb = bB * 1.2 + strata * 0.04;
+            } else if (slopeAngle < gentleThresh) {
+              // Gentle slope: darker base rock with slight vegetation tint
+              cr = bR * 0.75;
+              cg = bG * 0.85 + 0.04;
+              cb = bB * 0.72;
+            } else {
+              // Mid-range: smooth blend between gentle and steep
+              const t = (slopeAngle - gentleThresh) / (steepThresh - gentleThresh);
+              cr = bR * (0.75 + t * 0.55);
+              cg = (bG * 0.85 + 0.04) + t * (bG * 0.4 - 0.04);
+              cb = bB * (0.72 + t * 0.48);
+            }
+            cr = Math.min(1, Math.max(0, cr));
+            cg = Math.min(1, Math.max(0, cg));
+            cb = Math.min(1, Math.max(0, cb));
+
+            rockPositions.push(
+              a0.x, a0.y, a0.z,
+              b0.x, b0.y, b0.z,
+              a1.x, a1.y, a1.z,
+              a1.x, a1.y, a1.z,
+              b0.x, b0.y, b0.z,
+              b1.x, b1.y, b1.z,
+            );
+            // Same face color for all 6 vertices of this quad's two triangles
+            for (let vc = 0; vc < 6; vc++) rockColors.push(cr, cg, cb);
+          }
         }
       }
+
+      // Build and accumulate geometries
+      if (rockPositions.length > 0) {
+        rockGeoArrays.get(packName).push(_buildGeoFromPositions(new Float32Array(rockPositions), new Float32Array(rockColors)));
+      }
+      if (snowPositions.length > 0) {
+        snowGeoArray.push(_buildGeoFromPositions(new Float32Array(snowPositions)));
+      }
+    };
+
+    // ── Generate all segments ──
+    for (const seg of config.segments) {
+      buildSegmentMesh(seg);
     }
 
-    // ── (e) Merge phase ──
+    // ── Merge phase ──
     const mergedGeos = [];
-    const allMats = [];
 
-    // Normalize attributes for merge compatibility
-    function normalizeAttrs(g) {
-      // Convert indexed to non-indexed so all geometries are consistent
-      if (g.index) {
-        const nonIndexed = g.toNonIndexed();
-        // Copy attributes back
-        for (const key of Object.keys(g.attributes)) g.deleteAttribute(key);
-        for (const key of Object.keys(nonIndexed.attributes)) {
-          g.setAttribute(key, nonIndexed.attributes[key]);
-        }
-        g.setIndex(null);
-        nonIndexed.dispose();
-      }
-      if (!g.attributes.uv) {
-        g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-      }
-      for (const attr of Object.keys(g.attributes)) {
-        if (attr !== 'position' && attr !== 'normal' && attr !== 'uv') {
-          g.deleteAttribute(attr);
-        }
-      }
-    }
-
-    // Merge per rock type
     for (const [packName, geoArr] of rockGeoArrays) {
       if (geoArr.length === 0) continue;
-      for (const g of geoArr) normalizeAttrs(g);
-
       const merged = mergeGeometries(geoArr, false);
       if (merged) {
         const mesh = new THREE.Mesh(merged, rockMats.get(packName));
@@ -1973,14 +2513,11 @@ export class TownRenderer {
         mesh.receiveShadow = true;
         this._edgeRocksGroup.add(mesh);
         mergedGeos.push(merged);
-        allMats.push(rockMats.get(packName));
       }
       for (const g of geoArr) g.dispose();
     }
 
-    // Merge snow caps
     if (snowGeoArray.length > 0) {
-      for (const g of snowGeoArray) normalizeAttrs(g);
       const mergedSnow = mergeGeometries(snowGeoArray, false);
       if (mergedSnow) {
         const snowMesh = new THREE.Mesh(mergedSnow, snowMat);
@@ -1988,16 +2525,11 @@ export class TownRenderer {
         snowMesh.receiveShadow = true;
         this._edgeRocksGroup.add(snowMesh);
         mergedGeos.push(mergedSnow);
-        allMats.push(snowMat);
       }
       for (const g of snowGeoArray) g.dispose();
     }
 
-    // Dispose templates
-    ledgeTpl.dispose();
-    slopeTpl.dispose();
-    capTpl.dispose();
-    screeTpl.dispose();
+    // ── Cleanup ──
 
     this._edgeRockGeo = mergedGeos;
     this._edgeRockMat = [snowMat, ...rockMats.values()];
@@ -2033,8 +2565,8 @@ export class TownRenderer {
 
     // Beach/sand color
     const sandR = 0.82, sandG = 0.78, sandB = 0.63;
-    // Wet sand (near water)
-    const wetR = 0.6, wetG = 0.55, wetB = 0.45;
+    // Wet sand (near water) — matches ocean shallow color to avoid flicker through transparency
+    const wetR = 0.20, wetG = 0.55, wetB = 0.55;
 
     // Extra angular feather beyond halfSpread for color-only blending
     // so the green skirt edge-fade color doesn't show through at sea boundaries
@@ -2104,139 +2636,13 @@ export class TownRenderer {
     colors.needsUpdate = true;
     terrainMesh.geometry.computeVertexNormals();
 
-    // ── 2. Generate procedural water textures ──
-    const texSize = 256;
-    const normalData = new Uint8Array(texSize * texSize * 4);
-    const roughData = new Uint8Array(texSize * texSize * 4);
-
-    // Simple hash for procedural generation
-    const hash = (x, y, s) => {
-      const n = Math.sin(x * 127.1 + y * 311.7 + s * 73.7) * 43758.5453;
-      return n - Math.floor(n);
-    };
-
-    for (let y = 0; y < texSize; y++) {
-      for (let x = 0; x < texSize; x++) {
-        const idx = (y * texSize + x) * 4;
-        const u = x / texSize;
-        const v = y / texSize;
-
-        // Multi-octave noise for water ripple normals
-        let nx = 0, ny = 0;
-        for (let oct = 0; oct < 4; oct++) {
-          const freq = Math.pow(2, oct + 2);
-          const amp = 1.0 / Math.pow(2, oct);
-          const sx = Math.sin(u * freq * 6.28 + hash(oct, 0, 1) * 6.28) * amp;
-          const sy = Math.sin(v * freq * 6.28 + hash(oct, 1, 2) * 6.28) * amp;
-          nx += (hash(Math.floor(u * freq * texSize), Math.floor(v * freq * texSize), oct) - 0.5) * amp;
-          ny += (hash(Math.floor(u * freq * texSize) + 1, Math.floor(v * freq * texSize), oct + 5) - 0.5) * amp;
-        }
-        // Encode normal: XY perturbation, Z up, tangent space
-        normalData[idx]     = Math.min(255, Math.max(0, (nx * 0.3 + 0.5) * 255));
-        normalData[idx + 1] = Math.min(255, Math.max(0, (ny * 0.3 + 0.5) * 255));
-        normalData[idx + 2] = 220; // strong Z (mostly facing up)
-        normalData[idx + 3] = 255;
-
-        // Roughness: subtle variation
-        const r = 0.1 + hash(x, y, 99) * 0.15;
-        const rv = Math.min(255, Math.max(0, r * 255));
-        roughData[idx] = rv;
-        roughData[idx + 1] = rv;
-        roughData[idx + 2] = rv;
-        roughData[idx + 3] = 255;
-      }
-    }
-
-    const normalTex = new THREE.DataTexture(normalData, texSize, texSize, THREE.RGBAFormat);
-    normalTex.wrapS = THREE.RepeatWrapping;
-    normalTex.wrapT = THREE.RepeatWrapping;
-    normalTex.magFilter = THREE.LinearFilter;
-    normalTex.minFilter = THREE.LinearMipMapLinearFilter;
-    normalTex.generateMipmaps = true;
-    normalTex.needsUpdate = true;
-
-    const roughTex = new THREE.DataTexture(roughData, texSize, texSize, THREE.RGBAFormat);
-    roughTex.wrapS = THREE.RepeatWrapping;
-    roughTex.wrapT = THREE.RepeatWrapping;
-    roughTex.magFilter = THREE.LinearFilter;
-    roughTex.minFilter = THREE.LinearMipMapLinearFilter;
-    roughTex.generateMipmaps = true;
-    roughTex.needsUpdate = true;
-
-    // ── 3. Create fan-shaped water surface matching the sea arc ──
-    const fanSegs = 32;
-    const innerR = 0.01; // tiny inner radius at the fan center
-    const outerR = half + 1; // extend past terrain edge
-    const fanVerts = [];
-    const fanUvs = [];
-    const fanIndices = [];
-
-    // Fan origin is at world center; vertices are in world XZ
-    for (let s = 0; s <= fanSegs; s++) {
-      const t = s / fanSegs;
-      const a = angleRad - halfSpread + spreadRad * t;
-      const cosA = Math.cos(a);
-      const sinA = -Math.sin(a); // flip Z to match terrain coords
-
-      // Inner vertex
-      fanVerts.push(cosA * innerR, 0, sinA * innerR);
-      fanUvs.push(t, 0);
-
-      // Outer vertex
-      fanVerts.push(cosA * outerR, 0, sinA * outerR);
-      fanUvs.push(t, 1);
-    }
-
-    for (let s = 0; s < fanSegs; s++) {
-      const i0 = s * 2;
-      const i1 = s * 2 + 1;
-      const i2 = s * 2 + 2;
-      const i3 = s * 2 + 3;
-      fanIndices.push(i0, i1, i2);
-      fanIndices.push(i2, i1, i3);
-    }
-
-    const seaGeo = new THREE.BufferGeometry();
-    seaGeo.setAttribute('position', new THREE.Float32BufferAttribute(fanVerts, 3));
-    seaGeo.setAttribute('uv', new THREE.Float32BufferAttribute(fanUvs, 2));
-    seaGeo.setIndex(fanIndices);
-    seaGeo.computeVertexNormals();
-
-    const seaMat = new THREE.MeshStandardMaterial({
-      color: 0x2266aa,
-      transparent: true,
-      opacity: 0.7,
-      roughness: 0.15,
-      metalness: 0.3,
-      normalMap: normalTex,
-      normalScale: new THREE.Vector2(0.4, 0.4),
-      roughnessMap: roughTex,
-      side: THREE.DoubleSide,
+    // ── 2. OceanSystem — animated Gerstner-wave ocean ──
+    this._ocean = new OceanSystem(this._townGroup, config, meshSize, {
+      salinity: config.salinity ?? 0.5,
+      windSpeed: 0.6,
+      windAngle: angleRad,
+      shoreAtten: beachWidth + reach * 0.5,
     });
-
-    const seaMesh = new THREE.Mesh(seaGeo, seaMat);
-    seaMesh.position.set(0, seaHeight, 0);
-    seaMesh.name = 'water-sea';
-    seaMesh.renderOrder = 5;
-    this._townGroup.add(seaMesh);
-    this._seaMesh = seaMesh;
-    this._seaMat = seaMat;
-
-    // ── 4. Opaque seabed to hide the green skirt plane underneath the transparent water ──
-    const seabedGeo = seaGeo.clone();
-    const seabedMat = new THREE.MeshStandardMaterial({
-      color: 0x8a7a5a, // sandy seabed color
-      roughness: 1,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    });
-    const seabedMesh = new THREE.Mesh(seabedGeo, seabedMat);
-    seabedMesh.position.set(0, seaHeight - 0.01, 0);
-    seabedMesh.name = 'seabed';
-    seabedMesh.renderOrder = 4;
-    this._townGroup.add(seabedMesh);
-    this._seabedMesh = seabedMesh;
-    this._seabedMat = seabedMat;
   }
 
   _computeDockFacing(x, z) {
@@ -3106,7 +3512,7 @@ export class TownRenderer {
 
     // Dispose subsystems in reverse order
     const disposables = [
-      '_audio', '_cameraController', '_cloth', '_waterInteraction',
+      '_audio', '_cameraController', '_cloth',
       '_propPhysics', '_flowers',
       '_grass', '_economyCarts',
       '_animals', '_npcs', '_particles', '_footprints', '_assetLoader',

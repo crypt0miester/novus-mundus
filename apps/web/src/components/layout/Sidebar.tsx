@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { TIER_NAMES } from "@/lib/hooks/useTierTheme";
 
 /** Sidebar removed — navigation moved to TopBar. This file exports TierSwitcher for settings. */
-export function Sidebar() {
+function Sidebar() {
   return null;
 }
 
@@ -32,7 +32,7 @@ export function TierSwitcher() {
       <div className="flex gap-1">
         {TIER_NAMES.map((name, i) => (
           <button
-            key={i}
+            key={name}
             onClick={() => set(i)}
             className={cn(
               "rounded px-2 py-1 text-xs transition-colors",

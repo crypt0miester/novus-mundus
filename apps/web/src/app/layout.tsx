@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono, Cinzel } from "next/font/google";
 import { GameProviders } from "@/lib/solana/provider";
 import { NotificationToast } from "@/components/layout/NotificationToast";
 import { TransitionOverlay } from "@/components/layout/TransitionOverlay";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
+const cinzel = Cinzel({ subsets: ["latin"], variable: "--font-cinzel" });
 
 export const metadata: Metadata = {
   title: "Novus Mundus",
@@ -15,19 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${inter.variable} ${jetbrains.variable} ${cinzel.variable}`}>
       <body className="min-h-screen bg-surface font-mono">
         <GameProviders>
           {children}

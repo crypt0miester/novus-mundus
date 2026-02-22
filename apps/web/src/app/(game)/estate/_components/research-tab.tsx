@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useResearchBuffs } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -10,11 +10,14 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { DetailPanel } from "@/components/shared/DetailPanel";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { GemAction } from "@/components/shared/GemAction";
+import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import {
   derivePlayerPda,
   deriveResearchPda,
+  deriveResearchTemplatePda,
   createCreateProgressInstruction,
   createStartResearchInstruction,
   createCompleteResearchInstruction,
@@ -26,18 +29,292 @@ import {
   getTimeOfDayName,
   getActivityMultiplier,
   isTraveling,
+  parseResearchTemplate,
+  parseResearchProgress,
+  isResearching,
+  isResearchComplete,
+  getResearchLevel,
+  checkResearchPrerequisites,
 } from "@/lib/sdk";
-import BN from "bn.js";
+import type { ResearchTemplateAccount, ResearchProgressAccount } from "@/lib/sdk";
 
-const RESEARCH_TYPES = [
-  { id: 0, name: "Attack", icon: "\u2694", desc: "Increase attack power" },
-  { id: 1, name: "Defense", icon: "\uD83D\uDEE1", desc: "Increase defense power" },
-  { id: 2, name: "Crit Chance", icon: "\uD83C\uDFAF", desc: "Higher critical hit rate" },
-  { id: 3, name: "Crit Damage", icon: "\uD83D\uDCA5", desc: "More damage on crits" },
-  { id: 4, name: "Loot Bonus", icon: "\uD83D\uDCB0", desc: "Better loot drops" },
-  { id: 5, name: "Stamina", icon: "\u26A1", desc: "Faster stamina regen" },
-  { id: 6, name: "Collection", icon: "\uD83D\uDCE6", desc: "Resource collection bonus" },
-];
+// ─── Category / buff-type display maps ──────────────────────
+const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
+const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
+const BUFF_NAMES: Record<number, string> = {
+  0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",
+  4: "Crit Damage", 5: "Rally Capacity", 6: "Encounter Success", 7: "Loot Bonus",
+  8: "Training Speed", 9: "Ambush Damage",
+  10: "Production", 11: "Resource Cap", 12: "Market Tax", 13: "Trade Speed",
+  14: "Mining Output", 15: "Cash Gen", 16: "Build Speed", 17: "Upkeep Reduction",
+  18: "Black Market", 19: "Tax Collection",
+  20: "Daily Rewards", 21: "Mining Ops", 22: "Fishing", 23: "Loot Magnetism",
+  24: "Reputation", 25: "Stamina", 26: "Streak Bonus", 27: "Fragment Discovery",
+  28: "Gem Prospecting", 29: "Collection Mastery", 30: "Travel Speed",
+};
+
+// ─── Fetch all initialized research templates (types 0-29) ──
+function useResearchTemplates() {
+  const { connection } = useConnection();
+  return useQuery({
+    queryKey: ["research-templates"],
+    queryFn: async () => {
+      const pdas = Array.from({ length: 30 }, (_, i) => deriveResearchTemplatePda(i)[0]);
+      const infos = await connection.getMultipleAccountsInfo(pdas);
+      const templates: (ResearchTemplateAccount & { pda: string })[] = [];
+      for (let i = 0; i < 30; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parseResearchTemplate(info);
+        if (parsed && parsed.isActive) {
+          templates.push({ ...parsed, pda: pdas[i].toBase58() });
+        }
+      }
+      return templates;
+    },
+    staleTime: 60_000, // templates rarely change
+  });
+}
+
+// ─── Fetch player's research progress ───────────────────────
+function useResearchProgress() {
+  const { connection } = useConnection();
+  const { publicKey } = useWallet();
+  const client = useNovusMundusClient();
+
+  return useQuery({
+    queryKey: ["research-progress", publicKey?.toBase58()],
+    queryFn: async () => {
+      if (!publicKey) return null;
+      const [playerPda] = derivePlayerPda(client.gameEngine, publicKey);
+      const [researchPda] = deriveResearchPda(playerPda);
+      const info = await connection.getAccountInfo(researchPda);
+      if (!info) return { exists: false as const, account: null };
+      const account = parseResearchProgress(info);
+      return { exists: true as const, account };
+    },
+    enabled: !!publicKey,
+    staleTime: 10_000,
+  });
+}
+
+/* ─── Detail panel (shared between desktop sidebar + mobile bottom sheet) ─── */
+
+function ResearchDetailPanel({
+  template,
+  progress,
+  playerData,
+  onStart,
+  onComplete,
+  onInstant,
+  onCancel,
+  onAscend,
+  onSpeedup,
+  onClose,
+}: {
+  template: ResearchTemplateAccount;
+  progress: ResearchProgressAccount | null;
+  playerData: any;
+  onStart: (rp: (p: TxPhase) => void) => Promise<string>;
+  onComplete: (rp: (p: TxPhase) => void) => Promise<string>;
+  onInstant: (rp: (p: TxPhase) => void) => Promise<string>;
+  onCancel: (rp: (p: TxPhase) => void) => Promise<string>;
+  onAscend: (rp: (p: TxPhase) => void) => Promise<string>;
+  onSpeedup: (tier: number, rp: (p: TxPhase) => void) => Promise<string>;
+  onClose: () => void;
+}) {
+  const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
+  const currentLevel = progress ? getResearchLevel(progress, template.researchType) : 0;
+  const isActiveForThis = progress
+    ? isResearching(progress) && progress.currentResearch === template.researchType
+    : false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const isComplete = progress
+    ? isActiveForThis && isResearchComplete(progress, nowSec)
+    : false;
+  const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
+  const isAnyActive = progress ? isResearching(progress) : false;
+  const remainingSeconds = isActiveForThis && progress
+    ? Math.max(0, progress.completesAt.toNumber() - nowSec)
+    : 0;
+  const buffName = BUFF_NAMES[template.buffType] ?? `Buff #${template.buffType}`;
+  const categoryName = CATEGORY_NAMES[template.category] ?? "Unknown";
+
+  // Cost preview from on-chain base cost
+  const baseCost = template.baseNoviCost.toNumber();
+  const baseTime = template.baseTimeSeconds;
+  const nextLevelCost = currentLevel < template.maxLevel
+    ? calculateResearchCost(baseCost, currentLevel + 1)
+    : 0;
+  const hasEnoughNovi = noviBalance >= nextLevelCost;
+  const costPreview = useMemo(() => {
+    const levels = Array.from({ length: Math.min(template.maxLevel, 10) }, (_, i) => i + 1);
+    return levels.map((lvl) => ({
+      level: lvl,
+      cost: calculateResearchCost(baseCost, lvl),
+      timeHours: Math.max(0.1, Math.round((baseTime * Math.pow(1.5, lvl)) / 360) / 10),
+    }));
+  }, [baseCost, baseTime, template.maxLevel]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {buffName} Research
+        </h3>
+        <button
+          onClick={onClose}
+          className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Template info */}
+      <div className="flex items-center gap-3">
+        <span className="text-3xl">{CATEGORY_ICONS[template.category] ?? "?"}</span>
+        <div>
+          <div className="text-sm font-semibold text-text-primary">{buffName}</div>
+          <div className="text-xs text-text-muted">{categoryName} &middot; +{(template.buffPerLevelBps / 100).toFixed(1)}% per level</div>
+          <div className="text-[11px] text-text-gold">
+            Level {currentLevel}/{template.maxLevel}
+          </div>
+        </div>
+      </div>
+
+      {/* NOVI balance */}
+      <div className="rounded-lg bg-surface/60 px-3 py-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">Your NOVI</span>
+          <span className={`font-mono tabular-nums ${hasEnoughNovi || isActiveForThis ? "text-text-gold" : "text-red-400"}`}>
+            {noviBalance.toLocaleString()}
+          </span>
+        </div>
+        {currentLevel < template.maxLevel && !isActiveForThis && (
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Lv {currentLevel + 1} Cost</span>
+            <span className="font-mono tabular-nums text-text-muted">
+              {nextLevelCost.toLocaleString()} NOVI
+            </span>
+          </div>
+        )}
+        {!hasEnoughNovi && !isActiveForThis && currentLevel < template.maxLevel && (
+          <div className="mt-1 text-[11px] text-red-400">
+            Need {(nextLevelCost - noviBalance).toLocaleString()} more NOVI
+          </div>
+        )}
+      </div>
+
+      {/* Prerequisite warning */}
+      {!canMeetPrereqs && (
+        <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
+          Requires research #{template.prerequisiteResearch} at level {template.prerequisiteLevel}
+        </div>
+      )}
+
+      {/* Active research countdown */}
+      {isActiveForThis && !isComplete && (
+        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
+          <div className="text-xs text-text-muted">Researching...</div>
+          <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
+        </div>
+      )}
+
+      {/* Research complete — claim */}
+      {isComplete && (
+        <div className="rounded-lg border border-green-800/50 bg-green-900/20 p-3 text-center">
+          <div className="mb-2 text-xs text-green-400">Research Complete!</div>
+          <TxButton onClick={onComplete} className="w-full">
+            Claim Research
+          </TxButton>
+        </div>
+      )}
+
+      {/* Cost Preview */}
+      <div className="rounded-lg border border-zinc-800 bg-surface/50 p-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Cost Preview
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {costPreview.slice(0, 6).map((r) => (
+            <div
+              key={r.level}
+              className={`rounded border px-2 py-1 text-center ${
+                r.level === currentLevel + 1
+                  ? "border-amber-600 bg-amber-900/20"
+                  : r.level <= currentLevel
+                    ? "border-green-800/50 bg-green-900/10"
+                    : "border-zinc-800"
+              }`}
+            >
+              <div className="text-[11px] text-text-muted">Lv {r.level}</div>
+              <div className="text-xs font-semibold text-text-gold">{r.cost.toLocaleString()}</div>
+              <div className="text-[11px] text-text-muted">~{r.timeHours}h</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-[10px] text-text-muted">
+          Gem speedup: {template.gemCostPerMinute} gems/min
+        </div>
+      </div>
+
+      {/* Start actions — only when not actively researching */}
+      {!isAnyActive && canMeetPrereqs && currentLevel < template.maxLevel && (
+        <div className="flex flex-col gap-2">
+          <TxButton onClick={onStart} className="w-full" disabled={!hasEnoughNovi}>
+            {hasEnoughNovi
+              ? `Start ${buffName} Lv ${currentLevel + 1}`
+              : "Insufficient NOVI"}
+          </TxButton>
+          <GemAction
+            onClick={onInstant}
+            gemCost={template.gemCostPerMinute * Math.ceil(baseTime / 60)}
+            gemBalance={gemBalance}
+          >
+            Instant Research
+          </GemAction>
+        </div>
+      )}
+
+      {/* Ascend — only at max level */}
+      {!isAnyActive && currentLevel >= template.maxLevel && (
+        <TxButton
+          onClick={onAscend}
+          className="w-full border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50"
+        >
+          Ascend {buffName}
+        </TxButton>
+      )}
+
+      {/* In-progress actions */}
+      {isActiveForThis && !isComplete && (
+        <>
+          <SpeedupPanel
+            visible
+            remainingSeconds={remainingSeconds}
+            onSpeedup={onSpeedup}
+            tiers={[
+              { tier: 1, label: "Skip 1 Hour", description: "Skip 1 hour of research time", gemCost: template.gemCostPerMinute * 60 },
+              { tier: 2, label: "Instant", description: "Complete all remaining time", gemCost: template.gemCostPerMinute * Math.ceil(remainingSeconds / 60) },
+            ]}
+            gemBalance={gemBalance}
+          />
+          <TxButton onClick={onCancel} variant="danger" className="w-full">
+            Cancel Research
+          </TxButton>
+        </>
+      )}
+
+      {/* Already researching something else */}
+      {isAnyActive && !isActiveForThis && (
+        <div className="text-center text-xs text-text-muted">
+          Another research is in progress. Cancel or complete it first.
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ResearchTab() {
   const { data: playerData } = usePlayer();
@@ -45,26 +322,14 @@ export function ResearchTab() {
   const buffs = useResearchBuffs();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
-  const { connection } = useConnection();
   const transact = useTransact();
 
-  // Fetch research progress
-  const { data: researchData } = useQuery({
-    queryKey: ["research", publicKey?.toBase58()],
-    queryFn: async () => {
-      if (!publicKey) return null;
-      const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey);
-      const [researchPda] = deriveResearchPda(playerPda);
-      const info = await connection.getAccountInfo(researchPda);
-      if (!info) return { pubkey: researchPda, exists: false, account: null };
-      return { pubkey: researchPda, exists: true, account: null };
-    },
-    enabled: !!publicKey,
-    staleTime: 10_000,
-  });
+  // Fetch on-chain data
+  const { data: templates, isLoading: templatesLoading } = useResearchTemplates();
+  const { data: progressData, isLoading: progressLoading } = useResearchProgress();
+  const progress = progressData?.account ?? null;
 
-  const [selectedResearch, setSelectedResearch] = useState(0);
+  const [selectedResearch, setSelectedResearch] = useState<number>(-1);
 
   // Time-of-day indicator
   const now = Math.floor(Date.now() / 1000);
@@ -85,162 +350,138 @@ export function ResearchTab() {
     return isTraveling(player) ? "Cannot research while traveling" : null;
   }, [player]);
 
-  // Research cost preview for selected type
-  // On-chain uses base_novi_cost * 1.8^level. SDK uses calculateResearchCost(baseCost, level, GOLDEN_ROOT).
-  // We show both an approximate cost and time progression for levels 1-10.
-  const researchCostPreview = useMemo(() => {
-    // Base cost is 5,000 NOVI for most research types (approx from on-chain templates)
-    const baseCost = 5_000;
-    const baseTimeSeconds = 3_600; // 1 hour base
-    const levels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    return levels.map((lvl) => ({
-      level: lvl,
-      cost: calculateResearchCost(baseCost, lvl),
-      timeHours: Math.max(1, Math.round((baseTimeSeconds * Math.pow(1.5, lvl)) / 3600)),
-    }));
-  }, []);
+  // Group templates by category
+  const grouped = useMemo(() => {
+    if (!templates) return {};
+    const map: Record<string, ResearchTemplateAccount[]> = {};
+    for (const t of templates) {
+      const cat = CATEGORY_NAMES[t.category] ?? "Other";
+      (map[cat] ??= []).push(t);
+    }
+    return map;
+  }, [templates]);
 
-  // Current research level display (from buffs)
-  const currentResearchLevel = useMemo(() => {
-    const buff = buffs.find((b) => {
-      const typeNames = ["Attack", "Defense", "Crit Chance", "Crit Damage", "Loot Bonus", "Stamina", "Collection"];
-      return b.label === typeNames[selectedResearch];
-    });
-    if (!buff) return 0;
-    // Approximate level from bps (each level adds roughly 100-200 bps)
-    return Math.round(buff.bps / 100);
-  }, [buffs, selectedResearch]);
+  const selectedTemplate = useMemo(() => {
+    return templates?.find((t) => t.researchType === selectedResearch) ?? null;
+  }, [templates, selectedResearch]);
 
   const handleCreateProgress = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [researchPda] = deriveResearchPda(playerPda);
     const ix = createCreateProgressInstruction({
-      player: playerPda,
-      research: researchPda,
-      gameEngine: ge,
       owner: publicKey,
+      gameEngine: client.gameEngine,
     });
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
+      invalidateKeys: [["research-progress"], ["player"]],
       successMessage: "Research unlocked!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleStart = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [researchPda] = deriveResearchPda(playerPda);
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const ix = createStartResearchInstruction({
-      player: playerPda,
-      research: researchPda,
-      gameEngine: ge,
       owner: publicKey,
+      gameEngine: client.gameEngine,
+      researchType: selectedTemplate.researchType,
     });
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
+      invalidateKeys: [["research-progress"], ["player"]],
       successMessage: "Research started!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleComplete = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [researchPda] = deriveResearchPda(playerPda);
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const ix = createCompleteResearchInstruction({
-      player: playerPda,
-      research: researchPda,
-      gameEngine: ge,
-      owner: publicKey,
+      payer: publicKey,
+      gameEngine: client.gameEngine,
+      playerOwner: publicKey,
+      researchType: selectedTemplate.researchType,
     });
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
+      invalidateKeys: [["research-progress"], ["player"]],
       successMessage: "Research complete!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleInstantResearch = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [researchPda] = deriveResearchPda(playerPda);
-    const startIx = createStartResearchInstruction({
-      player: playerPda, research: researchPda, gameEngine: ge, owner: publicKey,
-    });
+    const rt = selectedTemplate.researchType;
+    const startIx = createStartResearchInstruction({ owner: publicKey, gameEngine: ge, researchType: rt });
     const speedupIx = createSpeedUpResearchInstruction(
-      { owner: publicKey, gameEngine: ge, researchType: selectedResearch },
+      { owner: publicKey, gameEngine: ge, researchType: rt },
       { speedUpSeconds: 0 },
     );
     const completeIx = createCompleteResearchInstruction({
-      player: playerPda, research: researchPda, gameEngine: ge, owner: publicKey,
+      payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
     });
     return transact.mutateAsync({
       instructions: [startIx, speedupIx, completeIx],
-      invalidateKeys: [["research"], ["player"]],
-      successMessage: `${RESEARCH_TYPES[selectedResearch]?.name} research completed instantly!`,
+      invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${BUFF_NAMES[selectedTemplate.buffType] ?? "Research"} completed instantly!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleResearchSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const geKey = client.gameEngine;
-    // Tier 1 = skip 1 hour, Tier 2 = complete all (0 = instant)
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const speedUpSeconds = tier === 2 ? 0 : 3600;
     const ix = createSpeedUpResearchInstruction(
-      { owner: publicKey, gameEngine: geKey, researchType: selectedResearch },
+      { owner: publicKey, gameEngine: client.gameEngine, researchType: selectedTemplate.researchType },
       { speedUpSeconds },
     );
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
+      invalidateKeys: [["research-progress"], ["player"]],
       successMessage: "Research sped up!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleCancelResearch = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const ix = createCancelResearchInstruction({
       owner: publicKey,
-      gameEngine: ge,
-      researchType: selectedResearch,
+      gameEngine: client.gameEngine,
+      researchType: selectedTemplate.researchType,
     });
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
+      invalidateKeys: [["research-progress"], ["player"]],
       successMessage: "Research cancelled!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleAscend = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
+    if (!publicKey || !selectedTemplate) throw new Error("Select a research type");
     const ix = createAscendInstruction(
-      { owner: publicKey, gameEngine: ge },
-      { researchType: selectedResearch },
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { researchType: selectedTemplate.researchType },
     );
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["research"], ["player"]],
-      successMessage: `${RESEARCH_TYPES[selectedResearch]?.name} ascended!`,
+      invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${BUFF_NAMES[selectedTemplate.buffType] ?? "Research"} ascended!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
+  const closePanel = useCallback(() => {
+    setSelectedResearch(-1);
+  }, []);
+
+  const loading = templatesLoading || progressLoading;
+
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-3">
       {travelWarning && (
         <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-sm text-amber-300">
           {travelWarning}
@@ -267,37 +508,13 @@ export function ResearchTab() {
         </div>
       )}
 
-      {/* Current Buffs */}
-      {buffs.length > 0 && (
-        <div className="card accent-border">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Active Research Buffs
-          </h3>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            {buffs.map((buff) => (
-              <div key={buff.label} className="rounded-lg border border-zinc-800 p-3 text-center">
-                <div className="text-xs text-text-muted">{buff.label}</div>
-                <div className="text-lg font-bold text-text-gold">
-                  +{(buff.bps / 100).toFixed(1)}%
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Active Research */}
-      {researchData?.exists && player && player.researchBuffVersion > 0 && (
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Research Active
-          </h3>
-          <p className="text-sm text-text-secondary">Research system is active. Complete research to earn buffs.</p>
-        </div>
+      {/* Loading */}
+      {loading && (
+        <div className="card text-center text-sm text-text-muted">Loading research data...</div>
       )}
 
       {/* Research not initialized */}
-      {!researchData?.exists && researchData !== undefined && (
+      {!loading && progressData && !progressData.exists && (
         <div className="card text-center">
           <p className="mb-4 text-text-secondary">
             Unlock the research system to boost your abilities.
@@ -306,104 +523,104 @@ export function ResearchTab() {
         </div>
       )}
 
-      {/* Research Types */}
-      {researchData?.exists && (
-        <div>
-          <h2 className="mb-3 text-lg font-semibold text-text-primary">Research Tree</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {RESEARCH_TYPES.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setSelectedResearch(type.id)}
-                className={`rounded-lg border p-4 text-left transition-all ${
-                  selectedResearch === type.id
-                    ? "border-amber-600 bg-amber-900/20"
-                    : "border-zinc-800 hover:border-zinc-700"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{type.icon}</span>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-text-primary">{type.name}</div>
-                      {selectedResearch === type.id && currentResearchLevel > 0 && (
-                        <span className="text-[11px] text-text-gold">Lv {currentResearchLevel}/10</span>
-                      )}
+      {/* No templates found */}
+      {!loading && templates && templates.length === 0 && (
+        <div className="card text-center text-sm text-text-muted">
+          No research templates found on-chain.
+        </div>
+      )}
+
+      {/* Research exists — 2-column on desktop */}
+      {!loading && progressData?.exists && templates && templates.length > 0 && (
+        <>
+          {/* Current Buffs */}
+          {buffs.length > 0 && (
+            <div className="card accent-border">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Active Research Buffs
+              </h3>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {buffs.map((buff) => (
+                  <div key={buff.label} className="rounded-lg border border-zinc-800 p-3 text-center">
+                    <div className="text-xs text-text-muted">{buff.label}</div>
+                    <div className="text-lg font-bold text-text-gold">
+                      +{(buff.bps / 100).toFixed(1)}%
                     </div>
-                    <div className="text-xs text-text-muted">{type.desc}</div>
                   </div>
-                </div>
-              </button>
-            ))}
-          </div>
-          {/* Research Cost Preview */}
-          <div className="mt-4 rounded-lg border border-zinc-800 bg-surface/50 p-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              {RESEARCH_TYPES[selectedResearch]?.name} Research — Cost Preview
-            </h3>
-            {currentResearchLevel > 0 && (
-              <div className="mb-2 text-[11px] text-text-gold">
-                Current Level: {currentResearchLevel}/10
+                ))}
               </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {researchCostPreview.slice(0, 6).map((r) => (
-                <div
-                  key={r.level}
-                  className={`rounded border px-2 py-1 text-center ${
-                    r.level === currentResearchLevel + 1
-                      ? "border-amber-600 bg-amber-900/20"
-                      : "border-zinc-800"
-                  }`}
-                >
-                  <div className="text-[11px] text-text-muted">Lv {r.level}</div>
-                  <div className="text-xs font-semibold text-text-gold">{r.cost.toLocaleString()}</div>
-                  <div className="text-[11px] text-text-muted">~{r.timeHours}h</div>
+            </div>
+          )}
+
+          {/* Main area: left grid + right detail */}
+          <div className="min-h-0 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-hidden">
+            {/* Left — research types grid (scrollable) */}
+            <div className="lg:col-span-2 overflow-y-auto space-y-4">
+              {Object.entries(grouped).map(([category, catTemplates]) => (
+                <div key={category}>
+                  <h2 className="mb-2 text-sm font-semibold text-text-primary">{category}</h2>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {catTemplates.map((t) => {
+                      const level = progress ? getResearchLevel(progress, t.researchType) : 0;
+                      const isActiveHere = progress
+                        ? isResearching(progress) && progress.currentResearch === t.researchType
+                        : false;
+                      const name = BUFF_NAMES[t.buffType] ?? `Research #${t.researchType}`;
+                      return (
+                        <button
+                          key={t.researchType}
+                          onClick={() => setSelectedResearch(t.researchType)}
+                          className={`rounded-lg border p-4 text-left transition-all ${
+                            selectedResearch === t.researchType
+                              ? "border-amber-600 bg-amber-900/20"
+                              : isActiveHere
+                                ? "border-green-700 bg-green-900/10"
+                                : "border-zinc-800 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{CATEGORY_ICONS[t.category] ?? "?"}</span>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div className="text-sm font-semibold text-text-primary">{name}</div>
+                                <span className="text-[11px] text-text-gold">Lv {level}/{t.maxLevel}</span>
+                              </div>
+                              <div className="text-xs text-text-muted">
+                                +{(t.buffPerLevelBps / 100).toFixed(1)}%/lv
+                                {isActiveHere && <span className="ml-2 text-green-400">Researching...</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="mt-2 text-[11px] text-text-muted">
-              Cost scales by ~1.27x per level (golden root). Time scales by 1.5x per level.
-            </div>
-          </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <TxButton onClick={handleStart}>
-              Start {RESEARCH_TYPES[selectedResearch]?.name} Research
-            </TxButton>
-            <GemAction
-              onClick={handleInstantResearch}
-              gemCost={5000}
-              gemBalance={player?.gems?.toNumber?.() ?? 0}
-            >
-              Instant {RESEARCH_TYPES[selectedResearch]?.name}
-            </GemAction>
-            <TxButton onClick={handleCancelResearch} variant="danger">
-              Cancel Research
-            </TxButton>
-            {currentResearchLevel >= 25 && (
-              <TxButton
-                onClick={handleAscend}
-                className="border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50"
-              >
-                Ascend {RESEARCH_TYPES[selectedResearch]?.name}
-              </TxButton>
-            )}
+            <DetailPanel open={selectedResearch >= 0} onClose={closePanel}>
+              {selectedTemplate ? (
+                <ResearchDetailPanel
+                  template={selectedTemplate}
+                  progress={progress}
+                  playerData={playerData}
+                  onStart={handleStart}
+                  onComplete={handleComplete}
+                  onInstant={handleInstantResearch}
+                  onCancel={handleCancelResearch}
+                  onAscend={handleAscend}
+                  onSpeedup={handleResearchSpeedup}
+                  onClose={closePanel}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-xs text-text-muted">Select a research type to view details</p>
+                </div>
+              )}
+            </DetailPanel>
           </div>
-          {/* Research Speedup */}
-          <div className="mt-6">
-            <SpeedupPanel
-              visible={researchData?.exists ?? false}
-              remainingSeconds={3600}
-              onSpeedup={handleResearchSpeedup}
-              tiers={[
-                { tier: 1, label: "Skip 1 Hour", description: "Skip 1 hour of research time", gemCost: 500 },
-                { tier: 2, label: "Instant", description: "Complete all remaining time", gemCost: 5000 },
-              ]}
-              gemBalance={player?.gems?.toNumber?.()}
-            />
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

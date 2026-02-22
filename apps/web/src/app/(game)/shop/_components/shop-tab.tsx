@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useShopConfig, useShopItems, useBundles, useFlashSales } from "@/lib/hooks/useShop";
@@ -13,6 +13,7 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { TabNav } from "@/components/shared/TabNav";
+import { DetailPanel } from "@/components/shared/DetailPanel";
 import {
   deriveShopItemPda,
   deriveBundlePda,
@@ -26,6 +27,8 @@ import {
   FlashSaleStatus,
   isItemAvailable,
   isFlashSaleActive,
+  getShopItemName,
+  getItemTypeInfo,
   calculateNoviPurchasePreview,
   calculateNoviStreak,
   getRemainingDailyAllowance,
@@ -70,12 +73,17 @@ const RARITY_COLORS: Record<number, string> = {
   [ShopItemRarity.Common]: "text-zinc-400",
   [ShopItemRarity.Uncommon]: "text-green-400",
   [ShopItemRarity.Rare]: "text-blue-400",
-  [ShopItemRarity.Epic]: "text-purple-400",
+  [ShopItemRarity.Epic]: "text-fuchsia-400",
   [ShopItemRarity.Legendary]: "text-amber-400",
 };
 
 function lamportsToSol(lamports: number): string {
   return (lamports / 1e9).toFixed(4);
+}
+
+/** Look up an item's itemType from the active items list by its PDA-derived itemId */
+function findItemType(activeItems: { itemId: number; account: { itemType: number } }[], itemId: number): number {
+  return activeItems.find((i) => i.itemId === itemId)?.account.itemType ?? -1;
 }
 
 /** Reverse-lookup map: pubkey base58 -> numeric ID for PDA-derived accounts */
@@ -111,7 +119,15 @@ export function ShopTab() {
   const ge = client.gameEngine;
 
   const [activeTab, setActiveTab] = useState("items");
-  const [selectedPackage, setSelectedPackage] = useState(0);
+  const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
+  const [itemQuantities, setItemQuantities] = useState<Record<number, number>>({});
+
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => { setIsDesktop(window.innerWidth >= 1024); }, []);
+  const [selectedItem, setSelectedItem] = useState<number | null>(null);
+  const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
+  const [selectedSale, setSelectedSale] = useState<number | null>(null);
+  const effectivePackage = selectedPackage ?? (isDesktop ? 0 : null);
 
   // Build reverse-lookup maps: pubkey -> numeric ID
   const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
@@ -135,16 +151,16 @@ export function ShopTab() {
 
   // NOVI purchase preview for selected package
   const noviPreview = useMemo(() => {
-    if (!gameEngine || !player) return null;
+    if (!gameEngine || !player || effectivePackage == null) return null;
     const config = gameEngine.noviPurchaseConfig;
     const tier = getEffectiveTier(player, nowSec);
     const streakDay = user ? user.noviPurchaseStreak : 1;
     try {
-      return calculateNoviPurchasePreview(selectedPackage, tier, streakDay, config);
+      return calculateNoviPurchasePreview(effectivePackage, tier, streakDay, config);
     } catch {
       return null;
     }
-  }, [gameEngine, player, user, selectedPackage, nowSec]);
+  }, [gameEngine, player, user, effectivePackage, nowSec]);
 
   // Streak info
   const streakInfo = useMemo(() => {
@@ -164,7 +180,7 @@ export function ShopTab() {
     return getRemainingDailyAllowance(user.noviPurchasedToday, tier, config);
   }, [gameEngine, player, user, nowSec]);
 
-  const handlePurchaseItem = async (itemId: number, reportPhase: (p: TxPhase) => void) => {
+  const handlePurchaseItem = async (itemId: number, quantity: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !gameEngine) throw new Error("Not ready");
     const ix = createPurchaseItemInstruction(
       {
@@ -173,12 +189,12 @@ export function ShopTab() {
         itemId,
         treasury: gameEngine.treasuryWallet,
       },
-      { quantity: 1 },
+      { quantity },
     );
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
-      successMessage: "Item purchased!",
+      successMessage: `Purchased x${quantity}!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -226,10 +242,10 @@ export function ShopTab() {
   };
 
   const handlePurchaseNovi = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !gameEngine) throw new Error("Not ready");
+    if (!publicKey || !gameEngine || effectivePackage == null) throw new Error("Not ready");
     const noviConfig = gameEngine.noviPurchaseConfig;
     const maxLamports = noviConfig.noviBasePriceLamports
-      .muln(noviConfig.noviPurchaseAmounts[selectedPackage].toNumber())
+      .muln(noviConfig.noviPurchaseAmounts[effectivePackage].toNumber())
       .muln(15)
       .divn(10);
     const ix = createPurchaseNoviInstruction(
@@ -239,9 +255,9 @@ export function ShopTab() {
         treasury: gameEngine.treasuryWallet,
         noviMint: gameEngine.noviMint,
       },
-      { packageIndex: selectedPackage, maxLamports },
+      { packageIndex: effectivePackage, maxLamports },
     );
-    const amount = noviConfig.noviPurchaseAmounts[selectedPackage].toNumber() / 10;
+    const amount = noviConfig.noviPurchaseAmounts[effectivePackage].toNumber() / 10;
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
@@ -276,6 +292,11 @@ export function ShopTab() {
         isFlashSaleActive(s.account, nowSec),
       );
   }, [flashSales, saleIdMap, nowSec]);
+
+  // On desktop, default to first entry so the sidebar is always populated
+  const effectiveItem = selectedItem ?? (isDesktop && activeItems.length > 0 ? activeItems[0].itemId : null);
+  const effectiveBundle = selectedBundle ?? (isDesktop && activeBundles.length > 0 ? activeBundles[0].bundleId : null);
+  const effectiveSale = selectedSale ?? (isDesktop && activeFlashSales.length > 0 ? activeFlashSales[0].saleId : null);
 
   return (
     <div className="space-y-6">
@@ -326,228 +347,376 @@ export function ShopTab() {
         }))}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        size="compact"
       />
 
       {/* Items Tab */}
       {activeTab === "items" && (
-        <div>
-          {!itemsReady ? (
-            <div className="card">
-              <p className="text-sm text-text-muted">Loading items...</p>
-            </div>
-          ) : activeItems.length === 0 ? (
-            <div className="card">
-              <p className="text-sm text-text-muted">No items available in the shop right now.</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {activeItems.map((item) => {
-                const a = item.account;
-                const baseLamports = a.priceSolLamports.toNumber();
-                const solPrice = lamportsToSol(baseLamports);
-                const hasStock = a.maxGlobalStock.eqn(0) || a.currentGlobalStock.gtn(0);
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {!itemsReady ? (
+              <div className="card"><p className="text-sm text-text-muted">Loading items...</p></div>
+            ) : activeItems.length === 0 ? (
+              <div className="card"><p className="text-sm text-text-muted">No items available in the shop right now.</p></div>
+            ) : (
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+                {activeItems.map((item) => {
+                  const a = item.account;
+                  const isSelected = effectiveItem === item.itemId;
+                  return (
+                    <button
+                      key={item.itemId}
+                      onClick={() => setSelectedItem(item.itemId)}
+                      className={`rounded-lg border p-3 text-left transition-all ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-900/20 ring-1 ring-amber-600/30"
+                          : a.isFeatured
+                            ? "border-amber-800/40 hover:border-amber-700/60"
+                            : "border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className={`text-[10px] font-semibold uppercase ${RARITY_COLORS[a.rarity] ?? "text-zinc-400"}`}>
+                        {RARITY_LABELS[a.rarity] ?? "Unknown"}
+                      </span>
+                      <div className="text-sm font-semibold text-text-primary truncate">
+                        {getShopItemName(a.itemType, a.quantityPerPurchase)}
+                      </div>
+                      <div className="mt-1 text-xs text-text-gold">
+                        {lamportsToSol(a.priceSolLamports.toNumber())} SOL
+                      </div>
+                      {!a.maxGlobalStock.eqn(0) && a.currentGlobalStock.eqn(0) && (
+                        <div className="text-[10px] text-red-400">Sold Out</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-                // Calculate discounted price if player has a subscription
-                const subTier = player ? getEffectiveTier(player, nowSec) : 0;
-                const tierDiscounts = shopConfig
-                  ? [0, shopConfig.bronzeDiscountBps, shopConfig.silverDiscountBps, shopConfig.goldDiscountBps]
-                  : [0, 0, 0, 0];
-                const discountedLamports = subTier > 0
-                  ? calculateShopPrice(baseLamports, subTier, tierDiscounts)
-                  : baseLamports;
-                const hasDiscount = discountedLamports < baseLamports;
+          <DetailPanel open={effectiveItem != null} onClose={() => setSelectedItem(null)}>
+            {effectiveItem != null && (() => {
+              const item = activeItems.find((i) => i.itemId === effectiveItem);
+              if (!item) return null;
+              const a = item.account;
+              const baseLamports = a.priceSolLamports.toNumber();
+              const hasStock = a.maxGlobalStock.eqn(0) || a.currentGlobalStock.gtn(0);
+              const subTier = player ? getEffectiveTier(player, nowSec) : 0;
+              const tierDiscounts = shopConfig
+                ? [0, shopConfig.bronzeDiscountBps, shopConfig.silverDiscountBps, shopConfig.goldDiscountBps]
+                : [0, 0, 0, 0];
+              const discountedLamports = subTier > 0
+                ? calculateShopPrice(baseLamports, subTier, tierDiscounts)
+                : baseLamports;
+              const hasDiscount = discountedLamports < baseLamports;
+              const qty = itemQuantities[effectiveItem] ?? 1;
+              const unitPrice = hasDiscount ? discountedLamports : baseLamports;
 
-                return (
-                  <div key={item.itemId} className={`card group ${a.isFeatured ? "accent-border" : ""}`}>
-                    <div className="flex items-center justify-between">
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Shop Item</h3>
+                    <button onClick={() => setSelectedItem(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
                       <span className={`text-xs font-semibold uppercase ${RARITY_COLORS[a.rarity] ?? "text-zinc-400"}`}>
                         {RARITY_LABELS[a.rarity] ?? "Unknown"}
                       </span>
-                      <span className="text-xs text-text-muted">
-                        {CATEGORY_LABELS[a.category] ?? "Unknown"}
-                      </span>
+                      <span className="text-xs text-text-muted">{CATEGORY_LABELS[a.category] ?? "Unknown"}</span>
                     </div>
                     <div className="mt-1 text-sm font-semibold text-text-primary">
-                      Item #{item.itemId}
+                      {getShopItemName(a.itemType, a.quantityPerPurchase)}
                     </div>
-                    <div className="text-xs text-text-muted">
-                      x{a.quantityPerPurchase} per purchase
-                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
                     {a.maxPerPlayer > 0 && (
-                      <div className="text-[11px] text-text-muted">
-                        Limit: {a.maxPerPlayer} per player
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Limit per player</span>
+                        <span className="text-text-muted">{a.maxPerPlayer}</span>
                       </div>
                     )}
                     {a.maxPerDay > 0 && (
-                      <div className="text-[11px] text-text-muted">
-                        Daily limit: {a.maxPerDay}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Daily limit</span>
+                        <span className="text-text-muted">{a.maxPerDay}</span>
                       </div>
                     )}
                     {!a.maxGlobalStock.eqn(0) && (
-                      <div className="text-xs text-text-muted">
-                        Stock: {a.currentGlobalStock.toString()}/{a.maxGlobalStock.toString()}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Stock</span>
+                        <span className={`text-text-muted ${a.currentGlobalStock.eqn(0) ? "text-red-400" : ""}`}>
+                          {a.currentGlobalStock.toString()}/{a.maxGlobalStock.toString()}
+                        </span>
                       </div>
                     )}
-                    <div className="mt-2 flex items-center justify-between">
-                      <div>
-                        {hasDiscount ? (
-                          <>
-                            <span className="text-xs text-text-muted line-through">{solPrice} SOL</span>
-                            <span className="ml-1 text-sm text-green-400">{lamportsToSol(discountedLamports)} SOL</span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-text-gold">{solPrice} SOL</span>
-                        )}
+                  </div>
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Unit price</span>
+                      {hasDiscount ? (
+                        <span>
+                          <span className="text-text-muted line-through mr-1">{lamportsToSol(baseLamports)}</span>
+                          <span className="text-green-400">{lamportsToSol(discountedLamports)} SOL</span>
+                        </span>
+                      ) : (
+                        <span className="font-mono tabular-nums text-text-gold">{lamportsToSol(baseLamports)} SOL</span>
+                      )}
+                    </div>
+                    {qty > 1 && (
+                      <div className="mt-1 flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Total ({qty}x)</span>
+                        <span className="font-mono tabular-nums text-text-gold">{lamportsToSol(unitPrice * qty)} SOL</span>
                       </div>
-                      <TxButton
-                        onClick={(reportPhase) => handlePurchaseItem(item.itemId, reportPhase)}
-                        variant="secondary"
-                        className="text-xs"
-                        disabled={!hasStock}
-                      >
-                        {hasStock ? "Buy" : "Sold Out"}
-                      </TxButton>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs text-text-muted">Quantity</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setItemQuantities((prev) => ({ ...prev, [effectiveItem!]: Math.max(1, qty - 1) }))}
+                        className="flex h-8 w-8 items-center justify-center rounded border border-zinc-700 text-sm text-text-muted hover:border-zinc-600"
+                      >−</button>
+                      <span className="w-8 text-center font-mono text-sm text-text-primary">{qty}</span>
+                      <button
+                        onClick={() => setItemQuantities((prev) => ({ ...prev, [effectiveItem!]: Math.min(100, qty + 1) }))}
+                        className="flex h-8 w-8 items-center justify-center rounded border border-zinc-700 text-sm text-text-muted hover:border-zinc-600"
+                      >+</button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  <TxButton
+                    onClick={(rp) => handlePurchaseItem(effectiveItem!, qty, rp)}
+                    className="w-full"
+                    disabled={!hasStock}
+                  >
+                    {hasStock ? `Buy ${qty}x for ${lamportsToSol(unitPrice * qty)} SOL` : "Sold Out"}
+                  </TxButton>
+                </>
+              );
+            })()}
+          </DetailPanel>
         </div>
       )}
 
       {/* Bundles Tab */}
       {activeTab === "bundles" && (
-        <div>
-          {!bundlesReady ? (
-            <div className="card">
-              <p className="text-sm text-text-muted">Loading bundles...</p>
-            </div>
-          ) : activeBundles.length === 0 ? (
-            <div className="card">
-              <p className="text-sm text-text-muted">No bundles available right now.</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {activeBundles.map((bundle) => {
-                const b = bundle.account;
-                const solPrice = lamportsToSol(b.priceSolLamports.toNumber());
-                return (
-                  <div key={bundle.bundleId} className="card accent-border">
-                    <div className="flex items-center justify-between">
-                      <div className="text-lg font-semibold text-text-gold">
-                        Bundle #{bundle.bundleId}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {!bundlesReady ? (
+              <div className="card"><p className="text-sm text-text-muted">Loading bundles...</p></div>
+            ) : activeBundles.length === 0 ? (
+              <div className="card"><p className="text-sm text-text-muted">No bundles available right now.</p></div>
+            ) : (
+              <div className="grid gap-2 grid-cols-2">
+                {activeBundles.map((bundle) => {
+                  const b = bundle.account;
+                  const isSelected = effectiveBundle === bundle.bundleId;
+                  return (
+                    <button
+                      key={bundle.bundleId}
+                      onClick={() => setSelectedBundle(bundle.bundleId)}
+                      className={`rounded-lg border p-3 text-left transition-all ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-900/20 ring-1 ring-amber-600/30"
+                          : "border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-text-gold">Bundle #{bundle.bundleId}</span>
+                        {b.savingsBps > 0 && (
+                          <span className="text-[10px] text-green-400">{(b.savingsBps / 100).toFixed(0)}% off</span>
+                        )}
                       </div>
-                      {b.savingsBps > 0 && (
-                        <span className="rounded bg-green-900/30 px-2 py-0.5 text-xs font-semibold text-green-400">
-                          {(b.savingsBps / 100).toFixed(0)}% off
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1 text-xs text-text-muted">
+                      <div className="text-xs text-text-muted">Tier {b.tier} &middot; {b.itemCount} items</div>
+                      <div className="mt-1 text-xs text-text-gold">{lamportsToSol(b.priceSolLamports.toNumber())} SOL</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DetailPanel open={effectiveBundle != null} onClose={() => setSelectedBundle(null)}>
+            {effectiveBundle != null && (() => {
+              const bundle = activeBundles.find((b) => b.bundleId === effectiveBundle);
+              if (!bundle) return null;
+              const b = bundle.account;
+              const solPrice = lamportsToSol(b.priceSolLamports.toNumber());
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Bundle</h3>
+                    <button onClick={() => setSelectedBundle(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-semibold text-text-gold">Bundle #{effectiveBundle}</div>
+                    <div className="text-xs text-text-muted">
                       Tier {b.tier} &middot; {b.itemCount} items
                       {b.requiresSubscription > 0 && " \u00b7 Subscription required"}
                     </div>
-                    <div className="mt-2 space-y-1">
-                      {b.items.map((bi, idx) => (
-                        <div key={idx} className="text-xs text-text-secondary">
-                          Item #{bi.itemId} x{bi.quantity}
-                        </div>
-                      ))}
+                  </div>
+
+                  {b.savingsBps > 0 && (
+                    <div className="rounded-lg bg-green-900/20 px-3 py-1.5 text-xs font-semibold text-green-400">
+                      {(b.savingsBps / 100).toFixed(0)}% savings
                     </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-lg text-text-gold">{solPrice} SOL</span>
-                      <TxButton
-                        variant="primary"
-                        onClick={(reportPhase) => handlePurchaseBundle(bundle.bundleId, b.items, reportPhase)}
-                      >
-                        Purchase
-                      </TxButton>
+                  )}
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2">
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Contents</div>
+                    <div className="space-y-1">
+                      {b.items.map((bi) => {
+                        const itemType = findItemType(activeItems, bi.itemId);
+                        const info = getItemTypeInfo(itemType);
+                        const matchingItem = activeItems.find((i) => i.itemId === bi.itemId);
+                        const qty = matchingItem ? matchingItem.account.quantityPerPurchase * bi.quantity : bi.quantity;
+                        return (
+                          <div key={bi.itemId} className="flex items-center justify-between text-xs">
+                            <span className="text-text-secondary">{info ? info.name : `Item #${bi.itemId}`}</span>
+                            <span className="font-mono text-text-muted">x{qty}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Price</span>
+                      <span className="font-mono tabular-nums text-text-gold">{solPrice} SOL</span>
+                    </div>
+                  </div>
+
+                  <TxButton
+                    onClick={(rp) => handlePurchaseBundle(effectiveBundle!, b.items, rp)}
+                    className="w-full"
+                  >
+                    Purchase for {solPrice} SOL
+                  </TxButton>
+                </>
+              );
+            })()}
+          </DetailPanel>
         </div>
       )}
 
       {/* Flash Sales Tab */}
       {activeTab === "flash" && (
-        <div>
-          {!flashSalesReady ? (
-            <div className="card">
-              <p className="text-sm text-text-muted">Loading flash sales...</p>
-            </div>
-          ) : activeFlashSales.length === 0 ? (
-            <div className="card text-center">
-              <p className="text-text-muted">No flash sales active right now. Check back soon!</p>
-            </div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {activeFlashSales.map((sale) => {
-                const s = sale.account;
-                const itemPda = s.isBundle
-                  ? deriveBundlePda(ge, s.itemId)[0]
-                  : deriveShopItemPda(ge, s.itemId)[0];
-                const discountPct = (s.discountBps / 100).toFixed(0);
-                const endsAtSec = s.endsAt.toNumber();
-                const remainingSec = Math.max(0, endsAtSec - nowSec);
-                const totalDurationSec = endsAtSec - s.startsAt.toNumber();
-                const pctRemaining = totalDurationSec > 0
-                  ? Math.round((remainingSec / totalDurationSec) * 100)
-                  : 0;
-                const stockPct = s.maxStock.gtn(0)
-                  ? Math.round((s.remainingStock.toNumber() / s.maxStock.toNumber()) * 100)
-                  : 100;
-                return (
-                  <div key={sale.saleId} className="card accent-border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-semibold uppercase text-red-400">Flash Sale</span>
-                        <div className="mt-1 text-sm font-semibold text-text-primary">
-                          {s.isBundle ? `Bundle #${s.itemId}` : `Item #${s.itemId}`}
-                        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {!flashSalesReady ? (
+              <div className="card"><p className="text-sm text-text-muted">Loading flash sales...</p></div>
+            ) : activeFlashSales.length === 0 ? (
+              <div className="card text-center"><p className="text-text-muted">No flash sales active right now. Check back soon!</p></div>
+            ) : (
+              <div className="grid gap-2 grid-cols-2">
+                {activeFlashSales.map((sale) => {
+                  const s = sale.account;
+                  const discountPct = (s.discountBps / 100).toFixed(0);
+                  const isSelected = effectiveSale === sale.saleId;
+                  const itemName = s.isBundle
+                    ? `Bundle #${s.itemId}`
+                    : (() => {
+                        const info = getItemTypeInfo(findItemType(activeItems, s.itemId));
+                        return info ? info.name : `Item #${s.itemId}`;
+                      })();
+                  return (
+                    <button
+                      key={sale.saleId}
+                      onClick={() => setSelectedSale(sale.saleId)}
+                      className={`rounded-lg border p-3 text-left transition-all ${
+                        isSelected
+                          ? "border-red-600 bg-red-900/20 ring-1 ring-red-600/30"
+                          : "border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-semibold uppercase text-red-400">Flash Sale</span>
+                        <span className="text-[10px] font-bold text-red-400">-{discountPct}%</span>
                       </div>
-                      <div className="text-right">
-                        <span className="rounded bg-red-900/30 px-2 py-0.5 text-sm font-bold text-red-400">
-                          -{discountPct}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-                      <span>Stock: {s.remainingStock.toString()}/{s.maxStock.toString()}</span>
-                      <span className={stockPct <= 20 ? "text-red-400 font-semibold" : ""}>
-                        {stockPct <= 20 ? "Almost gone!" : `${stockPct}% left`}
+                      <div className="text-sm font-semibold text-text-primary truncate">{itemName}</div>
+                      {s.remainingStock.eqn(0) && (
+                        <div className="text-[10px] text-red-400">Sold Out</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DetailPanel open={effectiveSale != null} onClose={() => setSelectedSale(null)}>
+            {effectiveSale != null && (() => {
+              const sale = activeFlashSales.find((s) => s.saleId === effectiveSale);
+              if (!sale) return null;
+              const s = sale.account;
+              const itemPda = s.isBundle
+                ? deriveBundlePda(ge, s.itemId)[0]
+                : deriveShopItemPda(ge, s.itemId)[0];
+              const discountPct = (s.discountBps / 100).toFixed(0);
+              const endsAtSec = s.endsAt.toNumber();
+              const remainingSec = Math.max(0, endsAtSec - nowSec);
+              const totalDurationSec = endsAtSec - s.startsAt.toNumber();
+              const pctRemaining = totalDurationSec > 0
+                ? Math.round((remainingSec / totalDurationSec) * 100)
+                : 0;
+              const stockPct = s.maxStock.gtn(0)
+                ? Math.round((s.remainingStock.toNumber() / s.maxStock.toNumber()) * 100)
+                : 100;
+              const itemName = s.isBundle
+                ? `Bundle #${s.itemId}`
+                : (() => {
+                    const info = getItemTypeInfo(findItemType(activeItems, s.itemId));
+                    return info ? info.name : `Item #${s.itemId}`;
+                  })();
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Flash Sale</h3>
+                    <button onClick={() => setSelectedSale(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-text-primary">{itemName}</div>
+                    <span className="rounded bg-red-900/30 px-2 py-0.5 text-sm font-bold text-red-400">-{discountPct}%</span>
+                  </div>
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Stock</span>
+                      <span className={stockPct <= 20 ? "text-red-400 font-semibold" : "text-text-muted"}>
+                        {s.remainingStock.toString()}/{s.maxStock.toString()}
+                        {stockPct <= 20 && " — Almost gone!"}
                       </span>
                     </div>
-                    <div className="mt-1">
-                      <GoldCountdown
-                        endsAt={endsAtSec}
-                        startedAt={s.startsAt.toNumber()}
-                        format="compact"
-                        size="sm"
-                      />
-                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
+                    <div className="text-xs text-text-muted">Ends in</div>
+                    <GoldCountdown endsAt={endsAtSec} startedAt={s.startsAt.toNumber()} format="compact" size="sm" />
                     {pctRemaining <= 25 && pctRemaining > 0 && (
                       <div className="mt-1 text-[11px] font-semibold text-amber-400">
-                        Ending soon &mdash; {pctRemaining}% time remaining
+                        {pctRemaining}% time remaining
                       </div>
                     )}
-                    <div className="mt-3">
-                      <TxButton
-                        onClick={(reportPhase) => handlePurchaseFlashSale(sale.saleId, itemPda, reportPhase)}
-                        disabled={s.remainingStock.eqn(0)}
-                      >
-                        {s.remainingStock.eqn(0) ? "Sold Out" : `Buy Now (-${discountPct}%)`}
-                      </TxButton>
-                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  <TxButton
+                    onClick={(rp) => handlePurchaseFlashSale(effectiveSale!, itemPda, rp)}
+                    className="w-full"
+                    disabled={s.remainingStock.eqn(0)}
+                  >
+                    {s.remainingStock.eqn(0) ? "Sold Out" : `Buy Now (-${discountPct}%)`}
+                  </TxButton>
+                </>
+              );
+            })()}
+          </DetailPanel>
         </div>
       )}
 
@@ -589,17 +758,15 @@ export function ShopTab() {
         <div className="space-y-4">
           {/* Streak & Allowance Banner */}
           {(streakInfo || dailyAllowance) && (
-            <div className="card flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
               {streakInfo && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">Streak:</span>
+                  <span className="text-text-muted">Streak:</span>
                   <span className={`text-sm font-semibold ${streakInfo.streakDay >= 5 ? "text-amber-400" : streakInfo.streakDay >= 3 ? "text-green-400" : "text-text-secondary"}`}>
                     Day {streakInfo.streakDay}/7
                   </span>
                   {streakInfo.bonusBps > 0 && (
-                    <span className="text-[11px] text-green-400">
-                      +{(streakInfo.bonusBps / 100).toFixed(0)}% bonus
-                    </span>
+                    <span className="text-[11px] text-green-400">+{(streakInfo.bonusBps / 100).toFixed(0)}% bonus</span>
                   )}
                   {streakInfo.isResetting && (
                     <span className="text-[11px] text-amber-400">Streak reset</span>
@@ -608,7 +775,7 @@ export function ShopTab() {
               )}
               {dailyAllowance && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">Daily limit:</span>
+                  <span className="text-text-muted">Daily limit:</span>
                   <span className={`text-sm font-semibold ${dailyAllowance.eqn(0) ? "text-red-400" : "text-text-gold"}`}>
                     {dailyAllowance.eqn(0) ? "Reached" : `${formatNoviAmount(dailyAllowance)} NOVI left`}
                   </span>
@@ -617,119 +784,115 @@ export function ShopTab() {
             </div>
           )}
 
-          <div className="card">
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Purchase NOVI Tokens
-            </h3>
-            {!gameEngine ? (
-              <p className="text-sm text-text-muted">Loading...</p>
-            ) : (
-              <>
-                <div className="grid gap-3 md:grid-cols-5">
+          {!gameEngine ? (
+            <div className="card"><p className="text-sm text-text-muted">Loading...</p></div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-2">
+                <div className="grid gap-2 grid-cols-3 md:grid-cols-5">
                   {gameEngine.noviPurchaseConfig.noviPurchaseAmounts.map((amount, idx) => {
                     const tierInfo = NOVI_PACKAGE_TIERS[idx];
                     const noviAmount = amount.toNumber() / 10;
                     const bonusBps = gameEngine.noviPurchaseConfig.noviBulkBonusBps[idx] ?? 0;
-                    const isSelected = selectedPackage === idx;
+                    const isSelected = effectivePackage === idx;
                     return (
                       <button
-                        key={idx}
+                        key={amount.toString()}
                         onClick={() => setSelectedPackage(idx)}
-                        className={`rounded-lg border p-4 text-center transition-all ${
+                        className={`rounded-lg border p-3 text-center transition-all ${
                           isSelected
-                            ? "border-amber-600 bg-amber-900/20"
+                            ? "border-amber-600 bg-amber-900/20 ring-1 ring-amber-600/30"
                             : "border-zinc-800 hover:border-zinc-700"
                         }`}
                       >
                         {tierInfo && (
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
                             {tierInfo.name}
                           </div>
                         )}
                         <div className="text-lg font-semibold text-text-gold">
                           {noviAmount.toLocaleString()}
                         </div>
-                        <div className="text-xs text-text-muted">NOVI</div>
+                        <div className="text-[10px] text-text-muted">NOVI</div>
                         {bonusBps > 0 && (
-                          <div className="mt-1 text-xs text-green-400">
-                            +{(bonusBps / 100).toFixed(0)}% bulk bonus
+                          <div className="mt-1 text-[10px] text-green-400">
+                            +{(bonusBps / 100).toFixed(0)}%
                           </div>
                         )}
                       </button>
                     );
                   })}
                 </div>
+              </div>
 
-                {/* Purchase Preview */}
+              <DetailPanel open={effectivePackage != null} onClose={() => setSelectedPackage(null)}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Purchase Preview</h3>
+                  <button onClick={() => setSelectedPackage(null)} className="hidden lg:block text-xs text-text-muted hover:text-text-secondary">Close</button>
+                </div>
+
                 {noviPreview && (
-                  <div className="mt-4 rounded-lg border border-zinc-800 bg-surface p-3">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      Purchase Preview
+                  <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Base amount</span>
+                      <span className="text-text-secondary">{formatNoviAmount(noviPreview.baseAmount)} NOVI</span>
                     </div>
-                    <div className="mt-2 space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-muted">Base amount</span>
-                        <span className="text-text-secondary">{formatNoviAmount(noviPreview.baseAmount)} NOVI</span>
+                    {!noviPreview.bulkBonus.eqn(0) && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Bulk bonus</span>
+                        <span className="text-green-400">+{formatNoviAmount(noviPreview.bulkBonus)} NOVI</span>
                       </div>
-                      {!noviPreview.bulkBonus.eqn(0) && (
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-text-muted">Bulk bonus</span>
-                          <span className="text-green-400">+{formatNoviAmount(noviPreview.bulkBonus)} NOVI</span>
-                        </div>
-                      )}
-                      {!noviPreview.subscriptionBonus.eqn(0) && (
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-text-muted">Subscription bonus</span>
-                          <span className="text-green-400">+{formatNoviAmount(noviPreview.subscriptionBonus)} NOVI</span>
-                        </div>
-                      )}
-                      {!noviPreview.streakBonus.eqn(0) && (
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-text-muted">Streak bonus (Day {streakInfo?.streakDay ?? 1})</span>
-                          <span className="text-green-400">+{formatNoviAmount(noviPreview.streakBonus)} NOVI</span>
-                        </div>
-                      )}
-                      {noviPreview.totalBonusBps > 0 && (
-                        <div className="border-t border-zinc-800 pt-1">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="text-text-muted">Total bonus</span>
-                            <span className="text-green-400">+{(noviPreview.totalBonusBps / 100).toFixed(1)}%</span>
-                          </div>
-                        </div>
-                      )}
-                      <div className="border-t border-zinc-800 pt-1">
-                        <div className="flex items-center justify-between text-sm font-semibold">
-                          <span className="text-text-muted">You receive</span>
-                          <span className="text-text-gold">{formatNoviAmount(noviPreview.totalNovi)} NOVI</span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-text-muted">Cost</span>
-                          <span className="text-text-secondary">{formatLamportsAsSol(noviPreview.costLamports)}</span>
-                        </div>
+                    )}
+                    {!noviPreview.subscriptionBonus.eqn(0) && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Subscription bonus</span>
+                        <span className="text-green-400">+{formatNoviAmount(noviPreview.subscriptionBonus)} NOVI</span>
                       </div>
+                    )}
+                    {!noviPreview.streakBonus.eqn(0) && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Streak (Day {streakInfo?.streakDay ?? 1})</span>
+                        <span className="text-green-400">+{formatNoviAmount(noviPreview.streakBonus)} NOVI</span>
+                      </div>
+                    )}
+                    {noviPreview.totalBonusBps > 0 && (
+                      <div className="flex items-center justify-between text-xs border-t border-zinc-800 pt-1">
+                        <span className="text-zinc-500">Total bonus</span>
+                        <span className="text-green-400">+{(noviPreview.totalBonusBps / 100).toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {noviPreview && (
+                  <div className="rounded-lg bg-surface/60 px-3 py-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">You receive</span>
+                      <span className="font-mono tabular-nums text-text-gold font-semibold">{formatNoviAmount(noviPreview.totalNovi)} NOVI</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Cost</span>
+                      <span className="font-mono tabular-nums text-text-muted">{formatLamportsAsSol(noviPreview.costLamports)}</span>
                     </div>
                   </div>
                 )}
 
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-text-muted">
-                    Base price:{" "}
-                    <span className="text-text-gold">
-                      {lamportsToSol(gameEngine.noviPurchaseConfig.noviBasePriceLamports.toNumber())} SOL/NOVI
-                    </span>
-                  </div>
-                  <TxButton
-                    onClick={handlePurchaseNovi}
-                    disabled={dailyAllowance?.eqn(0) ?? false}
-                  >
-                    {dailyAllowance?.eqn(0)
-                      ? "Daily limit reached"
-                      : `Buy ${noviPreview ? formatNoviAmount(noviPreview.totalNovi) : (gameEngine.noviPurchaseConfig.noviPurchaseAmounts[selectedPackage].toNumber() / 10)} NOVI`}
-                  </TxButton>
+                <div className="text-[10px] text-text-muted">
+                  Base: {lamportsToSol(gameEngine.noviPurchaseConfig.noviBasePriceLamports.toNumber())} SOL/NOVI
                 </div>
-              </>
-            )}
-          </div>
+
+                <TxButton
+                  onClick={handlePurchaseNovi}
+                  className="w-full"
+                  disabled={dailyAllowance?.eqn(0) ?? false}
+                >
+                  {dailyAllowance?.eqn(0)
+                    ? "Daily limit reached"
+                    : `Buy ${noviPreview ? formatNoviAmount(noviPreview.totalNovi) : "NOVI"}`}
+                </TxButton>
+              </DetailPanel>
+            </div>
+          )}
         </div>
       )}
     </div>

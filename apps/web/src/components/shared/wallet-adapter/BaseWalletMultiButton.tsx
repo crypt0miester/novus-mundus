@@ -47,7 +47,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
 
     let cancelled = false;
 
-    const fetch = async () => {
+    const loadBalance = async () => {
       try {
         const lamports = await connection.getBalance(publicKey, "confirmed");
         if (!cancelled) {
@@ -58,7 +58,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
       }
     };
 
-    fetch();
+    loadBalance();
     const id = connection.onAccountChange(publicKey, (info) => {
       if (!cancelled) {
         setBalance((info.lamports / LAMPORTS_PER_SOL).toFixed(4));
@@ -80,7 +80,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
     };
 
     document.addEventListener("mousedown", listener);
-    document.addEventListener("touchstart", listener);
+    document.addEventListener("touchstart", listener, { passive: true });
     return () => {
       document.removeEventListener("mousedown", listener);
       document.removeEventListener("touchstart", listener);
@@ -177,8 +177,10 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
           {/* Copy address */}
           <li
             role="menuitem"
+            tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white list-none"
             onClick={handleCopy}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCopy(); }}
           >
             {copied ? labels["copied"] : labels["copy-address"]}
           </li>
@@ -186,8 +188,10 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
           {/* Airdrop */}
           <li
             role="menuitem"
+            tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             onClick={handleAirdrop}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleAirdrop(); }}
           >
             {airdropping ? "Airdropping..." : "Airdrop 1 SOL"}
           </li>
@@ -195,8 +199,10 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
           {/* Change wallet */}
           <li
             role="menuitem"
+            tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             onClick={resetWalletSelection}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") resetWalletSelection(); }}
           >
             {labels["change-wallet"]}
           </li>
@@ -205,11 +211,13 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
           {disconnect && (
             <li
               role="menuitem"
+              tabIndex={0}
               className="cursor-pointer px-3 py-2 text-sm text-red-400 transition-colors hover:bg-zinc-800 hover:text-red-300"
               onClick={() => {
                 disconnect();
                 setMenuOpen(false);
               }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { disconnect(); setMenuOpen(false); } }}
             >
               {labels["disconnect"]}
             </li>

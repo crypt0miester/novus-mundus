@@ -1,5 +1,6 @@
 {
   "private": true,
+  "packageManager": "bun@1.2.10",
   "workspaces": [
     "apps/*",
     "packages/*",
@@ -11,14 +12,7 @@
     "lint": "turbo lint",
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "typecheck": "turbo typecheck",
-    "validator": "./sdks/novus-mundus-ts/scripts/start-validator.sh --reset",
-    "validator:stop": "./sdks/novus-mundus-ts/scripts/stop-validator.sh",
-    "setup": "cd sdks/novus-mundus-ts && bun run cli/cli.ts init all --env localnet",
-    "setup:status": "cd sdks/novus-mundus-ts && bun run cli/cli.ts status --env localnet",
-    "cli": "cd sdks/novus-mundus-ts && bun run cli/cli.ts"
-  },
-  "dependencies": {
-    "@project-serum/anchor": "^0.25.0"
+    "novus": "cd sdks/novus-mundus-ts && bun run cli/cli.ts"
   },
   "devDependencies": {
     "chai": "^4.3.4",

@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-export interface InfoGridItem {
+interface InfoGridItem {
   label: string;
   value: string | number;
   suffix?: string;
@@ -33,7 +33,7 @@ export function InfoGrid({ items, columns = 4, className }: InfoGridProps) {
           <div
             className={cn(
               "mt-0.5 font-mono text-sm font-semibold tabular-nums",
-              item.highlight ? "text-amber-400" : "text-text-primary",
+              item.highlight ? "text-text-gold" : "text-text-primary",
             )}
           >
             {item.value}

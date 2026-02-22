@@ -970,3 +970,63 @@ export function isDaoPromotionActive(promotion: DAOPromotionAccount, nowSeconds:
 export function hasDaoPromotionBudget(promotion: DAOPromotionAccount): boolean {
   return promotion.usedDiscountBudget.lt(promotion.maxDiscountBudgetLamports);
 }
+
+// ============================================================
+// Item Type Metadata (derived from on-chain fulfill_item)
+// ============================================================
+
+export interface ItemTypeInfo {
+  name: string;
+  field: string;
+  group: 'equipment' | 'consumable' | 'material' | 'currency' | 'cosmetic';
+}
+
+const ITEM_TYPE_MAP: Record<number, ItemTypeInfo> = {
+  // Equipment (0-99)
+  0:   { name: 'Melee Weapons',        field: 'meleeWeapons',        group: 'equipment' },
+  1:   { name: 'Ranged Weapons',       field: 'rangedWeapons',       group: 'equipment' },
+  2:   { name: 'Siege Weapons',        field: 'siegeWeapons',        group: 'equipment' },
+  3:   { name: 'Armor Pieces',         field: 'armorPieces',         group: 'equipment' },
+  4:   { name: 'Vehicles',             field: 'vehicles',            group: 'equipment' },
+
+  // Currency (50-61)
+  50:  { name: 'Gems',                 field: 'gems',                group: 'currency' },
+  51:  { name: 'Cash',                 field: 'cashOnHand',          group: 'currency' },
+  52:  { name: 'Fragments',            field: 'fragments',           group: 'currency' },
+  53:  { name: 'Stamina Refill',       field: 'encounterStamina',    group: 'currency' },
+  60:  { name: 'Encounter Stamina',    field: 'encounterStamina',    group: 'currency' },
+  61:  { name: 'Produce',              field: 'produce',             group: 'currency' },
+
+  // Consumables (100-199)
+  100: { name: 'Stamina Potions',      field: 'staminaPotions',      group: 'consumable' },
+  101: { name: 'XP Boosters',          field: 'xpBoosters',          group: 'consumable' },
+  102: { name: 'Loot Magnets',         field: 'lootMagnets',         group: 'consumable' },
+  103: { name: 'Shield Tokens',        field: 'shieldTokens',        group: 'consumable' },
+  104: { name: 'Speed Elixirs',        field: 'speedElixirs',        group: 'consumable' },
+  105: { name: 'Attack Boosters',      field: 'attackBoosters',      group: 'consumable' },
+  106: { name: 'Defense Boosters',     field: 'defenseBoosters',     group: 'consumable' },
+  107: { name: 'Collection Boosters',  field: 'collectionBoosters',  group: 'consumable' },
+  108: { name: 'Rally Horns',          field: 'rallyHorns',          group: 'consumable' },
+  109: { name: 'Teleport Scrolls',     field: 'teleportScrolls',     group: 'consumable' },
+  110: { name: 'Mystery Keys',         field: 'mysteryKeys',         group: 'consumable' },
+
+  // Materials (200-299)
+  200: { name: 'Common Materials',     field: 'commonMaterials',     group: 'material' },
+  201: { name: 'Uncommon Materials',   field: 'uncommonMaterials',   group: 'material' },
+  202: { name: 'Rare Materials',       field: 'rareMaterials',       group: 'material' },
+  203: { name: 'Epic Materials',       field: 'epicMaterials',       group: 'material' },
+  204: { name: 'Legendary Materials',  field: 'legendaryMaterials',  group: 'material' },
+};
+
+/** Get human-readable info for an item type code from on-chain data */
+export function getItemTypeInfo(itemType: number): ItemTypeInfo | null {
+  return ITEM_TYPE_MAP[itemType] ?? null;
+}
+
+/** Get display name for a shop item based on its itemType and quantity */
+export function getShopItemName(itemType: number, quantity: number): string {
+  const info = ITEM_TYPE_MAP[itemType];
+  if (!info) return `Item (type ${itemType})`;
+  if (quantity > 1) return `${info.name} x${quantity}`;
+  return info.name;
+}

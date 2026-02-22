@@ -558,7 +558,6 @@ fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> Prog
     // 1000+: Event items (inventory)
 
     let amount_u16 = amount.min(u16::MAX as u64) as u16;
-    let _amount_u32 = amount.min(u32::MAX as u64) as u32;
 
     match item_type {
         // Equipment - Weapons by type

@@ -81,6 +81,23 @@ export class TownTerrainBuilder {
    * @returns {{ mesh: THREE.Mesh, waterMesh: THREE.Mesh, skirtMesh: THREE.Mesh }}
    */
   build(terrain, centerOx, centerOy) {
+    // Dispose previous build's GPU resources if rebuilding
+    if (this._mesh) {
+      this._mesh.geometry.dispose();
+      this._mesh.material.dispose();
+      this._mesh = null;
+    }
+    if (this._waterMesh) {
+      this._waterMesh.geometry.dispose();
+      this._waterMesh.material.dispose();
+      this._waterMesh = null;
+    }
+    if (this._skirtMesh) {
+      this._skirtMesh.geometry.dispose();
+      this._skirtMesh.material.dispose();
+      this._skirtMesh = null;
+    }
+
     this._terrain = terrain;
     this._centerOx = centerOx;
     this._centerOy = centerOy;

@@ -46,7 +46,7 @@ export function GemAction({
       >
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           <span>{children}</span>
-          <span className="rounded bg-amber-900/30 px-1.5 py-0.5 font-mono text-xs text-amber-400">
+          <span className="rounded bg-amber-900/30 px-1.5 py-0.5 font-mono text-xs text-text-gold">
             {gemCost.toLocaleString()} gems
           </span>
         </div>
@@ -61,7 +61,7 @@ export function GemAction({
         </div>
         <Link
           href="/shop"
-          className="mt-0.5 rounded-md bg-amber-900/20 px-3 py-1 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-900/40"
+          className="mt-0.5 rounded-md bg-amber-900/20 px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
         >
           Get Gems →
         </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useUser } from "@/lib/hooks/useUser";
 import { usePlayer } from "@/lib/hooks/usePlayer";
@@ -27,22 +27,15 @@ export function OnboardingFlow() {
   const { data: geData } = useGameEngine();
   const { data: cities } = useAllCities();
   const transact = useTransact();
-  const [step, setStep] = useState<Step>("checking");
   const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
 
   const needsUser = !userData?.exists;
   const selectedCity = cities.find((c) => c.account.cityId === selectedCityId) ?? null;
-  useEffect(() => {
-    if (userLoading || playerLoading) {
-      setStep("checking");
-      return;
-    }
-    if (!playerData?.exists) {
-      setStep("pick-city");
-    } else {
-      setStep("complete");
-    }
-  }, [userData, playerData, userLoading, playerLoading]);
+  const step: Step = useMemo(() => {
+    if (userLoading || playerLoading) return "checking";
+    if (!playerData?.exists) return "pick-city";
+    return "complete";
+  }, [userLoading, playerLoading, playerData]);
 
   if (step === "checking") {
     return (
@@ -73,7 +66,7 @@ export function OnboardingFlow() {
       {cities.length === 0 ? (
         <p className="animate-pulse text-sm text-text-muted">Loading cities...</p>
       ) : (
-        <div className="mx-auto grid w-full max-w-lg grid-cols-2 gap-3 px-4">
+        <div className="mx-auto grid w-full grid-cols-5 gap-3 px-4">
           {cities.map((c) => {
             const city = c.account;
             const active = selectedCityId === city.cityId;

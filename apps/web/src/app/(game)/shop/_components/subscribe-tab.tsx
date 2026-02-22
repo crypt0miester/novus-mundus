@@ -40,7 +40,7 @@ const TIERS = [
     name: "Epic",
     price: 1500,
     perks: ["3x stamina regen", "+25% loot bonus", "Daily gem + NOVI bonus", "Flash sale access"],
-    color: "text-purple-400",
+    color: "text-fuchsia-400",
   },
   {
     id: 3,
@@ -77,10 +77,16 @@ export function SubscribeTab() {
   const handlePurchase = async (tierId: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
+    const geAccount = geData?.account;
+    if (!geAccount) throw new Error("Game engine not loaded");
     const ix = createPurchaseSubscriptionInstruction(
-      { player: playerPda, gameEngine: ge, owner: publicKey },
-      { tier: tierId, duration: 30 }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        paymentAuthority: publicKey,
+        treasury: geAccount.treasuryWallet,
+      },
+      { paymentType: 0, tier: tierId }
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -141,8 +147,8 @@ export function SubscribeTab() {
                 )}
               </div>
               <ul className="mt-3 space-y-1">
-                {tier.perks.map((perk, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm text-text-secondary">
+                {tier.perks.map((perk) => (
+                  <li key={perk} className="flex items-center gap-2 text-sm text-text-secondary">
                     <span className="text-amber-400">●</span>
                     {perk}
                   </li>
@@ -178,20 +184,19 @@ export function SubscribeTab() {
         return (
           <GameInfoPanel>
             <div className="space-y-3">
-              {tiers.map((t, i) => (
-                <div key={i}>
+              {tiers.map((t) => (
+                <div key={t.tierIndex}>
                   <div className="mb-1 text-xs font-semibold text-zinc-400">{t.name} (Tier {t.tierIndex})</div>
                   <InfoGrid items={[
-                    { label: "Cost", value: `$${(t.costInUsdCents.toNumber() / 100).toFixed(2)}` },
-                    { label: "Duration", value: `${t.durationDays}d` },
-                    { label: "Gen Multiplier", value: bpsToMultiplier(t.generationMultiplier.toNumber()) },
-                    { label: "Max Locked NOVI", value: formatNumber(t.maxLockedNovi.toNumber()) },
-                    { label: "Daily Reward Mult", value: bpsToMultiplier(t.dailyRewardMultiplier.toNumber()) },
-                    { label: "Bonus Units", value: `DU: ${t.du1.toNumber()}/${t.du2.toNumber()}/${t.du3.toNumber()}` },
-                    { label: "Rally Cap", value: t.rallyCaps.maxRallySize.toString() },
-                    { label: "Team Size", value: t.maxTeamMembers.toString() },
-                    { label: "Transfer Limit", value: formatNumber(t.maxDailyTransferAmount.toNumber()) },
-                    { label: "Travel Speed", value: bpsToPercent(t.travelSpeedBonusBps), suffix: "bonus" },
+                    { label: "Cost", value: `$${(t.costInUsdCents?.toNumber?.() ?? 0) / 100}` },
+                    { label: "Duration", value: `${t.durationDays ?? 0}d` },
+                    { label: "Gen Multiplier", value: bpsToMultiplier(t.generationMultiplier?.toNumber?.() ?? 0) },
+                    { label: "Max Locked NOVI", value: formatNumber(t.maxLockedNovi?.toNumber?.() ?? 0) },
+                    { label: "Daily Reward Mult", value: bpsToMultiplier(t.dailyRewardMultiplier?.toNumber?.() ?? 0) },
+                    { label: "Bonus Units", value: `DU: ${t.du1?.toNumber?.() ?? 0}/${t.du2?.toNumber?.() ?? 0}/${t.du3?.toNumber?.() ?? 0}` },
+                    { label: "Rally Cap", value: String(t.rallyCaps?.maxRallySize ?? 0) },
+                    { label: "Team Size", value: String(t.maxTeamMembers ?? 0) },
+                    { label: "Travel Speed", value: bpsToPercent(t.travelSpeedBonusBps ?? 0), suffix: "bonus" },
                   ]} />
                 </div>
               ))}

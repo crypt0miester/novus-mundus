@@ -106,7 +106,7 @@ pub fn process(
 
     // 5. Load and verify player/user accounts (PDA + ownership + bump in one call)
     let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
-    let mut user_data = UserAccount::load_checked_mut(user, owner.key(), program_id)?;
+    let _user_data = UserAccount::load_checked_mut(user, owner.key(), program_id)?;
 
     // Validate player not traveling (can't collect while traveling)
     if player_data.is_traveling_any() {
@@ -258,17 +258,17 @@ pub fn process(
             base_output.saturating_mul(3)
         },
         CollectionType::Farming => {
-            // Farming generates produce using DEFENSIVE units (thematic: farming is "stay home" work)
-            // defensive_unit_1: 5x (hard laborers)
-            // defensive_unit_2: 4x
-            // defensive_unit_3: 3x
-            let produce_from_unit_1 = player_data.defensive_unit_1
+            // Farming generates produce using operative units
+            // operative_unit_1: 5x
+            // operative_unit_2: 4x
+            // operative_unit_3: 3x
+            let produce_from_unit_1 = player_data.operative_unit_1
                 .saturating_mul(5);
 
-            let produce_from_unit_2 = player_data.defensive_unit_2
+            let produce_from_unit_2 = player_data.operative_unit_2
                 .saturating_mul(4);
 
-            let produce_from_unit_3 = player_data.defensive_unit_3
+            let produce_from_unit_3 = player_data.operative_unit_3
                 .saturating_mul(3);
 
             let unit_factor = produce_from_unit_1
@@ -445,10 +445,9 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
-            user_data.reserved_novi = user_data.reserved_novi
+            player_data.cash_on_hand = player_data.cash_on_hand
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
-            user_data.reserved_novi_earned_at = now;
             buffed_output
         },
         CollectionType::Mining => {

@@ -22,7 +22,7 @@ export function NotificationToast() {
   const dismiss = useNotifications((s) => s.dismiss);
 
   return (
-    <div className="fixed right-4 bottom-14 z-[9999] flex flex-col-reverse gap-2">
+    <div className="fixed right-4 top-12 z-[9999] flex flex-col gap-2 md:top-auto md:bottom-14 md:flex-col-reverse">
       {notifications.map((n) => (
         <ToastItem
           key={n.id}
@@ -57,8 +57,11 @@ function ToastItem({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={`flex max-w-sm cursor-pointer items-start gap-3 rounded-lg border border-border-default border-l-4 bg-[var(--nm-bg-raised)] p-3 ${typeBorder[type]}`}
       onClick={() => onDismiss(id)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onDismiss(id); }}
     >
       <div className="flex-1">
         <div className="text-sm font-medium text-text-primary">{title}</div>

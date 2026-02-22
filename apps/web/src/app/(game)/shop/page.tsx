@@ -19,19 +19,23 @@ function ShopContent() {
 
   return (
     <PageTransition>
-      <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="tier-title font-display text-3xl font-bold tracking-wide">SHOP</h1>
-        <TabNav tabs={TABS} activeTab={tab} onTabChange={setTab} />
-        {tab === "shop" && (
-          <FeatureGate feature={FEATURES.SHOP_PURCHASE}>
-            <ShopTab />
-          </FeatureGate>
-        )}
-        {tab === "subscribe" && (
-          <FeatureGate feature={FEATURES.SUBSCRIPTION}>
-            <SubscribeTab />
-          </FeatureGate>
-        )}
+      <div className="flex h-full flex-col gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+          <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">SHOP</h1>
+          <TabNav tabs={TABS} activeTab={tab} onTabChange={setTab} />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {tab === "shop" && (
+            <FeatureGate feature={FEATURES.SHOP_PURCHASE}>
+              <ShopTab />
+            </FeatureGate>
+          )}
+          {tab === "subscribe" && (
+            <FeatureGate feature={FEATURES.SUBSCRIPTION}>
+              <SubscribeTab />
+            </FeatureGate>
+          )}
+        </div>
       </div>
     </PageTransition>
   );

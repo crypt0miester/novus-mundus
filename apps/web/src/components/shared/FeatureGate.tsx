@@ -18,7 +18,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
   return <LockedCard missing={gate.missing} />;
 }
 
-export function LockedCard({ missing }: { missing: MissingRequirement[] }) {
+function LockedCard({ missing }: { missing: MissingRequirement[] }) {
   return (
     <div className="rounded-lg border border-amber-900/40 bg-surface-raised p-6 text-center">
       <div className="mb-2 text-2xl text-text-muted">&#9906;</div>
@@ -45,7 +45,7 @@ export function LockedCard({ missing }: { missing: MissingRequirement[] }) {
   );
 }
 
-export function LockedPage({ missing }: { missing: MissingRequirement[] }) {
+function LockedPage({ missing }: { missing: MissingRequirement[] }) {
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
       <div className="max-w-md">

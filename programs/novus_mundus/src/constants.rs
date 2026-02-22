@@ -219,15 +219,7 @@ pub const PVP_ATTACK_RANGE_METERS: f64 = 15.0;
 // City Encounter Scaling
 // ============================================================
 
-/// Base encounters per city (minimum)
-pub const BASE_ENCOUNTERS_PER_CITY: u8 = 3;
-
-/// Additional encounters per X players
-/// Formula: base + (players_present / this_value)
-pub const ENCOUNTERS_PER_PLAYER_COUNT: u32 = 10; // +1 encounter per 10 players
-
-/// Max encounters cap per city (hard limit to prevent overflow)
-pub const MAX_ENCOUNTERS_PER_CITY: u8 = 50;
+// Encounter scaling values are now configured via CombatConfig in GameEngine (on-chain).
 
 // ============================================================
 // City data is now passed via instruction data from the TypeScript SDK.

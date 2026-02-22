@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type NumberFormat = "compact" | "full";
+type NumberFormat = "compact" | "full";
 export type Explorer = "solscan" | "explorer" | "solanafm";
 export type ThemePreference = "paper" | "dark" | "auto";
 

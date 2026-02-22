@@ -739,26 +739,27 @@ export class TreeWindSystem {
     this._disposed = true;
 
     for (const [typeName, typeData] of Object.entries(this._types)) {
+      // Dispose geometry and material before removing mesh from scene
+      if (typeData.trunkGeo) typeData.trunkGeo.dispose();
+      if (typeData.trunkMat) typeData.trunkMat.dispose();
       if (typeData.trunkMesh) {
         this.scene.remove(typeData.trunkMesh);
         typeData.trunkMesh.dispose();
       }
-      if (typeData.trunkGeo) typeData.trunkGeo.dispose();
-      if (typeData.trunkMat) typeData.trunkMat.dispose();
 
+      if (typeData.foliageGeo) typeData.foliageGeo.dispose();
+      if (typeData.foliageMat) typeData.foliageMat.dispose();
       if (typeData.foliageMesh) {
         this.scene.remove(typeData.foliageMesh);
         typeData.foliageMesh.dispose();
       }
-      if (typeData.foliageGeo) typeData.foliageGeo.dispose();
-      if (typeData.foliageMat) typeData.foliageMat.dispose();
 
+      if (typeData.branchGeo) typeData.branchGeo.dispose();
+      if (typeData.branchMat) typeData.branchMat.dispose();
       if (typeData.branchMesh) {
         this.scene.remove(typeData.branchMesh);
         typeData.branchMesh.dispose();
       }
-      if (typeData.branchGeo) typeData.branchGeo.dispose();
-      if (typeData.branchMat) typeData.branchMat.dispose();
     }
 
     this._types = {};
@@ -858,13 +859,21 @@ export class TreeWindSystem {
     const scaleBuf = new Float32Array(maxCount);
     const phaseBuf = new Float32Array(maxCount);
 
-    geo.setAttribute('instanceOffset', new THREE.InstancedBufferAttribute(offsetBuf, 3));
-    geo.setAttribute('instanceScale', new THREE.InstancedBufferAttribute(scaleBuf, 1));
-    geo.setAttribute('instancePhase', new THREE.InstancedBufferAttribute(phaseBuf, 1));
+    const offsetAttr = new THREE.InstancedBufferAttribute(offsetBuf, 3);
+    offsetAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceOffset', offsetAttr);
+    const scaleAttr = new THREE.InstancedBufferAttribute(scaleBuf, 1);
+    scaleAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceScale', scaleAttr);
+    const phaseAttr = new THREE.InstancedBufferAttribute(phaseBuf, 1);
+    phaseAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instancePhase', phaseAttr);
 
     if (withColor) {
       const colorBuf = new Float32Array(maxCount * 3);
-      geo.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(colorBuf, 3));
+      const colorAttr = new THREE.InstancedBufferAttribute(colorBuf, 3);
+      colorAttr.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('instanceColor', colorAttr);
     }
   }
 
@@ -878,11 +887,21 @@ export class TreeWindSystem {
     const branchOffsetBuf = new Float32Array(maxCount * 3);
     const branchAngleBuf = new Float32Array(maxCount);
 
-    geo.setAttribute('instanceOffset', new THREE.InstancedBufferAttribute(offsetBuf, 3));
-    geo.setAttribute('instanceScale', new THREE.InstancedBufferAttribute(scaleBuf, 1));
-    geo.setAttribute('instancePhase', new THREE.InstancedBufferAttribute(phaseBuf, 1));
-    geo.setAttribute('branchOffset', new THREE.InstancedBufferAttribute(branchOffsetBuf, 3));
-    geo.setAttribute('branchAngle', new THREE.InstancedBufferAttribute(branchAngleBuf, 1));
+    const offsetAttr = new THREE.InstancedBufferAttribute(offsetBuf, 3);
+    offsetAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceOffset', offsetAttr);
+    const scaleAttr = new THREE.InstancedBufferAttribute(scaleBuf, 1);
+    scaleAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceScale', scaleAttr);
+    const phaseAttr = new THREE.InstancedBufferAttribute(phaseBuf, 1);
+    phaseAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instancePhase', phaseAttr);
+    const branchOffsetAttr = new THREE.InstancedBufferAttribute(branchOffsetBuf, 3);
+    branchOffsetAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('branchOffset', branchOffsetAttr);
+    const branchAngleAttr = new THREE.InstancedBufferAttribute(branchAngleBuf, 1);
+    branchAngleAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('branchAngle', branchAngleAttr);
   }
 
   /**

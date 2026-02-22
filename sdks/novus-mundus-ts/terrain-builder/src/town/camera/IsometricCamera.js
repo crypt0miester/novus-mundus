@@ -26,7 +26,7 @@ const CAMERA_CONFIG = {
   // Zoom
   distance: 5.0,        // starting zoom distance
   minDistance: 1.2,      // closest zoom
-  maxDistance: 7.0,      // farthest zoom — keep edges invisible
+  maxDistance: 10.0,      // farthest zoom — keep edges invisible
 
   // Interaction feel
   zoomSpeed: 0.12,      // scroll wheel sensitivity
@@ -36,7 +36,7 @@ const CAMERA_CONFIG = {
 
   // Bounds
   targetY: 0.1,         // look-at height above ground
-  panBounds: 2.5,       // default pan limit (symmetric ± from center)
+  panBounds: 5.5,       // default pan limit (symmetric ± from center)
 
 };
 

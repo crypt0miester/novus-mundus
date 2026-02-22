@@ -207,6 +207,7 @@ export const WalletModal: FC<WalletModalProps> = ({
           aria-modal="true"
           role="dialog"
           className={`fixed inset-0 z-50 flex items-end justify-end sm:items-center sm:justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-150 ${fadeIn ? "opacity-100" : "opacity-0"} ${className}`}
+          onKeyDown={(e) => { if (e.key === "Escape") hideModal(); }}
           onClick={(e) => {
             if (e.target === e.currentTarget) hideModal();
           }}

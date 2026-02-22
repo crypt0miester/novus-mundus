@@ -150,7 +150,7 @@ export function useDailyRewards() {
 }
 
 /** Networth from player state */
-export function useNetworth() {
+function useNetworth() {
   const { data } = usePlayer();
   const player = data?.account;
 

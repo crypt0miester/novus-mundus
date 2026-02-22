@@ -387,10 +387,15 @@ export class GrassSystem {
     this._phaseBuf = new Float32Array(this.maxBlades);
 
     this._offsetAttr = new THREE.InstancedBufferAttribute(this._offsetBuf, 3);
+    this._offsetAttr.setUsage(THREE.DynamicDrawUsage);
     this._rotationAttr = new THREE.InstancedBufferAttribute(this._rotationBuf, 1);
+    this._rotationAttr.setUsage(THREE.DynamicDrawUsage);
     this._heightAttr = new THREE.InstancedBufferAttribute(this._heightBuf, 1);
+    this._heightAttr.setUsage(THREE.DynamicDrawUsage);
     this._colorAttr = new THREE.InstancedBufferAttribute(this._colorBuf, 3);
+    this._colorAttr.setUsage(THREE.DynamicDrawUsage);
     this._phaseAttr = new THREE.InstancedBufferAttribute(this._phaseBuf, 1);
+    this._phaseAttr.setUsage(THREE.DynamicDrawUsage);
 
     this._bladeGeo.setAttribute('instanceOffset', this._offsetAttr);
     this._bladeGeo.setAttribute('instanceRotation', this._rotationAttr);

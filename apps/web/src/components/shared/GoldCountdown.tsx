@@ -54,7 +54,7 @@ export function GoldCountdown({
         timerRef.current
       ) {
         timerRef.current.classList.add("text-red-400");
-        timerRef.current.classList.remove("text-amber-400");
+        timerRef.current.classList.remove("text-text-gold");
       }
 
       if (remaining === 0 && !done) {
@@ -87,7 +87,7 @@ export function GoldCountdown({
         <span
           ref={timerRef}
           className={cn(
-            "font-mono tabular-nums text-amber-400",
+            "font-mono tabular-nums text-text-gold",
             sizeClasses[size]
           )}
         />

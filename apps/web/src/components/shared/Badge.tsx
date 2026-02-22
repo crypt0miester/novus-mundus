@@ -29,7 +29,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   common: "bg-zinc-800 text-zinc-400 border-zinc-600",
   uncommon: "bg-emerald-950/50 text-emerald-400 border-emerald-700",
   rare: "bg-blue-950/50 text-blue-400 border-blue-700",
-  epic: "bg-purple-950/50 text-purple-400 border-purple-700",
+  epic: "bg-purple-950/50 text-fuchsia-400 border-purple-700",
   legendary: "bg-amber-950/50 text-amber-400 border-amber-600",
   mythic: "bg-red-950/50 text-red-400 border-red-600",
 };

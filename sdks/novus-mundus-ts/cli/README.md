@@ -223,6 +223,121 @@ Uses DAO auto-spawn (no NOVI cost). Encounter index auto-increments per city.
 
 ---
 
+### `validator` — Local Test Validator Management
+
+Start, stop, and monitor the local Solana test validator with all game programs pre-loaded.
+
+```bash
+novus validator start              # Start with game programs loaded (detached)
+novus validator start --reset      # Kill existing + fresh start
+novus validator stop               # Stop running validator
+novus validator status             # Show validator status, slot, version
+```
+
+Loads 4 programs: Novus Mundus, MPL Core, TLD House, ALT Name Service. Clones TLD state accounts from mainnet. PID is tracked in `.validator.pid` for reliable stop/status.
+
+---
+
+### `reset` — Wipe and Reinitialize
+
+Kill the validator, start fresh, and reinitialize all game systems.
+
+```bash
+novus reset                        # Stop → restart → init all
+novus reset --skip-init            # Stop → restart only
+```
+
+---
+
+### `logs` — Tail Program Logs
+
+Stream real-time program logs via WebSocket subscription.
+
+```bash
+novus logs                         # Tail Novus Mundus program logs only
+novus logs --all                   # Tail all program logs (unfiltered)
+```
+
+Press `Ctrl+C` to stop. Each log entry shows timestamp, tx signature prefix, status, and instruction logs.
+
+---
+
+### `airdrop` — SOL Airdrop (Localnet)
+
+Quick SOL airdrop to any address on localnet.
+
+```bash
+novus airdrop <pubkey>             # Airdrop 2 SOL
+novus airdrop <pubkey> --amount 10 # Airdrop 10 SOL
+novus airdrop dao                  # Airdrop to DAO authority
+novus airdrop treasury             # Airdrop to treasury
+```
+
+Shows before/after balance. Only works on `--env localnet`.
+
+---
+
+### `deploy` — Build and Deploy Program
+
+Build the Solana program and deploy to the target cluster.
+
+```bash
+novus deploy                       # Build + deploy to localnet
+novus deploy --skip-build          # Deploy existing .so only
+novus deploy --env devnet          # Deploy to devnet
+```
+
+Runs `cargo build-sbf` then `solana program deploy`. Respects `--dry-run`.
+
+---
+
+### `player` — Manage Existing Players
+
+Fund or move existing players.
+
+```bash
+novus player fund <pubkey> --novi 100000     # Mint NOVI to player's reserved balance
+novus player fund <keypair-path> --novi 50000  # Resolve pubkey from keypair file
+novus player travel <keypair-path> --city 5  # Teleport player to city (requires keypair)
+```
+
+**`fund`** mints NOVI via DAO authority to the player's reserved balance. The player must call `reservedToLocked` separately to convert to usable NOVI. Accepts pubkey or keypair file path.
+
+**`travel`** teleports the player instantly to the destination city using the intercity teleport instruction. Requires the player's keypair (must sign the transaction). Costs Locked NOVI on-chain.
+
+---
+
+### `snapshot` — Save and Restore Validator State
+
+Save and restore validator ledger state for reproducible testing.
+
+```bash
+novus snapshot save <name>         # Save current ledger as named snapshot
+novus snapshot load <name>         # Stop validator, restore snapshot, restart
+novus snapshot list                # List available snapshots with sizes
+novus snapshot delete <name>       # Delete a snapshot
+```
+
+Snapshots are stored in `.snapshots/` as copies of the `.validator-ledger/` directory. `load` stops the validator, replaces the ledger, and restarts without `--reset`.
+
+---
+
+### `nuke` — Full Environment Setup
+
+One command to get a fully populated development environment.
+
+```bash
+novus nuke                         # Reset + init + 10 advanced players + encounters
+novus nuke --tier epic             # Use epic tier instead of advanced
+novus nuke --count 5               # Create 5 players instead of 10
+novus nuke --skip-players          # Skip player creation
+novus nuke --skip-encounters       # Skip encounter spawning
+```
+
+Runs: `validator stop` → `validator start --reset` → `init all` → `create-player` → `encounters spawn --all`.
+
+---
+
 ## Data Files
 
 Configuration data loaded by commands during initialization.

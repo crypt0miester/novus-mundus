@@ -33,12 +33,27 @@ import { handleShow } from './lib/commands/show';
 import { handleTerrain } from './lib/commands/terrain';
 import { handleCreatePlayer } from './lib/commands/create-player';
 import { handleEncounters } from './lib/commands/encounters';
+import { handleValidator } from './lib/commands/validator';
+import { handleReset } from './lib/commands/reset';
+import { handleLogs } from './lib/commands/logs';
+import { handleAirdrop } from './lib/commands/airdrop';
+import { handleDeploy } from './lib/commands/deploy';
+import { handlePlayer } from './lib/commands/player';
+import { handleSnapshot } from './lib/commands/snapshot';
+import { handleNuke } from './lib/commands/nuke';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.command || args.command === 'help' || args.command === '--help') {
     printUsage();
+    return;
+  }
+
+  // Commands that don't need full context (no RPC connection required)
+  if (args.command === 'validator') {
+    log.header(`Validator`);
+    await handleValidator(null, args);
     return;
   }
 
@@ -77,6 +92,27 @@ async function main(): Promise<void> {
       break;
     case 'encounters':
       await handleEncounters(ctx, args);
+      break;
+    case 'reset':
+      await handleReset(ctx, args);
+      break;
+    case 'logs':
+      await handleLogs(ctx, args);
+      break;
+    case 'airdrop':
+      await handleAirdrop(ctx, args);
+      break;
+    case 'deploy':
+      await handleDeploy(ctx, args);
+      break;
+    case 'player':
+      await handlePlayer(ctx, args);
+      break;
+    case 'snapshot':
+      await handleSnapshot(ctx, args);
+      break;
+    case 'nuke':
+      await handleNuke(ctx, args);
       break;
     default:
       log.error(`Unknown command: ${args.command}`);
@@ -133,6 +169,29 @@ Commands:
                             --rarity <common|uncommon|rare|epic|legendary>
   encounters status         Show encounter counts per city
                             --city <id>  (default: all cities)
+  validator start           Start local test validator with game programs
+  validator start --reset   Kill existing + fresh start
+  validator stop            Stop running validator
+  validator status          Show validator status
+  reset                     Wipe validator + reinit everything
+  reset --skip-init         Restart without init
+  logs                      Tail Novus Mundus program logs
+  logs --all                Tail all program logs
+  airdrop <pubkey>          Airdrop SOL (localnet only)
+  airdrop dao               Airdrop to DAO authority
+                            --amount <n>  (default: 2)
+  deploy                    Build + deploy program
+  deploy --skip-build       Deploy existing .so only
+  player fund <pk> --novi N Mint NOVI to player (DAO operation)
+  player travel <kp> --city N  Teleport player to city
+  snapshot save <name>      Save validator ledger state
+  snapshot load <name>      Restore from snapshot
+  snapshot list             List saved snapshots
+  snapshot delete <name>    Delete a snapshot
+  nuke                      Full reset + init + populate
+                            --tier <tier>  (default: advanced)
+                            --count <n>    (default: 10)
+                            --skip-players --skip-encounters
 
 Options:
   --env <env>               localnet | devnet | mainnet (default: localnet)

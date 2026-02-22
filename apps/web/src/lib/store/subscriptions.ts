@@ -96,14 +96,15 @@ export function startGameSubscriptions(
     client.fetchAllShopItems(),
     client.fetchAllBundles(),
     client.fetchAllFlashSales(),
+    client.fetchAllHeroTemplates(),
   ])
-    .then(([ge, player, user, cities, shopConfig, shopItems, bundles, flashSales]) => {
+    .then(([ge, player, user, cities, shopConfig, shopItems, bundles, flashSales, heroTemplates]) => {
       if (ge.account) {
         console.log(ge)
         store().setGameEngine(ge.pubkey, ge.account);}
       if (player.account) store().setPlayer(player.pubkey, player.account);
       if (user.account) store().setUser(user.pubkey, user.account);
-      console.log("Fetched initial accounts: cities", cities.length, "shop items", shopItems.length, "bundles", bundles.length, "flash sales", flashSales.length);
+      console.log("Fetched initial accounts: cities", cities.length, "shop items", shopItems.length, "bundles", bundles.length, "flash sales", flashSales.length, "hero templates", heroTemplates.length);
       for (const city of cities) {
         store().upsertCity(city.pubkey, city.account);
       }
@@ -116,6 +117,9 @@ export function startGameSubscriptions(
       }
       for (const sale of flashSales) {
         store().upsertFlashSale(sale.pubkey, sale.account, sale.saleId);
+      }
+      for (const t of heroTemplates) {
+        store().upsertHeroTemplate(t.pubkey, t.account);
       }
     })
     .catch(() => {
@@ -369,7 +373,7 @@ export function startGameSubscriptions(
 
   // Estate: only the current player's
   manager.on(AccountKey.Estate, (account: EstateAccount, pubkey) => {
-    if (account.owner.toBase58() === myPlayerKey) {
+    if (account.owner.toBase58() === wallet.toString()) {
       store().setEstate(pubkey, account);
     }
   });

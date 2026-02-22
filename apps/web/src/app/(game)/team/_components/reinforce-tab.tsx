@@ -202,27 +202,29 @@ export function ReinforceTab() {
         </h3>
         <div className="space-y-3">
           <div>
-            <label className="text-sm text-text-muted">Target Player Address:</label>
-            <input
-              type="text"
-              value={targetAddress}
-              onChange={(e) => setTargetAddress(e.target.value)}
-              placeholder="Wallet address..."
-              className="mt-1 w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-            />
+            <label className="text-sm text-text-muted">Target Player Address:
+              <input
+                type="text"
+                value={targetAddress}
+                onChange={(e) => setTargetAddress(e.target.value)}
+                placeholder="Wallet address..."
+                className="mt-1 w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+              />
+            </label>
             {targetAddress.trim() && !isValidAddress && (
               <p className="text-xs text-red-400">Invalid Solana address</p>
             )}
           </div>
           <div className="flex items-center gap-4">
-            <label className="text-sm text-text-muted">Units:</label>
-            <input
-              type="number"
-              value={units}
-              onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-              min={1}
-            />
+            <label className="text-sm text-text-muted">Units:
+              <input
+                type="number"
+                value={units}
+                onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                min={1}
+              />
+            </label>
             {units > totalDefensive && totalDefensive > 0 && (
               <p className="text-xs text-red-400">
                 Exceeds defensive units ({totalDefensive.toLocaleString()})

@@ -425,10 +425,10 @@ impl BuildingSlot {
     fn get_base_construction_cost(&self) -> u64 {
         match BuildingType::from_u8(self.building_type) {
             Some(bt) => match bt.tier() {
-                1 => 10_000,    // Tier 1: 10k NOVI base
-                2 => 50_000,    // Tier 2: 50k NOVI base
-                3 => 200_000,   // Tier 3: 200k NOVI base
-                _ => 10_000,
+                1 => 10_000u64,    // Tier 1: 1k NOVI
+                2 => 20_000u64,    // Tier 2: 2k NOVI
+                3 => 30_000u64,   // Tier 3: 3k NOVI
+                _ => 50_000u64,
             },
             None => 10_000,
         }

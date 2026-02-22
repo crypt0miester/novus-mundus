@@ -7,7 +7,8 @@
     "sanctuary_t2": 1,
     "sanctuary_t1": 0.7,
     "treasury_t4": 1,
-    "arena_t1": 1
+    "arena_t1": 1,
+    "mansion_t1": 1
   },
   "assetOverrides": {
     "forge_t4": true,
@@ -79,7 +80,7 @@
           "dz": 0.8165072336155745,
           "yOffset": 0,
           "scaleOverride": 1,
-          "rotation": 320
+          "rotation": 40
         },
         {
           "dx": -5.57595653767269,
@@ -992,69 +993,107 @@
     "levelScaleFactor": 0.1
   },
   "mountains": {
-    "T": {
-      "height": 3,
-      "density": 8,
-      "snowLine": 0.55,
-      "rock": "rock-cliff"
-    },
-    "TL": {
-      "height": 4,
-      "density": 5,
-      "snowLine": 0.55,
-      "rock": "rock-cliff"
-    },
-    "TR": {
-      "height": 2,
-      "density": 4,
-      "snowLine": 0.55,
-      "rock": "rock-cliff"
-    },
-    "ML": {
-      "height": 1,
-      "density": 3,
-      "snowLine": 1,
-      "rock": "rock-cliff"
-    },
-    "MR": {
-      "height": 2,
-      "density": 0,
-      "snowLine": 0.55,
-      "rock": "rock-cliff"
-    },
-    "BL": {
-      "height": 1,
-      "density": 0,
-      "snowLine": 0,
-      "rock": "rock-cliff"
-    },
-    "B": {
-      "height": 0,
-      "density": 0,
-      "snowLine": 0,
-      "rock": "rock-cliff"
-    },
-    "BR": {
-      "height": 1,
-      "density": 0,
-      "snowLine": 0.9,
-      "rock": "rock-cliff"
-    }
+    "segments": [
+      {
+        "id": "west-cliff",
+        "arcStart": 97,
+        "arcEnd": 152,
+        "peaks": [
+          { "t": 0.0, "height": 0.5, "width": 1.2, "offset": 0.0 },
+          { "t": 0.5, "height": 0.8, "width": 1.4, "offset": -0.1 },
+          { "t": 1.0, "height": 1.5, "width": 1.1, "offset": 0.0 }
+        ],
+        "radius": 0.93,
+        "snowLine": 1.0,
+        "rock": "rock-cliff",
+        "profile": "steep",
+        "foothillSpread": 0.5,
+        "scree": false
+      },
+      {
+        "id": "northwest-ridge",
+        "arcStart": 157,
+        "arcEnd": 222,
+        "peaks": [
+          { "t": 0.0, "height": 1.5, "width": 1.0, "offset": 0.0 },
+          { "t": 0.5, "height": 2.5, "width": 1.3, "offset": -0.1 },
+          { "t": 0.5, "height": 2.5, "width": 1.3, "offset": -0.1 },
+          { "t": 0.5, "height": 2.5, "width": 1.3, "offset": -0.1 },
+          { "t": 1.0, "height": 2.0, "width": 1.1, "offset": 0.0 }
+        ],
+        "radius": 0.93,
+        "snowLine": 1.0,
+        "rock": "rock-cliff",
+        "profile": "rounded",
+        "foothillSpread": 0.8,
+        "scree": true
+      },
+      {
+        "id": "north-range",
+        "arcStart": 227,
+        "arcEnd": 268,
+        "peaks": [
+          { "t": 0.0, "height": 4.0, "width": 1.4, "offset": 0.0 },
+          { "t": 0.4, "height": 6.0, "width": 1.6, "offset": -0.2 },
+          { "t": 0.8, "height": 5.0, "width": 1.4, "offset": 0.0 },
+          { "t": 1.0, "height": 3.5, "width": 1.2, "offset": 0.0 }
+        ],
+        "radius": 0.93,
+        "snowLine": 0.55,
+        "rock": "rock-cliff",
+        "profile": "rugged",
+        "foothillSpread": 0.8,
+        "scree": true
+      },
+      {
+        "id": "northeast-ridge",
+        "arcStart": 273,
+        "arcEnd": 338,
+        "peaks": [
+          { "t": 0.0, "height": 2.0, "width": 1.1, "offset": 0.0 },
+          { "t": 0.3, "height": 3.5, "width": 1.4, "offset": -0.1 },
+          { "t": 0.6, "height": 2.8, "width": 1.2, "offset": 0.0 },
+          { "t": 1.0, "height": 1.8, "width": 1.0, "offset": 0.0 }
+        ],
+        "radius": 0.93,
+        "snowLine": 0.7,
+        "rock": "rock-cliff",
+        "profile": "rugged",
+        "foothillSpread": 0.8,
+        "scree": true
+      },
+      {
+        "id": "east-cliffs",
+        "arcStart": 343,
+        "arcEnd": 30,
+        "peaks": [
+          { "t": 0.0, "height": 2.5, "width": 1.2, "offset": 0.0 },
+          { "t": 0.5, "height": 3.8, "width": 1.4, "offset": -0.1 },
+          { "t": 1.0, "height": 2.2, "width": 1.1, "offset": 0.4 }
+        ],
+        "radius": 0.93,
+        "snowLine": 0.6,
+        "rock": "rock-cliff",
+        "profile": "steep",
+        "foothillSpread": 0.8,
+        "scree": true
+      }
+    ]
   },
   "sea": {
     "enabled": true,
     "angle": 310,
-    "spread": 90,
+    "spread": 100,
     "reach": 3,
     "depth": 1,
-    "beachWidth": 0.5,
+    "beachWidth": 0.6,
     "height": -0.08
   },
   "cameraBounds": {
     "minX": -5.5,
     "maxX": 5.58,
     "minZ": -5,
-    "maxZ": 6.11
+    "maxZ": 8.11
   },
   "grass": {
     "enabled": true,

@@ -522,8 +522,10 @@ export function TeamTab() {
     });
   }, [members, otherPlayers]);
 
+  const [sidebarSection, setSidebarSection] = useState<"chat" | "treasury" | "settings">("chat");
+
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-3">
       {/* No Team */}
       {!hasTeam && (
         <div className="card accent-border">
@@ -546,9 +548,10 @@ export function TeamTab() {
         </div>
       )}
 
-      {/* Team Info */}
+      {/* Team exists — 2-column layout */}
       {team && (
         <>
+          {/* Team header */}
           <div className="card accent-border">
             <div className="flex items-center justify-between">
               <div>
@@ -559,309 +562,533 @@ export function TeamTab() {
                   Leader: <DomainName pubkey={team.leader} chars={4} />
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-xs text-text-muted">Members</div>
-                <GoldNumber value={team.memberCount} suffix={`/${team.maxMembers}`} />
-                {team.memberCount >= team.maxMembers && (
-                  <span className="text-xs text-amber-400">Team full</span>
+              <div className="flex items-center gap-6">
+                <div className="text-right">
+                  <div className="text-xs text-text-muted">Treasury</div>
+                  <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-text-muted">Members</div>
+                  <GoldNumber value={team.memberCount} suffix={`/${team.maxMembers}`} />
+                  {team.memberCount >= team.maxMembers && (
+                    <span className="text-xs text-amber-400">Full</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Main area: left content + right sidebar */}
+          <div className="min-h-0 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-hidden">
+            {/* Left — team info, MOTD, members (scrollable) */}
+            <div className="lg:col-span-2 overflow-y-auto space-y-4">
+              {/* MOTD */}
+              <div className="card">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Message of the Day
+                </h3>
+                {team.motd ? (
+                  <p className="mb-3 text-sm text-text-secondary">{team.motd}</p>
+                ) : (
+                  <p className="mb-3 text-sm text-text-muted italic">No message set</p>
                 )}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={motd}
+                    onChange={(e) => setMotd(e.target.value)}
+                    placeholder="Set new MOTD..."
+                    className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                    maxLength={32}
+                  />
+                  <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
+                    Set MOTD
+                  </TxButton>
+                </div>
               </div>
-            </div>
-            <div className="mt-3">
-              <div>
-                <div className="text-xs text-text-muted">Treasury</div>
-                <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
-              </div>
-            </div>
-          </div>
 
-          {/* Team Name (Leader Only) */}
-          {isLeader && (
-            <div className="card">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Domain Name
-              </h3>
-              <DomainPicker
-                currentName={currentTeamDomainName}
-                isPending={transact.isPending}
-                onSet={handleTeamNameSet}
-                onRemove={handleTeamNameRemove}
-                label="team"
-              />
-            </div>
-          )}
+              {/* Members */}
+              <div className="card">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Members
+                </h3>
+                <div className="space-y-2">
+                  {sortedMembers.map((m) => {
+                    const memberPda = m.account.player;
+                    const isCurrentPlayer = publicKey
+                      ? derivePlayerPda(client.gameEngine, publicKey)[0].equals(memberPda)
+                      : false;
 
-          {/* MOTD */}
-          <div className="card">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Message of the Day
-            </h3>
-            {team.motd ? (
-              <p className="mb-3 text-sm text-text-secondary">{team.motd}</p>
-            ) : (
-              <p className="mb-3 text-sm text-text-muted italic">No message set</p>
-            )}
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={motd}
-                onChange={(e) => setMotd(e.target.value)}
-                placeholder="Set new MOTD..."
-                className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-                maxLength={32}
-              />
-              <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
-                Set MOTD
-              </TxButton>
-            </div>
-          </div>
-
-          {/* Members */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Members
-            </h3>
-            <div className="space-y-2">
-              {sortedMembers.map((m) => {
-                const memberPda = m.account.player;
-                const isCurrentPlayer = publicKey
-                  ? derivePlayerPda(client.gameEngine, publicKey)[0].equals(memberPda)
-                  : false;
-
-                return (
-                  <div
-                    key={m.pubkey.toBase58()}
-                    className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                          m.account.rank === 0
-                            ? "bg-amber-900/40 text-text-gold"
-                            : "bg-zinc-800 text-text-muted"
-                        }`}
+                    return (
+                      <div
+                        key={m.pubkey.toBase58()}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
                       >
-                        {RANK_LABELS[m.account.rank] ?? `Rank ${m.account.rank}`}
-                      </span>
-                      <span className="font-mono text-sm text-text-primary">
-                        <DomainName pubkey={memberPda} chars={4} />
-                      </span>
-                      {isCurrentPlayer && (
-                        <span className="text-xs text-text-gold">(you)</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {getMemberLevel(memberPda) > 0 && (
-                        <span className="text-xs text-text-muted">Lv {getMemberLevel(memberPda)}</span>
-                      )}
-                      {getMemberNetworth(memberPda) > 0 && (
-                        <GoldNumber value={getMemberNetworth(memberPda)} size="sm" />
-                      )}
-                      {!isCurrentPlayer && myRank < m.account.rank && (
-                        <>
-                          {m.account.rank > 1 && (
-                            <button
-                              onClick={() => handlePromote(m.account.slotIndex, m.account.rank)}
-                              className="text-xs text-green-400 hover:text-green-300"
-                            >
-                              Promote
-                            </button>
-                          )}
-                          {m.account.rank < 4 && (
-                            <button
-                              onClick={() => handleDemote(m.account.slotIndex, m.account.rank)}
-                              className="text-xs text-amber-400 hover:text-amber-300"
-                            >
-                              Demote
-                            </button>
-                          )}
-                        </>
-                      )}
-                      {isLeader && !isCurrentPlayer && m.account.rank !== 0 && (
-                        <>
-                          <button
-                            onClick={() => handleTransferLeadership(memberPda, m.account.slotIndex)}
-                            className="text-xs text-blue-400 hover:text-blue-300"
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                              m.account.rank === 0
+                                ? "bg-amber-900/40 text-text-gold"
+                                : "bg-zinc-800 text-text-muted"
+                            }`}
                           >
-                            Transfer Lead
-                          </button>
-                          <button
-                            onClick={() => handleKick(memberPda, m.account.slotIndex, memberPda)}
-                            className="text-xs text-red-400 hover:text-red-300"
-                          >
-                            Kick
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                            {RANK_LABELS[m.account.rank] ?? `Rank ${m.account.rank}`}
+                          </span>
+                          <span className="font-mono text-sm text-text-primary">
+                            <DomainName pubkey={memberPda} chars={4} />
+                          </span>
+                          {isCurrentPlayer && (
+                            <span className="text-xs text-text-gold">(you)</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {getMemberLevel(memberPda) > 0 && (
+                            <span className="text-xs text-text-muted">Lv {getMemberLevel(memberPda)}</span>
+                          )}
+                          {getMemberNetworth(memberPda) > 0 && (
+                            <GoldNumber value={getMemberNetworth(memberPda)} size="sm" />
+                          )}
+                          {!isCurrentPlayer && myRank < m.account.rank && (
+                            <>
+                              {m.account.rank > 1 && (
+                                <button
+                                  onClick={() => handlePromote(m.account.slotIndex, m.account.rank)}
+                                  className="text-xs text-green-400 hover:text-green-300"
+                                >
+                                  Promote
+                                </button>
+                              )}
+                              {m.account.rank < 4 && (
+                                <button
+                                  onClick={() => handleDemote(m.account.slotIndex, m.account.rank)}
+                                  className="text-xs text-amber-400 hover:text-amber-300"
+                                >
+                                  Demote
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {isLeader && !isCurrentPlayer && m.account.rank !== 0 && (
+                            <>
+                              <button
+                                onClick={() => handleTransferLeadership(memberPda, m.account.slotIndex)}
+                                className="text-xs text-blue-400 hover:text-blue-300"
+                              >
+                                Transfer Lead
+                              </button>
+                              <button
+                                onClick={() => handleKick(memberPda, m.account.slotIndex, memberPda)}
+                                className="text-xs text-red-400 hover:text-red-300"
+                              >
+                                Kick
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {sortedMembers.length === 0 && (
+                    <p className="text-sm text-text-muted">No members found</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Game Parameters */}
+              {geData?.account && (() => {
+                const gp = geData.account.gameplayConfig;
+                const tiers = geData.account.subscriptionTiers;
+                return (
+                  <GameInfoPanel>
+                    <InfoGrid items={[
+                      { label: "Team Creation Cost", value: gp.teamCreationCost.toNumber().toLocaleString(), suffix: "NOVI", highlight: true },
+                      ...tiers.map((t) => ({
+                        label: `${t.name} Team Size`,
+                        value: t.maxTeamMembers.toString(),
+                      })),
+                    ]} columns={2} />
+                  </GameInfoPanel>
                 );
-              })}
-              {sortedMembers.length === 0 && (
-                <p className="text-sm text-text-muted">No members found</p>
-              )}
+              })()}
             </div>
-          </div>
 
-          {/* Invite */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Invite Player
-            </h3>
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={inviteAddress}
-                onChange={(e) => setInviteAddress(e.target.value)}
-                placeholder="Player wallet address..."
-                className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary placeholder-text-muted"
-              />
-              {inviteAddress.trim() && !isValidInviteAddress && (
-                <p className="mt-1 text-xs text-red-400">Invalid Solana address</p>
-              )}
-              <TxButton onClick={handleInvite} variant="secondary" disabled={!isValidInviteAddress || (team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}>
-                Invite
-              </TxButton>
-            </div>
-          </div>
-
-          {/* Pending Invites */}
-          {Array.from(teamInvites.values()).length > 0 && (
-            <div className="card">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Pending Invites
-              </h3>
-              <div className="space-y-2">
-                {Array.from(teamInvites.values()).map((inv) => (
-                  <div
-                    key={inv.pubkey.toBase58()}
-                    className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-                  >
-                    <span className="font-mono text-sm text-text-primary">
-                      <DomainName pubkey={inv.account.invitee} chars={4} />
-                    </span>
+            {/* Right — sidebar with tabbed sections */}
+            <div className="hidden lg:flex lg:flex-col overflow-y-auto">
+              <div className="sticky top-0 rounded-lg border border-border-default bg-surface-raised p-4 flex-1 space-y-4">
+                {/* Section tabs */}
+                <div className="flex gap-1 rounded-lg bg-surface/60 p-1">
+                  {(["chat", "treasury", "settings"] as const).map((s) => (
                     <button
-                      onClick={() => handleCancelInvite(inv.account.invitee)}
-                      className="text-xs text-red-400 hover:text-red-300"
+                      key={s}
+                      onClick={() => setSidebarSection(s)}
+                      className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                        sidebarSection === s
+                          ? "bg-amber-900/30 text-text-gold"
+                          : "text-text-muted hover:text-text-secondary"
+                      }`}
                     >
-                      Cancel
+                      {s}
                     </button>
+                  ))}
+                </div>
+
+                {/* Chat (disabled) */}
+                {sidebarSection === "chat" && (
+                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                    <div className="text-2xl text-text-muted">&#128172;</div>
+                    <p className="text-sm text-text-muted">Team chat coming soon</p>
+                    <p className="text-[11px] text-text-muted">Coordinate with your team in real-time</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Team Settings */}
-          {isOfficerPlus && team && (
-            <TeamSettingsPanel
-              team={team}
-              onSave={handleUpdateSettings}
-            />
-          )}
-
-          {/* Treasury */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Treasury
-            </h3>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                  placeholder="Amount"
-                  className="w-28 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                />
-                {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
-                  <p className="text-xs text-red-400">Exceeds cash on hand</p>
                 )}
-                <TxButton onClick={handleDeposit} variant="secondary" disabled={depositAmount <= 0 || depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)}>
-                  Deposit
-                </TxButton>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                  placeholder="Amount"
-                  className="w-28 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                />
-                {withdrawAmount > (team?.treasury?.toNumber?.() ?? 0) && withdrawAmount > 0 && (
-                  <p className="text-xs text-red-400">Exceeds treasury balance</p>
+
+                {/* Treasury */}
+                {sidebarSection === "treasury" && (
+                  <div className="space-y-4">
+                    {/* Balance */}
+                    <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
+                      <div className="text-[10px] text-text-muted">Treasury Balance</div>
+                      <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                    </div>
+
+                    {/* Deposit / Withdraw */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                          placeholder="Amount"
+                          className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                        />
+                      </div>
+                      {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
+                        <p className="text-xs text-red-400">Exceeds cash on hand</p>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <TxButton onClick={handleDeposit} variant="secondary" className="text-xs" disabled={depositAmount <= 0 || depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)}>
+                          Deposit
+                        </TxButton>
+                        <TxButton onClick={handleWithdraw} variant="secondary" className="text-xs" disabled={withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)}>
+                          Withdraw
+                        </TxButton>
+                      </div>
+                    </div>
+
+                    {/* Request Withdrawal */}
+                    <div className="border-t border-border-default pt-3 space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                        Request Withdrawal
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={requestWithdrawAmount}
+                          onChange={(e) => setRequestWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                          placeholder="Amount"
+                          className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                        />
+                      </div>
+                      <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0}>
+                        Request
+                      </TxButton>
+                      <div className="grid grid-cols-2 gap-2">
+                        <TxButton onClick={handleTreasuryExecute} variant="secondary" className="text-xs">
+                          Execute
+                        </TxButton>
+                        <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
+                          Cancel
+                        </TxButton>
+                      </div>
+                    </div>
+
+                    {/* Treasury Settings (Leader Only) */}
+                    {isLeader && (
+                      <div className="border-t border-border-default pt-3">
+                        <TreasurySettingsPanel
+                          team={team}
+                          onSave={handleUpdateTreasurySettings}
+                          compact
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
-                <TxButton onClick={handleWithdraw} variant="secondary" disabled={withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)}>
-                  Withdraw
-                </TxButton>
+
+                {/* Settings */}
+                {sidebarSection === "settings" && (
+                  <div className="space-y-4">
+                    {/* Invite */}
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                        Invite Player
+                      </div>
+                      <input
+                        type="text"
+                        value={inviteAddress}
+                        onChange={(e) => setInviteAddress(e.target.value)}
+                        placeholder="Wallet address..."
+                        className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary placeholder-text-muted"
+                      />
+                      {inviteAddress.trim() && !isValidInviteAddress && (
+                        <p className="text-xs text-red-400">Invalid address</p>
+                      )}
+                      <TxButton onClick={handleInvite} variant="secondary" className="w-full text-xs" disabled={!isValidInviteAddress || (team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}>
+                        Invite
+                      </TxButton>
+                    </div>
+
+                    {/* Pending Invites */}
+                    {Array.from(teamInvites.values()).length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                          Pending Invites
+                        </div>
+                        {Array.from(teamInvites.values()).map((inv) => (
+                          <div
+                            key={inv.pubkey.toBase58()}
+                            className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                          >
+                            <span className="font-mono text-xs text-text-primary">
+                              <DomainName pubkey={inv.account.invitee} chars={4} />
+                            </span>
+                            <button
+                              onClick={() => handleCancelInvite(inv.account.invitee)}
+                              className="text-xs text-red-400 hover:text-red-300"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Team Settings */}
+                    {isOfficerPlus && (
+                      <div className="border-t border-border-default pt-3">
+                        <TeamSettingsPanel
+                          team={team}
+                          onSave={handleUpdateSettings}
+                          compact
+                        />
+                      </div>
+                    )}
+
+                    {/* Domain Name (Leader Only) */}
+                    {isLeader && (
+                      <div className="border-t border-border-default pt-3 space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                          Domain Name
+                        </div>
+                        <DomainPicker
+                          currentName={currentTeamDomainName}
+                          isPending={transact.isPending}
+                          onSet={handleTeamNameSet}
+                          onRemove={handleTeamNameRemove}
+                          label="team"
+                        />
+                      </div>
+                    )}
+
+                    {/* Leave / Disband */}
+                    <div className="border-t border-border-default pt-3">
+                      {!isLeader && (
+                        <TxButton onClick={handleLeave} variant="danger" className="w-full">
+                          Leave Team
+                        </TxButton>
+                      )}
+                      {isLeader && (
+                        <TxButton onClick={handleDisband} variant="danger" className="w-full">
+                          Disband Team
+                        </TxButton>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Treasury Withdrawal Requests */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Request Withdrawal
-            </h3>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                value={requestWithdrawAmount}
-                onChange={(e) => setRequestWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                placeholder="Amount"
-                className="w-28 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-              />
-              <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" disabled={requestWithdrawAmount <= 0}>
-                Request
-              </TxButton>
+          {/* Mobile: same tabbed sidebar, shown below content */}
+          <div className="lg:hidden rounded-lg border border-border-default bg-surface-raised p-4 space-y-4">
+            {/* Section tabs */}
+            <div className="flex gap-1 rounded-lg bg-surface/60 p-1">
+              {(["chat", "treasury", "settings"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSidebarSection(s)}
+                  className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+                    sidebarSection === s
+                      ? "bg-amber-900/30 text-text-gold"
+                      : "text-text-muted hover:text-text-secondary"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <TxButton onClick={handleTreasuryExecute} variant="secondary">
-                Execute My Request
-              </TxButton>
-              <TxButton onClick={handleTreasuryCancel} variant="danger">
-                Cancel My Request
-              </TxButton>
-            </div>
-          </div>
 
-          {/* Treasury Settings (Leader Only) */}
-          {isLeader && team && (
-            <TreasurySettingsPanel
-              team={team}
-              onSave={handleUpdateTreasurySettings}
-            />
-          )}
-
-          {/* Game Parameters */}
-          {geData?.account && (() => {
-            const gp = geData.account.gameplayConfig;
-            const tiers = geData.account.subscriptionTiers;
-            return (
-              <GameInfoPanel>
-                <InfoGrid items={[
-                  { label: "Team Creation Cost", value: gp.teamCreationCost.toNumber().toLocaleString(), suffix: "NOVI", highlight: true },
-                  ...tiers.map((t) => ({
-                    label: `${t.name} Team Size`,
-                    value: t.maxTeamMembers.toString(),
-                  })),
-                ]} columns={2} />
-              </GameInfoPanel>
-            );
-          })()}
-
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3">
-            {!isLeader && (
-              <TxButton onClick={handleLeave} variant="danger">
-                Leave Team
-              </TxButton>
+            {/* Chat (disabled) */}
+            {sidebarSection === "chat" && (
+              <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                <div className="text-2xl text-text-muted">&#128172;</div>
+                <p className="text-sm text-text-muted">Team chat coming soon</p>
+                <p className="text-[11px] text-text-muted">Coordinate with your team in real-time</p>
+              </div>
             )}
-            {isLeader && (
-              <TxButton onClick={handleDisband} variant="danger">
-                Disband Team
-              </TxButton>
+
+            {/* Treasury */}
+            {sidebarSection === "treasury" && (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
+                  <div className="text-[10px] text-text-muted">Treasury Balance</div>
+                  <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                      placeholder="Amount"
+                      className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+                  {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
+                    <p className="text-xs text-red-400">Exceeds cash on hand</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <TxButton onClick={handleDeposit} variant="secondary" className="text-xs" disabled={depositAmount <= 0 || depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)}>
+                      Deposit
+                    </TxButton>
+                    <TxButton onClick={handleWithdraw} variant="secondary" className="text-xs" disabled={withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)}>
+                      Withdraw
+                    </TxButton>
+                  </div>
+                </div>
+
+                <div className="border-t border-border-default pt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    Request Withdrawal
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={requestWithdrawAmount}
+                      onChange={(e) => setRequestWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                      placeholder="Amount"
+                      className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                    />
+                  </div>
+                  <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0}>
+                    Request
+                  </TxButton>
+                  <div className="grid grid-cols-2 gap-2">
+                    <TxButton onClick={handleTreasuryExecute} variant="secondary" className="text-xs">
+                      Execute
+                    </TxButton>
+                    <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
+                      Cancel
+                    </TxButton>
+                  </div>
+                </div>
+
+                {isLeader && (
+                  <div className="border-t border-border-default pt-3">
+                    <TreasurySettingsPanel
+                      team={team}
+                      onSave={handleUpdateTreasurySettings}
+                      compact
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Settings */}
+            {sidebarSection === "settings" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    Invite Player
+                  </div>
+                  <input
+                    type="text"
+                    value={inviteAddress}
+                    onChange={(e) => setInviteAddress(e.target.value)}
+                    placeholder="Wallet address..."
+                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary placeholder-text-muted"
+                  />
+                  {inviteAddress.trim() && !isValidInviteAddress && (
+                    <p className="text-xs text-red-400">Invalid address</p>
+                  )}
+                  <TxButton onClick={handleInvite} variant="secondary" className="w-full text-xs" disabled={!isValidInviteAddress || (team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}>
+                    Invite
+                  </TxButton>
+                </div>
+
+                {Array.from(teamInvites.values()).length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                      Pending Invites
+                    </div>
+                    {Array.from(teamInvites.values()).map((inv) => (
+                      <div
+                        key={inv.pubkey.toBase58()}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                      >
+                        <span className="font-mono text-xs text-text-primary">
+                          <DomainName pubkey={inv.account.invitee} chars={4} />
+                        </span>
+                        <button
+                          onClick={() => handleCancelInvite(inv.account.invitee)}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isOfficerPlus && (
+                  <div className="border-t border-border-default pt-3">
+                    <TeamSettingsPanel
+                      team={team}
+                      onSave={handleUpdateSettings}
+                      compact
+                    />
+                  </div>
+                )}
+
+                {isLeader && (
+                  <div className="border-t border-border-default pt-3 space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                      Domain Name
+                    </div>
+                    <DomainPicker
+                      currentName={currentTeamDomainName}
+                      isPending={transact.isPending}
+                      onSet={handleTeamNameSet}
+                      onRemove={handleTeamNameRemove}
+                      label="team"
+                    />
+                  </div>
+                )}
+
+                <div className="border-t border-border-default pt-3">
+                  {!isLeader && (
+                    <TxButton onClick={handleLeave} variant="danger" className="w-full">
+                      Leave Team
+                    </TxButton>
+                  )}
+                  {isLeader && (
+                    <TxButton onClick={handleDisband} variant="danger" className="w-full">
+                      Disband Team
+                    </TxButton>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </>
@@ -875,9 +1102,11 @@ export function TeamTab() {
 function TeamSettingsPanel({
   team,
   onSave,
+  compact,
 }: {
   team: { settings: number; minLevelToJoin: number };
   onSave: (isPublic: boolean, minLevel: number, reportPhase: (p: TxPhase) => void) => Promise<string>;
+  compact?: boolean;
 }) {
   const [isPublic, setIsPublic] = useState(() => (team.settings & 1) !== 0);
   const [minLevel, setMinLevel] = useState(() => team.minLevelToJoin);
@@ -886,23 +1115,29 @@ function TeamSettingsPanel({
     return onSave(isPublic, minLevel, reportPhase);
   };
 
-  return (
-    <div className="card">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-        Team Settings
-      </h3>
-      <div className="space-y-3">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={(e) => setIsPublic(e.target.checked)}
-            className="rounded border-zinc-700"
-          />
-          <span className="text-sm text-text-primary">Public (anyone can join)</span>
-        </label>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-text-muted">Min Level:</label>
+  const content = (
+    <div className="space-y-3">
+      {!compact && (
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Team Settings
+        </h3>
+      )}
+      {compact && (
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Team Settings
+        </div>
+      )}
+      <label className="flex items-center gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isPublic}
+          onChange={(e) => setIsPublic(e.target.checked)}
+          className="rounded border-zinc-700"
+        />
+        <span className="text-sm text-text-primary">Public (anyone can join)</span>
+      </label>
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-text-muted">Min Level:
           <input
             type="number"
             value={minLevel}
@@ -911,13 +1146,16 @@ function TeamSettingsPanel({
             min={1}
             max={255}
           />
-        </div>
-        <TxButton onClick={handleSave} variant="secondary">
-          Save Settings
-        </TxButton>
+        </label>
       </div>
+      <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
+        Save Settings
+      </TxButton>
     </div>
   );
+
+  if (compact) return content;
+  return <div className="card">{content}</div>;
 }
 
 // ─── Treasury Settings Sub-Panel ────────────────────────────
@@ -925,6 +1163,7 @@ function TeamSettingsPanel({
 function TreasurySettingsPanel({
   team,
   onSave,
+  compact,
 }: {
   team: {
     treasuryInstantLimit: { toNumber: () => number }[];
@@ -937,6 +1176,7 @@ function TreasurySettingsPanel({
     cooldownHours: number,
     reportPhase: (p: TxPhase) => void,
   ) => Promise<string>;
+  compact?: boolean;
 }) {
   const [limits, setLimits] = useState<[number, number, number, number]>(() => [
     team.treasuryInstantLimit[0]?.toNumber() ?? 0,
@@ -958,44 +1198,49 @@ function TreasurySettingsPanel({
     return onSave(limits, caps, cooldown, reportPhase);
   };
 
-  return (
-    <div className="card">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-        Treasury Settings
-      </h3>
-      <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2 text-xs text-text-muted">
-          <span>Rank</span>
-          <span>Instant Limit</span>
-          <span>Daily Cap</span>
+  const content = (
+    <div className="space-y-3">
+      {compact ? (
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Treasury Settings
         </div>
-        {RANK_NAMES.map((name, i) => (
-          <div key={name} className="grid grid-cols-3 gap-2 items-center">
-            <span className="text-sm text-text-primary">{name}</span>
-            <input
-              type="number"
-              value={limits[i]}
-              onChange={(e) => {
-                const next = [...limits] as [number, number, number, number];
-                next[i] = Math.max(0, parseInt(e.target.value) || 0);
-                setLimits(next);
-              }}
-              className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
-            />
-            <input
-              type="number"
-              value={caps[i]}
-              onChange={(e) => {
-                const next = [...caps] as [number, number, number, number];
-                next[i] = Math.max(0, parseInt(e.target.value) || 0);
-                setCaps(next);
-              }}
-              className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
-            />
-          </div>
-        ))}
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-text-muted">Cooldown (hours):</label>
+      ) : (
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Treasury Settings
+        </h3>
+      )}
+      <div className="grid grid-cols-3 gap-2 text-xs text-text-muted">
+        <span>Rank</span>
+        <span>Instant Limit</span>
+        <span>Daily Cap</span>
+      </div>
+      {RANK_NAMES.map((name, i) => (
+        <div key={name} className="grid grid-cols-3 gap-2 items-center">
+          <span className={compact ? "text-xs text-text-primary" : "text-sm text-text-primary"}>{name}</span>
+          <input
+            type="number"
+            value={limits[i]}
+            onChange={(e) => {
+              const next = [...limits] as [number, number, number, number];
+              next[i] = Math.max(0, parseInt(e.target.value) || 0);
+              setLimits(next);
+            }}
+            className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
+          />
+          <input
+            type="number"
+            value={caps[i]}
+            onChange={(e) => {
+              const next = [...caps] as [number, number, number, number];
+              next[i] = Math.max(0, parseInt(e.target.value) || 0);
+              setCaps(next);
+            }}
+            className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
+          />
+        </div>
+      ))}
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-text-muted">Cooldown (hours):
           <input
             type="number"
             value={cooldown}
@@ -1004,11 +1249,14 @@ function TreasurySettingsPanel({
             min={1}
             max={72}
           />
-        </div>
-        <TxButton onClick={handleSave} variant="secondary">
-          Save Treasury Settings
-        </TxButton>
+        </label>
       </div>
+      <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
+        Save Treasury Settings
+      </TxButton>
     </div>
   );
+
+  if (compact) return content;
+  return <div className="card">{content}</div>;
 }

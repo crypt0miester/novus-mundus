@@ -13,16 +13,34 @@ import {
   TLD_HOUSE_PROGRAM_ID,
 } from './program';
 
+// Browser-safe LE byte helpers (no Buffer.write* dependency)
+function u8(v: number): Uint8Array { return new Uint8Array([v & 0xff]); }
+function u16le(v: number): Uint8Array { return new Uint8Array([v & 0xff, (v >> 8) & 0xff]); }
+function i32le(v: number): Uint8Array {
+  const b = new Uint8Array(4);
+  new DataView(b.buffer).setInt32(0, v, true);
+  return b;
+}
+function u32le(v: number): Uint8Array {
+  const b = new Uint8Array(4);
+  new DataView(b.buffer).setUint32(0, v, true);
+  return b;
+}
+function u64le(v: number | bigint): Uint8Array {
+  const b = new Uint8Array(8);
+  new DataView(b.buffer).setBigUint64(0, BigInt(v), true);
+  return b;
+}
+function strBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
+
 // ============================================================
 // Core Account PDAs
 // ============================================================
 
 /** Derive GameEngine PDA for a specific kingdom */
 export function deriveGameEnginePda(kingdomId: number): [PublicKey, number] {
-  const kingdomIdBuffer = Buffer.alloc(2);
-  kingdomIdBuffer.writeUInt16LE(kingdomId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.GAME_ENGINE, kingdomIdBuffer],
+    [SEEDS.GAME_ENGINE, u16le(kingdomId)],
     PROGRAM_ID
   );
 }
@@ -50,10 +68,8 @@ export function deriveUserPda(wallet: PublicKey): [PublicKey, number] {
 
 /** Derive City PDA from game engine and city ID */
 export function deriveCityPda(gameEngine: PublicKey, cityId: number): [PublicKey, number] {
-  const cityIdBuffer = Buffer.alloc(2);
-  cityIdBuffer.writeUInt16LE(cityId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.CITY, gameEngine.toBuffer(), cityIdBuffer],
+    [SEEDS.CITY, gameEngine.toBuffer(), u16le(cityId)],
     PROGRAM_ID
   );
 }
@@ -64,10 +80,8 @@ export function deriveCityPda(gameEngine: PublicKey, cityId: number): [PublicKey
 
 /** Derive Team PDA from game engine and team ID */
 export function deriveTeamPda(gameEngine: PublicKey, teamId: bigint | number): [PublicKey, number] {
-  const teamIdBuffer = Buffer.alloc(8);
-  teamIdBuffer.writeBigUInt64LE(BigInt(teamId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM, gameEngine.toBuffer(), teamIdBuffer],
+    [SEEDS.TEAM, gameEngine.toBuffer(), u64le(teamId)],
     PROGRAM_ID
   );
 }
@@ -77,10 +91,8 @@ export function deriveTeamSlotPda(
   team: PublicKey,
   slotIndex: number
 ): [PublicKey, number] {
-  const slotBuffer = Buffer.alloc(2);
-  slotBuffer.writeUInt16LE(slotIndex);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM_SLOT, team.toBuffer(), slotBuffer],
+    [SEEDS.TEAM_SLOT, team.toBuffer(), u16le(slotIndex)],
     PROGRAM_ID
   );
 }
@@ -117,10 +129,8 @@ export function deriveRallyPda(
   creator: PublicKey,
   rallyId: number | bigint
 ): [PublicKey, number] {
-  const idBuffer = Buffer.alloc(8);
-  idBuffer.writeBigUInt64LE(BigInt(rallyId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.RALLY, gameEngine.toBuffer(), creator.toBuffer(), idBuffer],
+    [SEEDS.RALLY, gameEngine.toBuffer(), creator.toBuffer(), u64le(rallyId)],
     PROGRAM_ID
   );
 }
@@ -132,10 +142,8 @@ export function deriveRallyParticipantPda(
   rallyId: number | bigint,
   participant: PublicKey
 ): [PublicKey, number] {
-  const idBuffer = Buffer.alloc(8);
-  idBuffer.writeBigUInt64LE(BigInt(rallyId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.RALLY_PARTICIPANT, gameEngine.toBuffer(), rallyCreator.toBuffer(), idBuffer, participant.toBuffer()],
+    [SEEDS.RALLY_PARTICIPANT, gameEngine.toBuffer(), rallyCreator.toBuffer(), u64le(rallyId), participant.toBuffer()],
     PROGRAM_ID
   );
 }
@@ -190,14 +198,8 @@ export function deriveLocationPda(
   gridLat: number,
   gridLong: number
 ): [PublicKey, number] {
-  const cityIdBuffer = Buffer.alloc(2);
-  cityIdBuffer.writeUInt16LE(cityId);
-  const latBuffer = Buffer.alloc(4);
-  latBuffer.writeInt32LE(gridLat);
-  const longBuffer = Buffer.alloc(4);
-  longBuffer.writeInt32LE(gridLong);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.LOCATION, gameEngine.toBuffer(), cityIdBuffer, latBuffer, longBuffer],
+    [SEEDS.LOCATION, gameEngine.toBuffer(), u16le(cityId), i32le(gridLat), i32le(gridLong)],
     PROGRAM_ID
   );
 }
@@ -212,12 +214,8 @@ export function deriveEncounterPda(
   cityId: number,
   encounterId: bigint | number
 ): [PublicKey, number] {
-  const cityIdBuffer = Buffer.alloc(2);
-  cityIdBuffer.writeUInt16LE(cityId);
-  const encounterIdBuffer = Buffer.alloc(8);
-  encounterIdBuffer.writeBigUInt64LE(BigInt(encounterId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.ENCOUNTER, gameEngine.toBuffer(), cityIdBuffer, encounterIdBuffer],
+    [SEEDS.ENCOUNTER, gameEngine.toBuffer(), u16le(cityId), u64le(encounterId)],
     PROGRAM_ID
   );
 }
@@ -227,10 +225,8 @@ export function deriveLootPda(
   playerPda: PublicKey,
   lootId: number | bigint
 ): [PublicKey, number] {
-  const lootIdBuffer = Buffer.alloc(8);
-  lootIdBuffer.writeBigUInt64LE(BigInt(lootId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.LOOT, playerPda.toBuffer(), lootIdBuffer],
+    [SEEDS.LOOT, playerPda.toBuffer(), u64le(lootId)],
     PROGRAM_ID
   );
 }
@@ -241,10 +237,8 @@ export function deriveLootPda(
 
 /** Derive Event PDA */
 export function deriveEventPda(gameEngine: PublicKey, eventId: bigint | number): [PublicKey, number] {
-  const eventIdBuffer = Buffer.alloc(8);
-  eventIdBuffer.writeBigUInt64LE(BigInt(eventId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.EVENT, gameEngine.toBuffer(), eventIdBuffer],
+    [SEEDS.EVENT, gameEngine.toBuffer(), u64le(eventId)],
     PROGRAM_ID
   );
 }
@@ -255,10 +249,8 @@ export function deriveEventParticipationPda(
   eventId: bigint | number,
   playerOwner: PublicKey
 ): [PublicKey, number] {
-  const eventIdBuffer = Buffer.alloc(8);
-  eventIdBuffer.writeBigUInt64LE(BigInt(eventId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.EVENT_PARTICIPATION, gameEngine.toBuffer(), eventIdBuffer, playerOwner.toBuffer()],
+    [SEEDS.EVENT_PARTICIPATION, gameEngine.toBuffer(), u64le(eventId), playerOwner.toBuffer()],
     PROGRAM_ID
   );
 }
@@ -283,11 +275,8 @@ export function deriveProgressionPda(player: PublicKey): [PublicKey, number] {
 export function deriveResearchTemplatePda(
   templateId: number
 ): [PublicKey, number] {
-  // Rust uses single byte: &[research_type]
-  const templateIdBuffer = Buffer.alloc(1);
-  templateIdBuffer.writeUInt8(templateId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.RESEARCH_TEMPLATE, templateIdBuffer],
+    [SEEDS.RESEARCH_TEMPLATE, u8(templateId)],
     PROGRAM_ID
   );
 }
@@ -306,11 +295,8 @@ export function deriveResearchPda(player: PublicKey): [PublicKey, number] {
 
 /** Derive Hero Template PDA */
 export function deriveHeroTemplatePda(templateId: number): [PublicKey, number] {
-  // Rust uses u16 LE: template_id.to_le_bytes()
-  const templateIdBuffer = Buffer.alloc(2);
-  templateIdBuffer.writeUInt16LE(templateId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.HERO_TEMPLATE, templateIdBuffer],
+    [SEEDS.HERO_TEMPLATE, u16le(templateId)],
     PROGRAM_ID
   );
 }
@@ -325,10 +311,8 @@ export function deriveHeroMintReceiptPda(
   playerPda: PublicKey,
   templateId: number
 ): [PublicKey, number] {
-  const templateIdBuffer = Buffer.alloc(2);
-  templateIdBuffer.writeUInt16LE(templateId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.HERO_MINT_RECEIPT, playerPda.toBuffer(), templateIdBuffer],
+    [SEEDS.HERO_MINT_RECEIPT, playerPda.toBuffer(), u16le(templateId)],
     PROGRAM_ID
   );
 }
@@ -352,10 +336,8 @@ export function deriveShopItemPda(
   gameEngine: PublicKey,
   itemId: number
 ): [PublicKey, number] {
-  const itemIdBuffer = Buffer.alloc(4);
-  itemIdBuffer.writeUInt32LE(itemId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.SHOP_ITEM, gameEngine.toBuffer(), itemIdBuffer],
+    [SEEDS.SHOP_ITEM, gameEngine.toBuffer(), u32le(itemId)],
     PROGRAM_ID
   );
 }
@@ -365,10 +347,8 @@ export function deriveBundlePda(
   gameEngine: PublicKey,
   bundleId: number
 ): [PublicKey, number] {
-  const bundleIdBuffer = Buffer.alloc(4);
-  bundleIdBuffer.writeUInt32LE(bundleId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.BUNDLE, gameEngine.toBuffer(), bundleIdBuffer],
+    [SEEDS.BUNDLE, gameEngine.toBuffer(), u32le(bundleId)],
     PROGRAM_ID
   );
 }
@@ -378,10 +358,8 @@ export function deriveDailyDealPda(
   gameEngine: PublicKey,
   slotIndex: number
 ): [PublicKey, number] {
-  const slotBuffer = Buffer.alloc(1);
-  slotBuffer.writeUInt8(slotIndex);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.DAILY_DEAL, gameEngine.toBuffer(), slotBuffer],
+    [SEEDS.DAILY_DEAL, gameEngine.toBuffer(), u8(slotIndex)],
     PROGRAM_ID
   );
 }
@@ -391,10 +369,8 @@ export function deriveFlashSalePda(
   gameEngine: PublicKey,
   saleId: bigint | number
 ): [PublicKey, number] {
-  const saleIdBuffer = Buffer.alloc(8);
-  saleIdBuffer.writeBigUInt64LE(BigInt(saleId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.FLASH_SALE, gameEngine.toBuffer(), saleIdBuffer],
+    [SEEDS.FLASH_SALE, gameEngine.toBuffer(), u64le(saleId)],
     PROGRAM_ID
   );
 }
@@ -404,10 +380,8 @@ export function deriveWeeklySalePda(
   gameEngine: PublicKey,
   weekNumber: bigint | number
 ): [PublicKey, number] {
-  const weekBuffer = Buffer.alloc(8);
-  weekBuffer.writeBigUInt64LE(BigInt(weekNumber));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.WEEKLY_SALE, gameEngine.toBuffer(), weekBuffer],
+    [SEEDS.WEEKLY_SALE, gameEngine.toBuffer(), u64le(weekNumber)],
     PROGRAM_ID
   );
 }
@@ -428,10 +402,8 @@ export function deriveDaoPromotionPda(
   gameEngine: PublicKey,
   proposalId: bigint | number
 ): [PublicKey, number] {
-  const proposalIdBuffer = Buffer.alloc(8);
-  proposalIdBuffer.writeBigUInt64LE(BigInt(proposalId));
   return PublicKey.findProgramAddressSync(
-    [SEEDS.DAO_PROMOTION, gameEngine.toBuffer(), proposalIdBuffer],
+    [SEEDS.DAO_PROMOTION, gameEngine.toBuffer(), u64le(proposalId)],
     PROGRAM_ID
   );
 }
@@ -441,10 +413,8 @@ export function derivePlayerPurchasePda(
   player: PublicKey,
   itemId: number
 ): [PublicKey, number] {
-  const itemIdBuffer = Buffer.alloc(4);
-  itemIdBuffer.writeUInt32LE(itemId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.PLAYER_PURCHASE, player.toBuffer(), itemIdBuffer],
+    [SEEDS.PLAYER_PURCHASE, player.toBuffer(), u32le(itemId)],
     PROGRAM_ID
   );
 }
@@ -511,10 +481,8 @@ export function deriveArenaSeasonPda(
   gameEngine: PublicKey,
   seasonId: number
 ): [PublicKey, number] {
-  const seasonIdBuffer = Buffer.alloc(4);
-  seasonIdBuffer.writeUInt32LE(seasonId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.ARENA_SEASON, gameEngine.toBuffer(), seasonIdBuffer],
+    [SEEDS.ARENA_SEASON, gameEngine.toBuffer(), u32le(seasonId)],
     PROGRAM_ID
   );
 }
@@ -525,10 +493,8 @@ export function deriveArenaParticipantPda(
   seasonId: number,
   player: PublicKey
 ): [PublicKey, number] {
-  const seasonIdBuffer = Buffer.alloc(4);
-  seasonIdBuffer.writeUInt32LE(seasonId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.ARENA_PARTICIPANT, gameEngine.toBuffer(), seasonIdBuffer, player.toBuffer()],
+    [SEEDS.ARENA_PARTICIPANT, gameEngine.toBuffer(), u32le(seasonId), player.toBuffer()],
     PROGRAM_ID
   );
 }
@@ -552,11 +518,8 @@ export function deriveArenaLoadoutPda(
 export function deriveDungeonTemplatePda(
   templateId: number
 ): [PublicKey, number] {
-  // Rust uses u16 LE: dungeon_id.to_le_bytes()
-  const templateIdBuffer = Buffer.alloc(2);
-  templateIdBuffer.writeUInt16LE(templateId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.DUNGEON_TEMPLATE, templateIdBuffer],
+    [SEEDS.DUNGEON_TEMPLATE, u16le(templateId)],
     PROGRAM_ID
   );
 }
@@ -575,12 +538,8 @@ export function deriveDungeonLeaderboardPda(
   dungeonId: number,
   weekNumber: number
 ): [PublicKey, number] {
-  const dungeonIdBuffer = Buffer.alloc(2);
-  dungeonIdBuffer.writeUInt16LE(dungeonId);
-  const weekBuffer = Buffer.alloc(2);
-  weekBuffer.writeUInt16LE(weekNumber);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.DUNGEON_LEADERBOARD, gameEngine.toBuffer(), dungeonIdBuffer, weekBuffer],
+    [SEEDS.DUNGEON_LEADERBOARD, gameEngine.toBuffer(), u16le(dungeonId), u16le(weekNumber)],
     PROGRAM_ID
   );
 }
@@ -591,12 +550,8 @@ export function deriveDungeonLeaderboardPda(
 
 /** Derive Castle PDA from game engine, city ID and castle ID */
 export function deriveCastlePda(gameEngine: PublicKey, cityId: number, castleId: number): [PublicKey, number] {
-  const cityIdBuffer = Buffer.alloc(2);
-  cityIdBuffer.writeUInt16LE(cityId);
-  const castleIdBuffer = Buffer.alloc(2);
-  castleIdBuffer.writeUInt16LE(castleId);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.CASTLE, gameEngine.toBuffer(), cityIdBuffer, castleIdBuffer],
+    [SEEDS.CASTLE, gameEngine.toBuffer(), u16le(cityId), u16le(castleId)],
     PROGRAM_ID
   );
 }
@@ -606,10 +561,8 @@ export function deriveCourtPda(
   castle: PublicKey,
   position: number
 ): [PublicKey, number] {
-  const positionBuffer = Buffer.alloc(1);
-  positionBuffer.writeUInt8(position);
   return PublicKey.findProgramAddressSync(
-    [SEEDS.COURT, castle.toBuffer(), positionBuffer],
+    [SEEDS.COURT, castle.toBuffer(), u8(position)],
     PROGRAM_ID
   );
 }
@@ -648,7 +601,7 @@ export function deriveNameAccountPda(
   domainName: string,
   nameParent: PublicKey
 ): [PublicKey, number] {
-  const hashedName = sha256(Buffer.from(ANS_HASH_PREFIX + domainName));
+  const hashedName = sha256(strBytes(ANS_HASH_PREFIX + domainName));
   return PublicKey.findProgramAddressSync(
     [hashedName, NULL_PUBKEY.toBuffer(), nameParent.toBuffer()],
     ALT_NAME_SERVICE_PROGRAM_ID
@@ -661,7 +614,7 @@ export function deriveReverseNameAccountPda(
   tldHouse: PublicKey
 ): [PublicKey, number] {
   const hashedReverse = sha256(
-    Buffer.from(ANS_HASH_PREFIX + nameAccount.toBase58())
+    strBytes(ANS_HASH_PREFIX + nameAccount.toBase58())
   );
   return PublicKey.findProgramAddressSync(
     [hashedReverse, tldHouse.toBuffer(), NULL_PUBKEY.toBuffer()],
@@ -672,7 +625,7 @@ export function deriveReverseNameAccountPda(
 /** Derive TLD House MainDomain PDA */
 export function deriveMainDomainPda(owner: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('main_domain'), owner.toBuffer()],
+    [strBytes('main_domain'), owner.toBuffer()],
     TLD_HOUSE_PROGRAM_ID
   );
 }
@@ -680,7 +633,7 @@ export function deriveMainDomainPda(owner: PublicKey): [PublicKey, number] {
 /** Derive TLD State PDA */
 export function deriveTldStatePda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('tld_pda')],
+    [strBytes('tld_pda')],
     TLD_HOUSE_PROGRAM_ID
   );
 }
@@ -688,7 +641,7 @@ export function deriveTldStatePda(): [PublicKey, number] {
 /** Derive TLD House PDA for a specific TLD */
 export function deriveTldHousePda(tld: string): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from('tld_house'), Buffer.from(tld.toLowerCase())],
+    [strBytes('tld_house'), strBytes(tld.toLowerCase())],
     TLD_HOUSE_PROGRAM_ID
   );
 }
@@ -699,5 +652,5 @@ export function deriveTldHousePda(tld: string): [PublicKey, number] {
 
 /** Get hashed name bytes for ANS operations */
 export function getHashedName(domainName: string): Uint8Array {
-  return sha256(Buffer.from(ANS_HASH_PREFIX + domainName));
+  return sha256(strBytes(ANS_HASH_PREFIX + domainName));
 }

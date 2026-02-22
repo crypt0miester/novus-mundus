@@ -36,7 +36,7 @@ export function GoldNumber({
   return (
     <span
       className={cn(
-        "font-mono tabular-nums text-amber-400",
+        "font-mono tabular-nums text-text-gold",
         sizeClasses[size],
         className
       )}

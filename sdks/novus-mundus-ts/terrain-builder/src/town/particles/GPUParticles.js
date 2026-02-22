@@ -145,13 +145,16 @@ const RAIN_VERTEX_BODY = /* glsl */ `
     vec3 pos = emitPos + velocity * age;
     pos.y += buoyancy * age * age;
 
-    // Slight wind sway
+    // Wind sway
     pos += windDir * windStr * age * windFactor;
 
-    // Streak length proportional to speed (render as taller point)
-    float speed = length(velocity);
-    gl_PointSize = max(startSize, speed * 0.15) * pixelRatio;
-    vAlpha = (1.0 - smoothstep(0.85, 1.0, t)) * 0.5;
+    // Large point size so the fragment shader can draw a visible streak
+    gl_PointSize = startSize * pixelRatio;
+
+    // Fade in quickly, hold, fade out at end of life
+    float fadeIn = smoothstep(0.0, 0.05, t);
+    float fadeOut = 1.0 - smoothstep(0.8, 1.0, t);
+    vAlpha = fadeIn * fadeOut * 0.7;
     vT = t;
     vAge = age;
     vBirthTime = birthTime;
@@ -278,18 +281,77 @@ const RAIN_FRAGMENT = /* glsl */ `
   varying float vBirthTime;
 
   void main() {
-    // Elongated streak — narrow on x, full on y
     vec2 uv = gl_PointCoord * 2.0 - 1.0;
-    float streak = abs(uv.x) * 3.0;  // Narrow horizontal
-    float vert = abs(uv.y);           // Full vertical
 
-    float mask = 1.0 - smoothstep(0.0, 1.0, streak);
-    mask *= 1.0 - smoothstep(0.8, 1.0, vert);
+    // Narrow vertical streak: tight on X, elongated on Y
+    float xFade = 1.0 - smoothstep(0.0, 0.15, abs(uv.x));
+    // Tapered — thinner at bottom, wider at top
+    float yFade = smoothstep(-1.0, -0.8, uv.y) * (1.0 - smoothstep(0.9, 1.0, uv.y));
 
-    if (mask < 0.01) discard;
+    float mask = xFade * yFade;
+    if (mask < 0.02) discard;
+
+    // Bright core along center line
+    float core = exp(-abs(uv.x) * 20.0) * 0.4;
+    mask = min(1.0, mask + core);
 
     vec3 col = mix(startColor, endColor, vT);
     gl_FragColor = vec4(col, vAlpha * mask);
+  }
+`;
+
+const SNOW_VERTEX_BODY = /* glsl */ `
+  void main() {
+    float age = mod(time - birthTime, lifetime);
+    float t = age / lifetime;
+
+    vec3 pos = emitPos + velocity * age;
+    pos.y += buoyancy * age * age;
+
+    // Gentle wobble for realistic flutter
+    float wobble = sin(age * turbFreq + birthTime * 6.28) * turbAmp;
+    pos.x += wobble;
+    pos.z += cos(age * turbFreq * 0.6 + birthTime * 3.14) * turbAmp * 0.7;
+
+    // Wind
+    pos += windDir * windStr * age * windFactor;
+
+    // Slight size variation per flake
+    float sizeVar = 0.7 + 0.6 * fract(sin(birthTime * 91.3) * 43758.5);
+    gl_PointSize = startSize * sizeVar * pixelRatio;
+
+    float fadeIn = smoothstep(0.0, 0.1, t);
+    float fadeOut = 1.0 - smoothstep(0.75, 1.0, t);
+    vAlpha = fadeIn * fadeOut * 0.85;
+    vT = t;
+    vAge = age;
+    vBirthTime = birthTime;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+const SNOW_FRAGMENT = /* glsl */ `
+  uniform vec3 startColor;
+  uniform vec3 endColor;
+
+  varying float vAlpha;
+  varying float vT;
+  varying float vAge;
+  varying float vBirthTime;
+
+  void main() {
+    vec2 uv = gl_PointCoord * 2.0 - 1.0;
+    float dist = dot(uv, uv);
+    if (dist > 1.0) discard;
+
+    // Soft snowflake: bright core with gentle falloff
+    float core = 1.0 - smoothstep(0.0, 0.3, dist);
+    float glow = (1.0 - smoothstep(0.0, 1.0, dist)) * 0.6;
+    float edgeFade = core + glow;
+
+    vec3 col = mix(startColor, endColor, vT);
+    gl_FragColor = vec4(col, vAlpha * edgeFade);
   }
 `;
 
@@ -612,49 +674,49 @@ const PRESETS = {
   },
 
   'rain': {
-    count: 6000,
-    lifetime: 1.5,
-    lifetimeVariance: 0.3,
-    buoyancy: -8.0,
+    count: 10000,
+    lifetime: 0.8,
+    lifetimeVariance: 0.2,
+    buoyancy: -12.0,
     turbFreq: 0.5,
-    turbAmp: 0.02,
-    startSize: 1.0,
-    endSize: 1.0,
-    startColor: '#AABBCC',
-    endColor: '#AABBCC',
-    emitRadius: 5.0,
+    turbAmp: 0.01,
+    startSize: 16.0,
+    endSize: 16.0,
+    startColor: '#8899AA',
+    endColor: '#8899AA',
+    emitRadius: 8.0,
     emitShape: 'box',
-    emitHeight: 4.0,
-    velocityMin: [-0.02, -1.5, -0.02],
-    velocityMax: [0.02, -0.8, 0.02],
-    windFactor: 0.5,
-    blending: 'additive',
+    emitHeight: 5.0,
+    velocityMin: [-0.01, -2.0, -0.01],
+    velocityMax: [0.01, -1.2, 0.01],
+    windFactor: 0.6,
+    blending: 'normal',
     depthWrite: false,
     vertexBody: RAIN_VERTEX_BODY,
     fragment: RAIN_FRAGMENT,
   },
 
   'snow': {
-    count: 3000,
-    lifetime: 6.0,
-    lifetimeVariance: 2.0,
-    buoyancy: -0.5,
-    turbFreq: 2.0,
-    turbAmp: 0.3,
-    startSize: 3.0,
-    endSize: 3.0,
-    startColor: '#FFFFFF',
+    count: 5000,
+    lifetime: 8.0,
+    lifetimeVariance: 3.0,
+    buoyancy: -0.3,
+    turbFreq: 1.5,
+    turbAmp: 0.4,
+    startSize: 5.0,
+    endSize: 5.0,
+    startColor: '#EEEEFF',
     endColor: '#FFFFFF',
-    emitRadius: 5.0,
+    emitRadius: 8.0,
     emitShape: 'box',
-    emitHeight: 4.0,
-    velocityMin: [-0.03, -0.05, -0.03],
-    velocityMax: [0.03, -0.02, 0.03],
-    windFactor: 0.7,
+    emitHeight: 5.0,
+    velocityMin: [-0.04, -0.08, -0.04],
+    velocityMax: [0.04, -0.03, 0.04],
+    windFactor: 0.8,
     blending: 'normal',
     depthWrite: false,
-    vertexBody: STANDARD_VERTEX_BODY,
-    fragment: STANDARD_FRAGMENT,
+    vertexBody: SNOW_VERTEX_BODY,
+    fragment: SNOW_FRAGMENT,
   },
 
   'falling-leaves': {

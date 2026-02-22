@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useSyncExternalStore } from "react";
 
 import { BaseWalletMultiButton } from "./BaseWalletMultiButton";
 import type { ButtonProps } from "./Button";
@@ -13,12 +13,10 @@ const LABELS = {
   "no-wallet": "Connect Wallet",
 } as const;
 
-export function WalletMultiButton(props: ButtonProps) {
-  const [isClient, setIsClient] = useState(false);
+const emptySubscribe = () => () => {};
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+export function WalletMultiButton(props: ButtonProps) {
+  const isClient = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   return (
     <Suspense>

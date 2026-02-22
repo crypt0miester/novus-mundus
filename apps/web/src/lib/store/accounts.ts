@@ -50,19 +50,19 @@ import type {
 // Account Store Types
 // ============================================================
 
-export interface AccountEntry<T> {
+interface AccountEntry<T> {
   pubkey: PublicKey;
   account: T;
 }
 
 // Enriched shop entries — include PDA-derived IDs needed by UI
-export interface ShopItemEntry extends AccountEntry<ShopItemAccount> {
+interface ShopItemEntry extends AccountEntry<ShopItemAccount> {
   itemId: number;
 }
-export interface BundleEntry extends AccountEntry<BundleAccount> {
+interface BundleEntry extends AccountEntry<BundleAccount> {
   bundleId: number;
 }
-export interface FlashSaleEntry extends AccountEntry<FlashSaleAccount> {
+interface FlashSaleEntry extends AccountEntry<FlashSaleAccount> {
   saleId: number;
 }
 

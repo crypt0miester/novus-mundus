@@ -20,19 +20,21 @@ export function useTierTheme() {
   const themePreference = useSettings((s) => s.themePreference);
 
   useEffect(() => {
-    if (!player) return;
+    let tier = 0;
 
-    const now = Math.floor(Date.now() / 1000);
-    const end = player.subscriptionEnd.toNumber();
-    const tier =
-      player.subscriptionTier > 0 && end > now
-        ? Math.min(player.subscriptionTier, 4)
-        : 0;
+    if (player) {
+      const now = Math.floor(Date.now() / 1000);
+      const end = player.subscriptionEnd.toNumber();
+      tier =
+        player.subscriptionTier > 0 && end > now
+          ? Math.min(player.subscriptionTier, 4)
+          : 0;
+    }
 
     document.body.setAttribute("data-tier", String(tier));
     try { localStorage.setItem("novus-tier", String(tier)); } catch {}
 
-    // Resolve theme: auto picks based on tier
+    // Resolve theme: auto picks based on tier (no player = tier 0 = paper)
     const resolvedTheme = resolveTheme(themePreference, tier);
     document.body.setAttribute("data-theme", resolvedTheme);
 
@@ -44,7 +46,7 @@ export function useTierTheme() {
 }
 
 /** Resolve "auto" theme preference into "paper" or "dark" based on tier */
-export function resolveTheme(pref: ThemePreference, tier: number): string {
+function resolveTheme(pref: ThemePreference, tier: number): string {
   if (pref === "paper") return "paper";
   if (pref === "dark") return "dark";
   // auto: tiers 0-1 = paper, tiers 2-4 = dark
@@ -66,7 +68,7 @@ export function getCachedTier(): number {
 export const TIER_NAMES = ["Free", "Bronze", "Silver", "Gold", "Legendary"] as const;
 
 /** Tier badge text (Roman numerals, empty for free) */
-export const TIER_BADGES = ["", "I", "II", "III", "IV"] as const;
+const TIER_BADGES = ["", "I", "II", "III", "IV"] as const;
 
 /** Get tier info for a given tier number */
 export function getTierInfo(tier: number) {

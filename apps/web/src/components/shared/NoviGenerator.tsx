@@ -19,18 +19,6 @@ import {
 const INTERVAL_SECONDS = 300; // 5 minutes
 
 const TIER_NAMES = ["Rookie", "Expert", "Epic", "Legendary"];
-const TIER_COLORS = [
-  "text-zinc-400",
-  "text-amber-400",
-  "text-purple-400",
-  "text-orange-400",
-];
-const TIER_RING_COLORS = [
-  "stroke-zinc-500",
-  "stroke-amber-500",
-  "stroke-purple-500",
-  "stroke-orange-500",
-];
 
 interface NoviGeneratorProps {
   compact?: boolean;
@@ -54,11 +42,9 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
   const rateRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
 
-  // Real-time ticking state
-  const [displayNovi, setDisplayNovi] = useState(0);
-  const [pendingNovi, setPendingNovi] = useState(0);
-  const [fillPct, setFillPct] = useState(0);
-  const [nextIntervalIn, setNextIntervalIn] = useState(0);
+  // Real-time ticking state (combined to avoid cascading setState)
+  const [ticker, setTicker] = useState({ displayNovi: 0, pendingNovi: 0, fillPct: 0, nextIntervalIn: 0 });
+  const { displayNovi, pendingNovi, fillPct, nextIntervalIn } = ticker;
   const [justClaimed, setJustClaimed] = useState(false);
 
   // Get tier config from game engine
@@ -85,18 +71,16 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
       const maxCap = tierConfig.maxLockedNovi.toNumber();
       const currentLocked = player.lockedNovi.toNumber();
 
-      const pending = Math.min(intervals * genRate, maxCap - currentLocked);
-      const total = Math.min(currentLocked + pending, maxCap);
-      const pct = maxCap > 0 ? (total / maxCap) * 100 : 0;
+      const pending = currentLocked >= maxCap ? 0 : Math.min(intervals * genRate, maxCap - currentLocked);
+      const total = currentLocked + pending;
+      const pct = maxCap > 0 ? Math.min((total / maxCap) * 100, 100) : 0;
+      // Show only locked balance as the main number; pending is displayed separately
 
       // Seconds until next interval fires
       const secondsIntoCurrentInterval = elapsed % INTERVAL_SECONDS;
       const secsUntilNext = INTERVAL_SECONDS - secondsIntoCurrentInterval;
 
-      setDisplayNovi(total);
-      setPendingNovi(Math.max(0, pending));
-      setFillPct(pct);
-      setNextIntervalIn(secsUntilNext);
+      setTicker({ displayNovi: currentLocked, pendingNovi: Math.max(0, pending), fillPct: pct, nextIntervalIn: secsUntilNext });
     };
 
     tick();
@@ -145,7 +129,8 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     player,
     Math.floor(Date.now() / 1000)
   );
-  const isFull = fillPct >= 99.9;
+  const currentLocked = player.lockedNovi.toNumber();
+  const isFull = currentLocked >= maxCap || fillPct >= 99.9;
 
   const circumference = 2 * Math.PI * 54;
 
@@ -181,13 +166,13 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
               fill="none"
               strokeWidth="5"
               strokeLinecap="round"
-              className={TIER_RING_COLORS[effectiveTier]}
+              style={{ stroke: "var(--tier-accent-bright)" }}
               strokeDasharray={circumference}
               strokeDashoffset={circumference * (1 - fillPct / 100)}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[10px] font-bold text-amber-400">
+            <span className="text-[10px] font-bold text-text-gold">
               {Math.floor(fillPct)}%
             </span>
           </div>
@@ -197,7 +182,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
           <div className="flex items-baseline gap-2">
             <span
               ref={numberRef as any}
-              className="font-mono text-lg font-bold tabular-nums text-amber-400"
+              className="font-mono text-lg font-bold tabular-nums text-text-gold"
             >
               {formatNumber(displayNovi, "compact")}
             </span>
@@ -242,18 +227,13 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-900/40">
             <span className="text-sm">◆</span>
           </div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-text-gold">
             NOVI Generator
           </span>
         </div>
         <div
-          className={cn(
-            "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-            effectiveTier === 0 && "bg-zinc-800 text-zinc-400",
-            effectiveTier === 1 && "bg-amber-900/40 text-amber-400",
-            effectiveTier === 2 && "bg-purple-900/40 text-purple-400",
-            effectiveTier === 3 && "bg-orange-900/40 text-orange-400"
-          )}
+          className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+          style={{ color: "var(--tier-accent-bright)", backgroundColor: "color-mix(in srgb, var(--tier-accent) 20%, transparent)" }}
         >
           {TIER_NAMES[effectiveTier]}
         </div>
@@ -283,15 +263,14 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
               fill="none"
               strokeWidth="6"
               strokeLinecap="round"
-              className={TIER_RING_COLORS[effectiveTier]}
               strokeDasharray={circumference}
               strokeDashoffset={circumference * (1 - fillPct / 100)}
-              style={{ transition: "stroke-dashoffset 0.8s ease-out" }}
+              style={{ stroke: "var(--tier-accent-bright)", transition: "stroke-dashoffset 0.8s ease-out" }}
             />
           </svg>
           {/* Center text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold tabular-nums text-amber-400">
+            <span className="text-2xl font-bold tabular-nums text-text-gold">
               {Math.floor(fillPct)}%
             </span>
             <span className="text-[9px] text-zinc-500">CAPACITY</span>
@@ -325,7 +304,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
           )}
 
           {isFull && (
-            <div className="flex items-center gap-1.5 text-amber-400">
+            <div className="flex items-center gap-1.5 text-text-gold">
               <span className="text-xs font-bold uppercase tracking-wider animate-pulse">
                 Generator Full
               </span>
@@ -350,7 +329,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
         <div ref={rateRef} className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-zinc-500">Next Drop</div>
-          <div className="font-mono text-sm font-bold tabular-nums text-amber-400">
+          <div className="font-mono text-sm font-bold tabular-nums text-text-gold">
             {nextMin}:{String(nextSec).padStart(2, "0")}
           </div>
         </div>
@@ -368,6 +347,13 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
           >
             {isFull ? "CLAIM — GENERATOR FULL!" : `CLAIM ${formatNumber(pendingNovi, "compact")} NOVI`}
           </TxButton>
+        ) : isFull ? (
+          <div className="flex w-full max-w-xs flex-col items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/20 py-3 text-center">
+            <span className="text-sm font-bold uppercase tracking-wider text-text-gold">Generator Full</span>
+            <span className="text-xs text-amber-600">
+              {displayNovi.toLocaleString()} / {maxCap.toLocaleString()} cap
+            </span>
+          </div>
         ) : (
           <div className="flex w-full max-w-xs flex-col items-center gap-1 rounded-lg border border-zinc-800 bg-surface py-3 text-center">
             <span className="text-sm text-zinc-500">Generating...</span>

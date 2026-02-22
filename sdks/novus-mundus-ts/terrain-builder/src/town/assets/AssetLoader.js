@@ -436,8 +436,8 @@ export class AssetLoader {
     const controller = new AbortController();
     this._abortControllers.set(cacheKey, controller);
 
-    // Load
-    const promise = this._loadByType(filePath, fileType, controller.signal)
+    // Load with single retry on transient failures
+    const promise = this._loadWithRetry(filePath, fileType, controller.signal, 1)
       .then((asset) => {
         if (controller.signal.aborted) return null;
 
@@ -445,6 +445,7 @@ export class AssetLoader {
         const sizeBytes = this._estimateSize(asset, fileType);
         this._cache.set(cacheKey, asset, sizeBytes);
         this._abortControllers.delete(cacheKey);
+        this._assets.delete(cacheKey);
         return asset;
       })
       .catch((err) => {
@@ -452,6 +453,7 @@ export class AssetLoader {
 
         entry.state = STATE_ERROR;
         this._abortControllers.delete(cacheKey);
+        this._assets.delete(cacheKey);
         console.warn(`[AssetLoader] Failed to load ${category}/${assetId}:`, err.message);
         return null;
       });
@@ -783,6 +785,31 @@ export class AssetLoader {
       default:
         return this._loadTexture(path, signal);
     }
+  }
+
+  /**
+   * Load an asset with retry logic for transient failures.
+   * @param {string} path
+   * @param {string} type
+   * @param {AbortSignal} signal
+   * @param {number} maxRetries - Number of retries (0 = no retry)
+   * @returns {Promise<object>}
+   */
+  async _loadWithRetry(path, type, signal, maxRetries) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      try {
+        return await this._loadByType(path, type, signal);
+      } catch (err) {
+        lastError = err;
+        if (err.name === 'AbortError') throw err;
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1)));
+        }
+      }
+    }
+    throw lastError;
   }
 
   /**

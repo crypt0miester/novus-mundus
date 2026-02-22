@@ -301,7 +301,7 @@ export function RallyTab() {
           <div className="mb-4 grid gap-3 md:grid-cols-3">
             {TARGET_TYPE.map((t, i) => (
               <button
-                key={i}
+                key={t}
                 onClick={() => setTargetType(i)}
                 className={`rounded-lg border p-3 text-center transition-all ${
                   targetType === i
@@ -314,14 +314,15 @@ export function RallyTab() {
             ))}
           </div>
           <div className="flex items-center gap-4">
-            <label className="text-sm text-text-muted">Units:</label>
-            <input
-              type="number"
-              value={units}
-              onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-              min={1}
-            />
+            <label className="text-sm text-text-muted">Units:
+              <input
+                type="number"
+                value={units}
+                onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                min={1}
+              />
+            </label>
             {units > availableUnits && availableUnits > 0 && (
               <p className="text-xs text-red-400">
                 Exceeds available units ({availableUnits.toLocaleString()})

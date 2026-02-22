@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -23,6 +24,8 @@ const BRIDGE_ARCH_SEGMENTS = 8;
 const CATMULL_SAMPLES = 12;   // samples per road edge for smooth curves
 const ROAD_BORDER_RATIO = 0.15; // fraction of width used for darker border
 const NODE_MERGE_THRESHOLD = 0.015; // distance below which road nodes are merged
+const INTERSECTION_SEGMENTS = 16; // segments for circular intersection patches
+const CAP_SEGMENTS = 8;           // segments for semicircular dead-end caps
 
 /** Road style per estate level tier. */
 const ROAD_TIERS = [
@@ -464,6 +467,202 @@ function applyRoadColors(geometry, mainColor, borderColor) {
 }
 
 // ---------------------------------------------------------------------------
+// Junction geometry: intersection discs and dead-end caps
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a flat circular disc at a road intersection.
+ * Covers the ugly gaps between converging square-ended road ribbons.
+ *
+ * @param {number} cx - Center X
+ * @param {number} cz - Center Z
+ * @param {number} cy - Center Y (terrain height + offset)
+ * @param {number} radius - Disc radius (derived from widest road at this node)
+ * @param {THREE.Color} mainColor - Road surface color for vertex coloring
+ * @returns {THREE.BufferGeometry}
+ */
+function generateIntersectionDisc(cx, cz, cy, radius, mainColor) {
+  const seg = INTERSECTION_SEGMENTS;
+  const vertCount = seg + 1; // center + ring
+  const positions = new Float32Array(vertCount * 3);
+  const uvs = new Float32Array(vertCount * 2);
+  const colors = new Float32Array(vertCount * 3);
+
+  // Center vertex
+  positions[0] = cx; positions[1] = cy; positions[2] = cz;
+  uvs[0] = 0.5; uvs[1] = 0.5;
+  colors[0] = mainColor.r; colors[1] = mainColor.g; colors[2] = mainColor.b;
+
+  // Ring vertices
+  for (let i = 0; i < seg; i++) {
+    const angle = (i / seg) * Math.PI * 2;
+    const vi = i + 1;
+    positions[vi * 3]     = cx + Math.cos(angle) * radius;
+    positions[vi * 3 + 1] = cy;
+    positions[vi * 3 + 2] = cz + Math.sin(angle) * radius;
+    uvs[vi * 2]     = 0.5 + Math.cos(angle) * 0.5;
+    uvs[vi * 2 + 1] = 0.5 + Math.sin(angle) * 0.5;
+    colors[vi * 3]     = mainColor.r;
+    colors[vi * 3 + 1] = mainColor.g;
+    colors[vi * 3 + 2] = mainColor.b;
+  }
+
+  // Triangle fan
+  const indices = [];
+  for (let i = 0; i < seg; i++) {
+    const next = ((i + 1) % seg) + 1;
+    indices.push(0, i + 1, next);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * Generate a semicircular cap at a dead-end road termination.
+ * The dome extends outward from the road endpoint in the road's direction.
+ *
+ * @param {{ x: number, y: number, z: number }} endPoint - Last path sample
+ * @param {number} dirX - Outward direction X (normalized, away from road interior)
+ * @param {number} dirZ - Outward direction Z (normalized)
+ * @param {number} width - Road width at this endpoint
+ * @param {THREE.Color} mainColor - Road surface color
+ * @returns {THREE.BufferGeometry}
+ */
+function generateRoadCap(endPoint, dirX, dirZ, width, mainColor) {
+  const seg = CAP_SEGMENTS;
+  const halfW = width * 0.5;
+  const perpX = -dirZ;
+  const perpZ = dirX;
+  const cx = endPoint.x, cy = endPoint.y, cz = endPoint.z;
+
+  const vertCount = seg + 2; // center + (seg+1) arc points
+  const positions = new Float32Array(vertCount * 3);
+  const uvs = new Float32Array(vertCount * 2);
+  const colors = new Float32Array(vertCount * 3);
+
+  // Center vertex (at the road endpoint)
+  positions[0] = cx; positions[1] = cy; positions[2] = cz;
+  uvs[0] = 0.5; uvs[1] = 0.0;
+  colors[0] = mainColor.r; colors[1] = mainColor.g; colors[2] = mainColor.b;
+
+  // Arc vertices: sweep from left edge → tip → right edge
+  // angle goes PI/2 → -PI/2 so triangle fan winds CCW (upward normal)
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const angle = (0.5 - t) * Math.PI; // PI/2 to -PI/2
+    const fwd = Math.cos(angle);  // forward (outward) component
+    const lat = Math.sin(angle);  // lateral (perpendicular) component
+
+    const vi = i + 1;
+    positions[vi * 3]     = cx + dirX * fwd * halfW + perpX * lat * halfW;
+    positions[vi * 3 + 1] = cy;
+    positions[vi * 3 + 2] = cz + dirZ * fwd * halfW + perpZ * lat * halfW;
+    uvs[vi * 2]     = t;
+    uvs[vi * 2 + 1] = 1.0;
+    colors[vi * 3]     = mainColor.r;
+    colors[vi * 3 + 1] = mainColor.g;
+    colors[vi * 3 + 2] = mainColor.b;
+  }
+
+  // Triangle fan from center to arc
+  const indices = [];
+  for (let i = 0; i < seg; i++) {
+    indices.push(0, i + 1, i + 2);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/**
+ * Normalize a 2D vector in the XZ plane.
+ */
+function normalize2d(x, z) {
+  const len = Math.sqrt(x * x + z * z);
+  if (len < 0.0001) return { x: 0, z: 1 };
+  return { x: x / len, z: z / len };
+}
+
+/**
+ * Generate intersection discs at multi-road junctions and semicircular caps
+ * at dead-end road terminations for smooth, rounded road endings.
+ *
+ * @param {Array} nodes - Road graph nodes
+ * @param {Array} edges - Road graph edges
+ * @param {Array} rawPaths - Generated road paths
+ * @param {object} sampler - Terrain height sampler
+ * @param {THREE.Color} mainColor - Main road surface color
+ * @returns {THREE.BufferGeometry[]} Array of junction geometries to merge
+ */
+function generateJunctionGeometry(nodes, edges, rawPaths, sampler, mainColor) {
+  const geos = [];
+  if (!nodes || nodes.length === 0) return geos;
+
+  // Build per-node info: max road width reaching it + endpoint directions for caps
+  const nodeInfo = nodes.map(() => ({ maxWidth: 0, endpoints: [] }));
+
+  for (const path of rawPaths) {
+    if (path.type === 'bridge') continue;
+    const edge = edges[path.edgeIndex];
+    if (!edge) continue;
+
+    const fromIdx = edge.from;
+    const toIdx = edge.to;
+    const w = path.width;
+
+    nodeInfo[fromIdx].maxWidth = Math.max(nodeInfo[fromIdx].maxWidth, w);
+    nodeInfo[toIdx].maxWidth = Math.max(nodeInfo[toIdx].maxWidth, w);
+
+    const pts = path.points;
+    if (pts.length >= 2) {
+      // "from" end: outward direction (away from road interior)
+      const fd = normalize2d(pts[0].x - pts[1].x, pts[0].z - pts[1].z);
+      nodeInfo[fromIdx].endpoints.push({ ...fd, endPoint: pts[0] });
+
+      // "to" end: outward direction
+      const td = normalize2d(
+        pts[pts.length - 1].x - pts[pts.length - 2].x,
+        pts[pts.length - 1].z - pts[pts.length - 2].z
+      );
+      nodeInfo[toIdx].endpoints.push({ ...td, endPoint: pts[pts.length - 1] });
+    }
+  }
+
+  for (let ni = 0; ni < nodes.length; ni++) {
+    const node = nodes[ni];
+    const info = nodeInfo[ni];
+    if (info.maxWidth === 0 || node.type === 'bridge') continue;
+
+    const nodeY = sampler.getHeight(node.x, node.z) + ROAD_Y_OFFSET;
+
+    if (node.connections >= 2) {
+      // Intersection disc — smooth circular patch covering gaps between roads
+      const radius = info.maxWidth * 0.5 * 1.15;
+      const disc = generateIntersectionDisc(node.x, node.z, nodeY, radius, mainColor);
+      if (disc) geos.push(disc);
+    } else if (node.connections === 1 && info.endpoints.length > 0) {
+      // Dead-end rounded cap — semicircle extending from the road's last point
+      const ep = info.endpoints[0];
+      const cap = generateRoadCap(ep.endPoint, ep.x, ep.z, info.maxWidth, mainColor);
+      if (cap) geos.push(cap);
+    }
+  }
+
+  return geos;
+}
+
+// ---------------------------------------------------------------------------
 // Bridge mesh generation
 // ---------------------------------------------------------------------------
 
@@ -653,6 +852,8 @@ export class RoadNetwork {
     this._rawPaths = null;
     this._estateLevel = 1;
     this._textures = null;
+    this._mergedRoadMesh = null;
+    this._ribbonVertexCount = 0;
   }
 
   /**
@@ -763,7 +964,8 @@ export class RoadNetwork {
     });
     this._materials.push(railMaterial);
 
-    // Generate road meshes
+    // Generate road ribbon geometries
+    const roadGeos = [];
     for (const path of rawPaths) {
       if (path.type === 'bridge') {
         // Bridge gets special geometry
@@ -773,10 +975,41 @@ export class RoadNetwork {
         const geo = generateRoadRibbonGeometry(path.points, path.width);
         if (geo) {
           applyRoadColors(geo, mainColor, borderColor);
-          const mesh = new THREE.Mesh(geo, mainMaterial);
-          mesh.receiveShadow = true;
-          mesh.renderOrder = 1;
-          this._meshGroup.add(mesh);
+          roadGeos.push(geo);
+        }
+      }
+    }
+
+    // Track ribbon vertex count so updateRoadType can distinguish
+    // ribbon vertices (6-per-sample pattern) from junction vertices (all mainColor)
+    let ribbonVertCount = 0;
+    for (const geo of roadGeos) {
+      ribbonVertCount += geo.getAttribute('position').count;
+    }
+    this._ribbonVertexCount = ribbonVertCount;
+
+    // Generate smooth intersection discs and dead-end caps
+    const junctionGeos = generateJunctionGeometry(
+      nodes, edges, rawPaths, wrappedSampler, mainColor
+    );
+
+    // Combine ribbon + junction geometries for single-draw-call merge
+    const allGeos = [...roadGeos, ...junctionGeos];
+
+    if (allGeos.length > 0) {
+      const merged = allGeos.length === 1
+        ? allGeos[0]
+        : mergeGeometries(allGeos, false);
+      if (merged) {
+        const mesh = new THREE.Mesh(merged, mainMaterial);
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 1;
+        mesh.name = 'road-ribbons-merged';
+        this._meshGroup.add(mesh);
+        this._mergedRoadMesh = mesh;
+        // Dispose individual geometries after merge (mergeGeometries creates a new buffer)
+        if (allGeos.length > 1) {
+          for (const geo of allGeos) geo.dispose();
         }
       }
     }
@@ -879,23 +1112,40 @@ export class RoadNetwork {
     const newBorderColor = new THREE.Color(style.borderColor);
     const newRoughness = newTier === 0 ? 0.95 : (newTier === 1 ? 0.80 : 0.50);
 
-    if (!this._meshGroup) return;
+    if (!this._mergedRoadMesh) return;
 
-    // Update existing road meshes
-    this._meshGroup.traverse((child) => {
-      if (!child.isMesh) return;
+    // Update material properties on the single merged road mesh
+    const mat = this._mergedRoadMesh.material;
+    mat.color.set(style.color);
+    mat.roughness = newRoughness;
+    mat.needsUpdate = true;
 
-      // Update material properties
-      if (child.material && child.material.isMeshStandardMaterial) {
-        if (child.geometry && child.geometry.getAttribute('color')) {
-          // This is a road ribbon -- update vertex colors and material
-          child.material.color.set(style.color);
-          child.material.roughness = newRoughness;
-          child.material.needsUpdate = true;
-          applyRoadColors(child.geometry, newMainColor, newBorderColor);
-        }
+    // Recolor merged vertex colors:
+    // Road ribbon vertices (first _ribbonVertexCount): 6-verts-per-sample pattern
+    // Junction vertices (rest): all main color
+    const colorAttr = this._mergedRoadMesh.geometry.getAttribute('color');
+    if (colorAttr) {
+      const arr = colorAttr.array;
+      const ribbonCount = this._ribbonVertexCount || 0;
+
+      // Road ribbon vertices: indices 0,5 per group of 6 = border; rest = main
+      for (let vi = 0; vi < ribbonCount; vi++) {
+        const mod = vi % 6;
+        const c = (mod === 0 || mod === 5) ? newBorderColor : newMainColor;
+        arr[vi * 3]     = c.r;
+        arr[vi * 3 + 1] = c.g;
+        arr[vi * 3 + 2] = c.b;
       }
-    });
+
+      // Junction vertices (discs + caps): all main color
+      for (let vi = ribbonCount; vi < colorAttr.count; vi++) {
+        arr[vi * 3]     = newMainColor.r;
+        arr[vi * 3 + 1] = newMainColor.g;
+        arr[vi * 3 + 2] = newMainColor.b;
+      }
+
+      colorAttr.needsUpdate = true;
+    }
   }
 
   /**
@@ -923,5 +1173,7 @@ export class RoadNetwork {
     this._roadSegments = null;
     this._currentTier = -1;
     this._textures = null;
+    this._mergedRoadMesh = null;
+    this._ribbonVertexCount = 0;
   }
 }

@@ -54,55 +54,55 @@ const CITIES = [
   { id: 3, name: 'Epoch Harbor', lat: 51.5074, lon: -0.1278 },
 ];
 
-/** Hero templates to create */
+/** Hero templates to create (matches CreateTemplateParams interface) */
 const HERO_TEMPLATES = [
   {
     templateId: 1,
     name: 'Warrior',
-    rarity: 0, // Common
-    heroClass: 0, // Melee
-    baseAttack: 100,
-    baseDefense: 80,
-    baseHealth: 1000,
-    baseCritBps: 500, // 5%
-    mintPriceLamports: new BN(LAMPORTS_PER_SOL / 10), // 0.1 SOL
-    maxSupply: 0, // unlimited
-    minPlayerLevel: 1,
-    requiredEventId: 0,
+    heroType: 0, // Common
+    category: 0, // Melee
+    mintCostSol: new BN(LAMPORTS_PER_SOL / 10), // 0.1 SOL
+    supplyCap: 0, // unlimited
     enabled: true,
-    metadataUri: 'https://arweave.net/warrior-metadata',
+    eventExclusive: false,
+    requiredPlayerLevel: 1,
+    meditationCityId: 0,
+    buffs: [
+      { stat: 0, baseBps: 500 }, // attack +5%
+      { stat: 1, baseBps: 300 }, // defense +3%
+    ],
   },
   {
     templateId: 2,
     name: 'Archer',
-    rarity: 0, // Common
-    heroClass: 1, // Ranged
-    baseAttack: 120,
-    baseDefense: 50,
-    baseHealth: 800,
-    baseCritBps: 800, // 8%
-    mintPriceLamports: new BN(LAMPORTS_PER_SOL / 10),
-    maxSupply: 0,
-    minPlayerLevel: 1,
-    requiredEventId: 0,
+    heroType: 0, // Common
+    category: 1, // Ranged
+    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    supplyCap: 0,
     enabled: true,
-    metadataUri: 'https://arweave.net/archer-metadata',
+    eventExclusive: false,
+    requiredPlayerLevel: 1,
+    meditationCityId: 0,
+    buffs: [
+      { stat: 0, baseBps: 800 }, // attack +8%
+      { stat: 3, baseBps: 400 }, // collection rate +4%
+    ],
   },
   {
     templateId: 3,
     name: 'Mage',
-    rarity: 0, // Common
-    heroClass: 2, // Magic
-    baseAttack: 150,
-    baseDefense: 40,
-    baseHealth: 600,
-    baseCritBps: 600, // 6%
-    mintPriceLamports: new BN(LAMPORTS_PER_SOL / 10),
-    maxSupply: 0,
-    minPlayerLevel: 1,
-    requiredEventId: 0,
+    heroType: 0, // Common
+    category: 2, // Magic
+    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    supplyCap: 0,
     enabled: true,
-    metadataUri: 'https://arweave.net/mage-metadata',
+    eventExclusive: false,
+    requiredPlayerLevel: 1,
+    meditationCityId: 0,
+    buffs: [
+      { stat: 2, baseBps: 600 }, // economy +6%
+      { stat: 0, baseBps: 400 }, // attack +4%
+    ],
   },
   {
     templateId: 4,
@@ -285,16 +285,11 @@ async function setupHeroCollection(
     return;
   }
 
-  const ix = createCreateCollectionInstruction(
-    {
-      payer: daoAuthority.publicKey,
-      daoAuthority: daoAuthority.publicKey,
-    },
-    {
-      name: 'Novus Mundus Heroes',
-      uri: 'https://arweave.net/collection-metadata',
-    }
-  );
+  const [gameEnginePda] = deriveGameEnginePda();
+  const ix = createCreateCollectionInstruction({
+    daoAuthority: daoAuthority.publicKey,
+    gameEngine: gameEnginePda,
+  });
 
   const tx = new Transaction().add(ix);
   await sendTx(connection, tx, [daoAuthority], 'CreateHeroCollection');
@@ -316,10 +311,11 @@ async function setupHeroTemplates(
       continue;
     }
 
+    const [gameEnginePda] = deriveGameEnginePda();
     const ix = createCreateTemplateInstruction(
       {
-        payer: daoAuthority.publicKey,
         daoAuthority: daoAuthority.publicKey,
+        gameEngine: gameEnginePda,
       },
       template
     );

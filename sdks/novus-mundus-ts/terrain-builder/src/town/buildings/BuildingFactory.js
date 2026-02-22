@@ -47,6 +47,40 @@ const DEFORM_AMOUNT = 0.003;
 
 const MAT_CACHE = new Map();
 
+// Shared snow uniform — all building materials reference this same object,
+// so a single value update applies everywhere instantly.
+const _snowUniform = { value: 0 };
+
+/**
+ * Inject snow accumulation into a MeshStandardMaterial via onBeforeCompile.
+ * Snow blends to white on upward-facing surfaces, scaled by uSnowAmount.
+ * Uses a single shared function reference so Three.js program caching works.
+ */
+function _onBeforeCompileSnow(shader) {
+  shader.uniforms.uSnowAmount = _snowUniform;
+
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <common>',
+    /* glsl */ `#include <common>
+    uniform float uSnowAmount;`,
+  );
+
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <dithering_fragment>',
+    /* glsl */ `
+    // Snow accumulation on upward-facing surfaces
+    if (uSnowAmount > 0.01) {
+      vec3 snowWorldN = normalize(normal * mat3(viewMatrix));
+      float snowDot = smoothstep(0.3, 0.8, snowWorldN.y);
+      float snowCov = snowDot * uSnowAmount;
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.95, 0.96, 0.98), snowCov);
+      // Snow is rough and non-metallic — slightly brighten to simulate diffuse scatter
+      gl_FragColor.rgb += snowCov * 0.05;
+    }
+    #include <dithering_fragment>`,
+  );
+}
+
 function mat(color, opts = {}) {
   const emissiveIntensity = opts.emissiveIntensity ?? 0;
   const side = opts.side ?? THREE.FrontSide;
@@ -62,6 +96,7 @@ function mat(color, opts = {}) {
     opacity: opts.opacity ?? 1,
     side,
   });
+  if (!opts.transparent) m.onBeforeCompile = _onBeforeCompileSnow;
   MAT_CACHE.set(key, m);
   return m;
 }
@@ -121,6 +156,7 @@ function pbrMat(packName, fallbackColor, opts = {}) {
     m.emissiveIntensity = opts.emissiveIntensity ?? 1.0;
   }
 
+  if (!opts.transparent) m.onBeforeCompile = _onBeforeCompileSnow;
   MAT_CACHE.set(key, m);
   return m;
 }
@@ -1931,6 +1967,16 @@ export class BuildingFactory {
   getSoundAnchors(typeId, level) {
     const key = `${typeId}-${level}`;
     return this._soundCache.get(key) || [];
+  }
+
+  // ── Snow API ──
+
+  /**
+   * Set snow accumulation amount on all building materials.
+   * @param {number} amount — 0 (no snow) to 1 (full coverage)
+   */
+  static setSnowAmount(amount) {
+    _snowUniform.value = Math.max(0, Math.min(1, amount));
   }
 
   // ── Dispose API (Phase 3) ──

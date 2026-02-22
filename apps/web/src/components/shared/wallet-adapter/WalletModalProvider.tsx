@@ -5,7 +5,7 @@ import { WalletModalContext } from "./useWalletModal";
 import type { WalletModalProps } from "./WalletModal";
 import { WalletModal } from "./WalletModal";
 
-export interface WalletModalProviderProps extends WalletModalProps {
+interface WalletModalProviderProps extends WalletModalProps {
   children: ReactNode;
 }
 

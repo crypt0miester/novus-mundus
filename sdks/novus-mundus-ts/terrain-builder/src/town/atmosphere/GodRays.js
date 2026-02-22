@@ -102,6 +102,9 @@ class GodRayOcclusionPass extends Pass {
     this.needsSwap = false;
     this.enabled = true;
 
+    // Reusable black color for scene background during occlusion
+    this._blackColor = new THREE.Color(0x000000);
+
     // Black override material for everything except the light source
     this._blackMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
@@ -138,7 +141,7 @@ class GodRayOcclusionPass extends Pass {
 
     // Override everything to black
     this.scene.overrideMaterial = this._blackMaterial;
-    this.scene.background = new THREE.Color(0x000000);
+    this.scene.background = this._blackColor;
 
     // Add the white light sphere temporarily
     this._lightSphere.visible = true;
@@ -368,7 +371,8 @@ export class GodRayPass {
 
   /** @private */
   _updateScreenPosition() {
-    const pos = this._lightWorldPos.clone();
+    if (!this._tmpProjectPos) this._tmpProjectPos = new THREE.Vector3();
+    const pos = this._tmpProjectPos.copy(this._lightWorldPos);
     pos.project(this._camera);
 
     // NDC -> UV space [0,1]
@@ -416,6 +420,9 @@ class GodRayComposerPass extends Pass {
     this._godRay = godRayPass;
     this.needsSwap = true;
     this.enabled = true;
+    // Reusable temporaries for render()
+    this._camDir = new THREE.Vector3();
+    this._toLight = new THREE.Vector3();
   }
 
   render(renderer, writeBuffer, readBuffer) {
@@ -425,9 +432,9 @@ class GodRayComposerPass extends Pass {
 
     // Check if light is behind the camera
     this._godRay._updateScreenPosition();
-    const camDir = new THREE.Vector3();
+    const camDir = this._camDir;
     this._godRay._camera.getWorldDirection(camDir);
-    const toLight = new THREE.Vector3().subVectors(
+    const toLight = this._toLight.subVectors(
       this._godRay._lightWorldPos,
       this._godRay._camera.position,
     );

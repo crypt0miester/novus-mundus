@@ -79,6 +79,8 @@ import { ENCOUNTER_ACCOUNT_BASE_SIZE } from './state/encounter';
 import { CORE_SIZE as PLAYER_CORE_SIZE } from './state/player';
 import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena';
 import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement';
+import { parseHeroTemplate, HERO_TEMPLATE_SIZE } from './state/hero';
+import type { HeroTemplateAccount } from './state/hero';
 import bs58 from 'bs58';
 import { AccountKey } from './types/enums';
 
@@ -446,7 +448,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: SHOP_ITEM_ACCOUNT_SIZE },
       ],
     });
 
@@ -479,7 +480,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: BUNDLE_ACCOUNT_SIZE },
       ],
     });
 
@@ -561,7 +561,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: TEAM_MEMBER_SLOT_SIZE },
         { memcmp: { offset: 1, bytes: team.toBase58() } },
       ],
     });
@@ -586,7 +585,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: TEAM_INVITE_ACCOUNT_SIZE },
         { memcmp: { offset: 1, bytes: team.toBase58() } },
       ],
     });
@@ -615,7 +613,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: LOOT_ACCOUNT_SIZE },
         // owner is at offset 1 (after account_key u8)
         { memcmp: { offset: 1, bytes: owner.toBase58() } },
       ],
@@ -688,7 +685,6 @@ export class NovusMundusClient {
     const keyByte = bs58.encode(Buffer.from([AccountKey.Rally]));
     const filters: Array<{ dataSize: number } | { memcmp: { offset: number; bytes: string } }> = [
       { memcmp: { offset: 0, bytes: keyByte } },
-      { dataSize: RALLY_ACCOUNT_SIZE },
       { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
     ];
 
@@ -745,7 +741,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: rpKeyByte } },
-        { dataSize: RALLY_PARTICIPANT_SIZE },
         { memcmp: { offset: 16, bytes: rallyData.creator.toBase58() } },
       ],
     });
@@ -778,7 +773,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: ARENA_PARTICIPANT_ACCOUNT_SIZE },
         { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
         // seasonId at offset 68 (1 account_key + 32 game_engine + 32 player + 3 padding)
         { memcmp: { offset: 68, bytes: bs58.encode(seasonIdBuffer) } },
@@ -805,7 +799,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: REINFORCEMENT_ACCOUNT_SIZE },
         { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
         // sender is at offset 33 (1 account_key + 32 game_engine)
         { memcmp: { offset: 33, bytes: sender.toBase58() } },
@@ -832,7 +825,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: REINFORCEMENT_ACCOUNT_SIZE },
         { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
         // destination is at offset 65 (1 account_key + 32 game_engine + 32 sender)
         { memcmp: { offset: 65, bytes: recipient.toBase58() } },
@@ -861,7 +853,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: PLAYER_CORE_SIZE },
         { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
       ],
     });
@@ -887,7 +878,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: EXPEDITION_ACCOUNT_SIZE },
       ],
     });
 
@@ -938,7 +928,6 @@ export class NovusMundusClient {
       commitment: this.commitment,
       filters: [
         { memcmp: { offset: 0, bytes: keyByte } },
-        { dataSize: TEAM_ACCOUNT_SIZE },
         { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
       ],
     });
@@ -956,6 +945,28 @@ export class NovusMundusClient {
     }
 
     return results;
+  }
+
+  /**
+   * Fetch all hero templates.
+   */
+  async fetchAllHeroTemplates(): Promise<BulkFetchResult<HeroTemplateAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.HeroTemplate]));
+
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { dataSize: HERO_TEMPLATE_SIZE },
+      ],
+    });
+
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseHeroTemplate(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<HeroTemplateAccount> => r !== null);
   }
 
   // ============================================================

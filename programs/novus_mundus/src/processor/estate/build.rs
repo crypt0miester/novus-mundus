@@ -95,10 +95,10 @@ pub fn process(
 
         // 9. Calculate cost (base cost for level 1)
         let base_cost = match building_type.tier() {
-            1 => 10_000u64,    // Tier 1: 10k NOVI
-            2 => 50_000u64,    // Tier 2: 50k NOVI
-            3 => 200_000u64,   // Tier 3: 200k NOVI
-            _ => 10_000u64,
+            1 => 10_000u64,    // Tier 1: 1k NOVI
+            2 => 20_000u64,    // Tier 2: 2k NOVI
+            3 => 30_000u64,   // Tier 3: 3k NOVI
+            _ => 50_000u64,
         };
 
         // 10. Check player has enough balance

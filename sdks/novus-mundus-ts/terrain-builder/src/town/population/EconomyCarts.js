@@ -334,6 +334,7 @@ export class EconomyCartSystem {
     geo.translate(0, CART_BODY_H * 0.5 + WHEEL_RADIUS, 0);
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.1 });
     const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.count = 0;
     mesh.frustumCulled = false;
     mesh.castShadow = true;
@@ -346,6 +347,7 @@ export class EconomyCartSystem {
     const geo = new THREE.CircleGeometry(WHEEL_RADIUS, WHEEL_SEGMENTS);
     const mat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9, metalness: 0.0 });
     const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.count = 0;
     mesh.frustumCulled = false;
     mesh.castShadow = false;
@@ -360,6 +362,7 @@ export class EconomyCartSystem {
     geo.translate(CART_BODY_W * 0.5 + HANDLE_LENGTH * 0.5, WHEEL_RADIUS + CART_BODY_H * 0.3, 0);
     const mat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.9, metalness: 0.0 });
     const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.count = 0;
     mesh.frustumCulled = false;
     mesh.castShadow = false;
@@ -372,6 +375,7 @@ export class EconomyCartSystem {
     geo.translate(0, CART_BODY_H + WHEEL_RADIUS + CART_BODY_H * 0.25, 0);
     const mat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.15 });
     const mesh = new THREE.InstancedMesh(geo, mat, maxCount);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.count = 0;
     mesh.frustumCulled = false;
     mesh.castShadow = false;

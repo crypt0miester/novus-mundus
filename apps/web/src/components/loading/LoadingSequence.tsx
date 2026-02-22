@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import anime from "animejs/lib/anime.es.js";
 
 interface LoadingStep {
@@ -10,15 +10,25 @@ interface LoadingStep {
 
 interface LoadingSequenceProps {
   steps: readonly LoadingStep[];
+  screen?: keyof typeof TIERED;
   completedKeys: Set<string>;
   children: React.ReactNode;
 }
 
 export function LoadingSequence({
-  steps,
+  steps: initialSteps,
+  screen,
   completedKeys,
   children,
 }: LoadingSequenceProps) {
+  // Upgrade to tier-aware labels after hydration (SSR always gets tier-0)
+  const [steps, setSteps] = useState<readonly LoadingStep[]>(initialSteps);
+  useEffect(() => {
+    if (screen && TIERED[screen]) {
+      setSteps(getTieredSteps(screen, TIERED[screen]));
+    }
+  }, [screen]);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<(HTMLDivElement | null)[]>([]);
   const allDone = steps.every((s) => completedKeys.has(s.key));
@@ -170,15 +180,21 @@ const TIERED: Record<string, readonly TieredStep[]> = {
 
 import { getCachedTier } from "@/lib/hooks/useTierTheme";
 
-/** Get tier-aware loading steps for a screen */
+/** Get loading steps for a screen. Always returns tier-0 labels to avoid hydration mismatch.
+ *  LoadingSequence upgrades to the cached tier after mount. */
 export function getLoadingSteps(screen: keyof typeof TIERED): LoadingStep[] {
+  return TIERED[screen].map((s) => ({ key: s.key, label: s.labels[0] }));
+}
+
+/** Resolve tier-aware labels (client-only, post-hydration) */
+function getTieredSteps(screen: string, steps: readonly TieredStep[]): LoadingStep[] {
   const tier = getCachedTier();
   const idx = Math.min(Math.max(tier, 0), 4);
-  return TIERED[screen].map((s) => ({ key: s.key, label: s.labels[idx] }));
+  return steps.map((s) => ({ key: s.key, label: s.labels[idx] }));
 }
 
 /** Static steps (bronze tier) for backward compatibility */
-export const LOADING_STEPS = Object.fromEntries(
+const LOADING_STEPS = Object.fromEntries(
   Object.entries(TIERED).map(([screen, steps]) => [
     screen,
     steps.map((s) => ({ key: s.key, label: s.labels[1] })),

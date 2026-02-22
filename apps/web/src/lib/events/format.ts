@@ -6,13 +6,15 @@
  */
 
 import type { NovusMundusEvent } from "novus-mundus-sdk";
-import type BN from "bn.js";
 
-function bn(v: BN | number): number {
-  return typeof v === "number" ? v : v.toNumber();
+function bn(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "bigint") return Number(v);
+  if (v && typeof (v as any).toNumber === "function") return (v as any).toNumber();
+  return Number(v) || 0;
 }
 
-function fmt(v: BN | number): string {
+function fmt(v: unknown): string {
   return bn(v).toLocaleString();
 }
 

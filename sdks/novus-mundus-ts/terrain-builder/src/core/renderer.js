@@ -55,7 +55,7 @@ export class TerrainRenderer {
     this._camera.position.set(0, 0.8, 2.2);
 
     // ── WebGL Renderer ──
-    this._renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this._renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', stencil: false });
     this._renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this._renderer.domElement);

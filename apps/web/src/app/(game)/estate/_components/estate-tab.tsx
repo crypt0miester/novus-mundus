@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -9,6 +9,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { DetailPanel } from "@/components/shared/DetailPanel";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
@@ -18,16 +19,18 @@ import {
   deriveEstatePda,
   createCreateEstateInstruction,
   createBuildBuildingInstruction,
+  createUpgradeBuildingInstruction,
   createBuildingSpeedupInstruction,
+  createCompleteBuildingInstruction,
   createDailyActivityInstruction,
-  createRecoverTroopsInstruction,
-  createConvertMaterialsInstruction,
+  createBuyPlotInstruction,
   calculateUpgradeCost,
-  calculateRecoveryCost,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
   isTraveling,
+  findBuilding,
+  BuildingStatus,
 } from "@/lib/sdk";
 
 const BUILDING_TYPES = [
@@ -52,6 +55,174 @@ const BUILDING_TYPES = [
   { id: 18, name: "Infirmary", desc: "Unit recovery", tier: 3 },
 ];
 
+/* ─── Detail panel (shared between desktop sidebar + mobile bottom sheet) ─── */
+
+function BuildingDetailPanel({
+  selectedBuilding,
+  speedupBuilding,
+  buildingInfo,
+  buildCostInfo,
+  upgradeCostPreview,
+  constructingBuildings,
+  playerData,
+  onBuild,
+  onBuildAndSpeedup,
+  onCompleteBuilding,
+  onBuildingSpeedup,
+  onClose,
+}: {
+  selectedBuilding: number | null;
+  speedupBuilding: number | null;
+  buildingInfo: any[];
+  buildCostInfo: { baseCost: number; baseTimeHours: number; tier: number } | null;
+  upgradeCostPreview: { level: number; cost: number }[] | null;
+  constructingBuildings: any[];
+  playerData: any;
+  onBuild: (rp: (p: TxPhase) => void) => Promise<string>;
+  onBuildAndSpeedup: (tier: number, rp: (p: TxPhase) => void) => Promise<string>;
+  onCompleteBuilding: (id: number, rp: (p: TxPhase) => void) => Promise<string>;
+  onBuildingSpeedup: (tier: number, rp: (p: TxPhase) => void) => Promise<string>;
+  onClose: () => void;
+}) {
+  const speedupTarget = speedupBuilding != null
+    ? constructingBuildings.find((b) => b.id === speedupBuilding)
+    : null;
+
+  const hasContent = selectedBuilding != null || speedupTarget != null;
+  if (!hasContent) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-xs text-text-muted">Select a building to view details</p>
+      </div>
+    );
+  }
+
+  const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {speedupTarget ? `Speed Up` : "Building Details"}
+        </h3>
+        <button
+          onClick={onClose}
+          className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* NOVI Balance */}
+      {(() => {
+        const cost = buildCostInfo?.baseCost ?? 0;
+        const hasEnough = noviBalance >= cost;
+        const deficit = cost - noviBalance;
+        return (
+          <div className={`rounded-lg px-3 py-2 text-xs ${hasEnough ? "bg-surface/60" : "bg-red-900/20 border border-red-800/40"}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">NOVI Balance</span>
+              <span className={`font-mono tabular-nums font-semibold ${hasEnough ? "text-text-gold" : "text-red-400"}`}>
+                {noviBalance.toLocaleString()}
+              </span>
+            </div>
+            {selectedBuilding != null && cost > 0 && (
+              <div className="mt-0.5 flex items-center justify-between">
+                <span className="text-zinc-500">Cost</span>
+                <span className={`font-mono tabular-nums ${hasEnough ? "text-text-muted" : "text-red-400"}`}>
+                  −{cost.toLocaleString()}
+                </span>
+              </div>
+            )}
+            {!hasEnough && cost > 0 && (
+              <div className="mt-1 text-[10px] text-red-400">
+                Need {deficit.toLocaleString()} more NOVI
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Speedup: show Hasten / Rush via shared SpeedupPanel */}
+      {speedupTarget && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            {speedupTarget.name}
+          </h3>
+          {speedupTarget.ready ? (
+            <TxButton
+              onClick={(rp) => onCompleteBuilding(speedupTarget.id, rp)}
+              className="px-6"
+            >
+              Complete {speedupTarget.name}
+            </TxButton>
+          ) : (
+            <SpeedupPanel
+              visible
+              inline
+              remainingSeconds={speedupTarget.remainingSec}
+              onSpeedup={onBuildingSpeedup}
+              gemBalance={gemBalance}
+              gemsPerMinute={1}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Build / Upgrade detail */}
+      {selectedBuilding != null && buildCostInfo && (
+        <div>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            {buildingInfo[selectedBuilding]?.status === "active" ? "Upgrade" : "Build"} — {BUILDING_TYPES[selectedBuilding]?.name}
+          </h3>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <div className="text-xs text-text-muted">NOVI Cost</div>
+              <div className="text-sm font-semibold text-text-gold">
+                {buildCostInfo.baseCost.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-text-muted">Build Time</div>
+              <div className="text-sm font-semibold text-text-secondary">
+                {buildCostInfo.baseTimeHours}h
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-text-muted">Tier</div>
+              <div className="text-sm font-semibold text-text-secondary">
+                T{buildCostInfo.tier}
+              </div>
+            </div>
+          </div>
+          {upgradeCostPreview && (
+            <div className="mb-4">
+              <div className="text-[11px] text-text-muted mb-1">Upgrade costs:</div>
+              <div className="flex flex-wrap gap-2">
+                {upgradeCostPreview.map((u) => (
+                  <div key={u.level} className="rounded border border-border-default px-2 py-1 text-center">
+                    <div className="text-[11px] text-text-muted">Lv {u.level} &rarr; {u.level + 1}</div>
+                    <div className="text-xs font-semibold text-text-gold">{u.cost.toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <TxButton onClick={onBuild} className="px-6 w-full">
+              {buildingInfo[selectedBuilding]?.status === "active" ? "Upgrade" : "Build"} {BUILDING_TYPES[selectedBuilding]?.name}
+            </TxButton>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Main Tab ─── */
+
 export function EstateTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
   const { data: estateData, isSuccess: estateReady } = useEstate();
@@ -62,16 +233,12 @@ export function EstateTab() {
 
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
   const [speedupBuilding, setSpeedupBuilding] = useState<number | null>(null);
-  const [recoverUnitType, setRecoverUnitType] = useState(0);
-  const [recoverAmount, setRecoverAmount] = useState(1);
-  const [convertFromTier, setConvertFromTier] = useState(0);
-  const [convertAmount, setConvertAmount] = useState(1);
-
   const player = playerData?.account;
   const estate = estateData?.account;
 
-  // Time-of-day indicator
-  const now = Math.floor(Date.now() / 1000);
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
+  const now = tick;
+
   const timeInfo = useMemo(() => {
     if (!player) return null;
     const longitude = player.currentLong ?? 0;
@@ -82,31 +249,18 @@ export function EstateTab() {
     };
   }, [player, now]);
 
-  // Traveling warning
   const travelWarning = useMemo(() => {
     if (!player) return null;
     return isTraveling(player) ? "Cannot build while traveling" : null;
   }, [player]);
 
-  // Build cost for newly selected building (level 0 -> 1)
-  const buildCostInfo = useMemo(() => {
-    if (selectedBuilding == null) return null;
-    const building = BUILDING_TYPES[selectedBuilding];
-    if (!building) return null;
-    const tier = building.tier;
-    const baseCost = tier === 1 ? 10_000 : tier === 2 ? 50_000 : 200_000;
-    const baseTimeHours = tier === 1 ? 4 : tier === 2 ? 12 : 24;
-    return { baseCost, baseTimeHours, tier };
-  }, [selectedBuilding]);
 
-  // Upgrade cost preview (simulated for levels 1-5)
   const upgradeCostPreview = useMemo(() => {
     if (selectedBuilding == null) return null;
     const building = BUILDING_TYPES[selectedBuilding];
     if (!building) return null;
     const tier = building.tier;
-    const baseCost = tier === 1 ? 10_000 : tier === 2 ? 50_000 : 200_000;
-    // Show cost for levels 1->2, 2->3, 3->4 using phi-squared scaling
+    const baseCost = tier === 1 ? 1_000 : tier === 2 ? 2_000 : 3_000;
     const levels = [1, 2, 3, 4, 5];
     return levels.map((lvl) => ({
       level: lvl,
@@ -114,63 +268,39 @@ export function EstateTab() {
     }));
   }, [selectedBuilding]);
 
-  const WOUNDED_UNITS = [
-    { type: 0, label: "Infantry", field: "woundedDef1" as const },
-    { type: 1, label: "Cavalry", field: "woundedDef2" as const },
-    { type: 2, label: "Siege", field: "woundedDef3" as const },
-    { type: 3, label: "Laborer", field: "woundedOp1" as const },
-    { type: 4, label: "Artisan", field: "woundedOp2" as const },
-    { type: 5, label: "Engineer", field: "woundedOp3" as const },
-  ];
-
-  const woundedCounts = useMemo(() => {
-    if (!estate) return WOUNDED_UNITS.map((u) => ({ ...u, count: 0 }));
-    return WOUNDED_UNITS.map((u) => ({ ...u, count: estate[u.field] ?? 0 }));
-  }, [estate]);
-
-  const totalWounded = woundedCounts.reduce((sum, u) => sum + u.count, 0);
-
-  const selectedWoundedMax = woundedCounts[recoverUnitType]?.count ?? 0;
-
-  const recoveryCostPreview = useMemo(() => {
-    if (!geData?.account || recoverAmount <= 0) return null;
-    const ec = geData.account.economicConfig;
-    const baseCosts = [
-      ec.defensiveUnit1Cost, ec.defensiveUnit2Cost, ec.defensiveUnit3Cost,
-      ec.operativeUnit1Cost, ec.operativeUnit2Cost, ec.operativeUnit3Cost,
-    ];
-    const baseCost = baseCosts[recoverUnitType]?.toNumber() ?? 0;
-    // Infirmary level discount: 25 bps per level
-    let infirmaryLevelDiscount = 0;
-    if (estate) {
-      const infirmaryBuilding = estate.buildings.find((b: any) => b.buildingType === 18 && b.level > 0);
-      if (infirmaryBuilding) {
-        infirmaryLevelDiscount = infirmaryBuilding.level * 25;
+  const buildingInfo = useMemo(() => {
+    if (!estate) return BUILDING_TYPES.map((b) => ({ ...b, slot: null as any, status: "unbuilt" as const, level: 0, constructing: false, remainingSec: 0, ready: false }));
+    return BUILDING_TYPES.map((b) => {
+      const slot = findBuilding(estate, b.id);
+      if (!slot || slot.status === BuildingStatus.Empty) {
+        return { ...b, slot: null, status: "unbuilt" as const, level: 0, constructing: false, remainingSec: 0, ready: false };
       }
-    }
-    const dailyBps = estate?.infirmaryRecoveryDailyBps ?? 0;
-    return calculateRecoveryCost(baseCost, infirmaryLevelDiscount, dailyBps, recoverAmount);
-  }, [geData, recoverUnitType, recoverAmount, estate]);
+      const constructing = slot.status === BuildingStatus.Building || slot.status === BuildingStatus.Upgrading;
+      const endsAt = slot.constructionEnds?.toNumber?.() ?? 0;
+      const remainingSec = constructing ? Math.max(0, endsAt - tick) : 0;
+      const ready = constructing && remainingSec === 0;
+      const statusLabel = slot.status === BuildingStatus.Active ? "active" as const
+        : slot.status === BuildingStatus.Building ? "building" as const
+        : "upgrading" as const;
+      return { ...b, slot, status: statusLabel, level: slot.level, constructing, remainingSec, ready };
+    });
+  }, [estate, tick]);
 
-  const handleRecoverTroops = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    if (recoverAmount <= 0 || recoverAmount > selectedWoundedMax) {
-      throw new Error("Invalid recovery amount");
-    }
-    const ge = client.gameEngine;
-    const ix = createRecoverTroopsInstruction(
-      { owner: publicKey, gameEngine: ge },
-      { unitType: recoverUnitType, amount: recoverAmount }
-    );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["estate"], ["player"]],
-      successMessage: `Recovered ${recoverAmount} ${WOUNDED_UNITS[recoverUnitType]?.label}!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
+  const buildCostInfo = useMemo(() => {
+    if (selectedBuilding == null) return null;
+    const building = BUILDING_TYPES[selectedBuilding];
+    if (!building) return null;
+    const tier = building.tier;
+    const baseCost = tier === 1 ? 1_000 : tier === 2 ? 2_000 : 3_000;
+    const baseTimeHours = tier === 1 ? 4 : tier === 2 ? 12 : 24;
+    // For upgrades, calculate actual cost based on current level (matches on-chain φ² scaling)
+    const info = buildingInfo[selectedBuilding];
+    const isUpgrade = info?.status === "active";
+    const actualCost = isUpgrade ? calculateUpgradeCost(baseCost, info.level, 2.618) : baseCost;
+    return { baseCost: actualCost, baseTimeHours, tier };
+  }, [selectedBuilding, buildingInfo]);
 
-  const handleBuildingSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+  const handleBuildingSpeedup = useCallback(async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || speedupBuilding == null) throw new Error("No building selected");
     const geKey = client.gameEngine;
     const ix = createBuildingSpeedupInstruction(
@@ -179,11 +309,24 @@ export function EstateTab() {
     );
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["estate"], ["player"]],
       successMessage: `${BUILDING_TYPES[speedupBuilding]?.name} construction sped up!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
-  };
+  }, [publicKey, speedupBuilding, client, transact]);
+
+  const handleCompleteBuilding = useCallback(async (buildingType: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const geKey = client.gameEngine;
+    const ix = createCompleteBuildingInstruction(
+      { owner: publicKey, gameEngine: geKey },
+      { buildingType },
+    );
+    return transact.mutateAsync({
+      instructions: [ix],
+      successMessage: `${BUILDING_TYPES[buildingType]?.name} construction complete!`,
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  }, [publicKey, client, transact]);
 
   const handleCreateEstate = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -196,49 +339,60 @@ export function EstateTab() {
     );
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["estate"], ["player"]],
       successMessage: "Estate created!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
-  const handleBuild = async (reportPhase: (p: TxPhase) => void) => {
+  const handleBuildOrUpgrade = useCallback(async (reportPhase: (p: TxPhase) => void) => {
     if (selectedBuilding == null || !publicKey) throw new Error("No building selected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [estatePda] = deriveEstatePda(playerPda);
-    const ix = createBuildBuildingInstruction(
-      { player: playerPda, estate: estatePda, gameEngine: ge, owner: publicKey },
-      { buildingType: selectedBuilding, slot: 0 }
-    );
+    const info = buildingInfo[selectedBuilding];
+    const isUpgrade = info?.status === "active";
+
+    const ix = isUpgrade
+      ? createUpgradeBuildingInstruction(
+          { owner: publicKey, gameEngine: ge },
+          { buildingType: selectedBuilding }
+        )
+      : createBuildBuildingInstruction(
+          { player: derivePlayerPda(ge, publicKey)[0], estate: deriveEstatePda(derivePlayerPda(ge, publicKey)[0])[0], gameEngine: ge, owner: publicKey },
+          { buildingType: selectedBuilding, slot: 0 }
+        );
+
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["estate"], ["player"]],
-      successMessage: `Building ${BUILDING_TYPES[selectedBuilding]?.name}!`,
+      successMessage: `${isUpgrade ? "Upgrading" : "Building"} ${BUILDING_TYPES[selectedBuilding]?.name}!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
-  };
+  }, [selectedBuilding, publicKey, client, transact, buildingInfo]);
 
-  const handleBuildAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+  const handleBuildOrUpgradeAndSpeedup = useCallback(async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (selectedBuilding == null || !publicKey) throw new Error("No building selected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [estatePda] = deriveEstatePda(playerPda);
-    const buildIx = createBuildBuildingInstruction(
-      { player: playerPda, estate: estatePda, gameEngine: ge, owner: publicKey },
-      { buildingType: selectedBuilding, slot: 0 }
-    );
+    const info = buildingInfo[selectedBuilding];
+    const isUpgrade = info?.status === "active";
+
+    const mainIx = isUpgrade
+      ? createUpgradeBuildingInstruction(
+          { owner: publicKey, gameEngine: ge },
+          { buildingType: selectedBuilding }
+        )
+      : createBuildBuildingInstruction(
+          { player: derivePlayerPda(ge, publicKey)[0], estate: deriveEstatePda(derivePlayerPda(ge, publicKey)[0])[0], gameEngine: ge, owner: publicKey },
+          { buildingType: selectedBuilding, slot: 0 }
+        );
+
     const speedupIx = createBuildingSpeedupInstruction(
       { owner: publicKey, gameEngine: ge },
       { buildingType: selectedBuilding, speedupTier: tier as 1 | 2 },
     );
     return transact.mutateAsync({
-      instructions: [buildIx, speedupIx],
-      invalidateKeys: [["estate"], ["player"]],
-      successMessage: `Building ${BUILDING_TYPES[selectedBuilding]?.name} (sped up)!`,
+      instructions: [mainIx, speedupIx],
+      successMessage: `${isUpgrade ? "Upgrading" : "Building"} ${BUILDING_TYPES[selectedBuilding]?.name} (sped up)!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
-  };
+  }, [selectedBuilding, publicKey, client, transact, buildingInfo]);
 
   const handleDailyActivity = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -251,36 +405,72 @@ export function EstateTab() {
     );
     return transact.mutateAsync({
       instructions: [ix],
-      invalidateKeys: [["estate"], ["player"]],
       successMessage: "Daily activity claimed!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
-  const MATERIAL_TIERS = [
-    { id: 0, name: "Common", field: "commonMaterials" as const },
-    { id: 1, name: "Uncommon", field: "uncommonMaterials" as const },
-    { id: 2, name: "Rare", field: "rareMaterials" as const },
-    { id: 3, name: "Epic", field: "epicMaterials" as const },
-  ];
+  // Plot costs: φ² scaling from 100k base
+  const PLOT_COSTS = [0, 10_000, 26_200, 68_500, 179_400]; // index = plotsOwned (0 unused, costs for plots 2-5)
+  const plotsOwned = estate?.plotsOwned ?? 1;
+  const maxSlots = plotsOwned * 4;
+  const canBuyPlot = plotsOwned < 5;
+  const nextPlotCost = canBuyPlot ? PLOT_COSTS[plotsOwned] ?? 0 : 0;
 
-  const handleConvertMaterials = async (reportPhase: (p: TxPhase) => void) => {
+  const handleBuyPlot = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createConvertMaterialsInstruction(
-      { owner: publicKey, gameEngine: ge },
-      { fromTier: convertFromTier, conversions: convertAmount },
-    );
+    const ix = createBuyPlotInstruction({ owner: publicKey, gameEngine: ge });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["estate"], ["player"]],
-      successMessage: `Converted ${convertAmount * 100} ${MATERIAL_TIERS[convertFromTier]?.name} to ${convertAmount * 20} ${MATERIAL_TIERS[convertFromTier + 1]?.name}!`,
+      successMessage: `Purchased plot ${plotsOwned + 1}! +4 building slots unlocked.`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
+  const constructingBuildings = buildingInfo.filter((b) => b.constructing);
+  const activeBuildings = buildingInfo.filter((b) => b.status === "active");
+  const unbuiltBuildings = buildingInfo.filter((b) => b.status === "unbuilt");
+
+  useEffect(() => {
+    if (constructingBuildings.length === 0) return;
+    const interval = setInterval(() => {
+      setTick(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [constructingBuildings.length]);
+
+  useEffect(() => {
+    if (speedupBuilding != null && !constructingBuildings.some((b) => b.id === speedupBuilding)) {
+      setSpeedupBuilding(null);
+    }
+  }, [speedupBuilding, constructingBuildings]);
+
+  const closePanel = useCallback(() => {
+    setSelectedBuilding(null);
+    setSpeedupBuilding(null);
+  }, []);
+
+  const panelOpen = selectedBuilding != null || (speedupBuilding != null && constructingBuildings.some((b) => b.id === speedupBuilding));
+
+  const detailPanelProps = {
+    selectedBuilding,
+    speedupBuilding,
+    buildingInfo,
+    buildCostInfo,
+    upgradeCostPreview,
+    constructingBuildings,
+    playerData,
+    onBuild: handleBuildOrUpgrade,
+    onBuildAndSpeedup: handleBuildOrUpgradeAndSpeedup,
+    onCompleteBuilding: handleCompleteBuilding,
+    onBuildingSpeedup: handleBuildingSpeedup,
+    onClose: closePanel,
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-3">
       {travelWarning && (
         <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-sm text-amber-300">
           {travelWarning}
@@ -291,351 +481,216 @@ export function EstateTab() {
       {!estateData?.exists && estateReady && (
         <div className="card accent-border text-center">
           <p className="mb-4 text-text-secondary">
-            You haven't established your estate yet. Build your domain!
+            You haven&apos;t established your estate yet. Build your domain!
           </p>
           <TxButton onClick={handleCreateEstate}>Establish Estate</TxButton>
         </div>
       )}
 
-      {/* Estate exists */}
+      {/* Estate exists — 2-column on desktop */}
       {estateData?.exists && (
         <>
-          {/* Estate Overview */}
-          <div className="card accent-border">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {/* Top bar */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-6 text-sm">
               <div>
-                <div className="text-xs text-text-muted">Status</div>
-                <div className="text-sm font-semibold text-text-gold">Active</div>
+                <span className="text-text-muted">Level </span>
+                <span className="font-semibold text-text-primary">{estate?.estateLevel ?? 0}</span>
+              </div>
+              <div>
+                <span className="text-text-muted">Plots </span>
+                <span className="font-semibold text-text-primary">{plotsOwned}</span>
+                <span className="text-text-muted">/5</span>
+              </div>
+              <div>
+                <span className="text-text-muted">Slots </span>
+                <span className="font-semibold text-text-primary">{activeBuildings.length + constructingBuildings.length}</span>
+                <span className="text-text-muted">/{maxSlots}</span>
               </div>
               {timeInfo && (
                 <div>
-                  <div className="text-xs text-text-muted">Time of Day</div>
-                  <div className="text-sm font-semibold text-text-secondary">{timeInfo.name}</div>
-                  {timeInfo.mult > 1 && (
-                    <div className="text-[11px] text-green-400">
-                      Cost bonus: {((timeInfo.mult - 1) * 100).toFixed(0)}% off
-                    </div>
-                  )}
-                  {timeInfo.mult < 1 && (
-                    <div className="text-[11px] text-amber-400">
-                      Cost premium: +{((1 - timeInfo.mult) / timeInfo.mult * 100).toFixed(0)}%
-                    </div>
+                  <span className="text-text-muted">{timeInfo.name}</span>
+                  {timeInfo.mult !== 1 && (
+                    <span className={`ml-1 text-xs ${timeInfo.mult > 1 ? "text-green-600" : "text-amber-600"}`}>
+                      ({timeInfo.mult > 1 ? `-${((timeInfo.mult - 1) * 100).toFixed(0)}%` : `+${((1 - timeInfo.mult) / timeInfo.mult * 100).toFixed(0)}%`} cost)
+                    </span>
                   )}
                 </div>
               )}
-              <div>
-                <TxButton onClick={handleDailyActivity} variant="secondary" className="text-xs w-full">
-                  Daily Claim
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              {canBuyPlot && (
+                <TxButton onClick={handleBuyPlot} variant="secondary" className="text-xs px-4">
+                  Buy Plot ({(nextPlotCost / 1000).toFixed(0)}k NOVI)
                 </TxButton>
-              </div>
-            </div>
-          </div>
-
-          {/* Building Grid */}
-          <div>
-            <h2 className="mb-3 text-lg font-semibold text-text-primary">Buildings</h2>
-            <div className="grid gap-2 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-              {BUILDING_TYPES.map((building) => (
-                <button
-                  key={building.id}
-                  onClick={() => setSelectedBuilding(building.id)}
-                  className={`rounded-lg border p-3 text-left transition-all ${
-                    selectedBuilding === building.id
-                      ? "border-amber-600 bg-amber-900/20"
-                      : "border-zinc-800 hover:border-zinc-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-text-primary">{building.name}</div>
-                    <span className={`text-[11px] ${
-                      building.tier === 3 ? "text-amber-400" : building.tier === 2 ? "text-text-gold" : "text-text-muted"
-                    }`}>
-                      T{building.tier}
-                    </span>
-                  </div>
-                  <div className="text-xs text-text-muted">{building.desc}</div>
-                  <div className="text-[11px] text-text-muted mt-1">
-                    {building.tier === 1 ? "10k" : building.tier === 2 ? "50k" : "200k"} NOVI
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {selectedBuilding != null && buildCostInfo && (
-            <div className="card">
-              {/* Build cost preview */}
-              <div className="mb-4 space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  Build Cost — {BUILDING_TYPES[selectedBuilding]?.name}
-                </h3>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  <div>
-                    <div className="text-xs text-text-muted">NOVI Cost</div>
-                    <div className="text-sm font-semibold text-text-gold">
-                      {buildCostInfo.baseCost.toLocaleString()} NOVI
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-text-muted">Build Time</div>
-                    <div className="text-sm font-semibold text-text-secondary">
-                      {buildCostInfo.baseTimeHours}h
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-text-muted">Tier</div>
-                    <div className={`text-sm font-semibold ${
-                      buildCostInfo.tier === 3 ? "text-amber-400" : buildCostInfo.tier === 2 ? "text-text-gold" : "text-text-secondary"
-                    }`}>
-                      Tier {buildCostInfo.tier}
-                    </div>
-                  </div>
-                </div>
-                {/* Upgrade cost preview */}
-                {upgradeCostPreview && (
-                  <div className="mt-3">
-                    <div className="text-[11px] text-text-muted mb-1">Upgrade Cost Preview (next levels):</div>
-                    <div className="flex flex-wrap gap-2">
-                      {upgradeCostPreview.map((u) => (
-                        <div key={u.level} className="rounded border border-zinc-800 px-2 py-1 text-center">
-                          <div className="text-[11px] text-text-muted">Lv {u.level} &rarr; {u.level + 1}</div>
-                          <div className="text-xs font-semibold text-text-gold">{u.cost.toLocaleString()}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-1 text-[11px] text-text-muted">
-                      Cost scales by phi-squared (2.618x) per level
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <TxButton onClick={handleBuild} className="px-6">
-                  Build {BUILDING_TYPES[selectedBuilding]?.name}
-                </TxButton>
-                <TxButton
-                  onClick={(rp) => handleBuildAndSpeedup(1, rp)}
-                  variant="secondary"
-                  className="text-xs"
-                >
-                  Build &amp; Hasten (50% faster, costs gems)
-                </TxButton>
-                <TxButton
-                  onClick={(rp) => handleBuildAndSpeedup(2, rp)}
-                  variant="secondary"
-                  className="text-xs"
-                >
-                  Build &amp; Rush (75% faster, costs gems)
-                </TxButton>
-              </div>
-            </div>
-          )}
-
-          {/* Building Speedup */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Speed Up Construction
-            </h3>
-            <p className="mb-3 text-xs text-text-secondary">
-              Select a building under construction to speed up.
-            </p>
-            <div className="mb-4 grid gap-2 grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {BUILDING_TYPES.map((building) => (
-                <button
-                  key={building.id}
-                  onClick={() => setSpeedupBuilding(building.id)}
-                  className={`rounded-lg border p-2 text-center text-xs transition-all ${
-                    speedupBuilding === building.id
-                      ? "border-amber-600 bg-amber-900/20"
-                      : "border-zinc-800 hover:border-zinc-700"
-                  }`}
-                >
-                  {building.name}
-                </button>
-              ))}
-            </div>
-            {speedupBuilding != null && (
-              <SpeedupPanel
-                visible
-                remainingSeconds={3600}
-                onSpeedup={handleBuildingSpeedup}
-                gemsPerMinute={1}
-                gemBalance={playerData?.account?.gems?.toNumber?.()}
-              />
-            )}
-          </div>
-
-          {/* Infirmary — Troop Recovery */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Infirmary
-            </h3>
-            {totalWounded === 0 ? (
-              <p className="text-sm text-text-muted">No wounded units to recover.</p>
-            ) : (
-              <div className="space-y-4">
-                {/* Wounded overview */}
-                <div className="grid gap-2 grid-cols-3 md:grid-cols-6">
-                  {woundedCounts.map((u) => (
-                    <button
-                      key={u.type}
-                      onClick={() => {
-                        setRecoverUnitType(u.type);
-                        setRecoverAmount(Math.min(recoverAmount, u.count || 1));
-                      }}
-                      disabled={u.count === 0}
-                      className={`rounded-lg border p-3 text-center transition-all ${
-                        recoverUnitType === u.type && u.count > 0
-                          ? "border-red-600 bg-red-900/20"
-                          : u.count > 0
-                            ? "border-zinc-800 hover:border-zinc-700"
-                            : "border-zinc-900 opacity-40"
-                      }`}
-                    >
-                      <div className="text-xs text-text-muted">{u.label}</div>
-                      <div className={`text-lg font-semibold ${u.count > 0 ? "text-red-400" : "text-text-muted"}`}>
-                        {u.count.toLocaleString()}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Recovery controls */}
-                {selectedWoundedMax > 0 && (
-                  <div className="rounded-lg border border-zinc-800 bg-surface/50 p-4 space-y-3">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <label className="mb-1 block text-xs text-text-muted">
-                          Recover {woundedCounts[recoverUnitType]?.label}
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            value={recoverAmount}
-                            onChange={(e) => setRecoverAmount(
-                              Math.max(1, Math.min(selectedWoundedMax, parseInt(e.target.value) || 1))
-                            )}
-                            className="w-24 rounded border border-zinc-700 bg-surface px-2 py-1 text-sm text-text-primary"
-                            min={1}
-                            max={selectedWoundedMax}
-                          />
-                          <button
-                            onClick={() => setRecoverAmount(selectedWoundedMax)}
-                            className="rounded border border-zinc-700 px-2 py-1 text-xs text-text-muted hover:text-text-secondary"
-                          >
-                            Max ({selectedWoundedMax.toLocaleString()})
-                          </button>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-text-muted">Est. Cost</div>
-                        <div className="text-sm font-semibold text-text-gold">
-                          {recoveryCostPreview != null ? recoveryCostPreview.toLocaleString() : "—"} NOVI
-                        </div>
-                        <div className="text-[11px] text-text-muted">
-                          50% of hire cost{estate?.infirmaryRecoveryDailyBps ? ` + ${bpsToPercent(estate.infirmaryRecoveryDailyBps)} daily buff` : ""}
-                        </div>
-                      </div>
-                    </div>
-                    <TxButton
-                      onClick={handleRecoverTroops}
-                      disabled={recoverAmount <= 0 || recoverAmount > selectedWoundedMax}
-                      className="w-full"
-                    >
-                      Recover {recoverAmount} {woundedCounts[recoverUnitType]?.label}
-                    </TxButton>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {/* Convert Materials */}
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Convert Materials
-            </h3>
-            <p className="mb-3 text-xs text-text-muted">
-              Convert 100 lower-tier materials into 20 higher-tier materials per conversion.
-            </p>
-            {/* Current material counts */}
-            {player && (
-              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-                {[
-                  { name: "Common", val: player.commonMaterials?.toNumber?.() ?? 0 },
-                  { name: "Uncommon", val: player.uncommonMaterials?.toNumber?.() ?? 0 },
-                  { name: "Rare", val: player.rareMaterials?.toNumber?.() ?? 0 },
-                  { name: "Epic", val: player.epicMaterials?.toNumber?.() ?? 0 },
-                  { name: "Legendary", val: player.legendaryMaterials?.toNumber?.() ?? 0 },
-                ].map((m) => (
-                  <div key={m.name} className="rounded border border-zinc-800 p-2 text-center">
-                    <div className="text-[11px] text-text-muted">{m.name}</div>
-                    <div className="text-sm font-semibold text-text-gold">{m.val.toLocaleString()}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* From tier selector */}
-            <div className="mb-3">
-              <div className="text-xs text-text-muted mb-2">Convert From:</div>
-              <div className="flex gap-2">
-                {MATERIAL_TIERS.map((tier) => (
-                  <button
-                    key={tier.id}
-                    onClick={() => setConvertFromTier(tier.id)}
-                    className={`rounded-lg border px-3 py-2 text-sm transition-all ${
-                      convertFromTier === tier.id
-                        ? "border-amber-600 bg-amber-900/20 text-text-gold"
-                        : "border-zinc-800 text-text-muted hover:border-zinc-700"
-                    }`}
-                  >
-                    {tier.name}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-1 text-[11px] text-text-muted">
-                {MATERIAL_TIERS[convertFromTier]?.name} &rarr; {MATERIAL_TIERS[convertFromTier + 1]?.name ?? "Legendary"}
-              </div>
-            </div>
-            {/* Amount */}
-            <div className="flex items-center gap-4">
-              <label className="text-sm text-text-muted">Conversions:</label>
-              <input
-                type="number"
-                value={convertAmount}
-                onChange={(e) => setConvertAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                min={1}
-              />
-              <div className="text-xs text-text-muted">
-                = {(convertAmount * 100).toLocaleString()} {MATERIAL_TIERS[convertFromTier]?.name} &rarr; {(convertAmount * 20).toLocaleString()} {MATERIAL_TIERS[convertFromTier + 1]?.name ?? "Legendary"}
-              </div>
-            </div>
-            <div className="mt-3">
-              <TxButton onClick={handleConvertMaterials}>
-                Convert Materials
+              )}
+              <TxButton onClick={handleDailyActivity} variant="secondary" className="text-xs px-4">
+                Daily Claim
               </TxButton>
             </div>
           </div>
+
+          {/* Main area: left grid + right detail */}
+          <div className="min-h-0 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-hidden">
+            {/* Left — building grids (scrollable) */}
+            <div className="lg:col-span-2 overflow-y-auto space-y-4">
+              {/* Under Construction */}
+              {constructingBuildings.length > 0 && (
+                <div>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Under Construction</h2>
+                  <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
+                    {constructingBuildings.map((b) => {
+                      const mins = Math.floor(b.remainingSec / 60);
+                      const hrs = Math.floor(mins / 60);
+                      const timeStr = hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
+                      const pct = b.slot ? (() => {
+                        const started = b.slot.constructionStarted?.toNumber?.() ?? 0;
+                        const ends = b.slot.constructionEnds?.toNumber?.() ?? 0;
+                        const total = ends - started;
+                        return total > 0 ? Math.min(100, Math.round(((total - b.remainingSec) / total) * 100)) : 0;
+                      })() : 0;
+                      return (
+                        <div
+                          key={b.id}
+                          className="relative overflow-hidden rounded-lg border border-amber-700/60 bg-surface-raised p-3"
+                        >
+                          <div
+                            className="absolute inset-y-0 left-0 bg-amber-900/20"
+                            style={{ width: `${pct}%` }}
+                          />
+                          <div className="relative flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-semibold text-text-primary">
+                                {b.name}
+                                <span className="ml-2 text-xs text-text-muted">
+                                  {b.status === "upgrading" ? `Lv ${b.level} upgrading` : "Building"}
+                                </span>
+                              </div>
+                              <div className="text-xs text-amber-600 font-mono tabular-nums">
+                                {b.remainingSec > 0 ? `${timeStr} remaining (${pct}%)` : "Ready to complete"}
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              {b.ready ? (
+                                <TxButton
+                                  onClick={(rp) => handleCompleteBuilding(b.id, rp)}
+                                  className="px-3 py-1 text-[11px]"
+                                >
+                                  Complete
+                                </TxButton>
+                              ) : (
+                                <button
+                                  onClick={() => { setSpeedupBuilding(b.id); setSelectedBuilding(null); }}
+                                  className="rounded border border-amber-700/50 px-2 py-1 text-[11px] font-medium text-amber-600 hover:bg-amber-900/20"
+                                >
+                                  Speed Up
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Built Buildings */}
+              {activeBuildings.length > 0 && (
+                <div>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Built ({activeBuildings.length})
+                  </h2>
+                  <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+                    {activeBuildings.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => { setSelectedBuilding(b.id); setSpeedupBuilding(null); }}
+                        className={`rounded-lg border p-3 text-left transition-colors ${
+                          selectedBuilding === b.id
+                            ? "border-amber-600 bg-amber-900/20"
+                            : "border-border-default hover:border-amber-800/40"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-text-primary">{b.name}</span>
+                          <span className="rounded bg-surface-overlay px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-text-secondary">
+                            Lv {b.level}
+                          </span>
+                        </div>
+                        <div className="text-xs text-text-muted">{b.desc}</div>
+                        {b.slot && b.slot.totalNoviInvested && (
+                          <div className="mt-1 text-[11px] text-text-muted tabular-nums">
+                            {(b.slot.totalNoviInvested.toNumber?.() ?? 0).toLocaleString()} invested
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Available to Build */}
+              {unbuiltBuildings.length > 0 && (
+                <div>
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Available to Build ({unbuiltBuildings.length})
+                  </h2>
+                  <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+                    {unbuiltBuildings.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => { setSelectedBuilding(b.id); setSpeedupBuilding(null); }}
+                        className={`rounded-lg border p-3 text-left transition-colors ${
+                          selectedBuilding === b.id
+                            ? "border-amber-600 bg-amber-900/20"
+                            : "border-border-default opacity-60 hover:opacity-80 hover:border-border-default"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-text-primary">{b.name}</span>
+                          <span className={`text-[11px] font-bold ${
+                            b.tier === 3 ? "text-amber-500" : b.tier === 2 ? "text-text-gold" : "text-text-muted"
+                          }`}>
+                            T{b.tier}
+                          </span>
+                        </div>
+                        <div className="text-xs text-text-muted">{b.desc}</div>
+                        <div className="mt-1 text-[11px] font-semibold text-text-muted">
+                          {b.tier === 1 ? "1k" : b.tier === 2 ? "2k" : "3k"} NOVI
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Game Parameters */}
+              {geData?.account && (() => {
+                const gp = geData.account.gameplayConfig;
+                return (
+                  <GameInfoPanel>
+                    <InfoGrid items={[
+                      { label: "Happy Abandon", value: bpsToPercent(gp.abandonRateHappy), highlight: true },
+                      { label: "Content Abandon", value: bpsToPercent(gp.abandonRateContent) },
+                      { label: "Unhappy Abandon", value: bpsToPercent(gp.abandonRateUnhappy) },
+                      { label: "Miserable Abandon", value: bpsToPercent(gp.abandonRateMiserable) },
+                      { label: "Dmg Redist T1→T2", value: bpsToPercent(gp.damageRedistribUnit1ToUnit2) },
+                      { label: "Dmg Redist T1→T3", value: bpsToPercent(gp.damageRedistribUnit1ToUnit3) },
+                      { label: "Dmg Redist T3→T1", value: bpsToPercent(gp.damageRedistribUnit3ToUnit1) },
+                      { label: "Dmg Redist T3→T2", value: bpsToPercent(gp.damageRedistribUnit3ToUnit2) },
+                    ]} />
+                  </GameInfoPanel>
+                );
+              })()}
+            </div>
+
+            <DetailPanel open={panelOpen} onClose={closePanel}>
+              <BuildingDetailPanel {...detailPanelProps} />
+            </DetailPanel>
+          </div>
         </>
       )}
-      {/* Game Parameters */}
-      {geData?.account && (() => {
-        const gp = geData.account.gameplayConfig;
-        return (
-          <GameInfoPanel>
-            <InfoGrid items={[
-              { label: "Happy Abandon", value: bpsToPercent(gp.abandonRateHappy), highlight: true },
-              { label: "Content Abandon", value: bpsToPercent(gp.abandonRateContent) },
-              { label: "Unhappy Abandon", value: bpsToPercent(gp.abandonRateUnhappy) },
-              { label: "Miserable Abandon", value: bpsToPercent(gp.abandonRateMiserable) },
-              { label: "Dmg Redist T1→T2", value: bpsToPercent(gp.damageRedistribUnit1ToUnit2) },
-              { label: "Dmg Redist T1→T3", value: bpsToPercent(gp.damageRedistribUnit1ToUnit3) },
-              { label: "Dmg Redist T3→T1", value: bpsToPercent(gp.damageRedistribUnit3ToUnit1) },
-              { label: "Dmg Redist T3→T2", value: bpsToPercent(gp.damageRedistribUnit3ToUnit2) },
-            ]} />
-          </GameInfoPanel>
-        );
-      })()}
     </div>
   );
 }

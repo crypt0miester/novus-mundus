@@ -317,6 +317,7 @@ export class AnimalSystem {
       side: THREE.DoubleSide,
     });
     this._birdMesh = new THREE.InstancedMesh(birdGeo, birdMat, this._maxBirds);
+    this._birdMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._birdMesh.count = 0;
     this._birdMesh.frustumCulled = false;
     this._birdMesh.castShadow = false;
@@ -343,6 +344,7 @@ export class AnimalSystem {
       metalness: 0.0,
     });
     this._chickenBodyMesh = new THREE.InstancedMesh(chickenBodyGeo, chickenBodyMat, this._maxChickens);
+    this._chickenBodyMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._chickenBodyMesh.count = 0;
     this._chickenBodyMesh.frustumCulled = false;
     this._chickenBodyMesh.castShadow = true;
@@ -355,6 +357,7 @@ export class AnimalSystem {
       metalness: 0.0,
     });
     this._chickenHeadMesh = new THREE.InstancedMesh(chickenHeadGeo, chickenHeadMat, this._maxChickens);
+    this._chickenHeadMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._chickenHeadMesh.count = 0;
     this._chickenHeadMesh.frustumCulled = false;
     this._chickenHeadMesh.castShadow = false;
@@ -375,6 +378,7 @@ export class AnimalSystem {
       metalness: 0.0,
     });
     this._horseMesh = new THREE.InstancedMesh(horseGeo, horseMat, this._maxHorses);
+    this._horseMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._horseMesh.count = 0;
     this._horseMesh.frustumCulled = false;
     this._horseMesh.castShadow = true;
@@ -398,6 +402,7 @@ export class AnimalSystem {
       metalness: 0.5,
     });
     this._fishMesh = new THREE.InstancedMesh(fishGeo, fishMat, this._maxFish);
+    this._fishMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._fishMesh.count = 0;
     this._fishMesh.frustumCulled = false;
     this._fishMesh.castShadow = false;

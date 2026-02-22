@@ -53,7 +53,7 @@ pub struct CityAccount {
     /// Incremented on arrival, decremented on departure
     pub players_present: u32,               // 4 bytes
 
-    /// Total PvP attacks initiated in this city (all-time)
+    /// Total PvE attacks initiated in this city (all-time)
     pub active_encounters: u64,            // 8 bytes
 
     /// Total PvE encounters spawned in this city (all-time)
@@ -168,35 +168,24 @@ impl CityAccount {
         &self.game_engine == game_engine
     }
 
-    /// Calculate max encounters based on current population
+    /// Calculate max encounters based on current population using game engine config.
     ///
-    /// Formula: BASE_ENCOUNTERS_PER_CITY + (players_present / ENCOUNTERS_PER_PLAYER_COUNT)
-    /// Capped at MAX_ENCOUNTERS_PER_CITY (hard limit)
-    ///
-    /// # Examples
-    /// - 0 players: 3 encounters (base)
-    /// - 50 players: 3 + (50/10) = 8 encounters
-    /// - 200 players: 3 + (200/10) = 23 encounters
-    /// - 1000 players: capped at 50 encounters
-    pub fn calculate_max_encounters(&self) -> u64 {
-        use crate::constants::{
-            BASE_ENCOUNTERS_PER_CITY,
-            ENCOUNTERS_PER_PLAYER_COUNT,
-            MAX_ENCOUNTERS_PER_CITY,
+    /// Formula: base + (players_present / per_player_count), capped at max.
+    pub fn calculate_max_encounters(&self, base: u8, per_player_count: u32, max: u8) -> u64 {
+        let base = base as u64;
+        let bonus = if per_player_count > 0 {
+            (self.players_present / per_player_count) as u64
+        } else {
+            0
         };
-
-        let base = BASE_ENCOUNTERS_PER_CITY as u64;
-        let bonus = (self.players_present / ENCOUNTERS_PER_PLAYER_COUNT) as u64;
         let total = base.saturating_add(bonus);
-        total.min(MAX_ENCOUNTERS_PER_CITY as u64)
+        total.min(max as u64)
     }
 
-    /// Check if city can accept more encounters
-    ///
-    /// Returns true if active_encounters < dynamic limit
+    /// Check if city can accept more encounters using game engine config values.
     #[inline]
-    pub fn can_spawn_encounter(&self) -> bool {
-        self.active_encounters < self.calculate_max_encounters()
+    pub fn can_spawn_encounter(&self, base: u8, per_player_count: u32, max: u8) -> bool {
+        self.active_encounters < self.calculate_max_encounters(base, per_player_count, max)
     }
 
     // ─── Terrain Helpers ─────────────────────────────────────────

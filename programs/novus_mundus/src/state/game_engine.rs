@@ -718,7 +718,7 @@ impl NoviPurchaseConfig {
     pub const fn default() -> Self {
         Self {
             // 0.0001 SOL per NOVI (adjustable by DAO) - FALLBACK when no oracle
-            novi_base_price_lamports: 100_000,
+            novi_base_price_lamports: 1000,
             // 15% undercut when oracle is used
             novi_market_undercut_bps: 1500,
 
@@ -1230,13 +1230,13 @@ impl CombatConfig {
             encounter_attack_range_meters: 10.0,
             pvp_attack_range_meters: 15.0,
 
-            encounters_per_player_count: 10,        // +1 encounter per 10 players
+            encounters_per_player_count: 5,         // +1 encounter per 5 players
             weapon_loot_rate_bps: 6000,             // 60%
             armory_raid_with_operatives_bps: 2500,  // 25%
             armory_raid_undefended_bps: 5000,       // 50%
             siege_capture_rate_bps: 8000,           // 80%
-            base_encounters_per_city: 3,
-            max_encounters_per_city: 50,
+            base_encounters_per_city: 25,
+            max_encounters_per_city: 200,
             _padding: [0; 2],
         }
     }

@@ -1205,33 +1205,33 @@ function setupEditor() {
   });
 
   // ── Camera bounds editor panel (uncomment to re-enable) ──
-  // const boundsPanel = document.getElementById('bounds-panel');
-  // const BOUNDS_DEFAULTS = { minX: -3, maxX: 3, minZ: -3, maxZ: 3 };
-  //
-  // function buildBoundsPanel() {
-  //   if (!layoutConfig) layoutConfig = {};
-  //   if (!layoutConfig.cameraBounds) {
-  //     layoutConfig.cameraBounds = { ...BOUNDS_DEFAULTS };
-  //   }
-  //   const b = layoutConfig.cameraBounds;
-  //   let html = '<h3>Camera Bounds</h3>';
-  //   html += `<div class="bounds-row"><label>Min X</label><input type="number" step="0.5" id="bounds-minX" value="${b.minX}"></div>`;
-  //   html += `<div class="bounds-row"><label>Max X</label><input type="number" step="0.5" id="bounds-maxX" value="${b.maxX}"></div>`;
-  //   html += `<div class="bounds-row"><label>Min Z</label><input type="number" step="0.5" id="bounds-minZ" value="${b.minZ}"></div>`;
-  //   html += `<div class="bounds-row"><label>Max Z</label><input type="number" step="0.5" id="bounds-maxZ" value="${b.maxZ}"></div>`;
-  //   boundsPanel.innerHTML = html;
-  //
-  //   boundsPanel.querySelectorAll('input').forEach(input => {
-  //     input.addEventListener('change', () => {
-  //       pushUndo();
-  //       layoutConfig.cameraBounds.minX = parseFloat(document.getElementById('bounds-minX').value);
-  //       layoutConfig.cameraBounds.maxX = parseFloat(document.getElementById('bounds-maxX').value);
-  //       layoutConfig.cameraBounds.minZ = parseFloat(document.getElementById('bounds-minZ').value);
-  //       layoutConfig.cameraBounds.maxZ = parseFloat(document.getElementById('bounds-maxZ').value);
-  //       debouncedReload();
-  //     });
-  //   });
-  // }
+  const boundsPanel = document.getElementById('bounds-panel');
+  const BOUNDS_DEFAULTS = { minX: -3, maxX: 3, minZ: -3, maxZ: 3 };
+  
+  function buildBoundsPanel() {
+    if (!layoutConfig) layoutConfig = {};
+    if (!layoutConfig.cameraBounds) {
+      layoutConfig.cameraBounds = { ...BOUNDS_DEFAULTS };
+    }
+    const b = layoutConfig.cameraBounds;
+    let html = '<h3>Camera Bounds</h3>';
+    html += `<div class="bounds-row"><label>Min X</label><input type="number" step="0.5" id="bounds-minX" value="${b.minX}"></div>`;
+    html += `<div class="bounds-row"><label>Max X</label><input type="number" step="0.5" id="bounds-maxX" value="${b.maxX}"></div>`;
+    html += `<div class="bounds-row"><label>Min Z</label><input type="number" step="0.5" id="bounds-minZ" value="${b.minZ}"></div>`;
+    html += `<div class="bounds-row"><label>Max Z</label><input type="number" step="0.5" id="bounds-maxZ" value="${b.maxZ}"></div>`;
+    boundsPanel.innerHTML = html;
+  
+    boundsPanel.querySelectorAll('input').forEach(input => {
+      input.addEventListener('change', () => {
+        pushUndo();
+        layoutConfig.cameraBounds.minX = parseFloat(document.getElementById('bounds-minX').value);
+        layoutConfig.cameraBounds.maxX = parseFloat(document.getElementById('bounds-maxX').value);
+        layoutConfig.cameraBounds.minZ = parseFloat(document.getElementById('bounds-minZ').value);
+        layoutConfig.cameraBounds.maxZ = parseFloat(document.getElementById('bounds-maxZ').value);
+        debouncedReload();
+      });
+    });
+  }
 
   // ── Roads editor panel ──
   const roadsPanel = document.getElementById('roads-panel');
@@ -1807,18 +1807,18 @@ function setupEditor() {
 
   canvas.addEventListener('pointermove', (e) => {
     // Handle bounds anchor dragging (uncomment to re-enable)
-    // if (editMode && boundsDragTarget && dragStart) {
-    //   const worldPos = raycastGround(e);
-    //   if (!worldPos) return;
-    //   const { axis } = boundsDragTarget;
-    //   const b = layoutConfig.cameraBounds;
-    //   if (axis === 'minX' || axis === 'maxX') b[axis] = +worldPos.x.toFixed(2);
-    //   else b[axis] = +worldPos.z.toFixed(2);
-    //   if (townRenderer.updateBoundsVisual) townRenderer.updateBoundsVisual(b);
-    //   const el = document.getElementById('bounds-' + axis);
-    //   if (el) el.value = b[axis];
-    //   return;
-    // }
+    if (editMode && boundsDragTarget && dragStart) {
+      const worldPos = raycastGround(e);
+      if (!worldPos) return;
+      const { axis } = boundsDragTarget;
+      const b = layoutConfig.cameraBounds;
+      if (axis === 'minX' || axis === 'maxX') b[axis] = +worldPos.x.toFixed(2);
+      else b[axis] = +worldPos.z.toFixed(2);
+      if (townRenderer.updateBoundsVisual) townRenderer.updateBoundsVisual(b);
+      const el = document.getElementById('bounds-' + axis);
+      if (el) el.value = b[axis];
+      return;
+    }
 
     if (!editMode || !dragTarget || !dragStart) return;
     const dx = e.clientX - pointerDownPos.x;

@@ -107,6 +107,11 @@ export class GlobeManager {
       this.starfield.geometry.dispose();
       this.starfield.material.dispose();
     }
+    // Dispose old globe texture to prevent GPU memory leak on reload
+    if (this.globeTexture) {
+      this.globeTexture.dispose();
+      this.globeTexture = null;
+    }
     this._scene.remove(this.cityMarkers);
     this.removeCityLabels();
 
@@ -327,12 +332,18 @@ export class GlobeManager {
     const typeSizes  = { Capital: 0.014, Trade: 0.009, Combat: 0.009, Resource: 0.008 };
     const typeCSS    = { Capital: '#ffd700', Trade: '#4af', Combat: '#f44', Resource: '#4f4' };
 
+    // Share SphereGeometry instances per unique marker size
+    const geoBySize = new Map();
+
     for (const city of this.cities) {
       const color = typeColors[city.type] || 0xffffff;
       const size  = typeSizes[city.type]  || 0.008;
 
-      // Dot on globe surface
-      const geom = new THREE.SphereGeometry(size, 12, 8);
+      // Dot on globe surface — shared geometry per size
+      if (!geoBySize.has(size)) {
+        geoBySize.set(size, new THREE.SphereGeometry(size, 12, 8));
+      }
+      const geom = geoBySize.get(size);
       const mat  = new THREE.MeshBasicMaterial({ color });
       const dot  = new THREE.Mesh(geom, mat);
       dot.position.copy(latLonToVec3(city.lat, city.lon, this.globeRadius + 0.003));
@@ -440,13 +451,10 @@ export class GlobeManager {
       if (this.onCityHover) this.onCityHover(null);
     }
 
-    // Remove old ring if no hit
+    // Hide pooled ring if no hit
     if (!hitMarker) {
       if (this.hoverRing) {
-        this._scene.remove(this.hoverRing);
-        this.hoverRing.geometry.dispose();
-        this.hoverRing.material.dispose();
-        this.hoverRing = null;
+        this.hoverRing.visible = false;
       }
       return;
     }
@@ -459,25 +467,24 @@ export class GlobeManager {
       this._container.style.cursor = 'pointer';
       if (this.onCityHover) this.onCityHover(hitCityId);
 
-      // Create pulsing ring
-      if (this.hoverRing) {
-        this._scene.remove(this.hoverRing);
-        this.hoverRing.geometry.dispose();
-        this.hoverRing.material.dispose();
+      // Create pooled ring on first hover, reuse thereafter
+      if (!this.hoverRing) {
+        const ringGeom = new THREE.RingGeometry(0.018, 0.025, 24);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.6,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        this.hoverRing = new THREE.Mesh(ringGeom, ringMat);
+        this._scene.add(this.hoverRing);
       }
-      const ringGeom = new THREE.RingGeometry(0.018, 0.025, 24);
-      const ringMat = new THREE.MeshBasicMaterial({
-        color: hitMarker.material.color.clone(),
-        transparent: true,
-        opacity: 0.6,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-      this.hoverRing = new THREE.Mesh(ringGeom, ringMat);
+      this.hoverRing.material.color.copy(hitMarker.material.color);
       this.hoverRing.position.copy(hitMarker.position);
       // Orient ring to face outward from globe center
       this.hoverRing.lookAt(hitMarker.position.clone().multiplyScalar(2));
-      this._scene.add(this.hoverRing);
+      this.hoverRing.visible = true;
     }
 
     // Animate hover: scale marker and pulse ring
@@ -505,10 +512,7 @@ export class GlobeManager {
     this.hoveredMarker = null;
     this.hoverOriginalScale = null;
     if (this.hoverRing) {
-      this._scene.remove(this.hoverRing);
-      this.hoverRing.geometry.dispose();
-      this.hoverRing.material.dispose();
-      this.hoverRing = null;
+      this.hoverRing.visible = false;
     }
     this._container.style.cursor = '';
   }
@@ -597,6 +601,13 @@ export class GlobeManager {
     }
 
     this.clearHoverGlow();
+    // Dispose pooled hover ring on full cleanup
+    if (this.hoverRing) {
+      this._scene.remove(this.hoverRing);
+      this.hoverRing.geometry.dispose();
+      this.hoverRing.material.dispose();
+      this.hoverRing = null;
+    }
 
     this._scene.remove(this.cityMarkers);
     this.cityMarkers.traverse(o => {

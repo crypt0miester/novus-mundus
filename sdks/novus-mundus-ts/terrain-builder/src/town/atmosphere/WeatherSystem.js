@@ -142,7 +142,7 @@ export class WeatherSystem {
   constructor(scene, options = {}) {
     this.scene = scene;
 
-    this._transitionDuration = options.transitionDuration || 5.0;
+    this._transitionDuration = options.transitionDuration || 0.0;
     this._wetAccumRate = options.wetAccumRate || 0.1;
     this._wetEvapRate = options.wetEvapRate || 0.02;
     this._snowAccumRate = options.snowAccumRate || 0.05;

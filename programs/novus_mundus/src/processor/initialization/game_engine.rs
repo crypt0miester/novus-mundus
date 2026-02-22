@@ -135,7 +135,7 @@ pub fn process(
     InitializeMint {
         mint: novi_mint,
         rent_sysvar,
-        decimals: 6,                           // Standard SPL token decimals
+        decimals: 1,                           // NOVI uses 1 decimal (values are ×10)
         mint_authority: &expected_game_engine, // GameEngine PDA is mint authority
         freeze_authority: None,                // No freeze authority
     }.invoke()?;

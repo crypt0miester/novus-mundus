@@ -154,90 +154,90 @@ export default function SettingsPage() {
 
   return (
     <PageTransition>
-      <div className="mx-auto max-w-3xl space-y-6">
-        <h1 className="tier-title font-display text-3xl font-bold tracking-wide">SETTINGS</h1>
+      <div className="flex h-full flex-col gap-3">
+        <h1 className="tier-title font-display text-2xl font-bold tracking-wide">SETTINGS</h1>
 
-        {/* Account Info */}
-        <div className="card accent-border">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Account
-          </h3>
-          <div className="space-y-3">
-            {publicKey && (
-              <CopyableAddress label="Wallet" address={publicKey.toBase58()} />
-            )}
-            {!publicKey && (
-              <div className="flex justify-between text-sm">
-                <span className="text-text-muted">Wallet</span>
-                <span className="text-text-secondary">Not connected</span>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+          {/* Left column: Account + Subscription */}
+          <div className="flex flex-col gap-3 lg:overflow-y-auto">
+            <div className="card accent-border">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Account</h3>
+              <div className="space-y-2">
+                {publicKey && <CopyableAddress label="Wallet" address={publicKey.toBase58()} />}
+                {!publicKey && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Wallet</span>
+                    <span className="text-text-secondary">Not connected</span>
+                  </div>
+                )}
+                {userPda && <CopyableAddress label="User Account" address={userPda.toBase58()} />}
+                {playerData?.pubkey && <CopyableAddress label="Player Account" address={playerData.pubkey.toBase58()} />}
+                {player && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-muted">Player Name</span>
+                      <span className="text-text-primary">{player.name || "Unnamed"}</span>
+                    </div>
+                    <DomainPicker
+                      currentName={currentPlayerName}
+                      isPending={transact.isPending}
+                      onSet={handleNameSet}
+                      onRemove={handleNameRemove}
+                      label="player account"
+                    />
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-muted">Level</span>
+                      <span className="text-text-gold">{player.level}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-muted">City</span>
+                      <span className="text-text-primary">City {player.currentCity}</span>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
-            {userPda && (
-              <CopyableAddress label="User Account" address={userPda.toBase58()} />
-            )}
-            {playerData?.pubkey && (
-              <CopyableAddress label="Player Account" address={playerData.pubkey.toBase58()} />
-            )}
-            {player && (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">Player Name</span>
-                  <span className="text-text-primary">{player.name || "Unnamed"}</span>
-                </div>
-
-                <DomainPicker
-                  currentName={currentPlayerName}
-                  isPending={transact.isPending}
-                  onSet={handleNameSet}
-                  onRemove={handleNameRemove}
-                  label="player account"
-                />
-
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">Level</span>
-                  <span className="text-text-gold">{player.level}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-muted">City</span>
-                  <span className="text-text-primary">City {player.currentCity}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Subscription */}
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Subscription
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Tier</span>
-              <span className="text-text-gold">{sub.tierName}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Status</span>
-              <span className={sub.active ? "text-green-400" : "text-zinc-500"}>
-                {sub.active ? "Active" : "Inactive"}
-              </span>
-            </div>
-            {sub.active && sub.expiresAt > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-text-muted">Expires</span>
-                <GoldCountdown endsAt={sub.expiresAt} format="full" size="sm" />
+
+            <div className="card">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Subscription</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-muted">Tier</span>
+                  <span className="text-text-gold">{sub.tierName}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-muted">Status</span>
+                  <span className={sub.active ? "text-green-400" : "text-zinc-500"}>
+                    {sub.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                {sub.active && sub.expiresAt > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-muted">Expires</span>
+                    <GoldCountdown endsAt={sub.expiresAt} format="full" size="sm" />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Display */}
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Display
-          </h3>
+            {/* Danger Zone */}
+            <div className="card border-red-900/50">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400">Danger Zone</h3>
+              <button
+                onClick={() => disconnect()}
+                className="rounded-lg border border-red-800 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/40"
+              >
+                Disconnect Wallet
+              </button>
+            </div>
+          </div>
+
+          {/* Right column: Display, Theme, Explorer, Transaction */}
+          <div className="flex flex-col gap-3 lg:overflow-y-auto">
+            <div className="card">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Display</h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <span className="text-text-primary">Number Format</span>
                 <p className="text-xs text-text-muted">How large numbers are displayed</p>
@@ -258,14 +258,14 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <span className="text-text-primary">Animations</span>
                 <p className="text-xs text-text-muted">Page transitions and number rolling</p>
               </div>
               <button
                 onClick={() => setAnimationsEnabled(!animationsEnabled)}
-                className={`relative h-6 w-11 rounded-full transition-colors ${
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                   animationsEnabled ? "bg-amber-600" : "bg-zinc-700"
                 }`}
               >
@@ -284,7 +284,7 @@ export default function SettingsPage() {
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Theme
           </h3>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="text-text-primary">Appearance</span>
               <p className="text-xs text-text-muted">Paper uses a light parchment background</p>
@@ -312,7 +312,7 @@ export default function SettingsPage() {
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Explorer
           </h3>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="text-text-primary">Transaction Explorer</span>
               <p className="text-xs text-text-muted">Where transaction links open</p>
@@ -341,7 +341,7 @@ export default function SettingsPage() {
             Transaction
           </h3>
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <span className="text-text-primary">Priority Fee</span>
                 <p className="text-xs text-text-muted">Higher fees help transactions land faster</p>
@@ -377,24 +377,11 @@ export default function SettingsPage() {
         {/* DEV: Tier Preview */}
         {process.env.NODE_ENV === "development" && (
           <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Dev Tools
-            </h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Dev Tools</h3>
             <TierSwitcher />
           </div>
         )}
-
-        {/* Danger Zone */}
-        <div className="card border-red-900/50">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-red-400">
-            Danger Zone
-          </h3>
-          <button
-            onClick={() => disconnect()}
-            className="rounded-lg border border-red-800 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/40"
-          >
-            Disconnect Wallet
-          </button>
+          </div>
         </div>
       </div>
     </PageTransition>

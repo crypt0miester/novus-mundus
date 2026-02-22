@@ -21,11 +21,15 @@ export function useEncounters(cityId: number | null | undefined) {
     }).catch(() => {});
   }, [cityId, client]);
 
-  // Filter encounters for this city
+  // Filter encounters for this city — exclude dead/despawned
   const data = useMemo(() => {
     if (cityId == null) return [];
+    const now = Math.floor(Date.now() / 1000);
     return Array.from(encounters.values()).filter(
-      (e) => e.account.cityId === cityId
+      (e) =>
+        e.account.cityId === cityId &&
+        e.account.health.gtn(0) &&
+        e.account.despawnAt.toNumber() > now
     );
   }, [encounters, cityId]);
 

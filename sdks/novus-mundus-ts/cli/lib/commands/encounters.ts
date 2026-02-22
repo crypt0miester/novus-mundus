@@ -21,6 +21,10 @@ import {
 import { EncounterRarity } from '../../../src/instructions/encounter';
 
 const GRID_PRECISION = 10000;
+const CELL_OCCUPIED = 6413;
+const CITY_ENCOUNTER_LIMIT = 6412;
+const WRONG_TIME = 6514;
+const MAX_PLACEMENT_RETRIES = 10;
 
 const RARITY_MAP: Record<string, EncounterRarity> = {
   common: EncounterRarity.Common,
@@ -90,35 +94,61 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
     const baseLat = Math.round(city.lat * GRID_PRECISION);
     const baseLong = Math.round(city.lon * GRID_PRECISION);
+    let citySpawned = 0;
 
     for (let i = 0; i < count; i++) {
-      const gridLat = baseLat + Math.floor(i / 10);
-      const gridLong = baseLong + (i % 10) + 1;
+      let placed = false;
 
-      const ix = createSpawnEncounterInstruction(
-        {
-          payer: ctx.daoAuthority.publicKey,
-          playerOwner: ctx.daoAuthority.publicKey,
-          gameEngine: ctx.gameEngine,
-          cityId,
-          encounterIndex: nextIndex,
-          gridLat,
-          gridLong,
-        },
-        { encounterType: rarity }
-      );
+      for (let attempt = 0; attempt < MAX_PLACEMENT_RETRIES; attempt++) {
+        // Random offset within ~50 grid cells around city center
+        const gridLat = baseLat + Math.floor(Math.random() * 100) - 50;
+        const gridLong = baseLong + Math.floor(Math.random() * 100) - 50;
 
-      try {
-        await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-        nextIndex++;
-        totalSpawned++;
-      } catch (e: any) {
-        log.error(`Failed to spawn encounter ${nextIndex} in ${city.name}: ${e.message}`);
-        break;
+        const ix = createSpawnEncounterInstruction(
+          {
+            payer: ctx.daoAuthority.publicKey,
+            playerOwner: ctx.daoAuthority.publicKey,
+            gameEngine: ctx.gameEngine,
+            cityId,
+            encounterIndex: nextIndex,
+            gridLat,
+            gridLong,
+          },
+          { encounterType: rarity }
+        );
+
+        try {
+          await sendWithRetry(ctx, ix, [ctx.daoAuthority], 1);
+          nextIndex++;
+          totalSpawned++;
+          citySpawned++;
+          placed = true;
+          break;
+        } catch (e: any) {
+          const errCode = extractCustomError(e);
+          if (errCode === CELL_OCCUPIED) {
+            continue; // Retry with different coordinates
+          }
+          if (errCode === CITY_ENCOUNTER_LIMIT) {
+            const limit = 3 + Math.floor((cityAccount.playersPresent ?? 0) / 10);
+            log.info(`  ${city.name}: encounter limit reached (${limit} max, need more players)`);
+            break;
+          }
+          if (errCode === WRONG_TIME) {
+            log.info(`  ${city.name}: ${rarityFlag} encounters can only spawn at night`);
+            break;
+          }
+          log.error(`Failed to spawn encounter ${nextIndex} in ${city.name}: ${e.message}`);
+          break;
+        }
       }
+
+      if (!placed) break;
     }
 
-    log.create(`${count} ${rarityFlag} encounter(s) in ${city.name} (city ${cityId})`);
+    if (citySpawned > 0) {
+      log.create(`${citySpawned} ${rarityFlag} encounter(s) in ${city.name} (city ${cityId})`);
+    }
   }
 
   log.info(`\nDone — ${totalSpawned} encounter(s) spawned.`);
@@ -177,4 +207,10 @@ function getFlag(flags: string[], name: string): string | undefined {
   const idx = flags.indexOf(name);
   if (idx === -1) return undefined;
   return flags[idx + 1];
+}
+
+function extractCustomError(e: any): number | null {
+  const msg = e?.transactionMessage ?? e?.message ?? '';
+  const match = msg.match(/"Custom":(\d+)/);
+  return match?.[1] ? parseInt(match[1], 10) : null;
 }

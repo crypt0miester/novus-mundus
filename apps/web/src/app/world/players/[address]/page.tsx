@@ -238,7 +238,7 @@ export default function PlayerProfilePage({
                 Attack
               </Link>
               <Link
-                href={`/economy?transfer=${address}`}
+                href={`/estate?tab=market&transfer=${address}`}
                 className="rounded-md border border-border-gold bg-amber-900/20 px-4 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
               >
                 Send Cash

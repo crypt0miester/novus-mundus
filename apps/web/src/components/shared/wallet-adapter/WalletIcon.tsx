@@ -1,12 +1,9 @@
 import type { Wallet } from "@solana/wallet-adapter-react";
-import type { DetailedHTMLProps, FC, ImgHTMLAttributes } from "react";
+import type { FC } from "react";
 import React from "react";
+import Image from "next/image";
 
-export interface WalletIconProps
-  extends DetailedHTMLProps<
-    ImgHTMLAttributes<HTMLImageElement>,
-    HTMLImageElement
-  > {
+interface WalletIconProps {
   wallet: { adapter: Pick<Wallet["adapter"], "icon" | "name"> } | null;
   connectionButtonClass?: string;
 }
@@ -14,7 +11,6 @@ export interface WalletIconProps
 export const WalletIcon: FC<WalletIconProps> = ({
   wallet,
   connectionButtonClass,
-  ...props
 }) => {
   if (!wallet) return null;
 
@@ -51,14 +47,14 @@ export const WalletIcon: FC<WalletIconProps> = ({
     );
   }
 
-  /* eslint-disable @next/next/no-img-element */
   return (
-    <img
+    <Image
       className={connectionButtonClass}
       src={wallet.adapter.icon}
       width={16}
       height={16}
       alt={`${wallet.adapter.name} icon`}
+      unoptimized
     />
   );
 };

@@ -4,7 +4,7 @@ import React from "react";
 
 import { WalletIcon } from "./WalletIcon";
 
-export interface WalletListItemProps {
+interface WalletListItemProps {
   handleClick: MouseEventHandler<HTMLButtonElement>;
   tabIndex?: number;
   wallet: Wallet;

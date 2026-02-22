@@ -72,7 +72,7 @@ export function TxButton({
 
   const variantClasses = {
     primary:
-      "bg-amber-600 text-white hover:bg-amber-500 accent-border",
+      "text-white accent-border [background-color:var(--tier-accent)] hover:[background-color:var(--tier-accent-bright)]",
     secondary:
       "bg-surface-raised text-text-gold hover:bg-surface-overlay accent-border",
     danger:
@@ -85,7 +85,7 @@ export function TxButton({
       onClick={handleClick}
       disabled={disabled || phase !== "idle"}
       className={cn(
-        "relative overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+        "relative overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors w-full",
         variantClasses[variant],
         disabled && "cursor-not-allowed opacity-50",
         phase === "preparing" && "scale-[0.97]",
@@ -103,7 +103,7 @@ export function TxButton({
       />
 
       {/* Label */}
-      <span className="relative z-10">
+      <span className="relative z-10 contents">
         {phase === "idle" ? children : phaseLabels[phase]}
       </span>
     </button>

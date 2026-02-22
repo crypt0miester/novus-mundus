@@ -16,9 +16,8 @@ import type { TransactionInstruction } from "@solana/web3.js";
 export { NovusMundusClient } from "novus-mundus-sdk";
 
 // Account discriminator + subscription manager
-export { AccountKey, GameSubscriptionManager } from "novus-mundus-sdk";
+export { GameSubscriptionManager } from "novus-mundus-sdk";
 export { deserializeAnyAccount, tryDeserializeAnyAccount, readAccountKey } from "novus-mundus-sdk";
-export type { RoutedAccount } from "novus-mundus-sdk";
 
 // PDA derivation
 export {
@@ -65,41 +64,39 @@ export { toGrid } from "novus-mundus-sdk";
 export { SubscriptionTier, CityType, TeamMemberRank } from "novus-mundus-sdk";
 export { TeamSettings, isTeamPublic, isTeamActive, isTeamFull } from "novus-mundus-sdk";
 export { hasTeam } from "novus-mundus-sdk";
-export type { GameEngine } from "novus-mundus-sdk";
-export type { CityAccount } from "novus-mundus-sdk";
 
 // State parsers & helpers
 export { parseCastle, parseRally, parseDungeonRun, parseEstate } from "novus-mundus-sdk";
+export { parseResearchTemplate, parseResearchProgress, deserializeResearchTemplate, deserializeResearchProgress } from "novus-mundus-sdk";
+export { isResearching, isResearchComplete, getResearchLevel, isResearchAscended, checkResearchPrerequisites } from "novus-mundus-sdk";
+export type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
 export { parseTeam, parseTeamMemberSlot, parsePlayer } from "novus-mundus-sdk";
-export type { EstateAccount } from "novus-mundus-sdk";
 export { isSeasonActive, getExpeditionEndTime, getExpeditionDurationSeconds } from "novus-mundus-sdk";
 export { isNullPubkey, hasCustomName } from "novus-mundus-sdk";
-export { isItemAvailable, isFlashSaleActive } from "novus-mundus-sdk";
-export type { ShopItemAccount, BundleAccount, FlashSaleAccount, BundleItem } from "novus-mundus-sdk";
-export type { NoviPurchaseConfig } from "novus-mundus-sdk";
+export { isItemAvailable, isFlashSaleActive, getItemTypeInfo, getShopItemName } from "novus-mundus-sdk";
 export { ShopItemCategory, ShopItemRarity, FlashSaleStatus } from "novus-mundus-sdk";
 export { isHeroMeditating, isTraveling, getTotalDefensiveUnits, getTotalOperativeUnits } from "novus-mundus-sdk";
+export { parseAssetV1 } from "novus-mundus-sdk";
+export type { ParsedAssetV1 } from "novus-mundus-sdk";
+export { deserializeHeroTemplate, canMintHero, getActiveBuffs } from "novus-mundus-sdk";
+export type { HeroTemplateAccount, HeroBuffConfig } from "novus-mundus-sdk";
+export { AccountKey } from "novus-mundus-sdk";
+export { PROGRAM_ID as NOVUS_PROGRAM_ID } from "novus-mundus-sdk";
 export { ExtensionFlags, hasExtension } from "novus-mundus-sdk";
 export { findBuilding, hasBuildingAtLevel, BuildingStatus } from "novus-mundus-sdk";
-export type { BuildingSlot } from "novus-mundus-sdk";
 export { getEffectiveTier, isSubscriptionActive } from "novus-mundus-sdk";
 export type { DungeonRunAccount } from "novus-mundus-sdk";
 export type { TeamAccount, TeamMemberSlot } from "novus-mundus-sdk";
 export type { PlayerAccount } from "novus-mundus-sdk";
 export type { SubscriptionTierConfig } from "novus-mundus-sdk";
-export type { UserAccount } from "novus-mundus-sdk";
-export type { TreasuryRequest } from "novus-mundus-sdk";
-export type { RallyParticipant } from "novus-mundus-sdk";
-export type { ResearchProgressAccount } from "novus-mundus-sdk";
 export { RESERVED_NOVI_VESTING_PERIOD } from "novus-mundus-sdk";
 
 // ─── Events ─────────────────────────────────────────────────
 export { parseEventsFromLogs } from "novus-mundus-sdk";
-export type { NovusMundusEvent, EventName } from "novus-mundus-sdk";
+export type { NovusMundusEvent } from "novus-mundus-sdk";
 
 // Subscriptions (log sub for real-time events)
 export { subscribeToGameLogs, createMultiSubscription } from "novus-mundus-sdk";
-export type { SubscriptionHandle, LogsCallback } from "novus-mundus-sdk";
 
 // ─── Error parsing ──────────────────────────────────────────
 export { parseErrorMessage, parseTransactionError, isGameError, getErrorCategory, GameError } from "novus-mundus-sdk";
@@ -113,7 +110,6 @@ export {
   getActivityMultiplier, getActivityMultiplierBps, applyTimeMultiplier,
   getTimeOfDayName, getTimeRange, getSecondsUntilNextPeriod,
 } from "novus-mundus-sdk";
-export type { TimeOfDay, ActivityType } from "novus-mundus-sdk";
 
 // Costs
 export {
@@ -188,7 +184,6 @@ export { applyBps, applyBpsBonus, applyBpsPenalty } from "novus-mundus-sdk";
 // ─── Validation ─────────────────────────────────────────────
 
 // Common
-export type { ValidationResult } from "novus-mundus-sdk";
 export { valid, invalid, combine, allValid, getAllErrors } from "novus-mundus-sdk";
 export { validatePositive, validateNonNegative, validateRange, validateMinimum, validateMaximum } from "novus-mundus-sdk";
 export { validateNonEmpty, validateStringLength, validateName } from "novus-mundus-sdk";

@@ -40,7 +40,7 @@ export function UnitGrid({
         <div className="game-num text-lg">{defTotal.toLocaleString()}</div>
         <div className="mt-1 space-y-0.5">
           {defense.map((count, i) => (
-            <div key={i} className="flex justify-between text-xs">
+            <div key={tierLabels[i]} className="flex justify-between text-xs">
               <span className="text-text-muted">{tierLabels[i]}</span>
               <span className="game-num">{count.toLocaleString()}</span>
             </div>
@@ -54,7 +54,7 @@ export function UnitGrid({
         <div className="game-num text-lg">{offTotal.toLocaleString()}</div>
         <div className="mt-1 space-y-0.5">
           {offense.map((count, i) => (
-            <div key={i} className="flex justify-between text-xs">
+            <div key={tierLabels[i]} className="flex justify-between text-xs">
               <span className="text-text-muted">{tierLabels[i]}</span>
               <span className="game-num">{count.toLocaleString()}</span>
             </div>

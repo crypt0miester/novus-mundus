@@ -12,7 +12,7 @@ button:not(:disabled) {
   /* Gold palette */
   --color-gold-50: #fefce8;
   --color-gold-100: #fef9c3;
-  --color-gold-200: #fef08a;
+  --color-gold-200: #f1af09;
   --color-gold-300: #fde047;
   --color-gold-400: #fbbf24;
   --color-gold-500: #f59e0b;
@@ -21,23 +21,23 @@ button:not(:disabled) {
   --color-gold-800: #92400e;
   --color-gold-900: #78350f;
 
-  /* Semantic tokens */
-  --color-primary: #fbbf24;
-  --color-primary-hover: #f59e0b;
-  --color-primary-dim: #92400e;
+  /* Semantic tokens — defaults are paper (tier 0) */
+  --color-primary: #92400e;
+  --color-primary-hover: #78350f;
+  --color-primary-dim: #6b3410;
 
-  --color-surface: #09090b;
-  --color-surface-raised: #18181b;
-  --color-surface-overlay: #27272a;
+  --color-surface: #F5F0E8;
+  --color-surface-raised: #EDE8DF;
+  --color-surface-overlay: #E5E0D7;
 
-  --color-border-default: #27272a;
+  --color-border-default: #d4cfc6;
   --color-border-gold: #92400e;
-  --color-border-gold-bright: #fbbf24;
+  --color-border-gold-bright: #b45309;
 
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-gold: #fbbf24;
-  --color-text-muted: #52525b;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #4a4a4a;
+  --color-text-gold: #92400e;
+  --color-text-muted: #8a8a7a;
 
   --color-danger: #ef4444;
   --color-success: #22c55e;
@@ -48,9 +48,9 @@ button:not(:disabled) {
   --shadow-gold-md: 0 0 16px rgba(251, 191, 36, 0.2);
   --shadow-gold-lg: 0 0 32px rgba(251, 191, 36, 0.3);
   /* Fonts */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Cinzel", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-display: var(--font-cinzel), serif;
 }
 
 /* ─── Tier CSS Variables ─── */
@@ -59,25 +59,25 @@ button:not(:disabled) {
   --tier-accent: #92400e;
   --tier-accent-bright: #92400e;
   --tier-accent-glow: rgba(146, 64, 14, 0.15);
-  --tier-border: #27272a;
+  --tier-border: #d4cfc6;
   --tier-noise: 0.04;
   --tier-vignette: 0.5;
   --tier-vignette-color: 0, 0, 0;
-  --tier-scrollbar: #27272a;
+  --tier-scrollbar: #c4bfb6;
 
-  /* ─── NM Design System Variables ─── */
-  --nm-bg: #09090b;
-  --nm-bg-raised: #18181b;
-  --nm-bg-bar: #111113;
+  /* ─── NM Design System Variables (default = paper / tier 0) ─── */
+  --nm-bg: #F5F0E8;
+  --nm-bg-raised: #EDE8DF;
+  --nm-bg-bar: #E5E0D7;
   --nm-accent: var(--tier-accent);
   --nm-accent-bright: var(--tier-accent-bright);
-  --nm-text: #fafafa;
-  --nm-text-secondary: #a1a1aa;
-  --nm-text-muted: #52525b;
-  --nm-border: var(--tier-border);
+  --nm-text: #1a1a1a;
+  --nm-text-secondary: #4a4a4a;
+  --nm-text-muted: #8a8a7a;
+  --nm-border: #d4cfc6;
 }
 
-/* ─── NM Tier Overrides ─── */
+/* ─── NM Theme Overrides ─── */
 body[data-theme="paper"] {
   --nm-bg: #F5F0E8;
   --nm-bg-raised: #EDE8DF;
@@ -86,6 +86,32 @@ body[data-theme="paper"] {
   --nm-text-secondary: #4a4a4a;
   --nm-text-muted: #8a8a7a;
   --nm-border: #d4cfc6;
+  --color-surface: #F5F0E8;
+  --color-surface-raised: #EDE8DF;
+  --color-surface-overlay: #E5E0D7;
+  --color-border-default: #d4cfc6;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #4a4a4a;
+  --color-text-muted: #8a8a7a;
+}
+
+body[data-theme="dark"] {
+  --nm-bg: #171412;
+  --nm-bg-raised: #18181b;
+  --nm-bg-bar: #111113;
+  --nm-text: #fafafa;
+  --nm-text-secondary: #a1a1aa;
+  --nm-text-muted: #52525b;
+  --nm-border: var(--tier-border);
+  --color-surface: #171412;
+  --color-surface-raised: #18181b;
+  --color-surface-overlay: #27272a;
+  --color-border-default: #27272a;
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #52525b;
+  --color-primary: #daa520;
+  --color-primary-hover: #f59e0b;
 }
 
 body[data-tier="0"] {
@@ -101,12 +127,12 @@ body[data-tier="2"] {
   --nm-accent-bright: #D4D4D4;
 }
 body[data-tier="3"] {
-  --nm-accent: #CFB53B;
-  --nm-accent-bright: #E5CC5C;
+  --nm-accent: #daa520;
+  --nm-accent-bright: #f1af09;
 }
 body[data-tier="4"] {
-  --nm-accent: #8B0000;
-  --nm-accent-bright: #C42B2B;
+  --nm-accent: #820000;
+  --nm-accent-bright: #9a2222;
 }
 
 body[data-tier="1"] {
@@ -117,6 +143,7 @@ body[data-tier="1"] {
   --tier-noise: 0.025;
   --tier-vignette: 0.35;
   --tier-scrollbar: #5C4033;
+  --color-text-gold: #D4944A;
 }
 
 body[data-tier="2"] {
@@ -127,27 +154,30 @@ body[data-tier="2"] {
   --tier-noise: 0.02;
   --tier-vignette: 0.25;
   --tier-scrollbar: #4A5568;
+  --color-text-gold: #B0BEC5;
 }
 
 body[data-tier="3"] {
-  --tier-accent: #FBBF24;
-  --tier-accent-bright: #FEF08A;
+  --tier-accent: #daa520;
+  --tier-accent-bright: #f1af09;
   --tier-accent-glow: rgba(251, 191, 36, 0.2);
   --tier-border: #422006;
   --tier-noise: 0.01;
   --tier-vignette: 0.15;
   --tier-scrollbar: #92400e;
+  --color-text-gold: #daa520;
 }
 
 body[data-tier="4"] {
   --tier-accent: #8B1A1A;
-  --tier-accent-bright: #C42B2B;
+  --tier-accent-bright: #9a2222;
   --tier-accent-glow: rgba(139, 26, 26, 0.25);
   --tier-border: #3B1111;
   --tier-noise: 0;
   --tier-vignette: 0.12;
   --tier-vignette-color: 40, 8, 8;
   --tier-scrollbar: #5C1515;
+  --color-text-gold: #9a2222;
 }
 
 /* ─── Base ─── */
@@ -158,6 +188,7 @@ body {
   --color-border-default: var(--tier-border);
   --color-border-gold: var(--tier-accent);
   --color-border-gold-bright: var(--tier-accent-bright);
+  --color-text-gold: var(--tier-accent-bright);
 }
 
 /* ─── Noise overlay ─── */
@@ -179,7 +210,7 @@ body::before {
 }
 
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: var(--color-surface);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -263,13 +294,13 @@ body::before {
 /* Free tier: dull accent */
 body[data-tier="0"] .tier-title,
 body:not([data-tier]) .tier-title {
-  color: #52525b;
+  color: var(--nm-text-muted);
 }
 
 /* Free tier: disable card hover glow */
 body[data-tier="0"] .card:hover,
 body:not([data-tier]) .card:hover {
-  border-color: #3f3f46;
+  border-color: var(--nm-border);
   box-shadow: none;
 }
 
@@ -284,7 +315,7 @@ body:not([data-tier]) .card:hover {
 
 /* Legendary badge — crimson */
 body[data-tier="4"] .tier-badge {
-  color: #C42B2B;
+  color: #9a2222;
 }
 
 

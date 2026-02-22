@@ -245,6 +245,24 @@ function getSharedBillboardGeometry() {
   return _sharedBillboardGeometry;
 }
 
+// Shared geometry for torch flame spheres (reused across all torches)
+let _sharedTorchSphereGeometry = null;
+function getSharedTorchSphereGeometry() {
+  if (!_sharedTorchSphereGeometry) {
+    _sharedTorchSphereGeometry = new THREE.SphereGeometry(0.012, 6, 4);
+  }
+  return _sharedTorchSphereGeometry;
+}
+
+// Shared geometry for window glow planes (reused across all windows)
+let _sharedWindowPlaneGeometry = null;
+function getSharedWindowPlaneGeometry() {
+  if (!_sharedWindowPlaneGeometry) {
+    _sharedWindowPlaneGeometry = new THREE.PlaneGeometry(0.3, 0.2);
+  }
+  return _sharedWindowPlaneGeometry;
+}
+
 // ---------------------------------------------------------------------------
 // DayNightCycle class
 // ---------------------------------------------------------------------------
@@ -266,7 +284,8 @@ export class DayNightCycle {
     this.scene = scene;
     this._options = {
       shadowMapSize: 2048,
-      shadowBias: -0.002,
+      shadowBias: -0.0001,
+      shadowNormalBias: 0.02,
       shadowCameraBounds: 50,
       maxActiveTorches: 30,
       sunArcRadius: 40,
@@ -359,6 +378,7 @@ export class DayNightCycle {
       this._sun.shadow.camera.near = 0.5;
       this._sun.shadow.camera.far = opts.sunArcRadius * 2 + 50;
       this._sun.shadow.bias = opts.shadowBias;
+      this._sun.shadow.normalBias = opts.shadowNormalBias;
     }
 
     this._sun.target.position.set(0, 0, 0);
@@ -414,7 +434,7 @@ export class DayNightCycle {
     const radius = options.radius !== undefined ? options.radius : 20;
 
     // Small sphere mesh for torch flame (constant glow, always visible)
-    const sphereGeo = new THREE.SphereGeometry(0.012, 6, 4);
+    const sphereGeo = getSharedTorchSphereGeometry();
     const sphereMat = new THREE.MeshStandardMaterial({
       color: color,
       emissive: color,
@@ -461,10 +481,9 @@ export class DayNightCycle {
       }
     }
 
-    // Dispose sphere
+    // Dispose sphere (geometry is shared, only dispose material)
     if (rec.sphereMesh) {
       this.scene.remove(rec.sphereMesh);
-      rec.sphereMesh.geometry.dispose();
       rec.sphereMesh.material.dispose();
     }
 
@@ -497,7 +516,7 @@ export class DayNightCycle {
       transparent: true,
       opacity: 0,
     });
-    const windowMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), windowMat);
+    const windowMesh = new THREE.Mesh(getSharedWindowPlaneGeometry(), windowMat);
     windowMesh.position.copy(position);
     this.scene.add(windowMesh);
 
@@ -525,7 +544,7 @@ export class DayNightCycle {
     if (rec.billboardMesh) {
       this.scene.remove(rec.billboardMesh);
       if (rec.billboardMat) rec.billboardMat.dispose();
-      if (rec.billboardMesh.geometry) rec.billboardMesh.geometry.dispose();
+      // Geometry is shared, don't dispose it per-window
     }
 
     this._windows.delete(id);

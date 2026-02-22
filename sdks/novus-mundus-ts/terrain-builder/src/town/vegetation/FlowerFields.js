@@ -924,17 +924,18 @@ export class FlowerFieldSystem {
     const geos = [this._wildflowerGeo, this._cropGeo, this._shrineGeo];
     const mats = [this._wildflowerMat, this._cropMat, this._shrineMat];
 
-    for (const mesh of meshes) {
-      if (mesh) {
-        this.scene.remove(mesh);
-        mesh.dispose();
-      }
-    }
+    // Dispose geometry and material before removing mesh from scene
     for (const geo of geos) {
       if (geo) geo.dispose();
     }
     for (const mat of mats) {
       if (mat) mat.dispose();
+    }
+    for (const mesh of meshes) {
+      if (mesh) {
+        this.scene.remove(mesh);
+        mesh.dispose();
+      }
     }
 
     this._wildflowerInstances = [];
@@ -963,17 +964,31 @@ export class FlowerFieldSystem {
     const petalColorBuf = new Float32Array(maxCount * 3);
     const phaseBuf = new Float32Array(maxCount);
 
-    geo.setAttribute('instanceOffset', new THREE.InstancedBufferAttribute(offsetBuf, 3));
-    geo.setAttribute('instanceRotation', new THREE.InstancedBufferAttribute(rotationBuf, 1));
-    geo.setAttribute('instanceHeight', new THREE.InstancedBufferAttribute(heightBuf, 1));
-    geo.setAttribute('instanceStemColor', new THREE.InstancedBufferAttribute(stemColorBuf, 3));
-    geo.setAttribute('instancePetalColor', new THREE.InstancedBufferAttribute(petalColorBuf, 3));
-    geo.setAttribute('instancePhase', new THREE.InstancedBufferAttribute(phaseBuf, 1));
+    const offsetAttr = new THREE.InstancedBufferAttribute(offsetBuf, 3);
+    offsetAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceOffset', offsetAttr);
+    const rotationAttr = new THREE.InstancedBufferAttribute(rotationBuf, 1);
+    rotationAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceRotation', rotationAttr);
+    const heightAttr = new THREE.InstancedBufferAttribute(heightBuf, 1);
+    heightAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceHeight', heightAttr);
+    const stemColorAttr = new THREE.InstancedBufferAttribute(stemColorBuf, 3);
+    stemColorAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instanceStemColor', stemColorAttr);
+    const petalColorAttr = new THREE.InstancedBufferAttribute(petalColorBuf, 3);
+    petalColorAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instancePetalColor', petalColorAttr);
+    const phaseAttr = new THREE.InstancedBufferAttribute(phaseBuf, 1);
+    phaseAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('instancePhase', phaseAttr);
 
     // Crop-specific: row index for coordinated wave
     if (type === 'crop') {
       const rowBuf = new Float32Array(maxCount);
-      geo.setAttribute('instanceRow', new THREE.InstancedBufferAttribute(rowBuf, 1));
+      const rowAttr = new THREE.InstancedBufferAttribute(rowBuf, 1);
+      rowAttr.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('instanceRow', rowAttr);
     }
 
     this.scene.add(mesh);

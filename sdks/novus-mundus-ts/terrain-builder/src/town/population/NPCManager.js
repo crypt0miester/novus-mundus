@@ -293,6 +293,7 @@ export class NPCRenderer {
       metalness: 0.0,
     });
     this._bodyMesh = new THREE.InstancedMesh(bodyGeo, bodyMat, maxCount);
+    this._bodyMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._bodyMesh.count = 0;
     this._bodyMesh.frustumCulled = false;
     this._bodyMesh.castShadow = true;
@@ -305,6 +306,7 @@ export class NPCRenderer {
       metalness: 0.0,
     });
     this._headMesh = new THREE.InstancedMesh(headGeo, headMat, maxCount);
+    this._headMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._headMesh.count = 0;
     this._headMesh.frustumCulled = false;
     this._headMesh.castShadow = false;
@@ -322,6 +324,7 @@ export class NPCRenderer {
       depthWrite: false,
     });
     this._billboardMesh = new THREE.InstancedMesh(bbGeo, bbMat, maxCount);
+    this._billboardMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._billboardMesh.count = 0;
     this._billboardMesh.frustumCulled = false;
     this._billboardMesh.visible = false;
