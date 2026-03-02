@@ -1,0 +1,89 @@
+import { BuildingId, FEATURES } from "@/lib/hooks/useFeatureGate";
+
+// ── Building categories ──
+export type BuildingCategory =
+  | "Military"
+  | "Economy"
+  | "Growth"
+  | "Combat"
+  | "Exploration";
+
+export const CATEGORY_COLORS: Record<BuildingCategory, string> = {
+  Military: "border-l-red-600",
+  Economy: "border-l-amber-500",
+  Growth: "border-l-emerald-500",
+  Combat: "border-l-purple-500",
+  Exploration: "border-l-cyan-500",
+};
+
+export const CATEGORY_ORDER: BuildingCategory[] = [
+  "Military",
+  "Economy",
+  "Growth",
+  "Combat",
+  "Exploration",
+];
+
+// ── Per-building feature mapping ──
+export interface BuildingFeatureConfig {
+  id: number;
+  name: string;
+  desc: string;
+  tier: number;
+  category: BuildingCategory;
+  /** Feature key that this building's primary action corresponds to (for gating) */
+  primaryFeature?: string;
+  /** Panel key to open when clicking an active building */
+  panelKey?: string;
+  /** Whether clicking opens a center feature view (complex features) */
+  centerView?: boolean;
+  /** Hint text shown on the card for active buildings */
+  featureHint?: string;
+}
+
+export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
+  // Military
+  { id: BuildingId.Barracks, name: "Barracks", desc: "Recruit defensive units", tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_DEFENSIVE, centerView: true, featureHint: "Hire units" },
+  { id: BuildingId.Camp, name: "Camp", desc: "Hire operative units", tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_OPERATIVE, centerView: true, featureHint: "Hire operatives" },
+  { id: BuildingId.Citadel, name: "Citadel", desc: "Lead rallies", tier: 2, category: "Military", primaryFeature: FEATURES.RALLY_CREATE, featureHint: "Rally" },
+  { id: BuildingId.Infirmary, name: "Infirmary", desc: "Unit recovery", tier: 3, category: "Military", centerView: true, featureHint: "Recover units" },
+
+  // Economy
+  { id: BuildingId.Market, name: "Market", desc: "Trade with others", tier: 2, category: "Economy", primaryFeature: FEATURES.PURCHASE_EQUIPMENT, centerView: true, featureHint: "Trade" },
+  { id: BuildingId.Workshop, name: "Workshop", desc: "Convert materials", tier: 1, category: "Economy", centerView: true, featureHint: "Convert materials" },
+  { id: BuildingId.Vault, name: "Vault", desc: "Secure your wealth", tier: 1, category: "Economy", primaryFeature: FEATURES.VAULT_TRANSFER, featureHint: "Vault" },
+  { id: BuildingId.Treasury, name: "Treasury", desc: "Maximize prizes", tier: 3, category: "Economy", featureHint: "Treasury" },
+
+  // Growth
+  { id: BuildingId.Mansion, name: "Mansion", desc: "Home base", tier: 1, category: "Growth", featureHint: "Home" },
+  { id: BuildingId.Academy, name: "Academy", desc: "Begin research", tier: 2, category: "Growth", primaryFeature: FEATURES.RESEARCH_START, centerView: true, featureHint: "Research" },
+  { id: BuildingId.Sanctuary, name: "Sanctuary", desc: "Hero meditation", tier: 2, category: "Growth", primaryFeature: FEATURES.SANCTUARY_MEDITATE, centerView: true, featureHint: "Meditate" },
+  { id: BuildingId.Observatory, name: "Observatory", desc: "Enhance loot", tier: 3, category: "Growth", featureHint: "Loot bonuses" },
+
+  // Combat
+  { id: BuildingId.Arena, name: "Arena", desc: "PvP combat", tier: 3, category: "Combat", primaryFeature: FEATURES.ARENA_JOIN, featureHint: "PvP" },
+  { id: BuildingId.Catacombs, name: "Catacombs", desc: "Dungeon access", tier: 3, category: "Combat", primaryFeature: FEATURES.DUNGEON_ENTER, featureHint: "Dungeon" },
+
+  // Exploration
+  { id: BuildingId.Mine, name: "Mine", desc: "Mining expeditions", tier: 2, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_MINING, featureHint: "Mine" },
+  { id: BuildingId.Dock, name: "Dock", desc: "Fishing expeditions", tier: 1, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_FISHING, featureHint: "Fish" },
+  { id: BuildingId.Farm, name: "Farm", desc: "Produce collection", tier: 1, category: "Exploration", primaryFeature: FEATURES.COLLECT_FARMING, featureHint: "Farm" },
+  { id: BuildingId.Stables, name: "Stables", desc: "Travel gating", tier: 2, category: "Exploration", primaryFeature: FEATURES.INTERCITY_TRAVEL, featureHint: "Travel" },
+];
+
+/** Map from building ID to feature config */
+export const BUILDING_FEATURE_MAP = new Map(
+  BUILDING_FEATURES.map((b) => [b.id, b])
+);
+
+/** Get all buildings grouped by category, in category order */
+export function getBuildingsByCategory(): [BuildingCategory, BuildingFeatureConfig[]][] {
+  const map = new Map<BuildingCategory, BuildingFeatureConfig[]>();
+  for (const cat of CATEGORY_ORDER) {
+    map.set(cat, []);
+  }
+  for (const b of BUILDING_FEATURES) {
+    map.get(b.category)!.push(b);
+  }
+  return Array.from(map.entries());
+}

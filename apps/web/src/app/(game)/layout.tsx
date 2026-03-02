@@ -3,8 +3,9 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
-import { StatusBar } from "@/components/layout/StatusBar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { LeftPanel, LeftPanelMobile } from "@/components/layout/LeftPanel";
+import { RightPanel } from "@/components/layout/RightPanel";
 import { useTransitionStore, exitMessage } from "@/lib/store/transition";
 
 export default function GameLayout({
@@ -25,18 +26,19 @@ export default function GameLayout({
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      {/* Desktop: TopBar at top */}
       <TopBar />
-      {/* Mobile: StatusBar at top */}
-      <div className="md:hidden">
-        <StatusBar />
+      {/* Mobile: collapsible data bar */}
+      <div className="lg:hidden">
+        <LeftPanelMobile />
       </div>
-      <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
-      {/* Desktop: StatusBar at bottom */}
-      <div className="hidden md:block">
-        <StatusBar />
+      {/* 3-column body */}
+      <div className="flex flex-1 overflow-hidden">
+        <aside className="hidden lg:block lg:w-56 flex-shrink-0 overflow-y-auto border-r border-border-default bg-[var(--nm-bg-bar)]">
+          <LeftPanel />
+        </aside>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <RightPanel />
       </div>
-      {/* Mobile: BottomNav at bottom */}
       <BottomNav />
     </div>
   );

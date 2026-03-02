@@ -26,9 +26,7 @@ function NavLink({
 }) {
   const sizeClass = size === "primary"
     ? "text-sm font-semibold"
-    : size === "secondary"
-      ? "text-xs font-medium"
-      : "text-[11px] text-text-muted";
+    : "text-[11px] font-medium text-text-muted";
 
   if (disabled) {
     return (
@@ -48,7 +46,9 @@ function NavLink({
           ? "tier-accent-text"
           : locked
             ? "text-zinc-600 hover:text-zinc-500"
-            : "text-text-secondary hover:text-text-primary"
+            : size === "secondary"
+              ? "text-text-muted hover:text-text-secondary"
+              : "text-text-secondary hover:text-text-primary"
       )}
     >
       {label}
@@ -85,40 +85,40 @@ export function TopBar() {
   const disabled = isSuccess && !hasPlayer;
 
   return (
-    <header className="z-40 hidden flex-col bg-[var(--nm-bg-bar)] md:flex">
-      {/* Row 1: Logo — Primary (centered) — Wallet */}
-      <div className="flex h-10 items-center px-4 lg:px-6">
-        <Link href="/dashboard" className="flex-shrink-0">
-          <span className="tier-title font-display text-sm font-semibold tracking-wide">
-            NovusMundus
-          </span>
-        </Link>
+    <header className="z-40 hidden md:flex h-10 items-center bg-[var(--nm-bg-bar)] border-b border-zinc-800/50 px-4 lg:px-6">
+      {/* Logo */}
+      <Link href="/dashboard" className="flex-shrink-0">
+        <span className="tier-title font-display text-sm font-semibold tracking-wide">
+          NovusMundus
+        </span>
+      </Link>
 
-        <nav className="flex flex-1 items-center justify-center gap-3">
-          {PRIMARY.map((item) => (
-            <NavLink key={item.href} href={item.href} label={item.label} size="primary" active={isActive(item.href)} locked={!!pageLocked[item.href]} disabled={disabled} />
-          ))}
-        </nav>
+      {/* Primary nav (centered) */}
+      <nav className="flex flex-1 items-center justify-center gap-3">
+        {PRIMARY.map((item) => (
+          <NavLink key={item.href} href={item.href} label={item.label} size="primary" active={isActive(item.href)} locked={!!pageLocked[item.href]} disabled={disabled} />
+        ))}
+      </nav>
 
-        <WalletMultiButton
-          style={{
-            background: "var(--nm-bg-raised)",
-            border: "1px solid var(--nm-border)",
-            borderRadius: "0.375rem",
-            fontSize: "0.75rem",
-            height: "2rem",
-            padding: "0 0.75rem",
-            color: "var(--nm-text-secondary)",
-          }}
-        />
-      </div>
-
-      {/* Row 2: Secondary nav (centered) */}
-      <nav className="flex h-7 items-center justify-center gap-3 border-t border-zinc-800/50 px-4">
+      {/* Secondary nav (compact, before wallet) */}
+      <nav className="hidden lg:flex items-center gap-2 mr-3">
         {SECONDARY.map((item) => (
           <NavLink key={item.href} href={item.href} label={item.label} size="secondary" active={isActive(item.href)} locked={!!pageLocked[item.href]} disabled={disabled} />
         ))}
       </nav>
+
+      {/* Wallet */}
+      <WalletMultiButton
+        style={{
+          background: "var(--nm-bg-raised)",
+          border: "1px solid var(--nm-border)",
+          borderRadius: "0.375rem",
+          fontSize: "0.75rem",
+          height: "2rem",
+          padding: "0 0.75rem",
+          color: "var(--nm-text-secondary)",
+        }}
+      />
     </header>
   );
 }

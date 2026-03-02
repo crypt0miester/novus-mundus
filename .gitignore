@@ -6,3 +6,14 @@ target
 node_modules
 test-ledger
 .next
+sdks/novus-mundus-ts/.validator.pid
+.agents
+.claude
+.turbo
+sdks/novus-mundus-ts/assets/*
+sdks/novus-mundus-ts/keys/*
+
+sdks/novus-mundus-ts/terrain-builder/data/*
+sdks/novus-mundus-ts/terrain-builder/src/town/assets
+sdks/pyth-sdk-rs
+sdks/sb-on-demand-examples

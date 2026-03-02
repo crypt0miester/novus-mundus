@@ -1,0 +1,323 @@
+"use client";
+
+import { useMemo, useCallback } from "react";
+import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useTransact } from "@/lib/hooks/useTransact";
+import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
+import { useQuery } from "@tanstack/react-query";
+import { TxButton } from "@/components/shared/TxButton";
+import type { TxPhase } from "@/components/shared/TxButton";
+import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { GemAction } from "@/components/shared/GemAction";
+import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { useRightPanelStore } from "@/lib/store/right-panel";
+import {
+  derivePlayerPda,
+  deriveResearchPda,
+  deriveResearchTemplatePda,
+  createStartResearchInstruction,
+  createCompleteResearchInstruction,
+  createSpeedUpResearchInstruction,
+  createCancelResearchInstruction,
+  createAscendInstruction,
+  calculateResearchCost,
+  parseResearchTemplate,
+  parseResearchProgress,
+  isResearching,
+  isResearchComplete,
+  getResearchLevel,
+  checkResearchPrerequisites,
+} from "@/lib/sdk";
+import type { ResearchTemplateAccount, ResearchProgressAccount } from "@/lib/sdk";
+
+const BUFF_NAMES: Record<number, string> = {
+  0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",
+  4: "Crit Damage", 5: "Rally Capacity", 6: "Encounter Success", 7: "Loot Bonus",
+  8: "Training Speed", 9: "Ambush Damage",
+  10: "Production", 11: "Resource Cap", 12: "Market Tax", 13: "Trade Speed",
+  14: "Mining Output", 15: "Cash Gen", 16: "Build Speed", 17: "Upkeep Reduction",
+  18: "Black Market", 19: "Tax Collection",
+  20: "Daily Rewards", 21: "Mining Ops", 22: "Fishing", 23: "Loot Magnetism",
+  24: "Reputation", 25: "Stamina", 26: "Streak Bonus", 27: "Fragment Discovery",
+  28: "Gem Prospecting", 29: "Collection Mastery", 30: "Travel Speed",
+};
+const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
+const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
+
+/** Standalone research detail panel for the right panel store. */
+export function ResearchPanel({
+  researchType,
+}: {
+  researchType: number;
+}) {
+  const { data: playerData } = usePlayer();
+  const client = useNovusMundusClient();
+  const { publicKey } = useWallet();
+  const { connection } = useConnection();
+  const transact = useTransact();
+  const close = useRightPanelStore((s) => s.close);
+
+  // Fetch template
+  const { data: template } = useQuery({
+    queryKey: ["research-template", researchType],
+    queryFn: async () => {
+      const [pda] = deriveResearchTemplatePda(researchType);
+      const info = await connection.getAccountInfo(pda);
+      if (!info) return null;
+      return parseResearchTemplate(info);
+    },
+    staleTime: 60_000,
+  });
+
+  // Fetch progress
+  const { data: progressData } = useQuery({
+    queryKey: ["research-progress", publicKey?.toBase58()],
+    queryFn: async () => {
+      if (!publicKey) return null;
+      const [playerPda] = derivePlayerPda(client.gameEngine, publicKey);
+      const [researchPda] = deriveResearchPda(playerPda);
+      const info = await connection.getAccountInfo(researchPda);
+      if (!info) return { exists: false as const, account: null };
+      const account = parseResearchProgress(info);
+      return { exists: true as const, account };
+    },
+    enabled: !!publicKey,
+    staleTime: 10_000,
+  });
+
+  const progress = progressData?.account ?? null;
+
+  const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
+
+  if (!template) {
+    return <div className="text-xs text-text-muted">Loading research data...</div>;
+  }
+
+  const currentLevel = progress ? getResearchLevel(progress, template.researchType) : 0;
+  const isActiveForThis = progress
+    ? isResearching(progress) && progress.currentResearch === template.researchType
+    : false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const isComplete = progress
+    ? isActiveForThis && isResearchComplete(progress, nowSec)
+    : false;
+  const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
+  const isAnyActive = progress ? isResearching(progress) : false;
+  const remainingSeconds = isActiveForThis && progress
+    ? Math.max(0, progress.completesAt.toNumber() - nowSec)
+    : 0;
+  const buffName = BUFF_NAMES[template.buffType] ?? `Buff #${template.buffType}`;
+  const categoryName = CATEGORY_NAMES[template.category] ?? "Unknown";
+
+  const baseCost = template.baseNoviCost.toNumber();
+  const baseTime = template.baseTimeSeconds;
+  const nextLevelCost = currentLevel < template.maxLevel
+    ? calculateResearchCost(baseCost, currentLevel + 1)
+    : 0;
+  const hasEnoughNovi = noviBalance >= nextLevelCost;
+
+  const costPreview = Array.from({ length: Math.min(template.maxLevel, 6) }, (_, i) => ({
+    level: i + 1,
+    cost: calculateResearchCost(baseCost, i + 1),
+    timeHours: Math.max(0.1, Math.round((baseTime * Math.pow(1.5, i + 1)) / 360) / 10),
+  }));
+
+  // Handlers
+  const handleStart = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createStartResearchInstruction({
+      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research started!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleComplete = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createCompleteResearchInstruction({
+      payer: publicKey, gameEngine: client.gameEngine, playerOwner: publicKey,
+      researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research complete!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleInstant = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const rt = template.researchType;
+    const startIx = createStartResearchInstruction({ owner: publicKey, gameEngine: ge, researchType: rt });
+    const speedupIx = createSpeedUpResearchInstruction(
+      { owner: publicKey, gameEngine: ge, researchType: rt },
+      { speedUpSeconds: 0 },
+    );
+    const completeIx = createCompleteResearchInstruction({
+      payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
+    });
+    return transact.mutateAsync({
+      instructions: [startIx, speedupIx, completeIx],
+      invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${buffName} completed instantly!`, onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const speedUpSeconds = tier === 2 ? 0 : 3600;
+    const ix = createSpeedUpResearchInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType },
+      { speedUpSeconds },
+    );
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research sped up!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createCancelResearchInstruction({
+      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research cancelled!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleAscend = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createAscendInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { researchType: template.researchType },
+    );
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${buffName} ascended!`, onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Template info */}
+      <div className="flex items-center gap-3">
+        <span className="text-3xl">{CATEGORY_ICONS[template.category] ?? "?"}</span>
+        <div>
+          <div className="text-sm font-semibold text-text-primary">{buffName}</div>
+          <div className="text-xs text-text-muted">{categoryName} &middot; +{(template.buffPerLevelBps / 100).toFixed(1)}% per level</div>
+          <div className="text-[11px] text-text-gold">Level {currentLevel}/{template.maxLevel}</div>
+        </div>
+      </div>
+
+      {/* NOVI balance */}
+      <div className="rounded-lg bg-surface/60 px-3 py-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">Your NOVI</span>
+          <span className={`font-mono tabular-nums ${hasEnoughNovi || isActiveForThis ? "text-text-gold" : "text-red-400"}`}>
+            {noviBalance.toLocaleString()}
+          </span>
+        </div>
+        {currentLevel < template.maxLevel && !isActiveForThis && (
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Lv {currentLevel + 1} Cost</span>
+            <span className="font-mono tabular-nums text-text-muted">{nextLevelCost.toLocaleString()} NOVI</span>
+          </div>
+        )}
+        {!hasEnoughNovi && !isActiveForThis && currentLevel < template.maxLevel && (
+          <div className="mt-1 text-[11px] text-red-400">Need {(nextLevelCost - noviBalance).toLocaleString()} more NOVI</div>
+        )}
+      </div>
+
+      {/* Prerequisite warning */}
+      {!canMeetPrereqs && (
+        <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
+          Requires research #{template.prerequisiteResearch} at level {template.prerequisiteLevel}
+        </div>
+      )}
+
+      {/* Active research countdown */}
+      {isActiveForThis && !isComplete && (
+        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
+          <div className="text-xs text-text-muted">Researching...</div>
+          <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
+        </div>
+      )}
+
+      {/* Complete */}
+      {isComplete && (
+        <div className="rounded-lg border border-green-800/50 bg-green-900/20 p-3 text-center">
+          <div className="mb-2 text-xs text-green-400">Research Complete!</div>
+          <TxButton onClick={handleComplete} className="w-full">Claim Research</TxButton>
+        </div>
+      )}
+
+      {/* Cost Preview */}
+      <div className="rounded-lg border border-zinc-800 bg-surface/50 p-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Cost Preview</div>
+        <div className="flex flex-wrap gap-2">
+          {costPreview.map((r) => (
+            <div key={r.level} className={`rounded border px-2 py-1 text-center ${
+              r.level === currentLevel + 1 ? "border-amber-600 bg-amber-900/20"
+                : r.level <= currentLevel ? "border-green-800/50 bg-green-900/10"
+                : "border-zinc-800"
+            }`}>
+              <div className="text-[11px] text-text-muted">Lv {r.level}</div>
+              <div className="text-xs font-semibold text-text-gold">{r.cost.toLocaleString()}</div>
+              <div className="text-[11px] text-text-muted">~{r.timeHours}h</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Start actions */}
+      {!isAnyActive && canMeetPrereqs && currentLevel < template.maxLevel && (
+        <div className="flex flex-col gap-2">
+          <TxButton onClick={handleStart} className="w-full" disabled={!hasEnoughNovi}>
+            {hasEnoughNovi ? `Start ${buffName} Lv ${currentLevel + 1}` : "Insufficient NOVI"}
+          </TxButton>
+          <GemAction onClick={handleInstant} gemCost={template.gemCostPerMinute * Math.ceil(baseTime / 60)} gemBalance={gemBalance}>
+            Instant Research
+          </GemAction>
+        </div>
+      )}
+
+      {/* Ascend */}
+      {!isAnyActive && currentLevel >= template.maxLevel && (
+        <TxButton onClick={handleAscend} className="w-full border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50">
+          Ascend {buffName}
+        </TxButton>
+      )}
+
+      {/* In-progress actions */}
+      {isActiveForThis && !isComplete && (
+        <>
+          <SpeedupPanel
+            visible
+            remainingSeconds={remainingSeconds}
+            onSpeedup={handleSpeedup}
+            tiers={[
+              { tier: 1, label: "Skip 1 Hour", description: "Skip 1 hour of research time", gemCost: template.gemCostPerMinute * 60 },
+              { tier: 2, label: "Instant", description: "Complete all remaining time", gemCost: template.gemCostPerMinute * Math.ceil(remainingSeconds / 60) },
+            ]}
+            gemBalance={gemBalance}
+          />
+          <TxButton onClick={handleCancel} variant="danger" className="w-full">Cancel Research</TxButton>
+        </>
+      )}
+
+      {/* Already researching something else */}
+      {isAnyActive && !isActiveForThis && (
+        <div className="text-center text-xs text-text-muted">
+          Another research is in progress. Cancel or complete it first.
+        </div>
+      )}
+    </div>
+  );
+}
