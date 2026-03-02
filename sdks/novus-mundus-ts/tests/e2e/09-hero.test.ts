@@ -84,7 +84,7 @@ async function mintHero(
   );
 
   await sendTransaction(
-    ctx.connection,
+    ctx.svm,
     new Transaction().add(ix),
     [player.keypair, heroMintKeypair]
   );
@@ -121,7 +121,7 @@ async function createHeroReadyPlayer(
     owner: player.publicKey,
     gameEngine: ctx.gameEngine,
   });
-  await sendTransaction(ctx.connection, new Transaction().add(buyPlotIx), [player.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(buyPlotIx), [player.keypair]);
   await factory.buildAndCompleteBuilding(player, BuildingType.Citadel);
 
   // 2. Create team → unlocks EXT_TEAM, sets player.team
@@ -130,7 +130,7 @@ async function createHeroReadyPlayer(
     { owner: player.publicKey, gameEngine: ctx.gameEngine, teamId },
     { name: `HTeam${teamId}` }
   );
-  await sendTransaction(ctx.connection, new Transaction().add(teamIx), [player.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(teamIx), [player.keypair]);
 
   // 3. Hire minimal units (needed for rally creation, which requires total_units > 0)
   //    Unit cost is 100 NOVI per unit, so we need at least 100 to get 1 unit
@@ -161,7 +161,7 @@ async function createHeroReadyPlayer(
       siegeWeapons: 0,
     }
   );
-  await sendTransaction(ctx.connection, new Transaction().add(rallyIx), [player.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(rallyIx), [player.keypair]);
 
   return player;
 }
@@ -207,10 +207,10 @@ describe('Hero System', () => {
 
       const tx = new Transaction().add(ix);
 
-      await sendTransaction(ctx.connection, tx, [player.keypair, heroMintKeypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair, heroMintKeypair]);
 
       // Verify: fetch the MPL Core asset account and parse on-chain data
-      const assetInfo = await ctx.connection.getAccountInfo(heroMintKeypair.publicKey);
+      const assetInfo = await ctx.svm.getAccount(heroMintKeypair.publicKey);
       expect(assetInfo).not.toBeNull();
 
       const asset = parseAssetV1(assetInfo!.data);
@@ -239,7 +239,7 @@ describe('Hero System', () => {
 
       // Also verify the HeroTemplate account
       const [heroTemplatePda] = deriveHeroTemplatePda(1);
-      const templateInfo = await ctx.connection.getAccountInfo(heroTemplatePda);
+      const templateInfo = await ctx.svm.getAccount(heroTemplatePda);
       expect(templateInfo).not.toBeNull();
       // template_id is first 2 bytes (u16 LE)
       const onChainTemplateId = templateInfo!.data.readUInt16LE(0);
@@ -263,7 +263,7 @@ describe('Hero System', () => {
 
       // Might fail if insufficient resources
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair, heroMintKeypair]
       );
@@ -284,7 +284,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair, heroMintKeypair]
       );
@@ -304,11 +304,11 @@ describe('Hero System', () => {
         },
         { templateId: 1 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(ix1), [player.keypair, heroMint1]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix1), [player.keypair, heroMint1]);
 
       // Verify receipt PDA exists
       const [receiptPda] = deriveHeroMintReceiptPda(player.playerPda, 1);
-      const receiptInfo = await ctx.connection.getAccountInfo(receiptPda);
+      const receiptInfo = await ctx.svm.getAccount(receiptPda);
       expect(receiptInfo).not.toBeNull();
       expect(receiptInfo!.data.length).toBe(0); // 0-byte receipt
 
@@ -324,7 +324,7 @@ describe('Hero System', () => {
         { templateId: 1 }
       );
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix2),
         [player.keypair, heroMint2]
       );
@@ -335,7 +335,7 @@ describe('Hero System', () => {
 
       // Mint template 1
       const heroMint1 = Keypair.generate();
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createMintHeroInstruction(
           { gameEngine: ctx.gameEngine, minter: player.publicKey, heroMint: heroMint1.publicKey, treasury: ctx.treasury.publicKey },
           { templateId: 1 }
@@ -345,7 +345,7 @@ describe('Hero System', () => {
 
       // Mint template 2 (different template, should succeed)
       const heroMint2 = Keypair.generate();
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createMintHeroInstruction(
           { gameEngine: ctx.gameEngine, minter: player.publicKey, heroMint: heroMint2.publicKey, treasury: ctx.treasury.publicKey },
           { templateId: 2 }
@@ -380,7 +380,7 @@ describe('Hero System', () => {
         },
         { slotIndex: 0 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(lockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(lockIx), [player.keypair]);
 
       // Now unlock to get hero back in wallet for level-up test
       const unlockIx = createUnlockHeroInstruction(
@@ -393,7 +393,7 @@ describe('Hero System', () => {
         },
         { slotIndex: 0 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(unlockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(unlockIx), [player.keypair]);
 
       // Buy fragments for level-up (cost is ~15 for level 1→2)
       await factory.buyFragments(player, 1); // 100 fragments
@@ -407,7 +407,7 @@ describe('Hero System', () => {
         estateAccount,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(levelUpIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(levelUpIx), [player.keypair]);
     });
 
     it('should reject level up without enough fragments', async () => {
@@ -419,14 +419,14 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       // Lock to unlock EXT_HEROES
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )),
         [player.keypair]
       );
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -445,7 +445,7 @@ describe('Hero System', () => {
           estateAccount,
         });
         try {
-          await sendTransaction(ctx.connection, new Transaction().add(levelUpIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(levelUpIx), [player.keypair]);
         } catch (err) {
           failed = true;
           break;
@@ -463,14 +463,14 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )),
         [player.keypair]
       );
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -489,7 +489,7 @@ describe('Hero System', () => {
           estateAccount,
         });
         try {
-          await sendTransaction(ctx.connection, new Transaction().add(levelUpIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(levelUpIx), [player.keypair]);
         } catch (err: any) {
           reachedMax = true;
           break;
@@ -507,14 +507,14 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )),
         [player.keypair]
       );
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -523,7 +523,7 @@ describe('Hero System', () => {
       );
 
       // Get initial player state
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
 
       // Buy fragments for level-up
@@ -538,7 +538,7 @@ describe('Hero System', () => {
         estateAccount,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(levelUpIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(levelUpIx), [player.keypair]);
 
       // Verify transaction succeeded (stats in NFT attributes)
     });
@@ -569,7 +569,7 @@ describe('Hero System', () => {
         { slotIndex: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(lockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(lockIx), [player.keypair]);
     });
 
     it('should unlock hero after expedition', async () => {
@@ -582,7 +582,7 @@ describe('Hero System', () => {
 
       // Lock hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -610,7 +610,7 @@ describe('Hero System', () => {
         { slotIndex: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(unlockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(unlockIx), [player.keypair]);
     });
 
     it('should lock and unlock without expedition', async () => {
@@ -622,7 +622,7 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -650,7 +650,7 @@ describe('Hero System', () => {
         { slotIndex: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(unlockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(unlockIx), [player.keypair]);
     });
 
     it('should reject lock on occupied slot', async () => {
@@ -664,7 +664,7 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       // Lock hero1 to slot 0
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: hero1.heroMint, heroTemplate: heroTemplate1, estateAccount },
           { slotIndex: 0 }
@@ -673,7 +673,7 @@ describe('Hero System', () => {
       );
 
       // Try to lock hero2 to slot 0 (already occupied) - should fail
-      await expectTransactionToFail(ctx.connection,
+      await expectTransactionToFail(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: hero2.heroMint, heroTemplate: heroTemplate2, estateAccount },
           { slotIndex: 0 }
@@ -698,7 +698,7 @@ describe('Hero System', () => {
 
       // Lock hero first (required before assignment)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -720,10 +720,10 @@ describe('Hero System', () => {
         { slotIndex: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(assignIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(assignIx), [player.keypair]);
 
       // Verify hero assigned
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -737,7 +737,7 @@ describe('Hero System', () => {
 
       // Lock hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -755,7 +755,7 @@ describe('Hero System', () => {
 
       // Assign
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -777,7 +777,7 @@ describe('Hero System', () => {
         { slotIndex: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(unlockIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(unlockIx), [player.keypair]);
     });
 
     it('should reject assigning empty slot', async () => {
@@ -790,7 +790,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(assignIx),
         [player.keypair]
       );
@@ -817,7 +817,7 @@ describe('Hero System', () => {
       const player = await createHeroReadyPlayer(ctx, factory);
 
       // Get player stats before hero
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
 
       // Mint and lock hero (locked heroes provide combat bonuses)
@@ -826,7 +826,7 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -844,7 +844,7 @@ describe('Hero System', () => {
 
       // Assign as defensive hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -855,7 +855,7 @@ describe('Hero System', () => {
       );
 
       // Verify hero bonuses applied
-      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAfter).not.toBeNull();
     });
 
@@ -886,7 +886,7 @@ describe('Hero System', () => {
 
       // Lock hero (required before equipping)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -903,7 +903,7 @@ describe('Hero System', () => {
       );
 
       // Verify hero is locked and ready for equipment
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -916,7 +916,7 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -934,7 +934,7 @@ describe('Hero System', () => {
 
       // Unlock hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUnlockHeroInstruction(
             {
@@ -950,7 +950,7 @@ describe('Hero System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -964,7 +964,7 @@ describe('Hero System', () => {
 
       // Try to assign slot 0 without locking - should fail (slot is empty)
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -989,7 +989,7 @@ describe('Hero System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [ctx.daoAuthority]
       );
@@ -1004,7 +1004,7 @@ describe('Hero System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -1025,7 +1025,7 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -1043,7 +1043,7 @@ describe('Hero System', () => {
 
       // Assign as defensive hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -1055,7 +1055,7 @@ describe('Hero System', () => {
 
       // Hero XP is gained through combat and expeditions
       // We verify the setup succeeded
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -1079,14 +1079,14 @@ describe('Hero System', () => {
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )),
         [player.keypair]
       );
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -1106,7 +1106,7 @@ describe('Hero System', () => {
         estateAccount,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(levelUpIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(levelUpIx), [player.keypair]);
     });
   });
 
@@ -1133,7 +1133,7 @@ describe('Hero System', () => {
 
       // Lock hero to see location bonus applied
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createLockHeroInstruction(
             {
@@ -1149,7 +1149,7 @@ describe('Hero System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -1166,7 +1166,7 @@ describe('Hero System', () => {
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
 
       // Get player state before burn
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
       const lockedNoviBefore = playerBefore!.lockedNovi;
 
@@ -1180,15 +1180,15 @@ describe('Hero System', () => {
         { templateId }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(burnIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(burnIx), [player.keypair]);
 
       // Verify hero NFT is destroyed
-      const assetInfo = await ctx.connection.getAccountInfo(heroMint);
+      const assetInfo = await ctx.svm.getAccount(heroMint);
       expect(assetInfo).toBeNull();
 
       // Verify receipt PDA was closed (allowing re-mint)
       const [receiptPda] = deriveHeroMintReceiptPda(player.playerPda, templateId);
-      const receiptInfo = await ctx.connection.getAccountInfo(receiptPda);
+      const receiptInfo = await ctx.svm.getAccount(receiptPda);
       expect(receiptInfo).toBeNull();
     });
 
@@ -1200,7 +1200,7 @@ describe('Hero System', () => {
       const [heroTemplate] = deriveHeroTemplatePda(templateId);
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -1219,7 +1219,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(burnIx),
         [player.keypair]
       );
@@ -1240,7 +1240,7 @@ describe('Hero System', () => {
         },
         { templateId }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(burnIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(burnIx), [player.keypair]);
 
       // Re-mint same template - should succeed (receipt was closed)
       const heroMint2 = Keypair.generate();
@@ -1253,7 +1253,7 @@ describe('Hero System', () => {
         },
         { templateId }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(mintIx), [player.keypair, heroMint2]);
+      await sendTransaction(ctx.svm, new Transaction().add(mintIx), [player.keypair, heroMint2]);
     });
 
     it('should reject burn by non-owner', async () => {
@@ -1274,7 +1274,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(burnIx),
         [player2.keypair]
       );
@@ -1291,7 +1291,7 @@ describe('Hero System', () => {
       const [templatePda] = deriveHeroTemplatePda(templateId);
 
       // Read current supply cap
-      const templateBefore = await ctx.connection.getAccountInfo(templatePda);
+      const templateBefore = await ctx.svm.getAccount(templatePda);
       expect(templateBefore).not.toBeNull();
 
       // Update supply cap (increase)
@@ -1303,7 +1303,7 @@ describe('Hero System', () => {
         { templateId, newSupplyCap: 50000 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
     });
 
     it('should reject supply cap decrease', async () => {
@@ -1316,7 +1316,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [ctx.daoAuthority]
       );
@@ -1334,7 +1334,7 @@ describe('Hero System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -1365,7 +1365,7 @@ describe('Hero System', () => {
       const [heroTemplate] = deriveHeroTemplatePda(templateId);
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -1374,7 +1374,7 @@ describe('Hero System', () => {
       );
 
       // Try to unlock from slot 1 (hero is in slot 0)
-      await expectTransactionToFail(ctx.connection,
+      await expectTransactionToFail(ctx.svm,
         new Transaction().add(createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 1 }
@@ -1391,7 +1391,7 @@ describe('Hero System', () => {
       const [heroTemplate] = deriveHeroTemplatePda(templateId);
       const [estateAccount] = deriveEstatePda(player.playerPda);
 
-      await sendTransaction(ctx.connection,
+      await sendTransaction(ctx.svm,
         new Transaction().add(createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
@@ -1400,7 +1400,7 @@ describe('Hero System', () => {
       );
 
       // Verify hero is locked in player's active_heroes
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });

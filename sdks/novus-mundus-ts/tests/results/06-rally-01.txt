@@ -1,5 +1,0 @@
-[2m[onchain][0m [2m5ByCnTSw9H..[0m [31m✗ tx failed[0m
-[2m[onchain][0m [2m5ByCnTSw9H..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1a[0m
-[2m[onchain][0m [2mBHgoiAh3Lz..[0m [31m✗ tx failed[0m
-[2m[onchain][0m [2mBHgoiAh3Lz..[0m [31mProgram J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V failed: custom program error: 0x1e1c[0m
-[2m[onchain][0m [2mEuYpqbgJMr..[0m [31m✗ tx failed[0m

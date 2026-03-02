@@ -93,7 +93,7 @@ describe('Networth Calculation', () => {
   describe('Baseline Networth', () => {
     it('should compute non-zero networth at init from starter assets', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       const onChain = account!.networth.toNumber();
@@ -111,15 +111,15 @@ describe('Networth Calculation', () => {
   describe('Networth After Subscription', () => {
     it('should increase after Rookie (tier 0) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       const baselineNw = before!.networth.toNumber();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createSubIx(player, 0)),
         [player.keypair],
       );
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       const onChain = after!.networth.toNumber();
@@ -132,15 +132,15 @@ describe('Networth Calculation', () => {
 
     it('should increase after Expert (tier 1) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       const baselineNw = before!.networth.toNumber();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createSubIx(player, 1)),
         [player.keypair],
       );
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       const onChain = after!.networth.toNumber();
@@ -152,15 +152,15 @@ describe('Networth Calculation', () => {
 
     it('should increase after Epic (tier 2) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       const baselineNw = before!.networth.toNumber();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createSubIx(player, 2)),
         [player.keypair],
       );
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       const onChain = after!.networth.toNumber();
@@ -172,19 +172,18 @@ describe('Networth Calculation', () => {
 
     it('should increase after Legendary (tier 3) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       const baselineNw = before!.networth.toNumber();
 
       // Legendary costs $250 (~2.5 SOL) -- airdrop extra to cover it
-      const sig = await ctx.connection.requestAirdrop(player.publicKey, 5 * LAMPORTS_PER_SOL);
-      await ctx.connection.confirmTransaction(sig);
+      ctx.svm.airdrop(player.publicKey, BigInt(5 * LAMPORTS_PER_SOL));
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createSubIx(player, 3)),
         [player.keypair],
       );
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       const onChain = after!.networth.toNumber();
@@ -232,8 +231,8 @@ describe('Networth Calculation', () => {
       const p1 = await factory.createPlayer({ initialize: true });
       const p2 = await factory.createPlayer({ initialize: true });
 
-      const a1 = await fetchPlayer(ctx.connection, p1.playerPda);
-      const a2 = await fetchPlayer(ctx.connection, p2.playerPda);
+      const a1 = await fetchPlayer(ctx.svm, p1.playerPda);
+      const a2 = await fetchPlayer(ctx.svm, p2.playerPda);
       expect(a1).not.toBeNull();
       expect(a2).not.toBeNull();
 
@@ -243,16 +242,16 @@ describe('Networth Calculation', () => {
 
     it('should update networth when subscription grants resources', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Expert subscription grants units, weapons, equipment, cash
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createSubIx(player, 1)),
         [player.keypair],
       );
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // More assets → higher networth

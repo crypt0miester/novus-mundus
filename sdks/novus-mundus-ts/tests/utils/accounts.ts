@@ -2,15 +2,17 @@
  * Account Fetching & Deserialization Utilities
  *
  * Helpers for fetching and parsing on-chain account data in tests.
+ * Uses LiteSVM for in-process account reads.
  */
 
 import {
-  Connection,
   PublicKey,
   type AccountInfo,
-  type Commitment,
 } from '@solana/web3.js';
 import BN from 'bn.js';
+
+import { type LiteSVM } from '../fixtures/svm';
+import { toAccountInfo } from '../fixtures/svm';
 
 import {
   // State types
@@ -105,32 +107,35 @@ export interface AccountDiff<T> {
  * Fetch raw account data.
  */
 export async function fetchAccount(
-  connection: Connection,
+  svm: LiteSVM,
   pubkey: PublicKey,
-  commitment: Commitment = 'confirmed'
 ): Promise<AccountInfo<Buffer> | null> {
-  return await connection.getAccountInfo(pubkey, commitment);
+  const info = svm.getAccount(pubkey);
+  if (!info) return null;
+  return toAccountInfo(info);
 }
 
 /**
- * Fetch multiple accounts at once.
+ * Fetch multiple accounts.
  */
 export async function fetchAccounts(
-  connection: Connection,
+  svm: LiteSVM,
   pubkeys: PublicKey[],
-  commitment: Commitment = 'confirmed'
 ): Promise<(AccountInfo<Buffer> | null)[]> {
-  return await connection.getMultipleAccountsInfo(pubkeys, commitment);
+  return pubkeys.map(pk => {
+    const info = svm.getAccount(pk);
+    return info ? toAccountInfo(info) : null;
+  });
 }
 
 /**
  * Check if an account exists.
  */
 export async function accountExists(
-  connection: Connection,
+  svm: LiteSVM,
   pubkey: PublicKey
 ): Promise<boolean> {
-  const info = await connection.getAccountInfo(pubkey);
+  const info = svm.getAccount(pubkey);
   return info !== null && info.data.length > 0;
 }
 
@@ -139,28 +144,28 @@ export async function accountExists(
 // ============================================================
 
 export async function fetchPlayer(
-  connection: Connection,
+  svm: LiteSVM,
   playerPda: PublicKey
 ): Promise<PlayerAccount | null> {
-  const info = await fetchAccount(connection, playerPda);
+  const info = await fetchAccount(svm, playerPda);
   if (!info || info.data.length === 0) return null;
   return deserializePlayer(info.data);
 }
 
 export async function fetchPlayerByOwner(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   owner: PublicKey
 ): Promise<PlayerAccount | null> {
   const [playerPda] = derivePlayerPda(gameEngine, owner);
-  return fetchPlayer(connection, playerPda);
+  return fetchPlayer(svm, playerPda);
 }
 
 export async function snapshotPlayer(
-  connection: Connection,
+  svm: LiteSVM,
   playerPda: PublicKey
 ): Promise<AccountSnapshot<PlayerAccount> | null> {
-  const info = await fetchAccount(connection, playerPda);
+  const info = await fetchAccount(svm, playerPda);
   if (!info || info.data.length === 0) return null;
 
   return {
@@ -176,52 +181,52 @@ export async function snapshotPlayer(
 // ============================================================
 
 export async function fetchTeam(
-  connection: Connection,
+  svm: LiteSVM,
   teamPda: PublicKey
 ): Promise<TeamAccount | null> {
-  const info = await fetchAccount(connection, teamPda);
+  const info = await fetchAccount(svm, teamPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeam(info.data);
 }
 
 export async function fetchTeamById(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   teamId: number
 ): Promise<TeamAccount | null> {
   const [teamPda] = deriveTeamPda(gameEngine, teamId);
-  return fetchTeam(connection, teamPda);
+  return fetchTeam(svm, teamPda);
 }
 
 export async function fetchTeamMemberSlot(
-  connection: Connection,
+  svm: LiteSVM,
   team: PublicKey,
   slotIndex: number
 ): Promise<TeamMemberSlot | null> {
   const [slotPda] = deriveTeamSlotPda(team, slotIndex);
-  const info = await fetchAccount(connection, slotPda);
+  const info = await fetchAccount(svm, slotPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamMemberSlot(info.data);
 }
 
 export async function fetchTeamInvite(
-  connection: Connection,
+  svm: LiteSVM,
   team: PublicKey,
   invitee: PublicKey
 ): Promise<TeamInviteAccount | null> {
   const [invitePda] = deriveTeamInvitePda(team, invitee);
-  const info = await fetchAccount(connection, invitePda);
+  const info = await fetchAccount(svm, invitePda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamInvite(info.data);
 }
 
 export async function fetchTreasuryRequest(
-  connection: Connection,
+  svm: LiteSVM,
   team: PublicKey,
   requester: PublicKey
 ): Promise<TreasuryRequest | null> {
   const [requestPda] = deriveTreasuryRequestPda(team, requester);
-  const info = await fetchAccount(connection, requestPda);
+  const info = await fetchAccount(svm, requestPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTreasuryRequest(info.data);
 }
@@ -231,33 +236,33 @@ export async function fetchTreasuryRequest(
 // ============================================================
 
 export async function fetchRally(
-  connection: Connection,
+  svm: LiteSVM,
   rallyPda: PublicKey
 ): Promise<RallyAccount | null> {
-  const info = await fetchAccount(connection, rallyPda);
+  const info = await fetchAccount(svm, rallyPda);
   if (!info || info.data.length === 0) return null;
   return deserializeRally(info.data);
 }
 
 export async function fetchRallyByCreator(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   creator: PublicKey,
   rallyId: number
 ): Promise<RallyAccount | null> {
   const [rallyPda] = deriveRallyPda(gameEngine, creator, rallyId);
-  return fetchRally(connection, rallyPda);
+  return fetchRally(svm, rallyPda);
 }
 
 export async function fetchRallyParticipant(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   rallyCreator: PublicKey,
   rallyId: number | bigint,
   participant: PublicKey
 ): Promise<RallyParticipant | null> {
   const [participantPda] = deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, participant);
-  const info = await fetchAccount(connection, participantPda);
+  const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeRallyParticipant(info.data);
 }
@@ -267,13 +272,13 @@ export async function fetchRallyParticipant(
 // ============================================================
 
 export async function fetchReinforcement(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   sender: PublicKey,
   receiver: PublicKey
 ): Promise<ReinforcementAccount | null> {
   const [reinforcementPda] = deriveReinforcementPda(gameEngine, sender, receiver);
-  const info = await fetchAccount(connection, reinforcementPda);
+  const info = await fetchAccount(svm, reinforcementPda);
   if (!info || info.data.length === 0) return null;
   return deserializeReinforcement(info.data);
 }
@@ -283,22 +288,22 @@ export async function fetchReinforcement(
 // ============================================================
 
 export async function fetchEncounter(
-  connection: Connection,
+  svm: LiteSVM,
   encounterPda: PublicKey
 ): Promise<EncounterAccount | null> {
-  const info = await fetchAccount(connection, encounterPda);
+  const info = await fetchAccount(svm, encounterPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEncounter(info.data);
 }
 
 export async function fetchEncounterByCity(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   cityId: number,
   encounterId: number
 ): Promise<EncounterAccount | null> {
   const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterId);
-  return fetchEncounter(connection, encounterPda);
+  return fetchEncounter(svm, encounterPda);
 }
 
 // ============================================================
@@ -306,11 +311,11 @@ export async function fetchEncounterByCity(
 // ============================================================
 
 export async function fetchExpedition(
-  connection: Connection,
+  svm: LiteSVM,
   owner: PublicKey
 ): Promise<ExpeditionAccount | null> {
   const [expeditionPda] = deriveExpeditionPda(owner);
-  const info = await fetchAccount(connection, expeditionPda);
+  const info = await fetchAccount(svm, expeditionPda);
   if (!info || info.data.length === 0) return null;
   return deserializeExpedition(info.data);
 }
@@ -320,25 +325,24 @@ export async function fetchExpedition(
 // ============================================================
 
 export async function fetchArenaSeason(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   seasonId: number
 ): Promise<ArenaSeasonAccount | null> {
   const [seasonPda] = deriveArenaSeasonPda(gameEngine, seasonId);
-  const info = await fetchAccount(connection, seasonPda);
+  const info = await fetchAccount(svm, seasonPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaSeason(info.data);
 }
 
 export async function fetchArenaParticipant(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   seasonId: number,
   ownerOrPlayerPda: PublicKey
 ): Promise<ArenaParticipantAccount | null> {
-  // ownerOrPlayerPda should be the PlayerAccount PDA (participant PDA is keyed by player PDA)
   const [participantPda] = deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
-  const info = await fetchAccount(connection, participantPda);
+  const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaParticipant(info.data);
 }
@@ -348,12 +352,12 @@ export async function fetchArenaParticipant(
 // ============================================================
 
 export async function fetchLoot(
-  connection: Connection,
+  svm: LiteSVM,
   playerPda: PublicKey,
   lootId: number | bigint
 ): Promise<LootAccount | null> {
   const [lootPda] = deriveLootPda(playerPda, lootId);
-  const info = await fetchAccount(connection, lootPda);
+  const info = await fetchAccount(svm, lootPda);
   if (!info || info.data.length === 0) return null;
   return deserializeLoot(info.data);
 }
@@ -363,67 +367,64 @@ export async function fetchLoot(
 // ============================================================
 
 export async function fetchEvent(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   eventId: number
 ): Promise<EventAccount | null> {
   const [eventPda] = deriveEventPda(gameEngine, eventId);
-  const info = await fetchAccount(connection, eventPda);
+  const info = await fetchAccount(svm, eventPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEvent(info.data);
 }
 
 export async function fetchEventParticipation(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   eventId: number,
   playerOwner: PublicKey
 ): Promise<EventParticipation | null> {
   const [participationPda] = deriveEventParticipationPda(gameEngine, eventId, playerOwner);
-  const info = await fetchAccount(connection, participationPda);
+  const info = await fetchAccount(svm, participationPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEventParticipation(info.data);
 }
 
 // ============================================================
 // Castle Accounts
-// Note: Castle deserialization is not exported from SDK yet
 // ============================================================
 
 export async function fetchCastleRaw(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   cityId: number,
   castleId: number
 ): Promise<AccountInfo<Buffer> | null> {
   const [castlePda] = deriveCastlePda(gameEngine, cityId, castleId);
-  return fetchAccount(connection, castlePda);
+  return fetchAccount(svm, castlePda);
 }
 
 // ============================================================
 // Dungeon Accounts
-// Note: Dungeon deserialization is not exported from SDK yet
 // ============================================================
 
 export async function fetchDungeonRunRaw(
-  connection: Connection,
+  svm: LiteSVM,
   player: PublicKey
 ): Promise<AccountInfo<Buffer> | null> {
   const [runPda] = deriveDungeonRunPda(player);
-  return fetchAccount(connection, runPda);
+  return fetchAccount(svm, runPda);
 }
 
 // ============================================================
 // Estate Accounts
-// Note: Estate account type is not in SDK yet
 // ============================================================
 
 export async function fetchEstateRaw(
-  connection: Connection,
+  svm: LiteSVM,
   playerPda: PublicKey
 ): Promise<AccountInfo<Buffer> | null> {
   const [estatePda] = deriveEstatePda(playerPda);
-  return fetchAccount(connection, estatePda);
+  return fetchAccount(svm, estatePda);
 }
 
 // ============================================================
@@ -431,43 +432,43 @@ export async function fetchEstateRaw(
 // ============================================================
 
 export async function fetchGameEngine(
-  connection: Connection,
+  svm: LiteSVM,
   kingdomId: number
 ): Promise<GameEngineAccount | null> {
   const [gameEnginePda] = deriveGameEnginePda(kingdomId);
-  const info = await fetchAccount(connection, gameEnginePda);
+  const info = await fetchAccount(svm, gameEnginePda);
   if (!info || info.data.length === 0) return null;
   return deserializeGameEngine(info.data);
 }
 
 export async function fetchCity(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   cityId: number
 ): Promise<CityAccount | null> {
   const [cityPda] = deriveCityPda(gameEngine, cityId);
-  const info = await fetchAccount(connection, cityPda);
+  const info = await fetchAccount(svm, cityPda);
   if (!info || info.data.length === 0) return null;
   return deserializeCity(info.data);
 }
 
 export async function fetchShopConfig(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey
 ): Promise<ShopConfigAccount | null> {
   const [shopConfigPda] = deriveShopConfigPda(gameEngine);
-  const info = await fetchAccount(connection, shopConfigPda);
+  const info = await fetchAccount(svm, shopConfigPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopConfig(info.data);
 }
 
 export async function fetchShopItem(
-  connection: Connection,
+  svm: LiteSVM,
   gameEngine: PublicKey,
   itemId: number
 ): Promise<ShopItemAccount | null> {
   const [shopItemPda] = deriveShopItemPda(gameEngine, itemId);
-  const info = await fetchAccount(connection, shopItemPda);
+  const info = await fetchAccount(svm, shopItemPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopItem(info.data);
 }
@@ -485,7 +486,6 @@ export function diffPlayerSnapshots(
 ): AccountDiff<PlayerAccount> {
   const changes: Partial<Record<keyof PlayerAccount, { before: any; after: any }>> = {};
 
-  // Compare all fields
   const keysToCompare: (keyof PlayerAccount)[] = [
     'lockedNovi', 'cashOnHand', 'cashInVault',
     'defensiveUnit1', 'defensiveUnit2', 'defensiveUnit3',

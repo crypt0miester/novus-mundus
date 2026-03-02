@@ -79,7 +79,7 @@ describe('Sanctuary System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -97,7 +97,7 @@ describe('Sanctuary System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -115,7 +115,7 @@ describe('Sanctuary System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -125,7 +125,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Hero must be locked to player before meditation
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -149,7 +149,7 @@ describe('Sanctuary System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -168,7 +168,7 @@ describe('Sanctuary System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -178,7 +178,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Can't claim until meditation complete
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -186,7 +186,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Partial rewards based on time spent
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -200,7 +200,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Meditation gives hero XP based on duration
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -208,7 +208,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Higher level sanctuary = better meditation rewards
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -216,7 +216,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Can't immediately start another meditation
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -230,7 +230,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Estate must have Sanctuary building
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -238,7 +238,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Higher level = more heroes can meditate
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -252,7 +252,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Hero cannot be used elsewhere during meditation
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -260,7 +260,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Hero is available again after claiming
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -268,7 +268,7 @@ describe('Sanctuary System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // XP accumulates properly
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });

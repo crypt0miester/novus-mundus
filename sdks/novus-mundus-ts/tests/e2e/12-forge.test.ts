@@ -89,7 +89,7 @@ describe('Forge System', () => {
       },
       { quantity: 2 }
     ));
-    await sendTransaction(ctx.connection, tx, [player.keypair]);
+    await sendTransaction(ctx.svm, tx, [player.keypair]);
 
     return player;
   }
@@ -112,10 +112,10 @@ describe('Forge System', () => {
         { equipmentType, qualityTier }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify crafting started
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       // Would check crafting state
     });
 
@@ -124,7 +124,7 @@ describe('Forge System', () => {
 
       // Start first craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -141,7 +141,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -156,7 +156,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -166,12 +166,12 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Get initial materials
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      let account = await fetchPlayer(ctx.svm, player.playerPda);
       // Would check material counts
 
       // Start craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -182,7 +182,7 @@ describe('Forge System', () => {
       );
 
       // Verify materials consumed
-      account = await fetchPlayer(ctx.connection, player.playerPda);
+      account = await fetchPlayer(ctx.svm, player.playerPda);
       // Would check reduced material counts
     });
   });
@@ -197,7 +197,7 @@ describe('Forge System', () => {
 
       // Start craft first
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -215,7 +215,7 @@ describe('Forge System', () => {
 
       // Should fail with StrikeTooEarly
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(strikeIx),
         [player.keypair]
       );
@@ -230,7 +230,7 @@ describe('Forge System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(strikeIx),
         [player.keypair]
       );
@@ -241,7 +241,7 @@ describe('Forge System', () => {
 
       // Start craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -259,14 +259,14 @@ describe('Forge System', () => {
 
       for (let i = 0; i < 10; i++) {
         try {
-          await sendTransaction(ctx.connection, new Transaction().add(strikeIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair]);
         } catch {
           break;
         }
       }
 
       // Check if craft completed
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       // Would verify crafting state
     });
 
@@ -274,7 +274,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -291,13 +291,13 @@ describe('Forge System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(strikeIx),
         [player.keypair]
       );
 
       // Verify craft is still in progress after rejected strike
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -312,7 +312,7 @@ describe('Forge System', () => {
 
       // Start craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -328,10 +328,10 @@ describe('Forge System', () => {
         owner: player.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(abandonIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(abandonIx), [player.keypair]);
 
       // Verify no longer crafting
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       // Would check crafting state is empty
     });
 
@@ -344,7 +344,7 @@ describe('Forge System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(abandonIx),
         [player.keypair]
       );
@@ -354,11 +354,11 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Materials consumed on start are not returned on abandon
-      const accountBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const accountBefore = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Start craft (consumes materials)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -370,7 +370,7 @@ describe('Forge System', () => {
 
       // Abandon craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAbandonCraftInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })
         ),
@@ -378,7 +378,7 @@ describe('Forge System', () => {
       );
 
       // Materials should still be consumed
-      const accountAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const accountAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(accountAfter).not.toBeNull();
     });
   });
@@ -399,7 +399,7 @@ describe('Forge System', () => {
 
       // Should fail — no crafted items available
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(equipIx),
         [player.keypair]
       );
@@ -415,7 +415,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(equipIx),
         [player.keypair]
       );
@@ -426,7 +426,7 @@ describe('Forge System', () => {
 
       // Start a craft
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -443,7 +443,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(equipIx),
         [player.keypair]
       );
@@ -466,7 +466,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -482,7 +482,7 @@ describe('Forge System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -497,9 +497,9 @@ describe('Forge System', () => {
         { equipmentType: 0, qualityTier: 1 } // Sword
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Craft in progress should be for sword
     });
@@ -515,7 +515,7 @@ describe('Forge System', () => {
 
       // Start craft and verify state is tracked
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -526,7 +526,7 @@ describe('Forge System', () => {
       );
 
       // Verify player state is intact after craft started
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Strike fails because window hasn't opened (60s for Refined)
@@ -535,7 +535,7 @@ describe('Forge System', () => {
         owner: player.publicKey,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(strikeIx),
         [player.keypair]
       );
@@ -545,7 +545,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Common, Rare, Epic, Legendary (0, 1, 2, 3)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Quality tiers are 0-3
     });
@@ -554,7 +554,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Higher quality = better stats
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Equipment stats scale: Common < Rare < Epic < Legendary
     });

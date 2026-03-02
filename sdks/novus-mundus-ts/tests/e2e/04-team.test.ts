@@ -123,10 +123,10 @@ describe('Team System', () => {
 
       const tx = new Transaction().add(ix);
 
-      await sendTransaction(ctx.connection, tx, [leader.keypair]);
+      await sendTransaction(ctx.svm, tx, [leader.keypair]);
 
       // Verify player is now in a team
-      const playerAccount = await fetchPlayer(ctx.connection, leader.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, leader.playerPda);
       expect(playerAccount).not.toBeNull();
       expect(playerAccount!.team).not.toBeNull();
     });
@@ -145,7 +145,7 @@ describe('Team System', () => {
       );
       const tx1 = new Transaction().add(ix1);
 
-      await sendTransaction(ctx.connection, tx1, [leader.keypair]);
+      await sendTransaction(ctx.svm, tx1, [leader.keypair]);
 
       // Try to create second team - should fail
       const ix2 = createTeamCreateInstruction(
@@ -153,7 +153,7 @@ describe('Team System', () => {
         { name: teamName2 }
       );
       const tx2 = new Transaction().add(ix2);
-      await expectTransactionToFail(ctx.connection, tx2, [leader.keypair]);
+      await expectTransactionToFail(ctx.svm, tx2, [leader.keypair]);
     });
 
     it('should reject empty team name', async () => {
@@ -166,7 +166,7 @@ describe('Team System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [leader.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [leader.keypair]);
     });
 
     it('should reject team name exceeding max length', async () => {
@@ -201,7 +201,7 @@ describe('Team System', () => {
         { name: teamName }
       );
       const createTx = new Transaction().add(createIx);
-      await sendTransaction(ctx.connection, createTx, [leader.keypair]);
+      await sendTransaction(ctx.svm, createTx, [leader.keypair]);
 
       // Invite member
       const inviteIx = createTeamInviteInstruction({
@@ -213,10 +213,10 @@ describe('Team System', () => {
         inviteePlayer: invitee.playerPda,
       });
       const inviteTx = new Transaction().add(inviteIx);
-      await sendTransaction(ctx.connection, inviteTx, [leader.keypair]);
+      await sendTransaction(ctx.svm, inviteTx, [leader.keypair]);
 
       // Verify invite was created
-      const invite = await fetchTeamInvite(ctx.connection, teamPda, invitee.playerPda);
+      const invite = await fetchTeamInvite(ctx.svm, teamPda, invitee.playerPda);
       expect(invite).not.toBeNull();
     });
 
@@ -232,7 +232,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
       // Invite
       const inviteIx = createTeamInviteInstruction({
@@ -243,7 +243,7 @@ describe('Team System', () => {
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(inviteIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Accept
       const acceptIx = createTeamAcceptInviteInstruction({
@@ -254,10 +254,10 @@ describe('Team System', () => {
         slotIndex: 1, // Slot 0 is leader
         inviteRefund: leader.publicKey, // Refund to inviter
       });
-      await sendTransaction(ctx.connection, new Transaction().add(acceptIx), [invitee.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(acceptIx), [invitee.keypair]);
 
       // Verify member is in team
-      const inviteeAccount = await fetchPlayer(ctx.connection, invitee.playerPda);
+      const inviteeAccount = await fetchPlayer(ctx.svm, invitee.playerPda);
       expect(inviteeAccount).not.toBeNull();
       expect(inviteeAccount!.team).not.toBeNull();
     });
@@ -274,7 +274,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
       const inviteIx = createTeamInviteInstruction({
         inviter: leader.publicKey,
@@ -284,7 +284,7 @@ describe('Team System', () => {
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(inviteIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Decline
       const declineIx = createTeamDeclineInviteInstruction({
@@ -293,10 +293,10 @@ describe('Team System', () => {
         team: teamPda,
         inviterRefund: leader.publicKey, // Refund to inviter
       });
-      await sendTransaction(ctx.connection, new Transaction().add(declineIx), [invitee.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(declineIx), [invitee.keypair]);
 
       // Verify still not in team
-      const inviteeAccount = await fetchPlayer(ctx.connection, invitee.playerPda);
+      const inviteeAccount = await fetchPlayer(ctx.svm, invitee.playerPda);
       expect(inviteeAccount).not.toBeNull();
       assertPlayerHasNoTeam(inviteeAccount!);
     });
@@ -313,7 +313,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
       const inviteIx = createTeamInviteInstruction({
         inviter: leader.publicKey,
@@ -323,7 +323,7 @@ describe('Team System', () => {
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(inviteIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Cancel (by inviter)
       const cancelIx = createTeamCancelInviteInstruction({
@@ -334,7 +334,7 @@ describe('Team System', () => {
         memberSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(cancelIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [leader.keypair]);
 
       // Verify invite is cancelled (accepting should fail)
       const acceptIx = createTeamAcceptInviteInstruction({
@@ -346,7 +346,7 @@ describe('Team System', () => {
         inviteRefund: leader.publicKey,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(acceptIx),
         [invitee.keypair]
       );
@@ -367,7 +367,7 @@ describe('Team System', () => {
 
       // Create team and add member
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -375,7 +375,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -390,7 +390,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -408,10 +408,10 @@ describe('Team System', () => {
         kickedSlotIndex: 1,
         kickedOwner: member.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(kickIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(kickIx), [leader.keypair]);
 
       // Verify member is no longer in team
-      const memberAccount = await fetchPlayer(ctx.connection, member.playerPda);
+      const memberAccount = await fetchPlayer(ctx.svm, member.playerPda);
       assertPlayerHasNoTeam(memberAccount!);
     });
 
@@ -424,7 +424,7 @@ describe('Team System', () => {
 
       // Create team and add member
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -432,7 +432,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -447,7 +447,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -462,10 +462,10 @@ describe('Team System', () => {
         teamId,
         slotIndex: 1,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(leaveIx), [member.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(leaveIx), [member.keypair]);
 
       // Verify member left
-      const memberAccount = await fetchPlayer(ctx.connection, member.playerPda);
+      const memberAccount = await fetchPlayer(ctx.svm, member.playerPda);
       assertPlayerHasNoTeam(memberAccount!);
     });
 
@@ -478,7 +478,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -486,7 +486,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -501,7 +501,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -520,7 +520,7 @@ describe('Team System', () => {
         },
         { newRank: 1 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(promoteIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(promoteIx), [leader.keypair]);
 
       // Verify member role changed (would need to check team member slot)
     });
@@ -534,7 +534,7 @@ describe('Team System', () => {
 
       // Setup team and promote
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -542,7 +542,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -557,7 +557,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: officer.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -565,7 +565,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             {
@@ -594,7 +594,7 @@ describe('Team System', () => {
         },
         { newRank: 4 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(demoteIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(demoteIx), [leader.keypair]);
     });
 
     it('should transfer leadership', async () => {
@@ -606,7 +606,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -614,7 +614,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -629,7 +629,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: newLeader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -646,7 +646,7 @@ describe('Team System', () => {
         newLeaderPlayer: newLeader.playerPda,
         newSlotIndex: 1,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(transferIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(transferIx), [leader.keypair]);
 
       // Verify leadership changed (check team account)
     });
@@ -658,7 +658,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -674,7 +674,7 @@ describe('Team System', () => {
         slotIndex: 0,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(leaveIx),
         [leader.keypair]
       );
@@ -693,7 +693,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -707,10 +707,10 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(disbandIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(disbandIx), [leader.keypair]);
 
       // Verify leader no longer in team
-      const afterAccount = await fetchPlayer(ctx.connection, leader.playerPda);
+      const afterAccount = await fetchPlayer(ctx.svm, leader.playerPda);
       assertPlayerHasNoTeam(afterAccount!);
     });
 
@@ -723,7 +723,7 @@ describe('Team System', () => {
 
       // Create team with member
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -731,7 +731,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -746,7 +746,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -761,7 +761,7 @@ describe('Team System', () => {
         teamId,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(disbandIx),
         [leader.keypair]
       );
@@ -781,7 +781,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -792,7 +792,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         { motd }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(motdIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(motdIx), [leader.keypair]);
 
       // Verify MOTD was set (check team account)
     });
@@ -804,7 +804,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -815,7 +815,7 @@ describe('Team System', () => {
         { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         { settings: 0, minLevelToJoin: 5 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(settingsIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(settingsIx), [leader.keypair]);
     });
   });
 
@@ -832,7 +832,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -843,7 +843,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
         { amount: depositAmount }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(depositIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(depositIx), [leader.keypair]);
 
       // Verify treasury increased (check team account)
     });
@@ -855,7 +855,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -864,7 +864,7 @@ describe('Team System', () => {
 
       // Deposit first
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -879,7 +879,7 @@ describe('Team System', () => {
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         { amount: new BN(1000) }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(withdrawIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(withdrawIx), [leader.keypair]);
     });
 
     it('should request treasury withdrawal (member)', async () => {
@@ -891,7 +891,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -899,7 +899,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -914,7 +914,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -923,7 +923,7 @@ describe('Team System', () => {
 
       // Promote member to rank 1 (needs PERM_TREASURY for withdrawal requests)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
@@ -935,7 +935,7 @@ describe('Team System', () => {
 
       // Deposit to treasury
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -950,7 +950,7 @@ describe('Team System', () => {
         { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
         { amount: new BN(1000) }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(requestIx), [member.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(requestIx), [member.keypair]);
     });
 
     it('should approve treasury request', async () => {
@@ -962,7 +962,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -971,7 +971,7 @@ describe('Team System', () => {
 
       // Add member
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -986,7 +986,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -995,7 +995,7 @@ describe('Team System', () => {
 
       // Promote member to rank 1 (needs PERM_TREASURY)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
@@ -1007,7 +1007,7 @@ describe('Team System', () => {
 
       // Deposit
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -1019,7 +1019,7 @@ describe('Team System', () => {
 
       // Request
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
@@ -1039,7 +1039,7 @@ describe('Team System', () => {
         requesterPlayer: member.playerPda,
         requesterRefund: member.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(approveIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(approveIx), [leader.keypair]);
     });
 
     it('should reject treasury request', async () => {
@@ -1051,7 +1051,7 @@ describe('Team System', () => {
 
       // Setup
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1059,7 +1059,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -1074,7 +1074,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -1083,7 +1083,7 @@ describe('Team System', () => {
 
       // Promote member to rank 1 (needs PERM_TREASURY)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
@@ -1094,7 +1094,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -1105,7 +1105,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
@@ -1125,7 +1125,7 @@ describe('Team System', () => {
         requesterPlayer: member.playerPda,
         requesterRefund: member.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(rejectIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(rejectIx), [leader.keypair]);
     });
 
     it('should update treasury settings', async () => {
@@ -1135,7 +1135,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1150,7 +1150,7 @@ describe('Team System', () => {
           cooldownHours: 24,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(settingsIx), [leader.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(settingsIx), [leader.keypair]);
     });
 
     it('should cancel treasury request', async () => {
@@ -1162,7 +1162,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1170,7 +1170,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -1185,7 +1185,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -1194,7 +1194,7 @@ describe('Team System', () => {
 
       // Promote member to rank 1 (needs PERM_TREASURY)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
@@ -1206,7 +1206,7 @@ describe('Team System', () => {
 
       // Deposit
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -1218,7 +1218,7 @@ describe('Team System', () => {
 
       // Member requests withdrawal
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
@@ -1230,7 +1230,7 @@ describe('Team System', () => {
 
       // Verify request exists
       const [requestPda] = deriveTreasuryRequestPda(teamPda, member.playerPda);
-      let requestAccount = await ctx.connection.getAccountInfo(requestPda);
+      let requestAccount = await ctx.svm.getAccount(requestPda);
       expect(requestAccount).not.toBeNull();
 
       // Cancel the request
@@ -1240,10 +1240,10 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(cancelIx), [member.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [member.keypair]);
 
       // Verify request PDA is closed
-      requestAccount = await ctx.connection.getAccountInfo(requestPda);
+      requestAccount = await ctx.svm.getAccount(requestPda);
       expect(requestAccount).toBeNull();
     });
 
@@ -1256,7 +1256,7 @@ describe('Team System', () => {
 
       // Setup team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1264,7 +1264,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             inviter: leader.publicKey,
@@ -1279,7 +1279,7 @@ describe('Team System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
         ),
@@ -1288,7 +1288,7 @@ describe('Team System', () => {
 
       // Promote member to rank 1 (needs PERM_TREASURY)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
@@ -1300,7 +1300,7 @@ describe('Team System', () => {
 
       // Set treasury settings with 0 cooldown for testing
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamUpdateTreasurySettingsInstruction(
             { leader: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
@@ -1316,7 +1316,7 @@ describe('Team System', () => {
 
       // Deposit
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
@@ -1328,7 +1328,7 @@ describe('Team System', () => {
 
       // Member requests withdrawal
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
@@ -1339,12 +1339,12 @@ describe('Team System', () => {
       );
 
       // Get member cash before approve (approve auto-executes transfer)
-      const memberBefore = await fetchPlayer(ctx.connection, member.playerPda);
+      const memberBefore = await fetchPlayer(ctx.svm, member.playerPda);
       const cashBefore = memberBefore!.cashOnHand.toNumber();
 
       // Leader approves (which auto-executes the withdrawal)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamTreasuryApproveRequestInstruction({
             approver: leader.publicKey,
@@ -1360,7 +1360,7 @@ describe('Team System', () => {
       );
 
       // Verify funds were transferred to member
-      const memberAfter = await fetchPlayer(ctx.connection, member.playerPda);
+      const memberAfter = await fetchPlayer(ctx.svm, member.playerPda);
       expect(memberAfter!.cashOnHand.toNumber()).toBeGreaterThan(cashBefore);
     });
   });
@@ -1379,7 +1379,7 @@ describe('Team System', () => {
 
       // Create team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1388,7 +1388,7 @@ describe('Team System', () => {
 
       // Make team joinable
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamUpdateSettingsInstruction(
             { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
@@ -1406,10 +1406,10 @@ describe('Team System', () => {
         teamId,
         slotIndex: 1,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(joinIx), [joiner.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(joinIx), [joiner.keypair]);
 
       // Verify joined
-      const joinerAccount = await fetchPlayer(ctx.connection, joiner.playerPda);
+      const joinerAccount = await fetchPlayer(ctx.svm, joiner.playerPda);
       expect(joinerAccount!.team).not.toBeNull();
     });
 
@@ -1422,7 +1422,7 @@ describe('Team System', () => {
 
       // Create team
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1431,7 +1431,7 @@ describe('Team System', () => {
 
       // Make team joinable with high min level
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamUpdateSettingsInstruction(
             { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
@@ -1450,7 +1450,7 @@ describe('Team System', () => {
         slotIndex: 1,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(joinIx),
         [joiner.keypair]
       );
@@ -1464,7 +1464,7 @@ describe('Team System', () => {
       const teamPda = getTeamPda(teamId);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
@@ -1481,7 +1481,7 @@ describe('Team System', () => {
         slotIndex: 1,
       });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(joinIx),
         [joiner.keypair]
       );

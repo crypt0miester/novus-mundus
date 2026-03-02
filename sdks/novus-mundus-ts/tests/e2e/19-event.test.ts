@@ -52,6 +52,7 @@ import {
 import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
+  advanceTime,
 } from '../fixtures/time';
 
 // ============================================================
@@ -75,7 +76,7 @@ describe('Event System', () => {
     ctx = await beforeAllTests();
     factory = new PlayerFactory(ctx, { autoInit: true });
 
-    const now = await getCurrentTimestamp(ctx.connection);
+    const now = await getCurrentTimestamp(ctx.svm);
 
     // Create active event (started 1 hour ago, ends in 24 hours)
     const createActiveEventIx = createCreateEventInstruction(
@@ -141,19 +142,19 @@ describe('Event System', () => {
     );
 
     await sendTransaction(
-      ctx.connection,
+      ctx.svm,
       new Transaction().add(createActiveEventIx),
       [ctx.daoAuthority]
     );
 
     await sendTransaction(
-      ctx.connection,
+      ctx.svm,
       new Transaction().add(createEndedEventIx),
       [ctx.daoAuthority]
     );
 
     await sendTransaction(
-      ctx.connection,
+      ctx.svm,
       new Transaction().add(createHighLevelEventIx),
       [ctx.daoAuthority]
     );
@@ -169,7 +170,7 @@ describe('Event System', () => {
 
   describe('Event Creation', () => {
     it('should create event with correct parameters', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.name).toBe('TestActiveEvent');
       // Events are always created as Pending; autoActivate is stored but activation happens separately
@@ -183,17 +184,17 @@ describe('Event System', () => {
     });
 
     it('should create ended event with correct timestamps', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ENDED_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.name).toBe('TestEndedEvent');
       // endTime < now, so the event window has passed
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       expect(event!.endTime.toNumber()).toBeLessThan(now);
       assertBnEquals(event!.prizeAmount, 5000);
     });
 
     it('should create event with high level requirement', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.minLevel).toBe(50);
       expect(event!.prizeType).toBe(EventPrizeType.Gems);
@@ -224,7 +225,7 @@ describe('Event System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -246,11 +247,11 @@ describe('Event System', () => {
         eventId: ACTIVE_EVENT_ID,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify participation account was created
       const participation = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
       );
       expect(participation).not.toBeNull();
       assertBnEquals(participation!.eventId, ACTIVE_EVENT_ID);
@@ -259,12 +260,12 @@ describe('Event System', () => {
       assertBnGreaterThan(participation!.joinedAt, 0, 'joinedAt should be set');
 
       // Verify player's currentEvent is set
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
 
       // Verify event participant count increased
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.participantCount).toBeGreaterThan(0);
     });
@@ -274,7 +275,7 @@ describe('Event System', () => {
 
       // Join first time
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -287,7 +288,7 @@ describe('Event System', () => {
       );
 
       // Verify player is now in event
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
 
@@ -300,7 +301,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -317,7 +318,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -334,7 +335,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -344,7 +345,7 @@ describe('Event System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Player starts at level 1, event requires level 50
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.level).toBeLessThan(50);
 
@@ -356,7 +357,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -374,11 +375,11 @@ describe('Event System', () => {
       });
 
       // Payer signs, player owner's account is updated
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [payer.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [payer.keypair]);
 
       // Verify the player (not payer) has the participation
       const participation = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
       );
       expect(participation).not.toBeNull();
       expect(participation!.player.equals(player.publicKey)).toBe(true);
@@ -394,7 +395,7 @@ describe('Event System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -407,7 +408,7 @@ describe('Event System', () => {
       );
 
       const participation = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
       );
       expect(participation).not.toBeNull();
       assertBnEquals(participation!.score, 0);
@@ -421,7 +422,7 @@ describe('Event System', () => {
       // Both join
       for (const player of [player1, player2]) {
         await sendTransaction(
-          ctx.connection,
+          ctx.svm,
           new Transaction().add(
             createJoinEventInstruction({
               gameEngine: ctx.gameEngine,
@@ -436,10 +437,10 @@ describe('Event System', () => {
 
       // Each has their own participation account
       const p1 = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player1.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player1.publicKey
       );
       const p2 = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player2.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player2.publicKey
       );
       expect(p1).not.toBeNull();
       expect(p2).not.toBeNull();
@@ -448,13 +449,13 @@ describe('Event System', () => {
     });
 
     it('should increment event participant count per join', async () => {
-      const eventBefore = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const eventBefore = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(eventBefore).not.toBeNull();
       const countBefore = eventBefore!.participantCount;
 
       const player = await factory.createPlayer({ initialize: true });
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -466,7 +467,7 @@ describe('Event System', () => {
         [player.keypair]
       );
 
-      const eventAfter = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const eventAfter = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(eventAfter).not.toBeNull();
       expect(eventAfter!.participantCount).toBe(countBefore + 1);
     });
@@ -486,10 +487,10 @@ describe('Event System', () => {
         eventId: ENDED_EVENT_ID,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify event status changed to Finalized
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ENDED_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.status).toBe(EventStatus.Finalized);
     });
@@ -504,7 +505,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -514,7 +515,7 @@ describe('Event System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Event 2 was finalized in the first test — trying again should fail
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ENDED_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.status).toBe(EventStatus.Finalized);
 
@@ -524,7 +525,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -539,14 +540,14 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
     });
 
     it('should preserve participant count after finalization', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ENDED_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.status).toBe(EventStatus.Finalized);
       // participantCount should still reflect total who joined (could be 0 if nobody joined ended event)
@@ -564,7 +565,7 @@ describe('Event System', () => {
 
       // Join active event first
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -577,7 +578,7 @@ describe('Event System', () => {
       );
 
       // Verify event is not finalized
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.status).not.toBe(EventStatus.Finalized);
 
@@ -590,7 +591,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -603,7 +604,7 @@ describe('Event System', () => {
       const [participationPda] = deriveEventParticipationPda(
         ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
       );
-      const exists = await accountExists(ctx.connection, participationPda);
+      const exists = await accountExists(ctx.svm, participationPda);
       expect(exists).toBe(false);
 
       const claimIx = createClaimPrizeInstruction({
@@ -614,7 +615,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -631,7 +632,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -641,7 +642,7 @@ describe('Event System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Event 2 is finalized but this player never joined it
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ENDED_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
       expect(event).not.toBeNull();
       expect(event!.status).toBe(EventStatus.Finalized);
 
@@ -653,7 +654,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -666,11 +667,11 @@ describe('Event System', () => {
 
   describe('Event Account State', () => {
     it('should store start and end times correctly', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
 
       // startTime should be in the past (event already started)
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       expect(event!.startTime.toNumber()).toBeLessThan(now);
 
       // endTime should be in the future (event not yet ended)
@@ -681,7 +682,7 @@ describe('Event System', () => {
     });
 
     it('should have correct prize pool configuration', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
 
       expect(event!.prizeType).toBe(EventPrizeType.LockedNovi);
@@ -691,7 +692,7 @@ describe('Event System', () => {
     });
 
     it('should track leaderboard entries', async () => {
-      const event = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
       expect(event).not.toBeNull();
 
       // Leaderboard is an array of 10 slots
@@ -702,8 +703,8 @@ describe('Event System', () => {
     });
 
     it('should have different event types', async () => {
-      const activeEvent = await fetchEvent(ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID);
-      const highLevelEvent = await fetchEvent(ctx.connection, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
+      const activeEvent = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const highLevelEvent = await fetchEvent(ctx.svm, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
       expect(activeEvent).not.toBeNull();
       expect(highLevelEvent).not.toBeNull();
 
@@ -727,7 +728,7 @@ describe('Event System', () => {
 
       // Join event 1
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -740,7 +741,7 @@ describe('Event System', () => {
       );
 
       // Verify player is in event 1
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
 
@@ -754,7 +755,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -766,7 +767,7 @@ describe('Event System', () => {
 
       // Join active event
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinEventInstruction({
             gameEngine: ctx.gameEngine,
@@ -780,14 +781,14 @@ describe('Event System', () => {
 
       // Verify participation exists for active event
       const p1 = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
       );
       expect(p1).not.toBeNull();
       assertBnEquals(p1!.eventId, ACTIVE_EVENT_ID);
 
       // Verify NO participation for ended event (player never joined it)
       const p2 = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, ENDED_EVENT_ID, player.publicKey
+        ctx.svm, ctx.gameEngine, ENDED_EVENT_ID, player.publicKey
       );
       expect(p2).toBeNull();
     });
@@ -845,7 +846,7 @@ describe('Event System', () => {
       const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
 
       // 2. Create event after players are ready (use fresh timestamp)
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       const createEventIx = createCreateEventInstruction(
         {
@@ -866,7 +867,7 @@ describe('Event System', () => {
           autoActivate: true,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createEventIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(createEventIx), [ctx.daoAuthority]);
 
       // 3. Attacker joins event (auto-activates from Pending → Active)
       const joinIx = createJoinEventInstruction({
@@ -875,17 +876,17 @@ describe('Event System', () => {
         playerOwner: attacker.publicKey,
         eventId: LIFECYCLE_EVENT_ID,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(joinIx), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(joinIx), [attacker.keypair]);
 
       // Verify event auto-activated on join
-      const eventAfterJoin = await fetchEvent(ctx.connection, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      const eventAfterJoin = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
       expect(eventAfterJoin).not.toBeNull();
       expect(eventAfterJoin!.status).toBe(EventStatus.Active);
       expect(eventAfterJoin!.participantCount).toBe(1);
 
       // Verify participation created with zero score
       const participationBefore = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
+        ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
       );
       expect(participationBefore).not.toBeNull();
       assertBnEquals(participationBefore!.score, 0);
@@ -902,25 +903,25 @@ describe('Event System', () => {
         },
         { driveBy: false }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(attackIx), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(attackIx), [attacker.keypair]);
 
       // Verify score updated and leaderboard populated
       const participationAfter = await fetchEventParticipation(
-        ctx.connection, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
+        ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
       );
       expect(participationAfter).not.toBeNull();
       assertBnGreaterThan(participationAfter!.score, 0, 'Score should increase after PvP attack');
 
-      const eventAfterAttack = await fetchEvent(ctx.connection, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      const eventAfterAttack = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
       expect(eventAfterAttack).not.toBeNull();
       expect(eventAfterAttack!.leaderboardCount).toBeGreaterThanOrEqual(1);
       expect(eventAfterAttack!.leaderboard[0]!.player.equals(attacker.publicKey)).toBe(true);
       assertBnGreaterThan(eventAfterAttack!.leaderboard[0]!.score, 0, 'Leaderboard score > 0');
 
-      // 5. Wait for event to end
-      const remaining = eventAfterAttack!.endTime.toNumber() - (await getCurrentTimestamp(ctx.connection));
+      // 5. Advance clock past event end time
+      const remaining = eventAfterAttack!.endTime.toNumber() - (await getCurrentTimestamp(ctx.svm));
       if (remaining > 0) {
-        await new Promise(resolve => setTimeout(resolve, (remaining + 2) * 1000));
+        await advanceTime(ctx.svm, remaining + 2);
       }
 
       // 6. Finalize event (permissionless — anyone can call after end_time)
@@ -928,10 +929,10 @@ describe('Event System', () => {
         gameEngine: ctx.gameEngine,
         eventId: LIFECYCLE_EVENT_ID,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(finalizeIx), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(finalizeIx), [attacker.keypair]);
 
       // Verify finalized state
-      const finalizedEvent = await fetchEvent(ctx.connection, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      const finalizedEvent = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
       expect(finalizedEvent).not.toBeNull();
       expect(finalizedEvent!.status).toBe(EventStatus.Finalized);
       assertBnEquals(finalizedEvent!.prizeAmount, 10000);
@@ -958,7 +959,7 @@ describe('Event System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [attacker.keypair],
         6122, // AccountTooNew — anti-sybil: account age < 7 days

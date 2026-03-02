@@ -115,7 +115,7 @@ describe('Shop System', () => {
     it('should initialize shop config (DAO)', async () => {
       // Shop config is initialized during beforeAllTests setup
       // Verify it exists and has valid data
-      const config = await fetchShopConfig(ctx.connection, ctx.gameEngine);
+      const config = await fetchShopConfig(ctx.svm, ctx.gameEngine);
       expect(config).not.toBeNull();
       expect(config?.bump).toBeDefined();
     });
@@ -128,10 +128,10 @@ describe('Shop System', () => {
 
       const tx = new Transaction().add(ix);
 
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
       // Verify config still exists after update
-      const config = await fetchShopConfig(ctx.connection, ctx.gameEngine);
+      const config = await fetchShopConfig(ctx.svm, ctx.gameEngine);
       expect(config).not.toBeNull();
     });
 
@@ -140,7 +140,7 @@ describe('Shop System', () => {
 
       // Non-DAO authority trying to update config should fail
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: player.publicKey },
@@ -178,10 +178,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify item was created
-      const item = await fetchShopItem(ctx.connection, ctx.gameEngine, TEST_ITEM_ID);
+      const item = await fetchShopItem(ctx.svm, ctx.gameEngine, TEST_ITEM_ID);
       expect(item).not.toBeNull();
       expect(item?.isActive).toBe(true);
       expect(item?.rarity).toBe(1);
@@ -196,10 +196,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify item was updated
-      const item = await fetchShopItem(ctx.connection, ctx.gameEngine, TEST_ITEM_ID);
+      const item = await fetchShopItem(ctx.svm, ctx.gameEngine, TEST_ITEM_ID);
       if (item) {
         assertBnEquals(item.priceSolLamports, new BN(2000));
       }
@@ -227,7 +227,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -241,10 +241,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify item was deactivated
-      const item = await fetchShopItem(ctx.connection, ctx.gameEngine, TEST_ITEM_ID);
+      const item = await fetchShopItem(ctx.svm, ctx.gameEngine, TEST_ITEM_ID);
       if (item) {
         expect(item.isActive).toBe(false);
       }
@@ -254,7 +254,7 @@ describe('Shop System', () => {
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey, itemId: TEST_ITEM_ID },
         { isActive: true }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(reactivateIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(reactivateIx), [ctx.daoAuthority]);
     });
   });
 
@@ -271,10 +271,10 @@ describe('Shop System', () => {
         { quantity: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify player state changed (received item)
-      const accountAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const accountAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(accountAfter).not.toBeNull();
     });
 
@@ -286,9 +286,9 @@ describe('Shop System', () => {
         { quantity: 5 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -301,7 +301,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -317,7 +317,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -357,7 +357,7 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
     });
 
     it('should update bundle (DAO)', async () => {
@@ -369,7 +369,7 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
     });
 
     it('should purchase bundle', async () => {
@@ -391,10 +391,10 @@ describe('Shop System', () => {
         {}
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify player received bundle items
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -422,7 +422,7 @@ describe('Shop System', () => {
           isActive: true,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [ctx.daoAuthority]);
 
       // Try to purchase without subscription
       const gameEngine = ctx.gameEngine;
@@ -441,7 +441,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(purchaseIx),
         [player.keypair]
       );
@@ -470,7 +470,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -489,7 +489,7 @@ describe('Shop System', () => {
     async function createRealMint(): Promise<Keypair> {
       const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
       const mintKeypair = Keypair.generate();
-      const lamports = await ctx.connection.getMinimumBalanceForRentExemption(82);
+      const lamports = Number(ctx.svm.minimumBalanceForRentExemption(BigInt(82)));
       const createAccountIx = SystemProgram.createAccount({
         fromPubkey: ctx.daoAuthority.publicKey,
         newAccountPubkey: mintKeypair.publicKey,
@@ -512,7 +512,7 @@ describe('Shop System', () => {
         data: initMintData,
       });
       const tx = new Transaction().add(createAccountIx, initMintIx);
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority, mintKeypair]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority, mintKeypair]);
       return mintKeypair;
     }
 
@@ -533,12 +533,12 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify allowed token was created
       const gameEngine = ctx.gameEngine;
       const [allowedTokenPda] = deriveAllowedTokenPda(gameEngine, testTokenMint);
-      const accountInfo = await ctx.connection.getAccountInfo(allowedTokenPda);
+      const accountInfo = await ctx.svm.getAccount(allowedTokenPda);
       expect(accountInfo).not.toBeNull();
     });
 
@@ -557,7 +557,7 @@ describe('Shop System', () => {
 
       const tx = new Transaction();
       ixs.forEach(ix => tx.add(ix));
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
     });
 
     it('should update discount on allowed token (DAO)', async () => {
@@ -575,7 +575,7 @@ describe('Shop System', () => {
 
       const tx = new Transaction();
       ixs.forEach(ix => tx.add(ix));
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
       // Reset discount to 0
       const resetIxs = createUpdateAllowedTokenInstruction(
@@ -588,7 +588,7 @@ describe('Shop System', () => {
       );
       const tx2 = new Transaction();
       resetIxs.forEach(ix => tx2.add(ix));
-      await sendTransaction(ctx.connection, tx2, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx2, [ctx.daoAuthority]);
     });
 
     it('should close allowed token (DAO)', async () => {
@@ -613,7 +613,7 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(createIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [ctx.daoAuthority]);
 
       // Now close it
       const closeIx = createCloseAllowedTokenInstruction({
@@ -622,12 +622,12 @@ describe('Shop System', () => {
         tokenMint: tokenToClose,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(closeIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(closeIx), [ctx.daoAuthority]);
 
       // Verify it was closed
       const gameEngine = ctx.gameEngine;
       const [allowedTokenPda] = deriveAllowedTokenPda(gameEngine, tokenToClose);
-      const accountInfo = await ctx.connection.getAccountInfo(allowedTokenPda);
+      const accountInfo = await ctx.svm.getAccount(allowedTokenPda);
       expect(accountInfo).toBeNull();
     });
 
@@ -652,7 +652,7 @@ describe('Shop System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -675,7 +675,7 @@ describe('Shop System', () => {
       const tx = new Transaction();
       ixs.forEach(ix => tx.add(ix));
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         tx,
         [player.keypair]
       );
@@ -691,7 +691,7 @@ describe('Shop System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -705,33 +705,33 @@ describe('Shop System', () => {
   describe('Payments', () => {
     it('should accept SOL payment for item', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const solBefore = await ctx.connection.getBalance(player.publicKey);
+      const solBefore = await ctx.svm.getBalance(player.publicKey);
 
       const ix = createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify SOL was deducted
-      const solAfter = await ctx.connection.getBalance(player.publicKey);
+      const solAfter = await ctx.svm.getBalance(player.publicKey);
       expect(solAfter).toBeLessThan(solBefore);
     });
 
     it('should transfer payment to treasury', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const treasuryBefore = await ctx.connection.getBalance(ctx.treasury.publicKey);
+      const treasuryBefore = await ctx.svm.getBalance(ctx.treasury.publicKey);
 
       const ix = createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify treasury received payment
-      const treasuryAfter = await ctx.connection.getBalance(ctx.treasury.publicKey);
+      const treasuryAfter = await ctx.svm.getBalance(ctx.treasury.publicKey);
       expect(treasuryAfter).toBeGreaterThan(treasuryBefore);
     });
   });
@@ -744,7 +744,7 @@ describe('Shop System', () => {
     it('should have rotating daily deals', async () => {
       // Daily deals are managed by DAO and rotate automatically
       // Verify shop config exists with daily deal slots
-      const config = await fetchShopConfig(ctx.connection, ctx.gameEngine);
+      const config = await fetchShopConfig(ctx.svm, ctx.gameEngine);
       expect(config).not.toBeNull();
     });
 
@@ -758,10 +758,10 @@ describe('Shop System', () => {
         { slotIndex: 0, itemId: 9999, discountBps: 2000, nextItemId: 9998, nextDiscountBps: 1500 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       const [dailyDealPda] = deriveDailyDealPda(ctx.gameEngine, 0);
-      const exists = await accountExists(ctx.connection, dailyDealPda);
+      const exists = await accountExists(ctx.svm, dailyDealPda);
       expect(exists).toBe(true);
     });
 
@@ -775,11 +775,11 @@ describe('Shop System', () => {
         { newItemId: 9997, newDiscountBps: 2500 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify the account still exists after rotation
       const [dailyDealPda] = deriveDailyDealPda(ctx.gameEngine, 0);
-      const exists = await accountExists(ctx.connection, dailyDealPda);
+      const exists = await accountExists(ctx.svm, dailyDealPda);
       expect(exists).toBe(true);
     });
   });
@@ -790,7 +790,7 @@ describe('Shop System', () => {
 
   describe('Weekly Sales', () => {
     it('should create a weekly sale', async () => {
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       const weekNumber = Math.floor(now / 604800);
 
       const ix = createCreateWeeklySaleInstruction(
@@ -810,10 +810,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       const [weeklySalePda] = deriveWeeklySalePda(ctx.gameEngine, weekNumber);
-      const exists = await accountExists(ctx.connection, weeklySalePda);
+      const exists = await accountExists(ctx.svm, weeklySalePda);
       expect(exists).toBe(true);
     });
   });
@@ -826,7 +826,7 @@ describe('Shop System', () => {
     it('should create a seasonal sale linked to event', async () => {
       // Create an event first
       const eventId = 100;
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       const createEventIx = createCreateEventInstruction(
         {
@@ -847,7 +847,7 @@ describe('Shop System', () => {
           autoActivate: true,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createEventIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(createEventIx), [ctx.daoAuthority]);
 
       const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
 
@@ -872,10 +872,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       const [seasonalSalePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
-      const exists = await accountExists(ctx.connection, seasonalSalePda);
+      const exists = await accountExists(ctx.svm, seasonalSalePda);
       expect(exists).toBe(true);
     });
   });
@@ -886,7 +886,7 @@ describe('Shop System', () => {
 
   describe('DAO Promotions', () => {
     it('should create a DAO promotion', async () => {
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       const proposalId = 1;
 
       const ix = createCreateDaoPromotionInstruction(
@@ -910,10 +910,10 @@ describe('Shop System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       const [daoPromotionPda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
-      const exists = await accountExists(ctx.connection, daoPromotionPda);
+      const exists = await accountExists(ctx.svm, daoPromotionPda);
       expect(exists).toBe(true);
     });
   });
@@ -925,7 +925,7 @@ describe('Shop System', () => {
   describe('Shop Analytics', () => {
     it('should track item stock changes', async () => {
       const gameEngine = ctx.gameEngine;
-      const itemBefore = await fetchShopItem(ctx.connection, gameEngine, 1);
+      const itemBefore = await fetchShopItem(ctx.svm, gameEngine, 1);
       const stockBefore = itemBefore?.currentGlobalStock?.toNumber() || 0;
 
       const player = await createShopReadyPlayer(ctx, factory);
@@ -934,9 +934,9 @@ describe('Shop System', () => {
         { quantity: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const itemAfter = await fetchShopItem(ctx.connection, gameEngine, 1);
+      const itemAfter = await fetchShopItem(ctx.svm, gameEngine, 1);
       if (itemAfter && itemBefore) {
         // Stock should decrease after purchase (if limited stock)
         const stockAfter = itemAfter.currentGlobalStock.toNumber();

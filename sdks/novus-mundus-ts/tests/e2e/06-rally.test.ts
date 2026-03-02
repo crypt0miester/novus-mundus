@@ -61,7 +61,7 @@ import {
   fetchRallyParticipant,
 } from '../utils/accounts';
 import { log } from '../utils/logger';
-import { sleep } from '../fixtures/time';
+import { advanceTime } from '../fixtures/time';
 
 // ============================================================
 // Test Suite
@@ -96,7 +96,7 @@ describe('Rally System', () => {
 
     // Create team
     await sendTransaction(
-      ctx.connection,
+      ctx.svm,
       new Transaction().add(
         createTeamCreateInstruction(
           { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
@@ -111,10 +111,10 @@ describe('Rally System', () => {
     // Add members with 200ms delay between each
     for (let i = 0; i < members.length; i++) {
       const member = members[i]!;
-      await sleep(200);
+
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             gameEngine: ctx.gameEngine,
@@ -128,10 +128,10 @@ describe('Rally System', () => {
         [leader.keypair]
       );
 
-      await sleep(200);
+
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({
             gameEngine: ctx.gameEngine,
@@ -152,7 +152,6 @@ describe('Rally System', () => {
   // Helper to create rally-ready players with delays between each creation
   async function createRallyReadyPlayersWithDelay(participantCount: number) {
     const result = await createRallyReadyPlayers(factory, participantCount);
-    await sleep(200);
     return result;
   }
 
@@ -166,9 +165,9 @@ describe('Rally System', () => {
       const { teamPda, teamId } = await createTeamWithMembers(creator, participants);
 
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       const ix = createRallyCreateInstruction(
@@ -193,11 +192,11 @@ describe('Rally System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [creator.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [creator.keypair]);
 
       // Verify rally was created with correct state
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
-      const rally = await fetchRally(ctx.connection, rallyPda);
+      const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
       expect(rally!.participantCount).toBe(1); // Creator is auto-joined
       expect(rally!.status).toBe(RallyStatus.Gathering);
@@ -207,14 +206,14 @@ describe('Rally System', () => {
 
       // Verify creator's participant was created
       const creatorParticipant = await fetchRallyParticipant(
-        ctx.connection, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
+        ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
       );
       expect(creatorParticipant).not.toBeNull();
       expect(creatorParticipant!.isLeader).toBe(true);
       expect(creatorParticipant!.unitsCommitted1.toNumber()).toBe(100);
 
       // Verify creator's units were deducted
-      const postCreator = await fetchPlayer(ctx.connection, creator.playerPda);
+      const postCreator = await fetchPlayer(ctx.svm, creator.playerPda);
       expect(postCreator!.defensiveUnit1.toNumber()).toBeLessThan(creatorAccount!.defensiveUnit1.toNumber());
     });
 
@@ -223,7 +222,7 @@ describe('Rally System', () => {
       const { teamPda, teamId } = await createTeamWithMembers(creator, participants);
 
       const rallyIndex = 1;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
       // Use a random keypair as a dummy encounter target (must be non-null)
@@ -251,11 +250,11 @@ describe('Rally System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [creator.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [creator.keypair]);
 
       // Verify rally was created with encounter target type
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
-      const rally = await fetchRally(ctx.connection, rallyPda);
+      const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
       expect(rally!.targetType).toBe(RallyTargetType.Encounter);
       expect(rally!.target.equals(dummyEncounterTarget)).toBe(true);
@@ -265,7 +264,7 @@ describe('Rally System', () => {
       // Create a player with estate+citadel but NOT on any team
       const { creator, participants, target } = await createRallyReadyPlayersWithDelay(2);
       // Do NOT create a team — creator is not on any team yet
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
       // Try to create rally without being on a team — use a fake teamId
@@ -292,7 +291,7 @@ describe('Rally System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [creator.keypair]
       );
@@ -301,7 +300,7 @@ describe('Rally System', () => {
     it('should reject rally with invalid target type value (99)', async () => {
       const { creator, participants, target } = await createRallyReadyPlayersWithDelay(2);
       const { teamPda, teamId } = await createTeamWithMembers(creator, participants);
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
       const ix = createRallyCreateInstruction(
@@ -327,7 +326,7 @@ describe('Rally System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [creator.keypair]
       );
@@ -336,7 +335,7 @@ describe('Rally System', () => {
     it('should reject rally with zero committed units', async () => {
       const { creator, participants, target } = await createRallyReadyPlayersWithDelay(2);
       const { teamPda, teamId } = await createTeamWithMembers(creator, participants);
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
       const ix = createRallyCreateInstruction(
@@ -362,7 +361,7 @@ describe('Rally System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [creator.keypair]
       );
@@ -380,13 +379,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -417,10 +416,10 @@ describe('Rally System', () => {
 
       // First participant joins the rally
       const participant = participants[0]!;
-      await sleep(200);
+
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -447,14 +446,14 @@ describe('Rally System', () => {
 
       // Verify participant account was created
       const participantInfo = await fetchRallyParticipant(
-        ctx.connection, ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey
+        ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey
       );
       expect(participantInfo).not.toBeNull();
       expect(participantInfo!.isLeader).toBe(false);
       expect(participantInfo!.unitsCommitted1.toNumber()).toBe(50);
 
       // Verify rally participant count increased
-      const rally = await fetchRally(ctx.connection, rallyPda);
+      const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(2);
     });
 
@@ -464,13 +463,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -507,7 +506,7 @@ describe('Rally System', () => {
       });
       await factory.hireUnits(outsider, 0, 50000);
 
-      await sleep(200);
+
 
       const joinIx = createRallyJoinInstruction(
         {
@@ -530,7 +529,7 @@ describe('Rally System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(joinIx),
         [outsider.keypair]
       );
@@ -548,13 +547,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -585,12 +584,12 @@ describe('Rally System', () => {
 
       // Participant joins
       const participant = participants[0]!;
-      const participantAccount = await fetchPlayer(ctx.connection, participant.playerPda);
+      const participantAccount = await fetchPlayer(ctx.svm, participant.playerPda);
       const participantCityId = participantAccount!.currentCity;
 
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -616,13 +615,13 @@ describe('Rally System', () => {
       );
 
       // Verify joined (participant_count should be 2)
-      let rally = await fetchRally(ctx.connection, rallyPda);
+      let rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(2);
 
       // Now leave
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyLeaveInstruction({
             gameEngine: ctx.gameEngine,
@@ -638,7 +637,7 @@ describe('Rally System', () => {
       );
 
       // Verify participant count decreased
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(1);
     });
   });
@@ -654,13 +653,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -690,9 +689,9 @@ describe('Rally System', () => {
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Cancel rally
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCancelInstruction({
             gameEngine: ctx.gameEngine,
@@ -706,7 +705,7 @@ describe('Rally System', () => {
       );
 
       // Verify rally status is Cancelled
-      const rally = await fetchRally(ctx.connection, rallyPda);
+      const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
       expect(rally!.status).toBe(RallyStatus.Cancelled);
     });
@@ -717,13 +716,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -754,7 +753,7 @@ describe('Rally System', () => {
 
       // Non-creator tries to cancel — should fail
       const participant = participants[0]!;
-      await sleep(200);
+
       const cancelIx = createRallyCancelInstruction({
         gameEngine: ctx.gameEngine,
         owner: participant.publicKey,
@@ -764,7 +763,7 @@ describe('Rally System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(cancelIx),
         [participant.keypair]
       );
@@ -782,13 +781,13 @@ describe('Rally System', () => {
 
       // Create rally with long gather duration
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -818,7 +817,7 @@ describe('Rally System', () => {
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Speedup the leader's gather travel
-      await sleep(200);
+
       const speedupIx = createRallySpeedupInstruction(
         {
           gameEngine: ctx.gameEngine,
@@ -834,11 +833,11 @@ describe('Rally System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [creator.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [creator.keypair]);
 
       // Verify the participant's travel time was reduced
       const participantInfo = await fetchRallyParticipant(
-        ctx.connection, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
+        ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
       );
       expect(participantInfo).not.toBeNull();
       // After tier 2 speedup, travel time should be reduced (25% remaining)
@@ -856,13 +855,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -892,9 +891,9 @@ describe('Rally System', () => {
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Cancel rally
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCancelInstruction({
             gameEngine: ctx.gameEngine,
@@ -911,7 +910,7 @@ describe('Rally System', () => {
       for (let i = 0; i < 12; i++) {
         try {
           await sendTransaction(
-            ctx.connection,
+            ctx.svm,
             new Transaction().add(
               createRallySpeedupInstruction(
                 {
@@ -935,12 +934,12 @@ describe('Rally System', () => {
         }
       }
 
-      // Wait briefly for time to pass
-      await sleep(2000);
+      // Advance LiteSVM clock past return travel time
+      await advanceTime(ctx.svm, 60);
 
       // Process return — returns units to player and closes participant account
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyProcessReturnInstruction({
             gameEngine: ctx.gameEngine,
@@ -957,17 +956,17 @@ describe('Rally System', () => {
 
       // Verify participant was closed
       const participantInfo = await fetchRallyParticipant(
-        ctx.connection, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
+        ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey
       );
       expect(participantInfo).toBeNull();
 
       // Verify returned_count matches participant_count
-      let rally = await fetchRally(ctx.connection, rallyPda);
+      let rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.returnedCount).toBe(rally!.participantCount);
 
       // Close rally — refund rent to leader
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCloseInstruction({
             leaderOwner: creator.publicKey,
@@ -978,7 +977,7 @@ describe('Rally System', () => {
       );
 
       // Verify rally account is closed
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).toBeNull();
     });
   });
@@ -994,13 +993,13 @@ describe('Rally System', () => {
 
       // Create rally
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -1030,14 +1029,14 @@ describe('Rally System', () => {
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Check initial state — creator auto-joined
-      let rally = await fetchRally(ctx.connection, rallyPda);
+      let rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(1);
 
       // First participant joins
       const p1 = participants[0]!;
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -1062,14 +1061,14 @@ describe('Rally System', () => {
         [p1.keypair]
       );
 
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(2);
 
       // Second participant joins
       const p2 = participants[1]!;
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -1094,7 +1093,7 @@ describe('Rally System', () => {
         [p2.keypair]
       );
 
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.participantCount).toBe(3);
     });
 
@@ -1105,13 +1104,13 @@ describe('Rally System', () => {
       // Create rally with 100 units from creator
       const rallyIndex = 0;
       const creatorUnits = 100;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -1141,15 +1140,15 @@ describe('Rally System', () => {
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Verify initial total units
-      let rally = await fetchRally(ctx.connection, rallyPda);
+      let rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.totalUnits.toNumber()).toBe(creatorUnits);
 
       // Join with 75 more units
       const participant = participants[0]!;
       const participantUnits = 75;
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -1175,7 +1174,7 @@ describe('Rally System', () => {
       );
 
       // Verify total units accumulated correctly
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally!.totalUnits.toNumber()).toBe(creatorUnits + participantUnits);
     });
   });
@@ -1191,13 +1190,13 @@ describe('Rally System', () => {
 
       // Create rally with very short gather duration (1 second)
       const rallyIndex = 0;
-      const creatorAccount = await fetchPlayer(ctx.connection, creator.playerPda);
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
-      const targetAccount = await fetchPlayer(ctx.connection, target.playerPda);
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyCreateInstruction(
             {
@@ -1228,9 +1227,9 @@ describe('Rally System', () => {
 
       // Join with a participant
       const participant = participants[0]!;
-      await sleep(200);
+
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRallyJoinInstruction(
             {
@@ -1259,7 +1258,7 @@ describe('Rally System', () => {
       for (let i = 0; i < 5; i++) {
         try {
           await sendTransaction(
-            ctx.connection,
+            ctx.svm,
             new Transaction().add(
               createRallySpeedupInstruction(
                 {
@@ -1280,8 +1279,8 @@ describe('Rally System', () => {
         }
       }
 
-      // Wait for gather time to elapse
-      await sleep(3000);
+      // Advance LiteSVM clock past gather time
+      await advanceTime(ctx.svm, 5);
 
       // Build participant PDA list
       const [creatorParticipantPda] = deriveRallyParticipantPda(ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey);
@@ -1298,10 +1297,10 @@ describe('Rally System', () => {
       });
 
       try {
-        await sendTransaction(ctx.connection, new Transaction().add(executeIx), [creator.keypair]);
+        await sendTransaction(ctx.svm, new Transaction().add(executeIx), [creator.keypair]);
 
         // Verify rally status changed
-        const rally = await fetchRally(ctx.connection, rallyPda);
+        const rally = await fetchRally(ctx.svm, rallyPda);
         expect(rally).not.toBeNull();
         // After execute, status should be Returning or Completed
         expect(rally!.status).not.toBe(RallyStatus.Gathering);

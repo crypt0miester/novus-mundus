@@ -88,7 +88,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -105,7 +105,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -120,7 +120,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -138,7 +138,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -175,7 +175,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -192,7 +192,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -207,7 +207,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -224,7 +224,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -242,7 +242,7 @@ describe('Token Operations', () => {
       expect(ix).toBeDefined();
       expect(ix.keys.length).toBeGreaterThan(0);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -262,9 +262,9 @@ describe('Token Operations', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -277,7 +277,7 @@ describe('Token Operations', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should require minimum time interval', async () => {
@@ -289,7 +289,7 @@ describe('Token Operations', () => {
       );
 
       // This may silently succeed but not update if not enough time passed
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should require valid player account', async () => {
@@ -315,7 +315,7 @@ describe('Token Operations', () => {
     it('should track reserved balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Player account has reserved_novi field
     });
@@ -323,7 +323,7 @@ describe('Token Operations', () => {
     it('should track locked balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Player account has locked_novi field
     });
@@ -331,7 +331,7 @@ describe('Token Operations', () => {
     it('should track cash balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Player account has cash field
     });
@@ -346,7 +346,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -363,7 +363,7 @@ describe('Token Operations', () => {
 
       // Combat rewards would increase attacker's tokens on victory
       // Verify player account state tracks token balances
-      const account = await fetchPlayer(ctx.connection, attacker.playerPda);
+      const account = await fetchPlayer(ctx.svm, attacker.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -371,7 +371,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Expedition completion rewards NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -379,7 +379,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Event prizes include NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -387,7 +387,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Arena rewards NOVI based on ranking
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -395,7 +395,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Dungeon completion rewards NOVI based on floor reached
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -409,7 +409,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Shop purchases require NOVI balance - verify player account exists
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -417,7 +417,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Subscriptions cost NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -425,7 +425,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Speedups cost NOVI (travel, research, etc.)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -433,7 +433,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Name registration costs NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -441,7 +441,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Research might cost NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -455,7 +455,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Get initial state
-      const beforeAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const beforeAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(beforeAccount).not.toBeNull();
 
       // Minting heroes locks NOVI
@@ -466,7 +466,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Burning heroes unlocks NOVI
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -474,7 +474,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Creating teams might lock NOVI as deposit
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -482,7 +482,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Locked tokens count for governance voting weight
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -496,7 +496,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Shop might reserve tokens before delivery
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -504,7 +504,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Rewards might be reserved before claim
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -512,7 +512,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Reserved becomes available after claim
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -544,7 +544,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [sender.keypair]
       );
@@ -568,7 +568,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -595,7 +595,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [sender.keypair]
       );
@@ -619,7 +619,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -637,7 +637,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -648,7 +648,7 @@ describe('Token Operations', () => {
 
       // Team treasury holds team funds
       // Would need to create team first
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -657,7 +657,7 @@ describe('Token Operations', () => {
 
       // Authorized withdrawals from treasury
       // Requires team leader permissions
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -671,7 +671,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // NOVI uses specific decimal places (likely 9 for SPL)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -679,7 +679,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Rounding follows specific rules for token operations
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -695,7 +695,7 @@ describe('Token Operations', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -711,7 +711,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Global supply tracked in game engine
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -719,7 +719,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Active tokens tracked (not locked or reserved)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -727,7 +727,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Token supply changes based on game mechanics
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -736,7 +736,7 @@ describe('Token Operations', () => {
 
       // Hiring units burns NOVI (deflationary mechanism)
       // Verify player account tracks token state
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -758,7 +758,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Only authorized game actions can burn tokens
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -767,7 +767,7 @@ describe('Token Operations', () => {
 
       // Transactions are atomic on Solana
       // Same instruction can't process twice in same tx
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -775,7 +775,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // All token transfers validated by program
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -789,7 +789,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // NOVI is SPL compatible
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Token accounts are standard SPL token accounts
     });
@@ -798,7 +798,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // ATA support for all token operations
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -806,7 +806,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Token 2022 features if applicable
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });

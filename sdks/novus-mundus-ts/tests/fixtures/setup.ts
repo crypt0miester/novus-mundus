@@ -3,22 +3,22 @@
  *
  * Initializes the game infrastructure required for all tests.
  * This includes: GameEngine, Cities, Hero Templates, Research Templates.
+ *
+ * Uses LiteSVM (in-process SVM) instead of solana-test-validator.
  */
 
 import {
-  Connection,
   Keypair,
   Transaction,
-  sendAndConfirmTransaction,
   LAMPORTS_PER_SOL,
   PublicKey,
-  type Commitment,
 } from '@solana/web3.js';
 import BN from 'bn.js';
+import bs58 from 'bs58';
 import * as fs from 'fs';
 import * as path from 'path';
-import { startValidator, stopValidator } from './validator';
-import { startProgramLogListener, stopProgramLogListener } from '../utils/logger';
+
+import { createTestSvm, type LiteSVM, FailedTransactionMetadata } from './svm';
 
 import {
   createInitGameEngineInstruction,
@@ -35,7 +35,6 @@ import {
   deriveCityPda,
   deriveShopConfigPda,
   deriveShopItemPda,
-  PROGRAM_ID,
 } from '../../src/index';
 
 // ============================================================
@@ -43,17 +42,11 @@ import {
 // ============================================================
 
 export interface TestConfig {
-  rpcUrl: string;
-  commitment: Commitment;
-  skipPreflight: boolean;
   /** Whether to initialize game infrastructure if not present */
   autoSetup: boolean;
 }
 
 export const DEFAULT_CONFIG: TestConfig = {
-  rpcUrl: process.env.RPC_URL || 'http://localhost:8899',
-  commitment: 'confirmed',
-  skipPreflight: true,
   autoSetup: true,
 };
 
@@ -62,7 +55,7 @@ export const DEFAULT_CONFIG: TestConfig = {
 // ============================================================
 
 export interface TestContext {
-  connection: Connection;
+  svm: LiteSVM;
   config: TestConfig;
   daoAuthority: Keypair;
   treasury: Keypair;
@@ -379,8 +372,7 @@ export const RESEARCH_TEMPLATES = [
     prerequisiteLevel: 0,
     gemCostPerMinute: 1,
   },
-  // Growth research templates for expedition unlock (category=0 Battle for test convenience
-  // so only Academy Lv 1 is needed, but buff_type 21/22 still sets has_mining/has_fishing)
+  // Growth research templates for expedition unlock
   {
     researchType: 21,
     category: 0,            // Battle category = Academy Lv 1 sufficient
@@ -438,56 +430,66 @@ function loadOrCreateKeypair(name: string): Keypair {
 // ============================================================
 
 export async function airdropIfNeeded(
-  connection: Connection,
+  svm: LiteSVM,
   pubkey: PublicKey,
   minBalance: number = 10 * LAMPORTS_PER_SOL
 ): Promise<void> {
-  const balance = await connection.getBalance(pubkey);
-  if (balance < minBalance) {
-    const needed = Math.min(minBalance - balance, 2 * LAMPORTS_PER_SOL);
-    try {
-      const sig = await connection.requestAirdrop(pubkey, needed);
-      await connection.confirmTransaction(sig, 'confirmed');
-    } catch (err) {
-      // Ignore airdrop failures on non-local networks
-      console.warn(`Airdrop failed for ${pubkey.toBase58()}: ${err}`);
-    }
+  const balance = svm.getBalance(pubkey);
+  if (balance === null || balance < BigInt(minBalance)) {
+    svm.airdrop(pubkey, BigInt(minBalance));
   }
 }
 
 export async function sendTx(
-  connection: Connection,
+  svm: LiteSVM,
   tx: Transaction,
   signers: Keypair[],
-  config: TestConfig
+  _config?: TestConfig
 ): Promise<string> {
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.recentBlockhash = svm.latestBlockhash();
   tx.feePayer = signers[0]!.publicKey;
-  try {
-    return await sendAndConfirmTransaction(connection, tx, signers, {
-      skipPreflight: config.skipPreflight,
-      commitment: config.commitment,
-    });
-  } catch (error: any) {
-    // Resolve Custom error codes to human-readable names
-    const msg = error?.message ?? '';
-    const match = msg.match(/custom program error: (0x[0-9a-fA-F]+)/i);
-    if (match?.[1]) {
-      const code = parseInt(match[1], 16);
-      const { GameError, parseErrorMessage } = await import('../../src/errors');
-      const name = GameError[code] || `Custom:${code}`;
-      const description = parseErrorMessage(code);
-      error.message = `${name} (${code}): ${description}\n${msg}`;
+  tx.sign(...signers);
+
+  const result = svm.sendTransaction(tx);
+
+  if (result instanceof FailedTransactionMetadata) {
+    const meta = result.meta();
+    const logs = meta.logs();
+    const errStr = result.toString();
+
+    // Build error message compatible with existing error code extraction
+    let message = `Transaction failed: ${errStr}`;
+
+    // Try to extract custom error code from the error
+    const hexMatch = errStr.match(/Custom\((\d+)\)/);
+    if (hexMatch?.[1]) {
+      const code = parseInt(hexMatch[1], 10);
+      message = `failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x${code.toString(16)}`;
+      try {
+        const { GameError, parseErrorMessage } = await import('../../src/errors');
+        const name = GameError[code] || `Custom:${code}`;
+        const description = parseErrorMessage(code);
+        message = `${name} (${code}): ${description}\n${message}`;
+      } catch {}
     }
+
+    const error: any = new Error(message);
+    error.logs = logs;
+    error.transactionLogs = logs;
     throw error;
   }
+
+  // Expire blockhash so identical transactions can be sent again
+  svm.expireBlockhash();
+
+  return bs58.encode(result.signature());
 }
 
 export async function accountExists(
-  connection: Connection,
+  svm: LiteSVM,
   pubkey: PublicKey
 ): Promise<boolean> {
-  const info = await connection.getAccountInfo(pubkey);
+  const info = svm.getAccount(pubkey);
   return info !== null && info.data.length > 0;
 }
 
@@ -496,7 +498,7 @@ export async function accountExists(
 // ============================================================
 
 async function setupGameEngine(ctx: TestContext): Promise<void> {
-  if (await accountExists(ctx.connection, ctx.gameEngine)) {
+  if (await accountExists(ctx.svm, ctx.gameEngine)) {
     return;
   }
 
@@ -507,11 +509,11 @@ async function setupGameEngine(ctx: TestContext): Promise<void> {
   });
 
   const tx = new Transaction().add(ix);
-  await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+  await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
 }
 
 async function setupShopConfig(ctx: TestContext): Promise<void> {
-  if (await accountExists(ctx.connection, ctx.shopConfig)) {
+  if (await accountExists(ctx.svm, ctx.shopConfig)) {
     return;
   }
 
@@ -525,13 +527,13 @@ async function setupShopConfig(ctx: TestContext): Promise<void> {
   );
 
   const tx = new Transaction().add(ix);
-  await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+  await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
 }
 
 async function setupTestGemsItem(ctx: TestContext): Promise<void> {
   const [gemsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
 
-  if (await accountExists(ctx.connection, gemsItemPda)) {
+  if (await accountExists(ctx.svm, gemsItemPda)) {
     return;
   }
 
@@ -546,9 +548,8 @@ async function setupTestGemsItem(ctx: TestContext): Promise<void> {
 
   const tx = new Transaction().add(ix);
   try {
-    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+    await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
   } catch (err) {
-    // Item may already exist
     console.warn(`Test gems item setup failed: ${err}`);
   }
 }
@@ -556,7 +557,7 @@ async function setupTestGemsItem(ctx: TestContext): Promise<void> {
 async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
   const [fragmentsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
 
-  if (await accountExists(ctx.connection, fragmentsItemPda)) {
+  if (await accountExists(ctx.svm, fragmentsItemPda)) {
     return;
   }
 
@@ -571,7 +572,7 @@ async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
 
   const tx = new Transaction().add(ix);
   try {
-    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+    await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
   } catch (err) {
     console.warn(`Test fragments item setup failed: ${err}`);
   }
@@ -580,7 +581,7 @@ async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
 async function setupTestMaterialsItem(ctx: TestContext): Promise<void> {
   const [materialsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_MATERIALS_ITEM.itemId);
 
-  if (await accountExists(ctx.connection, materialsItemPda)) {
+  if (await accountExists(ctx.svm, materialsItemPda)) {
     return;
   }
 
@@ -595,14 +596,14 @@ async function setupTestMaterialsItem(ctx: TestContext): Promise<void> {
 
   const tx = new Transaction().add(ix);
   try {
-    await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+    await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
   } catch (err) {
     console.warn(`Test materials item setup failed: ${err}`);
   }
 }
 
 async function setupHeroCollection(ctx: TestContext): Promise<void> {
-  if (await accountExists(ctx.connection, ctx.heroCollection)) {
+  if (await accountExists(ctx.svm, ctx.heroCollection)) {
     return;
   }
 
@@ -612,33 +613,27 @@ async function setupHeroCollection(ctx: TestContext): Promise<void> {
   });
 
   const tx = new Transaction().add(ix);
-  await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+  await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
 }
 
 async function setupHeroTemplates(ctx: TestContext): Promise<void> {
-  // Populate map and collect templates that need creation
-  const toCreate: typeof HERO_TEMPLATES = [];
   for (const template of HERO_TEMPLATES) {
     const [templatePda] = deriveHeroTemplatePda(template.templateId);
     ctx.heroTemplates.set(template.templateId, templatePda);
-    if (!(await accountExists(ctx.connection, templatePda))) {
-      toCreate.push(template);
-    }
-  }
 
-  // Create all missing templates in parallel
-  await Promise.all(toCreate.map(async (template) => {
+    if (await accountExists(ctx.svm, templatePda)) continue;
+
     const ix = createCreateTemplateInstruction(
       { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
       template
     );
     const tx = new Transaction().add(ix);
     try {
-      await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
+      await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
     } catch (err) {
       // Template may already exist
     }
-  }));
+  }
 }
 
 async function setupCities(ctx: TestContext): Promise<void> {
@@ -650,14 +645,13 @@ async function setupCities(ctx: TestContext): Promise<void> {
     ctx.cities.set(city.id, cityPda);
   }
 
-  // Check if first city already exists (all-or-nothing with --reset)
+  // Check if first city already exists
   const [firstCityPda] = deriveCityPda(ctx.gameEngine, CITIES[0].id);
-  if (await accountExists(ctx.connection, firstCityPda)) {
+  if (await accountExists(ctx.svm, firstCityPda)) {
     return;
   }
 
-  // Create all city batches in parallel
-  const batchPromises = [];
+  // Create city batches sequentially (LiteSVM is single-threaded, still instant)
   for (let i = 0; i < CITIES.length; i += BATCH_SIZE) {
     const batchCount = Math.min(BATCH_SIZE, CITIES.length - i);
     const startCityId = CITIES[i]!.id;
@@ -689,25 +683,17 @@ async function setupCities(ctx: TestContext): Promise<void> {
     );
 
     const tx = new Transaction().add(ix);
-    batchPromises.push(sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config));
+    await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
   }
-
-  await Promise.all(batchPromises);
 }
 
 async function setupResearchTemplates(ctx: TestContext): Promise<void> {
-  // Populate map and collect templates that need creation
-  const toCreate = [];
   for (const template of RESEARCH_TEMPLATES) {
     const [templatePda] = deriveResearchTemplatePda(template.researchType);
     ctx.researchTemplates.set(template.researchType, templatePda);
-    if (!(await accountExists(ctx.connection, templatePda))) {
-      toCreate.push(template);
-    }
-  }
 
-  // Create all missing templates in parallel
-  await Promise.all(toCreate.map(async (template) => {
+    if (await accountExists(ctx.svm, templatePda)) continue;
+
     const ix = createInitializeTemplateInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
@@ -716,23 +702,16 @@ async function setupResearchTemplates(ctx: TestContext): Promise<void> {
       template
     );
 
-    // Retry up to 3 times (blockhash/timing issues on fresh validator)
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const tx = new Transaction().add(ix);
-        await sendTx(ctx.connection, tx, [ctx.daoAuthority], ctx.config);
-        break; // success
-      } catch (err: any) {
-        const msg = err?.transactionMessage || err?.message || '';
-        if (msg.includes('already in use')) break; // already exists
-        if (attempt === 2) {
-          console.error(`[setup] Research template ${template.researchType} FAILED after 3 attempts:`, msg);
-        }
-        // Wait before retry
-        await new Promise(r => setTimeout(r, 1000));
+    const tx = new Transaction().add(ix);
+    try {
+      await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (!msg.includes('already in use')) {
+        console.error(`[setup] Research template ${template.researchType} FAILED:`, msg);
       }
     }
-  }));
+  }
 }
 
 // ============================================================
@@ -748,7 +727,7 @@ export async function setupTestContext(
 ): Promise<TestContext> {
   const fullConfig: TestConfig = { ...DEFAULT_CONFIG, ...config };
 
-  const connection = new Connection(fullConfig.rpcUrl, fullConfig.commitment);
+  const svm = createTestSvm();
   const daoAuthority = loadOrCreateKeypair('dao-authority');
   const treasury = loadOrCreateKeypair('treasury');
 
@@ -757,7 +736,7 @@ export async function setupTestContext(
   const [shopConfig] = deriveShopConfigPda(gameEngine);
 
   const ctx: TestContext = {
-    connection,
+    svm,
     config: fullConfig,
     daoAuthority,
     treasury,
@@ -774,34 +753,25 @@ export async function setupTestContext(
   if (fullConfig.autoSetup) {
     const t0 = performance.now();
 
-    // Phase 1: Airdrops (parallel)
+    // Phase 1: Airdrops (instant with LiteSVM)
     console.log('[setup] Airdropping SOL...');
-    await Promise.all([
-      airdropIfNeeded(connection, daoAuthority.publicKey, 50 * LAMPORTS_PER_SOL),
-      airdropIfNeeded(connection, treasury.publicKey, 1 * LAMPORTS_PER_SOL),
-    ]);
+    await airdropIfNeeded(svm, daoAuthority.publicKey, 50 * LAMPORTS_PER_SOL);
+    await airdropIfNeeded(svm, treasury.publicKey, 1 * LAMPORTS_PER_SOL);
 
     // Phase 2: GameEngine + ShopConfig (sequential - ShopConfig depends on GameEngine)
     console.log('[setup] Initializing GameEngine + ShopConfig...');
     await setupGameEngine(ctx);
     await setupShopConfig(ctx);
 
-    // Phase 3: Everything else in parallel (all depend only on GameEngine existing)
-    console.log('[setup] Initializing cities, heroes, research, shop items (parallel)...');
-    const results = await Promise.allSettled([
-      setupCities(ctx),
-      setupHeroCollection(ctx).then(() => setupHeroTemplates(ctx)),
-      setupResearchTemplates(ctx),
-      setupTestGemsItem(ctx),
-      setupTestFragmentsItem(ctx),
-      setupTestMaterialsItem(ctx),
-    ]);
-
-    for (const r of results) {
-      if (r.status === 'rejected') {
-        console.warn(`[setup] Non-critical setup failed: ${r.reason}`);
-      }
-    }
+    // Phase 3: Everything else sequentially (instant with LiteSVM)
+    console.log('[setup] Initializing cities, heroes, research, shop items...');
+    await setupCities(ctx);
+    await setupHeroCollection(ctx);
+    await setupHeroTemplates(ctx);
+    await setupResearchTemplates(ctx);
+    await setupTestGemsItem(ctx);
+    await setupTestFragmentsItem(ctx);
+    await setupTestMaterialsItem(ctx);
 
     const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
     console.log(`[setup] All infrastructure ready in ${elapsed}s.`);
@@ -828,30 +798,12 @@ export function resetGlobalContext(): void {
 // ============================================================
 
 export async function beforeAllTests(): Promise<TestContext> {
-  // Start (or restart) the validator with --reset so every run is fresh
-  await startValidator();
-  // Force re-setup since validator was reset
+  // Each test file gets a fresh LiteSVM instance
   globalContext = null;
   const ctx = await getGlobalContext();
-
-  // Start real-time program log listener (WebSocket)
-  startProgramLogListener(ctx.connection, PROGRAM_ID);
-
   return ctx;
 }
 
 export async function afterAllTests(): Promise<void> {
-  if (globalContext) {
-    stopProgramLogListener(globalContext.connection);
-  }
-  stopValidator();
+  // No cleanup needed — LiteSVM is garbage collected
 }
-
-// Clean up on SIGINT (Cmd+C) so WebSocket doesn't hang
-process.on('SIGINT', () => {
-  if (globalContext) {
-    stopProgramLogListener(globalContext.connection);
-  }
-  stopValidator();
-  process.exit(1);
-});

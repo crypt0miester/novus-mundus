@@ -44,6 +44,7 @@ import {
   fetchExpedition,
 } from '../utils/accounts';
 import { log } from '../utils/logger';
+import { advanceTime } from '../fixtures/time';
 
 // ============================================================
 // Test Suite
@@ -110,10 +111,10 @@ describe('Expedition System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify expedition started (fetchExpedition takes owner wallet, not PDA)
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
     });
 
@@ -131,7 +132,7 @@ describe('Expedition System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject mining expedition without Mine building', async () => {
@@ -155,7 +156,7 @@ describe('Expedition System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -177,7 +178,7 @@ describe('Expedition System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -188,7 +189,7 @@ describe('Expedition System', () => {
 
       // Start first expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -217,7 +218,7 @@ describe('Expedition System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -228,7 +229,7 @@ describe('Expedition System', () => {
 
       // Start expedition without hero (hero integration requires actual NFT)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -245,7 +246,7 @@ describe('Expedition System', () => {
       );
 
       // Verify expedition is active
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
     });
 
@@ -253,11 +254,11 @@ describe('Expedition System', () => {
       const player = await createMiningReadyPlayer();
 
       // Get initial operative count
-      const beforeAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const beforeAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(beforeAccount).not.toBeNull();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -274,7 +275,7 @@ describe('Expedition System', () => {
       );
 
       // Operatives should be consumed
-      const afterAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterAccount).not.toBeNull();
     });
   });
@@ -289,7 +290,7 @@ describe('Expedition System', () => {
 
       // Start expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -315,10 +316,10 @@ describe('Expedition System', () => {
         { score: 80 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Verify strike recorded
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
     });
 
@@ -335,7 +336,7 @@ describe('Expedition System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(strikeIx),
         [player.keypair, ctx.daoAuthority]
       );
@@ -346,7 +347,7 @@ describe('Expedition System', () => {
 
       // Start expedition (tier 0 = 1 hour, max 1 strike)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -364,7 +365,7 @@ describe('Expedition System', () => {
 
       // First strike
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStrikeInstruction(
             {
@@ -380,7 +381,7 @@ describe('Expedition System', () => {
 
       // Immediate second strike should fail (max strikes reached for 1-hour expedition)
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStrikeInstruction(
             {
@@ -400,7 +401,7 @@ describe('Expedition System', () => {
 
       // Start mining expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -425,10 +426,10 @@ describe('Expedition System', () => {
         },
         { score: 90 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Fetch expedition account and verify strike was recorded with score
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
       expect(expedition!.strikes).toBeGreaterThan(0);
       expect(expedition!.score).toBeGreaterThan(0);
@@ -451,7 +452,7 @@ describe('Expedition System', () => {
 
       // Start expedition (tier 0 = 1 hour)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -474,14 +475,14 @@ describe('Expedition System', () => {
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
-          await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
         } catch {
           break; // Already at minimal remaining time
         }
       }
 
       // Wait for any remaining time to elapse
-      await new Promise(r => setTimeout(r, 3000));
+      await advanceTime(ctx.svm, 5);
 
       // Claim expedition
       const claimIx = createExpeditionClaimInstruction({
@@ -489,10 +490,10 @@ describe('Expedition System', () => {
         owner: player.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify expedition account closed
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       // Should be null (account closed after claim)
     });
 
@@ -501,7 +502,7 @@ describe('Expedition System', () => {
 
       // Start expedition (tier 0 = 1 hour)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -524,7 +525,7 @@ describe('Expedition System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -536,7 +537,7 @@ describe('Expedition System', () => {
 
       // Start expedition (no hero — hero integration requires actual NFT)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -559,28 +560,28 @@ describe('Expedition System', () => {
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
-          await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
         } catch {
           break;
         }
       }
 
-      await new Promise(r => setTimeout(r, 3000));
+      await advanceTime(ctx.svm, 5);
 
       // Claim
       const claimIx = createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify expedition account is closed (hero would be unlocked)
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       // Account should be null after claim — hero and operatives returned
       expect(expedition).toBeNull();
 
       // Player account should still be valid
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -590,7 +591,7 @@ describe('Expedition System', () => {
 
       // Start expedition (without hero — hero XP requires actual NFT)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -613,24 +614,24 @@ describe('Expedition System', () => {
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
-          await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
         } catch {
           break;
         }
       }
 
-      await new Promise(r => setTimeout(r, 3000));
+      await advanceTime(ctx.svm, 5);
 
       // Claim expedition rewards
       const claimIx = createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify claim succeeded — hero XP grant requires hero NFT integration
       // Without a hero, we just verify the claim transaction completed successfully
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -645,7 +646,7 @@ describe('Expedition System', () => {
       await factory.buyGems(player, 20);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -667,7 +668,7 @@ describe('Expedition System', () => {
         { speedupTier: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
     });
 
     it('should reject speedup without active expedition', async () => {
@@ -679,7 +680,7 @@ describe('Expedition System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(speedupIx),
         [player.keypair]
       );
@@ -690,7 +691,7 @@ describe('Expedition System', () => {
       await factory.buyGems(player, 20);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -712,7 +713,7 @@ describe('Expedition System', () => {
         { speedupTier: 2 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
     });
   });
 
@@ -725,7 +726,7 @@ describe('Expedition System', () => {
       const player = await createMiningReadyPlayer();
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -746,10 +747,10 @@ describe('Expedition System', () => {
         owner: player.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(abortIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify expedition ended (account closed)
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       // Should be null or empty
     });
 
@@ -762,7 +763,7 @@ describe('Expedition System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(abortIx),
         [player.keypair]
       );
@@ -772,14 +773,14 @@ describe('Expedition System', () => {
       const player = await createMiningReadyPlayer();
 
       // Snapshot player before expedition
-      const beforeSnapshot = await fetchPlayer(ctx.connection, player.playerPda);
+      const beforeSnapshot = await fetchPlayer(ctx.svm, player.playerPda);
       expect(beforeSnapshot).not.toBeNull();
       const gemsBefore = beforeSnapshot!.gems;
       const fragmentsBefore = beforeSnapshot!.fragments;
 
       // Start expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -804,17 +805,17 @@ describe('Expedition System', () => {
         },
         { score: 95 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Abort — accumulated loot should be lost
       const abortIx = createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(abortIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify no rewards were credited (gems/fragments should not increase)
-      const afterSnapshot = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterSnapshot = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterSnapshot).not.toBeNull();
       // Gems and fragments should not have increased from expedition rewards
       expect(afterSnapshot!.gems.gte(gemsBefore)).toBe(true);
@@ -826,7 +827,7 @@ describe('Expedition System', () => {
 
       // Start expedition (without hero — hero unlock requires NFT)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -843,7 +844,7 @@ describe('Expedition System', () => {
       );
 
       // Verify expedition is active
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
 
       // Abort expedition
@@ -851,10 +852,10 @@ describe('Expedition System', () => {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(abortIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify expedition account is closed (hero would be unlocked)
-      const afterExpedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const afterExpedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(afterExpedition).toBeNull();
     });
 
@@ -862,13 +863,13 @@ describe('Expedition System', () => {
       const player = await createMiningReadyPlayer();
 
       // Snapshot operatives before expedition
-      const beforeAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const beforeAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(beforeAccount).not.toBeNull();
       const opsBefore = beforeAccount!.operativeUnit1;
 
       // Start expedition with 10 operatives
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -885,7 +886,7 @@ describe('Expedition System', () => {
       );
 
       // Verify operatives were consumed
-      const duringAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const duringAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(duringAccount).not.toBeNull();
 
       // Abort expedition — operatives should be returned
@@ -893,10 +894,10 @@ describe('Expedition System', () => {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(abortIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify operatives are restored
-      const afterAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterAccount).not.toBeNull();
       // Operatives should be restored to the pre-expedition level
       expect(afterAccount!.operativeUnit1.gte(opsBefore)).toBe(true);
@@ -913,7 +914,7 @@ describe('Expedition System', () => {
 
       // Start mining expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -930,7 +931,7 @@ describe('Expedition System', () => {
       );
 
       // Fetch expedition and verify type
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Mining);
     });
@@ -940,7 +941,7 @@ describe('Expedition System', () => {
 
       // Start fishing expedition
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -957,7 +958,7 @@ describe('Expedition System', () => {
       );
 
       // Fetch expedition and verify type
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Fishing);
     });

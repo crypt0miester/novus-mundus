@@ -69,6 +69,7 @@ import {
 import {
   sendTransaction,
 } from '../utils/transactions';
+import { advanceTime } from '../fixtures/time';
 import {
   fetchPlayer,
   fetchExpedition,
@@ -106,7 +107,7 @@ describe('Full Game Flow Integration', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Verify player exists and has correct initial state
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.owner.equals(player.publicKey)).toBe(true);
       expect(account!.level).toBe(1);
@@ -117,14 +118,14 @@ describe('Full Game Flow Integration', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Snapshot before
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Hire defensive units
       await factory.hireUnits(player, 0, 100); // defensive unit type 0
 
       // Snapshot after
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Verify units increased
@@ -136,13 +137,13 @@ describe('Full Game Flow Integration', () => {
     it('should purchase equipment and verify state changes', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Purchase melee weapons
       await factory.purchaseEquipment(player, 0, 10);
 
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Verify weapons increased
@@ -160,8 +161,8 @@ describe('Full Game Flow Integration', () => {
       const { attacker, defender } = await createCombatReadyPlayers(factory);
 
       // Get initial states
-      const attackerBefore = await snapshotPlayer(ctx.connection, attacker.playerPda);
-      const defenderBefore = await snapshotPlayer(ctx.connection, defender.playerPda);
+      const attackerBefore = await snapshotPlayer(ctx.svm, attacker.playerPda);
+      const defenderBefore = await snapshotPlayer(ctx.svm, defender.playerPda);
       expect(attackerBefore).not.toBeNull();
       expect(defenderBefore).not.toBeNull();
 
@@ -178,14 +179,14 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(attackIx),
         [attacker.keypair]
       );
 
       // Verify state changes
-      const attackerAfter = await snapshotPlayer(ctx.connection, attacker.playerPda);
-      const defenderAfter = await snapshotPlayer(ctx.connection, defender.playerPda);
+      const attackerAfter = await snapshotPlayer(ctx.svm, attacker.playerPda);
+      const defenderAfter = await snapshotPlayer(ctx.svm, defender.playerPda);
 
       // Attacker should have used operatives
       expect(attackerAfter!.data.operativeUnit1.lt(attackerBefore!.data.operativeUnit1)).toBe(true);
@@ -210,7 +211,7 @@ describe('Full Game Flow Integration', () => {
       await factory.purchaseEquipment(player, 3, 50); // armor
 
       // Verify final state
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.defensiveUnit1.toNumber()).toBeGreaterThan(0);
       expect(account!.defensiveUnit2.toNumber()).toBeGreaterThan(0);
@@ -231,7 +232,7 @@ describe('Full Game Flow Integration', () => {
     it('should start and complete intracity travel', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       const cityId = before!.currentCity;
@@ -249,14 +250,14 @@ describe('Full Game Flow Integration', () => {
       await factory.buyGems(player, 1);
       await factory.speedupTravel(player, 2);
 
-      // Small delay
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Advance clock past travel arrival
+      await advanceTime(ctx.svm, 5);
 
       // Complete travel
       await factory.completeIntracityTravel(player, cityId, destGridLat, destGridLong);
 
       // Verify location changed
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       const afterGridLat = Math.round(after!.currentLat * 10000);
@@ -269,7 +270,7 @@ describe('Full Game Flow Integration', () => {
     it('should start and complete intercity travel', async () => {
       const player = await factory.createPlayer({ initialize: true, cityId: 1 });
 
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
       expect(before!.currentCity).toBe(1);
 
@@ -293,14 +294,14 @@ describe('Full Game Flow Integration', () => {
         console.warn('Speedup may have failed (travel too short):', e);
       }
 
-      // Wait for travel
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Advance clock past travel arrival
+      await advanceTime(ctx.svm, 5);
 
       // Complete travel
       await factory.completeIntercityTravel(player, before!.currentCity, destinationCityId, destGridLat, destGridLong);
 
       // Verify city changed
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
       expect(after!.currentCity).toBe(destinationCityId);
     });
@@ -338,7 +339,7 @@ describe('Full Game Flow Integration', () => {
       // Need operatives for expedition
       await factory.hireUnits(player, 3, 100);
 
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Start mining expedition
@@ -354,19 +355,19 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(startIx),
         [player.keypair]
       );
 
       // Verify expedition created
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Mining);
       expect(expedition!.operativeUnit1.toNumber()).toBe(50);
 
       // Verify operatives deducted
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after!.data.operativeUnit1.lt(before!.data.operativeUnit1)).toBe(true);
     });
 
@@ -388,12 +389,12 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(startIx),
         [player.keypair]
       );
 
-      const beforeAbort = await snapshotPlayer(ctx.connection, player.playerPda);
+      const beforeAbort = await snapshotPlayer(ctx.svm, player.playerPda);
 
       // Abort expedition
       const abortIx = createExpeditionAbortInstruction({
@@ -402,17 +403,17 @@ describe('Full Game Flow Integration', () => {
       });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(abortIx),
         [player.keypair]
       );
 
       // Verify expedition gone
-      const expedition = await fetchExpedition(ctx.connection, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).toBeNull();
 
       // Verify operatives returned
-      const afterAbort = await snapshotPlayer(ctx.connection, player.playerPda);
+      const afterAbort = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(afterAbort!.data.operativeUnit1.gt(beforeAbort!.data.operativeUnit1)).toBe(true);
     });
   });
@@ -432,7 +433,7 @@ describe('Full Game Flow Integration', () => {
       await factory.purchaseEquipment(sender, 0, 20); // melee
       await factory.purchaseEquipment(sender, 3, 30); // armor
 
-      const senderBefore = await snapshotPlayer(ctx.connection, sender.playerPda);
+      const senderBefore = await snapshotPlayer(ctx.svm, sender.playerPda);
 
       // Send reinforcements (players must be on same team)
       const teamId = 1; // Use a placeholder team
@@ -457,14 +458,14 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(sendIx),
         [sender.keypair]
       );
 
       // Verify reinforcement account created
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -474,7 +475,7 @@ describe('Full Game Flow Integration', () => {
       expect(reinforcement!.unitsDef2.toNumber()).toBe(15);
 
       // Verify sender's units deducted
-      const senderAfter = await snapshotPlayer(ctx.connection, sender.playerPda);
+      const senderAfter = await snapshotPlayer(ctx.svm, sender.playerPda);
       expect(senderAfter!.data.defensiveUnit1.lt(senderBefore!.data.defensiveUnit1)).toBe(true);
     });
 
@@ -507,7 +508,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(sendIx),
         [sender.keypair]
       );
@@ -522,14 +523,14 @@ describe('Full Game Flow Integration', () => {
       });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(recallIx),
         [sender.keypair]
       );
 
       // Verify reinforcement is in returning state
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -580,14 +581,14 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(rallyIx),
         [creator.keypair]
       );
 
       // Verify rally created
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 0);
-      const rally = await fetchRally(ctx.connection, rallyPda);
+      const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
     });
 
@@ -628,7 +629,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createIx),
         [creator.keypair]
       );
@@ -657,13 +658,13 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(joinIx),
         [joiner.keypair]
       );
 
       // Verify rally has more operatives
-      let rally = await fetchRally(ctx.connection, rallyPda);
+      let rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
 
       // Leave rally
@@ -678,13 +679,13 @@ describe('Full Game Flow Integration', () => {
       });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(leaveIx),
         [joiner.keypair]
       );
 
       // Verify rally state changed
-      rally = await fetchRally(ctx.connection, rallyPda);
+      rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
     });
 
@@ -723,13 +724,13 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createIx),
         [creator.keypair]
       );
 
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 2);
-      const beforeCancel = await snapshotPlayer(ctx.connection, creator.playerPda);
+      const beforeCancel = await snapshotPlayer(ctx.svm, creator.playerPda);
 
       // Cancel rally
       const cancelIx = createRallyCancelInstruction({
@@ -741,13 +742,13 @@ describe('Full Game Flow Integration', () => {
       });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(cancelIx),
         [creator.keypair]
       );
 
       // Verify defensives returned
-      const afterCancel = await snapshotPlayer(ctx.connection, creator.playerPda);
+      const afterCancel = await snapshotPlayer(ctx.svm, creator.playerPda);
       expect(afterCancel!.data.defensiveUnit1.gt(beforeCancel!.data.defensiveUnit1)).toBe(true);
     });
   });
@@ -769,13 +770,13 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(createIx),
         [leader.keypair]
       );
 
       // Verify leader is in a team
-      const leaderAccount = await fetchPlayer(ctx.connection, leader.playerPda);
+      const leaderAccount = await fetchPlayer(ctx.svm, leader.playerPda);
       expect(leaderAccount).not.toBeNull();
       expect(leaderAccount!.team).not.toBeNull();
     });
@@ -796,7 +797,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(estateIx),
         [player.keypair]
       );
@@ -815,7 +816,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(buildIx),
         [player.keypair]
       );
@@ -875,7 +876,7 @@ describe('Full Game Flow Integration', () => {
       await factory.createPlayerEstate(player);
 
       // 4. Verify final state
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.defensiveUnit1.toNumber()).toBeGreaterThan(0);
       expect(account!.operativeUnit1.toNumber()).toBeGreaterThan(0);
@@ -895,7 +896,7 @@ describe('Full Game Flow Integration', () => {
 
       // All should be initialized
       for (const player of players) {
-        const account = await fetchPlayer(ctx.connection, player.playerPda);
+        const account = await fetchPlayer(ctx.svm, player.playerPda);
         expect(account).not.toBeNull();
         expect(account!.level).toBe(1);
       }
@@ -905,13 +906,13 @@ describe('Full Game Flow Integration', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Take multiple snapshots through economic actions
-      const snap1 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const snap1 = await snapshotPlayer(ctx.svm, player.playerPda);
 
       await factory.hireUnits(player, 0, 100);
-      const snap2 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const snap2 = await snapshotPlayer(ctx.svm, player.playerPda);
 
       await factory.purchaseEquipment(player, 0, 25);
-      const snap3 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const snap3 = await snapshotPlayer(ctx.svm, player.playerPda);
 
       // Verify progressive changes
       expect(snap2!.data.defensiveUnit1.gt(snap1!.data.defensiveUnit1)).toBe(true);

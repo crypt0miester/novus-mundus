@@ -53,7 +53,7 @@ import {
   fetchReinforcement,
 } from '../utils/accounts';
 import { log } from '../utils/logger';
-import { sleep } from '../fixtures/time';
+import { advanceTime } from '../fixtures/time';
 
 // ============================================================
 // Test Suite
@@ -88,7 +88,7 @@ describe('Reinforcement System', () => {
 
     // Create team
     await sendTransaction(
-      ctx.connection,
+      ctx.svm,
       new Transaction().add(
         createTeamCreateInstruction(
           { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
@@ -103,10 +103,10 @@ describe('Reinforcement System', () => {
     // Add members with delay between each
     for (let i = 0; i < members.length; i++) {
       const member = members[i]!;
-      await sleep(200);
+
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamInviteInstruction({
             gameEngine: ctx.gameEngine,
@@ -120,10 +120,10 @@ describe('Reinforcement System', () => {
         [leader.keypair]
       );
 
-      await sleep(200);
+
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamAcceptInviteInstruction({
             gameEngine: ctx.gameEngine,
@@ -155,14 +155,14 @@ describe('Reinforcement System', () => {
       createEstate: true,
       buildings: [BuildingType.Barracks],
     });
-    await sleep(200);
+
     const receiver = await factory.createPlayer({
       cityId: sameCity ? cityId : 2,
       initialize: true,
       createEstate: true,
       buildings: [BuildingType.Barracks],
     });
-    await sleep(200);
+
 
     const { teamPda, teamId } = await createTeamWithMembers(sender, [receiver]);
     return { sender, receiver, teamId, teamPda };
@@ -196,7 +196,7 @@ describe('Reinforcement System', () => {
         heroSlot: 255,
       }
     );
-    await sendTransaction(ctx.connection, new Transaction().add(ix), [sender.keypair]);
+    await sendTransaction(ctx.svm, new Transaction().add(ix), [sender.keypair]);
   }
 
   // ============================================================
@@ -211,19 +211,19 @@ describe('Reinforcement System', () => {
       // Hire defensive units for sender
       await factory.hireUnits(sender, 0, 200);
 
-      const senderBefore = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
       const initialDef1 = senderBefore!.defensiveUnit1;
 
       log.step('Sending reinforcement (50 defensive units)');
       await sendReinforcement(sender, receiver, teamId, { def1: 50 });
 
       // Verify units deducted from sender
-      const senderAfter = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderAfter = await fetchPlayer(ctx.svm, sender.playerPda);
       expect(senderAfter!.defensiveUnit1.lt(initialDef1)).toBe(true);
 
       // Verify reinforcement account created
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -248,7 +248,7 @@ describe('Reinforcement System', () => {
       const teamName = uniqueTeamName();
       const teamId = Date.now() % 1000000;
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTeamCreateInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, teamId },
@@ -279,7 +279,7 @@ describe('Reinforcement System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -311,7 +311,7 @@ describe('Reinforcement System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [sender.keypair]
       );
@@ -345,7 +345,7 @@ describe('Reinforcement System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [sender.keypair]
       );
@@ -383,7 +383,7 @@ describe('Reinforcement System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [sender.keypair]
       );
@@ -403,7 +403,7 @@ describe('Reinforcement System', () => {
 
       // Verify reinforcement has all unit types
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -437,11 +437,11 @@ describe('Reinforcement System', () => {
         destinationPlayer,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(arrivalIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(arrivalIx), [sender.keypair]);
 
       // Verify status changed to Active
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -477,7 +477,7 @@ describe('Reinforcement System', () => {
           heroSlot: 255,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [sender.keypair]);
 
       // Immediate arrival should fail (travel not complete)
       const [reinforcementPda] = deriveReinforcementPda(ctx.gameEngine, sender.publicKey, receiver.publicKey);
@@ -489,7 +489,7 @@ describe('Reinforcement System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(arrivalIx),
         [sender.keypair]
       );
@@ -518,11 +518,11 @@ describe('Reinforcement System', () => {
         destinationCityId: 1,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(recallIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(recallIx), [sender.keypair]);
 
       // Verify reinforcement is now returning
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -556,7 +556,7 @@ describe('Reinforcement System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(recallIx),
         [other.keypair]
       );
@@ -581,7 +581,7 @@ describe('Reinforcement System', () => {
       const [destinationPlayer] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createProcessArrivalInstruction({
             reinforcement: reinforcementPda,
@@ -600,11 +600,11 @@ describe('Reinforcement System', () => {
         destinationCityId: 1,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(relieveIx), [receiver.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(relieveIx), [receiver.keypair]);
 
       // Verify reinforcement is now returning, relieved by destination
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -633,7 +633,7 @@ describe('Reinforcement System', () => {
       const [destinationPlayer] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createProcessArrivalInstruction({
             reinforcement: reinforcementPda,
@@ -653,7 +653,7 @@ describe('Reinforcement System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(relieveIx),
         [other.keypair]
       );
@@ -672,7 +672,7 @@ describe('Reinforcement System', () => {
 
       await factory.hireUnits(sender, 0, 500);
 
-      const senderBefore = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
       const initialUnits = senderBefore!.defensiveUnit1;
 
       // Send
@@ -680,7 +680,7 @@ describe('Reinforcement System', () => {
 
       // Recall (same city = instant travel, so recall immediately)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRecallReinforcementInstruction({
             gameEngine: ctx.gameEngine,
@@ -693,7 +693,10 @@ describe('Reinforcement System', () => {
         [sender.keypair]
       );
 
-      // Process return (same city = instant return)
+      // Advance clock past return travel time
+      await advanceTime(ctx.svm, 5);
+
+      // Process return
       const [reinforcementPda] = deriveReinforcementPda(ctx.gameEngine, sender.publicKey, receiver.publicKey);
       const [senderPlayer] = derivePlayerPda(ctx.gameEngine, sender.publicKey);
       const [senderEstate] = deriveEstatePda(senderPlayer);
@@ -705,10 +708,10 @@ describe('Reinforcement System', () => {
         estateAccount: senderEstate,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(returnIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(returnIx), [sender.keypair]);
 
       // Verify units returned (account should be closed)
-      const senderAfter = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderAfter = await fetchPlayer(ctx.svm, sender.playerPda);
       expect(senderAfter!.defensiveUnit1.eq(initialUnits)).toBe(true);
       log.info(`Units restored: before=${initialUnits}, after=${senderAfter!.defensiveUnit1}`);
     });
@@ -739,11 +742,11 @@ describe('Reinforcement System', () => {
           heroSlot: 255,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [sender.keypair]);
 
       // Recall immediately (while traveling)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createRecallReinforcementInstruction({
             gameEngine: ctx.gameEngine,
@@ -769,7 +772,7 @@ describe('Reinforcement System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(returnIx),
         [sender.keypair]
       );
@@ -808,11 +811,11 @@ describe('Reinforcement System', () => {
           heroSlot: 255,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(sendIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(sendIx), [sender.keypair]);
 
       // Check initial arrival time
       const reinfBefore = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -829,11 +832,11 @@ describe('Reinforcement System', () => {
         { speedupTier: 2 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [sender.keypair]);
 
       // Verify arrival time decreased
       const reinfAfter = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -866,7 +869,7 @@ describe('Reinforcement System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(speedupIx),
         [other.keypair]
       );
@@ -885,7 +888,7 @@ describe('Reinforcement System', () => {
 
       await factory.hireUnits(sender, 0, 200);
 
-      const senderBefore = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
       const initialUnits = senderBefore!.defensiveUnit1;
 
       // 1. Send to different city
@@ -909,7 +912,7 @@ describe('Reinforcement System', () => {
           heroSlot: 255,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(sendIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(sendIx), [sender.keypair]);
 
       // 2. Apply multiple speedups to make travel instant
       log.step('Step 2: Apply speedups to complete travel');
@@ -923,7 +926,7 @@ describe('Reinforcement System', () => {
             },
             { speedupTier: 2 }
           );
-          await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [sender.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [sender.keypair]);
         } catch (e) {
           log.caught(`Speedup ${i + 1} failed (travel may already be complete)`, e);
           break;
@@ -936,7 +939,7 @@ describe('Reinforcement System', () => {
       const [destinationPlayer] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createProcessArrivalInstruction({
             reinforcement: reinforcementPda,
@@ -947,7 +950,7 @@ describe('Reinforcement System', () => {
       );
 
       const reinfActive = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -963,7 +966,7 @@ describe('Reinforcement System', () => {
         senderCityId: 1,
         destinationCityId: 2,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(relieveIx), [receiver.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(relieveIx), [receiver.keypair]);
 
       // 5. Speedup return
       log.step('Step 5: Speedup return travel');
@@ -977,7 +980,7 @@ describe('Reinforcement System', () => {
             },
             { speedupTier: 2 }
           );
-          await sendTransaction(ctx.connection, new Transaction().add(speedupIx), [sender.keypair]);
+          await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [sender.keypair]);
         } catch (e) {
           log.caught(`Return speedup ${i + 1} failed (travel may already be complete)`, e);
           break;
@@ -986,6 +989,9 @@ describe('Reinforcement System', () => {
 
       // 6. Process return
       log.step('Step 6: Process return');
+      // Advance clock past return travel time
+      await advanceTime(ctx.svm, 60);
+
       const [senderPlayer] = derivePlayerPda(ctx.gameEngine, sender.publicKey);
       const [senderEstate] = deriveEstatePda(senderPlayer);
 
@@ -996,10 +1002,10 @@ describe('Reinforcement System', () => {
         estateAccount: senderEstate,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(returnIx), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(returnIx), [sender.keypair]);
 
       // 7. Verify units returned
-      const senderAfter = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderAfter = await fetchPlayer(ctx.svm, sender.playerPda);
       expect(senderAfter!.defensiveUnit1.eq(initialUnits)).toBe(true);
       log.info(`Full lifecycle complete: units restored from ${initialUnits} → ${senderAfter!.defensiveUnit1}`);
     });
@@ -1018,7 +1024,7 @@ describe('Reinforcement System', () => {
       await sendReinforcement(sender, receiver, teamId, { def1: 50 });
 
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey
@@ -1063,10 +1069,10 @@ describe('Reinforcement System', () => {
           heroSlot: 255,
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [sender.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [sender.keypair]);
 
       const reinforcement = await fetchReinforcement(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         sender.publicKey,
         receiver.publicKey

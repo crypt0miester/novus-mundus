@@ -18,10 +18,10 @@
     "test:e2e": "bun test tests/e2e/",
     "setup:local": "bun run scripts/setup-local.ts",
     "programs:dump": "./scripts/dump-programs.sh",
-    "validator:start": "./scripts/start-validator.sh",
-    "validator:reset": "./scripts/start-validator.sh --reset",
-    "validator:debug": "./scripts/start-validator.sh --debug",
-    "validator:stop": "./scripts/stop-validator.sh",
+    "validator:start": "./scripts/start-validator.sh",                                    
+    "validator:reset": "./scripts/start-validator.sh --reset",                            
+    "validator:debug": "./scripts/start-validator.sh --debug",                          
+    "validator:stop": "./scripts/stop-validator.sh", 
     "novus": "bun run cli/cli.ts",
     "imagegen": "bun run scripts/imagegen/generate.ts",
     "imagegen:prompt": "bun run scripts/imagegen/generate.ts --prompt",
@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
     "@types/bun": "latest",
+    "litesvm": "0.6.0",
     "typescript": "^5"
   },
   "dependencies": {

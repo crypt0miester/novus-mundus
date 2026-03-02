@@ -51,6 +51,7 @@ import {
 import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
+  advanceTime,
 } from '../fixtures/time';
 
 // Grid precision matching on-chain LocationAccount::GRID_PRECISION
@@ -120,7 +121,7 @@ describe('Travel System', () => {
   describe('Intracity Travel', () => {
     it('should start intracity travel', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
       const destLat = city.lat + 0.005;
@@ -141,16 +142,16 @@ describe('Travel System', () => {
         { destinationLat: destLat, destinationLong: destLong }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.Intracity);
     });
 
     it('should complete intracity travel after speedup', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
       // Use very short distance for quick travel time
@@ -162,7 +163,7 @@ describe('Travel System', () => {
 
       // Start travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -180,10 +181,10 @@ describe('Travel System', () => {
       );
 
       // Speedup to reduce travel time (use as many as gems allow)
-      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
+      await speedupTravel(ctx.svm, ctx.gameEngine, player, 12);
 
-      // Wait for validator clock to advance past arrival time
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Advance LiteSVM clock past arrival time
+      await advanceTime(ctx.svm, 5);
 
       // Complete travel
       const completeIx = createIntracityCompleteInstruction({
@@ -192,16 +193,16 @@ describe('Travel System', () => {
         cityId,
         destinationLocation,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(completeIx), [player.keypair]);
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.None);
     });
 
     it('should reject travel while already traveling', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
 
@@ -215,7 +216,7 @@ describe('Travel System', () => {
 
       // Start first travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -234,7 +235,7 @@ describe('Travel System', () => {
 
       // Try to start second travel — should fail (AlreadyTraveling)
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -254,7 +255,7 @@ describe('Travel System', () => {
 
     it('should reject complete before travel finishes', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
       const destLat = city.lat + 0.05;
@@ -265,7 +266,7 @@ describe('Travel System', () => {
 
       // Start travel to far location
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -284,7 +285,7 @@ describe('Travel System', () => {
 
       // Immediately try to complete — should fail (TravelNotComplete)
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityCompleteInstruction({
             gameEngine: ctx.gameEngine,
@@ -305,7 +306,7 @@ describe('Travel System', () => {
   describe('Intercity Travel', () => {
     it('should start intercity travel', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 2;
 
@@ -316,7 +317,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -333,7 +334,7 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.Intercity);
       expect(account!.destinationCity).toBe(targetCityId);
@@ -341,7 +342,7 @@ describe('Travel System', () => {
 
     it('should complete intercity travel after speedup', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 3;
 
@@ -353,7 +354,7 @@ describe('Travel System', () => {
 
       // Start travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -371,14 +372,14 @@ describe('Travel System', () => {
       );
 
       // Speedup travel repeatedly
-      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
+      await speedupTravel(ctx.svm, ctx.gameEngine, player, 12);
 
-      // Wait for validator clock to advance past arrival time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Advance LiteSVM clock past arrival time
+      await advanceTime(ctx.svm, 5);
 
       // Complete
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
@@ -391,7 +392,7 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.None);
       expect(account!.currentCity).toBe(targetCityId);
@@ -399,7 +400,7 @@ describe('Travel System', () => {
 
     it('should cancel intercity travel and reverse direction', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 4;
 
@@ -415,7 +416,7 @@ describe('Travel System', () => {
 
       // Start travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -433,13 +434,13 @@ describe('Travel System', () => {
       );
 
       // Verify traveling to destination
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      let account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.Intercity);
       expect(account!.destinationCity).toBe(destinationCityId);
 
       // Cancel intercity travel — player enters return journey to origin city
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityCancelInstruction({
             gameEngine: ctx.gameEngine,
@@ -455,14 +456,14 @@ describe('Travel System', () => {
       );
 
       // After cancel, player is on return journey — destination_city is now origin_city
-      account = await fetchPlayer(ctx.connection, player.playerPda);
+      account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.destinationCity).toBe(originCityId);
     });
 
     it('should reject intercity travel to same city', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
 
       const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
@@ -472,7 +473,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -492,7 +493,7 @@ describe('Travel System', () => {
 
     it('should reject intercity travel to invalid city', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const invalidCityId = 999;
 
@@ -500,7 +501,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, invalidCityId, 0, 0);
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -530,7 +531,7 @@ describe('Travel System', () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
       await factory.fundNovi(player, 500_000_000); // Fund 500M NOVI for expensive upgrades
       await factory.upgradeAndCompleteBuilding(player, BuildingType.Stables, 10);
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 5;
 
@@ -541,7 +542,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityTeleportInstruction({
             gameEngine: ctx.gameEngine,
@@ -555,7 +556,7 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.None);
       expect(account!.currentCity).toBe(targetCityId);
@@ -564,7 +565,7 @@ describe('Travel System', () => {
     it('should fail teleport without required extension', async () => {
       // Player without estate/shop — no EXT_INVENTORY
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 2;
 
@@ -575,7 +576,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityTeleportInstruction({
             gameEngine: ctx.gameEngine,
@@ -598,7 +599,7 @@ describe('Travel System', () => {
   describe('Travel Speedup', () => {
     it('should speedup ongoing intercity travel', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 6;
 
@@ -610,7 +611,7 @@ describe('Travel System', () => {
 
       // Start intercity travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -628,12 +629,12 @@ describe('Travel System', () => {
       );
 
       // Verify traveling
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      let account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.Intercity);
 
       // Apply speedup
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTravelSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -644,7 +645,7 @@ describe('Travel System', () => {
       );
 
       // Verify still traveling (speedup reduces time, doesn't complete)
-      account = await fetchPlayer(ctx.connection, player.playerPda);
+      account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.Intercity);
     });
 
@@ -652,7 +653,7 @@ describe('Travel System', () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createTravelSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -671,7 +672,7 @@ describe('Travel System', () => {
   describe('Travel State', () => {
     it('should track travel departure time', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
       const destLat = city.lat + 0.015;
@@ -680,10 +681,10 @@ describe('Travel System', () => {
       const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
-      const beforeTime = await getCurrentTimestamp(ctx.connection);
+      const beforeTime = await getCurrentTimestamp(ctx.svm);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -700,8 +701,8 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const afterTime = await getCurrentTimestamp(ctx.connection);
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterTime = await getCurrentTimestamp(ctx.svm);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
 
       expect(account).not.toBeNull();
       const departureTime = account!.departureTime.toNumber();
@@ -711,7 +712,7 @@ describe('Travel System', () => {
 
     it('should store destination info during intracity travel', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
       const destLat = city.lat + 0.006;
@@ -721,7 +722,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -738,7 +739,7 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.Intracity);
       // Departure and arrival should be set
@@ -755,7 +756,7 @@ describe('Travel System', () => {
     it('should cancel intracity travel and return to origin', async () => {
       // Use city 11 to avoid collision with other tests
       const player = await factory.createPlayer({ cityId: 11, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 11;
       const city = CITIES[cityId]!;
 
@@ -773,7 +774,7 @@ describe('Travel System', () => {
 
       // Start intracity travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -791,7 +792,7 @@ describe('Travel System', () => {
       );
 
       // Verify player is traveling
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      let account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.Intracity);
 
       // Return location is the origin location PDA (re-reserved on cancel)
@@ -799,7 +800,7 @@ describe('Travel System', () => {
 
       // Cancel travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityCancelInstruction({
             gameEngine: ctx.gameEngine,
@@ -814,14 +815,14 @@ describe('Travel System', () => {
       );
 
       // Speedup the return journey
-      await speedupTravel(ctx.connection, ctx.gameEngine, player, 10);
+      await speedupTravel(ctx.svm, ctx.gameEngine, player, 10);
 
-      // Wait for validator clock to advance
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Advance LiteSVM clock past arrival time
+      await advanceTime(ctx.svm, 5);
 
       // Complete the return (intracity complete at origin)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityCompleteInstruction({
             gameEngine: ctx.gameEngine,
@@ -834,7 +835,7 @@ describe('Travel System', () => {
       );
 
       // Verify player is back at origin, not traveling
-      account = await fetchPlayer(ctx.connection, player.playerPda);
+      account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.None);
       expect(account!.currentCity).toBe(cityId);
     });
@@ -847,7 +848,7 @@ describe('Travel System', () => {
   describe('Travel Restrictions', () => {
     it('should prevent starting second travel while already traveling', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
 
@@ -858,7 +859,7 @@ describe('Travel System', () => {
 
       // Start intracity travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntracityStartInstruction(
             {
@@ -876,7 +877,7 @@ describe('Travel System', () => {
       );
 
       // Verify traveling
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).not.toBe(TravelType.None);
 
       // Try to start intercity travel while already traveling — should fail
@@ -887,7 +888,7 @@ describe('Travel System', () => {
       const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, 2, destGridLat2, destGridLong2);
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -908,7 +909,7 @@ describe('Travel System', () => {
     it('should require Stables building for intercity travel', async () => {
       // Player without Stables should fail intercity travel
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 2;
 
@@ -919,7 +920,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -939,7 +940,7 @@ describe('Travel System', () => {
 
     it('should allow intercity travel with Stables', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 13; // Use city 13 to avoid CellOccupied collision with other tests using city 2
 
@@ -950,7 +951,7 @@ describe('Travel System', () => {
       const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -967,13 +968,13 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.Intercity);
     });
 
     it('should verify new player has encounter stamina', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true });
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertBnGreaterThan(account!.encounterStamina, 0, 'New player should have encounter stamina');
     });
@@ -987,7 +988,7 @@ describe('Travel System', () => {
     it('should travel between cities with start cancel complete start pattern', async () => {
       // Use city 10 as origin to avoid return-location collision with other tests
       const player = await factory.createPlayer({ cityId: 10, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 10;
 
       const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
@@ -1008,7 +1009,7 @@ describe('Travel System', () => {
 
       // Start travel to city 7
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -1027,7 +1028,7 @@ describe('Travel System', () => {
 
       // Cancel — player enters return journey to origin
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityCancelInstruction({
             gameEngine: ctx.gameEngine,
@@ -1043,15 +1044,15 @@ describe('Travel System', () => {
       );
 
       // Speedup return journey to ensure it completes quickly
-      await speedupTravel(ctx.connection, ctx.gameEngine, player, 10);
+      await speedupTravel(ctx.svm, ctx.gameEngine, player, 10);
 
-      // Wait for clock to advance past arrival time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Advance LiteSVM clock past arrival time
+      await advanceTime(ctx.svm, 5);
 
       // Complete the return journey
       // After cancel: origin_city=1, destination_city=1 (set by cancel to origin)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
@@ -1065,14 +1066,14 @@ describe('Travel System', () => {
       );
 
       // Verify back in origin city, not traveling
-      let account = await fetchPlayer(ctx.connection, player.playerPda);
+      let account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.travelType).toBe(TravelType.None);
       expect(account!.currentCity).toBe(originCityId);
 
       // Now start travel to city 8
       // After completing return, player is at origin city center
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -1089,14 +1090,14 @@ describe('Travel System', () => {
         [player.keypair]
       );
 
-      account = await fetchPlayer(ctx.connection, player.playerPda);
+      account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.destinationCity).toBe(8);
       expect(account!.travelType).toBe(TravelType.Intercity);
     });
 
     it('should arrive in destination city with correct position', async () => {
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 9;
 
@@ -1108,7 +1109,7 @@ describe('Travel System', () => {
 
       // Start intercity travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
@@ -1126,14 +1127,14 @@ describe('Travel System', () => {
       );
 
       // Speedup travel
-      await speedupTravel(ctx.connection, ctx.gameEngine, player, 12);
+      await speedupTravel(ctx.svm, ctx.gameEngine, player, 12);
 
-      // Wait for validator clock to advance past arrival time
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Advance LiteSVM clock past arrival time
+      await advanceTime(ctx.svm, 5);
 
       // Complete travel
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
@@ -1147,7 +1148,7 @@ describe('Travel System', () => {
       );
 
       // Verify position in new city
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.currentCity).toBe(destinationCityId);
       expect(account!.travelType).toBe(TravelType.None);

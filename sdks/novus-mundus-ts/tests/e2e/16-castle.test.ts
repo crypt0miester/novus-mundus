@@ -89,7 +89,7 @@ async function createTeamForPlayer(
     { name: `CastleTeam${teamId}` }
   );
 
-  await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
   memberSlotCounter.set(teamPda.toBase58(), 1); // founder is slot 0, next is 1
   return { teamPda, teamId };
 }
@@ -115,7 +115,7 @@ async function addPlayerToTeam(
     inviterSlotIndex: 0, // leader is always slot 0
     inviteePlayer: memberPlayerPda,
   });
-  await sendTransaction(ctx.connection, new Transaction().add(inviteIx), [leader.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
   // Accept
   const acceptIx = createTeamAcceptInviteInstruction({
@@ -126,7 +126,7 @@ async function addPlayerToTeam(
     slotIndex,
     inviteRefund: leader.publicKey,
   });
-  await sendTransaction(ctx.connection, new Transaction().add(acceptIx), [member.keypair]);
+  await sendTransaction(ctx.svm, new Transaction().add(acceptIx), [member.keypair]);
 }
 
 /** Create castle via DAO */
@@ -152,7 +152,7 @@ async function createCastle(
     }
   );
 
-  await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+  await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 }
 
 /** Create a player with estate and team, ready for castle operations */
@@ -177,7 +177,7 @@ async function transitionCastleStatus(
     cityId,
     castleId,
   });
-  await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+  await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 }
 
 // ============================================================
@@ -206,14 +206,13 @@ describe('Castle System', () => {
     it('should create castle via DAO', async () => {
       await createCastle(ctx, 1, 100, 2);
 
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 100);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 100);
       expect(castleInfo).not.toBeNull();
     });
 
     it('should reject castle creation by non-DAO', async () => {
       const nonDao = Keypair.generate();
-      await ctx.connection.requestAirdrop(nonDao.publicKey, 1_000_000_000);
-      await new Promise(r => setTimeout(r, 500));
+      ctx.svm.airdrop(nonDao.publicKey, BigInt(1_000_000_000));
 
       const ix = createCreateCastleInstruction(
         { daoAuthority: nonDao.publicKey, gameEngine: ctx.gameEngine },
@@ -226,7 +225,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [nonDao]
       );
@@ -245,7 +244,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [ctx.daoAuthority]
       );
@@ -263,7 +262,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [ctx.daoAuthority]
       );
@@ -292,9 +291,9 @@ describe('Castle System', () => {
         castleId: CASTLE_CLAIM,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, CITY, CASTLE_CLAIM);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, CITY, CASTLE_CLAIM);
       expect(castleInfo).not.toBeNull();
     });
 
@@ -310,7 +309,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player2.keypair]
       );
@@ -331,7 +330,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [noTeamPlayer.keypair]
       );
@@ -351,7 +350,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -381,7 +380,7 @@ describe('Castle System', () => {
         cityId: CITY,
         castleId: CASTLE_GARRISON,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [king.keypair]);
     });
 
     it('should join castle garrison', async () => {
@@ -397,7 +396,7 @@ describe('Castle System', () => {
         { units: [new BN(5), new BN(0), new BN(0)], weapons: [new BN(0), new BN(0), new BN(0)], heroSlot: 255 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [member.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [member.keypair]);
     }, 30_000);
 
     it('should leave castle garrison', async () => {
@@ -407,7 +406,7 @@ describe('Castle System', () => {
 
       // Join
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinGarrisonInstruction(
             { gameEngine: ctx.gameEngine, owner: member.publicKey, cityId: CITY, castleId: CASTLE_GARRISON },
@@ -425,7 +424,7 @@ describe('Castle System', () => {
         castleId: CASTLE_GARRISON,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(leaveIx), [member.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(leaveIx), [member.keypair]);
     }, 30_000);
 
     it('should reject garrison from non-team member', async () => {
@@ -439,7 +438,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [outsider.keypair]
       );
@@ -468,7 +467,7 @@ describe('Castle System', () => {
         cityId: CITY,
         castleId: CASTLE_COURT,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [king.keypair]);
 
       // Transition castle from CONTEST → PROTECTED so court appointments work
       await transitionCastleStatus(ctx, CITY, CASTLE_COURT);
@@ -483,7 +482,7 @@ describe('Castle System', () => {
         { position: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(appointIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(appointIx), [king.keypair]);
     });
 
     it('should allow court member to resign', async () => {
@@ -492,7 +491,7 @@ describe('Castle System', () => {
 
       // Appoint
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAppointCourtInstruction(
             { gameEngine: ctx.gameEngine, king: king.publicKey, appointee: courtier.publicKey, cityId: CITY, castleId: CASTLE_COURT },
@@ -508,7 +507,7 @@ describe('Castle System', () => {
         { position: 1 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(resignIx), [courtier.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(resignIx), [courtier.keypair]);
     });
 
     it('should dismiss court member', async () => {
@@ -517,7 +516,7 @@ describe('Castle System', () => {
 
       // Appoint at position 2
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createAppointCourtInstruction(
             { gameEngine: ctx.gameEngine, king: king.publicKey, appointee: courtier.publicKey, cityId: CITY, castleId: CASTLE_COURT },
@@ -533,7 +532,7 @@ describe('Castle System', () => {
         { position: 2 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(dismissIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(dismissIx), [king.keypair]);
     });
 
     it('should reject appointment by non-king', async () => {
@@ -550,7 +549,7 @@ describe('Castle System', () => {
         cityId: CITY,
         castleId: CASTLE_COURT_NONKING,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [realKing.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [realKing.keypair]);
       await transitionCastleStatus(ctx, CITY, CASTLE_COURT_NONKING);
 
       const nonKing = await factory.createPlayer({ initialize: true, createEstate: true });
@@ -566,7 +565,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(appointIx),
         [nonKing.keypair]
       );
@@ -593,7 +592,7 @@ describe('Castle System', () => {
         cityId: CITY,
         castleId: CASTLE_UPGRADE,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [king.keypair]);
     });
 
     it('should initiate castle upgrade', async () => {
@@ -602,7 +601,7 @@ describe('Castle System', () => {
         { upgradeType: 1 } // Fortification
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(upgradeIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(upgradeIx), [king.keypair]);
     });
 
     it('should cancel castle upgrade', async () => {
@@ -613,7 +612,7 @@ describe('Castle System', () => {
         castleId: CASTLE_UPGRADE,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(cancelIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [king.keypair]);
     });
 
     it('should reject upgrade by non-king', async () => {
@@ -626,7 +625,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(upgradeIx),
         [nonKing.keypair]
       );
@@ -652,7 +651,7 @@ describe('Castle System', () => {
         cityId: CITY,
         castleId: CASTLE_ATTACK,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [king.keypair]);
 
       // Transition to PROTECTED (contest duration = 0, so immediate)
       await transitionCastleStatus(ctx, CITY, CASTLE_ATTACK);
@@ -673,7 +672,7 @@ describe('Castle System', () => {
 
       // Should fail - castle is in PROTECTED status
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [attacker.keypair]
       );
@@ -684,7 +683,7 @@ describe('Castle System', () => {
       const king = await createCastleReadyPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -706,7 +705,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [attacker.keypair]
       );
@@ -732,7 +731,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -743,7 +742,7 @@ describe('Castle System', () => {
       const king = await createCastleReadyPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -766,7 +765,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [outsider.keypair]
       );
@@ -783,7 +782,7 @@ describe('Castle System', () => {
       const king = await createCastleReadyPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -803,10 +802,10 @@ describe('Castle System', () => {
         currentKing: king.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify castle is now vacant
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 160);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 160);
       expect(castleInfo).not.toBeNull();
     });
 
@@ -815,7 +814,7 @@ describe('Castle System', () => {
       const king = await createCastleReadyPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -828,8 +827,7 @@ describe('Castle System', () => {
       );
 
       const nonDao = Keypair.generate();
-      await ctx.connection.requestAirdrop(nonDao.publicKey, 1_000_000_000);
-      await new Promise(r => setTimeout(r, 500));
+      ctx.svm.airdrop(nonDao.publicKey, BigInt(1_000_000_000));
 
       const ix = createForceRemoveKingInstruction({
         gameEngine: ctx.gameEngine,
@@ -840,7 +838,7 @@ describe('Castle System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [nonDao]
       );
@@ -858,7 +856,7 @@ describe('Castle System', () => {
       const king = await createCastleReadyPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -872,7 +870,7 @@ describe('Castle System', () => {
 
       // Initiate upgrade (type 1 = Fortification)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createInitiateUpgradeInstruction(
             { king: king.publicKey, gameEngine: ctx.gameEngine, cityId: 1, castleId: 180 },
@@ -883,12 +881,12 @@ describe('Castle System', () => {
       );
 
       // Verify castle has an upgrade in progress
-      let castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 180);
+      let castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 180);
       expect(castleInfo).not.toBeNull();
 
       // Try to complete immediately — should fail (upgrade time not elapsed)
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createCompleteUpgradeInstruction({
             payer: king.publicKey,
@@ -901,7 +899,7 @@ describe('Castle System', () => {
       );
 
       // Verify castle still has upgrade in progress
-      castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 180);
+      castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 180);
       expect(castleInfo).not.toBeNull();
     }, 30_000);
   });
@@ -921,7 +919,7 @@ describe('Castle System', () => {
       const { teamPda, teamId } = await createTeamForPlayer(ctx, king);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -942,7 +940,7 @@ describe('Castle System', () => {
 
       // Member joins garrison
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinGarrisonInstruction(
             { gameEngine: ctx.gameEngine, owner: member.publicKey, cityId: 1, castleId: 185 },
@@ -955,7 +953,7 @@ describe('Castle System', () => {
       // Verify garrison exists
       const [castlePda] = deriveCastlePda(ctx.gameEngine, 1, 185);
       const [garrisonPda] = deriveGarrisonPda(castlePda, member.playerPda);
-      let garrisonAccount = await ctx.connection.getAccountInfo(garrisonPda);
+      let garrisonAccount = await ctx.svm.getAccount(garrisonPda);
       expect(garrisonAccount).not.toBeNull();
 
       // King relieves garrison member
@@ -967,10 +965,10 @@ describe('Castle System', () => {
         garrisonMember: member.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(relieveIx), [king.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(relieveIx), [king.keypair]);
 
       // Verify garrison contribution account is closed
-      garrisonAccount = await ctx.connection.getAccountInfo(garrisonPda);
+      garrisonAccount = await ctx.svm.getAccount(garrisonPda);
       expect(garrisonAccount).toBeNull();
     }, 60_000);
   });
@@ -982,31 +980,31 @@ describe('Castle System', () => {
   describe('Castle Tiers', () => {
     it('should create outpost (tier 0) with no garrison', async () => {
       await createCastle(ctx, 1, 170, 0); // Outpost
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 170);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 170);
       expect(castleInfo).not.toBeNull();
     });
 
     it('should create keep (tier 1) with limited court', async () => {
       await createCastle(ctx, 1, 171, 1); // Keep
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 171);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 171);
       expect(castleInfo).not.toBeNull();
     });
 
     it('should create stronghold (tier 2) with full features', async () => {
       await createCastle(ctx, 1, 172, 2); // Stronghold
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 172);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 172);
       expect(castleInfo).not.toBeNull();
     });
 
     it('should create fortress (tier 3)', async () => {
       await createCastle(ctx, 1, 173, 3);
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 173);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 173);
       expect(castleInfo).not.toBeNull();
     });
 
     it('should create citadel (tier 4)', async () => {
       await createCastle(ctx, 1, 174, 4);
-      const castleInfo = await fetchCastleRaw(ctx.connection, ctx.gameEngine, 1, 174);
+      const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 174);
       expect(castleInfo).not.toBeNull();
     });
 
@@ -1014,7 +1012,7 @@ describe('Castle System', () => {
       // Claim outpost first
       const king = await createCastleReadyPlayer(factory, ctx);
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createClaimVacantCastleInstruction({
             gameEngine: ctx.gameEngine,
@@ -1033,7 +1031,7 @@ describe('Castle System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [king.keypair]
       );

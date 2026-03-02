@@ -2,11 +2,11 @@
  * Time Manipulation Utilities
  *
  * Helpers for testing time-based game mechanics.
- * Works with local validator's clock manipulation.
+ * Uses LiteSVM's deterministic clock manipulation.
  */
 
-import { Connection, PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
+import { type LiteSVM, Clock } from './svm';
 
 // ============================================================
 // Constants
@@ -25,39 +25,29 @@ export const MS_PER_SLOT = 400;
 // ============================================================
 
 /**
- * Get current Unix timestamp from the blockchain.
+ * Get current Unix timestamp from LiteSVM clock.
  */
-export async function getCurrentTimestamp(connection: Connection): Promise<number> {
-  const slot = await connection.getSlot();
-  const blockTime = await connection.getBlockTime(slot);
-  return blockTime ?? Math.floor(Date.now() / 1000);
+export async function getCurrentTimestamp(svm: LiteSVM): Promise<number> {
+  return Number(svm.getClock().unixTimestamp);
 }
 
 /**
- * Get current slot from the blockchain.
+ * Get current slot from LiteSVM clock.
  */
-export async function getCurrentSlot(connection: Connection): Promise<number> {
-  return await connection.getSlot();
+export async function getCurrentSlot(svm: LiteSVM): Promise<number> {
+  return Number(svm.getClock().slot);
 }
 
 /**
- * Wait for a specific number of slots to pass.
- * This is useful for waiting for confirmations.
+ * Advance the clock by N slots. Instant with LiteSVM.
  */
 export async function waitForSlots(
-  connection: Connection,
+  svm: LiteSVM,
   slots: number
 ): Promise<void> {
-  const startSlot = await connection.getSlot();
-  const targetSlot = startSlot + slots;
-
-  while (true) {
-    const currentSlot = await connection.getSlot();
-    if (currentSlot >= targetSlot) {
-      return;
-    }
-    await sleep(MS_PER_SLOT);
-  }
+  const clock = svm.getClock();
+  svm.warpToSlot(clock.slot + BigInt(slots));
+  svm.expireBlockhash();
 }
 
 /**
@@ -68,28 +58,41 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Wait for a specific timestamp to be reached.
- * Useful when testing with warp-to-timestamp on local validator.
+ * Warp the clock to a specific timestamp. Instant with LiteSVM.
  */
 export async function waitForTimestamp(
-  connection: Connection,
+  svm: LiteSVM,
   targetTimestamp: number,
-  timeoutMs: number = 60000
 ): Promise<void> {
-  const startTime = Date.now();
+  const clock = svm.getClock();
+  const newClock = new Clock(
+    clock.slot,
+    clock.epochStartTimestamp,
+    clock.epoch,
+    clock.leaderScheduleEpoch,
+    BigInt(targetTimestamp),
+  );
+  svm.setClock(newClock);
+  svm.expireBlockhash();
+}
 
-  while (true) {
-    const currentTimestamp = await getCurrentTimestamp(connection);
-    if (currentTimestamp >= targetTimestamp) {
-      return;
-    }
-
-    if (Date.now() - startTime > timeoutMs) {
-      throw new Error(`Timeout waiting for timestamp ${targetTimestamp}`);
-    }
-
-    await sleep(500);
-  }
+/**
+ * Advance the clock by N seconds. Instant with LiteSVM.
+ */
+export async function advanceTime(
+  svm: LiteSVM,
+  seconds: number
+): Promise<void> {
+  const clock = svm.getClock();
+  const newClock = new Clock(
+    clock.slot + BigInt(Math.ceil(seconds * SLOTS_PER_SECOND)),
+    clock.epochStartTimestamp,
+    clock.epoch,
+    clock.leaderScheduleEpoch,
+    clock.unixTimestamp + BigInt(seconds),
+  );
+  svm.setClock(newClock);
+  svm.expireBlockhash();
 }
 
 // ============================================================
@@ -293,29 +296,3 @@ export function getTimeOfDayCombatModifier(timestamp: number): number {
   }
   return 0;
 }
-
-// ============================================================
-// Local Validator Clock Control
-// ============================================================
-
-/**
- * Instructions for warping time on local validator.
- * These require running solana-test-validator with --warp-slot or similar.
- *
- * Usage:
- * 1. Start validator: solana-test-validator
- * 2. Warp to slot: solana validator warp --slot <target_slot>
- *
- * Note: Direct clock manipulation is not supported via RPC.
- * For comprehensive time testing, consider:
- * - Using a mock clock in your program
- * - Running separate test scenarios at different times
- * - Using the validator's warp functionality
- */
-export const CLOCK_CONTROL_NOTES = `
-For time-based testing:
-1. Use waitForSlots() to wait for real time to pass
-2. Use timestamps from the test setup for relative calculations
-3. For comprehensive testing, run the validator with time warping:
-   solana-test-validator --warp-slot <slot>
-`;

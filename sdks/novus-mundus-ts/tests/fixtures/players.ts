@@ -5,7 +5,6 @@
  */
 
 import {
-  Connection,
   Keypair,
   Transaction,
   PublicKey,
@@ -37,6 +36,7 @@ import {
   createSpeedUpResearchInstruction,
   createCompleteResearchInstruction,
   createMintForPrizeInstruction,
+  createBuyPlotInstruction,
   MintPurpose,
   createReservedToLockedInstruction,
   BuildingType,
@@ -52,6 +52,7 @@ import {
 } from '../../src/index';
 
 import { CITIES, TEST_GEMS_ITEM, TEST_FRAGMENTS_ITEM } from './setup';
+import { advanceTime } from './time';
 
 import { type TestContext, airdropIfNeeded, sendTx } from './setup';
 
@@ -182,7 +183,7 @@ export class PlayerFactory {
 
     // Airdrop SOL
     await airdropIfNeeded(
-      this.ctx.connection,
+      this.ctx.svm,
       keypair.publicKey,
       this.config.initialBalance
     );
@@ -241,7 +242,7 @@ export class PlayerFactory {
     if (player.initialized) return;
 
     // Check if already initialized on-chain
-    const accountInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.initialized = true;
       return;
@@ -281,7 +282,7 @@ export class PlayerFactory {
     // Request extra compute for 3 account-creating instructions
     tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }));
 
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     player.initialized = true;
   }
 
@@ -291,7 +292,7 @@ export class PlayerFactory {
   async createEstateBatched(player: TestPlayer, includeGems: boolean = false): Promise<void> {
     if (player.hasEstate) return;
 
-    const accountInfo = await this.ctx.connection.getAccountInfo(player.estatePda);
+    const accountInfo = await this.ctx.svm.getAccount(player.estatePda);
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.hasEstate = true;
       return;
@@ -319,7 +320,7 @@ export class PlayerFactory {
       this.playerGemsReady.add(player.publicKey.toBase58());
     }
 
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     player.hasEstate = true;
   }
 
@@ -332,7 +333,7 @@ export class PlayerFactory {
     }
 
     // Check if already initialized
-    const accountInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.initialized = true;
       return;
@@ -360,7 +361,7 @@ export class PlayerFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     player.initialized = true;
   }
 
@@ -371,7 +372,7 @@ export class PlayerFactory {
     const [userPda] = deriveUserPda(player.publicKey);
 
     // Check if already initialized
-    const accountInfo = await this.ctx.connection.getAccountInfo(userPda);
+    const accountInfo = await this.ctx.svm.getAccount(userPda);
     if (accountInfo !== null && accountInfo.data.length > 0) {
       return;
     }
@@ -382,7 +383,7 @@ export class PlayerFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -401,11 +402,11 @@ export class PlayerFactory {
 
     const tx = new Transaction().add(ix);
     try {
-      await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+      await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     } catch (e: any) {
       console.error('[unlockResearch] Failed:', e.transactionMessage || e.message);
       if (e.getLogs) {
-        const logs = await e.getLogs(this.ctx.connection);
+        const logs = await e.getLogs(this.ctx.svm);
         console.error('[unlockResearch] Logs:', logs);
       }
       throw e;
@@ -425,7 +426,7 @@ export class PlayerFactory {
     }
 
     // Check if already exists
-    const accountInfo = await this.ctx.connection.getAccountInfo(player.estatePda);
+    const accountInfo = await this.ctx.svm.getAccount(player.estatePda);
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.hasEstate = true;
       return;
@@ -437,7 +438,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     player.hasEstate = true;
   }
 
@@ -445,7 +446,7 @@ export class PlayerFactory {
    * Get player account data.
    */
   async getPlayerAccount(player: TestPlayer): Promise<PlayerAccount | null> {
-    const accountInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
     if (!accountInfo || accountInfo.data.length === 0) {
       return null;
     }
@@ -466,7 +467,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -483,7 +484,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -520,7 +521,7 @@ export class PlayerFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -545,7 +546,7 @@ export class PlayerFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -579,7 +580,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -604,7 +605,7 @@ export class PlayerFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -636,7 +637,7 @@ export class PlayerFactory {
    */
   async buyGems(player: TestPlayer, purchases: number = 1): Promise<void> {
     // Debug: check player account state before purchase
-    const preInfo = await this.ctx.connection.getAccountInfo(player.playerPda);
+    const preInfo = await this.ctx.svm.getAccount(player.playerPda);
     if (preInfo) {
       console.log(`[buyGems] PRE: data_len=${preInfo.data.length} lamports=${preInfo.lamports}`);
     }
@@ -653,11 +654,11 @@ export class PlayerFactory {
 
     const tx = new Transaction().add(ix);
     try {
-      await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+      await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     } catch (e: any) {
       console.error('[buyGems] Failed:', e.transactionMessage || e.message);
       if (e.getLogs) {
-        const logs = await e.getLogs(this.ctx.connection);
+        const logs = await e.getLogs(this.ctx.svm);
         console.error('[buyGems] Logs:', logs);
       }
       throw e;
@@ -680,7 +681,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -701,14 +702,14 @@ export class PlayerFactory {
       owner: player.publicKey,
       researchType,
     });
-    await sendTx(this.ctx.connection, new Transaction().add(startIx), [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, new Transaction().add(startIx), [player.keypair], this.ctx.config);
 
     // Speedup to completion (0 = complete all remaining)
     const speedupIx = createSpeedUpResearchInstruction(
       { gameEngine: this.ctx.gameEngine, owner: player.publicKey, researchType },
       { speedUpSeconds: new BN(0) }
     );
-    await sendTx(this.ctx.connection, new Transaction().add(speedupIx), [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, new Transaction().add(speedupIx), [player.keypair], this.ctx.config);
 
     // Complete research
     const completeIx = createCompleteResearchInstruction({
@@ -717,7 +718,7 @@ export class PlayerFactory {
       playerOwner: player.publicKey,
       researchType,
     });
-    await sendTx(this.ctx.connection, new Transaction().add(completeIx), [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, new Transaction().add(completeIx), [player.keypair], this.ctx.config);
   }
 
   /**
@@ -731,7 +732,7 @@ export class PlayerFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /** Track which buildings each player has built (for prerequisite handling) */
@@ -759,7 +760,7 @@ export class PlayerFactory {
     }
 
     // Check on-chain estate for existing building
-    const estateInfo = await this.ctx.connection.getAccountInfo(player.estatePda);
+    const estateInfo = await this.ctx.svm.getAccount(player.estatePda);
     if (estateInfo && estateInfo.data.length > 0) {
       // Scan building slots (last portion of account data)
       // Each BuildingSlot is 36 bytes: [building_type(u8), status(u8), ...]
@@ -816,10 +817,18 @@ export class PlayerFactory {
     ));
 
     try {
-      await sendTx(this.ctx.connection, tx1, [player.keypair], this.ctx.config);
+      await sendTx(this.ctx.svm, tx1, [player.keypair], this.ctx.config);
     } catch (e: any) {
       const errCode = this.extractCustomError(e);
-      if (errCode === 7706) {
+      if (errCode === 7705) {
+        // BuildingSlotFull — buy an extra plot and retry
+        console.log(`[buildAndCompleteBuilding] Building slots full, buying extra plot...`);
+        const buyPlotTx = new Transaction().add(
+          createBuyPlotInstruction({ owner: player.publicKey, gameEngine: this.ctx.gameEngine })
+        );
+        await sendTx(this.ctx.svm, buyPlotTx, [player.keypair], this.ctx.config);
+        return this.buildAndCompleteBuilding(player, buildingType);
+      } else if (errCode === 7706) {
         // BuildingAlreadyExists — fully built, just skip
         console.log(`[buildAndCompleteBuilding] Building ${buildingType} already exists, continuing`);
       } else if (errCode === 7708) {
@@ -839,7 +848,7 @@ export class PlayerFactory {
             { buildingType, speedupTier: 2 }
           ));
         }
-        await sendTx(this.ctx.connection, txA, [player.keypair], this.ctx.config);
+        await sendTx(this.ctx.svm, txA, [player.keypair], this.ctx.config);
 
         // Tx B: remaining speedups + complete
         await this.completeExistingBuilding(player, buildingType);
@@ -847,9 +856,6 @@ export class PlayerFactory {
         throw e;
       }
     }
-
-    // Wait for validator to produce a new block after heavy building tx
-    await new Promise(r => setTimeout(r, 1500));
 
     // Track built buildings for prerequisite handling
     built.add(buildingType as number);
@@ -861,9 +867,17 @@ export class PlayerFactory {
    * Returns the numeric code or null if not found.
    */
   private extractCustomError(e: any): number | null {
-    const txMsg = e?.transactionMessage ?? '';
-    const match = txMsg.match(/"Custom":(\d+)/);
-    return match?.[1] ? parseInt(match[1], 10) : null;
+    const msg = e?.message ?? '';
+    // Match "(7706):" from "BuildingAlreadyExists (7706): ..." format
+    const nameMatch = msg.match(/\((\d+)\):/);
+    if (nameMatch?.[1]) return parseInt(nameMatch[1], 10);
+    // Match "custom program error: 0x1e1a" hex format
+    const hexMatch = msg.match(/custom program error: 0x([0-9a-f]+)/i);
+    if (hexMatch?.[1]) return parseInt(hexMatch[1], 16);
+    // Match "Custom(7706)" from raw LiteSVM format
+    const customMatch = msg.match(/Custom\((\d+)\)/);
+    if (customMatch?.[1]) return parseInt(customMatch[1], 10);
+    return null;
   }
 
   /**
@@ -886,7 +900,7 @@ export class PlayerFactory {
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType }
         ));
-        await sendTx(this.ctx.connection, completeTx, [player.keypair], this.ctx.config);
+        await sendTx(this.ctx.svm, completeTx, [player.keypair], this.ctx.config);
         return; // Success!
       } catch (e: any) {
         const errCode = this.extractCustomError(e);
@@ -904,7 +918,7 @@ export class PlayerFactory {
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType, speedupTier: 2 }
         ));
-        await sendTx(this.ctx.connection, speedupTx, [player.keypair], this.ctx.config);
+        await sendTx(this.ctx.svm, speedupTx, [player.keypair], this.ctx.config);
       } catch {
         // Speedup may fail with InvalidParameter if already at 0 — that's fine
       }
@@ -952,7 +966,7 @@ export class PlayerFactory {
       ));
 
       try {
-        await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+        await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
       } catch (e: any) {
         const errCode = this.extractCustomError(e);
         if (errCode === 7708) {
@@ -969,15 +983,13 @@ export class PlayerFactory {
               { buildingType, speedupTier: 2 }
             ));
           }
-          await sendTx(this.ctx.connection, txA, [player.keypair], this.ctx.config);
+          await sendTx(this.ctx.svm, txA, [player.keypair], this.ctx.config);
           await this.completeExistingBuilding(player, buildingType);
         } else {
           throw e;
         }
       }
 
-      // Brief wait between upgrade levels
-      await new Promise(r => setTimeout(r, 500));
     }
   }
 
@@ -1014,7 +1026,7 @@ export class PlayerFactory {
             { amount: new BN(thisAmount), purpose }
           )
         );
-        await sendTx(this.ctx.connection, mintTx, [this.ctx.daoAuthority], this.ctx.config);
+        await sendTx(this.ctx.svm, mintTx, [this.ctx.daoAuthority], this.ctx.config);
 
         // Convert reserved → locked (player signs)
         const convertTx = new Transaction().add(
@@ -1023,7 +1035,7 @@ export class PlayerFactory {
             { amount: new BN(thisAmount) }
           )
         );
-        await sendTx(this.ctx.connection, convertTx, [player.keypair], this.ctx.config);
+        await sendTx(this.ctx.svm, convertTx, [player.keypair], this.ctx.config);
 
         allocated += thisAmount;
         remaining -= thisAmount;
@@ -1083,8 +1095,8 @@ export class PlayerFactory {
         }
       }
 
-      // Delay to let remaining time elapse
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Advance LiteSVM clock past travel arrival time
+      await advanceTime(this.ctx.svm, 5);
 
       // Complete intercity travel at the offset destination
       await this.completeIntercityTravel(
@@ -1123,8 +1135,8 @@ export class PlayerFactory {
       }
     }
 
-    // Delay to let remaining time elapse
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Advance LiteSVM clock past travel arrival time
+    await advanceTime(this.ctx.svm, 5);
 
     // Complete intracity travel
     await this.completeIntracityTravel(
@@ -1194,11 +1206,11 @@ export async function createCombatReadyPlayers(
 ): Promise<CombatReadyPlayers> {
   const moveToRange = options.moveToRange ?? true;
 
-  // Create defender first (in city 1) - needs Barracks for units, Market for equipment
-  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+  // Create defender first (in city 1) - needs Barracks+Camp for units, Market for equipment
+  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market, BuildingType.Stables] });
 
   // Create attacker in a DIFFERENT city (to avoid spawn collision) - needs Stables for travel
-  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market, BuildingType.Stables] });
 
   // Give attacker more operatives
   await factory.hireUnits(attacker, 0, 100); // operative unit 1

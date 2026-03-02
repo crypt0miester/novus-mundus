@@ -86,7 +86,7 @@ async function createDungeonPlayer(
     { templateId: 1 }
   );
 
-  await sendTransaction(ctx.connection, new Transaction().add(mintIx), [player.keypair, heroMint]);
+  await sendTransaction(ctx.svm, new Transaction().add(mintIx), [player.keypair, heroMint]);
 
   return { player, heroMint };
 }
@@ -139,7 +139,7 @@ describe('Dungeon System', () => {
         rewardScalingBps: 10000,
       }
     );
-    await sendTransaction(ctx.connection, new Transaction().add(templateIx), [ctx.daoAuthority]);
+    await sendTransaction(ctx.svm, new Transaction().add(templateIx), [ctx.daoAuthority]);
     log.info(`Dungeon template ${DUNGEON_TEMPLATE_ID} created`);
   });
 
@@ -160,10 +160,10 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, firstRoomType: 0, heroSpecialization: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify run started (use playerPda for PDA derivation)
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo).not.toBeNull();
     });
 
@@ -181,7 +181,7 @@ describe('Dungeon System', () => {
         },
         { templateId: 1 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(mintIx), [player.keypair, heroMint]);
+      await sendTransaction(ctx.svm, new Transaction().add(mintIx), [player.keypair, heroMint]);
 
       const ix = createEnterDungeonInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -189,7 +189,7 @@ describe('Dungeon System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -205,7 +205,7 @@ describe('Dungeon System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -216,7 +216,7 @@ describe('Dungeon System', () => {
 
       // Start first run
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -237,11 +237,11 @@ describe('Dungeon System', () => {
         },
         { templateId: 2 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(mintIx2), [player.keypair, heroMint2]);
+      await sendTransaction(ctx.svm, new Transaction().add(mintIx2), [player.keypair, heroMint2]);
 
       // Try second run — should fail
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint2.publicKey },
@@ -256,22 +256,22 @@ describe('Dungeon System', () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       // Snapshot player state before entering dungeon
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       const ix = createEnterDungeonInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
         { templateId: DUNGEON_TEMPLATE_ID, firstRoomType: 0, heroSpecialization: 0 }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Snapshot player state after entering dungeon
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Verify the run was created (entry fee deduction may be stamina or NOVI depending on template config;
       // template has staminaCost: 0 so fee may not apply, but the run account existing confirms entry succeeded)
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo).not.toBeNull();
     });
 
@@ -279,7 +279,7 @@ describe('Dungeon System', () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -290,7 +290,7 @@ describe('Dungeon System', () => {
       );
 
       // Hero is now locked in the dungeon run
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo).not.toBeNull();
     });
   });
@@ -304,7 +304,7 @@ describe('Dungeon System', () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -320,7 +320,7 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(advanceIx), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(advanceIx), [player.keypair, ctx.daoAuthority]);
     });
 
     it('should generate room based on type', async () => {
@@ -328,7 +328,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with firstRoomType = 1 (treasure)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -340,7 +340,7 @@ describe('Dungeon System', () => {
 
       // Fetch run account and verify it exists with valid data
       // Room type is determined by the firstRoomType param passed to enter instruction
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo).not.toBeNull();
       expect(runInfo!.data.length).toBeGreaterThan(0);
     });
@@ -349,7 +349,7 @@ describe('Dungeon System', () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -359,7 +359,7 @@ describe('Dungeon System', () => {
         [player.keypair]
       );
 
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo).not.toBeNull();
       expect(runInfo!.data.length).toBeGreaterThan(0);
     });
@@ -377,7 +377,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -393,7 +393,7 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0, doubleStrike: false, crit: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(combatIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(combatIx), [player.keypair]);
     });
 
     it.skip('hero combat stats verified by calculator unit tests', () => {});
@@ -403,7 +403,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room (firstRoomType = 0)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -414,7 +414,7 @@ describe('Dungeon System', () => {
       );
 
       // Snapshot run state before attack
-      const runBefore = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runBefore = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runBefore).not.toBeNull();
       const dataBefore = Buffer.from(runBefore!.data);
 
@@ -423,10 +423,10 @@ describe('Dungeon System', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0, doubleStrike: false, crit: false }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(combatIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(combatIx), [player.keypair]);
 
       // Snapshot run state after attack
-      const runAfter = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runAfter = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runAfter).not.toBeNull();
       const dataAfter = Buffer.from(runAfter!.data);
 
@@ -447,7 +447,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with treasure room type
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -462,7 +462,7 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(interactIx), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(interactIx), [player.keypair, ctx.daoAuthority]);
     });
 
     it('should reject relic choice when not awaiting relic', async () => {
@@ -470,7 +470,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room (not in relic selection phase)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -482,7 +482,7 @@ describe('Dungeon System', () => {
 
       // Try to choose relic — should fail because not in AwaitingRelic state
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createChooseRelicInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, gameAuthority: ctx.daoAuthority.publicKey },
@@ -498,7 +498,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -513,7 +513,7 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, attackCount: 3, nextRoomType: 0, doubleStrike: false, crit: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(multiIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(multiIx), [player.keypair]);
     });
 
     it.skip('trap rooms are assigned by game authority, not controllable in test', () => {});
@@ -529,7 +529,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -544,7 +544,7 @@ describe('Dungeon System', () => {
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0, doubleStrike: false, crit: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(combatIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(combatIx), [player.keypair]);
     });
 
     it.skip('boss behavior is server-side, not testable from client', () => {});
@@ -561,7 +561,7 @@ describe('Dungeon System', () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -577,19 +577,19 @@ describe('Dungeon System', () => {
         heroMint: heroMint.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(fleeIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(fleeIx), [player.keypair]);
     });
 
     it('should lose progress on flee', async () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
 
       // Snapshot player before entering dungeon
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Enter dungeon with combat room
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -604,7 +604,7 @@ describe('Dungeon System', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0, doubleStrike: false, crit: false }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(combatIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(combatIx), [player.keypair]);
 
       // Flee the dungeon
       const fleeIx = createFleeInstruction({
@@ -612,14 +612,14 @@ describe('Dungeon System', () => {
         owner: player.publicKey,
         heroMint: heroMint.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(fleeIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(fleeIx), [player.keypair]);
 
       // Verify run account is closed (flee ends the run)
-      const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runInfo === null || runInfo.data.length === 0).toBe(true);
 
       // Snapshot player after flee - no completion rewards should have been granted
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
     });
 
@@ -628,7 +628,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon (hero gets locked/transferred to dungeon run PDA)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -639,7 +639,7 @@ describe('Dungeon System', () => {
       );
 
       // Verify run exists (hero is locked in dungeon)
-      const runBefore = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runBefore = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runBefore).not.toBeNull();
 
       // Flee the dungeon (hero should be returned from escrow)
@@ -648,16 +648,16 @@ describe('Dungeon System', () => {
         owner: player.publicKey,
         heroMint: heroMint.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(fleeIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(fleeIx), [player.keypair]);
 
       // Verify run account is closed
-      const runAfter = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runAfter = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runAfter === null || runAfter.data.length === 0).toBe(true);
 
       // Hero should be unlocked - player can start a new dungeon run with the same hero
       // Verify by successfully entering a new dungeon run with the same hero
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -667,7 +667,7 @@ describe('Dungeon System', () => {
         [player.keypair]
       );
 
-      const newRun = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const newRun = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(newRun).not.toBeNull();
     });
   });
@@ -682,7 +682,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -701,11 +701,11 @@ describe('Dungeon System', () => {
 
       // This may fail if not all floors cleared - expected behavior
       try {
-        await sendTransaction(ctx.connection, new Transaction().add(completeIx), [player.keypair]);
+        await sendTransaction(ctx.svm, new Transaction().add(completeIx), [player.keypair]);
       } catch {
         // Claim requires all floors cleared - expected failure
         // Verify run still exists
-        const runInfo = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+        const runInfo = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
         expect(runInfo).not.toBeNull();
       }
     });
@@ -727,7 +727,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon with combat room
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -738,7 +738,7 @@ describe('Dungeon System', () => {
       );
 
       // Snapshot run state before attack
-      const runBefore = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runBefore = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runBefore).not.toBeNull();
       const dataBefore = Buffer.from(runBefore!.data);
 
@@ -747,10 +747,10 @@ describe('Dungeon System', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { templateId: DUNGEON_TEMPLATE_ID, nextRoomType: 0, doubleStrike: false, crit: false }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(combatIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(combatIx), [player.keypair]);
 
       // Fetch run state after attack
-      const runAfter = await fetchDungeonRunRaw(ctx.connection, player.playerPda);
+      const runAfter = await fetchDungeonRunRaw(ctx.svm, player.playerPda);
       expect(runAfter).not.toBeNull();
       const dataAfter = Buffer.from(runAfter!.data);
 
@@ -783,7 +783,7 @@ describe('Dungeon System', () => {
 
   describe('Leaderboard', () => {
     it('should create a dungeon leaderboard', async () => {
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       const weekNumber = Math.floor(now / (7 * 24 * 60 * 60));
 
       const ix = createCreateLeaderboardInstruction(
@@ -799,21 +799,21 @@ describe('Dungeon System', () => {
         }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       const [leaderboardPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, DUNGEON_TEMPLATE_ID, weekNumber);
-      const exists = await accountExists(ctx.connection, leaderboardPda);
+      const exists = await accountExists(ctx.svm, leaderboardPda);
       expect(exists).toBe(true);
     });
 
     it('should claim leaderboard prize after dungeon completion', async () => {
       const { player, heroMint } = await createDungeonPlayer(factory, ctx);
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
       const weekNumber = Math.floor(now / (7 * 24 * 60 * 60)) + 1; // Use next week to avoid collision with previous test
 
       // Create leaderboard for this week
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createCreateLeaderboardInstruction(
             {
@@ -833,7 +833,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -845,7 +845,7 @@ describe('Dungeon System', () => {
 
       // Flee dungeon (hero returned, run account closed)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createFleeInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey }
@@ -863,7 +863,7 @@ describe('Dungeon System', () => {
       );
 
       try {
-        await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+        await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
       } catch {
         // Expected: player might not qualify for prize (not in top 10 after flee)
         // The test validates the instruction builds and submits correctly
@@ -881,7 +881,7 @@ describe('Dungeon System', () => {
 
       // Enter dungeon — run is Active
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createEnterDungeonInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
@@ -893,7 +893,7 @@ describe('Dungeon System', () => {
 
       // Resume requires Failed status — should reject
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createResumeInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },

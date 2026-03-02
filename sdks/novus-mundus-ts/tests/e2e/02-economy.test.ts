@@ -93,7 +93,7 @@ describe('Economy', () => {
   describe('Hire Units', () => {
     it('should hire defensive unit 1', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       const hireAmount = new BN(100);
@@ -103,9 +103,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Defensive units should increase
@@ -116,7 +116,7 @@ describe('Economy', () => {
 
     it('should hire defensive unit 2', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -124,15 +124,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.defensiveUnit2, before!.defensiveUnit2);
     });
 
     it('should hire defensive unit 3', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -140,15 +140,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.defensiveUnit3, before!.defensiveUnit3);
     });
 
     it('should hire operative unit 1 (requires Camp)', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -156,15 +156,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.operativeUnit1, before!.operativeUnit1);
     });
 
     it('should hire operative unit 2 (requires Camp)', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -172,15 +172,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.operativeUnit2, before!.operativeUnit2);
     });
 
     it('should hire operative unit 3 (requires Camp)', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -188,9 +188,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.operativeUnit3, before!.operativeUnit3);
     });
 
@@ -203,12 +203,12 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
 
     it('should consume NOVI when hiring units', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -216,9 +216,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // NOVI should decrease (units cost NOVI)
       assertBnLessThan(after!.lockedNovi, before!.lockedNovi);
@@ -235,7 +235,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
 
     it('should reject invalid unit type', async () => {
@@ -247,7 +247,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
   });
 
@@ -258,7 +258,7 @@ describe('Economy', () => {
   describe('Purchase Equipment', () => {
     it('should purchase melee weapons', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -266,15 +266,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.meleeWeapons, before!.meleeWeapons);
     });
 
     it('should purchase ranged weapons', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -282,15 +282,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.rangedWeapons, before!.rangedWeapons);
     });
 
     it('should purchase siege weapons', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -298,15 +298,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.siegeWeapons, before!.siegeWeapons);
     });
 
     it('should purchase armor', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -314,15 +314,15 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnGreaterThan(after!.armorPieces, before!.armorPieces);
     });
 
     it('should consume NOVI when purchasing equipment', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -330,9 +330,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnLessThan(after!.lockedNovi, before!.lockedNovi);
     });
   });
@@ -346,7 +346,7 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
 
       // First, deplete some stamina (we'll skip this in initial test)
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
       const staminaBefore = before!.encounterStamina;
 
       const ix = createPurchaseStaminaInstruction(
@@ -356,16 +356,16 @@ describe('Economy', () => {
 
       const tx = buildTransaction([ix]);
 
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Stamina should be restored
       assertBnGreaterThanOrEqual(after!.encounterStamina, staminaBefore);
     });
 
     it('should consume NOVI when purchasing stamina', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createPurchaseStaminaInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -374,9 +374,9 @@ describe('Economy', () => {
 
       const tx = buildTransaction([ix]);
 
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       assertBnLessThan(after!.lockedNovi, before!.lockedNovi);
     });
   });
@@ -419,12 +419,12 @@ describe('Economy', () => {
       ));
 
       const tx = buildTransaction(instructions, { computeUnits: 400_000 });
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
     }
 
     it('setup: configure game caps, team, subscription, and vault', async () => {
       // 1. Set min_account_age_for_events to 0 so newly created players can transfer
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engine).not.toBeNull();
 
       const updatedCaps = {
@@ -438,10 +438,10 @@ describe('Economy', () => {
       );
 
       const configTx = buildTransaction([configIx]);
-      await sendTransaction(ctx.connection, configTx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, configTx, [ctx.daoAuthority]);
 
       // Verify the update
-      const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engineAfter!.caps.minAccountAgeForEvents.toNumber()).toBe(0);
 
       // 2. Create players with estate + vault (level 1)
@@ -459,7 +459,7 @@ describe('Economy', () => {
         { quantity: 10 }
       );
       const gemsTx = buildTransaction([gemsIx]);
-      await sendTransaction(ctx.connection, gemsTx, [sender.keypair]);
+      await sendTransaction(ctx.svm, gemsTx, [sender.keypair]);
 
       // 4. Upgrade sender's Vault from level 1 → 5 (4 cycles)
       for (let level = 2; level <= 5; level++) {
@@ -473,7 +473,7 @@ describe('Economy', () => {
         { name: 'TransferTeam' }
       );
       const createTeamTx = buildTransaction([createTeamIx]);
-      await sendTransaction(ctx.connection, createTeamTx, [sender.keypair]);
+      await sendTransaction(ctx.svm, createTeamTx, [sender.keypair]);
 
       // 6. Invite receiver to team, then receiver accepts
       [teamPda] = deriveTeamPda(ctx.gameEngine, testTeamId);
@@ -486,7 +486,7 @@ describe('Economy', () => {
         inviteePlayer: receiver.playerPda,
       });
       const inviteTx = buildTransaction([inviteIx]);
-      await sendTransaction(ctx.connection, inviteTx, [sender.keypair]);
+      await sendTransaction(ctx.svm, inviteTx, [sender.keypair]);
 
       const acceptIx = createTeamAcceptInviteInstruction({
         owner: receiver.publicKey,
@@ -497,7 +497,7 @@ describe('Economy', () => {
         inviteRefund: sender.publicKey,
       });
       const acceptTx = buildTransaction([acceptIx]);
-      await sendTransaction(ctx.connection, acceptTx, [receiver.keypair]);
+      await sendTransaction(ctx.svm, acceptTx, [receiver.keypair]);
 
       // 7. Sender buys Expert subscription (tier 1) via SOL payment
       const subIx = createPurchaseSubscriptionInstruction(
@@ -510,16 +510,16 @@ describe('Economy', () => {
         { paymentType: 0, tier: 1 }
       );
       const subTx = buildTransaction([subIx]);
-      await sendTransaction(ctx.connection, subTx, [sender.keypair]);
+      await sendTransaction(ctx.svm, subTx, [sender.keypair]);
 
       // Verify sender has Expert subscription
-      const senderAfter = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderAfter = await fetchPlayer(ctx.svm, sender.playerPda);
       expect(senderAfter!.subscriptionTier).toBe(1);
     });
 
     it('should transfer cash between players', async () => {
-      const senderBefore = await fetchPlayer(ctx.connection, sender.playerPda);
-      const receiverBefore = await fetchPlayer(ctx.connection, receiver.playerPda);
+      const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
+      const receiverBefore = await fetchPlayer(ctx.svm, receiver.playerPda);
 
       const [receiverPlayerPda] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
@@ -536,10 +536,10 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [sender.keypair]);
+      await sendTransaction(ctx.svm, tx, [sender.keypair]);
 
-      const senderAfter = await fetchPlayer(ctx.connection, sender.playerPda);
-      const receiverAfter = await fetchPlayer(ctx.connection, receiver.playerPda);
+      const senderAfter = await fetchPlayer(ctx.svm, sender.playerPda);
+      const receiverAfter = await fetchPlayer(ctx.svm, receiver.playerPda);
 
       // Sender's cash should decrease
       assertResourceDecreased(senderBefore!.cashOnHand, senderAfter!.cashOnHand);
@@ -549,7 +549,7 @@ describe('Economy', () => {
     });
 
     it('should reject transfer with insufficient cash', async () => {
-      const senderBefore = await fetchPlayer(ctx.connection, sender.playerPda);
+      const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
       const [receiverPlayerPda] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
       // Try to transfer more than available
@@ -566,7 +566,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [sender.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [sender.keypair]);
     });
 
     it('should reject transfer to self', async () => {
@@ -584,7 +584,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [sender.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [sender.keypair]);
     });
 
     it('should track daily transfer count', async () => {
@@ -602,9 +602,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [sender.keypair]);
+      await sendTransaction(ctx.svm, tx, [sender.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, sender.playerPda);
+      const after = await fetchPlayer(ctx.svm, sender.playerPda);
       expect(after!.dailyTransferCount).toBeGreaterThan(0);
     });
   });
@@ -616,7 +616,7 @@ describe('Economy', () => {
   describe('Vault Transfer', () => {
     it('should move cash from hand to vault', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const depositAmount = new BN(50);
       const ix = createVaultTransferInstruction(
@@ -625,9 +625,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Cash on hand should decrease
       assertResourceDecreased(before!.cashOnHand, after!.cashOnHand);
@@ -645,10 +645,10 @@ describe('Economy', () => {
         { amount: new BN(100), toVault: true }
       );
       const depositTx = buildTransaction([depositIx]);
-      await sendTransaction(ctx.connection, depositTx, [player.keypair]);
+      await sendTransaction(ctx.svm, depositTx, [player.keypair]);
 
       // Now withdraw
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const withdrawAmount = new BN(50);
       const withdrawIx = createVaultTransferInstruction(
@@ -657,9 +657,9 @@ describe('Economy', () => {
       );
 
       const withdrawTx = buildTransaction([withdrawIx]);
-      await sendTransaction(ctx.connection, withdrawTx, [player.keypair]);
+      await sendTransaction(ctx.svm, withdrawTx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Cash in vault should decrease
       assertResourceDecreased(before!.cashInVault, after!.cashInVault);
@@ -670,7 +670,7 @@ describe('Economy', () => {
 
     it('should clamp vault deposit to available cash on hand', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Request more than available — program clamps to min(amount, space, cashOnHand)
       const depositAmount = before!.cashOnHand.add(new BN(1_000_001));
@@ -680,9 +680,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Vault balance should not exceed what was on hand before
       assertBnGreaterThanOrEqual(before!.cashOnHand, after!.cashInVault.sub(before!.cashInVault));
     });
@@ -696,9 +696,9 @@ describe('Economy', () => {
         { amount: new BN(100), toVault: true }
       );
       const depositTx = buildTransaction([depositIx]);
-      await sendTransaction(ctx.connection, depositTx, [player.keypair]);
+      await sendTransaction(ctx.svm, depositTx, [player.keypair]);
 
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Request more than vault balance — program clamps to min(amount, cashInVault)
       const withdrawAmount = before!.cashInVault.add(new BN(1_000_001));
@@ -708,9 +708,9 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Vault should be drained to 0 (clamped to vault balance)
       assertBnGreaterThanOrEqual(before!.cashInVault, before!.cashInVault.sub(after!.cashInVault));
     });
@@ -723,7 +723,7 @@ describe('Economy', () => {
   describe('Collect Resources', () => {
     it('should collect resources from estate buildings', async () => {
       const player = await factory.createPlayer({ createEstate: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -732,9 +732,9 @@ describe('Economy', () => {
 
       const tx = buildTransaction([ix]);
 
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Should have collected some resources (exact amount depends on buildings)
       // At minimum, timestamp should update
@@ -752,7 +752,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
     });
 
     it('should reject farming without Farm building', async () => {
@@ -764,11 +764,11 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
 
     it('should collect mining resources (requires Mine)', async () => {
-      const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp, BuildingType.Mine] });
+      const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp, BuildingType.Mine, BuildingType.Academy] });
       await factory.completeResearch(player, 21); // Unlock mining (has_mining = true)
 
       // Hire operative units (needed for mining output calculation)
@@ -776,7 +776,7 @@ describe('Economy', () => {
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { unitType: 3, noviAmount: new BN(1000) }
       );
-      await sendTransaction(ctx.connection, buildTransaction([hireIx]), [player.keypair]);
+      await sendTransaction(ctx.svm, buildTransaction([hireIx]), [player.keypair]);
 
       const ix = createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
@@ -784,7 +784,7 @@ describe('Economy', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
     });
 
     it('should allow consecutive collections', async () => {
@@ -797,9 +797,9 @@ describe('Economy', () => {
       );
       const tx1 = buildTransaction([ix1]);
 
-      await sendTransaction(ctx.connection, tx1, [player.keypair]);
+      await sendTransaction(ctx.svm, tx1, [player.keypair]);
 
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Second collection should also succeed (no cooldown)
       const ix2 = createCollectResourcesInstruction(
@@ -808,8 +808,8 @@ describe('Economy', () => {
       );
       const tx2 = buildTransaction([ix2]);
 
-      await sendTransaction(ctx.connection, tx2, [player.keypair]);
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      await sendTransaction(ctx.svm, tx2, [player.keypair]);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after!.lastUpdatedTokensAt.toNumber()).toBeGreaterThanOrEqual(
         before!.lastUpdatedTokensAt.toNumber()
       );
@@ -823,16 +823,16 @@ describe('Economy', () => {
   describe('Update Locked NOVI', () => {
     it('should sync locked NOVI from token account', async () => {
       const player = await factory.createPlayer({ createEstate: true });
-      const before = await fetchPlayer(ctx.connection, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       const ix = createUpdateLockedNoviInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine }
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const after = await fetchPlayer(ctx.connection, player.playerPda);
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Token update timestamp should be updated
       expect(after!.lastUpdatedTokensAt.toNumber()).toBeGreaterThanOrEqual(

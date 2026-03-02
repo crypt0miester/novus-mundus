@@ -38,14 +38,14 @@ describe('Initialization', () => {
 
   describe('GameEngine defaults', () => {
     it('should have initialized GameEngine with default configs', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engine).not.toBeNull();
       expect(engine!.version.toNumber()).toBeGreaterThanOrEqual(0);
       expect(engine!.paused).toBe(false);
     });
 
     it('should have default ArenaConfig values', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engine).not.toBeNull();
 
       const arena = engine!.arenaConfig;
@@ -68,7 +68,7 @@ describe('Initialization', () => {
     });
 
     it('should have default ExpeditionConfig values', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const exp = engine!.expeditionConfig;
       expect(exp.maxTier).toBe(4);
       expect(exp.perfectScoreThreshold).toBe(80);
@@ -81,7 +81,7 @@ describe('Initialization', () => {
     });
 
     it('should have default DungeonConfig values', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const dg = engine!.dungeonConfig;
       expect(dg.resumeGemCost.toNumber()).toBe(500);
       expect(dg.maxMultiAttacks).toBe(5);
@@ -93,7 +93,7 @@ describe('Initialization', () => {
     });
 
     it('should have default CastleConfig values', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const castle = engine!.castleConfig;
       expect(castle.contestDuration.toNumber()).toBe(0);           // testing mode
       expect(castle.protectionDuration.toNumber()).toBe(864_000);  // 10 days
@@ -105,7 +105,7 @@ describe('Initialization', () => {
     });
 
     it('should have default CombatConfig values', async () => {
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const combat = engine!.combatConfig;
       expect(combat.damagePerSiegeWeapon.toNumber()).toBe(500);
       expect(combat.maxReinforcementReceive.toNumber()).toBe(10_000);
@@ -115,8 +115,8 @@ describe('Initialization', () => {
       expect(combat.staminaRegenInterval.toNumber()).toBe(300);
       expect(combat.encounterAttackRangeMeters).toBe(10.0);
       expect(combat.pvpAttackRangeMeters).toBe(15.0);
-      expect(combat.baseEncountersPerCity).toBe(3);
-      expect(combat.maxEncountersPerCity).toBe(50);
+      expect(combat.baseEncountersPerCity).toBe(25);
+      expect(combat.maxEncountersPerCity).toBe(200);
       expect(combat.weaponLootRateBps).toBe(6000);
     });
   });
@@ -127,7 +127,7 @@ describe('Initialization', () => {
 
   describe('update_game_config', () => {
     it('should update ArenaConfig via DAO authority', async () => {
-      const engineBefore = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const versionBefore = engineBefore!.version.toNumber();
 
       // Modify arena config: change max daily battles and ELO K-factor
@@ -147,9 +147,9 @@ describe('Initialization', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
-      const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engineAfter).not.toBeNull();
 
       // Version incremented
@@ -166,7 +166,7 @@ describe('Initialization', () => {
     });
 
     it('should update CombatConfig via DAO authority', async () => {
-      const engineBefore = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
 
       const updatedCombat: CombatConfig = {
         ...engineBefore!.combatConfig,
@@ -184,9 +184,9 @@ describe('Initialization', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
-      const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engineAfter!.combatConfig.maxEncountersPerCity).toBe(100);
       expect(engineAfter!.combatConfig.weaponLootRateBps).toBe(7500);
       expect(engineAfter!.combatConfig.damagePerSiegeWeapon.toNumber()).toBe(750);
@@ -197,7 +197,7 @@ describe('Initialization', () => {
     });
 
     it('should update multiple configs in single transaction', async () => {
-      const engineBefore = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const versionBefore = engineBefore!.version.toNumber();
 
       const updatedCastle: CastleConfig = {
@@ -224,9 +224,9 @@ describe('Initialization', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
-      const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       // Version incremented once (single instruction)
       expect(engineAfter!.version.toNumber()).toBe(versionBefore + 1);
 
@@ -244,7 +244,7 @@ describe('Initialization', () => {
     });
 
     it('should update DungeonConfig via DAO authority', async () => {
-      const engineBefore = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
 
       const updatedDungeon: DungeonConfig = {
         ...engineBefore!.dungeonConfig,
@@ -262,9 +262,9 @@ describe('Initialization', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
-      const engineAfter = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engineAfter!.dungeonConfig.resumeGemCost.toNumber()).toBe(1000);
       expect(engineAfter!.dungeonConfig.maxMultiAttacks).toBe(10);
       expect(engineAfter!.dungeonConfig.restHealPercent).toBe(30);
@@ -278,10 +278,9 @@ describe('Initialization', () => {
       const impostor = Keypair.generate();
 
       // Fund impostor for tx fees
-      const sig = await ctx.connection.requestAirdrop(impostor.publicKey, 1_000_000_000);
-      await ctx.connection.confirmTransaction(sig, 'confirmed');
+      ctx.svm.airdrop(impostor.publicKey, BigInt(1_000_000_000));
 
-      const engine = await fetchGameEngine(ctx.connection, ctx.kingdomId);
+      const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const arenaConfig: ArenaConfig = {
         ...engine!.arenaConfig,
         maxDailyBattles: 99,
@@ -297,7 +296,7 @@ describe('Initialization', () => {
 
       const tx = buildTransaction([ix]);
       // Error 6001 = Unauthorized
-      await expectTransactionToFail(ctx.connection, tx, [impostor], 6001, 'unauthorized update');
+      await expectTransactionToFail(ctx.svm, tx, [impostor], 6001, 'unauthorized update');
     });
   });
 });

@@ -83,7 +83,7 @@ describe('Player Lifecycle', () => {
       });
 
       // Verify player now exists
-      const postFetch = await fetchPlayer(ctx.connection, player.playerPda);
+      const postFetch = await fetchPlayer(ctx.svm, player.playerPda);
       expect(postFetch).not.toBeNull();
 
       // Verify basic state
@@ -98,7 +98,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertPlayerLocation(account!, 2);
     });
@@ -109,7 +109,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertPlayerLocation(account!, 3);
     });
@@ -130,7 +130,7 @@ describe('Player Lifecycle', () => {
       });
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
 
     it('should reject initialization with invalid city', async () => {
@@ -138,11 +138,7 @@ describe('Player Lifecycle', () => {
       const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
       // Airdrop some SOL
-      const sig = await ctx.connection.requestAirdrop(
-        keypair.publicKey,
-        1_000_000_000
-      );
-      await ctx.connection.confirmTransaction(sig, 'confirmed');
+      ctx.svm.airdrop(keypair.publicKey, BigInt(1_000_000_000));
 
       // Try to initialize with non-existent city (999)
       const ix = createInitPlayerInstruction({
@@ -154,7 +150,7 @@ describe('Player Lifecycle', () => {
       });
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [keypair]);
     });
   });
 
@@ -169,7 +165,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Rookie tier starts with 100 locked NOVI (stored as 1000 with 1 decimal)
@@ -182,7 +178,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Should have starter defensive units
@@ -195,7 +191,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Should have starter operative units
@@ -208,7 +204,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Should have starter melee weapons
@@ -225,7 +221,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       assertBnGreaterThan(account!.produce, 0, 'Should have produce');
@@ -237,7 +233,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       assertBnGreaterThan(account!.cashOnHand, 0, 'Should have cash on hand');
@@ -249,7 +245,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertPlayerLevel(account!, 1);
     });
@@ -260,7 +256,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.subscriptionTier).toBe(SubscriptionTier.Rookie);
     });
@@ -271,7 +267,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       assertPlayerHasNoTeam(account!);
     });
@@ -282,7 +278,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.None);
     });
@@ -299,10 +295,10 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
-      const currentTime = await getCurrentTimestamp(ctx.connection);
+      const currentTime = await getCurrentTimestamp(ctx.svm);
       assertPlayerProtected(account!, currentTime);
 
       // Protection should be set for ~24 hours in the future
@@ -320,11 +316,11 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Check with a future timestamp (after protection expires)
-      const futureTime = await getCurrentTimestamp(ctx.connection) + SECONDS_PER_DAY * 2;
+      const futureTime = await getCurrentTimestamp(ctx.svm) + SECONDS_PER_DAY * 2;
       assertPlayerNotProtected(account!, futureTime);
     });
   });
@@ -340,21 +336,21 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.owner.equals(player.publicKey)).toBe(true);
     });
 
     it('should have valid creation timestamp', async () => {
-      const beforeTime = await getCurrentTimestamp(ctx.connection);
+      const beforeTime = await getCurrentTimestamp(ctx.svm);
 
       const player = await factory.createPlayer({
         cityId: 1,
         initialize: true,
       });
 
-      const afterTime = await getCurrentTimestamp(ctx.connection);
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const afterTime = await getCurrentTimestamp(ctx.svm);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       const createdAt = account!.createdAt.toNumber();
@@ -368,7 +364,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Should have some initial stamina
@@ -383,7 +379,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Bump should be a valid value (usually 250-255)
@@ -397,7 +393,7 @@ describe('Player Lifecycle', () => {
         initialize: true,
       });
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Version should be set (usually 1 for new accounts)

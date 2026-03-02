@@ -5,7 +5,6 @@
  */
 
 import {
-  Connection,
   Keypair,
   Transaction,
   PublicKey,
@@ -75,7 +74,7 @@ export class HeroFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair, heroMint], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair, heroMint], this.ctx.config);
 
     const hero: TestHero = {
       mint: heroMint,
@@ -130,7 +129,7 @@ export class HeroFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     hero.locked = true;
   }
 
@@ -158,7 +157,7 @@ export class HeroFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     hero.locked = false;
   }
 
@@ -181,7 +180,7 @@ export class HeroFactory {
     });
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     hero.level++;
   }
 
@@ -200,7 +199,7 @@ export class HeroFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
   }
 
   /**
@@ -220,7 +219,7 @@ export class HeroFactory {
     );
 
     const tx = new Transaction().add(ix);
-    await sendTx(this.ctx.connection, tx, [player.keypair], this.ctx.config);
+    await sendTx(this.ctx.svm, tx, [player.keypair], this.ctx.config);
     this.heroes.delete(hero.mintPubkey.toBase58());
   }
 

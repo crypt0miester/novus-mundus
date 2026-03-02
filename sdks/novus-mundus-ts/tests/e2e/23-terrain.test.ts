@@ -59,10 +59,10 @@ describe('Terrain', () => {
         { cityId: TEST_CITY_ID, terrain: NYC_TERRAIN },
       );
 
-      await sendInstruction(ctx.connection, ix, [ctx.daoAuthority], { _label: 'set_terrain' });
+      await sendInstruction(ctx.svm, ix, [ctx.daoAuthority], { _label: 'set_terrain' });
 
       // Verify the terrain was written
-      const city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city).not.toBeNull();
       expect(city!.terrainSeed).toBe(NYC_TERRAIN.seed);
       expect(city!.waterLine).toBe(NYC_TERRAIN.waterLine);
@@ -83,7 +83,7 @@ describe('Terrain', () => {
     });
 
     it('should verify city center is passable land', async () => {
-      const city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city).not.toBeNull();
 
       const terrain: CityTerrain = {
@@ -99,7 +99,7 @@ describe('Terrain', () => {
     });
 
     it('should verify ocean coordinates are impassable', async () => {
-      const city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city).not.toBeNull();
 
       const terrain: CityTerrain = {
@@ -133,9 +133,9 @@ describe('Terrain', () => {
         { cityId: TEST_CITY_ID, terrain: smallerTerrain },
       );
 
-      await sendInstruction(ctx.connection, ix, [ctx.daoAuthority], { _label: 'set_terrain (shrink)' });
+      await sendInstruction(ctx.svm, ix, [ctx.daoAuthority], { _label: 'set_terrain (shrink)' });
 
-      const city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city!.anchorCount).toBe(2);
       expect(city!.terrainSeed).toBe(42);
       expect(city!.anchors.length).toBe(2);
@@ -145,8 +145,7 @@ describe('Terrain', () => {
       const fake = Keypair.generate();
 
       // Airdrop to fake signer so it can pay fees
-      const sig = await ctx.connection.requestAirdrop(fake.publicKey, 1_000_000_000);
-      await ctx.connection.confirmTransaction(sig);
+      ctx.svm.airdrop(fake.publicKey, BigInt(1_000_000_000));
 
       const ix = createSetTerrainInstruction(
         { daoAuthority: fake.publicKey, gameEngine: ctx.gameEngine },
@@ -154,7 +153,7 @@ describe('Terrain', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [fake], undefined, 'set_terrain (unauthorized)');
+      await expectTransactionToFail(ctx.svm, tx, [fake], undefined, 'set_terrain (unauthorized)');
     });
   });
 
@@ -189,10 +188,10 @@ describe('Terrain', () => {
         { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, terrain: BASE_TERRAIN },
       );
-      await sendInstruction(ctx.connection, setIx, [ctx.daoAuthority], { _label: 'set_terrain (base)' });
+      await sendInstruction(ctx.svm, setIx, [ctx.daoAuthority], { _label: 'set_terrain (base)' });
 
       // Verify base terrain
-      let city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      let city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city!.anchorCount).toBe(3);
 
       // Step 2: Append additional anchors
@@ -200,10 +199,10 @@ describe('Terrain', () => {
         { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, anchors: EXTRA_ANCHORS },
       );
-      await sendInstruction(ctx.connection, appendIx, [ctx.daoAuthority], { _label: 'append_terrain' });
+      await sendInstruction(ctx.svm, appendIx, [ctx.daoAuthority], { _label: 'append_terrain' });
 
       // Verify all anchors are present
-      city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city!.anchorCount).toBe(5); // 3 + 2
       expect(city!.anchors.length).toBe(5);
 
@@ -238,9 +237,9 @@ describe('Terrain', () => {
         { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, anchors: moreAnchors },
       );
-      await sendInstruction(ctx.connection, ix, [ctx.daoAuthority], { _label: 'append_terrain (second)' });
+      await sendInstruction(ctx.svm, ix, [ctx.daoAuthority], { _label: 'append_terrain (second)' });
 
-      const city = await fetchCity(ctx.connection, ctx.gameEngine, TEST_CITY_ID);
+      const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city!.anchorCount).toBe(6); // 5 + 1
       expect(city!.anchors[5].x).toBe(1500);
       expect(city!.anchors[5].y).toBe(1500);
@@ -254,7 +253,7 @@ describe('Terrain', () => {
       );
 
       const tx = buildTransaction([ix]);
-      await expectTransactionToFail(ctx.connection, tx, [ctx.daoAuthority], undefined, 'append_terrain (no terrain)');
+      await expectTransactionToFail(ctx.svm, tx, [ctx.daoAuthority], undefined, 'append_terrain (no terrain)');
     });
   });
 });

@@ -55,6 +55,7 @@ import {
 import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
+  advanceTime,
   SECONDS_PER_DAY,
 } from '../fixtures/time';
 import { CITIES } from '../fixtures/setup';
@@ -109,8 +110,8 @@ describe('Combat System', () => {
       const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
 
       // Get initial state
-      const attackerBefore = await fetchPlayer(ctx.connection, attacker.playerPda);
-      const defenderBefore = await fetchPlayer(ctx.connection, defender.playerPda);
+      const attackerBefore = await fetchPlayer(ctx.svm, attacker.playerPda);
+      const defenderBefore = await fetchPlayer(ctx.svm, defender.playerPda);
 
       expect(attackerBefore).not.toBeNull();
       expect(defenderBefore).not.toBeNull();
@@ -127,11 +128,11 @@ describe('Combat System', () => {
         { driveBy: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [attacker.keypair]);
 
       // Verify state changes after combat
-      const attackerAfter = await fetchPlayer(ctx.connection, attacker.playerPda);
-      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
+      const attackerAfter = await fetchPlayer(ctx.svm, attacker.playerPda);
+      const defenderAfter = await fetchPlayer(ctx.svm, defender.playerPda);
 
       expect(attackerAfter).not.toBeNull();
       expect(defenderAfter).not.toBeNull();
@@ -159,10 +160,10 @@ describe('Combat System', () => {
       await factory.hireUnits(attacker, 3, 100);
 
       // New player should be protected
-      const defenderAccount = await fetchPlayer(ctx.connection, defender.playerPda);
+      const defenderAccount = await fetchPlayer(ctx.svm, defender.playerPda);
       expect(defenderAccount).not.toBeNull();
 
-      const currentTime = await getCurrentTimestamp(ctx.connection);
+      const currentTime = await getCurrentTimestamp(ctx.svm);
       expect(defenderAccount!.newPlayerProtectionUntil.toNumber()).toBeGreaterThan(currentTime);
 
       // Attack should fail due to protection
@@ -180,7 +181,7 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [attacker.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [attacker.keypair]);
     });
 
     it('should reject attack on same city requirement', async () => {
@@ -190,8 +191,8 @@ describe('Combat System', () => {
 
       await factory.hireUnits(attacker, 3, 100);
 
-      const attackerAccount = await fetchPlayer(ctx.connection, attacker.playerPda);
-      const defenderAccount = await fetchPlayer(ctx.connection, defender.playerPda);
+      const attackerAccount = await fetchPlayer(ctx.svm, attacker.playerPda);
+      const defenderAccount = await fetchPlayer(ctx.svm, defender.playerPda);
 
       expect(attackerAccount!.currentCity).not.toBe(defenderAccount!.currentCity);
 
@@ -210,7 +211,7 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [attacker.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [attacker.keypair]);
     });
 
     it('should reject self-attack', async () => {
@@ -231,7 +232,7 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [player.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [player.keypair]);
     });
 
     it('should reject attack without troops', async () => {
@@ -254,7 +255,7 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await expectTransactionToFail(ctx.connection, tx, [attacker.keypair]);
+      await expectTransactionToFail(ctx.svm, tx, [attacker.keypair]);
     });
   });
 
@@ -270,7 +271,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 3, 50);
       await factory.purchaseEquipment(player, 0, 25); // melee weapons
 
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAccount).not.toBeNull();
 
       // Spawn an encounter adjacent to the player (within 10m attack range)
@@ -294,15 +295,15 @@ describe('Combat System', () => {
         },
         { encounterType: EncounterRarity.Common }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
-      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
       // Attack the encounter (include death accounts in case encounter is killed)
       const [playerPda] = derivePlayerPda(ctx.gameEngine, player.publicKey);
-      const playerBefore = await fetchPlayer(ctx.connection, playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, playerPda);
       const lootId = playerBefore!.lootCounter.toNumber();
       const [lootPda] = deriveLootPda(playerPda, lootId);
       const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
@@ -322,10 +323,10 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
       // Verify combat happened
-      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAfter).not.toBeNull();
     });
 
@@ -333,7 +334,7 @@ describe('Combat System', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       await factory.hireUnits(player, 3, 50);
 
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAccount).not.toBeNull();
 
       // Player starts with stamina
@@ -347,7 +348,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 3, 100);
       await factory.purchaseEquipment(player, 0, 50);
 
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
 
       // Spawn an encounter adjacent to the player (within 10m attack range)
@@ -370,7 +371,7 @@ describe('Combat System', () => {
         },
         { encounterType: EncounterRarity.Common }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
 
@@ -395,9 +396,9 @@ describe('Combat System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
-      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAfter).not.toBeNull();
 
       // Should have gained some XP
@@ -418,7 +419,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 0, 50000);    // tier 1 defensive units
       await factory.purchaseEquipment(player, 0, 50); // melee weapons
 
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
       const lootCounterBefore = playerBefore!.lootCounter.toNumber();
 
@@ -442,10 +443,10 @@ describe('Combat System', () => {
         },
         { encounterType: EncounterRarity.Common }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
-      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
       // Derive death accounts: loot PDA, encounter location, location creator refund
@@ -467,17 +468,17 @@ describe('Combat System', () => {
         { encounterId }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(attackIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(attackIx), [player.keypair]);
 
       // Verify loot was created
-      const loot = await fetchLoot(ctx.connection, player.playerPda, lootCounterBefore);
+      const loot = await fetchLoot(ctx.svm, player.playerPda, lootCounterBefore);
       expect(loot).not.toBeNull();
       expect(loot!.claimed).toBe(false);
       // Loot should have some rewards
       assertBnGreaterThan(loot!.cash, 0, 'Loot should contain cash');
 
       // Player's loot counter should have incremented
-      const playerAfter = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAfter!.lootCounter.toNumber()).toBeGreaterThan(lootCounterBefore);
     });
 
@@ -488,7 +489,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 0, 50000);         // tier 1 defensive units
       await factory.purchaseEquipment(player, 0, 50);    // melee weapons for damage
 
-      const playerBefore = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
       const lootId = playerBefore!.lootCounter.toNumber();
 
@@ -510,10 +511,10 @@ describe('Combat System', () => {
         },
         { encounterType: EncounterRarity.Common }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
-      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
       const [lootPda] = deriveLootPda(player.playerPda, lootId);
@@ -531,14 +532,14 @@ describe('Combat System', () => {
         },
         { encounterId }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(attackIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(attackIx), [player.keypair]);
 
       // Verify loot exists
-      const loot = await fetchLoot(ctx.connection, player.playerPda, lootId);
+      const loot = await fetchLoot(ctx.svm, player.playerPda, lootId);
       expect(loot).not.toBeNull();
 
       // Record player state before claim
-      const playerBeforeClaim = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerBeforeClaim = await fetchPlayer(ctx.svm, player.playerPda);
       const cashBefore = playerBeforeClaim!.cashOnHand;
 
       // Claim loot — creator is the owner wallet (who paid rent for loot account)
@@ -549,14 +550,14 @@ describe('Combat System', () => {
         creator: player.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(claimIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify rewards were transferred
-      const playerAfterClaim = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAfterClaim = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAfterClaim!.cashOnHand.gt(cashBefore)).toBe(true);
 
       // Loot account should be closed (rent reclaimed)
-      const lootGone = !(await accountExists(ctx.connection, lootPda));
+      const lootGone = !(await accountExists(ctx.svm, lootPda));
       expect(lootGone).toBe(true);
     });
 
@@ -574,7 +575,7 @@ describe('Combat System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -594,7 +595,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 0, 100); // defensive unit 1 (combat)
       await factory.purchaseEquipment(player, 0, 50); // melee weapons
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       // Attack power = defensive units + weapons
@@ -610,7 +611,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 1, 200);  // defensive unit 2
       await factory.purchaseEquipment(player, 5, 50); // armor (type 5)
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive unit 1');
@@ -627,7 +628,7 @@ describe('Combat System', () => {
       await factory.purchaseEquipment(player, 1, 30); // ranged
       await factory.purchaseEquipment(player, 2, 20); // siege
 
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
       assertBnGreaterThan(account!.defensiveUnit1, 0, 'Should have defensive units');
@@ -645,7 +646,7 @@ describe('Combat System', () => {
     it('should inflict casualties on loser', async () => {
       const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
 
-      const defenderBefore = await fetchPlayer(ctx.connection, defender.playerPda);
+      const defenderBefore = await fetchPlayer(ctx.svm, defender.playerPda);
       expect(defenderBefore).not.toBeNull();
 
       // Execute PvP attack
@@ -660,11 +661,11 @@ describe('Combat System', () => {
         { driveBy: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [attacker.keypair]);
 
       // Verify the loser lost defensive units
-      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
-      const attackerAfter = await fetchPlayer(ctx.connection, attacker.playerPda);
+      const defenderAfter = await fetchPlayer(ctx.svm, defender.playerPda);
+      const attackerAfter = await fetchPlayer(ctx.svm, attacker.playerPda);
       expect(defenderAfter).not.toBeNull();
       expect(attackerAfter).not.toBeNull();
 
@@ -681,7 +682,7 @@ describe('Combat System', () => {
       await factory.hireUnits(defender, 1, 100);
       await factory.hireUnits(defender, 2, 100);
 
-      const defenderBefore = await fetchPlayer(ctx.connection, defender.playerPda);
+      const defenderBefore = await fetchPlayer(ctx.svm, defender.playerPda);
       expect(defenderBefore).not.toBeNull();
       assertBnGreaterThan(defenderBefore!.defensiveUnit1, 0, 'Should have def unit 1');
       assertBnGreaterThan(defenderBefore!.defensiveUnit2, 0, 'Should have def unit 2');
@@ -705,10 +706,10 @@ describe('Combat System', () => {
         { driveBy: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [attacker.keypair]);
 
       // Casualties should be distributed proportionally across unit types
-      const defenderAfter = await fetchPlayer(ctx.connection, defender.playerPda);
+      const defenderAfter = await fetchPlayer(ctx.svm, defender.playerPda);
       expect(defenderAfter).not.toBeNull();
 
       // At least 2 of 3 unit types should have taken casualties (proportional distribution)
@@ -732,7 +733,7 @@ describe('Combat System', () => {
       await factory.hireUnits(player, 0, 100);
       await factory.purchaseEquipment(player, 0, 50);
 
-      const playerAccount = await fetchPlayer(ctx.connection, player.playerPda);
+      const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAccount).not.toBeNull();
 
       // Spawn an encounter near the player
@@ -753,7 +754,7 @@ describe('Combat System', () => {
         },
         { encounterType: EncounterRarity.Common }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(spawnIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
       // Start intracity travel (player becomes traveling)
       const destLat = city.lat + 0.001;
@@ -772,7 +773,7 @@ describe('Combat System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -813,7 +814,7 @@ describe('Combat System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [attacker.keypair]
       );
@@ -827,6 +828,9 @@ describe('Combat System', () => {
 
       await factory.hireUnits(attacker, 3, 200);
 
+      // Advance clock past new player protection (2s)
+      await advanceTime(ctx.svm, 3);
+
       // First attack
       const ix1 = createAttackPlayerInstruction(
         {
@@ -839,7 +843,7 @@ describe('Combat System', () => {
         { driveBy: false }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix1), [attacker.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix1), [attacker.keypair]);
 
       // Second attack immediately should fail due to cooldown
       const ix2 = createAttackPlayerInstruction(
@@ -854,7 +858,7 @@ describe('Combat System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix2),
         [attacker.keypair]
       );
@@ -890,11 +894,11 @@ describe('Combat System', () => {
 
       const tx = new Transaction().add(ix);
 
-      await sendTransaction(ctx.connection, tx, [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
       // Verify encounter was created
       const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
-      const encounter = await fetchEncounter(ctx.connection, encounterPda);
+      const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
     });
 
@@ -933,8 +937,8 @@ describe('Combat System', () => {
         { encounterType: EncounterRarity.Rare }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(lowLevelIx), [ctx.daoAuthority]);
-      await sendTransaction(ctx.connection, new Transaction().add(highLevelIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(lowLevelIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(highLevelIx), [ctx.daoAuthority]);
       // High level encounter would have more power/HP
     });
 
@@ -974,8 +978,8 @@ describe('Combat System', () => {
         { encounterType: EncounterRarity.Uncommon }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(commonIx), [ctx.daoAuthority]);
-      await sendTransaction(ctx.connection, new Transaction().add(uncommonIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(commonIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(uncommonIx), [ctx.daoAuthority]);
       // Higher rarity encounter drops better loot
     });
   });

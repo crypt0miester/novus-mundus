@@ -89,11 +89,11 @@ describe('Estate System', () => {
       );
 
       const tx = new Transaction().add(ix);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
 
       // Verify estate created
       const [estatePda] = deriveEstatePda(player.playerPda);
-      const estateInfo = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateInfo = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateInfo).not.toBeNull();
     });
 
@@ -107,7 +107,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -117,7 +117,7 @@ describe('Estate System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createCreateEstateInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -128,7 +128,7 @@ describe('Estate System', () => {
       );
 
       // Verify estate has starting plots
-      const estateInfo = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateInfo = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateInfo).not.toBeNull();
       // Would check plot count in deserialized estate
     });
@@ -149,7 +149,7 @@ describe('Estate System', () => {
         { buildingType }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
       // Verify building started
     });
 
@@ -168,7 +168,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -183,7 +183,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -196,7 +196,7 @@ describe('Estate System', () => {
 
       // Start building
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createBuildBuildingInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -222,7 +222,7 @@ describe('Estate System', () => {
         tx.add(speedupIx);
       }
       tx.add(completeIx);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
     });
   });
 
@@ -246,7 +246,7 @@ describe('Estate System', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(upgradeIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(upgradeIx), [player.keypair]);
 
       // Speedup + complete the upgrade
       const speedupIx = createBuildingSpeedupInstruction(
@@ -263,7 +263,7 @@ describe('Estate System', () => {
         tx.add(speedupIx);
       }
       tx.add(completeIx);
-      await sendTransaction(ctx.connection, tx, [player.keypair]);
+      await sendTransaction(ctx.svm, tx, [player.keypair]);
     });
 
     it.skip('should reject upgrade of max level building', async () => {
@@ -288,7 +288,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(upgradeIx),
         [player.keypair],
         GameError.ExceedsMaxCap
@@ -308,7 +308,7 @@ describe('Estate System', () => {
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Barracks }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(upgradeBarracksIx), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(upgradeBarracksIx), [player.keypair]);
 
       // Try to start academy upgrade while barracks upgrade is in progress
       // The program may reject concurrent upgrades on the same estate
@@ -326,7 +326,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(upgradeBarracksAgainIx),
         [player.keypair],
         GameError.BuildingUnderConstruction
@@ -342,7 +342,7 @@ describe('Estate System', () => {
       });
 
       // Snapshot estate before upgrade (Barracks at level 1)
-      const estateBefore = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateBefore = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateBefore).not.toBeNull();
       // Read attack_bps from estate raw data
       // Estate has attack_bps field which Barracks contributes to (50 bps per level)
@@ -353,7 +353,7 @@ describe('Estate System', () => {
       await factory.upgradeAndCompleteBuilding(player, BuildingType.Barracks, 2);
 
       // Snapshot estate after upgrade (Barracks at level 2)
-      const estateAfter = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateAfter = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateAfter).not.toBeNull();
 
       // Verify estate data changed (the account data should differ after upgrade)
@@ -379,7 +379,7 @@ describe('Estate System', () => {
       // Buy plot - automatically purchases next available plot
       const ix = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it.skip('should reject buying when at max plots', async () => {
@@ -392,13 +392,13 @@ describe('Estate System', () => {
       // So we need to buy plots 2, 3, 4, and 5
       for (let i = 0; i < 4; i++) {
         const ix = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
-        await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+        await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
       }
 
       // Now at max plots (5) - next purchase should fail with ExceedsMaxCap
       const ix = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair],
         GameError.ExceedsMaxCap
@@ -410,27 +410,27 @@ describe('Estate System', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
       // Snapshot before buying plot 2
-      const beforePlot2 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const beforePlot2 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(beforePlot2).not.toBeNull();
 
       // Buy plot 2 (costs 100,000 NOVI)
       const ix2 = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
-      await sendTransaction(ctx.connection, new Transaction().add(ix2), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix2), [player.keypair]);
 
-      const afterPlot2 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const afterPlot2 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(afterPlot2).not.toBeNull();
 
       // Cost of plot 2 = difference in lockedNovi
       const cost2 = beforePlot2!.data.lockedNovi.sub(afterPlot2!.data.lockedNovi);
 
       // Buy plot 3 (costs ~262,000 NOVI - more expensive than plot 2)
-      const beforePlot3 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const beforePlot3 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(beforePlot3).not.toBeNull();
 
       const ix3 = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
-      await sendTransaction(ctx.connection, new Transaction().add(ix3), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix3), [player.keypair]);
 
-      const afterPlot3 = await snapshotPlayer(ctx.connection, player.playerPda);
+      const afterPlot3 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(afterPlot3).not.toBeNull();
 
       const cost3 = beforePlot3!.data.lockedNovi.sub(afterPlot3!.data.lockedNovi);
@@ -463,7 +463,7 @@ describe('Estate System', () => {
         { buildingType: BuildingType.Barracks, score: 75 }
       );
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair, ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair, ctx.daoAuthority]);
     });
 
     it('should reject duplicate daily activity', async () => {
@@ -478,7 +478,7 @@ describe('Estate System', () => {
 
       // Do daily activity
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createDailyActivityInstruction(
             {
@@ -505,7 +505,7 @@ describe('Estate System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair, ctx.daoAuthority]
       );
@@ -532,7 +532,7 @@ describe('Estate System', () => {
         owner: player.publicKey,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should scale rewards with building levels', async () => {
@@ -544,7 +544,7 @@ describe('Estate System', () => {
       });
 
       // Snapshot before daily claim
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Perform daily claim
@@ -552,10 +552,10 @@ describe('Estate System', () => {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Snapshot after daily claim
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Verify rewards were granted (common materials, locked NOVI, XP increase)
@@ -586,10 +586,10 @@ describe('Estate System', () => {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Fetch estate raw data to verify login streak updated
-      const estateInfo = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateInfo = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateInfo).not.toBeNull();
       expect(estateInfo!.data.length).toBeGreaterThan(0);
 
@@ -598,7 +598,7 @@ describe('Estate System', () => {
       // We verify the estate data has been modified (non-zero login tracking fields).
 
       // Also verify player got rewards (proving claim succeeded)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Common materials should be > 0 after claim (base reward: 100)
       expect(account!.commonMaterials.gtn(0)).toBe(true);
@@ -618,12 +618,12 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Fetch player account
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Barracks provides attack_bps and training_speed_bps on the estate.
       // At level 1: attack_bps = 50 (1 * 50 buff_per_level)
@@ -637,13 +637,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Market provides trade_discount_bps on the estate
       // At level 1: trade_discount_bps = 100 (1 * 100)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -655,13 +655,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Academy provides research_speed_bps on the estate
       // At level 1: research_speed_bps = 150 (1 * 50 * 3)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -673,12 +673,12 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Workshop: mining bonus calculated dynamically (not cached in estate buffs)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -690,13 +690,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Observatory provides loot_bonus_bps on the estate
       // At level 1: loot_bonus_bps = 100 (1 * 50 * 2)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -708,13 +708,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Camp provides training_speed_bps on the estate
       // At level 1: training_speed_bps = 25 (1 * 50 / 2)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -726,13 +726,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Mine provides resource_gen_bps on the estate
       // At level 1: resource_gen_bps = 50 (1 * 50)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -744,13 +744,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Catacombs provides loot_bonus_bps on the estate (dungeon loot)
       // At level 1: loot_bonus_bps = 50 (1 * 50)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -762,13 +762,13 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Farm provides resource_gen_bps on the estate
       // At level 1: resource_gen_bps = 50 (1 * 50)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -780,12 +780,12 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Stables: travel speed bonus computed dynamically (stables_travel_reduction_bps)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
 
@@ -797,12 +797,12 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
       // Infirmary: recovery bonus computed dynamically (infirmary_recovery_bps)
-      const account = await fetchPlayer(ctx.connection, player.playerPda);
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
     });
   });
@@ -821,7 +821,7 @@ describe('Estate System', () => {
       });
 
       // Snapshot before daily claim
-      const before = await snapshotPlayer(ctx.connection, player.playerPda);
+      const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
       // Perform daily claim (which grants common materials, NOVI, XP)
@@ -829,10 +829,10 @@ describe('Estate System', () => {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Snapshot after daily claim
-      const after = await snapshotPlayer(ctx.connection, player.playerPda);
+      const after = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
       // Verify common materials increased (daily claim grants base 100 + mansion/streak bonuses)
@@ -862,7 +862,7 @@ describe('Estate System', () => {
       });
 
       // Verify estate with 1 building
-      const estateAfter1 = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateAfter1 = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateAfter1).not.toBeNull();
       const dataAfter1 = Buffer.from(estateAfter1!.data);
 
@@ -870,7 +870,7 @@ describe('Estate System', () => {
       await factory.buildAndCompleteBuilding(player, BuildingType.Market);
 
       // Verify estate with 2 buildings
-      const estateAfter2 = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateAfter2 = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateAfter2).not.toBeNull();
       const dataAfter2 = Buffer.from(estateAfter2!.data);
 
@@ -880,7 +880,7 @@ describe('Estate System', () => {
       // Build a third building to further increase estate level
       await factory.buildAndCompleteBuilding(player, BuildingType.Observatory);
 
-      const estateAfter3 = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateAfter3 = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateAfter3).not.toBeNull();
       const dataAfter3 = Buffer.from(estateAfter3!.data);
 
@@ -897,7 +897,7 @@ describe('Estate System', () => {
       });
 
       // Verify estate exists with Observatory building data
-      const estateRaw = await fetchEstateRaw(ctx.connection, player.playerPda);
+      const estateRaw = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateRaw).not.toBeNull();
       expect(estateRaw!.data.length).toBeGreaterThan(0);
 
@@ -909,7 +909,7 @@ describe('Estate System', () => {
         createEstate: true,
       });
 
-      const baselineEstate = await fetchEstateRaw(ctx.connection, baselinePlayer.playerPda);
+      const baselineEstate = await fetchEstateRaw(ctx.svm, baselinePlayer.playerPda);
       expect(baselineEstate).not.toBeNull();
 
       // Estate with Observatory should have different buff values than empty estate

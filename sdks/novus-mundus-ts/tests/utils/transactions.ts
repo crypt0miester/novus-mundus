@@ -2,28 +2,37 @@
  * Transaction Utilities
  *
  * Helpers for sending transactions and parsing results in tests.
+ * Uses LiteSVM for in-process transaction execution.
  */
 
 import {
-  Connection,
   Keypair,
   Transaction,
   TransactionInstruction,
-  sendAndConfirmTransaction,
   ComputeBudgetProgram,
   PublicKey,
-  VersionedTransaction,
   type TransactionSignature,
-  type Commitment,
-  type ParsedTransactionWithMeta,
-  type Finality,
 } from '@solana/web3.js';
+import bs58 from 'bs58';
 import BN from 'bn.js';
 
+import { type LiteSVM, FailedTransactionMetadata, type TransactionMetadata } from '../fixtures/svm';
 import { parseEventsFromLogs, parseEventFromBase64, type NovusMundusEvent } from '../../src/events/index';
 import { GameError, parseErrorMessage } from '../../src/errors';
 import { type TestConfig } from '../fixtures/setup';
 import { log } from './logger';
+
+// ============================================================
+// Transaction Metadata Cache
+// ============================================================
+
+interface CachedTxMeta {
+  logs: string[];
+  computeUnitsConsumed: number;
+  signature: string;
+}
+
+const _txCache = new Map<string, CachedTxMeta>();
 
 // ============================================================
 // Transaction Building
@@ -38,10 +47,6 @@ export interface TransactionOptions {
   additionalSigners?: Keypair[];
   /** Whether to simulate before sending */
   simulate?: boolean;
-  /** Commitment level */
-  commitment?: Finality;
-  /** Skip preflight checks */
-  skipPreflight?: boolean;
   /** Label for logging (auto-set by callers) */
   _label?: string;
 }
@@ -50,8 +55,6 @@ const DEFAULT_TX_OPTIONS: TransactionOptions = {
   computeUnits: 400000,
   priorityFee: 1,
   simulate: false,
-  commitment: 'confirmed',
-  skipPreflight: true,
 };
 
 /**
@@ -90,10 +93,10 @@ export function buildTransaction(
 }
 
 /**
- * Send a transaction with retries.
+ * Send a transaction via LiteSVM.
  */
 export async function sendTransaction(
-  connection: Connection,
+  svm: LiteSVM,
   tx: Transaction,
   signers: Keypair[],
   options: TransactionOptions = {}
@@ -101,62 +104,72 @@ export async function sendTransaction(
   const opts = { ...DEFAULT_TX_OPTIONS, ...options };
   const label = opts._label ?? 'tx';
 
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.recentBlockhash = svm.latestBlockhash();
   tx.feePayer = signers[0]!.publicKey;
+  tx.sign(...signers);
 
-  // Optionally simulate first
-  if (opts.simulate) {
-    const simulation = await connection.simulateTransaction(tx);
-    if (simulation.value.err) {
-      throw new Error(`Simulation failed: ${JSON.stringify(simulation.value.err)}`);
-    }
-  }
+  const result = svm.sendTransaction(tx);
 
-  try {
-    const sig = await sendAndConfirmTransaction(connection, tx, signers, {
-      skipPreflight: opts.skipPreflight ?? true,
-      commitment: opts.commitment,
-    });
-    log.txSuccess(label, sig);
-    return sig;
-  } catch (error: any) {
-    // Try to extract tx logs and resolve error code
-    const txLogs = extractLogsFromError(error);
-    const code = extractErrorCode(error);
+  if (result instanceof FailedTransactionMetadata) {
+    const meta = result.meta();
+    const txLogs = meta.logs();
+    const errStr = result.toString();
+
+    // Build error message compatible with existing error code extraction
+    let message = `Transaction failed: ${errStr}`;
+    const code = extractErrorCodeFromSvmResult(result);
     if (code !== null) {
+      message = `failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x${code.toString(16)}`;
       const resolved = resolveErrorCode(code);
       log.txFail(label, new Error(resolved), txLogs);
     } else {
-      log.txFail(label, error, txLogs);
+      log.txFail(label, new Error(message), txLogs);
     }
+
+    const error: any = new Error(message);
+    error.logs = txLogs;
+    error.transactionLogs = txLogs;
     throw error;
   }
+
+  const sig = bs58.encode(result.signature());
+  const txLogs = result.logs();
+  const cu = Number(result.computeUnitsConsumed());
+
+  // Cache metadata for later retrieval
+  _txCache.set(sig, { logs: txLogs, computeUnitsConsumed: cu, signature: sig });
+
+  // Expire blockhash so identical transactions can be sent again
+  svm.expireBlockhash();
+
+  log.txSuccess(label, sig);
+  return sig;
 }
 
 /**
  * Send a single instruction as a transaction.
  */
 export async function sendInstruction(
-  connection: Connection,
+  svm: LiteSVM,
   instruction: TransactionInstruction,
   signers: Keypair[],
   options: TransactionOptions = {}
 ): Promise<TransactionSignature> {
   const tx = buildTransaction([instruction], options);
-  return await sendTransaction(connection, tx, signers, options);
+  return await sendTransaction(svm, tx, signers, options);
 }
 
 /**
  * Send multiple instructions in a single transaction.
  */
 export async function sendInstructions(
-  connection: Connection,
+  svm: LiteSVM,
   instructions: TransactionInstruction[],
   signers: Keypair[],
   options: TransactionOptions = {}
 ): Promise<TransactionSignature> {
   const tx = buildTransaction(instructions, options);
-  return await sendTransaction(connection, tx, signers, options);
+  return await sendTransaction(svm, tx, signers, options);
 }
 
 // ============================================================
@@ -164,38 +177,34 @@ export async function sendInstructions(
 // ============================================================
 
 /**
- * Get transaction details with logs.
- */
-export async function getTransactionDetails(
-  connection: Connection,
-  signature: TransactionSignature,
-  commitment: Finality = 'confirmed'
-): Promise<ParsedTransactionWithMeta | null> {
-  return await connection.getParsedTransaction(signature, {
-    commitment,
-    maxSupportedTransactionVersion: 0,
-  });
-}
-
-/**
- * Get transaction logs.
+ * Get transaction logs from cache or SVM history.
  */
 export async function getTransactionLogs(
-  connection: Connection,
+  svm: LiteSVM,
   signature: TransactionSignature
 ): Promise<string[]> {
-  const tx = await getTransactionDetails(connection, signature);
-  return tx?.meta?.logMessages ?? [];
+  // Check cache first
+  const cached = _txCache.get(signature);
+  if (cached) return cached.logs;
+
+  // Fall back to SVM transaction history
+  const sigBytes = bs58.decode(signature);
+  const txMeta = svm.getTransaction(sigBytes);
+  if (txMeta) {
+    const meta = txMeta instanceof FailedTransactionMetadata ? txMeta.meta() : txMeta;
+    return meta.logs();
+  }
+  return [];
 }
 
 /**
  * Parse events from transaction signature.
  */
 export async function parseEventsFromSignature(
-  connection: Connection,
+  svm: LiteSVM,
   signature: TransactionSignature
 ): Promise<NovusMundusEvent[]> {
-  const logs = await getTransactionLogs(connection, signature);
+  const logs = await getTransactionLogs(svm, signature);
   return parseEventsFromLogs(logs);
 }
 
@@ -203,11 +212,11 @@ export async function parseEventsFromSignature(
  * Find a specific event type in transaction.
  */
 export async function findEventInTransaction<T extends NovusMundusEvent>(
-  connection: Connection,
+  svm: LiteSVM,
   signature: TransactionSignature,
   eventName: string
 ): Promise<T | undefined> {
-  const events = await parseEventsFromSignature(connection, signature);
+  const events = await parseEventsFromSignature(svm, signature);
   return events.find(e => e.name === eventName) as T | undefined;
 }
 
@@ -229,44 +238,45 @@ export interface TransactionResult {
  * Send transaction and return detailed result.
  */
 export async function sendTransactionWithResult(
-  connection: Connection,
+  svm: LiteSVM,
   tx: Transaction,
   signers: Keypair[],
   options: TransactionOptions = {}
 ): Promise<TransactionResult> {
-  const opts = { ...DEFAULT_TX_OPTIONS, ...options };
-
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.recentBlockhash = svm.latestBlockhash();
   tx.feePayer = signers[0]!.publicKey;
+  tx.sign(...signers);
 
-  try {
-    const signature = await sendAndConfirmTransaction(connection, tx, signers, {
-      skipPreflight: opts.skipPreflight ?? true,
-      commitment: opts.commitment,
-    });
+  const result = svm.sendTransaction(tx);
 
-    const details = await getTransactionDetails(connection, signature);
-    const logs = details?.meta?.logMessages ?? [];
-    const events = parseEventsFromLogs(logs);
-
-    return {
-      signature,
-      success: true,
-      logs,
-      events,
-      slot: details?.slot ?? 0,
-      computeUnitsUsed: details?.meta?.computeUnitsConsumed ?? undefined,
-    };
-  } catch (error: any) {
+  if (result instanceof FailedTransactionMetadata) {
+    const meta = result.meta();
+    const logs = meta.logs();
     return {
       signature: '',
       success: false,
-      error,
-      logs: [],
+      error: new Error(result.toString()),
+      logs,
       events: [],
-      slot: 0,
+      slot: Number(svm.getClock().slot),
     };
   }
+
+  const sig = bs58.encode(result.signature());
+  const logs = result.logs();
+  const events = parseEventsFromLogs(logs);
+  const cu = Number(result.computeUnitsConsumed());
+
+  _txCache.set(sig, { logs, computeUnitsConsumed: cu, signature: sig });
+
+  return {
+    signature: sig,
+    success: true,
+    logs,
+    events,
+    slot: Number(svm.getClock().slot),
+    computeUnitsUsed: cu,
+  };
 }
 
 // ============================================================
@@ -274,20 +284,18 @@ export async function sendTransactionWithResult(
 // ============================================================
 
 /**
- * Extract transaction logs from a SendTransactionError.
+ * Extract custom error code from a FailedTransactionMetadata.
  */
-function extractLogsFromError(error: any): string[] {
-  // @solana/web3.js SendTransactionError has logs property
-  if (error?.logs && Array.isArray(error.logs)) {
-    return error.logs;
-  }
-  // Some errors embed logs in the message
-  const msg = error?.message ?? '';
-  const logMatch = msg.match(/Transaction simulation failed.*\n([\s\S]*)/);
-  if (logMatch?.[1]) {
-    return logMatch[1].split('\n').filter((l: string) => l.trim());
-  }
-  return [];
+function extractErrorCodeFromSvmResult(failed: FailedTransactionMetadata): number | null {
+  try {
+    const errStr = failed.toString();
+    // Match Custom(NNNN) pattern
+    const customMatch = errStr.match(/Custom\((\d+)\)/);
+    if (customMatch?.[1]) {
+      return parseInt(customMatch[1], 10);
+    }
+  } catch {}
+  return null;
 }
 
 /**
@@ -314,6 +322,12 @@ export function extractErrorCode(error: Error): number | null {
     return parseInt(jsonMatch[1], 10);
   }
 
+  // Match LiteSVM Custom(NNNN) format
+  const customMatch = msg.match(/Custom\((\d+)\)/);
+  if (customMatch?.[1]) {
+    return parseInt(customMatch[1], 10);
+  }
+
   // Check transactionMessage property (SendTransactionError)
   const txMsg = (error as any).transactionMessage;
   if (typeof txMsg === 'string') {
@@ -325,8 +339,8 @@ export function extractErrorCode(error: Error): number | null {
 
   // Check error logs for hex error code
   const logs: string[] = (error as any).logs ?? [];
-  for (const log of logs) {
-    const logMatch = log.match(/custom program error: (0x[0-9a-fA-F]+)/);
+  for (const logLine of logs) {
+    const logMatch = logLine.match(/custom program error: (0x[0-9a-fA-F]+)/);
     if (logMatch?.[1]) {
       return parseInt(logMatch[1], 16);
     }
@@ -337,10 +351,9 @@ export function extractErrorCode(error: Error): number | null {
 
 /**
  * Resolve an error code to its GameError enum name and message.
- * e.g. 6127 → "UserAccountNotCreated: Must create user account before player"
  */
 export function resolveErrorCode(code: number): string {
-  const name = GameError[code]; // reverse lookup enum name
+  const name = GameError[code];
   const message = parseErrorMessage(code);
   if (name) {
     return `${name} (${code}): ${message}`;
@@ -360,7 +373,7 @@ export function isErrorCode(error: Error, expectedCode: number): boolean {
  * Assert transaction fails with specific error code.
  */
 export async function expectTransactionToFail(
-  connection: Connection,
+  svm: LiteSVM,
   tx: Transaction,
   signers: Keypair[],
   expectedErrorCode?: number,
@@ -368,7 +381,7 @@ export async function expectTransactionToFail(
 ): Promise<Error> {
   const tag = label ?? 'tx (expect fail)';
   try {
-    await sendTransaction(connection, tx, signers, { _label: tag });
+    await sendTransaction(svm, tx, signers, { _label: tag });
     throw new Error('Transaction should have failed');
   } catch (error: any) {
     if (error.message === 'Transaction should have failed') {
@@ -379,7 +392,7 @@ export async function expectTransactionToFail(
     if (expectedErrorCode !== undefined) {
       const actualCode = extractErrorCode(error);
       if (actualCode !== expectedErrorCode) {
-        const txLogs = extractLogsFromError(error);
+        const txLogs = (error as any).logs ?? [];
         const expected = resolveErrorCode(expectedErrorCode);
         const actual = actualCode !== null ? resolveErrorCode(actualCode) : 'unknown';
         log.txFail(tag, new Error(`Expected ${expected} but got ${actual}`), txLogs);
@@ -397,51 +410,40 @@ export async function expectTransactionToFail(
 // ============================================================
 
 /**
- * Send multiple independent transactions in parallel.
+ * Execute multiple transactions sequentially (LiteSVM is single-threaded).
  */
 export async function sendTransactionsParallel(
-  connection: Connection,
+  svm: LiteSVM,
   transactions: Array<{
     tx: Transaction;
     signers: Keypair[];
   }>,
-  options: TransactionOptions = {}
-): Promise<TransactionSignature[]> {
-  const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
-  const promises = transactions.map(({ tx, signers }) => {
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = signers[0]!.publicKey;
-    return sendAndConfirmTransaction(connection, tx, signers, {
-      skipPreflight: options.skipPreflight ?? true,
-      commitment: options.commitment,
-    });
-  });
-
-  return await Promise.all(promises);
-}
-
-/**
- * Send transactions sequentially with delay.
- */
-export async function sendTransactionsSequential(
-  connection: Connection,
-  transactions: Array<{
-    tx: Transaction;
-    signers: Keypair[];
-  }>,
-  delayMs: number = 100,
   options: TransactionOptions = {}
 ): Promise<TransactionSignature[]> {
   const signatures: TransactionSignature[] = [];
-
   for (const { tx, signers } of transactions) {
-    const sig = await sendTransaction(connection, tx, signers, options);
+    const sig = await sendTransaction(svm, tx, signers, options);
     signatures.push(sig);
-    if (delayMs > 0) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
   }
+  return signatures;
+}
 
+/**
+ * Send transactions sequentially.
+ */
+export async function sendTransactionsSequential(
+  svm: LiteSVM,
+  transactions: Array<{
+    tx: Transaction;
+    signers: Keypair[];
+  }>,
+  _delayMs: number = 0,
+  options: TransactionOptions = {}
+): Promise<TransactionSignature[]> {
+  const signatures: TransactionSignature[] = [];
+  for (const { tx, signers } of transactions) {
+    const sig = await sendTransaction(svm, tx, signers, options);
+    signatures.push(sig);
+  }
   return signatures;
 }

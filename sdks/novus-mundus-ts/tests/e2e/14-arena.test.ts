@@ -79,10 +79,10 @@ describe('Arena System', () => {
         minLevelRequired: 1,
       }
     );
-    await sendTransaction(ctx.connection, new Transaction().add(createSeasonIx), [ctx.daoAuthority]);
+    await sendTransaction(ctx.svm, new Transaction().add(createSeasonIx), [ctx.daoAuthority]);
 
     // Verify season exists
-    const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+    const season = await fetchArenaSeason(ctx.svm, ctx.gameEngine, SEASON_ID);
     expect(season).not.toBeNull();
     log.info(`Arena season ${SEASON_ID} created, status=${season!.status}`);
   });
@@ -106,11 +106,11 @@ describe('Arena System', () => {
         seasonId: SEASON_ID,
       });
 
-      await sendTransaction(ctx.connection, new Transaction().add(ix), [player.keypair]);
+      await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify joined — fetchArenaParticipant takes the player PDA
       const participant = await fetchArenaParticipant(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         SEASON_ID,
         player.playerPda
@@ -123,7 +123,7 @@ describe('Arena System', () => {
 
       // Join first time
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -144,7 +144,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -161,7 +161,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -183,7 +183,7 @@ describe('Arena System', () => {
           minLevelRequired: 5, // Requires level 5
         }
       );
-      await sendTransaction(ctx.connection, new Transaction().add(createHighLevelSeasonIx), [ctx.daoAuthority]);
+      await sendTransaction(ctx.svm, new Transaction().add(createHighLevelSeasonIx), [ctx.daoAuthority]);
 
       // Level-1 player should fail to join
       const player = await factory.createPlayer({ initialize: true });
@@ -196,7 +196,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -207,7 +207,7 @@ describe('Arena System', () => {
 
       // Join and check initial rating
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -220,7 +220,7 @@ describe('Arena System', () => {
       );
 
       const participant = await fetchArenaParticipant(
-        ctx.connection,
+        ctx.svm,
         ctx.gameEngine,
         SEASON_ID,
         player.playerPda
@@ -246,7 +246,7 @@ describe('Arena System', () => {
 
       // Both join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -259,7 +259,7 @@ describe('Arena System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -273,7 +273,7 @@ describe('Arena System', () => {
 
       // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
@@ -283,7 +283,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
@@ -294,7 +294,7 @@ describe('Arena System', () => {
       );
 
       // Get current timestamp for match
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge requires game_authority co-signature
       const challengeIx = createChallengePlayerInstruction(
@@ -314,13 +314,13 @@ describe('Arena System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [attacker.keypair, ctx.daoAuthority]
       );
 
       // Verify battle was recorded
-      const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+      const season = await fetchArenaSeason(ctx.svm, ctx.gameEngine, SEASON_ID);
       expect(season).not.toBeNull();
       expect(season!.totalBattles.toNumber()).toBeGreaterThan(0);
     });
@@ -331,7 +331,7 @@ describe('Arena System', () => {
 
       // Only attacker joins
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -343,7 +343,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
 
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge non-participant — should fail
       const challengeIx = createChallengePlayerInstruction(
@@ -363,7 +363,7 @@ describe('Arena System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [attacker.keypair, ctx.daoAuthority]
       );
@@ -394,12 +394,12 @@ describe('Arena System', () => {
           seasonId: SEASON_ID,
         })
       );
-      await sendTransaction(ctx.connection, joinTx1, [attacker.keypair]);
-      await sendTransaction(ctx.connection, joinTx2, [defender.keypair]);
+      await sendTransaction(ctx.svm, joinTx1, [attacker.keypair]);
+      await sendTransaction(ctx.svm, joinTx2, [defender.keypair]);
 
       // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
@@ -409,7 +409,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
@@ -419,7 +419,7 @@ describe('Arena System', () => {
         [defender.keypair]
       );
 
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
       const challengeIx = createChallengePlayerInstruction(
@@ -438,17 +438,17 @@ describe('Arena System', () => {
         { matchId: new BN(1), matchTimestamp: new BN(now) }
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [attacker.keypair, ctx.daoAuthority]
       );
 
       // Check ratings changed from 1000
       const attackerPart = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, attacker.playerPda
       );
       const defenderPart = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, defender.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, defender.playerPda
       );
       expect(attackerPart).not.toBeNull();
       expect(defenderPart).not.toBeNull();
@@ -466,7 +466,7 @@ describe('Arena System', () => {
 
       // Both join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -478,7 +478,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -492,7 +492,7 @@ describe('Arena System', () => {
 
       // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
@@ -502,7 +502,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
@@ -512,7 +512,7 @@ describe('Arena System', () => {
         [defender.keypair]
       );
 
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
       const challengeIx = createChallengePlayerInstruction(
@@ -531,14 +531,14 @@ describe('Arena System', () => {
         { matchId: new BN(200), matchTimestamp: new BN(now) }
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [attacker.keypair, ctx.daoAuthority]
       );
 
       // Fetch participant and verify battle was tracked
       const participant = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, attacker.playerPda
       );
       expect(participant).not.toBeNull();
       // With asymmetric loadouts, result is not a draw — wins+losses > 0
@@ -550,7 +550,7 @@ describe('Arena System', () => {
       await factory.hireUnits(player, 3, 100);
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -562,7 +562,7 @@ describe('Arena System', () => {
         [player.keypair]
       );
 
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       const challengeIx = createChallengePlayerInstruction(
         {
@@ -581,7 +581,7 @@ describe('Arena System', () => {
       );
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [player.keypair, ctx.daoAuthority]
       );
@@ -598,7 +598,7 @@ describe('Arena System', () => {
 
       // Join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -619,7 +619,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -640,7 +640,7 @@ describe('Arena System', () => {
 
       // All join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -653,7 +653,7 @@ describe('Arena System', () => {
       );
       for (const d of defenders) {
         await sendTransaction(
-          ctx.connection,
+          ctx.svm,
           new Transaction().add(
             createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
@@ -668,7 +668,7 @@ describe('Arena System', () => {
 
       // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
@@ -679,7 +679,7 @@ describe('Arena System', () => {
       );
       for (const d of defenders) {
         await sendTransaction(
-          ctx.connection,
+          ctx.svm,
           new Transaction().add(
             createUpdateLoadoutInstruction(
               { owner: d.publicKey, gameEngine: ctx.gameEngine },
@@ -694,7 +694,7 @@ describe('Arena System', () => {
       let matchId = 100;
       for (const d of defenders) {
         for (let i = 0; i < 2; i++) {
-          const now = await getCurrentTimestamp(ctx.connection);
+          const now = await getCurrentTimestamp(ctx.svm);
           const challengeIx = createChallengePlayerInstruction(
             {
               gameEngine: ctx.gameEngine,
@@ -711,7 +711,7 @@ describe('Arena System', () => {
             { matchId: new BN(matchId++), matchTimestamp: new BN(now) }
           );
           await sendTransaction(
-            ctx.connection,
+            ctx.svm,
             new Transaction().add(challengeIx),
             [attacker.keypair, ctx.daoAuthority]
           );
@@ -727,7 +727,7 @@ describe('Arena System', () => {
       });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [attacker.keypair]
       );
@@ -747,7 +747,7 @@ describe('Arena System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -768,7 +768,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -779,7 +779,7 @@ describe('Arena System', () => {
 
       // Join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -800,7 +800,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(claimIx),
         [player.keypair]
       );
@@ -827,7 +827,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [ctx.daoAuthority]
       );
@@ -845,7 +845,7 @@ describe('Arena System', () => {
       });
 
       await expectTransactionToFail(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(ix),
         [player.keypair]
       );
@@ -875,7 +875,7 @@ describe('Arena System', () => {
 
       // Both join season
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -887,7 +887,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -901,7 +901,7 @@ describe('Arena System', () => {
 
       // Update loadouts so power is non-zero (loadouts start at 0, causing draws)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
@@ -911,7 +911,7 @@ describe('Arena System', () => {
         [attacker.keypair]
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
@@ -921,7 +921,7 @@ describe('Arena System', () => {
         [defender.keypair]
       );
 
-      const now = await getCurrentTimestamp(ctx.connection);
+      const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
       const challengeIx = createChallengePlayerInstruction(
@@ -940,17 +940,17 @@ describe('Arena System', () => {
         { matchId: new BN(300), matchTimestamp: new BN(now) }
       );
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(challengeIx),
         [attacker.keypair, ctx.daoAuthority]
       );
 
       // Fetch both participants and verify win/loss tracking
       const attackerPart = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, attacker.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, attacker.playerPda
       );
       const defenderPart = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, defender.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, defender.playerPda
       );
       expect(attackerPart).not.toBeNull();
       expect(defenderPart).not.toBeNull();
@@ -964,7 +964,7 @@ describe('Arena System', () => {
 
     it('should update leaderboard', async () => {
       // After battles in preceding tests, the season leaderboard should be populated
-      const season = await fetchArenaSeason(ctx.connection, ctx.gameEngine, SEASON_ID);
+      const season = await fetchArenaSeason(ctx.svm, ctx.gameEngine, SEASON_ID);
       expect(season).not.toBeNull();
       // leaderboardCount should be > 0 after challenges have occurred
       expect(season!.leaderboardCount).toBeGreaterThan(0);
@@ -986,7 +986,7 @@ describe('Arena System', () => {
 
       // Join season (creates loadout account)
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(
           createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
@@ -1015,14 +1015,14 @@ describe('Arena System', () => {
       );
 
       await sendTransaction(
-        ctx.connection,
+        ctx.svm,
         new Transaction().add(updateIx),
         [player.keypair]
       );
 
       // Verify loadout was updated by confirming participant still exists
       const participant = await fetchArenaParticipant(
-        ctx.connection, ctx.gameEngine, SEASON_ID, player.playerPda
+        ctx.svm, ctx.gameEngine, SEASON_ID, player.playerPda
       );
       expect(participant).not.toBeNull();
     });
