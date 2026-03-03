@@ -164,11 +164,7 @@ pub fn process(
         return Err(GameError::HeroAlreadyMintedByPlayer.into());
     }
 
-    // 15. Load estate for sanctuary bonus
-    let estate_data = estate_account.try_borrow_data()?;
-    let estate = unsafe { EstateAccount::load(&estate_data) };
-
-    // Verify estate belongs to this player
+    // 15. Load estate for sanctuary bonus (optional — no estate = no bonus)
     let (expected_estate_pda, _) = find_program_address(
         &[ESTATE_SEED, player_account.key().as_ref()],
         program_id,
@@ -177,14 +173,22 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    let sanctuary_level = get_sanctuary_level(estate);
+    let sanctuary_level = if estate_account.data_len() > 0 {
+        let estate_data = estate_account.try_borrow_data()?;
+        let estate = unsafe { EstateAccount::load(&estate_data) };
+        let level = get_sanctuary_level(estate);
+        drop(estate_data);
+        level
+    } else {
+        0
+    };
+
     let mint_cost = template.mint_cost_sol;
     let mint_bonus = calculate_mint_bonus(mint_cost, sanctuary_level)?;
 
     // Drop borrows before payments
     drop(template_data);
     drop(player_data);
-    drop(estate_data);
 
     // 16. SOL PAYMENT (CRITICAL - BEFORE ANY STATE CHANGES!)
     pinocchio_system::instructions::Transfer {

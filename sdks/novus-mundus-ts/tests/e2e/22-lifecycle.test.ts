@@ -298,7 +298,7 @@ describe('Full Game Lifecycle', () => {
         {
           name: 'LifecycleEvent',
           startTime: now - 3600,
-          endTime: now + 86400,
+          endTime: now + 604800, // 7 days (to survive all advanceTime calls during test)
           eventType: 0,
           minLevel: 1,
           minReputation: 0,
@@ -438,13 +438,13 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Bravo: bought plot 2');
     }
 
-    // Alpha: 11 buildings (Mansion, Barracks, Camp, Workshop, Market, Vault, Academy, Sanctuary, Citadel, Forge, Dock)
-    // Camp required for hiring operatives. Workshop for mining, Dock for fishing.
+    // Alpha: 12 buildings (Mansion + 11 needed for full lifecycle, 12 slots = 3 plots × 4)
+    // Camp for operatives, Stables for travel, Mine/Dock for expeditions
     for (const b of [
-      BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Workshop,
+      BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp,
       BuildingType.Market, BuildingType.Vault, BuildingType.Academy,
       BuildingType.Sanctuary, BuildingType.Citadel, BuildingType.Forge,
-      BuildingType.Dock,
+      BuildingType.Dock, BuildingType.Stables, BuildingType.Mine,
     ]) {
       await factory.buildAndCompleteBuilding(alpha, b);
       log.txSuccess(`Alpha built ${BuildingType[b]}`);
@@ -459,8 +459,8 @@ describe('Full Game Lifecycle', () => {
     }
     log.txSuccess('Bravo: all buildings constructed');
 
-    // Charlie: 3 buildings (Mansion, Barracks, Camp)
-    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp]) {
+    // Charlie: 4 buildings (Mansion, Barracks, Camp, Stables)
+    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Stables]) {
       await factory.buildAndCompleteBuilding(charlie, b);
     }
 
@@ -469,8 +469,8 @@ describe('Full Game Lifecycle', () => {
       await factory.buildAndCompleteBuilding(delta, b);
     }
 
-    // Echo: 4 buildings (Mansion, Barracks, Camp, Arena)
-    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Arena]) {
+    // Echo: 5 buildings (Mansion, Barracks, Camp, Arena, Catacombs)
+    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Arena, BuildingType.Catacombs]) {
       await factory.buildAndCompleteBuilding(echo, b);
     }
 
@@ -511,7 +511,7 @@ describe('Full Game Lifecycle', () => {
     log.txSuccess('Alpha: units hired');
 
     await factory.hireUnits(bravo, 0, 100);
-    await factory.hireUnits(bravo, 3, 50);
+    await factory.hireUnits(bravo, 1, 50);
     log.txSuccess('Bravo: units hired');
 
     await factory.hireUnits(charlie, 0, 50);
@@ -521,8 +521,8 @@ describe('Full Game Lifecycle', () => {
     await factory.hireUnits(delta, 1, 150);
     log.txSuccess('Delta: units hired');
 
-    await factory.hireUnits(echo, 3, 150);
-    await factory.hireUnits(echo, 0, 50);
+    await factory.hireUnits(echo, 0, 150);
+    await factory.hireUnits(echo, 1, 50);
     log.txSuccess('Echo: units hired');
 
     await factory.hireUnits(foxtrot, 0, 30);
@@ -623,7 +623,9 @@ describe('Full Game Lifecycle', () => {
     }
 
     {
-      // Purchase flash sale (sale already active — startsAt set in the past)
+      // Advance time so flash sale becomes active (startsAt = onChainNow + 2 in beforeAll)
+      await advanceTime(ctx.svm, 5);
+      // Purchase flash sale
       const [gemsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
       const ix = createPurchaseFlashSaleInstruction(
         {
@@ -1484,18 +1486,11 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(ix), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: startMeditation (hero slot 0)');
 
-      // Speed up meditation with gems (6 × tier 1 = +6 hours, costs 18,000 gems)
-      await factory.buyGems(alpha, 20); // 20,000 gems
-      for (let i = 0; i < 6; i++) {
-        const speedupIx = createSpeedupMeditationInstruction(
-          { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
-          { speedupTier: 1 }
-        );
-        await sendTx(ctx.svm, new Transaction().add(speedupIx), [alpha.keypair], ctx.config);
-      }
-      log.txSuccess('Alpha: speedupMeditation (6 × tier 1, +6h)');
+      // Advance time past meditation duration
+      await advanceTime(ctx.svm, 43200); // 12 hours
+      log.txSuccess('Alpha: advanced time past meditation');
 
-      // Claim meditation (time now sufficient after speedup)
+      // Claim meditation
       const claimIx = createClaimMeditationInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,

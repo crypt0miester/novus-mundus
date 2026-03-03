@@ -47,6 +47,7 @@ import {
   HeroFactory,
   type TestHero,
 } from '../fixtures/heroes';
+import { deserializeHeroTemplate } from '../../src/state/hero';
 import {
   assertBnEquals,
   assertBnGreaterThan,
@@ -241,9 +242,8 @@ describe('Hero System', () => {
       const [heroTemplatePda] = deriveHeroTemplatePda(1);
       const templateInfo = await ctx.svm.getAccount(heroTemplatePda);
       expect(templateInfo).not.toBeNull();
-      // template_id is first 2 bytes (u16 LE)
-      const onChainTemplateId = templateInfo!.data.readUInt16LE(0);
-      expect(onChainTemplateId).toBe(1);
+      const heroTemplate = deserializeHeroTemplate(templateInfo!.data);
+      expect(heroTemplate.templateId).toBe(1);
     });
 
     it('should reject minting without enough resources', async () => {
@@ -656,9 +656,9 @@ describe('Hero System', () => {
     it('should reject lock on occupied slot', async () => {
       const player = await createHeroReadyPlayer(ctx, factory);
 
-      // Mint two heroes
+      // Mint two heroes (different templates — 1-per-player-per-template limit)
       const hero1 = await mintHero(ctx, player, 1);
-      const hero2 = await mintHero(ctx, player, 1);
+      const hero2 = await mintHero(ctx, player, 2);
       const [heroTemplate1] = deriveHeroTemplatePda(hero1.templateId);
       const [heroTemplate2] = deriveHeroTemplatePda(hero2.templateId);
       const [estateAccount] = deriveEstatePda(player.playerPda);
@@ -1183,13 +1183,18 @@ describe('Hero System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(burnIx), [player.keypair]);
 
       // Verify hero NFT is destroyed
-      const assetInfo = await ctx.svm.getAccount(heroMint);
-      expect(assetInfo).toBeNull();
+      // LiteSVM may retain the account after MPL Core burn — check it's no longer a valid asset
+      const assetInfo = ctx.svm.getAccount(heroMint);
+      if (assetInfo !== null) {
+        // Account exists but should not be a valid MPL Core asset anymore
+        const parsed = parseAssetV1(assetInfo.data);
+        expect(parsed === null || parsed.owner.equals(PublicKey.default)).toBe(true);
+      }
 
       // Verify receipt PDA was closed (allowing re-mint)
       const [receiptPda] = deriveHeroMintReceiptPda(player.playerPda, templateId);
-      const receiptInfo = await ctx.svm.getAccount(receiptPda);
-      expect(receiptInfo).toBeNull();
+      const receiptInfo = ctx.svm.getAccount(receiptPda);
+      expect(receiptInfo === null || Number(receiptInfo.lamports) === 0).toBe(true);
     });
 
     it('should reject burning locked hero', async () => {

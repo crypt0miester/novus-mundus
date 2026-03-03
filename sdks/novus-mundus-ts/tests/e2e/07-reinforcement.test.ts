@@ -324,6 +324,11 @@ describe('Reinforcement System', () => {
 
       await factory.hireUnits(sender, 0, 50);
 
+      // Fetch actual unit count so we can exceed it
+      const playerAccount = await fetchPlayer(ctx.svm, sender.playerPda);
+      const actualUnits = playerAccount!.defensiveUnit1.toNumber();
+      log.step(`Sender has ${actualUnits} defensiveUnit1, attempting ${actualUnits + 1}`);
+
       const ix = createSendReinforcementInstruction(
         {
           gameEngine: ctx.gameEngine,
@@ -334,7 +339,7 @@ describe('Reinforcement System', () => {
           teamId,
         },
         {
-          defensiveUnit1: new BN(10000), // Way more than available
+          defensiveUnit1: new BN(actualUnits + 1), // One more than available
           defensiveUnit2: new BN(0),
           defensiveUnit3: new BN(0),
           meleeWeapons: new BN(0),

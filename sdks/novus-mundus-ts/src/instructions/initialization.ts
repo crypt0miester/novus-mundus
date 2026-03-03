@@ -744,7 +744,7 @@ export function createAppendTerrainInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // city_id (2 bytes) + raw anchor bytes (N × 8)
+  // city_id (2 bytes) + raw anchor bytes (N × ANCHOR_SIZE)
   const writer = new BufferWriter(2 + params.anchors.length * ANCHOR_SIZE);
   writer.writeU16(params.cityId);
 
@@ -755,6 +755,7 @@ export function createAppendTerrainInstruction(
     writer.writeU8(a.lift);
     writer.writeI8(a.pushX);
     writer.writeI8(a.pushY);
+    writer.writeU8(a.moisture ?? 128);
   }
 
   const data = createInstructionData(DISCRIMINATORS.APPEND_TERRAIN, writer.toBuffer());

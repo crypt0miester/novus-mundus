@@ -171,15 +171,15 @@ describe('Terrain', () => {
       anchorCount: 3,
       version: 1,
       anchors: [
-        { x: 0, y: 0, mass: 80, lift: 180, pushX: 0, pushY: 0 },
-        { x: -2000, y: 1000, mass: 75, lift: 185, pushX: 0, pushY: 0 },
-        { x: 2000, y: -1000, mass: 200, lift: 55, pushX: 0, pushY: 0 },
+        { x: 0, y: 0, mass: 80, lift: 180, pushX: 0, pushY: 0, moisture: 128 },
+        { x: -2000, y: 1000, mass: 75, lift: 185, pushX: 0, pushY: 0, moisture: 128 },
+        { x: 2000, y: -1000, mass: 200, lift: 55, pushX: 0, pushY: 0, moisture: 128 },
       ],
     };
 
     const EXTRA_ANCHORS: Anchor[] = [
-      { x: -3000, y: -2000, mass: 210, lift: 45, pushX: 1, pushY: 1 },
-      { x: 3000, y: 2000, mass: 70, lift: 195, pushX: -1, pushY: -1 },
+      { x: -3000, y: -2000, mass: 210, lift: 45, pushX: 1, pushY: 1, moisture: 128 },
+      { x: 3000, y: 2000, mass: 70, lift: 195, pushX: -1, pushY: -1, moisture: 128 },
     ];
 
     it('should set initial terrain, then append anchors', async () => {
@@ -230,7 +230,7 @@ describe('Terrain', () => {
 
     it('should allow multiple appends', async () => {
       const moreAnchors: Anchor[] = [
-        { x: 1500, y: 1500, mass: 90, lift: 165, pushX: 0, pushY: 0 },
+        { x: 1500, y: 1500, mass: 90, lift: 165, pushX: 0, pushY: 0, moisture: 128 },
       ];
 
       const ix = createAppendTerrainInstruction(

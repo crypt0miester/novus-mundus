@@ -6,9 +6,7 @@ use pinocchio::{
 };
 
 use crate::{
-    error::GameError,
-    state::{UserAccount, GameEngine},
-    logic::safe_math::apply_bp,
+    error::GameError, helpers::validate_token_account_owner, logic::safe_math::apply_bp, state::{GameEngine, UserAccount}, validation::require_owner
 };
 
 /// Mint NOVI tokens for prizes (DAO only)
@@ -49,7 +47,7 @@ use crate::{
 /// - 5: Treasury (reserve fund)
 /// - 6: Liquidity (DEX pools)
 pub fn process(
-    _program_id: &Pubkey,
+    program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -90,21 +88,23 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // Load GameEngine to verify DAO authority
-    let mut game_engine_data_ref = game_engine_account.try_borrow_mut_data()?;
-    let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_data_ref) };
+    // Validate account ownership, then use raw pointer access to avoid
+    // holding RefCell borrows across the mint_tokens CPI call.
+    require_owner(game_engine_account, program_id)?;
+    require_owner(recipient_user, program_id)?;
+
+    let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
 
     if dao_authority.key() != &game_engine_data.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // SECURITY: Verify token account belongs to the UserAccount PDA
-    crate::helpers::validate_token_account_owner(user_token_account, recipient_user.key())?;
+    validate_token_account_owner(user_token_account, recipient_user.key())?;
 
     // 4. Load Recipient User Account
 
-    let mut user_data_ref = recipient_user.try_borrow_mut_data()?;
-    let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
+    let user_data = unsafe { &mut *(recipient_user.data_ptr() as *mut UserAccount) };
 
     // 5. Check Allocation Caps
 

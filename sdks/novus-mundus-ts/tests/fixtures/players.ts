@@ -1206,11 +1206,11 @@ export async function createCombatReadyPlayers(
 ): Promise<CombatReadyPlayers> {
   const moveToRange = options.moveToRange ?? true;
 
-  // Create defender first (in city 1) - needs Barracks+Camp for units, Market for equipment
-  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market, BuildingType.Stables] });
+  // Create defender first (in city 1) - needs Barracks for units, Market for equipment
+  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
 
   // Create attacker in a DIFFERENT city (to avoid spawn collision) - needs Stables for travel
-  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market, BuildingType.Stables] });
+  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
 
   // Give attacker more operatives
   await factory.hireUnits(attacker, 0, 100); // operative unit 1

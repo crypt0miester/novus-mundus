@@ -237,11 +237,11 @@ describe('Arena System', () => {
 
   describe('Challenging Players', () => {
     it('should challenge another player', async () => {
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
 
-      // Give players some units for power calculation
-      await factory.hireUnits(attacker, 3, 100);
+      // Give players some defensive units for power calculation
+      await factory.hireUnits(attacker, 0, 100);
       await factory.hireUnits(defender, 0, 100);
 
       // Both join season
@@ -370,11 +370,11 @@ describe('Arena System', () => {
     });
 
     it('should update ratings after challenge', async () => {
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
 
       // Give different units to create power difference
-      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(attacker, 0, 200);
       await factory.hireUnits(defender, 0, 50);
 
       // Both join
@@ -458,10 +458,10 @@ describe('Arena System', () => {
     });
 
     it('should track daily challenges', async () => {
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
 
-      await factory.hireUnits(attacker, 3, 100);
+      await factory.hireUnits(attacker, 0, 100);
       await factory.hireUnits(defender, 0, 100);
 
       // Both join season
@@ -546,8 +546,8 @@ describe('Arena System', () => {
     });
 
     it('should reject self-challenge', async () => {
-      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      await factory.hireUnits(player, 3, 100);
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      await factory.hireUnits(player, 0, 100);
 
       await sendTransaction(
         ctx.svm,
@@ -627,13 +627,13 @@ describe('Arena System', () => {
 
     it('should claim daily arena reward after enough battles', async () => {
       // Create attacker and 3 defenders sequentially (need 5+ battles, max 2 per opponent)
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender1 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender2 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender3 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender1 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender2 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender3 = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       const defenders = [defender1, defender2, defender3];
 
-      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(attacker, 0, 200);
       for (const d of defenders) {
         await factory.hireUnits(d, 0, 200);
       }
@@ -866,11 +866,11 @@ describe('Arena System', () => {
     it.skip('requires many losses to hit rating floor', () => {});
 
     it('should track wins and losses', async () => {
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      const defender = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
 
       // Give attacker power advantage to ensure a decisive result
-      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(attacker, 0, 200);
       await factory.hireUnits(defender, 0, 50);
 
       // Both join season

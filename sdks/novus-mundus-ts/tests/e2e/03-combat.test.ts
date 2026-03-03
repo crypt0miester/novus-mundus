@@ -153,11 +153,11 @@ describe('Combat System', () => {
     });
 
     it('should reject attack on protected player', async () => {
-      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       const defender = await factory.createPlayer({ initialize: true });
 
-      // Give attacker some units
-      await factory.hireUnits(attacker, 3, 100);
+      // Give attacker some defensive units (used for combat)
+      await factory.hireUnits(attacker, 0, 100);
 
       // New player should be protected
       const defenderAccount = await fetchPlayer(ctx.svm, defender.playerPda);
@@ -186,10 +186,10 @@ describe('Combat System', () => {
 
     it('should reject attack on same city requirement', async () => {
       // Create players in different cities (use 3/4 to avoid collision with PvP players in city 1)
-      const attacker = await factory.createPlayer({ cityId: 3, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ cityId: 3, initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       const defender = await factory.createPlayer({ cityId: 4, initialize: true });
 
-      await factory.hireUnits(attacker, 3, 100);
+      await factory.hireUnits(attacker, 0, 100);
 
       const attackerAccount = await fetchPlayer(ctx.svm, attacker.playerPda);
       const defenderAccount = await fetchPlayer(ctx.svm, defender.playerPda);
@@ -215,8 +215,8 @@ describe('Combat System', () => {
     });
 
     it('should reject self-attack', async () => {
-      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      await factory.hireUnits(player, 3, 100);
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      await factory.hireUnits(player, 0, 100);
 
       const ix = createAttackPlayerInstruction(
         {
@@ -267,8 +267,8 @@ describe('Combat System', () => {
     it('should attack encounter successfully', async () => {
       // Use city 17 (Berlin, lat 52.5°) - high latitude ensures 1 grid cell in longitude ≈ 6.8m (within 10m attack range)
       const cityId = 17;
-      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Camp] });
-      await factory.hireUnits(player, 3, 50);
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
+      await factory.hireUnits(player, 0, 50);
       await factory.purchaseEquipment(player, 0, 25); // melee weapons
 
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
@@ -331,8 +331,8 @@ describe('Combat System', () => {
     });
 
     it('should require stamina for encounter attack', async () => {
-      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
-      await factory.hireUnits(player, 3, 50);
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      await factory.hireUnits(player, 0, 50);
 
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAccount).not.toBeNull();
@@ -344,8 +344,8 @@ describe('Combat System', () => {
     it('should grant rewards from encounter', async () => {
       // Use city 9 to avoid conflicts with other tests
       const cityId = 9;
-      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Camp] });
-      await factory.hireUnits(player, 3, 100);
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
+      await factory.hireUnits(player, 0, 100);
       await factory.purchaseEquipment(player, 0, 50);
 
       const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
@@ -822,11 +822,11 @@ describe('Combat System', () => {
 
     it('should enforce attack cooldown', async () => {
       // Players have cooldown between attacks
-      const attacker = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
+      const attacker = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       const defender1 = await factory.createPlayer({ cityId: 1, initialize: true });
       const defender2 = await factory.createPlayer({ cityId: 1, initialize: true });
 
-      await factory.hireUnits(attacker, 3, 200);
+      await factory.hireUnits(attacker, 0, 200);
 
       // Advance clock past new player protection (2s)
       await advanceTime(ctx.svm, 3);
