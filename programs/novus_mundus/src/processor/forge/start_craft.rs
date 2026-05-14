@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -22,7 +22,7 @@ use crate::{
         },
     },
     constants::PLAYER_SEED,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
 /// Start a staged tempering craft
@@ -69,8 +69,8 @@ use crate::{
 /// - [0] equipment_type: u8 (CraftableEquipment enum)
 /// - [1] quality_tier: u8 (QualityTier enum)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -84,6 +84,12 @@ pub fn process(
     require_owner(player_account, program_id)?;
     require_writable(crafted_equipment)?;
     require_owner(crafted_equipment, program_id)?;
+    // Validate CraftedEquipmentAccount PDA derivation
+    require_pda(
+        crafted_equipment,
+        &[b"crafted_equipment", owner.address().as_ref()],
+        program_id,
+    )?;
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
 
@@ -108,11 +114,11 @@ pub fn process(
 
     // 4. Phase 1: Validate and capture values (scoped borrows, dropped before CPI)
     let (player_ge, player_bump, player_name, forge_level) = {
-        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data_ref = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&player_data_ref) };
 
         // Verify ownership
-        if &player.owner != owner.key() {
+        if &player.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -131,7 +137,7 @@ pub fn process(
         let forge_level = get_forge_level(estate);
 
         // 6. Load Crafted Equipment Account (read-only check)
-        let crafted_data_ref = crafted_equipment.try_borrow_data()?;
+        let crafted_data_ref = crafted_equipment.try_borrow()?;
         let crafted = unsafe { CraftedEquipmentAccount::load(&crafted_data_ref) };
 
         // Verify ownership
@@ -171,8 +177,8 @@ pub fn process(
 
     // 12. Burn NOVI tokens (CPI - no active borrows)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
         player_token_account,
@@ -183,7 +189,7 @@ pub fn process(
     )?;
 
     // Phase 2: Update state after successful CPI (mutable borrows)
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 11. Deduct materials from player
@@ -212,7 +218,7 @@ pub fn process(
     let window_closes = window_opens + window_duration;
 
     // 14. Initialize staged craft state on CraftedEquipmentAccount
-    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
+    let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;
     let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
 
     crafted.active_craft_equipment = equipment_type as u8;
@@ -236,7 +242,7 @@ pub fn process(
         .saturating_add(legendary_cost);
 
     emit!(CraftStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         item_type: equipment_type as u8,
         quality_tier: quality_tier as u8,

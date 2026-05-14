@@ -8,9 +8,7 @@
 import BN from 'bn.js';
 import type { NoviPurchaseConfig } from '../state/game-engine';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** NOVI purchase preview result */
 export interface NoviPurchasePreview {
@@ -44,9 +42,7 @@ export interface NoviStreakResult {
   isResetting: boolean;
 }
 
-// ============================================================
 // Streak Calculations
-// ============================================================
 
 /**
  * Calculate NOVI purchase streak after a purchase.
@@ -112,9 +108,7 @@ export function getStreakBonusBps(
   return bonuses[index] ?? 0;
 }
 
-// ============================================================
 // Bonus Calculations
-// ============================================================
 
 /**
  * Calculate total bonus in basis points.
@@ -159,9 +153,7 @@ export function calculateBonusAmount(baseAmount: BN, bonusBps: number): BN {
   return baseAmount.mul(new BN(bonusBps)).div(new BN(10000));
 }
 
-// ============================================================
 // Daily Cap Calculations
-// ============================================================
 
 /**
  * Get daily cap for a subscription tier.
@@ -222,9 +214,7 @@ export function getRemainingDailyAllowance(
   return cap.sub(purchasedToday);
 }
 
-// ============================================================
 // Purchase Preview
-// ============================================================
 
 /**
  * Calculate full purchase preview.
@@ -284,9 +274,7 @@ export function calculateNoviPurchasePreview(
   };
 }
 
-// ============================================================
 // Package Helpers
-// ============================================================
 
 /** NOVI package tiers */
 export const NOVI_PACKAGE_TIERS = [
@@ -343,9 +331,7 @@ export function formatLamportsAsSol(lamports: BN | number): string {
   }) + ' SOL';
 }
 
-// ============================================================
 // Oracle Price Calculation
-// ============================================================
 
 /**
  * Calculate NOVI cost in lamports using oracle prices with undercut.

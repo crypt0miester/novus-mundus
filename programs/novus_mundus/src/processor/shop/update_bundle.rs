@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 use crate::{
     error::GameError,
@@ -34,8 +34,8 @@ pub const UPDATE_SAVINGS_BPS: u8 = 8;
 /// - available_until: i64 (if availability flag)
 /// - savings_bps: u16 (if flag set)
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -64,23 +64,23 @@ pub fn process(
 
     // 4. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // 5. Verify PDA
 
-    let (expected_pda, _) = BundleAccount::derive_pda(game_engine_account.key(), bundle_id);
-    if bundle_account.key() != &expected_pda {
+    let (expected_pda, _) = BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
+    if bundle_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 6. Load and Update Bundle
 
-    let mut bundle_data_ref = bundle_account.try_borrow_mut_data()?;
+    let mut bundle_data_ref = bundle_account.try_borrow_mut()?;
     let bundle = unsafe { BundleAccount::load_mut(&mut bundle_data_ref) };
 
     let mut offset = 5usize;

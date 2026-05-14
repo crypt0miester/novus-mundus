@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -16,7 +16,7 @@ use crate::{
     events::RallyCancelled,
 };
 
-/// Cancel a rally (NEW architecture)
+/// Cancel a rally
 ///
 /// Creator cancels the rally during Gathering phase. Sets status to Cancelled
 /// and starts the creator's return journey. Other participants must call
@@ -39,8 +39,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -66,7 +66,7 @@ pub fn process(
 
     // 4. Load and validate creator (using by_key for kingdom scoping)
     let creator = PlayerAccount::load_checked_by_key(creator_player, program_id)?;
-    if &creator.owner != creator_owner.key() {
+    if &creator.owner != creator_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -77,11 +77,11 @@ pub fn process(
 
     // 5. Load Rally and validate
     require_owner(rally_account, program_id)?;
-    let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
+    let mut rally_data_ref = rally_account.try_borrow_mut()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     // Validate creator authority
-    if &rally.creator != creator_owner.key() {
+    if &rally.creator != creator_owner.address() {
         return Err(GameError::NotRallyCreator.into());
     }
 
@@ -104,14 +104,14 @@ pub fn process(
 
     // 7. Load and update creator's RallyParticipant
     require_owner(creator_participant, program_id)?;
-    let mut participant_data_ref = creator_participant.try_borrow_mut_data()?;
+    let mut participant_data_ref = creator_participant.try_borrow_mut()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
     // Validate participant is the creator's
     if participant.rally_id != rally_id || participant.rally_creator != rally_creator {
         return Err(GameError::NotRallyParticipant.into());
     }
-    if &participant.participant != creator_owner.key() {
+    if &participant.participant != creator_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if !participant.is_leader {
@@ -160,7 +160,7 @@ pub fn process(
     //     process_return will NOT re-decrement because it checks
     //     `participant.included_in_march` which we set to false above.
     drop(participant_data_ref);
-    let mut creator_data = creator_player.try_borrow_mut_data()?;
+    let mut creator_data = creator_player.try_borrow_mut()?;
     let creator = unsafe { PlayerAccount::load_mut(&mut creator_data) };
     creator.rally_stats.current_rallies_joined = creator.rally_stats.current_rallies_joined.saturating_sub(1);
     drop(creator_data);
@@ -168,9 +168,9 @@ pub fn process(
     // Emit RallyCancelled event
     // Note: team_name not available here - would need to pass team account
     emit!(RallyCancelled {
-        rally: *rally_account.key(),
+        rally: *rally_account.address(),
         team_name: [0u8; 32], // Team name not available, lookup via rally.team
-        cancelled_by: *creator_player.key(),
+        cancelled_by: *creator_player.address(),
         timestamp: now,
     });
 

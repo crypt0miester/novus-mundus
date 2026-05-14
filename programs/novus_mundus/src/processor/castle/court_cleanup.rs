@@ -7,9 +7,9 @@
 //! accounts and returns rent to original holders.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -43,8 +43,8 @@ const PHASE_COURT: u8 = 1;
 /// 4. [writable] Rent recipient (former holder wallet)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -82,16 +82,16 @@ pub fn process(
     require_owner(court_account, program_id)?;
 
     let (expected_court_pda, _) = CourtPositionAccount::derive_pda(
-        castle_account.key(),
+        castle_account.address(),
         position,
     );
-    if court_account.key() != &expected_court_pda {
+    if court_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_initialized(court_account).map_err(|_| GameError::CourtPositionVacant)?;
 
-    let court_data = court_account.try_borrow_data()?;
+    let court_data = court_account.try_borrow()?;
     let court = unsafe { CourtPositionAccount::load(&court_data) };
 
     // Verify holder matches
@@ -99,14 +99,20 @@ pub fn process(
         return Err(GameError::CourtPositionVacant.into());
     }
 
-    if court.holder != *holder_account.key() {
+    if court.holder != *holder_account.address() {
         return Err(GameError::InvalidAccount.into());
     }
 
     // Load holder player to clear court reference
     require_owner(holder_account, program_id)?;
-    let mut holder_data = holder_account.try_borrow_mut_data()?;
+    let mut holder_data = holder_account.try_borrow_mut()?;
     let holder = unsafe { PlayerAccount::load_mut(&mut holder_data) };
+
+    // Rent recipient must be the court holder's wallet (the player
+    // who originally paid the rent for the court position account).
+    if rent_recipient.address() != &holder.owner {
+        return Err(GameError::InvalidAccount.into());
+    }
 
     // Clear court position reference in player account if they have court extension
     let holder_extensions = holder.extensions;
@@ -142,7 +148,7 @@ pub fn process(
 
     // Emit event
     emit!(CastleTransitionProgress {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         phase: PHASE_COURT,
         cleaned_count,
         total_count,

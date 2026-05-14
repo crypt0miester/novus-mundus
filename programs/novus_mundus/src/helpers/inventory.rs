@@ -3,10 +3,29 @@
 //! Provides get_or_create and auto-expand functionality for player inventory.
 //! Used by shop purchases, loot claims, and any other instruction that adds items.
 
+/// Check if item type goes to PlayerInventoryAccount instead of direct PlayerAccount fields.
+///
+/// Inventory item types:
+/// - `3`: Armor pieces (tracked individually in inventory for stat variations)
+/// - `300..=399`: Cosmetics
+/// - `1000..`: Event items
+///
+/// All other item types (weapons, consumables, materials, currencies) are stored as
+/// counters/totals directly on the PlayerAccount.
+///
+/// # Note
+/// This is the canonical source of truth shared by all shop purchase flows
+/// (`purchase_item`, `purchase_bundle`, `purchase_flash_sale`) to ensure
+/// consistent routing of fulfillment between direct-player fields and the
+/// separate PlayerInventoryAccount.
+pub fn is_inventory_item_type(item_type: u16) -> bool {
+    matches!(item_type, 3 | 300..=399 | 1000..)
+}
+
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
     ProgramResult,
 };
@@ -35,20 +54,20 @@ use crate::{
 /// # Returns
 /// Ok(()) if inventory is ready to use (created/expanded as needed)
 pub fn get_or_create_inventory(
-    program_id: &Pubkey,
-    payer: &AccountInfo,
-    owner: &Pubkey,
-    inventory_account: &AccountInfo,
-    system_program: &AccountInfo,
+    program_id: &Address,
+    payer: &AccountView,
+    owner: &Address,
+    inventory_account: &AccountView,
+    system_program: &AccountView,
 ) -> ProgramResult {
     // Verify PDA
     let (expected_pda, bump) = PlayerInventoryHeader::derive_pda(owner);
-    if inventory_account.key() != &expected_pda {
+    if inventory_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Verify system program
-    if system_program.key() != &pinocchio_system::ID {
+    if system_program.address() != &pinocchio_system::ID {
         return Err(ProgramError::IncorrectProgramId);
     }
 
@@ -78,11 +97,11 @@ pub fn get_or_create_inventory(
 /// * `item_id` - Specific item ID
 /// * `now` - Current timestamp
 pub fn add_to_inventory(
-    program_id: &Pubkey,
-    payer: &AccountInfo,
-    owner: &Pubkey,
-    inventory_account: &AccountInfo,
-    system_program: &AccountInfo,
+    program_id: &Address,
+    payer: &AccountView,
+    owner: &Address,
+    inventory_account: &AccountView,
+    system_program: &AccountView,
     item_type: u16,
     quantity: u16,
     rarity: u8,
@@ -94,7 +113,7 @@ pub fn add_to_inventory(
 
     // Try to add item
     {
-        let mut data = inventory_account.try_borrow_mut_data()?;
+        let mut data = inventory_account.try_borrow_mut()?;
         let mut inventory = unsafe { PlayerInventory::load(&mut data) };
 
         if inventory.add_item(item_type, quantity, rarity, item_id, now) {
@@ -106,7 +125,7 @@ pub fn add_to_inventory(
     expand_inventory(payer, inventory_account)?;
 
     // Retry adding item
-    let mut data = inventory_account.try_borrow_mut_data()?;
+    let mut data = inventory_account.try_borrow_mut()?;
     let mut inventory = unsafe { PlayerInventory::load(&mut data) };
 
     if inventory.add_item(item_type, quantity, rarity, item_id, now) {
@@ -119,25 +138,25 @@ pub fn add_to_inventory(
 
 /// Create a new inventory account
 fn create_inventory(
-    program_id: &Pubkey,
-    payer: &AccountInfo,
-    owner: &Pubkey,
-    inventory_account: &AccountInfo,
+    program_id: &Address,
+    payer: &AccountView,
+    owner: &Address,
+    inventory_account: &AccountView,
     bump: u8,
 ) -> ProgramResult {
     let initial_slots = PlayerInventoryHeader::INITIAL_SLOTS;
     let account_size = PlayerInventoryHeader::account_size(initial_slots);
 
     let rent = pinocchio::sysvars::rent::Rent::get()?;
-    let lamports = rent.minimum_balance(account_size);
+    let lamports = rent.try_minimum_balance(account_size)?;
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         INVENTORY_SEED,
         owner.as_ref(),
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -148,7 +167,7 @@ fn create_inventory(
     }.invoke_signed(&[signer])?;
 
     // Initialize header
-    let mut data = inventory_account.try_borrow_mut_data()?;
+    let mut data = inventory_account.try_borrow_mut()?;
     let header = unsafe { PlayerInventoryHeader::load_mut(&mut data) };
     header.owner = *owner;
     header.bump = bump;
@@ -171,11 +190,11 @@ fn create_inventory(
 
 /// Expand inventory by EXPANSION_SLOTS
 fn expand_inventory(
-    payer: &AccountInfo,
-    inventory_account: &AccountInfo,
+    payer: &AccountView,
+    inventory_account: &AccountView,
 ) -> ProgramResult {
     let current_slot_count = {
-        let data = inventory_account.try_borrow_data()?;
+        let data = inventory_account.try_borrow()?;
         let header = unsafe { PlayerInventoryHeader::load(&data) };
         header.slot_count
     };
@@ -186,8 +205,8 @@ fn expand_inventory(
     // Calculate additional rent needed
     let rent = pinocchio::sysvars::rent::Rent::get()?;
     let old_size = PlayerInventoryHeader::account_size(current_slot_count);
-    let old_lamports = rent.minimum_balance(old_size);
-    let new_lamports = rent.minimum_balance(new_size);
+    let old_lamports = rent.try_minimum_balance(old_size)?;
+    let new_lamports = rent.try_minimum_balance(new_size)?;
     let additional_lamports = new_lamports.saturating_sub(old_lamports);
 
     // Transfer additional rent
@@ -203,7 +222,7 @@ fn expand_inventory(
     inventory_account.resize(new_size)?;
 
     // Update header and zero new slots
-    let mut data = inventory_account.try_borrow_mut_data()?;
+    let mut data = inventory_account.try_borrow_mut()?;
     let header = unsafe { PlayerInventoryHeader::load_mut(&mut data) };
     header.slot_count = new_slot_count;
 

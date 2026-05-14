@@ -1,6 +1,6 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    program_error::ProgramError,
+    Address,
+    error::ProgramError,
 };
 use crate::constants::HERO_TEMPLATE_SEED;
 use crate::logic::safe_math::exp_growth;
@@ -162,22 +162,22 @@ impl HeroTemplate {
     }
 
     /// Derive the PDA for a hero template account
-    pub fn derive_pda(template_id: u16) -> (Pubkey, u8) {
+    pub fn derive_pda(template_id: u16) -> (Address, u8) {
         let template_id_bytes = template_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[HERO_TEMPLATE_SEED, &template_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(template_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(template_id: u16, bump: u8) -> Result<Address, ProgramError> {
         let template_id_bytes = template_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 
@@ -318,9 +318,7 @@ pub fn calculate_weighted_power_for_level(level: u32, template: &HeroTemplate) -
     }
 }
 
-// ============================================================
 // Location Synergy System
-// ============================================================
 
 /// Hero tier for location bonus calculation
 /// Determines the percentage bonus (2-10%) when hero is in their home city

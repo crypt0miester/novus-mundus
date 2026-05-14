@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -62,8 +62,8 @@ use crate::{
 /// # Instruction Data
 /// None (always levels up by 1)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -77,11 +77,11 @@ pub fn process(
     require_writable(hero_mint)?;
 
     // 3. Load player account
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // 4. SAFETY: Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -97,13 +97,13 @@ pub fn process(
 
     // 5. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
-    let nft_data = hero_mint.try_borrow_data()?;
+    let nft_data = hero_mint.try_borrow()?;
     let parsed_hero = parse_hero_nft(&nft_data)
         .ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 6. Load template (read-only)
-    let template_data = hero_template.try_borrow_data()?;
+    let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     // 7. SAFETY: Verify template matches hero
@@ -119,13 +119,13 @@ pub fn process(
 
     // 8. SAFETY: Verify hero ownership
     // Hero must be either in player's wallet or locked in player's active_heroes
-    let is_locked = player.active_heroes.iter().any(|&mint| mint == *hero_mint.key());
+    let is_locked = player.active_heroes.iter().any(|&mint| mint == *hero_mint.address());
 
     // If not locked, verify NFT is owned by the signer
     if !is_locked {
-        let nft_data = hero_mint.try_borrow_data()?;
-        let asset = unsafe { p_core::state::AssetV1::load(&nft_data) };
-        if asset.owner != *owner.key() {
+        let nft_data = hero_mint.try_borrow()?;
+        let asset = p_core::state::AssetV1::from_borsh(&nft_data);
+        if asset.owner != *owner.address().as_array() {
             return Err(GameError::Unauthorized.into());
         }
         drop(nft_data);
@@ -168,11 +168,11 @@ pub fn process(
     drop(player_data);
 
     // 16. Update NFT metadata with all attributes using p-core UpdatePluginV1
-    let game_engine_data = game_engine.try_borrow_data()?;
-    let ge = unsafe { crate::state::GameEngine::load(&game_engine_data) };
-    let ge_bump = ge.bump;
-    let kingdom_id_bytes = ge.kingdom_id.to_le_bytes();
-    drop(game_engine_data);
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let (ge_bump, kingdom_id_bytes) = {
+        let ge = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
+        (ge.bump, ge.kingdom_id.to_le_bytes())
+    };
 
     // Build NFT attributes from context
     let mut buffers = HeroNftBuffers::new();
@@ -181,8 +181,8 @@ pub fn process(
 
     // Derive game_engine PDA signer
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
-    let ge_signer = pinocchio::instruction::Signer::from(&game_engine_seeds);
+    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     // Update all NFT attributes
     p_core::instructions::UpdatePluginV1 {
@@ -200,9 +200,9 @@ pub fn process(
     // 17. Emit HeroLeveledUp event
     let clock = Clock::get()?;
     emit!(HeroLeveledUp {
-        hero_mint: *hero_mint.key(),
+        hero_mint: *hero_mint.address(),
         hero_name,
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         old_level,
         new_level,

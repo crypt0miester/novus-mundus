@@ -1,18 +1,18 @@
 /// Travel events - intercity and intracity movement
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player starts traveling between cities
 pub struct IntercityTravelStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Origin city
-    pub from_city: Pubkey,
+    pub from_city: Address,
     /// Destination city
-    pub to_city: Pubkey,
+    pub to_city: Address,
     /// Estimated arrival timestamp
     pub arrival_at: i64,
     /// Unix timestamp
@@ -37,11 +37,11 @@ impl Event for IntercityTravelStarted {
 /// Emitted when a player completes intercity travel
 pub struct IntercityTravelCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// City arrived at
-    pub city: Pubkey,
+    pub city: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -62,13 +62,13 @@ impl Event for IntercityTravelCompleted {
 /// Emitted when a player teleports instantly
 pub struct PlayerTeleported {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Origin city
-    pub from_city: Pubkey,
+    pub from_city: Address,
     /// Destination city
-    pub to_city: Pubkey,
+    pub to_city: Address,
     /// Gems spent on teleport
     pub gems_spent: u64,
     /// Unix timestamp
@@ -93,11 +93,11 @@ impl Event for PlayerTeleported {
 /// Emitted when a player starts moving within a city
 pub struct IntracityTravelStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// City pubkey
-    pub city: Pubkey,
+    pub city: Address,
     /// Destination X coordinate
     pub dest_x: i32,
     /// Destination Y coordinate
@@ -127,7 +127,7 @@ impl Event for IntracityTravelStarted {
 /// Emitted when intracity travel completes
 pub struct IntracityTravelCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Final X coordinate
@@ -155,7 +155,7 @@ impl Event for IntracityTravelCompleted {
 /// Emitted when travel is cancelled
 pub struct TravelCancelled {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Whether this was intercity travel
@@ -183,7 +183,7 @@ impl Event for TravelCancelled {
 /// Emitted when a player speeds up travel
 pub struct TravelSpeedup {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Whether this was intercity travel

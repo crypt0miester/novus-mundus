@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use pinocchio_system::instructions::{CreateAccount, Transfer};
@@ -12,6 +12,7 @@ use crate::{
     helpers::{
         add_to_inventory,
         estate::{market_discount_bps, load_estate_for_player, require_market},
+        is_inventory_item_type,
         process_token_payment_flow,
     },
     state::{
@@ -71,8 +72,8 @@ pub const DISCOUNT_WEEKLY_SALE: u8 = 2;
 /// - daily_deal_slot: u8 (if daily_deal flag, slot index 0-2)
 /// - weekly_sale_week: u64 (if weekly_sale flag, week number)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -121,7 +122,7 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify treasury matches
-    if treasury.key() != &game_engine.treasury_wallet {
+    if treasury.address() != &game_engine.treasury_wallet {
         return Err(GameError::InvalidTreasury.into());
     }
 
@@ -132,12 +133,12 @@ pub fn process(
 
     // 5. Load Shop Config
     require_owner(shop_config_account, program_id)?;
-    let shop_config_data_ref = shop_config_account.try_borrow_data()?;
+    let shop_config_data_ref = shop_config_account.try_borrow()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
 
     // 6. Load and Validate Shop Item
     require_owner(shop_item_account, program_id)?;
-    let mut shop_item_data_ref = shop_item_account.try_borrow_mut_data()?;
+    let mut shop_item_data_ref = shop_item_account.try_borrow_mut()?;
     let shop_item = unsafe { ShopItemAccount::load_mut(&mut shop_item_data_ref) };
 
     // Check item is active
@@ -185,14 +186,14 @@ pub fn process(
     // 8. Check extensions and unlock INVENTORY before loading player mutably
     // (must be done before load_checked_mut to avoid borrow conflicts with resize)
     {
-        let data = player_account.try_borrow_data()?;
+        let data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&data) };
         require_extension(player, EXT_RESEARCH)?;
     }
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
     // 9. Load Player and Calculate Discounts (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
 
     // Calculate subscription discount (using effective tier to handle expiration)
     let effective_tier = player.get_effective_tier(now);
@@ -211,7 +212,8 @@ pub fn process(
     let base_discount_bps = calculate_optional_discounts(
         instruction_data,
         &accounts[10..], // Optional accounts start after estate_account
-        game_engine_account.key(),
+        game_engine_account.address(),
+        program_id,
         item_id,
         shop_item.category,
         now,
@@ -252,25 +254,24 @@ pub fn process(
         // Check if player_purchase account exists or needs creation
         let player_purchase_data_len = player_purchase_account.data_len();
 
-        let (expected_pda, pp_bump) = PlayerPurchaseAccount::derive_pda(buyer.key(), item_id);
+        let (expected_pda, pp_bump) = PlayerPurchaseAccount::derive_pda(buyer.address(), item_id);
 
-        if player_purchase_account.key() != &expected_pda {
+        if player_purchase_account.address() != &expected_pda {
             return Err(GameError::InvalidPDA.into());
         }
         if player_purchase_data_len == 0 {
             // Create the account
-            let lamports = pinocchio::sysvars::rent::Rent::get()?
-                .minimum_balance(PlayerPurchaseAccount::LEN);
+            let lamports = crate::utils::rent_exempt_const(PlayerPurchaseAccount::LEN);
 
             let item_id_bytes = item_id.to_le_bytes();
             let bump_seed = [pp_bump];
-            let seeds = pinocchio::seeds!(
+            let seeds = crate::seeds!(
                 PLAYER_PURCHASE_SEED,
-                buyer.key().as_ref(),
+                buyer.address(),
                 &item_id_bytes,
                 &bump_seed
             );
-            let signer = pinocchio::instruction::Signer::from(&seeds);
+            let signer = pinocchio::cpi::Signer::from(&seeds);
 
             CreateAccount {
                 from: buyer,
@@ -281,7 +282,7 @@ pub fn process(
             }.invoke_signed(&[signer])?;
 
             // Initialize
-            let mut pp_data_ref = player_purchase_account.try_borrow_mut_data()?;
+            let mut pp_data_ref = player_purchase_account.try_borrow_mut()?;
             let pp = unsafe { PlayerPurchaseAccount::load_mut(&mut pp_data_ref) };
             pp.account_key = crate::state::AccountKey::PlayerPurchase as u8;
             pp.lifetime_purchased = 0;
@@ -292,7 +293,7 @@ pub fn process(
         }
 
         // Now validate limits
-        let mut pp_data_ref = player_purchase_account.try_borrow_mut_data()?;
+        let mut pp_data_ref = player_purchase_account.try_borrow_mut()?;
         let pp = unsafe { PlayerPurchaseAccount::load_mut(&mut pp_data_ref) };
 
         // Reset daily counter if needed
@@ -337,7 +338,7 @@ pub fn process(
         // Use unified token payment helper
         process_token_payment_flow(
             &accounts[token_offset..],
-            game_engine_account.key(),
+            game_engine_account.address(),
             program_id,
             shop_config,
             buyer,
@@ -359,7 +360,7 @@ pub fn process(
             add_to_inventory(
                 program_id,
                 buyer,
-                buyer.key(),
+                buyer.address(),
                 inventory_account,
                 system_program,
                 shop_item.item_type,
@@ -420,7 +421,7 @@ pub fn process(
 
     // Emit event
     emit!(ItemPurchased {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         item_id,
         quantity: quantity as u16,
@@ -432,9 +433,7 @@ pub fn process(
     Ok(())
 }
 
-// ============================================================
 // HELPER FUNCTIONS
-// ============================================================
 
 fn calculate_milestone_discount(total_spent: u64, config: &ShopConfigAccount) -> u16 {
     if total_spent >= config.diamond_threshold {
@@ -544,11 +543,6 @@ fn calculate_final_price(
     price.max(min_price)
 }
 
-/// Check if item type goes to PlayerInventoryAccount instead of direct PlayerAccount fields
-fn is_inventory_item_type(item_type: u16) -> bool {
-    matches!(item_type, 3 | 300..=399 | 1000..)
-}
-
 fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> ProgramResult {
     // Item type ranges (from architecture doc):
     // 0-99: Equipment (except 3=armor which goes to inventory)
@@ -609,8 +603,9 @@ fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> Prog
 /// from the provided optional accounts.
 fn calculate_optional_discounts(
     instruction_data: &[u8],
-    optional_accounts: &[AccountInfo],
-    game_engine_key: &Pubkey,
+    optional_accounts: &[AccountView],
+    game_engine_key: &Address,
+    program_id: &Address,
     item_id: u32,
     item_category: u8,
     now: i64,
@@ -636,6 +631,7 @@ fn calculate_optional_discounts(
             &mut data_offset,
             optional_accounts.get(account_idx),
             game_engine_key,
+            program_id,
             item_id,
             now,
         ) {
@@ -651,6 +647,7 @@ fn calculate_optional_discounts(
             &mut data_offset,
             optional_accounts.get(account_idx),
             game_engine_key,
+            program_id,
             item_category,
             now,
         ) {
@@ -666,8 +663,9 @@ fn calculate_optional_discounts(
 fn check_daily_deal(
     instruction_data: &[u8],
     data_offset: &mut usize,
-    daily_deal_account: Option<&AccountInfo>,
-    game_engine_key: &Pubkey,
+    daily_deal_account: Option<&AccountView>,
+    game_engine_key: &Address,
+    program_id: &Address,
     item_id: u32,
     now: i64,
 ) -> Option<u16> {
@@ -680,14 +678,18 @@ fn check_daily_deal(
 
     let account = daily_deal_account?;
 
+    // Verify program ownership — caller passes the account, so spoofing with a
+    // fake account that mimics the PDA layout would otherwise bypass the gate.
+    require_owner(account, program_id).ok()?;
+
     // Verify PDA
     let (expected_pda, _) = DailyDealAccount::derive_pda(game_engine_key, slot_index);
-    if account.key() != &expected_pda {
+    if account.address() != &expected_pda {
         return None;
     }
 
     // Load and validate
-    let data = account.try_borrow_data().ok()?;
+    let data = account.try_borrow().ok()?;
     let daily_deal = unsafe { DailyDealAccount::load(&data) };
 
     // Check item matches
@@ -695,9 +697,13 @@ fn check_daily_deal(
         return None;
     }
 
-    // Check deal is active (started within last 24 hours)
+    // Check deal is active (started within last 24 hours).
+    // Also reject zero/future start (uninitialized or clock-skew abuse).
     let day_seconds = 86400i64;
-    if now < daily_deal.started_at || now > daily_deal.started_at + day_seconds {
+    if daily_deal.started_at <= 0 || daily_deal.started_at > now {
+        return None;
+    }
+    if now > daily_deal.started_at + day_seconds {
         return None;
     }
 
@@ -707,8 +713,9 @@ fn check_daily_deal(
 fn check_weekly_sale(
     instruction_data: &[u8],
     data_offset: &mut usize,
-    weekly_sale_account: Option<&AccountInfo>,
-    game_engine_key: &Pubkey,
+    weekly_sale_account: Option<&AccountView>,
+    game_engine_key: &Address,
+    program_id: &Address,
     item_category: u8,
     now: i64,
 ) -> Option<u16> {
@@ -723,18 +730,26 @@ fn check_weekly_sale(
 
     let account = weekly_sale_account?;
 
+    // Verify program ownership — see check_daily_deal note.
+    require_owner(account, program_id).ok()?;
+
     // Verify PDA
     let (expected_pda, _) = WeeklySaleAccount::derive_pda(game_engine_key, week_number);
-    if account.key() != &expected_pda {
+    if account.address() != &expected_pda {
         return None;
     }
 
     // Load and validate
-    let data = account.try_borrow_data().ok()?;
+    let data = account.try_borrow().ok()?;
     let weekly_sale = unsafe { WeeklySaleAccount::load(&data) };
 
+    // Reject uninitialized / future-dated sales.
+    if weekly_sale.starts_at <= 0 || weekly_sale.starts_at > now {
+        return None;
+    }
+
     // Check sale is active
-    if now < weekly_sale.starts_at || now > weekly_sale.ends_at {
+    if now > weekly_sale.ends_at {
         return None;
     }
 

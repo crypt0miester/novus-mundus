@@ -28,9 +28,7 @@ import {
   OP3_POWER_COST,
 } from './constants';
 
-// ============================================================
 // Weapon Set
-// ============================================================
 
 /** A set of weapons (melee, ranged, siege) */
 export interface WeaponSet {
@@ -61,9 +59,7 @@ export function weaponSetApplyRate(set: WeaponSet, rateBps: number): WeaponSet {
   };
 }
 
-// ============================================================
 // Combat Weapon Result
-// ============================================================
 
 /** Result of weapon combat resolution */
 export interface CombatWeaponResult {
@@ -77,9 +73,7 @@ export interface CombatWeaponResult {
   attackerWon: boolean;
 }
 
-// ============================================================
 // Combat Resolution Functions
-// ============================================================
 
 /**
  * Resolve weapon outcomes from combat.
@@ -230,9 +224,7 @@ export function resolveWeaponCombat(
   }
 }
 
-// ============================================================
 // Damage Calculations
-// ============================================================
 
 /**
  * Calculate total damage output (Deterministic System).
@@ -396,9 +388,7 @@ export function inflictDamage(
   ];
 }
 
-// ============================================================
 // Infirmary Recovery
-// ============================================================
 
 /**
  * Calculate infirmary passive recovery (reduces unit losses in combat).
@@ -418,9 +408,7 @@ export function calculateInfirmaryRecovery(
   return Math.floor((unitsLost * infirmaryRecoveryBps) / 10000);
 }
 
-// ============================================================
 // Happiness and Abandonment
-// ============================================================
 
 /**
  * Calculate unit abandonment based on happiness (Deterministic).
@@ -502,9 +490,7 @@ export function updateHappinessOperative(sumOfUnits: number, produce: number): n
   return Math.min(1.0, Math.round(foodCoeff));
 }
 
-// ============================================================
 // Power Calculations
-// ============================================================
 
 /**
  * Calculate total power from units.

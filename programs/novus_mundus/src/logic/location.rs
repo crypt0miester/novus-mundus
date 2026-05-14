@@ -1,7 +1,7 @@
 /// Location and travel mechanics (pure logic)
 ///
 /// All functions in this module are framework-agnostic and operate
-/// on primitives only. No AccountInfo references.
+/// on primitives only. No AccountView references.
 
 /// Earth radius in kilometers for Haversine formula
 pub const EARTH_RADIUS_KM: f64 = 6371.0;

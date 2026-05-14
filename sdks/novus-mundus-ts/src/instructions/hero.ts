@@ -26,9 +26,7 @@ import {
   deriveEstatePda,
 } from '../pda';
 
-// ============================================================
 // Create Template (Admin)
-// ============================================================
 
 /** Buff configuration for hero templates */
 export interface BuffConfig {
@@ -160,9 +158,7 @@ export function createCreateTemplateInstruction(
   });
 }
 
-// ============================================================
 // Create Collection (Admin)
-// ============================================================
 
 export interface CreateCollectionAccounts {
   /** DAO authority (signer, pays for account creation) */
@@ -210,9 +206,7 @@ export function createCreateCollectionInstruction(
   });
 }
 
-// ============================================================
 // Mint Hero
-// ============================================================
 
 export interface MintHeroAccounts {
   /** Minter's wallet (signer) */
@@ -289,9 +283,7 @@ export function createMintHeroInstruction(
   });
 }
 
-// ============================================================
 // Lock Hero
-// ============================================================
 
 export interface LockHeroAccounts {
   /** Hero owner's wallet (signer) */
@@ -363,9 +355,7 @@ export function createLockHeroInstruction(
   });
 }
 
-// ============================================================
 // Unlock Hero
-// ============================================================
 
 export interface UnlockHeroAccounts {
   /** Hero owner's wallet (signer) */
@@ -436,9 +426,7 @@ export function createUnlockHeroInstruction(
   });
 }
 
-// ============================================================
 // Level Up Hero
-// ============================================================
 
 export interface LevelUpHeroAccounts {
   /** Hero owner's wallet (signer) */
@@ -512,9 +500,7 @@ export function createLevelUpHeroInstruction(
   });
 }
 
-// ============================================================
 // Assign Defensive Hero
-// ============================================================
 
 export interface AssignDefensiveHeroAccounts {
   /** Hero owner's wallet (signer) */
@@ -566,9 +552,7 @@ export function createAssignDefensiveHeroInstruction(
   });
 }
 
-// ============================================================
 // Burn Hero
-// ============================================================
 
 export interface BurnHeroAccounts {
   /** Hero owner's wallet (signer) */
@@ -639,9 +623,7 @@ export function createBurnHeroInstruction(
   });
 }
 
-// ============================================================
 // Update Supply Cap (DAO Only)
-// ============================================================
 
 export interface UpdateSupplyCapAccounts {
   /** DAO authority (signer) */

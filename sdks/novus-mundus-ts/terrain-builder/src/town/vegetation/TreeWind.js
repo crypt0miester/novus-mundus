@@ -7,9 +7,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_TREES_PER_TYPE = 500;
 const POISSON_MAX_ATTEMPTS = 30;
@@ -66,9 +64,7 @@ const TREE_TYPES = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // Seeded RNG
-// ---------------------------------------------------------------------------
 
 function makeRng(seed) {
   let s = seed | 0;
@@ -78,9 +74,7 @@ function makeRng(seed) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Geometry builders
-// ---------------------------------------------------------------------------
 
 /**
  * Create trunk geometry: tapered cylinder.
@@ -133,9 +127,7 @@ function createBranchGeometry() {
   return new THREE.BoxGeometry(0.003, 0.04, 0.003);
 }
 
-// ---------------------------------------------------------------------------
 // Shader materials
-// ---------------------------------------------------------------------------
 
 /**
  * Trunk shader — gentle primary sway only.
@@ -413,9 +405,7 @@ function createBranchMaterial(color) {
   });
 }
 
-// ---------------------------------------------------------------------------
 // Poisson disk sampling (simplified for tree scatter)
-// ---------------------------------------------------------------------------
 
 function poissonDiskSampleTrees(bounds, radius, maxPoints, isValid, rng) {
   const cellSize = radius / Math.SQRT2;
@@ -496,9 +486,7 @@ function poissonDiskSampleTrees(bounds, radius, maxPoints, isValid, rng) {
   return points;
 }
 
-// ---------------------------------------------------------------------------
 // TreeWindSystem class
-// ---------------------------------------------------------------------------
 
 export class TreeWindSystem {
   /**

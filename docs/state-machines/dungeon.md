@@ -172,10 +172,10 @@ The Dungeon system provides roguelike PvE content where players descend through 
 
 | Theme | Ability | Effect |
 |-------|---------|--------|
-| Crypts | Undead Summon | Spawns minions |
-| Caverns | Beast Roar | Damage over time |
-| Abyss | Demon Corruption | Debuff player |
-| Forge | Iron Shell | Shield that absorbs damage |
+| RadiantWeakness | Lifesteal aura | Boss heals from damage dealt |
+| FastMobs | Defense pierce | Ignores player defense for N attacks |
+| DarknessVulnerable | Darkness amp | x3 darkness effects when active |
+| ArmoredMobs | Iron shell | Shield that absorbs damage |
 
 ### Boss State Flow
 
@@ -425,7 +425,7 @@ reward_penalty = effective_darkness / 100  // % reduction
 Warrior:  attack_power *= 1.20 (2000 bps bonus)
 Guardian: attack_power *= 0.85 (-1500 bps)
 Scout:    no modifier
-Mystic:   no modifier
+Tactician: no modifier
 ```
 
 ### Defense Phase Modifiers
@@ -434,7 +434,7 @@ Mystic:   no modifier
 Warrior:  healing *= 0.90 (-10%)
 Guardian: survival *= 1.25 (+2500 bps)
 Scout:    no modifier
-Mystic:   no modifier
+Tactician: no modifier
 ```
 
 ### Relic Effect Modifiers
@@ -443,7 +443,7 @@ Mystic:   no modifier
 Warrior:  no modifier
 Guardian: no modifier
 Scout:    loot_bonus *= 1.15 (+1500 bps)
-Mystic:   relic_effects *= 1.30 (+3000 bps)
+Tactician: relic_effects *= 1.30 (+3000 bps)
 ```
 
 ---

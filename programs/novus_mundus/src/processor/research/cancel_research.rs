@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -10,6 +10,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, ResearchProgress, ResearchTemplate, require_extension, EXT_RESEARCH},
     validation::{
+        require_owner,
         require_signer,
         require_writable,
     },
@@ -31,8 +32,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -43,23 +44,27 @@ pub fn process(
     // 2. Validate accounts
     require_signer(player_owner)?;
     require_writable(research_progress)?;
+    // Guard the unsafe ResearchTemplate::load below: if a caller passed an
+    // account not owned by this program, the cast would read attacker-controlled
+    // bytes as a ResearchTemplate.
+    require_owner(research_template, program_id)?;
 
     // 3. Load accounts
-    let player_data = player_account.try_borrow_data()?;
+    let player_data = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data) };
 
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
+    let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
-    let template_data = research_template.try_borrow_data()?;
+    let template_data = research_template.try_borrow()?;
     let template = unsafe { ResearchTemplate::load(&template_data) };
 
     // 4. Verify ownership
-    if !player.is_owner(player_owner.key()) {
+    if !player.is_owner(player_owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
-    if &progress.player != player_owner.key() {
+    if &progress.player != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -89,7 +94,7 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
     emit!(ResearchCancelled {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         research_id: research_id as u16,
         timestamp: now,

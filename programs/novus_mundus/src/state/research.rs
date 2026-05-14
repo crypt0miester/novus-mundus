@@ -1,6 +1,6 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    program_error::ProgramError,
+    Address,
+    error::ProgramError,
 };
 use crate::constants::{RESEARCH_SEED, RESEARCH_TEMPLATE_SEED};
 use crate::logic::safe_math::exp_growth;
@@ -94,20 +94,20 @@ impl ResearchTemplate {
     }
 
     /// Derive the PDA for a research template account
-    pub fn derive_pda(research_type: u8) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(research_type: u8) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[RESEARCH_TEMPLATE_SEED, &[research_type]],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(research_type: u8, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(research_type: u8, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[RESEARCH_TEMPLATE_SEED, &[research_type], &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Calculate NOVI cost for a specific level (no u128!)
@@ -152,7 +152,7 @@ pub struct ResearchProgress {
     /// Account discriminator (AccountKey::ResearchProgress)
     pub account_key: u8,
 
-    pub player: Pubkey,                    // Owner
+    pub player: Address,                    // Owner
     pub current_research: u8,              // Active research type (255 = none)
     pub current_level: u8,                 // Current level being researched
     pub started_at: i64,                   // Unix timestamp research started
@@ -203,7 +203,7 @@ impl ResearchProgress {
     }
 
     /// Initialize with default values
-    pub fn init(player: Pubkey, bump: u8) -> Self {
+    pub fn init(player: Address, bump: u8) -> Self {
         Self {
             account_key: crate::state::AccountKey::ResearchProgress as u8,
             player,
@@ -269,9 +269,7 @@ impl ResearchProgress {
         prereq_level >= template.prerequisite_level
     }
 
-    // ============================================================
     // Ascension System
-    // ============================================================
 
     /// Check if a research node is ascended
     pub fn is_ascended(&self, research_type: u8) -> bool {
@@ -370,19 +368,19 @@ impl ResearchProgress {
     }
 
     /// Derive the PDA for a research progress account
-    pub fn derive_pda(player: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(player: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[RESEARCH_SEED, player.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(player: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[RESEARCH_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }

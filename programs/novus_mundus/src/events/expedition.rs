@@ -1,12 +1,12 @@
 /// Expedition events - mining, fishing, gathering
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when an expedition starts
 pub struct ExpeditionStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Expedition type (0=mining, 1=fishing, etc.)
@@ -37,7 +37,7 @@ impl Event for ExpeditionStarted {
 /// Emitted when an expedition action/strike occurs
 pub struct ExpeditionStrike {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Strike number
@@ -68,7 +68,7 @@ impl Event for ExpeditionStrike {
 /// Emitted when expedition rewards are claimed
 pub struct ExpeditionClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Expedition type
@@ -102,7 +102,7 @@ impl Event for ExpeditionClaimed {
 /// Emitted when an expedition is aborted early
 pub struct ExpeditionAborted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Expedition type
@@ -130,7 +130,7 @@ impl Event for ExpeditionAborted {
 /// Emitted when an expedition is sped up using gems
 pub struct ExpeditionSpeedup {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Seconds reduced from remaining time

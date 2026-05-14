@@ -31,9 +31,7 @@ describe('Terrain', () => {
     await afterAllTests();
   });
 
-  // ============================================================
   // set_terrain (instruction 7)
-  // ============================================================
 
   describe('set_terrain', () => {
     const TEST_CITY_ID = 0; // New York — already initialized by setup
@@ -157,9 +155,7 @@ describe('Terrain', () => {
     });
   });
 
-  // ============================================================
   // append_terrain (instruction 8)
-  // ============================================================
 
   describe('append_terrain', () => {
     const TEST_CITY_ID = 1; // Los Angeles

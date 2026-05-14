@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -72,8 +72,8 @@ use crate::{
 /// - novi_amount: u64 (8 bytes) - Amount of locked Novi to consume
 /// - collection_type: u8 (1 byte) - 0=Cash, 1=Mining, 2=Fishing
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
@@ -105,8 +105,8 @@ pub fn process(
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     // 5. Load and verify player/user accounts (PDA + ownership + bump in one call)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
-    let _user_data = UserAccount::load_checked_mut(user, owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
+    let _user_data = UserAccount::load_checked_mut(user, owner.address(), program_id)?;
 
     // Validate player not traveling (can't collect while traveling)
     if player_data.is_traveling_any() {
@@ -299,7 +299,7 @@ pub fn process(
         };
         if let Some(idx) = city_idx {
             let city_acc = &accounts[idx];
-            if city_acc.owner() == program_id && city_acc.data_len() >= CityAccount::SIZE {
+            if unsafe { city_acc.owner() } == program_id && city_acc.data_len() >= CityAccount::SIZE {
                 let city_data = unsafe { CityAccount::load(city_acc)? };
                 // Validate city matches player's current city
                 if city_data.city_id == player_data.current_city {
@@ -411,8 +411,8 @@ pub fn process(
     drop(player_data); // Release RefMut so player can be passed to CPI
 
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key(), owner.key(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     crate::helpers::burn_tokens(
         player_token_account,
@@ -423,7 +423,7 @@ pub fn process(
     )?;
 
     // Re-load player data after CPI (mutations from before drop are preserved in buffer)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
 
     // 12. Transfer resources based on collection type
     // (clock already obtained above for time-of-day calculation)
@@ -582,7 +582,7 @@ pub fn process(
 
     // Emit XP gained event
     emit!(XpGained {
-        player: *player.key(),
+        player: *player.address(),
         player_name: player_data.name,
         amount: xp_amount,
         source: 1, // 1=collection
@@ -593,7 +593,7 @@ pub fn process(
     // Emit level up event if player leveled
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
-            player: *player.key(),
+            player: *player.address(),
             player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
@@ -609,22 +609,22 @@ pub fn process(
         // Load event participation with ownership validation (kingdom-scoped)
         let mut participation = crate::state::EventParticipation::load_checked_mut(
             event_participation,
-            game_engine.key(),
+            game_engine.address(),
             player_data.current_event,
-            owner.key(),
+            owner.address(),
             program_id,
         )?;
 
         // Load event with ownership validation (kingdom-scoped)
         let mut event_data = crate::state::EventAccount::load_checked_mut(
             event,
-            game_engine.key(),
+            game_engine.address(),
             player_data.current_event,
             program_id,
         )?;
 
-        let player_key = owner.key();
-        let event_key = event.key();
+        let player_key = owner.address();
+        let event_key = event.address();
 
         // DETERMINISTIC: Use exact resource value (no randomness)
         // MostResourcesCollected: Add resources collected (deterministic)
@@ -669,7 +669,13 @@ pub fn process(
     // Calculate gems and fragments earned for event
     let (gems_earned, fragments_earned) = match collection_type {
         CollectionType::Mining => {
-            let gems = total_resources_collected as u32;
+            // NOTE: `gems` is reported through the local u32 path here for
+            // event-internal accounting (saturating cast). The emitted
+            // `ResourcesCollected.gems_earned` field is u64 and receives the
+            // widened value below, so no precision is lost on-chain — only
+            // the intermediate event-scoring counter saturates if a single
+            // mining session ever collects more than u32::MAX resources.
+            let gems = total_resources_collected.min(u32::MAX as u64) as u32;
             let frags = if player_data.has_fragment_drops { 2u16 } else { 0 };
             (gems, frags)
         },
@@ -686,7 +692,7 @@ pub fn process(
 
     // Emit ResourcesCollected event
     emit!(ResourcesCollected {
-        player: *player.key(),
+        player: *player.address(),
         player_name: player_data.name,
         collection_type: collection_type as u8,
         novi_consumed: novi_amount,

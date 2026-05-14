@@ -26,21 +26,64 @@ impl CollectionV1 {
     /// The fixed size of a CollectionV1 account in bytes
     pub const LEN: usize = 1 // Key discriminator
         + 33 // UpdateAuthority (1 byte discriminator + 32 bytes pubkey)
-        + MAX_NAME_LEN // Name array
         + 4 // Name length
-        + MAX_URI_LEN // URI array
         + 4 // URI length
         + 4 // num_minted
         + 4; // current_size
 
-    /// Load a CollectionV1 from account data
-    pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
-    }
+    /// Parse a CollectionV1 from Borsh-encoded account data (mainnet MPL Core format).
+    ///
+    /// Borsh layout: key(1) + update_authority(32) + name(4+N) + uri(4+M) + num_minted(4) + current_size(4)
+    /// Total = 49 + len(name) + len(uri)
+    pub fn from_borsh(data: &[u8]) -> Self {
+        let key = Key::from(data[0]);
 
-    /// Load a mutable CollectionV1 from account data
-    pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
+        // update_authority is a plain 32-byte Pubkey in CollectionV1 (no discriminant)
+        let mut ua_key = [0u8; 32];
+        ua_key.copy_from_slice(&data[1..33]);
+        let update_authority = UpdateAuthority::Address(ua_key);
+
+        let mut offset = 33;
+
+        // name: Borsh string (4-byte LE length prefix + data)
+        let name_len = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]) as usize;
+        offset += 4;
+        let mut name = [0u8; MAX_NAME_LEN];
+        let copy_len = name_len.min(MAX_NAME_LEN);
+        name[..copy_len].copy_from_slice(&data[offset..offset + copy_len]);
+        offset += name_len;
+
+        // uri: Borsh string
+        let uri_len = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]) as usize;
+        offset += 4;
+        let mut uri = [0u8; MAX_URI_LEN];
+        let uri_copy_len = uri_len.min(MAX_URI_LEN);
+        uri[..uri_copy_len].copy_from_slice(&data[offset..offset + uri_copy_len]);
+        offset += uri_len;
+
+        // num_minted + current_size
+        let num_minted = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]);
+        offset += 4;
+        let current_size = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]);
+
+        Self {
+            key,
+            update_authority,
+            name,
+            name_len: name_len as u32,
+            uri,
+            uri_len: uri_len as u32,
+            num_minted,
+            current_size,
+        }
     }
 
     /// Create a new CollectionV1
@@ -76,13 +119,13 @@ impl CollectionV1 {
 
     /// Get the name as a slice
     pub fn get_name(&self) -> &[u8] {
-        let len = (self.name_len as usize).min(MAX_NAME_LEN);
+        let len = self.name_len as usize;
         &self.name[..len]
     }
 
     /// Get the URI as a slice
     pub fn get_uri(&self) -> &[u8] {
-        let len = (self.uri_len as usize).min(MAX_URI_LEN);
+        let len = self.uri_len as usize;
         &self.uri[..len]
     }
 

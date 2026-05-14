@@ -10,9 +10,7 @@ import BN from 'bn.js';
 import { createHash } from 'crypto';
 import type { NovusMundusEvent } from './types';
 
-// ============================================================
 // Discriminator Computation
-// ============================================================
 
 /**
  * Compute 8-byte discriminator from event name.
@@ -30,9 +28,7 @@ export function discriminatorToHex(disc: Uint8Array): string {
   return Array.from(disc).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ============================================================
 // Event Discriminator Map
-// ============================================================
 
 /** Helper to create a discriminator entry */
 const d = (name: string): [string, string] => [discriminatorToHex(computeEventDiscriminator(name)), name];
@@ -231,9 +227,7 @@ export const EVENT_DISCRIMINATORS: Map<string, string> = new Map([
   d('KingdomCitiesInitialized'),
 ]);
 
-// ============================================================
 // Event Buffer Reader
-// ============================================================
 
 /** Reader for sequential byte reads from a buffer */
 export class EventBufferReader {
@@ -354,9 +348,7 @@ export class EventBufferReader {
   }
 }
 
-// ============================================================
 // Event Parsers
-// ============================================================
 
 type EventParser = (reader: EventBufferReader) => Record<string, unknown>;
 
@@ -917,10 +909,7 @@ EVENT_PARSERS.set('EncounterSpawned', (r) => ({
 EVENT_PARSERS.set('DailyRewardClaimed', (r) => ({
   player: r.readPubkey(),
   playerName: r.readName48(),
-  day: r.readU16(),
   cash: r.readU64(),
-  gems: r.readU32(),
-  bonusType: r.readU8(),
   timestamp: r.readI64(),
 }));
 
@@ -1755,9 +1744,7 @@ EVENT_PARSERS.set('KingdomCitiesInitialized', (r) => ({
   initializedAt: r.readI64(),
 }));
 
-// ============================================================
 // Main Parser Functions
-// ============================================================
 
 /**
  * Parse a single event from raw bytes.

@@ -24,9 +24,7 @@ import {
   getSecondsUntilNextPeriod,
 } from '../../src/calculators/time';
 
-// ============================================================
 // calculateLocalTime Tests
-// ============================================================
 
 describe('calculateLocalTime', () => {
   it('should return a value in the 0-999 range', () => {
@@ -76,9 +74,7 @@ describe('calculateLocalTime', () => {
   });
 });
 
-// ============================================================
 // getTimeOfDay Tests
-// ============================================================
 
 describe('getTimeOfDay', () => {
   it('should return DeepNight for 0-124', () => {
@@ -132,9 +128,7 @@ describe('getTimeOfDay', () => {
   });
 });
 
-// ============================================================
 // getCurrentTimeOfDay Tests
-// ============================================================
 
 describe('getCurrentTimeOfDay', () => {
   it('should combine calculateLocalTime and getTimeOfDay', () => {
@@ -153,9 +147,7 @@ describe('getCurrentTimeOfDay', () => {
   });
 });
 
-// ============================================================
 // Time Period Helper Tests
-// ============================================================
 
 describe('isGoldenHour', () => {
   it('should return true for Dawn', () => {
@@ -235,9 +227,7 @@ describe('isDeepNight', () => {
   });
 });
 
-// ============================================================
 // Activity Multiplier Tests
-// ============================================================
 
 describe('getActivityMultiplier', () => {
   it('should return all multipliers > 0', () => {
@@ -283,7 +273,7 @@ describe('getActivityMultiplier', () => {
   it('should give Hiring a penalty at DeepNight', () => {
     const deepNight = getActivityMultiplier(ActivityType.Hiring, TimeOfDay.DeepNight);
     expect(deepNight).toBeLessThan(1.0);
-    expect(deepNight).toBeCloseTo(0.382, 2);
+    expect(deepNight).toBeCloseTo(0.618, 2);
   });
 
   it('should give Hiring neutral at Dawn and Dusk', () => {
@@ -291,11 +281,11 @@ describe('getActivityMultiplier', () => {
     expect(getActivityMultiplier(ActivityType.Hiring, TimeOfDay.Dusk)).toBe(1.0);
   });
 
-  it('should give Collecting the best bonus at golden hours (PHI_SQUARED)', () => {
-    const dawn = getActivityMultiplier(ActivityType.Collecting, TimeOfDay.Dawn);
-    const dusk = getActivityMultiplier(ActivityType.Collecting, TimeOfDay.Dusk);
-    expect(dawn).toBeCloseTo(2.618, 2);
-    expect(dusk).toBeCloseTo(2.618, 2);
+  it('should give Collecting a penalty at DeepNight and Evening', () => {
+    const deepNight = getActivityMultiplier(ActivityType.Collecting, TimeOfDay.DeepNight);
+    const evening = getActivityMultiplier(ActivityType.Collecting, TimeOfDay.Evening);
+    expect(deepNight).toBeCloseTo(0.618, 2);
+    expect(evening).toBeCloseTo(0.618, 2);
   });
 
   it('should give Mining the best bonus at DeepNight', () => {
@@ -303,26 +293,26 @@ describe('getActivityMultiplier', () => {
     expect(deepNight).toBeCloseTo(1.618, 2);
   });
 
-  it('should give Attacking the best bonus at DeepNight (PHI_SQUARED)', () => {
+  it('should give Attacking the best bonus at DeepNight (PHI)', () => {
     const deepNight = getActivityMultiplier(ActivityType.Attacking, TimeOfDay.DeepNight);
-    expect(deepNight).toBeCloseTo(2.618, 2);
+    expect(deepNight).toBeCloseTo(1.618, 2);
   });
 
-  it('should give Defending the best bonus at Midday (PHI_SQUARED)', () => {
+  it('should give Defending the best bonus at Midday (PHI)', () => {
     const midday = getActivityMultiplier(ActivityType.Defending, TimeOfDay.Midday);
-    expect(midday).toBeCloseTo(2.618, 2);
+    expect(midday).toBeCloseTo(1.618, 2);
   });
 
-  it('should give XPGain the best bonus at golden hours', () => {
-    const dawn = getActivityMultiplier(ActivityType.XPGain, TimeOfDay.Dawn);
-    const dusk = getActivityMultiplier(ActivityType.XPGain, TimeOfDay.Dusk);
-    expect(dawn).toBeCloseTo(2.618, 2);
-    expect(dusk).toBeCloseTo(2.618, 2);
+  it('should give XPGain a night-wisdom bonus at DeepNight and Evening', () => {
+    const deepNight = getActivityMultiplier(ActivityType.XPGain, TimeOfDay.DeepNight);
+    const evening = getActivityMultiplier(ActivityType.XPGain, TimeOfDay.Evening);
+    expect(deepNight).toBeCloseTo(1.272, 2);
+    expect(evening).toBeCloseTo(1.272, 2);
   });
 
-  it('should give StaminaRegen the best bonus at DeepNight', () => {
+  it('should give StaminaRegen the best bonus at DeepNight (PHI)', () => {
     const deepNight = getActivityMultiplier(ActivityType.StaminaRegen, TimeOfDay.DeepNight);
-    expect(deepNight).toBeCloseTo(2.618, 2);
+    expect(deepNight).toBeCloseTo(1.618, 2);
   });
 
   it('should return 1.0 for unknown activity type', () => {
@@ -331,9 +321,7 @@ describe('getActivityMultiplier', () => {
   });
 });
 
-// ============================================================
 // getActivityMultiplierBps Tests
-// ============================================================
 
 describe('getActivityMultiplierBps', () => {
   it('should return 10000 for neutral multiplier (1.0x)', () => {
@@ -355,9 +343,7 @@ describe('getActivityMultiplierBps', () => {
   });
 });
 
-// ============================================================
 // applyTimeMultiplier Tests
-// ============================================================
 
 describe('applyTimeMultiplier', () => {
   it('should return the base value for 1.0 multiplier', () => {
@@ -385,9 +371,7 @@ describe('applyTimeMultiplier', () => {
   });
 });
 
-// ============================================================
 // getTimeOfDayName Tests
-// ============================================================
 
 describe('getTimeOfDayName', () => {
   it('should return non-empty strings for all periods', () => {
@@ -423,9 +407,7 @@ describe('getTimeOfDayName', () => {
   });
 });
 
-// ============================================================
 // getTimeRange Tests
-// ============================================================
 
 describe('getTimeRange', () => {
   it('should return non-empty strings for all periods', () => {
@@ -485,9 +467,7 @@ describe('getTimeRange', () => {
   });
 });
 
-// ============================================================
 // getSecondsUntilNextPeriod Tests
-// ============================================================
 
 describe('getSecondsUntilNextPeriod', () => {
   it('should return a positive number of seconds', () => {

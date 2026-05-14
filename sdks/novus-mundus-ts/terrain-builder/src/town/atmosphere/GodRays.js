@@ -14,15 +14,11 @@ import * as THREE from 'three';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const NUM_SAMPLES = 60;
 
-// ---------------------------------------------------------------------------
 // GLSL — Occlusion vertex (standard fullscreen)
-// ---------------------------------------------------------------------------
 
 const OCCLUSION_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -32,9 +28,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GLSL — Radial blur fragment
-// ---------------------------------------------------------------------------
 
 const RADIAL_BLUR_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -83,9 +77,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GodRayOcclusionPass — renders the black/white occlusion mask
-// ---------------------------------------------------------------------------
 
 class GodRayOcclusionPass extends Pass {
   /**
@@ -181,9 +173,7 @@ class GodRayOcclusionPass extends Pass {
   }
 }
 
-// ---------------------------------------------------------------------------
 // GodRayPass — main class combining occlusion + radial blur
-// ---------------------------------------------------------------------------
 
 export class GodRayPass {
   /**
@@ -253,9 +243,7 @@ export class GodRayPass {
     this._composerPass = new GodRayComposerPass(this);
   }
 
-  // -----------------------------------------------------------------------
   // Public API
-  // -----------------------------------------------------------------------
 
   /**
    * Set the world position of the god ray light source.
@@ -365,9 +353,7 @@ export class GodRayPass {
     this._blurQuad.dispose();
   }
 
-  // -----------------------------------------------------------------------
   // Internal: called by the composer pass each frame
-  // -----------------------------------------------------------------------
 
   /** @private */
   _updateScreenPosition() {
@@ -407,9 +393,7 @@ export class GodRayPass {
   }
 }
 
-// ---------------------------------------------------------------------------
 // GodRayComposerPass — EffectComposer-compatible pass wrapper
-// ---------------------------------------------------------------------------
 
 class GodRayComposerPass extends Pass {
   /**
@@ -466,9 +450,7 @@ class GodRayComposerPass extends Pass {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Utility
-// ---------------------------------------------------------------------------
 
 /**
  * Smooth cosine interpolation (0 at edges, 1 at center).

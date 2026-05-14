@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -50,8 +50,8 @@ use crate::{
 /// 4. Update cached balance in UserAccount
 /// 5. Update last_withdrawal timestamp
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -74,7 +74,7 @@ pub fn process(
     require_writable(user)?;
     require_owner(user, program_id)?;
 
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
+    let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Parse Instruction Data
 
@@ -91,44 +91,42 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 4. Load User Data
-
-    let mut user_data_ref = user.try_borrow_mut_data()?;
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data_ref)
-    };
-
-    // Verify ownership and bump
-    if &user_data.owner != owner.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-    if user_data.bump != user_bump {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // 5. Validate Sufficient Reserved Novi
-
-    if user_data.reserved_novi < amount {
-        return Err(GameError::NoReservedNoviToWithdraw.into());
-    }
-
-    // 6. Validate Vesting Period
+    // 4. Validate ownership, balance, and vesting (borrow, check, drop before CPI)
 
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    let time_since_earning = now - user_data.reserved_novi_earned_at;
-    if time_since_earning < RESERVED_NOVI_VESTING_PERIOD {
-        return Err(GameError::VestingPeriodNotComplete.into());
-    }
+    {
+        let user_data_ref = user.try_borrow()?;
+        let user_data = unsafe { UserAccount::load(&user_data_ref) };
+
+        // Verify ownership and bump
+        if &user_data.owner != owner.address() {
+            return Err(GameError::Unauthorized.into());
+        }
+        if user_data.bump != user_bump {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        // 5. Validate Sufficient Reserved Novi
+        if user_data.reserved_novi < amount {
+            return Err(GameError::NoReservedNoviToWithdraw.into());
+        }
+
+        // 6. Validate Vesting Period
+        let time_since_earning = now - user_data.reserved_novi_earned_at;
+        if time_since_earning < RESERVED_NOVI_VESTING_PERIOD {
+            return Err(GameError::VestingPeriodNotComplete.into());
+        }
+    } // user_data_ref dropped before CPI so the runtime can access the account
 
     // 7. Transfer Tokens (Reserved → Wallet)
 
     // CRITICAL: Reserved token account is OWNED BY UserAccount PDA
     // So we need UserAccount PDA to sign the transfer
     let user_bump_seed = [user_bump];
-    let user_seeds = pinocchio::seeds!(USER_SEED, owner.key().as_ref(), &user_bump_seed);
-    let user_signer = pinocchio::instruction::Signer::from(&user_seeds);
+    let user_seeds = crate::seeds!(USER_SEED, owner.address(), &user_bump_seed);
+    let user_signer = pinocchio::cpi::Signer::from(&user_seeds);
 
     crate::helpers::transfer_tokens(
         reserved_token_account,       // From: Token account owned by UserAccount PDA
@@ -138,7 +136,10 @@ pub fn process(
         &[user_signer],              // UserAccount PDA signs
     )?;
 
-    // 8. Update Cached Balance and Timestamp
+    // 8. Update Cached Balance and Timestamp (re-borrow after CPI)
+
+    let mut user_data_ref = user.try_borrow_mut()?;
+    let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
     user_data.reserved_novi = user_data.reserved_novi
         .checked_sub(amount)
@@ -149,7 +150,7 @@ pub fn process(
     // 9. Emit Event
     // Note: This is a user-level operation, player account not passed in
     emit!(NoviWithdrawn {
-        player: *user.key(), // Using UserAccount PDA instead
+        player: *user.address(), // Using UserAccount PDA instead
         player_name: [0u8; 48], // User account doesn't have name, lookup via owner
         amount,
         remaining_reserved: user_data.reserved_novi,

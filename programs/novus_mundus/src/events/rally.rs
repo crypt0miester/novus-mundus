@@ -1,20 +1,20 @@
 /// Rally events - group combat coordination
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a rally is created
 pub struct RallyCreated {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Rally leader's player account (not wallet)
-    pub leader: Pubkey,
+    pub leader: Address,
     /// Target player account pubkey
-    pub target: Pubkey,
+    pub target: Address,
     /// Gather deadline timestamp
     pub gather_at: i64,
     /// Unix timestamp
@@ -40,11 +40,11 @@ impl Event for RallyCreated {
 /// Emitted when a player joins a rally
 pub struct RallyJoined {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who joined (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Units committed (defensive_1, defensive_2, defensive_3)
     pub units: [u64; 3],
     /// Current participant count
@@ -73,11 +73,11 @@ impl Event for RallyJoined {
 /// Emitted when a rally is executed (combat resolved)
 pub struct RallyExecuted {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Target player account
-    pub target: Pubkey,
+    pub target: Address,
     /// Total damage dealt to target
     pub damage_dealt: u64,
     /// Total damage received
@@ -110,11 +110,11 @@ impl Event for RallyExecuted {
 /// Emitted when a rally is cancelled
 pub struct RallyCancelled {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who cancelled (leader) (not wallet)
-    pub cancelled_by: Pubkey,
+    pub cancelled_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -135,11 +135,11 @@ impl Event for RallyCancelled {
 /// Emitted when a player leaves a rally during gathering
 pub struct RallyLeft {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who left (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Units refunded to return journey
     pub units: [u64; 3],
     /// Remaining participant count
@@ -168,13 +168,13 @@ impl Event for RallyLeft {
 /// Emitted when a rally account is closed and rent refunded
 pub struct RallyClosed {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Rally ID
     pub rally_id: u64,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Leader's player account who received rent (not wallet)
-    pub leader: Pubkey,
+    pub leader: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -196,11 +196,11 @@ impl Event for RallyClosed {
 /// Emitted when rally travel is sped up
 pub struct RallySpeedup {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who paid for speedup (not wallet)
-    pub payer: Pubkey,
+    pub payer: Address,
     /// Speedup type (0=Gather, 1=March, 2=Return)
     pub speedup_type: u8,
     /// Gems spent
@@ -227,11 +227,11 @@ impl Event for RallySpeedup {
 /// Emitted when a participant returns from a rally
 pub struct RallyParticipantReturned {
     /// Rally account pubkey
-    pub rally: Pubkey,
+    pub rally: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who returned (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Whether they participated in combat
     pub participated_in_combat: bool,
     /// Units returned

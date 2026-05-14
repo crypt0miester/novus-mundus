@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -52,8 +52,8 @@ use crate::{
 /// # Instruction Data
 /// - [0] research_type: u8 (which research to start)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -82,21 +82,21 @@ pub fn process(
     // We must drop all borrows before calling burn_tokens CPI, then re-borrow after.
     let (novi_cost, player_bump, next_level, current_long, base_research_time,
          building_speed_bps, mastery_speed_bps, player_name) = {
-        let player_data = player_account.try_borrow_data()?;
+        let player_data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&player_data) };
 
-        let progress_data = research_progress.try_borrow_data()?;
+        let progress_data = research_progress.try_borrow()?;
         let progress = unsafe { ResearchProgress::load(&progress_data) };
 
-        let template_data = research_template.try_borrow_data()?;
+        let template_data = research_template.try_borrow()?;
         let template = unsafe { ResearchTemplate::load(&template_data) };
 
         // 5. Verify ownership
-        if !player.is_owner(player_owner.key()) {
+        if !player.is_owner(player_owner.address()) {
             return Err(GameError::Unauthorized.into());
         }
 
-        if &progress.player != player_owner.key() {
+        if &progress.player != player_owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -166,8 +166,8 @@ pub fn process(
 
     // 12a. Burn NOVI tokens (CPI - no borrows held)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key().as_ref(), player_owner.key().as_ref(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), player_owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
         player_token_account,
@@ -178,7 +178,7 @@ pub fn process(
     )?;
 
     // Post-CPI: re-borrow and update state
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Update soft balance tracker
@@ -205,7 +205,7 @@ pub fn process(
     let completes_at = now.saturating_add(research_time);
 
     // 14. Set research state
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
+    let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
     progress.current_research = research_type;
@@ -216,7 +216,7 @@ pub fn process(
 
     // 15. Emit ResearchStarted event
     emit!(ResearchStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         research_id: research_type as u16,
         level: next_level,

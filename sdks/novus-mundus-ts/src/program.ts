@@ -7,9 +7,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 
-// ============================================================
 // Program IDs
-// ============================================================
 
 /** Novus Mundus Program ID (raw bytes) */
 export const PROGRAM_ID = new PublicKey(
@@ -45,9 +43,7 @@ export const SYSTEM_PROGRAM_ID = new PublicKey(
   '11111111111111111111111111111111'
 );
 
-// ============================================================
 // PDA Seeds
-// ============================================================
 
 export const SEEDS = {
   // Core accounts
@@ -129,9 +125,7 @@ export const SEEDS = {
   TEAM_CASTLE_REWARD: Buffer.from('team_castle_reward'),
 } as const;
 
-// ============================================================
 // Instruction Discriminators (little-endian u16)
-// ============================================================
 
 export const DISCRIMINATORS = {
   // Initialization (0-9)

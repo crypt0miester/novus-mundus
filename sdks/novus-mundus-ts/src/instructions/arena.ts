@@ -29,9 +29,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Create Season (Admin)
-// ============================================================
 
 export interface CreateSeasonAccounts {
   /** Authority (must be game_authority from GameEngine) */
@@ -101,9 +99,7 @@ export function createCreateSeasonInstruction(
   });
 }
 
-// ============================================================
 // Join Season
-// ============================================================
 
 export interface JoinSeasonAccounts {
   /** Player's wallet (signer) */
@@ -160,9 +156,7 @@ export function createJoinSeasonInstruction(
   });
 }
 
-// ============================================================
 // Update Loadout
-// ============================================================
 
 export interface UpdateLoadoutAccounts {
   /** Player's wallet (signer) */
@@ -232,9 +226,7 @@ export function createUpdateLoadoutInstruction(
   });
 }
 
-// ============================================================
 // Challenge Player
-// ============================================================
 
 export interface ChallengePlayerAccounts {
   /** Challenger's wallet (signer) */
@@ -336,9 +328,7 @@ export function createChallengePlayerInstruction(
   });
 }
 
-// ============================================================
 // Claim Daily Reward
-// ============================================================
 
 export interface ClaimArenaDailyRewardAccounts {
   /** Player's wallet (for PDA derivation, NOT signer - permissionless) */
@@ -401,9 +391,7 @@ export function createClaimArenaDailyRewardInstruction(
   });
 }
 
-// ============================================================
 // Claim Master Reward
-// ============================================================
 
 export interface ClaimMasterRewardAccounts {
   /** Player's wallet (for PDA derivation, NOT signer - permissionless) */
@@ -466,9 +454,7 @@ export function createClaimMasterRewardInstruction(
   });
 }
 
-// ============================================================
 // Close Season (Permissionless)
-// ============================================================
 
 export interface CloseSeasonAccounts {
   /** Season authority (must match season.authority, receives rent) */

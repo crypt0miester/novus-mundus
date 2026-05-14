@@ -5,9 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useOwnedDomains } from "@/lib/hooks/useOwnedDomains";
 import { useDomainCheck } from "@/lib/hooks/useDomainCheck";
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 interface DomainPickerProps {
   /** Current domain name if set (e.g., "myname.abc"). Null = no name set. */
@@ -31,9 +29,7 @@ type ValidationStatus =
   | { type: "invalid"; reason: string }
   | { type: "error" };
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 const DOMAIN_RE = /^[a-z0-9-]+$/;
 
@@ -52,9 +48,7 @@ function validate(input: string): { type: "invalid"; reason: string } | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Component
-// ---------------------------------------------------------------------------
 
 export function DomainPicker({
   currentName,

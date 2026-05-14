@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -31,10 +31,10 @@ use crate::{
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - rejecter_slot_index: u16 (2 bytes) - Rejecter's slot index
-/// - requester_pubkey: Pubkey (32 bytes) - Requester's player account for PDA derivation
+/// - requester_pubkey: Address (32 bytes) - Requester's player account for PDA derivation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -45,7 +45,7 @@ pub fn process(
 
     let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
     let rejecter_slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let requester_pubkey = Pubkey::from(
+    let requester_pubkey = Address::from(
         <[u8; 32]>::try_from(&instruction_data[10..42]).unwrap()
     );
 
@@ -71,7 +71,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let rejecter = PlayerAccount::load_checked_by_key(rejecter_account, program_id)?;
-    if &rejecter.owner != rejecter_owner.key() {
+    if &rejecter.owner != rejecter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
@@ -89,14 +89,14 @@ pub fn process(
 
     // 5. Validate Rejecter is in Team
 
-    if rejecter.team == NULL_PUBKEY || &rejecter.team != team_account.key() {
+    if rejecter.team == NULL_PUBKEY || &rejecter.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Rejecter Slot and Get Rank
 
-    let (expected_rejecter_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), rejecter_slot_index);
-    if rejecter_slot_account.key() != &expected_rejecter_slot {
+    let (expected_rejecter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), rejecter_slot_index);
+    if rejecter_slot_account.address() != &expected_rejecter_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -104,10 +104,10 @@ pub fn process(
 
     let rejecter_rank: u8;
     {
-        let slot_data = rejecter_slot_account.try_borrow_data()?;
+        let slot_data = rejecter_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *rejecter_account.key() {
+        if slot.player != *rejecter_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -122,8 +122,8 @@ pub fn process(
 
     // 8. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.key(), &requester_pubkey);
-    if request_account.key() != &expected_request {
+    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), &requester_pubkey);
+    if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -132,10 +132,10 @@ pub fn process(
 
     // Validate request belongs to this team
     {
-        let request_data = request_account.try_borrow_data()?;
+        let request_data = request_account.try_borrow()?;
         let request = unsafe { TreasuryRequest::load(&request_data) };
 
-        if &request.team != team_account.key() {
+        if &request.team != team_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -154,9 +154,9 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryRequestRejected {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        rejector: *rejecter_account.key(),
+        rejector: *rejecter_account.address(),
         requester: requester_pubkey,
         timestamp: now,
     });

@@ -46,6 +46,7 @@ import {
   type TestContext,
   beforeAllTests,
 } from '../fixtures/setup';
+import { advanceTime } from '../fixtures/time';
 import {
   PlayerFactory,
   type TestPlayer,
@@ -60,9 +61,7 @@ import {
 } from '../utils/accounts';
 import { log } from '../utils/logger';
 
-// ============================================================
 // Helpers
-// ============================================================
 
 let teamCounter = 9000;
 let memberSlotCounter = new Map<string, number>(); // track next available slot per team
@@ -171,6 +170,9 @@ async function transitionCastleStatus(
   cityId: number,
   castleId: number,
 ): Promise<void> {
+  // CASTLE_CONTEST_DURATION = 7200s; advance past it so update_castle_status
+  // can flip CONTEST → PROTECTED.
+  await advanceTime(ctx.svm, 7201);
   const ix = createUpdateCastleStatusInstruction({
     caller: ctx.daoAuthority.publicKey,
     gameEngine: ctx.gameEngine,
@@ -180,9 +182,7 @@ async function transitionCastleStatus(
   await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Castle System', () => {
   let ctx: TestContext;
@@ -198,9 +198,7 @@ describe('Castle System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Castle Creation Tests (DAO)
-  // ============================================================
 
   describe('Castle Creation', () => {
     it('should create castle via DAO', async () => {
@@ -269,9 +267,7 @@ describe('Castle System', () => {
     });
   });
 
-  // ============================================================
   // Castle Claiming Tests
-  // ============================================================
 
   describe('Castle Claiming', () => {
     const CITY = 1;
@@ -357,9 +353,7 @@ describe('Castle System', () => {
     });
   });
 
-  // ============================================================
   // Garrison Tests
-  // ============================================================
 
   describe('Garrison Management', () => {
     const CITY = 1;
@@ -445,9 +439,7 @@ describe('Castle System', () => {
     }, 30_000);
   });
 
-  // ============================================================
   // Court Tests
-  // ============================================================
 
   describe('Court Management', () => {
     const CITY = 1;
@@ -572,9 +564,7 @@ describe('Castle System', () => {
     }, 30_000);
   });
 
-  // ============================================================
   // Upgrade Tests
-  // ============================================================
 
   describe('Castle Upgrades', () => {
     const CITY = 1;
@@ -632,9 +622,7 @@ describe('Castle System', () => {
     });
   });
 
-  // ============================================================
   // Castle Attack Tests
-  // ============================================================
 
   describe('Castle Attacks', () => {
     const CITY = 1;
@@ -712,9 +700,7 @@ describe('Castle System', () => {
     }, 30_000);
   });
 
-  // ============================================================
   // Reward Tests
-  // ============================================================
 
   describe('Castle Rewards', () => {
     it('should reject rewards when castle not owned', async () => {
@@ -772,9 +758,7 @@ describe('Castle System', () => {
     }, 30_000);
   });
 
-  // ============================================================
   // Force Remove Tests (Admin)
-  // ============================================================
 
   describe('Force Removal', () => {
     it('should force remove king', async () => {
@@ -845,9 +829,7 @@ describe('Castle System', () => {
     });
   });
 
-  // ============================================================
   // Complete Upgrade Tests
-  // ============================================================
 
   describe('Complete Upgrade', () => {
     it('should complete upgrade after initiation', async () => {
@@ -904,9 +886,7 @@ describe('Castle System', () => {
     }, 30_000);
   });
 
-  // ============================================================
   // Relieve Garrison Tests
-  // ============================================================
 
   describe('Relieve Garrison', () => {
     it('should allow king to relieve garrison member', async () => {
@@ -973,9 +953,7 @@ describe('Castle System', () => {
     }, 60_000);
   });
 
-  // ============================================================
   // Castle Tier Tests
-  // ============================================================
 
   describe('Castle Tiers', () => {
     it('should create outpost (tier 0) with no garrison', async () => {

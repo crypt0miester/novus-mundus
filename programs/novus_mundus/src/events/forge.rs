@@ -1,12 +1,12 @@
 /// Forge events - crafting and equipment
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when crafting begins
 pub struct CraftStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Item type being crafted
@@ -37,7 +37,7 @@ impl Event for CraftStarted {
 /// Emitted when a tempering strike is performed
 pub struct CraftStrike {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Current stage
@@ -68,7 +68,7 @@ impl Event for CraftStrike {
 /// Emitted when crafting completes successfully
 pub struct CraftCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Item type crafted
@@ -102,7 +102,7 @@ impl Event for CraftCompleted {
 /// Emitted when crafting is abandoned
 pub struct CraftAbandoned {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Item type that was being crafted
@@ -130,11 +130,11 @@ impl Event for CraftAbandoned {
 /// Emitted when an item is equipped to a hero
 pub struct ItemEquipped {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Equipment slot

@@ -28,9 +28,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Team Create
-// ============================================================
 
 export interface TeamCreateAccounts {
   /** Player's wallet (signer, payer) */
@@ -109,9 +107,7 @@ export function createTeamCreateInstruction(
   });
 }
 
-// ============================================================
 // Team Join (Open Teams)
-// ============================================================
 
 export interface TeamJoinAccounts {
   /** Player's wallet (signer) */
@@ -171,9 +167,7 @@ export function createTeamJoinInstruction(
   });
 }
 
-// ============================================================
 // Team Leave
-// ============================================================
 
 export interface TeamLeaveAccounts {
   /** Player's wallet (signer) */
@@ -231,9 +225,7 @@ export function createTeamLeaveInstruction(
   });
 }
 
-// ============================================================
 // Team Disband
-// ============================================================
 
 export interface TeamDisbandAccounts {
   /** Leader's wallet (signer) */
@@ -284,9 +276,7 @@ export function createTeamDisbandInstruction(
   });
 }
 
-// ============================================================
 // Team Invite
-// ============================================================
 
 export interface TeamInviteAccounts {
   /** Inviter's wallet (signer) - must have PERM_INVITE */
@@ -366,9 +356,7 @@ export function createTeamInviteInstruction(
   });
 }
 
-// ============================================================
 // Team Accept Invite
-// ============================================================
 
 export interface TeamAcceptInviteAccounts {
   /** Invitee's wallet (signer) */
@@ -437,9 +425,7 @@ export function createTeamAcceptInviteInstruction(
   });
 }
 
-// ============================================================
 // Team Decline Invite
-// ============================================================
 
 export interface TeamDeclineInviteAccounts {
   /** Invitee's wallet (signer) */
@@ -491,9 +477,7 @@ export function createTeamDeclineInviteInstruction(
   });
 }
 
-// ============================================================
 // Team Cancel Invite
-// ============================================================
 
 export interface TeamCancelInviteAccounts {
   /** Member's wallet (signer) - must have PERM_INVITE */
@@ -559,9 +543,7 @@ export function createTeamCancelInviteInstruction(
   });
 }
 
-// ============================================================
 // Team Kick Member
-// ============================================================
 
 export interface TeamKickMemberAccounts {
   /** Kicker's wallet (signer) - must have PERM_KICK */
@@ -636,9 +618,7 @@ export function createTeamKickMemberInstruction(
   });
 }
 
-// ============================================================
 // Team Promote Member
-// ============================================================
 
 export interface TeamPromoteMemberAccounts {
   /** Promoter's wallet (signer) - must have PERM_PROMOTE and outrank target */
@@ -712,9 +692,7 @@ export function createTeamPromoteMemberInstruction(
   });
 }
 
-// ============================================================
 // Team Demote Member
-// ============================================================
 
 export interface TeamDemoteMemberAccounts {
   /** Demoter's wallet (signer) - must outrank target's current rank */
@@ -788,9 +766,7 @@ export function createTeamDemoteMemberInstruction(
   });
 }
 
-// ============================================================
 // Team Transfer Leadership
-// ============================================================
 
 export interface TeamTransferLeadershipAccounts {
   /** Current leader's wallet (signer) */
@@ -860,9 +836,7 @@ export function createTeamTransferLeadershipInstruction(
   });
 }
 
-// ============================================================
 // Team Set MOTD
-// ============================================================
 
 export interface TeamSetMotdAccounts {
   /** Member's wallet (signer) - must have PERM_MOTD */
@@ -934,9 +908,7 @@ export function createTeamSetMotdInstruction(
   });
 }
 
-// ============================================================
 // Team Update Settings
-// ============================================================
 
 export interface TeamUpdateSettingsAccounts {
   /** Member's wallet (signer) - must have PERM_SETTINGS */
@@ -1010,9 +982,7 @@ export function createTeamUpdateSettingsInstruction(
   });
 }
 
-// ============================================================
 // Team Deposit Treasury
-// ============================================================
 
 export interface TeamDepositTreasuryAccounts {
   /** Member's wallet (signer) */
@@ -1070,9 +1040,7 @@ export function createTeamDepositTreasuryInstruction(
   });
 }
 
-// ============================================================
 // Team Withdraw Treasury (Instant - within limits)
-// ============================================================
 
 export interface TeamWithdrawTreasuryAccounts {
   /** Withdrawer's wallet (signer) */
@@ -1138,9 +1106,7 @@ export function createTeamWithdrawTreasuryInstruction(
   });
 }
 
-// ============================================================
 // Team Treasury Request Withdraw
-// ============================================================
 
 export interface TeamTreasuryRequestWithdrawAccounts {
   /** Requester's wallet (signer) */
@@ -1212,9 +1178,7 @@ export function createTeamTreasuryRequestWithdrawInstruction(
   });
 }
 
-// ============================================================
 // Team Treasury Approve Request
-// ============================================================
 
 export interface TeamTreasuryApproveRequestAccounts {
   /** Approver's wallet (signer) - must outrank requester */
@@ -1227,6 +1191,8 @@ export interface TeamTreasuryApproveRequestAccounts {
   teamId: BN | number | bigint;
   /** Approver's slot index */
   approverSlotIndex: number;
+  /** Requester's slot index (used to fetch requester's current rank) */
+  requesterSlotIndex: number;
   /** Requester's player account (receives funds) */
   requesterPlayer: PublicKey;
   /** Account to receive request rent refund (usually requester's wallet) */
@@ -1238,17 +1204,18 @@ export interface TeamTreasuryApproveRequestAccounts {
  * Approve a treasury withdrawal request.
  *
  * Higher ranked member approves a pending request, executing it immediately.
- * Approver must outrank the requester (lower rank number).
+ * Approver must STRICTLY outrank the requester (lower rank number == higher rank).
  * Request PDA is closed, rent returned to requester.
  *
- * On-chain accounts (7):
+ * On-chain accounts (8):
  * 0. [] approver_player: PlayerAccount (approver)
  * 1. [] approver_slot: TeamMemberSlot (for approver rank)
- * 2. [writable] requester_player: PlayerAccount (receives funds)
- * 3. [writable] team: TeamAccount
- * 4. [writable] request: TreasuryRequest PDA (to be closed)
- * 5. [writable] requester_refund: Account to receive request rent refund
- * 6. [signer] approver_owner: Approver's wallet
+ * 2. [] requester_slot: TeamMemberSlot (for requester's current rank)
+ * 3. [writable] requester_player: PlayerAccount (receives funds)
+ * 4. [writable] team: TeamAccount
+ * 5. [writable] request: TreasuryRequest PDA (to be closed)
+ * 6. [writable] requester_refund: Account to receive request rent refund
+ * 7. [signer] approver_owner: Approver's wallet
  *
  * On-chain data (10 bytes):
  * - team_id: u64 (8)
@@ -1259,11 +1226,13 @@ export function createTeamTreasuryApproveRequestInstruction(
 ): TransactionInstruction {
   const [approverPlayer] = derivePlayerPda(accounts.gameEngine, accounts.approver);
   const [approverSlot] = deriveTeamSlotPda(accounts.team, accounts.approverSlotIndex);
+  const [requesterSlot] = deriveTeamSlotPda(accounts.team, accounts.requesterSlotIndex);
   const [request] = deriveTreasuryRequestPda(accounts.team, accounts.requesterPlayer);
 
   const keys = [
     { pubkey: approverPlayer, isSigner: false, isWritable: false },
     { pubkey: approverSlot, isSigner: false, isWritable: false },
+    { pubkey: requesterSlot, isSigner: false, isWritable: false },
     { pubkey: accounts.requesterPlayer, isSigner: false, isWritable: true },
     { pubkey: accounts.team, isSigner: false, isWritable: true },
     { pubkey: request, isSigner: false, isWritable: true },
@@ -1285,9 +1254,7 @@ export function createTeamTreasuryApproveRequestInstruction(
   });
 }
 
-// ============================================================
 // Team Treasury Reject Request
-// ============================================================
 
 export interface TeamTreasuryRejectRequestAccounts {
   /** Rejecter's wallet (signer) - must outrank requester (RANK_0 or RANK_1) */
@@ -1358,9 +1325,7 @@ export function createTeamTreasuryRejectRequestInstruction(
   });
 }
 
-// ============================================================
 // Team Treasury Execute Request
-// ============================================================
 
 export interface TeamTreasuryExecuteRequestAccounts {
   /** Requester's wallet (signer) */
@@ -1423,9 +1388,7 @@ export function createTeamTreasuryExecuteRequestInstruction(
   });
 }
 
-// ============================================================
 // Team Treasury Cancel Request
-// ============================================================
 
 export interface TeamTreasuryCancelRequestAccounts {
   /** Requester's wallet (signer) */
@@ -1480,9 +1443,7 @@ export function createTeamTreasuryCancelRequestInstruction(
   });
 }
 
-// ============================================================
 // Team Update Treasury Settings
-// ============================================================
 
 export interface TeamUpdateTreasurySettingsAccounts {
   /** Leader's wallet (signer) */

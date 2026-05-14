@@ -1,5 +1,5 @@
 use pinocchio::{
-    pubkey::Pubkey,
+    Address,
     ProgramResult,
 };
 
@@ -28,8 +28,8 @@ use crate::{
 pub fn update_event_score(
     participation: &mut EventParticipation,
     event: &mut EventAccount,
-    event_key: &Pubkey,
-    player_key: &Pubkey,
+    event_key: &Address,
+    player_key: &Address,
     player_name: [u8; 48],
     action_type: EventType,
     score_value: u64,
@@ -142,7 +142,7 @@ fn ensure_event_active(event: &mut EventAccount, now: i64) -> Result<(), GameErr
 fn update_leaderboard(
     leaderboard: &mut [LeaderboardEntry; 10],
     count: &mut u8,
-    player: &Pubkey,
+    player: &Address,
     new_score: u64,
 ) {
     let len = *count as usize;
@@ -219,7 +219,7 @@ mod tests {
     fn test_leaderboard_insert_empty() {
         let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
         let mut count = 0u8;
-        let player1 = Pubkey::from([1u8; 32]);
+        let player1 = Address::from([1u8; 32]);
 
         update_leaderboard(&mut leaderboard, &mut count, &player1, 100);
 
@@ -232,9 +232,9 @@ mod tests {
     fn test_leaderboard_maintains_order() {
         let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
         let mut count = 0u8;
-        let player1 = Pubkey::from([1u8; 32]);
-        let player2 = Pubkey::from([2u8; 32]);
-        let player3 = Pubkey::from([3u8; 32]);
+        let player1 = Address::from([1u8; 32]);
+        let player2 = Address::from([2u8; 32]);
+        let player3 = Address::from([3u8; 32]);
 
         update_leaderboard(&mut leaderboard, &mut count, &player1, 100);
         update_leaderboard(&mut leaderboard, &mut count, &player2, 200);
@@ -250,7 +250,7 @@ mod tests {
     fn test_leaderboard_update_existing() {
         let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
         let mut count = 0u8;
-        let player1 = Pubkey::from([1u8; 32]);
+        let player1 = Address::from([1u8; 32]);
 
         update_leaderboard(&mut leaderboard, &mut count, &player1, 100);
         update_leaderboard(&mut leaderboard, &mut count, &player1, 200);
@@ -266,14 +266,14 @@ mod tests {
 
         // Add 10 players
         for i in 0..10 {
-            let player = Pubkey::from([i as u8; 32]);
+            let player = Address::from([i as u8; 32]);
             update_leaderboard(&mut leaderboard, &mut count, &player, (i + 1) * 10);
         }
 
         assert_eq!(count, 10);
 
         // Try to add 11th player with low score (should not be added)
-        let player11 = Pubkey::from([11u8; 32]);
+        let player11 = Address::from([11u8; 32]);
         update_leaderboard(&mut leaderboard, &mut count, &player11, 5);
 
         assert_eq!(count, 10); // Still 10

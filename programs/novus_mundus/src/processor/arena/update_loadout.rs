@@ -8,9 +8,9 @@
 //! 1. `[SIGNER]` player_authority: Player's wallet
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// Instruction data for update_loadout
-/// - arena_hero: Pubkey (32 bytes) - Hero mint, or default pubkey for no hero
+/// - arena_hero: Address (32 bytes) - Hero mint, or default pubkey for no hero
 /// - defensive_units: [u64; 3] (24 bytes) - Tier 1, 2, 3 units
 /// - melee_weapons: u64 (8 bytes)
 /// - ranged_weapons: u64 (8 bytes)
@@ -28,8 +28,8 @@ use crate::{
 /// - armor_pieces: u64 (8 bytes)
 /// Total: 88 bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -50,7 +50,7 @@ pub fn process(
 
     let mut hero_bytes = [0u8; 32];
     hero_bytes.copy_from_slice(&instruction_data[0..32]);
-    let arena_hero = Pubkey::from(hero_bytes);
+    let arena_hero = Address::from(hero_bytes);
 
     let defensive_units_0 = u64::from_le_bytes([
         instruction_data[32], instruction_data[33], instruction_data[34], instruction_data[35],
@@ -89,7 +89,7 @@ pub fn process(
     )?;
     // Verify player authority matches (loadout.player stores the PlayerCore PDA,
     // so derive it from wallet key + game_engine to compare)
-    let (expected_player_pda, _) = PlayerCore::derive_pda(&loadout.game_engine, player_authority.key());
+    let (expected_player_pda, _) = PlayerCore::derive_pda(&loadout.game_engine, player_authority.address());
     if loadout.player != expected_player_pda {
         return Err(crate::error::GameError::Unauthorized.into());
     }

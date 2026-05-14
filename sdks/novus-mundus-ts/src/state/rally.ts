@@ -10,9 +10,7 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { RallyStatus, RallyTargetType } from '../types/enums';
 
-// ============================================================
 // Rally Account Interface
-// ============================================================
 
 export interface RallyAccount {
   // Identity
@@ -90,9 +88,7 @@ export interface RallyAccount {
 /** RallyAccount size in bytes (repr(C) layout with alignment padding) */
 export const RALLY_ACCOUNT_SIZE = 368;
 
-// ============================================================
 // Rally Participant Interface
-// ============================================================
 
 export interface RallyParticipant {
   // Identity
@@ -170,9 +166,7 @@ export interface RallyParticipant {
 /** RallyParticipant size in bytes (repr(C) layout with alignment padding) */
 export const RALLY_PARTICIPANT_SIZE = 352;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize RallyAccount from raw bytes */
 export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
@@ -444,9 +438,7 @@ export function deserializeRallyParticipant(data: Uint8Array | Buffer): RallyPar
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse RallyAccount from account info */
 export function parseRally(accountInfo: AccountInfo<Buffer>): RallyAccount | null {
@@ -464,9 +456,7 @@ export function parseRallyParticipant(accountInfo: AccountInfo<Buffer>): RallyPa
   return deserializeRallyParticipant(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if rally is gathering */
 export function isRallyGathering(rally: RallyAccount): boolean {

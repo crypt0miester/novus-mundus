@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::{AccountMeta, Instruction, Signer},
-    program::invoke_signed,
+    AccountView,
+    instruction::{InstructionAccount, InstructionView}, cpi::Signer,
+    cpi::invoke_signed,
     ProgramResult,
 };
 
@@ -15,10 +15,10 @@ use crate::UPDATE_DISCRIMINATOR;
 ///   2. `[]` Name class account
 ///   3. `[]` Parent name account
 pub struct Update<'a, 'b> {
-    pub owner: &'a AccountInfo,
-    pub name_account: &'a AccountInfo,
-    pub name_class: &'a AccountInfo,
-    pub parent_name: &'a AccountInfo,
+    pub owner: &'a AccountView,
+    pub name_account: &'a AccountView,
+    pub name_class: &'a AccountView,
+    pub parent_name: &'a AccountView,
     pub hashed_name: [u8; 32],
     pub offset: u32,
     pub input_data: &'b [u8],
@@ -37,11 +37,11 @@ impl<'a, 'b> Update<'a, 'b> {
         signers: &[Signer],
         buffer: &mut [u8],
     ) -> ProgramResult {
-        let account_metas: [AccountMeta; 4] = [
-            AccountMeta::readonly_signer(self.owner.key()),
-            AccountMeta::writable(self.name_account.key()),
-            AccountMeta::readonly(self.name_class.key()),
-            AccountMeta::readonly(self.parent_name.key()),
+        let account_metas: [InstructionAccount; 4] = [
+            InstructionAccount::readonly_signer(self.owner.address()),
+            InstructionAccount::writable(self.name_account.address()),
+            InstructionAccount::readonly(self.name_class.address()),
+            InstructionAccount::readonly(self.parent_name.address()),
         ];
 
         // discriminator (8) + hashed_name (32) + offset (4) + data_len (4) + data
@@ -54,7 +54,7 @@ impl<'a, 'b> Update<'a, 'b> {
         instruction_data[44..48].copy_from_slice(&(self.input_data.len() as u32).to_le_bytes());
         instruction_data[48..].copy_from_slice(self.input_data);
 
-        let instruction = Instruction {
+        let instruction = InstructionView {
             program_id: &crate::ID,
             accounts: &account_metas,
             data: instruction_data,
@@ -72,11 +72,11 @@ impl<'a> Update<'a, '_> {
     /// Simple invoke without data (just updates hashed_name validation).
     #[inline(always)]
     pub fn invoke_signed(&self, signers: &[Signer]) -> ProgramResult {
-        let account_metas: [AccountMeta; 4] = [
-            AccountMeta::readonly_signer(self.owner.key()),
-            AccountMeta::writable(self.name_account.key()),
-            AccountMeta::readonly(self.name_class.key()),
-            AccountMeta::readonly(self.parent_name.key()),
+        let account_metas: [InstructionAccount; 4] = [
+            InstructionAccount::readonly_signer(self.owner.address()),
+            InstructionAccount::writable(self.name_account.address()),
+            InstructionAccount::readonly(self.name_class.address()),
+            InstructionAccount::readonly(self.parent_name.address()),
         ];
 
         // discriminator (8) + hashed_name (32) + offset (4) + data_len (4) = 48
@@ -86,7 +86,7 @@ impl<'a> Update<'a, '_> {
         data[40..44].copy_from_slice(&self.offset.to_le_bytes());
         // data_len = 0
 
-        let instruction = Instruction {
+        let instruction = InstructionView {
             program_id: &crate::ID,
             accounts: &account_metas,
             data: &data,

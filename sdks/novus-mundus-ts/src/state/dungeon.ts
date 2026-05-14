@@ -10,10 +10,8 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Dungeon Enums (local definitions matching Rust state)
 // Note: These differ from types/enums.ts which has simplified versions
-// ============================================================
 
 /** Dungeon run status (matches Rust DungeonStatus) */
 export enum DungeonStatus {
@@ -34,12 +32,16 @@ export enum RoomType {
   Trap = 4,
 }
 
-/** Dungeon theme (matches Rust DungeonTheme) */
+/**
+ * Dungeon mechanical category (matches Rust DungeonTheme).
+ * Theme-flavored display names ("Crypts", "Server Farms", "Voidspace",
+ * "Fab Plant") are mapped at the UI layer per kingdom theme.
+ */
 export enum DungeonTheme {
-  Crypts = 0,
-  Caverns = 1,
-  Abyss = 2,
-  Forge = 3,
+  RadiantWeakness = 0,
+  FastMobs = 1,
+  DarknessVulnerable = 2,
+  ArmoredMobs = 3,
 }
 
 /** Hero specialization for dungeon (matches Rust HeroSpecialization) */
@@ -47,12 +49,10 @@ export enum HeroSpecialization {
   Warrior = 0,
   Guardian = 1,
   Scout = 2,
-  Mystic = 3,
+  Tactician = 3,
 }
 
-// ============================================================
 // Dungeon Template Account
-// ============================================================
 
 export interface DungeonTemplateAccount {
   dungeonId: number;
@@ -93,9 +93,7 @@ export interface DungeonTemplateAccount {
   rewardScalingBps: number;
 }
 
-// ============================================================
 // Dungeon Run Account
-// ============================================================
 
 export interface DungeonRunAccount {
   player: PublicKey;
@@ -176,9 +174,7 @@ export interface DungeonRunAccount {
   isWiped: boolean;
 }
 
-// ============================================================
 // Dungeon Leaderboard Entry
-// ============================================================
 
 export interface DungeonLeaderboardEntry {
   player: PublicKey;
@@ -193,9 +189,7 @@ export interface DungeonLeaderboardAccount {
   entries: DungeonLeaderboardEntry[];
 }
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 export function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateAccount {
   const reader = new BufferReader(data);
@@ -444,9 +438,7 @@ export function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): Dungeo
   return { dungeonId, weekNumber, bump, entries };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse DungeonTemplateAccount from account info */
 export function parseDungeonTemplate(accountInfo: AccountInfo<Buffer>): DungeonTemplateAccount | null {

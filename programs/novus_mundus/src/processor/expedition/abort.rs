@@ -8,9 +8,9 @@
 //! Use case: Player urgently needs operatives for combat/rally.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -46,8 +46,8 @@ use crate::{
 /// # Instruction Data
 /// None required
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 3, up to 7 with hero)
@@ -67,12 +67,12 @@ pub fn process(
     require_owner(expedition_account, program_id)?;
 
     // 3. Validate ExpeditionAccount PDA
-    let (expected_expedition_pda, _) = pinocchio::pubkey::find_program_address(
-        &[EXPEDITION_SEED, owner.key().as_ref()],
+    let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
+        &[EXPEDITION_SEED, owner.address().as_ref()],
         program_id,
     );
 
-    if expedition_account.key() != &expected_expedition_pda {
+    if expedition_account.address() != &expected_expedition_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -81,11 +81,11 @@ pub fn process(
 
     // 5. Load Expedition Data (before closing)
     let (op_unit_1, op_unit_2, op_unit_3, hero_mint_key, expedition_type) = {
-        let expedition_data = expedition_account.try_borrow_data()?;
+        let expedition_data = expedition_account.try_borrow()?;
         let expedition = unsafe { ExpeditionAccount::load(&expedition_data) };
 
         // Verify expedition belongs to this player
-        if &expedition.player != owner.key() {
+        if &expedition.player != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -102,11 +102,11 @@ pub fn process(
     let has_hero = hero_mint_key != NULL_PUBKEY;
 
     // 6. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 7. Verify ownership
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -132,22 +132,22 @@ pub fn process(
         let p_core_program = &accounts[6];
 
         // Verify hero mint matches what was stored
-        if hero_mint.key() != &hero_mint_key {
+        if hero_mint.address() != &hero_mint_key {
             return Err(GameError::InvalidParameter.into());
         }
 
         // Derive expedition PDA signer
-        let (_, expedition_bump) = pinocchio::pubkey::find_program_address(
-            &[EXPEDITION_SEED, owner.key().as_ref()],
+        let (_, expedition_bump) = pinocchio::Address::find_program_address(
+            &[EXPEDITION_SEED, owner.address().as_ref()],
             program_id,
         );
         let bump_seed = [expedition_bump];
-        let expedition_seeds = pinocchio::seeds!(
+        let expedition_seeds = crate::seeds!(
             EXPEDITION_SEED,
-            owner.key().as_ref(),
+            owner.address(),
             &bump_seed
         );
-        let expedition_signer = pinocchio::instruction::Signer::from(&expedition_seeds);
+        let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
         // Transfer hero NFT from expedition back to owner
         p_core::instructions::TransferV1 {
@@ -169,11 +169,11 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     // Re-borrow player_data to access name field
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
     emit!(ExpeditionAborted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         expedition_type,
         partial_yield: 0, // No partial yield on abort

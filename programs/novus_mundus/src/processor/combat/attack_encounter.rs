@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -74,8 +74,8 @@ use crate::{
 /// # Instruction Data
 /// - encounter_id: u64 (8 bytes, little-endian) - ID of the encounter to attack
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
@@ -122,15 +122,11 @@ pub fn process(
     );
 
     // 4. Load GameEngine first to get kingdom context
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let ge = unsafe { GameEngine::load(&game_engine_data_ref) };
-    let kingdom_id = ge.kingdom_id;
-    drop(game_engine_data_ref);
-
-    let game_engine_data = GameEngine::load_checked(game_engine, kingdom_id, program_id)?;
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     // 5. Load and verify player (kingdom-scoped)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
 
     // 5a. Validate player not traveling (can't fight while moving)
     if player_data.is_traveling_any() {
@@ -146,7 +142,7 @@ pub fn process(
     // Uses player's current_city - if encounter is in different city, PDA check fails
     let mut encounter_data = EncounterAccount::load_checked_mut(
         encounter,
-        game_engine.key(),
+        game_engine.address(),
         player_data.current_city,
         encounter_id,
         program_id,
@@ -306,7 +302,7 @@ pub fn process(
 
     // 16. Track attacker for ranking rewards (DYNAMIC REALLOC)
     // Add player to attackers list if not already present
-    let player_key = *player.key();
+    let player_key = *player.address();
     let old_attacker_count = encounter_data.attacker_count;
 
     // Drop encounter_data to release the RefMut before re-borrowing
@@ -315,9 +311,9 @@ pub fn process(
 
     // Check if player already attacked (now safe to borrow)
     let already_attacking = {
-        let encounter_data_check = encounter.try_borrow_data()?;
+        let encounter_data_check = encounter.try_borrow()?;
         let encounter_header = unsafe { EncounterAccount::load(&encounter_data_check) };
-        encounter_header.has_attacked(&encounter_data_check, player.key())
+        encounter_header.has_attacked(&encounter_data_check, player.address())
     };
 
     // Calculate if we need to realloc BEFORE doing it
@@ -336,8 +332,8 @@ pub fn process(
 
         // Calculate additional rent needed
         let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let old_rent = rent.minimum_balance(old_len);
-        let new_rent = rent.minimum_balance(new_len);
+        let old_rent = rent.try_minimum_balance(old_len)?;
+        let new_rent = rent.try_minimum_balance(new_len)?;
         let rent_diff = new_rent.saturating_sub(old_rent);
 
         // Attacker pays for rent increase (fair cost distribution!)
@@ -354,7 +350,7 @@ pub fn process(
         encounter.resize(new_len)?;
 
         // Add attacker pubkey to end of list and update count
-        let mut encounter_data_full = encounter.try_borrow_mut_data()?;
+        let mut encounter_data_full = encounter.try_borrow_mut()?;
         let offset = EncounterAccount::BASE_LEN + (old_attacker_count as usize * 32);
         encounter_data_full[offset..offset+32].copy_from_slice(player_key.as_ref());
 
@@ -366,7 +362,7 @@ pub fn process(
     // Re-load encounter data for remaining operations (immutable is fine now)
     let encounter_data = EncounterAccount::load_checked(
         encounter,
-        game_engine.key(),
+        game_engine.address(),
         player_data.current_city,
         encounter_id,
         program_id,
@@ -390,7 +386,7 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *player.key(),
+            player: *player.address(),
             player_name: player_data.name,
             amount: base_xp,
             source: 0, // 0=combat
@@ -401,7 +397,7 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *player.key(),
+                player: *player.address(),
                 player_name: player_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
@@ -473,23 +469,22 @@ pub fn process(
                 .ok_or(GameError::MathOverflow)?;
 
             // Derive and validate loot PDA (player-specific: [loot, player, loot_id])
-            let (expected_loot_pda, loot_bump) = LootAccount::derive_pda(player.key(), loot_id);
+            let (expected_loot_pda, loot_bump) = LootAccount::derive_pda(player.address(), loot_id);
             require_key_match(loot_account, &expected_loot_pda)?;
 
             // Calculate rent for loot account
-            let rent = pinocchio::sysvars::rent::Rent::get()?;
-            let loot_lamports = rent.minimum_balance(LootAccount::LEN);
+            let loot_lamports = crate::utils::rent_exempt_const(LootAccount::LEN);
 
             // Create loot account PDA with signer seeds
             let loot_bump_seed = [loot_bump];
             let loot_id_bytes = loot_id.to_le_bytes();
-            let loot_seeds = pinocchio::seeds!(
+            let loot_seeds = crate::seeds!(
                 LOOT_SEED,
-                player.key().as_ref(),
+                player.address(),
                 &loot_id_bytes,
                 &loot_bump_seed
             );
-            let loot_signer = pinocchio::instruction::Signer::from(&loot_seeds);
+            let loot_signer = pinocchio::cpi::Signer::from(&loot_seeds);
 
             // CPI: Create loot account
             CreateAccount {
@@ -553,7 +548,7 @@ pub fn process(
             }
 
             // Initialize loot data
-            let mut loot_account_data_ref = loot_account.try_borrow_mut_data()?;
+            let mut loot_account_data_ref = loot_account.try_borrow_mut()?;
             let loot_data = unsafe {
                 LootAccount::load_mut(&mut loot_account_data_ref)
             };
@@ -561,14 +556,17 @@ pub fn process(
             // Split weapons by rarity: Melee 50%, Ranged 30%, Siege 20%
             // This reflects: melee=common, ranged=tactical, siege=rare+powerful
             let total_weapons = loot_pool.total_weapons;
-            let melee_share = total_weapons / 2;                    // 50%
-            let ranged_share = (total_weapons * 3) / 10;            // 30%
-            let siege_share = total_weapons - melee_share - ranged_share; // 20% + remainder
+            // Rounded shares (basis-points + half-step) so low counts don't bias siege.
+            let melee_share = (total_weapons * 5000 + 5000) / 10000; // 50% rounded
+            let ranged_share = (total_weapons * 3000 + 5000) / 10000; // 30% rounded
+            // Siege gets the remainder; clamp in case rounding pushed melee+ranged over total.
+            let used = melee_share + ranged_share;
+            let siege_share = total_weapons.saturating_sub(used);
 
             *loot_data = LootAccount {
                 account_key: crate::state::AccountKey::Loot as u8,
-                owner: *player.key(),
-                creator: *owner.key(), // Owner pays rent, gets refund on claim
+                owner: *player.address(),
+                creator: *owner.address(), // Owner pays rent, gets refund on claim
                 loot_id,
                 bump: loot_bump,
                 source_type: LootSourceType::Encounter as u8,
@@ -612,7 +610,7 @@ pub fn process(
             enc_grid_long,
         );
 
-        if enc_location.key() != &expected_location_pda {
+        if enc_location.address() != &expected_location_pda {
             return Err(GameError::InvalidPDA.into());
         }
 
@@ -620,15 +618,15 @@ pub fn process(
         require_owner(enc_location, program_id)?;
 
         {
-            let location_data = enc_location.try_borrow_data()?;
+            let location_data = enc_location.try_borrow()?;
             let location = unsafe { LocationAccount::load(&location_data) };
 
-            if !location.is_occupied_by(encounter.key()) {
+            if !location.is_occupied_by(encounter.address()) {
                 return Err(GameError::NotCellOccupant.into());
             }
 
             // Validate the refund recipient matches the stored location_creator
-            if &location.location_creator != creator_refund.key() {
+            if &location.location_creator != creator_refund.address() {
                 return Err(GameError::InvalidParameter.into());
             }
         }
@@ -650,22 +648,22 @@ pub fn process(
         // Load event participation with ownership validation (kingdom-scoped)
         let mut participation = crate::state::EventParticipation::load_checked_mut(
             event_participation_acc,
-            game_engine.key(),
+            game_engine.address(),
             player_data.current_event,
-            owner.key(),
+            owner.address(),
             program_id,
         )?;
 
         // Load event with ownership validation (kingdom-scoped)
         let mut event_data = crate::state::EventAccount::load_checked_mut(
             event_acc,
-            game_engine.key(),
+            game_engine.address(),
             player_data.current_event,
             program_id,
         )?;
 
-        let player_key = owner.key();
-        let event_key = event_acc.key();
+        let player_key = owner.address();
+        let event_key = event_acc.address();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_damage = actual_damage;
@@ -737,7 +735,7 @@ pub fn process(
     emit!(EncounterAttacked {
         player: player_key,
         player_name: player_data.name,
-        encounter: *encounter.key(),
+        encounter: *encounter.address(),
         damage_dealt: actual_damage,
         health_remaining: encounter_data.health,
         stamina_consumed,
@@ -749,7 +747,7 @@ pub fn process(
     // Emit EncounterDefeated event if encounter dies
     if encounter_data.health == 0 {
         emit!(EncounterDefeated {
-            encounter: *encounter.key(),
+            encounter: *encounter.address(),
             encounter_type: encounter_data.rarity,
             level: encounter_data.level as u8,
             total_attackers: new_count,

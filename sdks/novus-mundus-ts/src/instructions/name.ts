@@ -27,9 +27,7 @@ import {
   getHashedName,
 } from '../pda';
 
-// ============================================================
 // Set Player Name
-// ============================================================
 
 export interface SetPlayerNameAccounts {
   /** Player's wallet (signer) */
@@ -108,9 +106,7 @@ export function createSetPlayerNameInstruction(
   });
 }
 
-// ============================================================
 // Update Player Name
-// ============================================================
 
 export interface UpdatePlayerNameAccounts {
   /** Player's wallet (signer) */
@@ -183,9 +179,7 @@ export function createUpdatePlayerNameInstruction(
   });
 }
 
-// ============================================================
 // Remove Player Name
-// ============================================================
 
 export interface RemovePlayerNameAccounts {
   /** Player's wallet (signer) */
@@ -253,9 +247,7 @@ export function createRemovePlayerNameInstruction(
   });
 }
 
-// ============================================================
 // Set Team Name
-// ============================================================
 
 export interface SetTeamNameAccounts {
   /** Leader's wallet (signer) */
@@ -321,9 +313,7 @@ export function createSetTeamNameInstruction(
   });
 }
 
-// ============================================================
 // Update Team Name
-// ============================================================
 
 export interface UpdateTeamNameAccounts {
   /** Leader's wallet (signer) */
@@ -396,9 +386,7 @@ export function createUpdateTeamNameInstruction(
   });
 }
 
-// ============================================================
 // Remove Team Name
-// ============================================================
 
 export interface RemoveTeamNameAccounts {
   /** Leader's wallet (signer) */

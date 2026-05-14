@@ -22,9 +22,7 @@ import { GameError, parseErrorMessage } from '../../src/errors';
 import { type TestConfig } from '../fixtures/setup';
 import { log } from './logger';
 
-// ============================================================
 // Transaction Metadata Cache
-// ============================================================
 
 interface CachedTxMeta {
   logs: string[];
@@ -34,9 +32,7 @@ interface CachedTxMeta {
 
 const _txCache = new Map<string, CachedTxMeta>();
 
-// ============================================================
 // Transaction Building
-// ============================================================
 
 export interface TransactionOptions {
   /** Additional compute units */
@@ -172,9 +168,7 @@ export async function sendInstructions(
   return await sendTransaction(svm, tx, signers, options);
 }
 
-// ============================================================
 // Transaction Parsing
-// ============================================================
 
 /**
  * Get transaction logs from cache or SVM history.
@@ -220,9 +214,7 @@ export async function findEventInTransaction<T extends NovusMundusEvent>(
   return events.find(e => e.name === eventName) as T | undefined;
 }
 
-// ============================================================
 // Transaction Result Wrapper
-// ============================================================
 
 export interface TransactionResult {
   signature: TransactionSignature;
@@ -279,9 +271,7 @@ export async function sendTransactionWithResult(
   };
 }
 
-// ============================================================
 // Error Handling
-// ============================================================
 
 /**
  * Extract custom error code from a FailedTransactionMetadata.
@@ -405,9 +395,7 @@ export async function expectTransactionToFail(
   }
 }
 
-// ============================================================
 // Batch Operations
-// ============================================================
 
 /**
  * Execute multiple transactions sequentially (LiteSVM is single-threaded).

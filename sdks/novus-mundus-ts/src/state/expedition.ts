@@ -15,9 +15,7 @@ import {
   SECONDS_PER_HOUR,
 } from '../constants';
 
-// ============================================================
 // Mining/Fishing Tiers
-// ============================================================
 
 export enum MiningTier {
   Surface = 0,
@@ -35,9 +33,7 @@ export enum FishingTier {
   Abyss = 4,
 }
 
-// ============================================================
 // Expedition Account Interface
-// ============================================================
 
 export interface ExpeditionAccount {
   player: PublicKey;
@@ -57,9 +53,7 @@ export interface ExpeditionAccount {
 /** ExpeditionAccount size in bytes */
 export const EXPEDITION_ACCOUNT_SIZE = 112;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize ExpeditionAccount from raw bytes */
 export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAccount {
@@ -106,9 +100,7 @@ export function parseExpedition(accountInfo: AccountInfo<Buffer>): ExpeditionAcc
   return deserializeExpedition(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if expedition has a hero assigned */
 export function expeditionHasHero(expedition: ExpeditionAccount): boolean {

@@ -12,9 +12,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_NPC_COUNT = 300;
 
@@ -141,9 +139,7 @@ const WORK_BOB_AMP = 0.003;
 /** Walking leg-swing animation frequency. */
 const WALK_SWING_FREQ = 8.0;
 
-// ---------------------------------------------------------------------------
 // Seeded RNG
-// ---------------------------------------------------------------------------
 
 function makeRng(seed) {
   let s = (seed | 0) || 1;
@@ -153,9 +149,7 @@ function makeRng(seed) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Reusable THREE objects (avoid per-frame allocation)
-// ---------------------------------------------------------------------------
 
 const _mat4 = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
@@ -165,9 +159,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _forward = new THREE.Vector3();
 const _color = new THREE.Color();
 
-// ---------------------------------------------------------------------------
 // Road graph BFS pathfinding
-// ---------------------------------------------------------------------------
 
 /**
  * Find a path between two nodes via BFS on a small graph.
@@ -251,9 +243,7 @@ function closestNode(nodes, x, z) {
   return best;
 }
 
-// ---------------------------------------------------------------------------
 // Time-of-day phase helper
-// ---------------------------------------------------------------------------
 
 /**
  * Convert hour (0-24) to phase index: 0=dawn, 1=day, 2=dusk, 3=night.
@@ -267,9 +257,7 @@ function timePhase(hour) {
   return 3;
 }
 
-// ---------------------------------------------------------------------------
 // NPCRenderer
-// ---------------------------------------------------------------------------
 
 export class NPCRenderer {
   /**
@@ -443,9 +431,7 @@ export class NPCRenderer {
   }
 }
 
-// ---------------------------------------------------------------------------
 // NPCManager
-// ---------------------------------------------------------------------------
 
 export class NPCManager {
   /**

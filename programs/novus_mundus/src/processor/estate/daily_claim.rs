@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -10,7 +10,7 @@ use crate::{
     error::GameError,
     state::{EstateAccount, PlayerAccount},
     helpers::estate::require_mansion,
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_owner},
     logic::safe_math::apply_bp_bonus,
     emit,
     events::estate::EstateDailyClaimed,
@@ -51,8 +51,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -68,19 +68,22 @@ pub fn process(
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(estate_account)?;
+    // Program-ownership gate (precedes the unsafe ::load calls below).
+    require_owner(player_account, program_id)?;
+    require_owner(estate_account, program_id)?;
 
     // 3. Load Accounts
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let mut estate_data_ref = estate_account.try_borrow_mut()?;
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
     // 4. Verify ownership
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    if &estate_data.owner != owner.key() {
+    if &estate_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -167,7 +170,7 @@ pub fn process(
 
     // 13. Emit EstateDailyClaimed event
     emit!(EstateDailyClaimed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         materials: final_materials,
         streak: estate_data.login_streak,

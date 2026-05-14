@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -34,8 +34,8 @@ use crate::{
 /// # Instruction Data
 /// None required
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -62,11 +62,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Reinforcement
-    let reinf_data_ref = reinforcement_account.try_borrow_data()?;
+    let reinf_data_ref = reinforcement_account.try_borrow()?;
     let reinf = unsafe { ReinforcementAccount::load(&reinf_data_ref) };
 
     // 5. Validate Sender Account
-    if &reinf.sender != sender_owner.key() {
+    if &reinf.sender != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -84,11 +84,11 @@ pub fn process(
     }
 
     // 8. Load Sender Player
-    let mut sender_data_ref = sender_player.try_borrow_mut_data()?;
+    let mut sender_data_ref = sender_player.try_borrow_mut()?;
     let sender = unsafe { PlayerAccount::load_mut(&mut sender_data_ref) };
 
     // Verify sender player matches
-    if &sender.owner != sender_owner.key() {
+    if &sender.owner != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -120,10 +120,10 @@ pub fn process(
     sender.siege_weapons = sender.siege_weapons.saturating_add(return_siege);
 
     // 11. Return Hero (if any) - restore to first available slot
-    if return_hero != Pubkey::default() {
+    if return_hero != Address::default() {
         // Find first empty hero slot
         for i in 0..3 {
-            if sender.active_heroes[i] == Pubkey::default() {
+            if sender.active_heroes[i] == Address::default() {
                 sender.active_heroes[i] = return_hero;
                 break;
             }
@@ -159,15 +159,17 @@ pub fn process(
     let lamports = reinforcement_account.lamports();
 
     // Zero out the account data
-    let mut reinf_data = reinforcement_account.try_borrow_mut_data()?;
+    let mut reinf_data = reinforcement_account.try_borrow_mut()?;
     reinf_data.fill(0);
     drop(reinf_data);
 
     // Transfer lamports to sender
-    unsafe {
-        *reinforcement_account.borrow_mut_lamports_unchecked() = 0;
-        *sender_owner.borrow_mut_lamports_unchecked() += lamports;
-    }
+    sender_owner.set_lamports(
+        sender_owner.lamports()
+            .checked_add(lamports)
+            .ok_or::<pinocchio::error::ProgramError>(crate::error::GameError::MathOverflow.into())?,
+    );
+    reinforcement_account.set_lamports(0);
 
     Ok(())
 }

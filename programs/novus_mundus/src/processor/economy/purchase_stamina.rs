@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -31,8 +31,8 @@ use crate::{
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Stamina to purchase
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -77,21 +77,21 @@ pub fn process(
 
     // 4. PHASE 1: Validate and calculate cost (scoped borrow - dropped before CPI)
     let (novi_cost, player_bump) = {
-        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data_ref = player_account.try_borrow()?;
         let player_data = unsafe {
             PlayerAccount::load(&player_data_ref)
         };
 
         // Verify ownership
-        if &player_data.owner != owner.key() {
+        if &player_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
-        // Load GameEngine for Cost Configuration
-        let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-        let game_engine_data = unsafe {
-            crate::state::GameEngine::load(&game_engine_data_ref)
-        };
+        // Validate game_engine account (ownership + PDA + discriminator + bump)
+        let game_engine_data = crate::state::GameEngine::load_checked_by_key(
+            game_engine_account,
+            program_id,
+        )?;
         let economic_config = &game_engine_data.economic_config;
 
         // Calculate Novi Cost (with DAO multiplier)
@@ -109,8 +109,8 @@ pub fn process(
     // 5. PHASE 2: Burn Novi Tokens (CPI - requires no active borrows on player)
     // Player PDA owns the token account, so player is the burn authority
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine_account.key(), owner.key(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine_account.address(), owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
         player_token_account,
@@ -122,7 +122,7 @@ pub fn process(
 
     // 6. PHASE 3: Re-borrow and update state (after CPI)
     {
-        let mut player_data_ref = player_account.try_borrow_mut_data()?;
+        let mut player_data_ref = player_account.try_borrow_mut()?;
         let player_data = unsafe {
             PlayerAccount::load_mut(&mut player_data_ref)
         };
@@ -137,7 +137,7 @@ pub fn process(
         // Emit StaminaPurchased event
         let now = Clock::get()?.unix_timestamp;
         emit!(StaminaPurchased {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player_data.name,
             stamina: actual_added,
             gems_spent: 0,

@@ -5,9 +5,9 @@
 //! King can cancel an in-progress upgrade and receive 50% refund.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -18,7 +18,7 @@ use crate::{
     events::CastleUpgradeCancelled,
     state::{CastleAccount, PlayerAccount, GameEngine},
     constants::GAME_ENGINE_SEED,
-    helpers::mint_tokens,
+    helpers::{mint_tokens, validate_token_account_owner},
     validation::require_owner,
 };
 
@@ -43,8 +43,8 @@ const UPGRADE_COST_MULTIPLIER: u64 = 15;
 /// 6. [writable] Locked token account (owned by PlayerAccount PDA)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -69,10 +69,10 @@ pub fn process(
 
     // Load king player
     require_owner(king_account, program_id)?;
-    let mut king_data = king_account.try_borrow_mut_data()?;
+    let mut king_data = king_account.try_borrow_mut()?;
     let king = unsafe { PlayerAccount::load_mut(&mut king_data) };
 
-    if &king.owner != king_wallet.key() {
+    if &king.owner != king_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -80,7 +80,7 @@ pub fn process(
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
-    if castle.king != *king_account.key() {
+    if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
     }
 
@@ -107,11 +107,13 @@ pub fn process(
     // Create GameEngine PDA signer for minting
     let ge_bump_seed = [game_engine.bump];
     let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
-    let ge_seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
-    let ge_signer = pinocchio::instruction::Signer::from(&ge_seeds);
+    let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
 
     // Mint refund to locked token account
     if refund > 0 {
+        // SECURITY: Verify locked token account belongs to the king's PlayerAccount PDA
+        validate_token_account_owner(locked_token_account, king_account.address())?;
         mint_tokens(
             novi_mint,
             locked_token_account,
@@ -135,7 +137,7 @@ pub fn process(
 
     // Emit event
     emit!(CastleUpgradeCancelled {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
         upgrade_type,
         novi_refunded: refund,

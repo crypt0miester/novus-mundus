@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use crate::{
@@ -26,8 +26,8 @@ use crate::{
 /// - new_next_item_id: u32
 /// - new_next_discount_bps: u16
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -69,18 +69,18 @@ pub fn process(
 
     // 5. Verify Authority (DAO or crank)
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Must be DAO authority (could extend to allow cranks in future)
-    if authority.key() != &game_engine.authority {
+    if authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // 6. Verify PDA
 
-    let (expected_pda, _) = DailyDealAccount::derive_pda(game_engine_account.key(), slot_index);
-    if daily_deal_account.key() != &expected_pda {
+    let (expected_pda, _) = DailyDealAccount::derive_pda(game_engine_account.address(), slot_index);
+    if daily_deal_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -89,7 +89,7 @@ pub fn process(
     let clock = pinocchio::sysvars::clock::Clock::get()?;
     let now = clock.unix_timestamp;
 
-    let mut daily_deal_data_ref = daily_deal_account.try_borrow_mut_data()?;
+    let mut daily_deal_data_ref = daily_deal_account.try_borrow_mut()?;
     let daily_deal = unsafe { DailyDealAccount::load_mut(&mut daily_deal_data_ref) };
 
     // Check if 24 hours have passed (optional - DAO can force rotate)

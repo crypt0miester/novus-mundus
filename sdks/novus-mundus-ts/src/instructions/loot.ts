@@ -15,9 +15,7 @@ import {
   deriveUserPda,
 } from '../pda';
 
-// ============================================================
 // Claim Loot
-// ============================================================
 
 export interface ClaimLootAccounts {
   /** Player's wallet (signer) */

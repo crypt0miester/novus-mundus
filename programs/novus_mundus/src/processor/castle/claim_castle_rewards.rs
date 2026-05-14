@@ -10,11 +10,11 @@
 //! - Fortress, Citadel: Mint to unlocked/reserved_novi (withdrawable)
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{clock::Clock, Sysvar},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -28,7 +28,7 @@ use crate::{
         calculate_reward, player::NULL_PUBKEY,
     },
     constants::{TEAM_CASTLE_REWARD_SEED, SECONDS_PER_DAY, GAME_ENGINE_SEED},
-    helpers::mint_tokens,
+    helpers::{mint_tokens, validate_token_account_owner},
     validation::require_owner,
 };
 
@@ -58,8 +58,8 @@ const ROLE_MEMBER: u8 = 2;
 /// 11. [writable] Reserved token account (owned by UserAccount PDA) - for Fortress/Citadel tiers
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -87,10 +87,10 @@ pub fn process(
 
     // Load player
     require_owner(player_account, program_id)?;
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    if &player.owner != player_wallet.key() {
+    if &player.owner != player_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -107,17 +107,17 @@ pub fn process(
     }
 
     // Determine role and base rewards
-    let (role, base_novi, base_cash) = if tier.has_king() && castle.king == *player_account.key() {
+    let (role, base_novi, base_cash) = if tier.has_king() && castle.king == *player_account.address() {
         // Player is the king (Citadel only)
         (ROLE_KING, castle.king_novi_per_day, castle.king_cash_per_day)
     } else if player.team == castle.team && castle.team != NULL_PUBKEY {
         // Check if court member (Citadel only)
         let is_court = if tier.has_court() && accounts.len() > 5 {
             let court_account = &accounts[5];
-            if court_account.owner() == program_id && court_account.data_len() > 0 {
-                let court_data = court_account.try_borrow_data()?;
+            if unsafe { court_account.owner() } == program_id && court_account.data_len() > 0 {
+                let court_data = court_account.try_borrow()?;
                 let court = unsafe { CourtPositionAccount::load(&court_data) };
-                court.holder == *player_account.key() && court.castle == *castle_account.key()
+                court.holder == *player_account.address() && court.castle == *castle_account.address()
             } else {
                 false
             }
@@ -142,26 +142,25 @@ pub fn process(
 
     // Verify reward PDA
     let (expected_reward_pda, reward_bump) = TeamCastleRewardAccount::derive_pda(
-        castle_account.key(),
-        player_account.key(),
+        castle_account.address(),
+        player_account.address(),
     );
-    if reward_account.key() != &expected_reward_pda {
+    if reward_account.address() != &expected_reward_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Create reward account if doesn't exist
     if reward_account.data_len() == 0 {
-        let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(TeamCastleRewardAccount::LEN);
+        let lamports = crate::utils::rent_exempt_const(TeamCastleRewardAccount::LEN);
 
         let bump_seed = [reward_bump];
-        let seeds = pinocchio::seeds!(
+        let seeds = crate::seeds!(
             TEAM_CASTLE_REWARD_SEED,
-            castle_account.key().as_ref(),
-            player_account.key().as_ref(),
+            castle_account.address(),
+            player_account.address(),
             &bump_seed
         );
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
 
         CreateAccount {
             from: player_wallet,
@@ -172,19 +171,27 @@ pub fn process(
         }.invoke_signed(&[signer])?;
 
         // Initialize reward account
-        let mut reward_data = reward_account.try_borrow_mut_data()?;
+        let mut reward_data = reward_account.try_borrow_mut()?;
         let reward = unsafe { TeamCastleRewardAccount::load_mut(&mut reward_data) };
 
         reward.account_key = crate::state::AccountKey::TeamCastleReward as u8;
-        reward.castle = *castle_account.key();
-        reward.member = *player_account.key();
+        reward.castle = *castle_account.address();
+        reward.member = *player_account.address();
         reward.bump = reward_bump;
-        reward.last_claim_at = castle.claimed_at; // Start from when castle was claimed
+        // Start accruing rewards from max(castle.claimed_at,
+        // player_joined_team_at) to prevent late-joining team members from
+        // collecting retroactive rewards for time before they were on the team.
+        // We use `now` as a conservative proxy: brand-new TeamCastleReward
+        // accounts can only have accrued rewards from this moment forward.
+        // (player.team_joined_at is not currently tracked granularly; using
+        // `now` is safe and prevents the exploit. If a per-team join timestamp
+        // is added later, swap to max(castle.claimed_at, player_joined_team_at).)
+        reward.last_claim_at = now;
         reward.total_claimed_novi = 0;
     }
 
     // Load reward account
-    let mut reward_data = reward_account.try_borrow_mut_data()?;
+    let mut reward_data = reward_account.try_borrow_mut()?;
     let reward = unsafe { TeamCastleRewardAccount::load_mut(&mut reward_data) };
 
     // Calculate elapsed days
@@ -219,8 +226,8 @@ pub fn process(
     // Create GameEngine PDA signer for minting
     let ge_bump_seed = [game_engine.bump];
     let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
-    let ge_seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
-    let ge_signer = pinocchio::instruction::Signer::from(&ge_seeds);
+    let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
 
     // Mint NOVI tokens based on tier
     if novi_reward > 0 {
@@ -234,12 +241,20 @@ pub fn process(
 
             // Verify user account
             require_owner(user_account, program_id)?;
-            let mut user_data = user_account.try_borrow_mut_data()?;
+            let mut user_data = user_account.try_borrow_mut()?;
             let user = unsafe { UserAccount::load_mut(&mut user_data) };
 
-            if &user.owner != player_wallet.key() {
+            if &user.owner != player_wallet.address() {
                 return Err(GameError::Unauthorized.into());
             }
+
+            // SECURITY: Verify reserved token account belongs to the UserAccount PDA
+            // (drop the borrow first so validate_token_account_owner can re-borrow)
+            drop(user_data);
+            validate_token_account_owner(reserved_token_account, user_account.address())?;
+            // Re-acquire user borrow for the post-mint balance update below
+            let mut user_data = user_account.try_borrow_mut()?;
+            let user = unsafe { UserAccount::load_mut(&mut user_data) };
 
             // Mint tokens to reserved token account
             mint_tokens(
@@ -254,6 +269,8 @@ pub fn process(
             user.reserved_novi = user.reserved_novi.saturating_add(novi_reward);
         } else {
             // Lower tiers: Mint to locked (not withdrawable)
+            // SECURITY: Verify locked token account belongs to the PlayerAccount PDA
+            validate_token_account_owner(locked_token_account, player_account.address())?;
             // Mint tokens to locked token account (owned by PlayerAccount PDA)
             mint_tokens(
                 novi_mint,
@@ -282,9 +299,9 @@ pub fn process(
 
     // Emit event
     emit!(CastleRewardsClaimed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        claimer: *player_account.key(),
+        claimer: *player_account.address(),
         claimer_name: player_name,
         role,
         days: days as u8,

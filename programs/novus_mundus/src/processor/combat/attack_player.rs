@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -69,8 +69,8 @@ use crate::{
 /// # Instruction Data
 /// - drive_by: bool (1 byte) - True for drive-by attack (requires 10k+ units, 25% damage penalty)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts (8 required, 4 optional event accounts)
@@ -102,7 +102,7 @@ pub fn process(
     require_owner(attacker_player, program_id)?;
     require_owner(defender_player, program_id)?;
 
-    let attacker_bump = require_pda(attacker_player, &[PLAYER_SEED, game_engine.key(), attacker_owner.key()], program_id)?;
+    let attacker_bump = require_pda(attacker_player, &[PLAYER_SEED, game_engine.address().as_ref(), attacker_owner.address().as_ref()], program_id)?;
 
     // 3. Parse instruction data
     if data.is_empty() {
@@ -112,8 +112,8 @@ pub fn process(
     let drive_by = data[0] != 0;
 
     // 4. Load player data
-    let mut attacker_data = attacker_player.try_borrow_mut_data()?;
-    let mut defender_data = defender_player.try_borrow_mut_data()?;
+    let mut attacker_data = attacker_player.try_borrow_mut()?;
+    let mut defender_data = defender_player.try_borrow_mut()?;
 
     let attacker_data = unsafe {
         PlayerAccount::load_mut(&mut attacker_data)
@@ -124,18 +124,18 @@ pub fn process(
     };
 
     // Validate defender PDA (CRITICAL: prevents fake defender accounts)
-    let defender_bump = require_pda(defender_player, &[PLAYER_SEED, &defender_data.game_engine, &defender_data.owner], program_id)?;
+    let defender_bump = require_pda(defender_player, &[PLAYER_SEED, defender_data.game_engine.as_ref(), defender_data.owner.as_ref()], program_id)?;
     if defender_data.bump != defender_bump {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // Load GameEngine for networth value config
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref)};
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // Verify attacker ownership and bump
-    if &attacker_data.owner != attacker_owner.key() {
+    if &attacker_data.owner != attacker_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if attacker_data.bump != attacker_bump {
@@ -146,7 +146,7 @@ pub fn process(
     require_extension(attacker_data, EXT_RESEARCH)?;
 
     // 5. Validate cannot attack self
-    if attacker_player.key() == defender_player.key() {
+    if attacker_player.address() == defender_player.address() {
         return Err(GameError::CannotAttackSelf.into());
     }
 
@@ -178,7 +178,7 @@ pub fn process(
 
     // Defender city might be same account as attacker city (if in same city)
     // So we can't borrow mutably if they're the same
-    let defender_city_data = if attacker_city.key() == defender_city.key() {
+    let defender_city_data = if attacker_city.address() == defender_city.address() {
         attacker_city_data
     } else {
         unsafe { CityAccount::load(&defender_city)? }
@@ -378,7 +378,7 @@ pub fn process(
     );
 
     // 11a. Infirmary recovery for defender (reduce unit losses)
-    let (remaining_1, remaining_2, remaining_3) = if defender_estate_account.owner() == program_id {
+    let (remaining_1, remaining_2, remaining_3) = if unsafe { defender_estate_account.owner() } == program_id {
         let defender_estate = load_estate_for_player(defender_estate_account, &*defender_data, program_id)?;
         let recovery_bps = infirmary_recovery_bps(defender_estate);
         if recovery_bps > 0 {
@@ -455,7 +455,7 @@ pub fn process(
         );
 
         // Infirmary recovery for operative losses
-        let (op_remaining_1, op_remaining_2, op_remaining_3) = if defender_estate_account.owner() == program_id {
+        let (op_remaining_1, op_remaining_2, op_remaining_3) = if unsafe { defender_estate_account.owner() } == program_id {
             let defender_estate = load_estate_for_player(defender_estate_account, &*defender_data, program_id)?;
             let recovery_bps = infirmary_recovery_bps(defender_estate);
             if recovery_bps > 0 {
@@ -493,7 +493,7 @@ pub fn process(
     );
 
     // 12a. Infirmary recovery for attacker (reduce unit losses)
-    let (att_unit_1, att_unit_2, att_unit_3) = if attacker_estate_account.owner() == program_id {
+    let (att_unit_1, att_unit_2, att_unit_3) = if unsafe { attacker_estate_account.owner() } == program_id {
         let attacker_estate = load_estate_for_player(attacker_estate_account, &*attacker_data, program_id)?;
         let recovery_bps = infirmary_recovery_bps(attacker_estate);
         if recovery_bps > 0 {
@@ -522,7 +522,7 @@ pub fn process(
     // 12b. Track wounded units on estates (Infirmary feature)
     // Only if estate exists (owned by this program) — players without estates skip wounded tracking
     // Defender: own defensive unit losses → wounded_def_*, operative losses → wounded_op_*
-    if defender_estate_account.owner() == program_id {
+    if unsafe { defender_estate_account.owner() } == program_id {
         let defender_estate = load_estate_for_player_mut(defender_estate_account, &*defender_data, program_id)?;
         if has_infirmary(defender_estate) {
             let def_lost_1 = orig_defender_own_def_1.saturating_sub(def_unit_1) as u32;
@@ -550,7 +550,7 @@ pub fn process(
         }
     }
     // Attacker: defensive unit losses from counter-attack → wounded_def_*
-    if attacker_estate_account.owner() == program_id {
+    if unsafe { attacker_estate_account.owner() } == program_id {
         let attacker_estate = load_estate_for_player_mut(attacker_estate_account, &*attacker_data, program_id)?;
         if has_infirmary(attacker_estate) {
             let att_lost_1 = orig_attacker_def_1.saturating_sub(att_unit_1) as u32;
@@ -788,7 +788,7 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *attacker_player.key(),
+            player: *attacker_player.address(),
             player_name: attacker_data.name,
             amount: base_xp,
             source: 0, // 0=combat
@@ -799,7 +799,7 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *attacker_player.key(),
+                player: *attacker_player.address(),
                 player_name: attacker_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
@@ -824,7 +824,7 @@ pub fn process(
             attacker_event_participation,
             &attacker_data.game_engine,
             attacker_data.current_event,
-            attacker_owner.key(),
+            attacker_owner.address(),
             program_id,
         )?;
 
@@ -836,8 +836,8 @@ pub fn process(
             program_id,
         )?;
 
-        let attacker_key = attacker_owner.key();
-        let attacker_event_key = attacker_event.key();
+        let attacker_key = attacker_owner.address();
+        let attacker_event_key = attacker_event.address();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_damage = attacker_damage;
@@ -915,7 +915,7 @@ pub fn process(
         )?;
 
         let defender_key = &defender_data.owner;
-        let defender_event_key = defender_event.key();
+        let defender_event_key = defender_event.address();
 
         // DETERMINISTIC: Use exact damage value (no randomness)
         let final_defender_damage = defender_damage;
@@ -986,9 +986,9 @@ pub fn process(
 
     // Emit PlayerAttacked event
     emit!(PlayerAttacked {
-        attacker: *attacker_player.key(),
+        attacker: *attacker_player.address(),
         attacker_name: attacker_data.name,
-        defender: *defender_player.key(),
+        defender: *defender_player.address(),
         defender_name: defender_data.name,
         damage_dealt: attacker_damage,
         damage_received: defender_damage,

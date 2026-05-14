@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use pinocchio_system::instructions::Transfer;
@@ -12,11 +12,11 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::shop::NoviPurchased,
-    helpers::{validate_token_account_owner, detect_oracle_type, get_pyth_price, OracleType},
+    helpers::{validate_token_account_owner, detect_oracle_type, get_pyth_price, pin_oracle_feed, read_switchboard_price, OracleType},
     logic::safe_math::apply_bp_penalty,
+    utils::{read_u64, read_u8, unlikely},
 };
 use p_pyth::OraclePrice;
-use switchboard_on_demand::QuoteVerifier;
 
 /// Purchase NOVI tokens from the shop
 ///
@@ -42,25 +42,17 @@ use switchboard_on_demand::QuoteVerifier;
 /// 7. [] token_program - SPL Token program
 /// 8. [] system_program - System program
 ///
-/// # Accounts (Optional - Oracle Pricing with Pyth, +3 accounts)
+/// # Accounts (Optional - Oracle Pricing, +3 accounts; Pyth or Switchboard)
 /// 9. [] shop_config - ShopConfigAccount (for SOL oracle config)
-/// 10. [] sol_oracle_feed - SOL/USD Pyth price feed
-/// 11. [] novi_oracle_feed - NOVI/USD Pyth price feed
-///
-/// # Accounts (Optional - Oracle Pricing with Switchboard, +6 accounts)
-/// 9. [] shop_config - ShopConfigAccount (for SOL oracle config)
-/// 10. [] sol_oracle_feed - SOL/USD Switchboard quote
-/// 11. [] novi_oracle_feed - NOVI/USD Switchboard quote
-/// 12. [] switchboard_queue - Switchboard queue account
-/// 13. [] slothashes_sysvar - SlotHashes sysvar
-/// 14. [] instructions_sysvar - Instructions sysvar
+/// 10. [] sol_oracle_feed - SOL/USD price feed (Pyth or Switchboard pull feed)
+/// 11. [] novi_oracle_feed - NOVI/USD price feed (Pyth or Switchboard pull feed)
 ///
 /// # Instruction Data
 /// - package_index: u8 (0-4, which package to buy)
 /// - max_lamports: u64 (slippage protection, max SOL willing to pay)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -89,44 +81,39 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let package_index = read_u8(instruction_data, 0, "purchase_novi.package_index")?;
+    let max_lamports = read_u64(instruction_data, 1, "purchase_novi.max_lamports")?;
 
-    let package_index = instruction_data[0];
-    let max_lamports = u64::from_le_bytes(instruction_data[1..9].try_into().unwrap());
-
-    // Validate package index
-    if package_index > 4 {
+    if unlikely(package_index > 4) {
+        pinocchio_log::log!("purchase_novi: package_index out of range: {}", package_index);
         return Err(GameError::InvalidParameter.into());
     }
 
     // 4. Load Game Engine (kingdom-scoped)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    // Check game not paused
-    if game_engine.paused {
-        return Err(GameError::GamePaused.into());
-    }
-
-    // Verify treasury matches
-    if treasury.key() != &game_engine.treasury_wallet {
-        return Err(GameError::InvalidTreasury.into());
-    }
-
-    // Verify novi mint matches
-    if novi_mint.key() != &game_engine.novi_mint {
-        return Err(GameError::InvalidMint.into());
-    }
+    crate::require!(!game_engine.paused, GameError::GamePaused);
+    crate::require_keys_eq!(
+        treasury.address().as_array(),
+        game_engine.treasury_wallet.as_array(),
+        "purchase_novi.treasury",
+        GameError::InvalidTreasury,
+    );
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "purchase_novi.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 5. Load Player Account (for subscription tier, kingdom-scoped)
-    let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+    let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
     let clock = pinocchio::sysvars::clock::Clock::get()?;
     let now = clock.unix_timestamp;
     let subscription_tier = player.get_effective_tier(now);
 
     // 6. Load and Update User Account
-    let mut user = UserAccount::load_checked_mut(user_account, buyer.key(), program_id)?;
+    let mut user = UserAccount::load_checked_mut(user_account, buyer.address(), program_id)?;
 
     // 7. Get current day
     let current_day = (now / 86400) as u32;
@@ -180,7 +167,7 @@ pub fn process(
         base_amount,
         novi_config,
         &accounts[9..],  // Optional oracle accounts
-        game_engine_account.key(),
+        game_engine_account.address(),
         program_id,
         clock.slot,
     )?;
@@ -191,7 +178,7 @@ pub fn process(
     }
 
     // 15. Validate reserved token account ownership
-    validate_token_account_owner(reserved_token_account, user_account.key())?;
+    validate_token_account_owner(reserved_token_account, user_account.address())?;
 
     // 16. Transfer SOL to treasury
     Transfer {
@@ -205,8 +192,8 @@ pub fn process(
     let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
     let game_engine_bump = game_engine.bump;
     let bump_seed = [game_engine_bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     crate::helpers::mint_tokens(
         novi_mint,
@@ -226,10 +213,15 @@ pub fn process(
         .checked_add(total_novi)
         .ok_or(GameError::MathOverflow)?;
 
+    // Update vesting basis so the 7-day vesting window starts now.
+    // This prevents the bypass where fresh accounts with default 0 earned_at
+    // could withdraw immediately (now - 0 ≫ 7d).
+    user.reserved_novi_earned_at = now;
+
     // 20. Emit event
     emit!(NoviPurchased {
-        buyer: *buyer.key(),
-        user: *user_account.key(),
+        buyer: *buyer.address(),
+        user: *user_account.address(),
         package_index,
         base_amount,
         bonus_amount,
@@ -243,147 +235,132 @@ pub fn process(
     Ok(())
 }
 
-// ============================================================
 // ORACLE PRICE CALCULATION
-// ============================================================
 
-/// Calculate cost in lamports using oracle price or fallback
+/// Calculate cost in lamports using oracle price or fallback.
 ///
-/// If oracle accounts are provided and valid, uses oracle prices with undercut.
-/// Otherwise falls back to novi_base_price_lamports.
+/// When an oracle is *configured* on `novi_config`, oracle errors
+/// must be fatal (not silently fall back to `novi_base_price_lamports`).
+/// Otherwise an attacker can deliberately supply a malformed feed to force
+/// the cheap fallback path. The fallback is only used when no oracle is
+/// configured at all (DAO has not set feeds yet).
 fn calculate_cost_lamports(
     base_amount: u64,
     novi_config: &crate::state::NoviPurchaseConfig,
-    oracle_accounts: &[AccountInfo],
-    game_engine_key: &Pubkey,
-    program_id: &Pubkey,
+    oracle_accounts: &[AccountView],
+    game_engine_key: &Address,
+    program_id: &Address,
     current_slot: u64,
 ) -> Result<u64, ProgramError> {
-    // Check if oracle is configured and accounts provided
-    if !novi_config.has_oracle() || oracle_accounts.len() < 3 {
-        // Use fallback price
+    // No oracle configured: pure DAO-set fallback price.
+    if !novi_config.has_oracle() {
         return base_amount
             .checked_mul(novi_config.novi_base_price_lamports)
             .ok_or(GameError::MathOverflow.into());
     }
 
-    // Try to get oracle price
-    match try_oracle_price(
+    // Oracle is configured — require feed accounts and propagate any failure.
+    if oracle_accounts.len() < 3 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    try_oracle_price(
         base_amount,
         novi_config,
         oracle_accounts,
         game_engine_key,
         program_id,
         current_slot,
-    ) {
-        Ok(price) => Ok(price),
-        Err(_) => {
-            // Oracle failed, use fallback price
-            base_amount
-                .checked_mul(novi_config.novi_base_price_lamports)
-                .ok_or(GameError::MathOverflow.into())
-        }
-    }
+    )
 }
 
-/// Try to calculate price using oracle
+/// Try to calculate price using oracle.
+///
+/// `oracle_accounts`:
+/// - [0] shop_config
+/// - [1] sol_oracle_feed (Pyth price account or Switchboard pull feed)
+/// - [2] novi_oracle_feed (same oracle program as sol_oracle_feed)
 fn try_oracle_price(
     base_amount: u64,
     novi_config: &crate::state::NoviPurchaseConfig,
-    oracle_accounts: &[AccountInfo],
-    _game_engine_key: &Pubkey,
-    program_id: &Pubkey,
+    oracle_accounts: &[AccountView],
+    _game_engine_key: &Address,
+    program_id: &Address,
     current_slot: u64,
 ) -> Result<u64, ProgramError> {
-    // Parse oracle accounts
-    // [0] = shop_config
-    // [1] = sol_oracle_feed
-    // [2] = novi_oracle_feed
-    // [3..] = switchboard extras (queue, slothashes, instructions)
-
     let shop_config_account = &oracle_accounts[0];
     let sol_oracle_feed = &oracle_accounts[1];
     let novi_oracle_feed = &oracle_accounts[2];
 
-    // Validate shop_config
     require_owner(shop_config_account, program_id)?;
-    let shop_config_data = shop_config_account.try_borrow_data()?;
+    let shop_config_data = shop_config_account.try_borrow()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data) };
 
-    // Detect oracle type from SOL feed
-    let sol_oracle_data = sol_oracle_feed.try_borrow_data()?;
-    let oracle_type = detect_oracle_type(&sol_oracle_data);
+    // Detect oracle type by feed owner; reject mixed Pyth+Switchboard.
+    let oracle_type = detect_oracle_type(sol_oracle_feed)?;
+    if unlikely(detect_oracle_type(novi_oracle_feed)? != oracle_type) {
+        pinocchio_log::log!("purchase_novi: mixed Pyth+Switchboard feeds rejected");
+        return Err(GameError::OracleUnavailable.into());
+    }
 
-    // Get prices based on oracle type
-    let (sol_price, novi_price) = match oracle_type {
+    // Pin both feeds to the DAO-configured pubkey for this oracle type.
+    let (sol_configured, novi_configured) = match oracle_type {
+        OracleType::Pyth => (&shop_config.sol_pyth_feed, &novi_config.novi_pyth_feed),
+        OracleType::Switchboard => (&shop_config.sol_switchboard_feed, &novi_config.novi_switchboard_feed),
+    };
+    pin_oracle_feed(sol_oracle_feed, sol_configured)?;
+    pin_oracle_feed(novi_oracle_feed, novi_configured)?;
+
+    let price_lamports = match oracle_type {
         OracleType::Pyth => {
-            get_pyth_prices(
-                &sol_oracle_data,
-                novi_oracle_feed,
-                shop_config,
-                novi_config,
-                current_slot,
-            )?
-        }
-        OracleType::Switchboard => {
-            // Need extra accounts for Switchboard
-            if oracle_accounts.len() < 6 {
-                return Err(ProgramError::NotEnoughAccountKeys);
-            }
-            get_switchboard_prices(
+            let (sol_price, novi_price) = get_pyth_prices(
                 sol_oracle_feed,
                 novi_oracle_feed,
-                &oracle_accounts[3], // queue
-                &oracle_accounts[4], // slothashes
-                &oracle_accounts[5], // instructions
                 shop_config,
                 novi_config,
                 current_slot,
-            )?
+            )?;
+            calculate_lamports_from_pyth(base_amount, &sol_price, &novi_price)?
+        }
+        OracleType::Switchboard => {
+            let sol_price = read_switchboard_price(
+                sol_oracle_feed,
+                current_slot,
+                shop_config.sol_max_staleness_slots as u64,
+                shop_config.sol_confidence_threshold_bps,
+            )?;
+            let novi_price = read_switchboard_price(
+                novi_oracle_feed,
+                current_slot,
+                novi_config.novi_max_staleness_slots as u64,
+                novi_config.novi_confidence_threshold_bps,
+            )?;
+            calculate_lamports_from_sb(base_amount, sol_price.value, novi_price.value)?
         }
     };
 
-    // Calculate cost: base_amount * (novi_usd / sol_usd) * 10^9 / 10^novi_decimals
-    // Since both prices are OraclePrice with same expo after normalization,
-    // we can calculate: lamports = base_amount * novi_price / sol_price * (10^9 / 10^1)
-    // NOVI has 1 decimal, SOL has 9 decimals
-    //
-    // Formula: lamports = base_amount * novi_usd / sol_usd * 10^8
-    // (10^9 SOL decimals / 10^1 NOVI decimal = 10^8)
-
-    let price_lamports = calculate_lamports_from_oracle(
-        base_amount,
-        &sol_price,
-        &novi_price,
-    )?;
-
-    // Apply undercut (e.g., 15% off market price)
-    // undercut means user pays LESS, so we reduce the price
+    // undercut means user pays LESS, so we reduce the price.
     let undercut_bps = novi_config.novi_market_undercut_bps;
-    let final_price = apply_bp_penalty(price_lamports, undercut_bps)
-        .ok_or(GameError::MathOverflow)?;
-
-    Ok(final_price)
+    apply_bp_penalty(price_lamports, undercut_bps)
+        .ok_or(GameError::MathOverflow.into())
 }
 
-/// Get Pyth prices for SOL and NOVI
 fn get_pyth_prices(
-    sol_oracle_data: &[u8],
-    novi_oracle_feed: &AccountInfo,
+    sol_oracle_feed: &AccountView,
+    novi_oracle_feed: &AccountView,
     shop_config: &ShopConfigAccount,
     novi_config: &crate::state::NoviPurchaseConfig,
     current_slot: u64,
 ) -> Result<(OraclePrice, OraclePrice), ProgramError> {
-    // Get SOL/USD price
+    let sol_oracle_data = sol_oracle_feed.try_borrow()?;
     let sol_price = get_pyth_price(
-        sol_oracle_data,
+        &sol_oracle_data,
         current_slot,
         shop_config.sol_max_staleness_slots as u64,
         shop_config.sol_confidence_threshold_bps,
     ).map_err(|_| GameError::OraclePriceStale)?;
 
-    // Get NOVI/USD price
-    let novi_oracle_data = novi_oracle_feed.try_borrow_data()?;
+    let novi_oracle_data = novi_oracle_feed.try_borrow()?;
     let novi_price = get_pyth_price(
         &novi_oracle_data,
         current_slot,
@@ -394,89 +371,15 @@ fn get_pyth_prices(
     Ok((sol_price, novi_price))
 }
 
-/// Get Switchboard prices for SOL and NOVI
-fn get_switchboard_prices(
-    sol_oracle_feed: &AccountInfo,
-    novi_oracle_feed: &AccountInfo,
-    queue_account: &AccountInfo,
-    slothashes_sysvar: &AccountInfo,
-    instructions_sysvar: &AccountInfo,
-    shop_config: &ShopConfigAccount,
-    novi_config: &crate::state::NoviPurchaseConfig,
-    current_slot: u64,
-) -> Result<(OraclePrice, OraclePrice), ProgramError> {
-    // Get SOL/USD price from Switchboard
-    let sol_price_i128 = get_switchboard_price_value(
-        sol_oracle_feed,
-        queue_account,
-        slothashes_sysvar,
-        instructions_sysvar,
-        current_slot,
-        shop_config.sol_max_staleness_slots as u64,
-    )?;
-
-    // Get NOVI/USD price from Switchboard
-    let novi_price_i128 = get_switchboard_price_value(
-        novi_oracle_feed,
-        queue_account,
-        slothashes_sysvar,
-        instructions_sysvar,
-        current_slot,
-        novi_config.novi_max_staleness_slots as u64,
-    )?;
-
-    // Convert Switchboard i128 (18 decimals) to OraclePrice
-    // OraclePrice uses expo field, Switchboard uses fixed 18 decimals
-    let sol_price = OraclePrice {
-        price: sol_price_i128 as i64,
-        conf: 0,
-        expo: -18,
-        publish_time: 0,
-    };
-    let novi_price = OraclePrice {
-        price: novi_price_i128 as i64,
-        conf: 0,
-        expo: -18,
-        publish_time: 0,
-    };
-
-    Ok((sol_price, novi_price))
-}
-
-/// Get price value from Switchboard oracle
-fn get_switchboard_price_value(
-    quote_account: &AccountInfo,
-    queue_account: &AccountInfo,
-    slothashes_sysvar: &AccountInfo,
-    instructions_sysvar: &AccountInfo,
-    current_slot: u64,
-    max_staleness_slots: u64,
-) -> Result<i128, ProgramError> {
-    let quote_data = QuoteVerifier::new()
-        .slothash_sysvar(slothashes_sysvar)
-        .ix_sysvar(instructions_sysvar)
-        .clock_slot(current_slot)
-        .queue(queue_account)
-        .max_age(max_staleness_slots)
-        .verify_account(quote_account)
-        .map_err(|_| GameError::OraclePriceStale)?;
-
-    let feed = quote_data.feeds().first()
-        .ok_or(GameError::OracleUnavailable)?;
-
-    Ok(feed.value().mantissa())
-}
-
-/// Calculate lamports cost from oracle prices
+/// Calculate lamports cost from Pyth prices.
 ///
 /// Formula: lamports = base_amount * (novi_usd / sol_usd) * 10^8
-/// Where 10^8 = 10^9 (SOL decimals) / 10^1 (NOVI decimals)
-fn calculate_lamports_from_oracle(
+/// where 10^8 = 10^9 (SOL decimals) / 10^1 (NOVI decimal).
+fn calculate_lamports_from_pyth(
     base_amount: u64,
     sol_price: &OraclePrice,
     novi_price: &OraclePrice,
 ) -> Result<u64, ProgramError> {
-    // Normalize both prices to same exponent for comparison
     const WORK_EXPO: i32 = -18;
 
     let sol_usd = sol_price.get_price_in_target_expo(WORK_EXPO)
@@ -488,11 +391,6 @@ fn calculate_lamports_from_oracle(
         return Err(GameError::OracleUnavailable.into());
     }
 
-    // Calculate: (base_amount * novi_usd * 10^8) / sol_usd
-    // NOVI has 1 decimal in base_amount (e.g., 5000 = 500 NOVI)
-    // SOL has 9 decimals in lamports
-    // Conversion factor: 10^9 / 10^1 = 10^8
-
     let numerator = (base_amount as u128)
         .checked_mul(novi_usd as u128)
         .ok_or(GameError::OracleOverflow)?
@@ -503,10 +401,42 @@ fn calculate_lamports_from_oracle(
         .checked_div(sol_usd as u128)
         .ok_or(GameError::OracleOverflow)?;
 
-    // Convert back to u64
     if lamports > u64::MAX as u128 {
         return Err(GameError::OracleOverflow.into());
     }
+    Ok(lamports as u64)
+}
 
+/// Calculate lamports cost from Switchboard pull-feed prices (i128 @ 10^18).
+///
+/// Both prices share the same scale (10^18), so they cancel in the ratio.
+/// Direct u128 math — no lossy i128→i64 round-trip through Pyth's
+/// OraclePrice (which is what the old stub did, and would have silently
+/// truncated for any token over ~$9 at 10^18 scale).
+fn calculate_lamports_from_sb(
+    base_amount: u64,
+    sol_usd_i128: i128,
+    novi_usd_i128: i128,
+) -> Result<u64, ProgramError> {
+    if sol_usd_i128 <= 0 || novi_usd_i128 <= 0 {
+        return Err(GameError::OracleUnavailable.into());
+    }
+    let sol_usd = sol_usd_i128 as u128;
+    let novi_usd = novi_usd_i128 as u128;
+
+    // Same formula as the Pyth path; 10^18 scale cancels in the division.
+    let numerator = (base_amount as u128)
+        .checked_mul(novi_usd)
+        .ok_or(GameError::OracleOverflow)?
+        .checked_mul(100_000_000) // 10^8
+        .ok_or(GameError::OracleOverflow)?;
+
+    let lamports = numerator
+        .checked_div(sol_usd)
+        .ok_or(GameError::OracleOverflow)?;
+
+    if lamports > u64::MAX as u128 {
+        return Err(GameError::OracleOverflow.into());
+    }
     Ok(lamports as u64)
 }

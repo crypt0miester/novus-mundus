@@ -618,9 +618,7 @@ pub struct InventoryItem {
 }
 // Total: 16 bytes per item
 
-// ============================================================
 // ITEM ID GENERATION
-// ============================================================
 // Items are NON-TRANSFERABLE (bound to player).
 // item_id is unique per-player, generated via hash:
 //
@@ -634,9 +632,7 @@ pub struct InventoryItem {
 // Note: item_id is for client-side tracking/UI purposes.
 // On-chain, items are identified by (player_account, slot_index).
 
-// ============================================================
 // WHAT ITEMS DO (EFFECT SYSTEM)
-// ============================================================
 // Items provide bonuses based on their type and bonus_bps field:
 //
 // EQUIPMENT (item_type 1-5):
@@ -1886,9 +1882,7 @@ Some cosmetics can only be obtained through:
 ### Account Sections
 
 ```rust
-// ============================================================
 // CORE SECTION (Always present, ~450 bytes)
-// ============================================================
 #[repr(C)]
 pub struct PlayerCore {
     // Identity (48 bytes)
@@ -1985,9 +1979,7 @@ pub struct PlayerCore {
     pub loot_counter: u64,
 }
 
-// ============================================================
 // RESEARCH SECTION (+100 bytes, offset 450)
-// ============================================================
 #[repr(C)]
 pub struct ResearchSection {
     // Buffs (24 bytes)
@@ -2025,9 +2017,7 @@ pub struct ResearchSection {
     pub _reserved: [u8; 24],
 }
 
-// ============================================================
 // HEROES SECTION (+130 bytes, offset 550)
-// ============================================================
 #[repr(C)]
 pub struct HeroesSection {
     // Active Heroes (96 bytes)
@@ -2064,9 +2054,7 @@ pub fn count_active_heroes(heroes: &[Pubkey; 3]) -> u8 {
     heroes.iter().filter(|h| *h != &NULL_PUBKEY).count() as u8
 }
 
-// ============================================================
 // INVENTORY SECTION (+400 bytes, offset 680)
-// ============================================================
 #[repr(C)]
 pub struct InventorySection {
     // Consumables (32 bytes)
@@ -2134,9 +2122,7 @@ pub struct InventoryItem {
     pub obtained_at: u32,
 }
 
-// ============================================================
 // RALLY SECTION (+80 bytes, offset 1080)
-// ============================================================
 #[repr(C)]
 pub struct RallySection {
     // Caps (8 bytes)
@@ -2162,9 +2148,7 @@ pub struct RallySection {
     pub _reserved: [u8; 8],
 }
 
-// ============================================================
 // TEAM SECTION (+60 bytes, offset 1160)
-// ============================================================
 #[repr(C)]
 pub struct TeamSection {
     // Team Reference (40 bytes)
@@ -2177,9 +2161,7 @@ pub struct TeamSection {
     pub team_invite_expires_at: i64,
 }
 
-// ============================================================
 // COSMETICS SECTION (+80 bytes, offset 1220)
-// ============================================================
 #[repr(C)]
 pub struct CosmeticsSection {
     // Equipped (16 bytes)
@@ -3128,9 +3110,7 @@ Updated whenever: units change, equipment changes, research completes, hero lock
 pub fn calculate_total_attack_power(
     player: &PlayerAccount,
 ) -> u64 {
-    // ========================================================
     // 1. BASE POWER: Only Defensive Units × Linear Tier Weight
-    // ========================================================
     // Tier weights: 1, 2, 3 (linear scaling)
     // Elite scaling (level 50+) can be added later
 
@@ -3143,9 +3123,7 @@ pub fn calculate_total_attack_power(
         return 0;
     }
 
-    // ========================================================
     // 2. WEAPON COVERAGE (0-100%)
-    // ========================================================
     // Units need weapons to fight effectively
     // Coverage = min(weapons / total_defensive_units, 1.0)
 
@@ -3161,9 +3139,7 @@ pub fn calculate_total_attack_power(
         10000
     };
 
-    // ========================================================
     // 3. EQUIPMENT BONUSES
-    // ========================================================
     // From new equipment variety system:
     // - ranged_weapons: +10% attack bonus (1000 bps max)
     // - vehicles: +25% drive-by potential (2500 bps max)
@@ -3180,18 +3156,14 @@ pub fn calculate_total_attack_power(
         2500, // 25% max (drive-by eligibility)
     );
 
-    // ========================================================
     // 4. RESEARCH + HERO + LEVEL BONUSES
-    // ========================================================
     let research_bonus_bps = player.research_attack_bps as u64;
     let hero_bonus_bps = player.hero_attack_bps as u64;
 
     // Level bonus: +1% per 10 levels (up to +10% at level 100)
     let level_bonus_bps = ((player.level as u64) / 10) * 100;
 
-    // ========================================================
     // 5. FINAL CALCULATION (Multiplicative)
-    // ========================================================
     // total = base × (weapon% / 100) × (1 + bonuses%)
 
     let total_bonus_bps: u64 = 10000  // Base 100%
@@ -3276,9 +3248,7 @@ pub fn calculate_total_defense_power(
     deployment: Option<&DeploymentState>,
     reinforcements: &[ReinforcementAccount],
 ) -> u64 {
-    // ========================================================
     // 1. GARRISON: Defensive Units - Deployed Units
-    // ========================================================
     let garrison = if let Some(deploy) = deployment {
         [
             player.defensive_unit_1.saturating_sub(deploy.deployed_def_1),
@@ -3299,9 +3269,7 @@ pub fn calculate_total_defense_power(
         .saturating_add(garrison[1] * 2)
         .saturating_add(garrison[2] * 3);
 
-    // ========================================================
     // 2. REINFORCEMENTS FROM TEAM MEMBERS
-    // ========================================================
     // Only count reinforcements that have arrived (not traveling)
     // Team bonus: +20% effectiveness (already applied by sender)
 
@@ -3326,18 +3294,14 @@ pub fn calculate_total_defense_power(
         }
     }
 
-    // ========================================================
     // 3. BASE DEFENSE POWER
-    // ========================================================
     let base_defense = garrison_power.saturating_add(reinforcement_power);
 
     if base_defense == 0 {
         return 0;
     }
 
-    // ========================================================
     // 4. EQUIPMENT BONUSES (Armor)
-    // ========================================================
     let total_garrison = garrison[0]
         .saturating_add(garrison[1])
         .saturating_add(garrison[2]);
@@ -3348,16 +3312,12 @@ pub fn calculate_total_defense_power(
         1500, // 15% max defense bonus from armor
     );
 
-    // ========================================================
     // 5. RESEARCH + HERO + LEVEL BONUSES
-    // ========================================================
     let research_bonus_bps = player.research_defense_bps as u64;
     let hero_bonus_bps = player.hero_defense_bps as u64;
     let level_bonus_bps = ((player.level as u64) / 10) * 100;
 
-    // ========================================================
     // 6. FINAL CALCULATION
-    // ========================================================
     let total_bonus_bps: u64 = 10000
         .saturating_add(armor_bonus_bps)
         .saturating_add(research_bonus_bps)

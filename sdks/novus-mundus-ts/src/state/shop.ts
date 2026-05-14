@@ -17,9 +17,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Shop Enums
-// ============================================================
 
 export enum ShopItemCategory {
   Equipment = 0,
@@ -51,9 +49,7 @@ export enum WeeklySaleTheme {
   Expedition = 4,
 }
 
-// ============================================================
 // Shop Config Account Interface
-// ============================================================
 
 export interface ShopConfigAccount {
   // Discount caps
@@ -107,9 +103,7 @@ export interface ShopConfigAccount {
 /** ShopConfigAccount size in bytes */
 export const SHOP_CONFIG_ACCOUNT_SIZE = 192;
 
-// ============================================================
 // Shop Item Account Interface
-// ============================================================
 
 export interface ShopItemAccount {
   itemType: number;
@@ -132,18 +126,14 @@ export interface ShopItemAccount {
 /** ShopItemAccount size in bytes */
 export const SHOP_ITEM_ACCOUNT_SIZE = 88;
 
-// ============================================================
 // Bundle Item
-// ============================================================
 
 export interface BundleItem {
   itemId: number;
   quantity: number;
 }
 
-// ============================================================
 // Bundle Account Interface
-// ============================================================
 
 export interface BundleAccount {
   tier: number;
@@ -164,9 +154,7 @@ export interface BundleAccount {
 /** BundleAccount size in bytes */
 export const BUNDLE_ACCOUNT_SIZE = 152;
 
-// ============================================================
 // Daily Deal Account Interface
-// ============================================================
 
 export interface DailyDealAccount {
   itemId: number;
@@ -182,9 +170,7 @@ export interface DailyDealAccount {
 /** DailyDealAccount size in bytes */
 export const DAILY_DEAL_ACCOUNT_SIZE = 64;
 
-// ============================================================
 // Flash Sale Account Interface
-// ============================================================
 
 export interface FlashSaleAccount {
   payer: PublicKey;
@@ -205,9 +191,7 @@ export interface FlashSaleAccount {
 /** FlashSaleAccount size in bytes */
 export const FLASH_SALE_ACCOUNT_SIZE = 120;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize ShopConfigAccount from raw bytes */
 export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAccount {
@@ -492,9 +476,7 @@ export function deserializeFlashSale(data: Uint8Array | Buffer): FlashSaleAccoun
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse ShopConfigAccount from account info */
 export function parseShopConfig(accountInfo: AccountInfo<Buffer>): ShopConfigAccount | null {
@@ -536,9 +518,7 @@ export function parseFlashSale(accountInfo: AccountInfo<Buffer>): FlashSaleAccou
   return deserializeFlashSale(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if item is available for purchase */
 export function isItemAvailable(item: ShopItemAccount, nowSeconds: number): boolean {
@@ -592,9 +572,7 @@ export function getMilestoneDiscount(config: ShopConfigAccount, tier: string): n
   }
 }
 
-// ============================================================
 // Weekly Sale Enums
-// ============================================================
 
 export enum SeasonalSaleStatus {
   Upcoming = 0,
@@ -609,9 +587,7 @@ export enum DaoPromotionStatus {
   Cancelled = 3,
 }
 
-// ============================================================
 // Weekly Sale Account Interface
-// ============================================================
 
 export interface WeeklySaleAccount {
   payer: PublicKey;
@@ -629,9 +605,7 @@ export interface WeeklySaleAccount {
 /** WeeklySaleAccount size in bytes */
 export const WEEKLY_SALE_ACCOUNT_SIZE = 104;
 
-// ============================================================
 // Seasonal Sale Account Interface
-// ============================================================
 
 export interface SeasonalSaleAccount {
   payer: PublicKey;
@@ -654,9 +628,7 @@ export interface SeasonalSaleAccount {
 /** SeasonalSaleAccount size in bytes */
 export const SEASONAL_SALE_ACCOUNT_SIZE = 208;
 
-// ============================================================
 // DAO Promotion Account Interface
-// ============================================================
 
 export interface DAOPromotionAccount {
   payer: PublicKey;
@@ -682,9 +654,7 @@ export interface DAOPromotionAccount {
 /** DAOPromotionAccount size in bytes */
 export const DAO_PROMOTION_ACCOUNT_SIZE = 168;
 
-// ============================================================
 // Player Purchase Account Interface
-// ============================================================
 
 export interface PlayerPurchaseAccount {
   lifetimePurchased: BN;
@@ -696,9 +666,7 @@ export interface PlayerPurchaseAccount {
 /** PlayerPurchaseAccount size in bytes */
 export const PLAYER_PURCHASE_ACCOUNT_SIZE = 48;
 
-// ============================================================
 // Allowed Token Account Interface
-// ============================================================
 
 export interface AllowedTokenAccount {
   mint: PublicKey;
@@ -713,9 +681,7 @@ export interface AllowedTokenAccount {
 /** AllowedTokenAccount size in bytes */
 export const ALLOWED_TOKEN_ACCOUNT_SIZE = 122;
 
-// ============================================================
 // New Account Deserialization
-// ============================================================
 
 /** Deserialize WeeklySaleAccount from raw bytes */
 export function deserializeWeeklySale(data: Uint8Array | Buffer): WeeklySaleAccount {
@@ -901,9 +867,7 @@ export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedToken
   };
 }
 
-// ============================================================
 // New Account Parse Functions
-// ============================================================
 
 /** Parse WeeklySaleAccount from account info */
 export function parseWeeklySale(accountInfo: AccountInfo<Buffer>): WeeklySaleAccount | null {
@@ -945,9 +909,7 @@ export function parseAllowedToken(accountInfo: AccountInfo<Buffer>): AllowedToke
   return deserializeAllowedToken(accountInfo.data);
 }
 
-// ============================================================
 // New Account Helper Functions
-// ============================================================
 
 /** Check if weekly sale is currently active */
 export function isWeeklySaleActive(sale: WeeklySaleAccount, nowSeconds: number): boolean {
@@ -971,9 +933,7 @@ export function hasDaoPromotionBudget(promotion: DAOPromotionAccount): boolean {
   return promotion.usedDiscountBudget.lt(promotion.maxDiscountBudgetLamports);
 }
 
-// ============================================================
 // Item Type Metadata (derived from on-chain fulfill_item)
-// ============================================================
 
 export interface ItemTypeInfo {
   name: string;

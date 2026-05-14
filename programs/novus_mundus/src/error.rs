@@ -1,4 +1,4 @@
-use pinocchio::program_error::ProgramError;
+use pinocchio::error::ProgramError;
 
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -337,7 +337,7 @@ pub enum GameError {
     MarketRequired = 7717,
     AcademyRequired = 7718,
     ArenaRequired = 7719,
-    SanctuaryRequired = 7720,
+    MeditationChamberRequired = 7720,
     ObservatoryRequired = 7721,
     TreasuryRequired = 7722,
     CitadelRequired = 7723,
@@ -355,7 +355,7 @@ pub enum GameError {
     CampRequired = 7735,            // Camp building required for operative hiring
     MineRequired = 7736,            // Mine building required for mining
     FarmRequired = 7737,            // Farm building required for farming
-    StablesRequired = 7738,         // Stables building required for travel
+    TransportBayRequired = 7738,    // TransportBay building required for travel
     InfirmaryRequired = 7739,       // Infirmary building required
 
     // Staged Tempering Errors (1740-1759)
@@ -437,7 +437,7 @@ pub enum GameError {
     EnemyAlreadyDead = 8009,              // Cannot attack dead enemy
     NoCheckpoint = 8010,                  // No checkpoint to resume from
     DungeonRunExists = 8011,              // Player already has active dungeon run
-    CatacombsRequired = 8012,             // Catacombs building required
+    DungeonEntryRequired = 8012,          // DungeonEntry building required
     InvalidRelicChoice = 8013,            // Chosen relic not in offered options
     NotOnLeaderboard = 8014,              // Player not on dungeon leaderboard
     LeaderboardPrizeAlreadyClaimed = 8015, // Leaderboard prize already claimed

@@ -15,6 +15,22 @@ import {
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+
+/** BPFLoaderUpgradeab1e11111111111111111111111 — owner of program-data PDAs. */
+export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
+  'BPFLoaderUpgradeab1e11111111111111111111111',
+);
+
+/**
+ * Derive the program-data PDA for this program.
+ * Layout: `find_program_address([PROGRAM_ID], BPF_LOADER_UPGRADEABLE)`.
+ */
+export function deriveProgramDataPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PROGRAM_ID.toBuffer()],
+    BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+  );
+}
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
@@ -26,9 +42,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Initialize Game Engine
-// ============================================================
 
 export interface InitGameEngineAccounts {
   /** DAO governance authority (signer, payer) */
@@ -74,15 +88,19 @@ export function createInitGameEngineInstruction(
 ): TransactionInstruction {
   const [gameEngine] = deriveGameEnginePda(accounts.kingdomId);
   const [noviMint] = deriveNoviMintPda();
+  const [programData] = deriveProgramDataPda();
 
-  // Rust account order (7):
+  // Rust account order (8):
   // 0. [writable] game_engine: GameEngine PDA
-  // 1. [signer] authority: DAO governance authority
+  // 1. [signer] authority: program upgrade authority (deployer)
   // 2. [writable] novi_mint: NOVI mint PDA
   // 3. [writable] treasury_wallet: Wallet for SOL payments
   // 4. [] system_program
   // 5. [] token_program
-  // 6. [] rent
+  // 6. [] rent sysvar
+  // 7. [] program_data: ProgramData PDA under BPFLoaderUpgradeable. Used by
+  //    `assert_is_program_authority` to enforce that only the upgrade
+  //    authority can initialize a kingdom.
   const keys = [
     { pubkey: gameEngine, isSigner: false, isWritable: true },
     { pubkey: accounts.authority, isSigner: true, isWritable: true },
@@ -91,6 +109,7 @@ export function createInitGameEngineInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    { pubkey: programData, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: 51 bytes
@@ -128,9 +147,7 @@ export function createInitGameEngineInstruction(
   });
 }
 
-// ============================================================
 // Initialize Player
-// ============================================================
 
 export interface InitPlayerAccounts {
   /** Player's wallet (signer, payer) */
@@ -211,9 +228,7 @@ export function createInitPlayerInstruction(
   });
 }
 
-// ============================================================
 // Initialize User (if separate from Player)
-// ============================================================
 
 export interface InitUserAccounts {
   /** User's wallet (signer, payer) */
@@ -269,9 +284,7 @@ export function createInitUserInstruction(
   });
 }
 
-// ============================================================
 // Initialize City
-// ============================================================
 
 // CityType is imported from '../types/enums' via '../index'
 // Re-export for convenience
@@ -365,9 +378,7 @@ export function createInitCityInstruction(
   });
 }
 
-// ============================================================
 // Close Kingdom Registration
-// ============================================================
 
 export interface CloseRegistrationAccounts {
   /** Caller (signer) - DAO authority OR anyone if registration_closes_at has passed */
@@ -407,9 +418,7 @@ export function createCloseRegistrationInstruction(
   });
 }
 
-// ============================================================
 // Batch City Initialization
-// ============================================================
 
 export interface BatchCitiesAccounts {
   /** DAO authority (signer, payer) */
@@ -517,9 +526,7 @@ export function createBatchCitiesInstruction(
   });
 }
 
-// ============================================================
 // Update Game Config
-// ============================================================
 
 import type {
   GameCaps,
@@ -634,9 +641,7 @@ export function createUpdateGameConfigInstruction(
   });
 }
 
-// ============================================================
 // Set Terrain
-// ============================================================
 
 import { type CityTerrain, serializeTerrain } from '../calculators/terrain';
 
@@ -696,9 +701,7 @@ export function createSetTerrainInstruction(
   });
 }
 
-// ============================================================
 // Append Terrain Anchors
-// ============================================================
 
 import { type Anchor, ANCHOR_SIZE } from '../calculators/terrain';
 
@@ -767,9 +770,7 @@ export function createAppendTerrainInstruction(
   });
 }
 
-// ============================================================
 // Helper: Associated Token Program ID
-// ============================================================
 
 function getAssociatedTokenProgramId(): PublicKey {
   return new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');

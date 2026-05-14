@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -39,8 +39,8 @@ use crate::{
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - slot_index: u16 (2 bytes) - Slot index to occupy
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -79,9 +79,9 @@ pub fn process(
 
     // 4. Pre-checks and extension unlock (before mutable load to avoid borrow conflict)
     {
-        let data = player_account.try_borrow_data()?;
+        let data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&data) };
-        if &player.owner != owner.key() {
+        if &player.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
         require_extension(player, EXT_INVENTORY)?;
@@ -103,12 +103,12 @@ pub fn process(
     // 5. Verify and Validate Invite
 
     // Verify invite PDA
-    let (expected_invite, _) = find_program_address(
-        &[TEAM_INVITE_SEED, team_account.key().as_ref(), player_account.key().as_ref()],
+    let (expected_invite, _) = Address::find_program_address(
+        &[TEAM_INVITE_SEED, team_account.address().as_ref(), player_account.address().as_ref()],
         program_id,
     );
 
-    if invite_account.key() != &expected_invite {
+    if invite_account.address() != &expected_invite {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -121,15 +121,15 @@ pub fn process(
 
     // Load and validate invite data
     {
-        let invite_data = invite_account.try_borrow_data()?;
+        let invite_data = invite_account.try_borrow()?;
         let invite = unsafe { TeamInviteAccount::load(&invite_data) };
 
         // Verify invite is for this team and player
-        if &invite.team != team_account.key() {
+        if &invite.team != team_account.address() {
             return Err(GameError::InviteNotFound.into());
         }
 
-        if &invite.invitee != player_account.key() {
+        if &invite.invitee != player_account.address() {
             return Err(GameError::InviteNotFound.into());
         }
 
@@ -173,9 +173,9 @@ pub fn process(
     // 7. Verify Slot PDA and Availability
     // Seeds: [TEAM_SLOT_SEED, team_pubkey, slot_index]
 
-    let (expected_slot, slot_bump) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
+    let (expected_slot, slot_bump) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
 
-    if member_slot_account.key() != &expected_slot {
+    if member_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -188,13 +188,12 @@ pub fn process(
 
     // 9. Create Member Slot Account
 
-    let slot_lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(TeamMemberSlot::LEN);
+    let slot_lamports = crate::utils::rent_exempt_const(TeamMemberSlot::LEN);
 
     let slot_bump_seed = [slot_bump];
     let slot_index_bytes = slot_index.to_le_bytes();
-    let slot_seeds = pinocchio::seeds!(TEAM_SLOT_SEED, team_account.key().as_ref(), &slot_index_bytes, &slot_bump_seed);
-    let slot_signer = pinocchio::instruction::Signer::from(&slot_seeds);
+    let slot_seeds = crate::seeds!(TEAM_SLOT_SEED, team_account.address(), &slot_index_bytes, &slot_bump_seed);
+    let slot_signer = pinocchio::cpi::Signer::from(&slot_seeds);
 
     CreateAccount {
         from: owner,
@@ -206,12 +205,12 @@ pub fn process(
 
     // 10. Initialize Slot Data
 
-    let mut slot_data = member_slot_account.try_borrow_mut_data()?;
+    let mut slot_data = member_slot_account.try_borrow_mut()?;
     let slot = unsafe { TeamMemberSlot::load_mut(&mut slot_data) };
 
     *slot = TeamMemberSlot::init(
-        *team_account.key(),
-        *player_account.key(),
+        *team_account.address(),
+        *player_account.address(),
         now,
         slot_index,
         slot_bump,
@@ -227,15 +226,15 @@ pub fn process(
 
     // 12. Update Player Account
 
-    player.team = *team_account.key();
+    player.team = *team_account.address();
     player.team_slot_index = slot_index;
 
     // 13. Emit Event
 
     emit!(InviteAccepted {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        player: *player_account.key(),
+        player: *player_account.address(),
         member_count: team.member_count,
         timestamp: now,
     });

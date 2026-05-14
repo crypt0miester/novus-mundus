@@ -35,9 +35,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Create Castle (Admin)
-// ============================================================
 
 export interface CreateCastleAccounts {
   /** DAO authority (signer) - must be game_engine.authority */
@@ -130,9 +128,7 @@ export function createCreateCastleInstruction(
   });
 }
 
-// ============================================================
 // Claim Vacant Castle
-// ============================================================
 
 export interface ClaimVacantCastleAccounts {
   /** Claimer's wallet (signer) */
@@ -186,9 +182,7 @@ export function createClaimVacantCastleInstruction(
   });
 }
 
-// ============================================================
 // Appoint Court
-// ============================================================
 
 export interface AppointCourtAccounts {
   /** King's wallet (signer) */
@@ -252,9 +246,7 @@ export function createAppointCourtInstruction(
   });
 }
 
-// ============================================================
 // Dismiss Court
-// ============================================================
 
 export interface DismissCourtAccounts {
   /** King's wallet (signer) */
@@ -295,14 +287,16 @@ export function createDismissCourtInstruction(
   // 2. castle_account (WRITE)
   // 3. dismissed_account (WRITE)
   // 4. court_position_account (WRITE)
-  // 5. rent_recipient (WRITE)
+  // 5. rent_recipient (WRITE) — must be the dismissed courtier's wallet
+  //    (they paid the position rent at appointment time, and dismiss_court
+  //    requires rent_recipient == dismissed.owner).
   const keys = [
     { pubkey: accounts.king, isSigner: true, isWritable: false },
     { pubkey: kingPlayer, isSigner: false, isWritable: false },
     { pubkey: castle, isSigner: false, isWritable: true },
     { pubkey: dismissedPlayer, isSigner: false, isWritable: true },
     { pubkey: court, isSigner: false, isWritable: true },
-    { pubkey: accounts.king, isSigner: false, isWritable: true }, // rent_recipient = king
+    { pubkey: accounts.dismissed, isSigner: false, isWritable: true },
   ];
 
   // Instruction data: position_type (u8) - city_id/castle_id derived from castle PDA
@@ -318,9 +312,7 @@ export function createDismissCourtInstruction(
   });
 }
 
-// ============================================================
 // Resign Court
-// ============================================================
 
 export interface ResignCourtAccounts {
   /** Court member's wallet (signer) */
@@ -376,9 +368,7 @@ export function createResignCourtInstruction(
   });
 }
 
-// ============================================================
 // Initiate Upgrade
-// ============================================================
 
 export interface InitiateUpgradeAccounts {
   /** King's wallet (signer) */
@@ -440,9 +430,7 @@ export function createInitiateUpgradeInstruction(
   });
 }
 
-// ============================================================
 // Cancel Upgrade
-// ============================================================
 
 export interface CancelUpgradeAccounts {
   /** King's wallet (signer) */
@@ -497,9 +485,7 @@ export function createCancelUpgradeInstruction(
   });
 }
 
-// ============================================================
 // Complete Upgrade
-// ============================================================
 
 export interface CompleteUpgradeAccounts {
   /** Anyone can call (permissionless) */
@@ -541,9 +527,7 @@ export function createCompleteUpgradeInstruction(
   });
 }
 
-// ============================================================
 // Join Garrison
-// ============================================================
 
 export interface JoinGarrisonAccounts {
   /** Player's wallet (signer) */
@@ -632,9 +616,7 @@ export function createJoinGarrisonInstruction(
   });
 }
 
-// ============================================================
 // Leave Garrison
-// ============================================================
 
 export interface LeaveGarrisonAccounts {
   /** Player's wallet (signer) */
@@ -705,9 +687,7 @@ export function createLeaveGarrisonInstruction(
   });
 }
 
-// ============================================================
 // Relieve Garrison
-// ============================================================
 
 export interface RelieveGarrisonAccounts {
   /** King's wallet (signer) */
@@ -783,9 +763,7 @@ export function createRelieveGarrisonInstruction(
   });
 }
 
-// ============================================================
 // Claim Castle Rewards
-// ============================================================
 
 export interface ClaimCastleRewardsAccounts {
   /** Claimant's wallet (signer) - king, court member, or team member */
@@ -855,9 +833,7 @@ export function createClaimCastleRewardsInstruction(
   });
 }
 
-// ============================================================
 // Claim Garrison Loot
-// ============================================================
 
 export interface ClaimGarrisonLootAccounts {
   /** Garrison member's wallet (signer) */
@@ -905,9 +881,7 @@ export function createClaimGarrisonLootInstruction(
   });
 }
 
-// ============================================================
 // Attack Castle
-// ============================================================
 
 export interface AttackCastleAccounts {
   /** Attacker's wallet (signer) */
@@ -973,9 +947,7 @@ export function createAttackCastleInstruction(
   });
 }
 
-// ============================================================
 // Finalize Transition
-// ============================================================
 
 export interface FinalizeTransitionAccounts {
   /** Anyone can call (permissionless) */
@@ -1038,9 +1010,7 @@ export function createFinalizeTransitionInstruction(
   });
 }
 
-// ============================================================
 // Update Castle Status (Permissionless)
-// ============================================================
 
 export interface UpdateCastleStatusAccounts {
   /** Anyone can call (permissionless) */
@@ -1084,9 +1054,7 @@ export function createUpdateCastleStatusInstruction(
   });
 }
 
-// ============================================================
 // Force Remove King (Admin)
-// ============================================================
 
 export interface ForceRemoveKingAccounts {
   /** DAO authority (signer) */
@@ -1142,9 +1110,7 @@ export function createForceRemoveKingInstruction(
   });
 }
 
-// ============================================================
 // Cleanup Instructions (Permissionless)
-// ============================================================
 
 export interface GarrisonCleanupAccounts {
   /** Anyone can call */
@@ -1326,9 +1292,7 @@ export function createRewardsCleanupInstruction(
   });
 }
 
-// ============================================================
 // Update Castle Config (DAO Only)
-// ============================================================
 
 export interface UpdateCastleConfigAccounts {
   /** DAO authority (signer) */

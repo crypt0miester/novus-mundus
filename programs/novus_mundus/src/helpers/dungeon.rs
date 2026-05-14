@@ -15,15 +15,13 @@ use crate::logic::safe_math::apply_bp;
 use crate::logic::time_cycle::TimeOfDay;
 use crate::state::DungeonRun;
 
-// ============================================================
 // RELIC EFFECT CALCULATIONS
-// ============================================================
 
-/// Apply Mystic specialization bonus to relic effects (+30%)
-fn apply_mystic_mult(run: &DungeonRun, value: u16) -> u16 {
+/// Apply Tactician specialization bonus to relic effects (+30%)
+fn apply_tactician_mult(run: &DungeonRun, value: u16) -> u16 {
     use crate::state::HeroSpecialization;
     let spec = run.get_specialization();
-    if spec == HeroSpecialization::Mystic {
+    if spec == HeroSpecialization::Tactician {
         // +30% to relic effects
         apply_bp(value as u64, 13000u64).unwrap_or(value as u64) as u16
     } else {
@@ -35,190 +33,188 @@ fn apply_mystic_mult(run: &DungeonRun, value: u16) -> u16 {
 pub fn calculate_relic_attack_bonus(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Warrior's Fury (ID 0): +15% attack
+    // Relic 0: +15% attack
     if run.has_relic(0) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[0]);
     }
 
-    // Berserker (ID 12): +30% attack
+    // Relic 12: +30% attack (+15% damage taken handled in defense calc)
     if run.has_relic(12) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[12]);
     }
 
-    // Double Strike (ID 14): counted in crit/hit calculation
-    // Glass Cannon (ID 17): +50% attack
+    // Relic 14 (15% double-attack): counted in crit/hit calculation
+    // Relic 17: +50% attack (-30% defense handled in defense calc)
     if run.has_relic(17) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[17]);
     }
 
-    // Blood Pact (ID 18): +40% attack when below 50% units
+    // Relic 18: +40% attack when below 50% units
     if run.has_relic(18) {
         // Check if units are below 50% (need original units to compare)
         // This is handled in the combat processor with context
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate total defense bonus from relics (basis points)
 pub fn calculate_relic_defense_bonus(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Iron Skin (ID 1): +10% damage reduction
+    // Relic 1: +10% damage reduction
     if run.has_relic(1) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[1]);
     }
 
-    // Unit Rally (ID 8): +15% unit survival
+    // Relic 8: +15% unit survival
     if run.has_relic(8) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[8]);
     }
 
-    // Glass Cannon (ID 17): -30% defense (negative)
+    // Relic 17: -30% defense (negative tradeoff for +50% attack)
     if run.has_relic(17) {
         bonus = bonus.saturating_sub(3000);
     }
 
-    // Berserker (ID 12): +15% damage taken (negative)
+    // Relic 12: +15% damage taken (negative tradeoff for +30% attack)
     if run.has_relic(12) {
         bonus = bonus.saturating_sub(1500);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
+    // Apply Tactician bonus (+30% to all relic effects)
     // Note: For defense, we only boost the positive portion
-    apply_mystic_mult(run, bonus)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate crit chance bonus from relics (basis points)
 pub fn calculate_relic_crit_chance(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Swift Blade (ID 2): +20% crit chance
+    // Relic 2: +20% crit chance
     if run.has_relic(2) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[2]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate crit damage bonus from relics (basis points)
 pub fn calculate_relic_crit_damage(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Executioner (ID 3): +30% crit damage
+    // Relic 3: +30% crit damage
     if run.has_relic(3) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[3]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate lifesteal from relics (basis points)
 pub fn calculate_relic_lifesteal(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Vampiric Touch (ID 4): 5% lifesteal
+    // Relic 4: 5% lifesteal
     if run.has_relic(4) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[4]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate darkness reduction from relics (basis points)
 pub fn calculate_relic_darkness_reduction(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Shadow Cloak (ID 5): -30% darkness
+    // Relic 5: -30% darkness
     if run.has_relic(5) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[5]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate loot bonus from relics (basis points)
 pub fn calculate_relic_loot_bonus(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Fortune's Favor (ID 6): +25% loot
+    // Relic 6: +25% loot
     if run.has_relic(6) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[6]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate boss power reduction from relics (basis points)
 pub fn calculate_relic_boss_reduction(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Time Dilation (ID 7): -15% boss power
+    // Relic 7: -15% boss power
     if run.has_relic(7) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[7]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
 /// Calculate hero effectiveness bonus from relics (basis points)
 pub fn calculate_relic_hero_bonus(run: &DungeonRun) -> u16 {
     let mut bonus = 0u16;
 
-    // Hero's Blessing (ID 9): +25% hero effectiveness
+    // Relic 9: +25% hero effectiveness
     if run.has_relic(9) {
         bonus = bonus.saturating_add(RELIC_EFFECTS[9]);
     }
 
-    // Apply Mystic bonus (+30% to all relic effects)
-    apply_mystic_mult(run, bonus)
+    // Apply Tactician bonus (+30% to all relic effects)
+    apply_tactician_mult(run, bonus)
 }
 
-/// Check if player has Treasure Sense (guaranteed rare find)
-pub fn has_treasure_sense(run: &DungeonRun) -> bool {
+/// Check if player has the guaranteed-rare-drop relic (id 10)
+pub fn has_guaranteed_rare_drop_relic(run: &DungeonRun) -> bool {
     run.has_relic(10)
 }
 
-/// Check if player has Phoenix Feather (one-time resurrection)
-pub fn has_phoenix_feather(run: &DungeonRun) -> bool {
+/// Check if player has the one-time resurrection relic (id 11)
+pub fn has_resurrection_relic(run: &DungeonRun) -> bool {
     run.has_relic(11)
 }
 
-/// Check if player has Stalwart (cannot be one-shot)
-pub fn has_stalwart(run: &DungeonRun) -> bool {
+/// Check if player has the one-shot immunity relic (id 13: min 1 unit survives)
+pub fn has_one_shot_immunity_relic(run: &DungeonRun) -> bool {
     run.has_relic(13)
 }
 
-/// Check if player has Double Strike chance
-pub fn double_strike_chance(run: &DungeonRun) -> u16 {
+/// Double-attack chance from relic id 14 (basis points)
+pub fn double_attack_chance(run: &DungeonRun) -> u16 {
     if run.has_relic(14) {
-        // Apply Mystic bonus (+30% to all relic effects)
-        apply_mystic_mult(run, RELIC_EFFECTS[14]) // 15% = 1500 bps (or 19.5% with Mystic)
+        // Apply Tactician bonus (+30% to all relic effects)
+        apply_tactician_mult(run, RELIC_EFFECTS[14]) // 15% = 1500 bps (or 19.5% with Tactician)
     } else {
         0
     }
 }
 
-/// Check if player has Golden Touch (2x NOVI)
-pub fn has_golden_touch(run: &DungeonRun) -> bool {
+/// Check if player has the double-NOVI relic (id 15)
+pub fn has_double_novi_relic(run: &DungeonRun) -> bool {
     run.has_relic(15)
 }
 
-/// Check if player has Torch Bearer (immune to crit penalty)
-pub fn has_torch_bearer(run: &DungeonRun) -> bool {
+/// Check if player has the darkness-crit-penalty immunity relic (id 16)
+pub fn has_darkness_crit_immunity_relic(run: &DungeonRun) -> bool {
     run.has_relic(16)
 }
 
-// ============================================================
 // SYNERGY CALCULATIONS
-// ============================================================
 
 /// Calculate synergy bonuses for a run
 /// Returns (attack_bps, defense_bps, crit_bps, lifesteal_bps, darkness_reduction_bps, loot_bps, boss_reduction_bps, hero_bps)
@@ -304,9 +300,7 @@ pub struct SynergyBonuses {
     pub extra_boss_drop: bool,
 }
 
-// ============================================================
 // DARKNESS CALCULATIONS
-// ============================================================
 
 /// Calculate darkness damage penalty for a floor (basis points)
 pub fn calculate_darkness_damage_penalty(floor: u8, mitigation_bps: u16) -> u16 {
@@ -325,9 +319,9 @@ pub fn calculate_darkness_damage_penalty(floor: u8, mitigation_bps: u16) -> u16 
 pub fn calculate_darkness_crit_penalty(
     floor: u8,
     mitigation_bps: u16,
-    has_torch_bearer: bool,
+    has_crit_immunity: bool,
 ) -> u16 {
-    if has_torch_bearer || floor < DARKNESS_CRIT_PENALTY_START_FLOOR {
+    if has_crit_immunity || floor < DARKNESS_CRIT_PENALTY_START_FLOOR {
         return 0;
     }
 
@@ -390,9 +384,7 @@ pub fn calculate_total_darkness_mitigation(run: &DungeonRun) -> u16 {
         .saturating_add(scout_mitigation)
 }
 
-// ============================================================
 // COMBAT CALCULATIONS
-// ============================================================
 
 /// Calculate player's combat power from remaining units
 pub fn calculate_unit_power(remaining_units: &[u64; 3]) -> u64 {
@@ -551,9 +543,7 @@ pub fn calculate_damage_taken(
     damage
 }
 
-// ============================================================
 // REWARD CALCULATIONS
-// ============================================================
 
 /// Get floor reward multiplier (×10000 precision)
 pub fn get_floor_multiplier(floor: u8) -> u32 {
@@ -570,11 +560,11 @@ pub fn calculate_room_xp(base_xp: u64, floor: u8) -> u64 {
 }
 
 /// Calculate NOVI reward for a floor
-pub fn calculate_floor_novi(base_novi: u64, floor: u8, has_golden_touch: bool) -> u64 {
+pub fn calculate_floor_novi(base_novi: u64, floor: u8, has_double_novi: bool) -> u64 {
     let multiplier = get_floor_multiplier(floor);
     let mut novi = base_novi.saturating_mul(multiplier as u64) / 10000;
 
-    if has_golden_touch {
+    if has_double_novi {
         novi = novi.saturating_mul(2);
     }
 
@@ -633,9 +623,7 @@ pub fn calculate_loot_with_bonuses(
     loot
 }
 
-// ============================================================
 // DUNGEON TIME PERIODS - Simplified from TimeOfDay
-// ============================================================
 
 /// Simplified time periods for dungeon mechanics (4 periods vs 7 in TimeOfDay)
 /// Maps from the comprehensive TimeOfDay system in logic/time_cycle.rs
@@ -767,23 +755,29 @@ pub fn get_time_modifiers(period: TimePeriod) -> TimeModifiers {
     }
 }
 
-/// Dungeon theme for time interactions
+/// Dungeon mechanical category for time interactions.
+/// Theme-flavored display names are mapped by the SDK; on-chain code only
+/// uses the abstract enemy archetype.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DungeonTheme {
-    Crypts = 0,  // Undead - strong at night, weak at day
-    Caverns = 1, // Beasts - strong at dusk, weak at dawn
-    Abyss = 2,   // Demons - strong at night, weak at dawn
-    Forge = 3,   // Constructs - immune to time effects
+    /// Enemies weakened by radiant/light effects — strong at night, weak by day
+    RadiantWeakness = 0,
+    /// Fast enemies — strong at dusk, weak at dawn
+    FastMobs = 1,
+    /// Enemies amplified by darkness — strong at night, weak at dawn
+    DarknessVulnerable = 2,
+    /// Heavily armored enemies — immune to time-of-day effects
+    ArmoredMobs = 3,
 }
 
 impl DungeonTheme {
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
-            0 => Some(DungeonTheme::Crypts),
-            1 => Some(DungeonTheme::Caverns),
-            2 => Some(DungeonTheme::Abyss),
-            3 => Some(DungeonTheme::Forge),
+            0 => Some(DungeonTheme::RadiantWeakness),
+            1 => Some(DungeonTheme::FastMobs),
+            2 => Some(DungeonTheme::DarknessVulnerable),
+            3 => Some(DungeonTheme::ArmoredMobs),
             _ => None,
         }
     }
@@ -793,22 +787,22 @@ impl DungeonTheme {
 /// Returns basis points adjustment (positive = stronger, negative = weaker)
 pub fn get_theme_time_modifier(theme: DungeonTheme, period: TimePeriod) -> i16 {
     match theme {
-        DungeonTheme::Crypts => match period {
+        DungeonTheme::RadiantWeakness => match period {
             TimePeriod::Night => 2000, // +20% at night
             TimePeriod::Day => -2000,  // -20% during day
             _ => 0,
         },
-        DungeonTheme::Caverns => match period {
-            TimePeriod::Dusk => 1500,  // +15% at dusk (hunting hour)
+        DungeonTheme::FastMobs => match period {
+            TimePeriod::Dusk => 1500,  // +15% at dusk
             TimePeriod::Dawn => -1500, // -15% at dawn
             _ => 0,
         },
-        DungeonTheme::Abyss => match period {
+        DungeonTheme::DarknessVulnerable => match period {
             TimePeriod::Night => 2500, // +25% at night
             TimePeriod::Dawn => -2500, // -25% at dawn
             _ => 0,
         },
-        DungeonTheme::Forge => 0, // Constructs don't care about time
+        DungeonTheme::ArmoredMobs => 0, // Immune to time-of-day effects
     }
 }
 
@@ -887,9 +881,7 @@ pub fn calculate_treasure_gems_with_time(base_gems: u64, period: TimePeriod) -> 
     apply_bp(base_gems, time_mods.treasure_gem_mult_bps as u64).unwrap_or(base_gems)
 }
 
-// ============================================================
 // BOSS WRATH SYSTEM - Multi-Phase Boss Mechanics
-// ============================================================
 
 /// Boss wrath thresholds
 pub const WRATH_FIRST_BLOOD: u8 = 25; // +15% damage
@@ -971,9 +963,7 @@ pub struct BossAbility {
     pub remaining_attacks: u8,
 }
 
-// ============================================================
 // HERO SPECIALIZATION HELPERS
-// ============================================================
 
 use crate::state::HeroSpecialization;
 
@@ -1016,11 +1006,11 @@ pub fn apply_scout_loot_bonus(loot: u64, spec: HeroSpecialization) -> u64 {
     }
 }
 
-/// Apply Mystic relic effect multiplier (+30% relic effects)
+/// Apply Tactician relic effect multiplier (+30% relic effects)
 /// Note: This function is available for external use, but most internal relic
-/// calculations already apply Mystic bonus via apply_mystic_mult().
+/// calculations already apply Tactician bonus via apply_tactician_mult().
 #[allow(dead_code)]
-pub fn apply_mystic_relic_bonus(effect_bps: u16, spec: HeroSpecialization) -> u16 {
+pub fn apply_tactician_relic_bonus(effect_bps: u16, spec: HeroSpecialization) -> u16 {
     let mult = spec.relic_effect_mult_bps();
     if mult > 10000 {
         apply_bp(effect_bps as u64, mult as u64).unwrap_or(effect_bps as u64) as u16
@@ -1063,7 +1053,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
     let duration_mult = if has_boss_2 { 1 } else { 2 }; // Half duration with 2-piece
 
     match theme {
-        DungeonTheme::Crypts => BossAbility {
+        DungeonTheme::RadiantWeakness => BossAbility {
             active: true,
             lifesteal_bps: 2000, // Heals 20% of damage dealt
             defense_pierce_bps: 0,
@@ -1071,7 +1061,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
             shield_hp: 0,
             remaining_attacks: 255, // Permanent until killed
         },
-        DungeonTheme::Caverns => BossAbility {
+        DungeonTheme::FastMobs => BossAbility {
             active: true,
             lifesteal_bps: 0,
             defense_pierce_bps: 10000, // Ignores all defense
@@ -1079,7 +1069,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
             shield_hp: 0,
             remaining_attacks: 3 * duration_mult, // 3 attacks (or 6 without counter)
         },
-        DungeonTheme::Abyss => BossAbility {
+        DungeonTheme::DarknessVulnerable => BossAbility {
             active: true,
             lifesteal_bps: 0,
             defense_pierce_bps: 0,
@@ -1087,7 +1077,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
             shield_hp: 0,
             remaining_attacks: 255, // Permanent until killed
         },
-        DungeonTheme::Forge => BossAbility {
+        DungeonTheme::ArmoredMobs => BossAbility {
             active: true,
             lifesteal_bps: 0,
             defense_pierce_bps: 0,

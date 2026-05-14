@@ -35,9 +35,7 @@ import {
 } from '../../src/calculators/novi';
 import type { NoviPurchaseConfig } from '../../src/state/game-engine';
 
-// ============================================================
 // Test Fixtures
-// ============================================================
 
 function createTestConfig(): NoviPurchaseConfig {
   return {
@@ -66,9 +64,7 @@ function createTestConfig(): NoviPurchaseConfig {
   };
 }
 
-// ============================================================
 // Streak Calculation Tests
-// ============================================================
 
 describe('NOVI Streak Calculations', () => {
   describe('calculateNoviStreak', () => {
@@ -154,9 +150,7 @@ describe('NOVI Streak Calculations', () => {
   });
 });
 
-// ============================================================
 // Bonus Calculation Tests
-// ============================================================
 
 describe('Bonus Calculations', () => {
   describe('calculateTotalBonusBps', () => {
@@ -227,9 +221,7 @@ describe('Bonus Calculations', () => {
   });
 });
 
-// ============================================================
 // Daily Cap Tests
-// ============================================================
 
 describe('Daily Cap Calculations', () => {
   const config = createTestConfig();
@@ -307,9 +299,7 @@ describe('Daily Cap Calculations', () => {
   });
 });
 
-// ============================================================
 // Purchase Preview Tests
-// ============================================================
 
 describe('Purchase Preview', () => {
   const config = createTestConfig();
@@ -381,9 +371,7 @@ describe('Purchase Preview', () => {
   });
 });
 
-// ============================================================
 // Package Helper Tests
-// ============================================================
 
 describe('Package Helpers', () => {
   describe('NOVI_PACKAGE_TIERS', () => {
@@ -444,9 +432,7 @@ describe('Package Helpers', () => {
   });
 });
 
-// ============================================================
 // Formatting Tests
-// ============================================================
 
 describe('Formatting', () => {
   describe('formatNoviAmount', () => {
@@ -505,9 +491,7 @@ describe('Formatting', () => {
   });
 });
 
-// ============================================================
 // Oracle Price Tests
-// ============================================================
 
 describe('Oracle Pricing', () => {
   describe('calculateOracleCostLamports', () => {

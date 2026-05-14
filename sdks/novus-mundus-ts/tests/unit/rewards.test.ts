@@ -33,9 +33,7 @@ import {
   type EncounterLootPool,
 } from '../../src/calculators/rewards';
 
-// ============================================================
 // Oscillation Multiplier Tests
-// ============================================================
 
 describe('Oscillation Multiplier', () => {
   describe('calculateOscillationMultiplier', () => {
@@ -91,9 +89,7 @@ describe('Oscillation Multiplier', () => {
   });
 });
 
-// ============================================================
 // Level Scaling Tests
-// ============================================================
 
 describe('Level Scaling', () => {
   describe('calculateLevelMultiplier', () => {
@@ -136,9 +132,7 @@ describe('Level Scaling', () => {
   });
 });
 
-// ============================================================
 // Novi Award Determination Tests
-// ============================================================
 
 describe('Novi Award Determination', () => {
   describe('shouldAwardNovi', () => {
@@ -239,9 +233,7 @@ describe('Novi Award Determination', () => {
   });
 });
 
-// ============================================================
 // Reward Type Count Tests
-// ============================================================
 
 describe('Reward Type Count', () => {
   describe('calculateRewardTypeCount', () => {
@@ -314,9 +306,7 @@ describe('Reward Type Count', () => {
   });
 });
 
-// ============================================================
 // Fragment and Gem Amount Tests
-// ============================================================
 
 describe('Fragment and Gem Amounts', () => {
   describe('calculateFragmentAmount', () => {
@@ -427,9 +417,7 @@ describe('Fragment and Gem Amounts', () => {
   });
 });
 
-// ============================================================
 // Encounter Loot Pool Tests
-// ============================================================
 
 describe('Encounter Loot Pool', () => {
   // Common base arrays for testing (5 rarity tiers)
@@ -551,9 +539,7 @@ describe('Encounter Loot Pool', () => {
   });
 });
 
-// ============================================================
 // XP Reward Tests
-// ============================================================
 
 describe('XP Rewards', () => {
   describe('calculateXpReward', () => {
@@ -598,9 +584,7 @@ describe('XP Rewards', () => {
   });
 });
 
-// ============================================================
 // Daily Rewards Tests
-// ============================================================
 
 describe('Daily Rewards', () => {
   describe('calculateDailyRewards', () => {

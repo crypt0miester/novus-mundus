@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -36,8 +36,8 @@ pub const MEDITATION_SPEEDUP_GEMS_PER_MINUTE: u64 = 50;
 /// # Instruction Data
 /// - speedup_tier: u8 (1 byte) - 1 or 2
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -64,11 +64,11 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     // 5. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 6. Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -80,6 +80,15 @@ pub fn process(
     // 8. Calculate remaining meditation time
     let elapsed = now.saturating_sub(player.meditation_started_at);
     if elapsed <= 0 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    // Reject speedup if meditation is already past the maximum possible cap.
+    // The estate account is not passed in here, so we use the absolute upper bound
+    // (max sanctuary level => 48h). Any further speedup yields no benefit because
+    // XP is computed against capped_elapsed = elapsed.min(max_duration).
+    const MAX_POSSIBLE_MEDITATION_SECONDS: i64 = 48 * 3600;
+    if elapsed >= MAX_POSSIBLE_MEDITATION_SECONDS {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -114,7 +123,7 @@ pub fn process(
 
     // 12. Emit event
     emit!(MeditationSpeedup {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         speedup_seconds: seconds_to_add as u64,
         gems_spent: gem_cost,

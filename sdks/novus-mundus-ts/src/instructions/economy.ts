@@ -29,9 +29,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Enums
-// ============================================================
 
 /** Unit type for hiring */
 export enum UnitType {
@@ -61,9 +59,7 @@ export enum CollectionType {
   Farming = 3,
 }
 
-// ============================================================
 // Hire Units
-// ============================================================
 
 export interface HireUnitsAccounts {
   /** Player's wallet (signer) */
@@ -138,9 +134,7 @@ export function createHireUnitsInstruction(
   });
 }
 
-// ============================================================
 // Collect Resources
-// ============================================================
 
 export interface CollectResourcesAccounts {
   /** Player's wallet (signer) */
@@ -210,9 +204,7 @@ export function createCollectResourcesInstruction(
   });
 }
 
-// ============================================================
 // Purchase Equipment
-// ============================================================
 
 export interface PurchaseEquipmentAccounts {
   /** Player's wallet (signer) */
@@ -273,9 +265,7 @@ export function createPurchaseEquipmentInstruction(
   });
 }
 
-// ============================================================
 // Purchase Stamina
-// ============================================================
 
 export interface PurchaseStaminaAccounts {
   /** Player's wallet (signer) */
@@ -333,9 +323,7 @@ export function createPurchaseStaminaInstruction(
   });
 }
 
-// ============================================================
 // Transfer Cash
-// ============================================================
 
 export interface TransferCashAccounts {
   /** Sender's wallet (signer) */
@@ -419,9 +407,7 @@ export function createTransferCashInstruction(
   });
 }
 
-// ============================================================
 // Vault Transfer
-// ============================================================
 
 export interface VaultTransferAccounts {
   /** Player's wallet (signer) */
@@ -480,9 +466,7 @@ export function createVaultTransferInstruction(
   });
 }
 
-// ============================================================
 // Update Locked NOVI
-// ============================================================
 
 export interface UpdateLockedNoviAccounts {
   /** Player's wallet (signer) */
@@ -542,9 +526,7 @@ export function createUpdateLockedNoviInstruction(
   });
 }
 
-// ============================================================
 // Mint For Prize
-// ============================================================
 
 export interface MintForPrizeAccounts {
   /** Authority (DAO) */

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -52,8 +52,8 @@ pub const SPEEDUP_RETURN: u8 = 2;
 /// 3. `[SIGNER]` payer_owner - Payer's wallet
 /// 4. `[]` game_engine - For gem cost configuration
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -88,7 +88,7 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // 5. Load Payer (anyone can pay for speedup, kingdom-scoped)
-    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, game_engine_account.key(), payer_owner.key(), program_id)?;
+    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, game_engine_account.address(), payer_owner.address(), program_id)?;
 
     let now = Clock::get()?.unix_timestamp;
 
@@ -104,16 +104,14 @@ pub fn process(
 
     // 7. Process based on speedup type
     match speedup_type {
-        // ============================================================
         // GATHER: Speed up participant's travel to rally point
-        // ============================================================
         SPEEDUP_GATHER => {
             require_owner(rally_account, program_id)?;
-            let rally_data_ref = rally_account.try_borrow_data()?;
+            let rally_data_ref = rally_account.try_borrow()?;
             let rally_data = unsafe { RallyAccount::load(&rally_data_ref) };
 
             require_owner(rally_participant_account, program_id)?;
-            let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
+            let mut participant_data_ref = rally_participant_account.try_borrow_mut()?;
             let participant_data = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
             // Validate rally is in Gathering phase
@@ -161,12 +159,10 @@ pub fn process(
             participant_data.arrives_at_rally = now + new_remaining;
         }
 
-        // ============================================================
         // MARCH: Speed up entire army's march to target
-        // ============================================================
         SPEEDUP_MARCH => {
             require_owner(rally_account, program_id)?;
-            let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
+            let mut rally_data_ref = rally_account.try_borrow_mut()?;
             let rally_data = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
             // Validate rally is in Marching phase
@@ -203,16 +199,14 @@ pub fn process(
             rally_data.arrive_at = now + new_remaining;
         }
 
-        // ============================================================
         // RETURN: Speed up participant's return journey
-        // ============================================================
         SPEEDUP_RETURN => {
             require_owner(rally_account, program_id)?;
-            let rally_data_ref = rally_account.try_borrow_data()?;
+            let rally_data_ref = rally_account.try_borrow()?;
             let rally_data = unsafe { RallyAccount::load(&rally_data_ref) };
 
             require_owner(rally_participant_account, program_id)?;
-            let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
+            let mut participant_data_ref = rally_participant_account.try_borrow_mut()?;
             let participant_data = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
             // Validate participant belongs to this rally
@@ -276,9 +270,9 @@ pub fn process(
     // 8. Emit event
     // Note: team_name not available here - would need to pass team account
     emit!(RallySpeedup {
-        rally: *rally_account.key(),
+        rally: *rally_account.address(),
         team_name: [0u8; 32], // Team name not available, lookup via rally.team
-        payer: *payer_player_account.key(),
+        payer: *payer_player_account.address(),
         speedup_type,
         gems_spent: total_gem_cost_spent,
         timestamp: now,

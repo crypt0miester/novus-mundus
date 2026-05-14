@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::Signer,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    cpi::Signer,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -15,7 +15,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::PlayerAccount,
-    validation::{require_key_match, require_signer, require_writable},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::PlayerNameSet,
     NULL_PUBKEY,
@@ -48,7 +48,7 @@ use crate::{
 /// - Transfers domain ownership from user wallet → player PDA
 /// - Sets main domain for player PDA via TLD House
 /// - Stores domain+tld name in player account
-pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
     let [
         player_account,
@@ -81,18 +81,21 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     require_writable(main_domain)?;
     require_key_match(alt_name_service_program, &alt_name_service::ID)?;
     require_key_match(tld_house_program, &tld_house::ID)?;
+    require_owner(name_account, &alt_name_service::ID)?;
+    require_owner(reverse_name_account, &alt_name_service::ID)?;
+    require_owner(tld_state, &alt_name_service::ID)?;
 
     // Validate name_class is NULL_PUBKEY (standard domains only)
-    if name_class.key() != &NULL_PUBKEY {
+    if name_class.address() != &NULL_PUBKEY {
         return Err(ProgramError::InvalidAccountData);
     }
 
     // 4. Load and validate player
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Verify ownership
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -102,7 +105,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
         reverse_name_account,
         name_parent,
         tld_house,
-        owner.key(), // User must currently own the domain
+        owner.address(), // User must currently own the domain
         &reverse_acc_hashed_name,
     )?;
 
@@ -114,11 +117,11 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
 
     // 8. Derive player PDA (this is the new owner)
     let player_ge = player.game_engine;
-    let player_seeds: &[&[u8]] = &[PLAYER_SEED, &player_ge, owner.key().as_ref()];
-    let (player_pda, bump) = pinocchio::pubkey::find_program_address(player_seeds, program_id);
+    let player_seeds: &[&[u8]] = &[PLAYER_SEED, player_ge.as_ref(), owner.address().as_ref()];
+    let (player_pda, bump) = pinocchio::Address::find_program_address(player_seeds, program_id);
 
     // Verify player account matches
-    if player_pda != *player_account.key() {
+    if player_pda != *player_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -136,7 +139,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 10. Set main domain for player PDA
     // After transfer, the player PDA is the new owner and must sign
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
+    let seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), owner.address(), &bump_seed);
     let signer = Signer::from(&seeds);
 
     SetMainDomain {
@@ -163,7 +166,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 12. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameSet {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         domain_hash: hashed_name,
         timestamp: now,

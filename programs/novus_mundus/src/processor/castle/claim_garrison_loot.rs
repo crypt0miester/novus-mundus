@@ -6,9 +6,9 @@
 //! during successful castle defenses.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -34,8 +34,8 @@ use crate::{
 /// 3. [writable] Garrison contribution account
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -57,10 +57,10 @@ pub fn process(
 
     // Load player
     require_owner(player_account, program_id)?;
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    if &player.owner != player_wallet.key() {
+    if &player.owner != player_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -71,20 +71,20 @@ pub fn process(
     require_owner(garrison_account, program_id)?;
 
     let (expected_garrison_pda, _) = GarrisonContributionAccount::derive_pda(
-        castle_account.key(),
-        player_account.key(),
+        castle_account.address(),
+        player_account.address(),
     );
-    if garrison_account.key() != &expected_garrison_pda {
+    if garrison_account.address() != &expected_garrison_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_initialized(garrison_account).map_err(|_| GameError::NotInGarrison)?;
 
-    let mut garrison_data = garrison_account.try_borrow_mut_data()?;
+    let mut garrison_data = garrison_account.try_borrow_mut()?;
     let garrison = unsafe { GarrisonContributionAccount::load_mut(&mut garrison_data) };
 
     // Verify contributor matches
-    if garrison.contributor != *player_account.key() {
+    if garrison.contributor != *player_account.address() {
         return Err(GameError::NotInGarrison.into());
     }
 
@@ -123,9 +123,9 @@ pub fn process(
 
     // Emit event
     emit!(GarrisonLootClaimed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        claimer: *player_account.key(),
+        claimer: *player_account.address(),
         claimer_name: player_name,
         melee,
         ranged,

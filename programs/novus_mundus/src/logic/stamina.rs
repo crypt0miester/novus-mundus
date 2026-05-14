@@ -5,7 +5,7 @@
 /// - Consumption for encounter attacks
 /// - Adding stamina (from purchases/rewards)
 ///
-/// All functions are pure - no AccountInfo dependencies
+/// All functions are pure - no AccountView dependencies
 
 use crate::{
     state::PlayerAccount,

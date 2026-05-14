@@ -1,16 +1,16 @@
 /// Initialization events - player/user creation, game engine setup
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new player account is created
 pub struct PlayerCreated {
     /// Player account pubkey
-    pub player: Pubkey,
+    pub player: Address,
     /// User account pubkey (wallet owner)
-    pub user: Pubkey,
+    pub user: Address,
     /// Starting city pubkey
-    pub city: Pubkey,
+    pub city: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -31,9 +31,9 @@ impl Event for PlayerCreated {
 /// Emitted when a new user account is created
 pub struct UserCreated {
     /// User account pubkey
-    pub user: Pubkey,
+    pub user: Address,
     /// Wallet pubkey (owner)
-    pub wallet: Pubkey,
+    pub wallet: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -53,7 +53,7 @@ impl Event for UserCreated {
 /// Emitted when a city is initialized
 pub struct CityInitialized {
     /// City account pubkey
-    pub city: Pubkey,
+    pub city: Address,
     /// City index
     pub city_index: u16,
     /// Unix timestamp
@@ -75,7 +75,7 @@ impl Event for CityInitialized {
 /// Emitted when terrain data is set on a city
 pub struct TerrainSet {
     /// City account pubkey
-    pub city: Pubkey,
+    pub city: Address,
     /// City ID
     pub city_id: u16,
     /// Number of terrain anchors written
@@ -100,9 +100,9 @@ impl Event for TerrainSet {
 /// Emitted when game engine is initialized
 pub struct GameEngineInitialized {
     /// Game engine account pubkey
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Authority pubkey
-    pub authority: Pubkey,
+    pub authority: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }

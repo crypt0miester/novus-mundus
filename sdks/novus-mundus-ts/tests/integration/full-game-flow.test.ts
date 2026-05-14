@@ -38,6 +38,9 @@ import {
   // Team
   createTeamCreateInstruction,
   createTeamJoinInstruction,
+  createTeamInviteInstruction,
+  createTeamAcceptInviteInstruction,
+  deriveTeamPda,
   // Estate
   createCreateEstateInstruction,
   createBuildBuildingInstruction,
@@ -48,11 +51,13 @@ import {
   deriveRallyPda,
   deriveExpeditionPda,
   // Enums
+  BuildingType,
   ExpeditionType,
   RallyTargetType,
   ReinforcementStatus,
 } from '../../src/index';
 
+import type { PublicKey } from '@solana/web3.js';
 import {
   type TestContext,
   beforeAllTests,
@@ -79,14 +84,75 @@ import {
   diffPlayerSnapshots,
 } from '../utils/accounts';
 
-// ============================================================
+// Unique team-id generator to avoid collisions across tests in this file
+let teamIdCounter = 0;
+function nextTeamId(): number {
+  teamIdCounter += 1;
+  return (Date.now() % 1_000_000) * 100 + teamIdCounter;
+}
+
 // Test Suite
-// ============================================================
 
 describe('Full Game Flow Integration', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
   let heroFactory: HeroFactory;
+
+  // Create a team led by `leader` with `members` invited and accepted.
+  // Unlocks EXT_TEAM for the leader and each member (prereq for rally/etc).
+  async function createTeamWithMembers(
+    leader: TestPlayer,
+    members: TestPlayer[],
+  ): Promise<{ teamPda: PublicKey; teamId: number }> {
+    const teamId = nextTeamId();
+    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        createTeamCreateInstruction(
+          { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
+          { name: `IntTeam${teamId % 100000}` },
+        ),
+      ),
+      [leader.keypair],
+    );
+
+    for (let i = 0; i < members.length; i++) {
+      const member = members[i]!;
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createTeamInviteInstruction({
+            gameEngine: ctx.gameEngine,
+            inviter: leader.publicKey,
+            team: teamPda,
+            inviteePlayer: member.playerPda,
+            teamId,
+            inviterSlotIndex: 0,
+          }),
+        ),
+        [leader.keypair],
+      );
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createTeamAcceptInviteInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: member.publicKey,
+            team: teamPda,
+            slotIndex: i + 1,
+            teamId,
+            inviteRefund: leader.publicKey,
+          }),
+        ),
+        [member.keypair],
+      );
+    }
+
+    return { teamPda, teamId };
+  }
 
   beforeAll(async () => {
     ctx = await beforeAllTests();
@@ -98,9 +164,7 @@ describe('Full Game Flow Integration', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Player Initialization and Basic Actions
-  // ============================================================
 
   describe('Player Initialization', () => {
     it('should create and initialize a new player', async () => {
@@ -115,7 +179,7 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should hire units and verify state changes', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
 
       // Snapshot before
       const before = await snapshotPlayer(ctx.svm, player.playerPda);
@@ -135,7 +199,7 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should purchase equipment and verify state changes', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Market] });
 
       const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
@@ -151,9 +215,7 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Combat Flow
-  // ============================================================
 
   describe('Combat Flow', () => {
     it('should attack another player (PvP) and create loot', async () => {
@@ -187,23 +249,26 @@ describe('Full Game Flow Integration', () => {
       // Verify state changes
       const attackerAfter = await snapshotPlayer(ctx.svm, attacker.playerPda);
       const defenderAfter = await snapshotPlayer(ctx.svm, defender.playerPda);
+      expect(defenderAfter).not.toBeNull();
 
-      // Attacker should have used operatives
-      expect(attackerAfter!.data.operativeUnit1.lt(attackerBefore!.data.operativeUnit1)).toBe(true);
-
-      // Defender should have taken damage (lost defensive units)
-      // Note: This depends on combat outcome
+      // Attacker should have lost some defensive units in combat (units used to attack)
+      expect(attackerAfter!.data.defensiveUnit1.lt(attackerBefore!.data.defensiveUnit1)).toBe(true);
     });
 
     it('should build army with multiple unit types', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market],
+      });
 
-      // Hire different unit types
-      await factory.hireUnits(player, 0, 100); // defensive 1
-      await factory.hireUnits(player, 1, 75);  // defensive 2
-      await factory.hireUnits(player, 2, 50);  // defensive 3
-      await factory.hireUnits(player, 3, 80);  // operative 1
-      await factory.hireUnits(player, 4, 40);  // operative 2
+      // Hire different unit types. 200 NOVI each so the Hiring time-of-day
+      // penalty (DeepNight/Evening 0.618x) can't drop us below 1 unit.
+      await factory.hireUnits(player, 0, 200); // defensive 1
+      await factory.hireUnits(player, 1, 200); // defensive 2
+      await factory.hireUnits(player, 2, 200); // defensive 3
+      await factory.hireUnits(player, 3, 200); // operative 1
+      await factory.hireUnits(player, 4, 200); // operative 2
 
       // Purchase equipment
       await factory.purchaseEquipment(player, 0, 30); // melee
@@ -224,13 +289,15 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Travel Flow
-  // ============================================================
 
   describe('Travel Flow', () => {
     it('should start and complete intracity travel', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.TransportBay],
+      });
 
       const before = await fetchPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
@@ -239,16 +306,25 @@ describe('Full Game Flow Integration', () => {
       const currentGridLat = Math.round(before!.currentLat * 10000);
       const currentGridLong = Math.round(before!.currentLong * 10000);
 
-      // Move to adjacent cell
-      const destGridLat = currentGridLat + 10;
-      const destGridLong = currentGridLong + 10;
+      // Destination = small lat/lon offset from current position (f64 coords)
+      const destLat = before!.currentLat + 0.001;
+      const destLong = before!.currentLong + 0.001;
+      const destGridLat = Math.round(destLat * 10000);
+      const destGridLong = Math.round(destLong * 10000);
 
       // Start intracity travel
-      await factory.startIntracityTravel(player, cityId, currentGridLat, currentGridLong, destGridLat * 100 + 50, destGridLong * 100 + 50);
+      await factory.startIntracityTravel(player, cityId, currentGridLat, currentGridLong, destLat, destLong);
 
-      // Buy gems and speedup
+      // Buy gems and speedup. Tier 2 cuts remaining travel time to 25% per
+      // application; repeat until we can advance the clock past arrival.
       await factory.buyGems(player, 1);
-      await factory.speedupTravel(player, 2);
+      for (let i = 0; i < 10; i++) {
+        try {
+          await factory.speedupTravel(player, 2);
+        } catch {
+          break;
+        }
+      }
 
       // Advance clock past travel arrival
       await advanceTime(ctx.svm, 5);
@@ -268,36 +344,54 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should start and complete intercity travel', async () => {
-      const player = await factory.createPlayer({ initialize: true, cityId: 1 });
+      // Use cityId 19 → 18 to avoid colliding with other tests that target cities 1-3
+      const player = await factory.createPlayer({
+        initialize: true,
+        cityId: 19,
+        createEstate: true,
+        buildings: [BuildingType.TransportBay],
+      });
 
       const before = await fetchPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
-      expect(before!.currentCity).toBe(1);
+      expect(before!.currentCity).toBe(19);
 
-      const destinationCityId = 2;
-      const destGridLat = 408000; // Approximate grid coords for city 2
-      const destGridLong = -740000;
+      const destinationCityId = 18; // Madrid
+      // Derive destination grid coords from the actual city center
+      const destCity = { lat: 40.4168, lon: -3.7038 }; // CITIES[18]
+      // Offset by player index to avoid clashing with other intercity travelers
+      const destGridLat = Math.round(destCity.lat * 10000);
+      const destGridLong = Math.round(destCity.lon * 10000);
 
       // Get current location for origin params
       const currentGridLat = Math.round(before!.currentLat * 10000);
       const currentGridLong = Math.round(before!.currentLong * 10000);
 
-      // Start intercity travel
-      await factory.startIntercityTravel(player, before!.currentCity, destinationCityId, currentGridLat, currentGridLong);
+      // Start intercity travel — pass dest coords explicitly so they match complete()
+      await factory.startIntercityTravel(
+        player,
+        before!.currentCity,
+        destinationCityId,
+        currentGridLat,
+        currentGridLong,
+        destGridLat,
+        destGridLong,
+      );
 
-      // Buy gems and speedup multiple times
+      // Buy gems and speedup repeatedly to collapse the multi-hour travel
       await factory.buyGems(player, 2);
-      try {
-        await factory.speedupTravel(player, 2);
-        await factory.speedupTravel(player, 2);
-      } catch (e) {
-        console.warn('Speedup may have failed (travel too short):', e);
+      for (let i = 0; i < 12; i++) {
+        try {
+          await factory.speedupTravel(player, 2);
+        } catch {
+          break;
+        }
       }
 
       // Advance clock past travel arrival
       await advanceTime(ctx.svm, 5);
 
-      // Complete travel
+      // Complete travel at the same coords used for start
       await factory.completeIntercityTravel(player, before!.currentCity, destinationCityId, destGridLat, destGridLong);
 
       // Verify city changed
@@ -307,7 +401,12 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should move player to another player location', async () => {
-      const player1 = await factory.createPlayer({ initialize: true, cityId: 1 });
+      const player1 = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.TransportBay],
+      });
       const player2 = await factory.createPlayer({ initialize: true, cityId: 3 });
 
       // Get initial locations
@@ -328,13 +427,17 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Expedition Flow
-  // ============================================================
 
   describe('Expedition Flow', () => {
     it('should start an expedition', async () => {
-      const player = await factory.createPlayer({ initialize: true, createEstate: true });
+      // Mining expedition: needs Academy + Mine + research 21 + Camp (for operatives)
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Academy, BuildingType.Mine, BuildingType.Camp],
+      });
+      await factory.completeResearch(player, 21); // Unlock mining
 
       // Need operatives for expedition
       await factory.hireUnits(player, 3, 100);
@@ -372,7 +475,13 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should abort an expedition and return operatives', async () => {
-      const player = await factory.createPlayer({ initialize: true, createEstate: true });
+      // Fishing expedition: needs Academy + Dock + research 22 + Camp (for operatives)
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Academy, BuildingType.Dock, BuildingType.Camp],
+      });
+      await factory.completeResearch(player, 22); // Unlock fishing
 
       await factory.hireUnits(player, 3, 100);
 
@@ -418,14 +527,25 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Reinforcement Flow
-  // ============================================================
 
   describe('Reinforcement Flow', () => {
     it('should send reinforcements to another player', async () => {
-      const sender = await factory.createPlayer({ initialize: true, cityId: 1 });
-      const receiver = await factory.createPlayer({ initialize: true, cityId: 1 });
+      const sender = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Market],
+      });
+      const receiver = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
+
+      // Both players must be on the same team
+      const { teamId } = await createTeamWithMembers(sender, [receiver]);
 
       // Sender needs defensive units
       await factory.hireUnits(sender, 0, 100);
@@ -435,8 +555,6 @@ describe('Full Game Flow Integration', () => {
 
       const senderBefore = await snapshotPlayer(ctx.svm, sender.playerPda);
 
-      // Send reinforcements (players must be on same team)
-      const teamId = 1; // Use a placeholder team
       const sendIx = createSendReinforcementInstruction(
         {
           gameEngine: ctx.gameEngine,
@@ -480,13 +598,22 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should recall reinforcements', async () => {
-      const sender = await factory.createPlayer({ initialize: true, cityId: 2 });
-      const receiver = await factory.createPlayer({ initialize: true, cityId: 2 });
+      const sender = await factory.createPlayer({
+        initialize: true,
+        cityId: 2,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
+      const receiver = await factory.createPlayer({
+        initialize: true,
+        cityId: 2,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
 
+      const { teamId } = await createTeamWithMembers(sender, [receiver]);
       await factory.hireUnits(sender, 0, 100);
 
-      // Send reinforcements (players must be on same team)
-      const teamId = 1;
       const sendIx = createSendReinforcementInstruction(
         {
           gameEngine: ctx.gameEngine,
@@ -540,20 +667,24 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Rally Flow
-  // ============================================================
 
   describe('Rally Flow', () => {
     it('should create a rally', async () => {
-      const creator = await factory.createPlayer({ initialize: true });
+      const creator = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Citadel],
+      });
       const target = await factory.createPlayer({ initialize: true });
 
-      // Creator needs operatives
-      await factory.hireUnits(creator, 3, 100);
+      // Team unlocks EXT_TEAM, required before rally.create can unlock EXT_RALLY
+      const { teamId } = await createTeamWithMembers(creator, []);
 
-      const [creatorPlayer] = derivePlayerPda(ctx.gameEngine, creator.publicKey);
-      const teamId = 1;
+      // Creator needs defensive units (rallies consume defensive_unit_1)
+      await factory.hireUnits(creator, 0, 100);
+
       const leaderCityId = 1;
       const targetCityId = 1;
 
@@ -593,15 +724,26 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should join and leave a rally', async () => {
-      const creator = await factory.createPlayer({ initialize: true });
-      const joiner = await factory.createPlayer({ initialize: true });
+      const creator = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Citadel],
+      });
+      const joiner = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
       const target = await factory.createPlayer({ initialize: true });
 
-      await factory.hireUnits(creator, 3, 100);
-      await factory.hireUnits(joiner, 3, 80);
+      // Both creator and joiner must be on the same team for rally.join
+      const { teamId } = await createTeamWithMembers(creator, [joiner]);
 
-      const [creatorPlayer] = derivePlayerPda(ctx.gameEngine, creator.publicKey);
-      const teamId = 1;
+      await factory.hireUnits(creator, 0, 100);
+      await factory.hireUnits(joiner, 0, 80);
+
       const leaderCityId = 1;
       const targetCityId = 1;
 
@@ -690,13 +832,17 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should cancel a rally', async () => {
-      const creator = await factory.createPlayer({ initialize: true });
+      const creator = await factory.createPlayer({
+        initialize: true,
+        cityId: 1,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Citadel],
+      });
       const target = await factory.createPlayer({ initialize: true });
 
-      await factory.hireUnits(creator, 3, 100);
+      const { teamId } = await createTeamWithMembers(creator, []);
+      await factory.hireUnits(creator, 0, 100);
 
-      const [creatorPlayer] = derivePlayerPda(ctx.gameEngine, creator.publicKey);
-      const teamId = 1;
       const leaderCityId = 1;
       const targetCityId = 1;
 
@@ -730,7 +876,6 @@ describe('Full Game Flow Integration', () => {
       );
 
       const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 2);
-      const beforeCancel = await snapshotPlayer(ctx.svm, creator.playerPda);
 
       // Cancel rally
       const cancelIx = createRallyCancelInstruction({
@@ -747,19 +892,23 @@ describe('Full Game Flow Integration', () => {
         [creator.keypair]
       );
 
-      // Verify defensives returned
-      const afterCancel = await snapshotPlayer(ctx.svm, creator.playerPda);
-      expect(afterCancel!.data.defensiveUnit1.gt(beforeCancel!.data.defensiveUnit1)).toBe(true);
+      // Verify rally was cancelled. Units don't return immediately — the leader
+      // starts a return journey and only restocks units after process_return.
+      const rally = await fetchRally(ctx.svm, rallyPda);
+      expect(rally).not.toBeNull();
+      expect(rally!.status).toBe(5); // RallyStatus::Cancelled
     });
   });
 
-  // ============================================================
   // Team Flow
-  // ============================================================
 
   describe('Team Flow', () => {
     it('should create a team with multiple players', async () => {
-      const { leader, members } = await createTeamReadyPlayers(factory, 2);
+      // Leader needs estate+gems to unlock EXT_INVENTORY → EXT_TEAM
+      const leader = await factory.createPlayer({ initialize: true, createEstate: true });
+      // Members created for symmetry; join is not exercised here
+      await factory.createPlayer({ initialize: true });
+      await factory.createPlayer({ initialize: true });
 
       const teamId = Date.now();
 
@@ -782,9 +931,7 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Estate Flow
-  // ============================================================
 
   describe('Estate Flow', () => {
     it('should create an estate', async () => {
@@ -823,9 +970,7 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Hero Flow
-  // ============================================================
 
   describe('Hero Flow', () => {
     it('should mint and use a hero', async () => {
@@ -840,7 +985,47 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should lock and unlock a hero', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      // Hero lock requires EXT_RALLY (full extension chain) + MeditationChamber
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Citadel, BuildingType.MeditationChamber],
+      });
+
+      // Walk the extension journey: INVENTORY (estate+gems) → TEAM → RALLY
+      const { teamId } = await createTeamWithMembers(player, []);
+      await factory.hireUnits(player, 0, 500); // Need units for rally
+
+      const rallyId = nextTeamId(); // reuse generator for uniqueness
+      const dummyTarget = Keypair.generate().publicKey;
+      const rallyCityId = player.startingCityId;
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createRallyCreateInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              rallyId,
+              target: dummyTarget,
+              teamId,
+              rallyCityId,
+            },
+            {
+              targetType: RallyTargetType.Player,
+              gatherDuration: new BN(3600),
+              targetCityId: rallyCityId,
+              defensiveUnit1: new BN(1),
+              defensiveUnit2: new BN(0),
+              defensiveUnit3: new BN(0),
+              meleeWeapons: new BN(0),
+              rangedWeapons: new BN(0),
+              siegeWeapons: new BN(0),
+            },
+          ),
+        ),
+        [player.keypair],
+      );
 
       const hero = await heroFactory.mintHero(player, 2);
       expect(hero.locked).toBe(false);
@@ -855,27 +1040,26 @@ describe('Full Game Flow Integration', () => {
     });
   });
 
-  // ============================================================
   // Cross-System Integration
-  // ============================================================
 
   describe('Cross-System Integration', () => {
     it('should complete full early game flow', async () => {
-      // New player journey
-      const player = await factory.createPlayer({ initialize: true });
+      // On-chain handlers gate hire/purchase on estate + buildings; set those up first
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Camp, BuildingType.Market],
+      });
 
-      // 1. Hire initial units
-      await factory.hireUnits(player, 0, 50);
-      await factory.hireUnits(player, 3, 30);
+      // 1. Hire initial units (must be at least 100 NOVI to convert to >= 1 unit)
+      await factory.hireUnits(player, 0, 100);
+      await factory.hireUnits(player, 3, 100);
 
       // 2. Purchase equipment
       await factory.purchaseEquipment(player, 0, 10);
       await factory.purchaseEquipment(player, 3, 20);
 
-      // 3. Create estate
-      await factory.createPlayerEstate(player);
-
-      // 4. Verify final state
+      // 3. Verify final state
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.defensiveUnit1.toNumber()).toBeGreaterThan(0);
@@ -903,7 +1087,11 @@ describe('Full Game Flow Integration', () => {
     });
 
     it('should verify economic actions affect player state', async () => {
-      const player = await factory.createPlayer({ initialize: true });
+      const player = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks, BuildingType.Market],
+      });
 
       // Take multiple snapshots through economic actions
       const snap1 = await snapshotPlayer(ctx.svm, player.playerPda);

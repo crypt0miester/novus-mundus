@@ -70,9 +70,7 @@ import {
   fetchTreasuryRequest,
 } from '../utils/accounts';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 setDefaultTimeout(60_000);
 
@@ -106,9 +104,7 @@ describe('Team System', () => {
     return teamPda;
   }
 
-  // ============================================================
   // Team Creation Tests
-  // ============================================================
 
   describe('Team Creation', () => {
     it('should create a new team', async () => {
@@ -183,9 +179,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Invitation Tests
-  // ============================================================
 
   describe('Invitations', () => {
     it('should invite player to team', async () => {
@@ -353,9 +347,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Member Management Tests
-  // ============================================================
 
   describe('Member Management', () => {
     it('should kick member from team', async () => {
@@ -681,9 +673,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Team Disbanding Tests
-  // ============================================================
 
   describe('Team Disbanding', () => {
     it('should disband team when only leader remains', async () => {
@@ -768,9 +758,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Team Settings Tests
-  // ============================================================
 
   describe('Team Settings', () => {
     it('should set team MOTD', async () => {
@@ -819,9 +807,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Treasury Tests
-  // ============================================================
 
   describe('Treasury', () => {
     it('should deposit to treasury', async () => {
@@ -1036,6 +1022,7 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
         approverSlotIndex: 0,
+        requesterSlotIndex: 1,
         requesterPlayer: member.playerPda,
         requesterRefund: member.publicKey,
       });
@@ -1352,6 +1339,7 @@ describe('Team System', () => {
             team: teamPda,
             teamId,
             approverSlotIndex: 0,
+            requesterSlotIndex: 1,
             requesterPlayer: member.playerPda,
             requesterRefund: member.publicKey,
           })
@@ -1365,9 +1353,7 @@ describe('Team System', () => {
     });
   });
 
-  // ============================================================
   // Open Join Tests
-  // ============================================================
 
   describe('Open Join', () => {
     it('should join open team', async () => {

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, rent::Rent},
 };
@@ -33,8 +33,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -52,27 +52,27 @@ pub fn process(
 
     // 3. Verify player account ownership (scoped borrow)
     {
-        let player_data = player_account.try_borrow_data()?;
+        let player_data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&player_data) };
 
-        if !player.is_owner(player_owner.key()) {
+        if !player.is_owner(player_owner.address()) {
             return Err(ProgramError::IllegalOwner);
         }
     }
 
     // 4. Derive and verify Research Progress PDA (scoped to player PDA for multi-kingdom)
-    let (expected_progress, bump) = ResearchProgress::derive_pda(player_account.key());
+    let (expected_progress, bump) = ResearchProgress::derive_pda(player_account.address());
 
-    if research_progress.key() != &expected_progress {
+    if research_progress.address() != &expected_progress {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // 5. Create ResearchProgress account
-    let lamports = Rent::get()?.minimum_balance(ResearchProgress::LEN);
+    let lamports = crate::utils::rent_exempt_const(ResearchProgress::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(RESEARCH_SEED, player_account.key().as_ref(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(RESEARCH_SEED, player_account.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -84,16 +84,16 @@ pub fn process(
 
     // 6. Initialize research progress (scoped to drop borrow before CPI/resize)
     {
-        let mut progress_data = research_progress.try_borrow_mut_data()?;
+        let mut progress_data = research_progress.try_borrow_mut()?;
         let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
-        *progress = ResearchProgress::init(*player_owner.key(), bump);
+        *progress = ResearchProgress::init(*player_owner.address(), bump);
     }
 
     // 7. Unlock EXT_RESEARCH extension on player account
     // This is the first step in the user journey - no prerequisites
     // Must check extensions, drop borrow, resize via CPI, re-borrow, then update flag
     let needs_unlock = {
-        let player_data = player_account.try_borrow_data()?;
+        let player_data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&player_data) };
         player.extensions & EXT_RESEARCH == 0
     };
@@ -103,7 +103,7 @@ pub fn process(
 
         // Calculate new size needed
         let new_extensions = {
-            let player_data = player_account.try_borrow_data()?;
+            let player_data = player_account.try_borrow()?;
             let player = unsafe { PlayerAccount::load(&player_data) };
             player.extensions | EXT_RESEARCH
         };
@@ -113,7 +113,7 @@ pub fn process(
         if new_size > current_size {
             // Transfer lamports for rent via system program CPI (payer is external wallet)
             let rent = Rent::get()?;
-            let required_lamports = rent.minimum_balance(new_size);
+            let required_lamports = rent.try_minimum_balance(new_size)?;
             let lamports_needed = required_lamports.saturating_sub(player_account.lamports());
 
             if lamports_needed > 0 {
@@ -129,7 +129,7 @@ pub fn process(
         }
 
         // Re-borrow and set the extension flag
-        let mut player_data = player_account.try_borrow_mut_data()?;
+        let mut player_data = player_account.try_borrow_mut()?;
         let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
         player.extensions = new_extensions;
     }

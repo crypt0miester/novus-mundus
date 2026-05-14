@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::Signer,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    cpi::Signer,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -15,7 +15,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::{PlayerAccount, TeamAccount},
-    validation::{require_key_match, require_signer, require_writable},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::TeamNameUpdated,
     NULL_PUBKEY,
@@ -53,7 +53,7 @@ use crate::{
 /// - Transfers new domain from user wallet → team PDA
 /// - Sets new domain as main domain for team PDA
 /// - Updates domain name in team account
-pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
     let [
         player_account,
@@ -91,21 +91,26 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     require_writable(main_domain)?;
     require_key_match(alt_name_service_program, &alt_name_service::ID)?;
     require_key_match(tld_house_program, &tld_house::ID)?;
+    require_owner(old_name_account, &alt_name_service::ID)?;
+    require_owner(old_reverse_name_account, &alt_name_service::ID)?;
+    require_owner(new_name_account, &alt_name_service::ID)?;
+    require_owner(new_reverse_name_account, &alt_name_service::ID)?;
+    require_owner(tld_state, &alt_name_service::ID)?;
 
-    if name_class.key() != &NULL_PUBKEY {
+    if name_class.address() != &NULL_PUBKEY {
         return Err(ProgramError::InvalidAccountData);
     }
 
     // 4. Load player and verify ownership
-    let player_data = player_account.try_borrow_data()?;
+    let player_data = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data) };
 
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Load team and verify leader
-    let mut team_data = team_account.try_borrow_mut_data()?;
+    let mut team_data = team_account.try_borrow_mut()?;
     let team = unsafe { TeamAccount::load_mut(&mut team_data) };
 
     // Team disbanded?
@@ -113,7 +118,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if &team.leader != player_account.key() {
+    if &team.leader != player_account.address() {
         return Err(GameError::NotTeamLeader.into());
     }
 
@@ -122,9 +127,9 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
 
     // 6. Derive team PDA
     let team_seeds: &[&[u8]] = &[TEAM_SEED, &team_id.to_le_bytes()];
-    let (team_pda, bump) = pinocchio::pubkey::find_program_address(team_seeds, program_id);
+    let (team_pda, bump) = pinocchio::Address::find_program_address(team_seeds, program_id);
 
-    if team_pda != *team_account.key() {
+    if team_pda != *team_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -144,7 +149,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
         new_reverse_name_account,
         name_parent,
         tld_house,
-        owner.key(),
+        owner.address(),
         &new_reverse_acc_hashed_name,
     )?;
 
@@ -158,7 +163,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 11. Transfer OLD domain: team PDA → user wallet
     let bump_seed = [bump];
     let team_id_bytes = team_id.to_le_bytes();
-    let seeds = pinocchio::seeds!(TEAM_SEED, &team_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(TEAM_SEED, &team_id_bytes, &bump_seed);
 
     {
         let signer = Signer::from(&seeds);
@@ -168,7 +173,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
             name_class,
             parent_name: name_parent,
             hashed_name: old_hashed_name,
-            new_owner: owner.key(),
+            new_owner: owner.address(),
         }
         .invoke_signed(&[signer])?;
     }
@@ -226,7 +231,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 15. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(TeamNameUpdated {
-        team: *team_account.key(),
+        team: *team_account.address(),
         old_name: old_team_name,
         new_name: new_team_name,
         new_domain_hash: new_hashed_name,

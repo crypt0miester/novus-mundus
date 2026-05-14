@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::{AccountMeta, Instruction, Signer},
-    program::invoke_signed,
-    pubkey::Pubkey,
+    AccountView,
+    instruction::{InstructionAccount, InstructionView}, cpi::Signer,
+    cpi::invoke_signed,
+    Address,
     ProgramResult,
 };
 
@@ -16,31 +16,31 @@ use crate::SET_MAIN_DOMAIN_DISCRIMINATOR;
 ///   0. `[SIGNER, WRITE]` Payer (domain owner)
 ///   1. `[]` TldState account
 ///   2. `[]` TldHouse account
-///   3. `[WRITE]` MainDomain account (PDA: ["main_domain", payer.key()])
-///   4. `[]` Name class account (usually Pubkey::default())
+///   3. `[WRITE]` MainDomain account (PDA: ["main_domain", payer.address()])
+///   4. `[]` Name class account (usually Address::default())
 ///   5. `[]` Name account (the domain)
 ///   6. `[]` Name parent (TLD account)
 ///   7. `[]` Reverse name account
 ///   8. `[]` System program
 ///   9. `[]` Alt Name Service program
 pub struct SetMainDomain<'a> {
-    pub payer: &'a AccountInfo,
-    pub tld_state: &'a AccountInfo,
-    pub tld_house: &'a AccountInfo,
-    pub main_domain: &'a AccountInfo,
-    pub name_class: &'a AccountInfo,
-    pub name_account: &'a AccountInfo,
-    pub name_parent: &'a AccountInfo,
-    pub reverse_name_account: &'a AccountInfo,
-    pub system_program: &'a AccountInfo,
-    pub name_service_program: &'a AccountInfo,
+    pub payer: &'a AccountView,
+    pub tld_state: &'a AccountView,
+    pub tld_house: &'a AccountView,
+    pub main_domain: &'a AccountView,
+    pub name_class: &'a AccountView,
+    pub name_account: &'a AccountView,
+    pub name_parent: &'a AccountView,
+    pub reverse_name_account: &'a AccountView,
+    pub system_program: &'a AccountView,
+    pub name_service_program: &'a AccountView,
     /// Domain name without TLD (e.g., "mydomain")
     pub name: &'a [u8],
     /// SHA256("ALT Name Service" + name)
     pub hashed_name: [u8; 32],
     /// TLD string including dot (e.g., ".all")
     pub tld: &'a [u8],
-    /// SHA256("ALT Name Service" + name_account.key().to_base58())
+    /// SHA256("ALT Name Service" + name_account.address().to_base58())
     pub reverse_acc_hashed_name: [u8; 32],
 }
 
@@ -52,17 +52,17 @@ impl<'a> SetMainDomain<'a> {
 
     #[inline(always)]
     pub fn invoke_signed(&self, signers: &[Signer]) -> ProgramResult {
-        let account_metas: [AccountMeta; 10] = [
-            AccountMeta::writable_signer(self.payer.key()),
-            AccountMeta::readonly(self.tld_state.key()),
-            AccountMeta::readonly(self.tld_house.key()),
-            AccountMeta::writable(self.main_domain.key()),
-            AccountMeta::readonly(self.name_class.key()),
-            AccountMeta::readonly(self.name_account.key()),
-            AccountMeta::readonly(self.name_parent.key()),
-            AccountMeta::readonly(self.reverse_name_account.key()),
-            AccountMeta::readonly(self.system_program.key()),
-            AccountMeta::readonly(self.name_service_program.key()),
+        let account_metas: [InstructionAccount; 10] = [
+            InstructionAccount::writable_signer(self.payer.address()),
+            InstructionAccount::readonly(self.tld_state.address()),
+            InstructionAccount::readonly(self.tld_house.address()),
+            InstructionAccount::writable(self.main_domain.address()),
+            InstructionAccount::readonly(self.name_class.address()),
+            InstructionAccount::readonly(self.name_account.address()),
+            InstructionAccount::readonly(self.name_parent.address()),
+            InstructionAccount::readonly(self.reverse_name_account.address()),
+            InstructionAccount::readonly(self.system_program.address()),
+            InstructionAccount::readonly(self.name_service_program.address()),
         ];
 
         // Build instruction data with Anchor encoding:
@@ -113,7 +113,7 @@ impl<'a> SetMainDomain<'a> {
         offset += 4;
         data[offset..offset + 32].copy_from_slice(&self.reverse_acc_hashed_name);
 
-        let instruction = Instruction {
+        let instruction = InstructionView {
             program_id: &crate::ID,
             accounts: &account_metas,
             data: &data[..data_size],
@@ -139,10 +139,10 @@ impl<'a> SetMainDomain<'a> {
 }
 
 /// Derive the MainDomain PDA for a given owner.
-/// Seeds: ["main_domain", owner.key()]
+/// Seeds: ["main_domain", owner.address()]
 #[inline]
-pub fn derive_main_domain_pda(owner: &Pubkey, tld_house_program_id: &Pubkey) -> (Pubkey, u8) {
-    pinocchio::pubkey::find_program_address(
+pub fn derive_main_domain_pda(owner: &Address, tld_house_program_id: &Address) -> (Address, u8) {
+    pinocchio::address::Address::find_program_address(
         &[crate::MAIN_DOMAIN_PREFIX, owner.as_ref()],
         tld_house_program_id,
     )
@@ -151,8 +151,8 @@ pub fn derive_main_domain_pda(owner: &Pubkey, tld_house_program_id: &Pubkey) -> 
 /// Derive the TldState PDA.
 /// Seeds: ["tld_pda"]
 #[inline]
-pub fn derive_tld_state_pda(tld_house_program_id: &Pubkey) -> (Pubkey, u8) {
-    pinocchio::pubkey::find_program_address(
+pub fn derive_tld_state_pda(tld_house_program_id: &Address) -> (Address, u8) {
+    pinocchio::address::Address::find_program_address(
         &[crate::PDA_SEED],
         tld_house_program_id,
     )
@@ -161,8 +161,8 @@ pub fn derive_tld_state_pda(tld_house_program_id: &Pubkey) -> (Pubkey, u8) {
 /// Derive the TldHouse PDA for a given TLD.
 /// Seeds: ["tld_house", tld_lowercase]
 #[inline]
-pub fn derive_tld_house_pda(tld_lowercase: &[u8], tld_house_program_id: &Pubkey) -> (Pubkey, u8) {
-    pinocchio::pubkey::find_program_address(
+pub fn derive_tld_house_pda(tld_lowercase: &[u8], tld_house_program_id: &Address) -> (Address, u8) {
+    pinocchio::address::Address::find_program_address(
         &[crate::PREFIX, tld_lowercase],
         tld_house_program_id,
     )

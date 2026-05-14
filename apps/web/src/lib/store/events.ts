@@ -11,9 +11,7 @@ import { get as idbGet, set as idbSet } from "idb-keyval";
 import type { NovusMundusEvent } from "novus-mundus-sdk";
 import type { EventScope } from "@/lib/events/classify";
 
-// ============================================================
 // Types
-// ============================================================
 
 export interface EventEntry {
   /** Unique ID: `${txSignature}:${eventIndex}` */
@@ -46,9 +44,7 @@ interface EventStoreState {
   getUnreadCount: (scope: EventScope) => number;
 }
 
-// ============================================================
 // Serialization Helpers
-// ============================================================
 
 const MAX_EVENTS = 1000;
 const IDB_KEY = "novus-events";
@@ -84,9 +80,7 @@ export function serializeEventData(event: NovusMundusEvent): Record<string, unkn
   return result;
 }
 
-// ============================================================
 // Store
-// ============================================================
 
 export const useEventStore = create<EventStoreState>((set, get) => ({
   events: [],

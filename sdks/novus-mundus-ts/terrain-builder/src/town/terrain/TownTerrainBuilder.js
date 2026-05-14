@@ -12,18 +12,14 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Defaults
-// ---------------------------------------------------------------------------
 
 const DEFAULT_GRID_SIZE = 128;
 const DEFAULT_PATCH_RADIUS = 100;
 const DEFAULT_HEIGHT_SCALE = 0.005;
 const DEFAULT_MESH_SIZE = 10;
 
-// ---------------------------------------------------------------------------
 // TownTerrainBuilder
-// ---------------------------------------------------------------------------
 
 export class TownTerrainBuilder {
   /**
@@ -68,9 +64,7 @@ export class TownTerrainBuilder {
     this._skirtMesh = null;
   }
 
-  // -------------------------------------------------------------------------
   // Build
-  // -------------------------------------------------------------------------
 
   /**
    * Build terrain geometry from CityTerrain data.
@@ -282,9 +276,7 @@ export class TownTerrainBuilder {
     };
   }
 
-  // -------------------------------------------------------------------------
   // District coloring
-  // -------------------------------------------------------------------------
 
   /**
    * Recolor terrain vertices to reflect district ground types.
@@ -338,9 +330,7 @@ export class TownTerrainBuilder {
     colorAttr.needsUpdate = true;
   }
 
-  // -------------------------------------------------------------------------
   // Terrain queries
-  // -------------------------------------------------------------------------
 
   /**
    * Convert a world-space (x, z) to grid indices (gx, gy).
@@ -466,9 +456,7 @@ export class TownTerrainBuilder {
     return slope < 0.5;
   }
 
-  // -------------------------------------------------------------------------
   // Terrain analysis for district placement
-  // -------------------------------------------------------------------------
 
   /**
    * Find points along the water boundary (land-to-water transitions).
@@ -731,9 +719,7 @@ export class TownTerrainBuilder {
     return bestDistSq < Infinity ? Math.sqrt(bestDistSq) : Infinity;
   }
 
-  // -------------------------------------------------------------------------
   // Raw data access
-  // -------------------------------------------------------------------------
 
   /**
    * Raw elevation grid (Float32Array, gridSize x gridSize).
@@ -779,9 +765,7 @@ export class TownTerrainBuilder {
     return this._skirtMesh;
   }
 
-  // -------------------------------------------------------------------------
   // Dispose
-  // -------------------------------------------------------------------------
 
   /**
    * Release all GPU resources and internal data.

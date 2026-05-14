@@ -1,10 +1,9 @@
 use core::slice::from_raw_parts;
 
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::{AccountMeta, Instruction, Signer},
-    program::invoke_signed,
-    ProgramResult,
+    cpi::{invoke_signed, Signer},
+    instruction::{InstructionAccount, InstructionView},
+    AccountView, ProgramResult,
 };
 
 use crate::{write_bytes, UNINIT_BYTE};
@@ -13,9 +12,7 @@ use crate::{write_bytes, UNINIT_BYTE};
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum DataState {
-    /// The data is stored in account state.
     AccountState = 0,
-    /// The data is stored in the ledger history (compressed).
     LedgerState = 1,
 }
 
@@ -23,38 +20,35 @@ pub enum DataState {
 ///
 /// ### Accounts:
 ///   0. `[WRITE, SIGNER]` The address of the new asset
-///   1. `[WRITE, OPTIONAL]` The collection to which the asset belongs
+///   1. `[WRITE, OPTIONAL]` The collection
 ///   2. `[SIGNER, OPTIONAL]` The authority signing for creation
-///   3. `[WRITE, SIGNER]` The account paying for the storage fees
-///   4. `[OPTIONAL]` The owner of the new asset. Defaults to the authority if not present.
-///   5. `[OPTIONAL]` The authority on the new asset
+///   3. `[WRITE, SIGNER]` The payer
+///   4. `[OPTIONAL]` The owner of the new asset
+///   5. `[OPTIONAL]` The update authority on the new asset
 ///   6. `[]` The system program
 ///   7. `[OPTIONAL]` The SPL Noop Program
+///
+/// To indicate "no update authority" (e.g. when creating within a collection),
+/// pass the MPL Core program account as `update_authority`. When its address
+/// equals `crate::ID`, the on-chain Shank resolver treats it as `None`.
+///
+/// `plugins` is pre-serialized Borsh for `Vec<PluginAuthorityPair>`.
+/// Pass an empty slice for no plugins.
 pub struct CreateV1<'a> {
-    /// The address of the new asset
-    pub asset: &'a AccountInfo,
-    /// The collection to which the asset belongs (pass zero pubkey for None)
-    pub collection: &'a AccountInfo,
-    /// The authority signing for creation (pass zero pubkey for None)
-    pub authority: &'a AccountInfo,
-    /// The account paying for the storage fees
-    pub payer: &'a AccountInfo,
-    /// The owner of the new asset (pass zero pubkey for None)
-    pub owner: &'a AccountInfo,
-    /// The update authority on the new asset (pass zero pubkey for None)
-    pub update_authority: &'a AccountInfo,
-    /// The system program
-    pub system_program: &'a AccountInfo,
-    /// The SPL Noop Program (pass system_program if not needed)
-    pub log_wrapper: &'a AccountInfo,
-
-    // Instruction arguments
-    /// Data state (account state or ledger state for compression)
+    pub asset: &'a AccountView,
+    pub collection: &'a AccountView,
+    pub authority: &'a AccountView,
+    pub payer: &'a AccountView,
+    pub owner: &'a AccountView,
+    pub update_authority: &'a AccountView,
+    pub system_program: &'a AccountView,
+    pub log_wrapper: &'a AccountView,
     pub data_state: DataState,
-    /// Name of the asset (max 32 bytes)
     pub name: &'a [u8],
-    /// URI of the asset (max 200 bytes)
     pub uri: &'a [u8],
+    /// Pre-serialized Borsh bytes for `Vec<PluginAuthorityPair>`.
+    /// Empty slice = `None` (no plugins).
+    pub plugins: &'a [u8],
 }
 
 impl CreateV1<'_> {
@@ -65,76 +59,65 @@ impl CreateV1<'_> {
 
     #[inline(always)]
     pub fn invoke_signed(&self, signers: &[Signer]) -> ProgramResult {
-        // Build account metas
         let account_metas = [
-            AccountMeta::writable_signer(self.asset.key()),
-            AccountMeta::writable(self.collection.key()),
-            AccountMeta::readonly_signer(self.authority.key()),
-            AccountMeta::writable_signer(self.payer.key()),
-            AccountMeta::readonly(self.owner.key()),
-            AccountMeta::readonly(self.update_authority.key()),
-            AccountMeta::readonly(self.system_program.key()),
-            AccountMeta::readonly(self.log_wrapper.key()),
+            InstructionAccount::writable_signer(self.asset.address()),
+            InstructionAccount::writable(self.collection.address()),
+            InstructionAccount::readonly_signer(self.authority.address()),
+            InstructionAccount::writable_signer(self.payer.address()),
+            InstructionAccount::readonly(self.owner.address()),
+            InstructionAccount::readonly(self.update_authority.address()),
+            InstructionAccount::readonly(self.system_program.address()),
+            InstructionAccount::readonly(self.log_wrapper.address()),
         ];
 
-        // Calculate instruction data size
-        // 1 byte discriminator
-        // 1 byte data_state
-        // 4 bytes name length
-        // name bytes
-        // 4 bytes uri length
-        // uri bytes
-        // 1 byte (no plugins for now)
         let name_len = self.name.len().min(32);
         let uri_len = self.uri.len().min(200);
 
-        // Allocate instruction data
-        let mut instruction_data = [UNINIT_BYTE; 256]; // Max size
-
+        let mut instruction_data = [UNINIT_BYTE; 512];
         let mut offset = 0;
 
-        // Write discriminator (0 for CreateV1)
+        // Discriminator (0 for CreateV1)
         write_bytes(&mut instruction_data[offset..offset+1], &[0]);
         offset += 1;
 
-        // Write data_state
+        // Data state
         write_bytes(&mut instruction_data[offset..offset+1], &[self.data_state as u8]);
         offset += 1;
 
-        // Write name length and name
+        // Name (Borsh string)
         write_bytes(&mut instruction_data[offset..offset+4], &(name_len as u32).to_le_bytes());
         offset += 4;
         write_bytes(&mut instruction_data[offset..offset+name_len], &self.name[..name_len]);
         offset += name_len;
 
-        // Write URI length and URI
+        // URI (Borsh string)
         write_bytes(&mut instruction_data[offset..offset+4], &(uri_len as u32).to_le_bytes());
         offset += 4;
         write_bytes(&mut instruction_data[offset..offset+uri_len], &self.uri[..uri_len]);
         offset += uri_len;
 
-        // Write None for plugins (discriminator 0)
-        write_bytes(&mut instruction_data[offset..offset+1], &[0]);
-        offset += 1;
+        // Plugins: Option<Vec<PluginAuthorityPair>>
+        if self.plugins.is_empty() {
+            write_bytes(&mut instruction_data[offset..offset+1], &[0]); // None
+            offset += 1;
+        } else {
+            write_bytes(&mut instruction_data[offset..offset+1], &[1]); // Some
+            offset += 1;
+            let plen = self.plugins.len();
+            write_bytes(&mut instruction_data[offset..offset+plen], self.plugins);
+            offset += plen;
+        }
 
-        let instruction = Instruction {
+        let instruction = InstructionView {
             program_id: &crate::ID,
             accounts: &account_metas,
             data: unsafe { from_raw_parts(instruction_data.as_ptr() as _, offset) },
         };
 
-        // Collect account infos
-        let account_infos = [
-            self.asset,
-            self.collection,
-            self.authority,
-            self.payer,
-            self.owner,
-            self.update_authority,
-            self.system_program,
-            self.log_wrapper,
-        ];
-
-        invoke_signed(&instruction, &account_infos, signers)
+        invoke_signed(
+            &instruction,
+            &[self.asset, self.collection, self.authority, self.payer, self.owner, self.update_authority, self.system_program, self.log_wrapper],
+            signers,
+        )
     }
 }

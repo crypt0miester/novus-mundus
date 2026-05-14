@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -24,8 +24,8 @@ use super::attack::process_attacks;
 /// - attack_count: u8 (1-5)
 /// - next_room_type: u8 (provided by backend for auto-advance)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // Parse attack count

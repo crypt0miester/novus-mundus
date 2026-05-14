@@ -1,16 +1,16 @@
 /// Reinforcement events - sending troops to allies
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when reinforcements are sent
 pub struct ReinforcementSent {
     /// Sender player account pubkey (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Receiver player account pubkey (not wallet)
-    pub receiver: Pubkey,
+    pub receiver: Address,
     /// Receiver's name (48 bytes UTF-8)
     pub receiver_name: [u8; 48],
     /// Units sent (defensive_1, defensive_2, defensive_3)
@@ -42,13 +42,13 @@ impl Event for ReinforcementSent {
 /// Emitted when reinforcements arrive at destination
 pub struct ReinforcementArrived {
     /// Reinforcement account pubkey
-    pub reinforcement: Pubkey,
+    pub reinforcement: Address,
     /// Sender player account pubkey (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Receiver player account pubkey (not wallet)
-    pub receiver: Pubkey,
+    pub receiver: Address,
     /// Receiver's name (48 bytes UTF-8)
     pub receiver_name: [u8; 48],
     /// Units that arrived
@@ -78,13 +78,13 @@ impl Event for ReinforcementArrived {
 /// Emitted when reinforcements are recalled by sender
 pub struct ReinforcementRecalled {
     /// Reinforcement account pubkey
-    pub reinforcement: Pubkey,
+    pub reinforcement: Address,
     /// Sender player account who recalled (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Receiver player account who was being helped (not wallet)
-    pub receiver: Pubkey,
+    pub receiver: Address,
     /// Receiver's name (48 bytes UTF-8)
     pub receiver_name: [u8; 48],
     /// Units being recalled
@@ -114,13 +114,13 @@ impl Event for ReinforcementRecalled {
 /// Emitted when reinforcements are relieved by destination owner
 pub struct ReinforcementRelieved {
     /// Reinforcement account pubkey
-    pub reinforcement: Pubkey,
+    pub reinforcement: Address,
     /// Sender player account who sent the reinforcement (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Receiver player account who relieved the reinforcement (not wallet)
-    pub receiver: Pubkey,
+    pub receiver: Address,
     /// Receiver's name (48 bytes UTF-8)
     pub receiver_name: [u8; 48],
     /// Units being sent back
@@ -150,7 +150,7 @@ impl Event for ReinforcementRelieved {
 /// Emitted when reinforcements return home
 pub struct ReinforcementReturned {
     /// Sender player account pubkey (troops returning to) (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Units that returned
@@ -177,13 +177,13 @@ impl Event for ReinforcementReturned {
 /// Emitted when reinforcement travel is sped up with gems
 pub struct ReinforcementSpeedup {
     /// Reinforcement account pubkey
-    pub reinforcement: Pubkey,
+    pub reinforcement: Address,
     /// Sender player account who paid for speedup (not wallet)
-    pub sender: Pubkey,
+    pub sender: Address,
     /// Sender's name (48 bytes UTF-8)
     pub sender_name: [u8; 48],
     /// Receiver player account destination (not wallet)
-    pub receiver: Pubkey,
+    pub receiver: Address,
     /// Speedup type (1=Traveling, 2=Returning)
     pub speedup_type: u8,
     /// Gems spent

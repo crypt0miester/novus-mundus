@@ -15,9 +15,9 @@
 //! Phase 1 expeditions work without strikes (time-based yield only).
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -46,8 +46,8 @@ use crate::{
 /// # Instruction Data
 /// - score: u8 (1 byte) - Score from mini-game (0-100)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -74,28 +74,28 @@ pub fn process(
     let score = instruction_data[0].min(100); // Cap at 100
 
     // 4. Validate game_authority against GameEngine
-    let game_engine_data = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if game_authority.key() != &game_engine.game_authority {
+    if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Load Player Data (for ownership verification)
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
     // 6. Validate ExpeditionAccount PDA
-    let (expected_expedition_pda, _) = pinocchio::pubkey::find_program_address(
-        &[EXPEDITION_SEED, owner.key().as_ref()],
+    let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
+        &[EXPEDITION_SEED, owner.address().as_ref()],
         program_id,
     );
 
-    if expedition_account.key() != &expected_expedition_pda {
+    if expedition_account.address() != &expected_expedition_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -103,11 +103,11 @@ pub fn process(
     require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 8. Load Expedition Data
-    let mut expedition_data = expedition_account.try_borrow_mut_data()?;
+    let mut expedition_data = expedition_account.try_borrow_mut()?;
     let expedition = unsafe { ExpeditionAccount::load_mut(&mut expedition_data) };
 
     // 9. Verify expedition belongs to this player
-    if &expedition.player != owner.key() {
+    if &expedition.player != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -134,7 +134,7 @@ pub fn process(
 
     // 15. Emit event
     emit!(ExpeditionStrike {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         strike_num: expedition.strikes,
         yield_amount: 0, // Yield is calculated at claim time, not during strike

@@ -20,9 +20,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Enums
-// ============================================================
 
 /** Encounter rarity */
 export enum EncounterRarity {
@@ -33,9 +31,7 @@ export enum EncounterRarity {
   Legendary = 4,
 }
 
-// ============================================================
 // Spawn Encounter
-// ============================================================
 
 export interface SpawnEncounterAccounts {
   /** Payer's wallet (signer) - pays for account creation */

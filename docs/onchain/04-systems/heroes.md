@@ -386,7 +386,7 @@ function formatBuff(stat, value) {
 
 ```javascript
 function canLockHero(player, estate, heroMint) {
-  const sanctuaryLevel = getBuildingLevel(estate, BuildingType.Sanctuary);
+  const sanctuaryLevel = getBuildingLevel(estate, BuildingType.MeditationChamber);
   const maxHeroes = getMaxLockedHeroes(sanctuaryLevel);
   const currentLocked = player.active_heroes.filter(h => h !== NULL_PUBKEY).length;
 

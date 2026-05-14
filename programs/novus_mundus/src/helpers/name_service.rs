@@ -1,10 +1,10 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    syscalls::sol_sha256,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
 };
+use solana_sha256_hasher::hashv as sha256_hashv;
 
 use alt_name_service::state::{get_name_bytes, NameRecordHeader};
 
@@ -18,52 +18,7 @@ pub const HASH_PREFIX: &[u8] = b"ALT Name Service";
 /// Uses the sol_sha256 syscall.
 #[inline]
 pub fn hashv(vals: &[&[u8]]) -> [u8; 32] {
-    // Build array of (ptr, len) pairs for the syscall
-    // The syscall expects: &[(data_ptr, data_len), ...]
-    #[repr(C)]
-    struct SliceRef {
-        ptr: *const u8,
-        len: u64,
-    }
-
-    let mut result = [0u8; 32];
-
-    // Stack-allocate for small number of slices (common case: 2)
-    if vals.len() <= 4 {
-        let mut refs: [SliceRef; 4] = [
-            SliceRef {
-                ptr: core::ptr::null(),
-                len: 0,
-            },
-            SliceRef {
-                ptr: core::ptr::null(),
-                len: 0,
-            },
-            SliceRef {
-                ptr: core::ptr::null(),
-                len: 0,
-            },
-            SliceRef {
-                ptr: core::ptr::null(),
-                len: 0,
-            },
-        ];
-        for (i, val) in vals.iter().enumerate() {
-            refs[i] = SliceRef {
-                ptr: val.as_ptr(),
-                len: val.len() as u64,
-            };
-        }
-        unsafe {
-            sol_sha256(
-                refs.as_ptr() as *const u8,
-                vals.len() as u64,
-                result.as_mut_ptr(),
-            );
-        }
-    }
-
-    result
+    sha256_hashv(vals).to_bytes()
 }
 
 /// Computes the name hash for Alt Name Service PDA derivation.
@@ -74,12 +29,9 @@ pub fn compute_name_hash(name: &[u8]) -> [u8; 32] {
 }
 
 /// TLD House Program ID: TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S
-pub const TLD_HOUSE_PROGRAM_ID: Pubkey = [
-    0x05, 0x1e, 0x88, 0x5b, 0x08, 0x2e, 0x7e, 0x6b,
-    0x90, 0x5e, 0x9a, 0x8b, 0x0e, 0x93, 0x5c, 0x7e,
-    0x0c, 0xd1, 0x8f, 0x1c, 0x8a, 0x5e, 0x9a, 0x24,
-    0x0e, 0x4c, 0x3e, 0x7c, 0x9f, 0x6a, 0x7c, 0x3b,
-];
+pub const TLD_HOUSE_PROGRAM_ID: Address = Address::new_from_array(
+    five8_const::decode_32_const("TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S"),
+);
 
 /// TldHouse account layout (Anchor):
 /// - 8 bytes: discriminator
@@ -91,8 +43,8 @@ const TLDHOUSE_TLD_OFFSET: usize = 8 + 32 + 32 + 32; // 104
 
 /// Extracts the TLD string from a TldHouse account (e.g., ".sol").
 /// Returns the TLD bytes trimmed of trailing zeros.
-pub fn get_tld_from_tld_house(tld_house: &AccountInfo) -> Result<&[u8], ProgramError> {
-    let data = tld_house.try_borrow_data()?;
+pub fn get_tld_from_tld_house(tld_house: &AccountView) -> Result<&[u8], ProgramError> {
+    let data = tld_house.try_borrow()?;
 
     // Need at least offset + 4 bytes for string length
     if data.len() < TLDHOUSE_TLD_OFFSET + 4 {
@@ -135,7 +87,7 @@ pub fn get_tld_from_tld_house(tld_house: &AccountInfo) -> Result<&[u8], ProgramE
 /// - `name_parent`: The parent TLD account (.tld)
 /// - `tld_house`: The TldHouse account that owns the parent TLD
 /// - `owner`: Expected owner of the name_account
-/// - `reverse_acc_hashed_name`: Pre-computed hash = SHA256("ALT Name Service" + name_account.key().to_base58())
+/// - `reverse_acc_hashed_name`: Pre-computed hash = SHA256("ALT Name Service" + name_account.address().to_base58())
 ///   (computed off-chain since base58 encoding is expensive on-chain)
 ///
 /// Validates:
@@ -147,20 +99,20 @@ pub fn get_tld_from_tld_house(tld_house: &AccountInfo) -> Result<&[u8], ProgramE
 ///
 /// Returns the domain name bytes on success.
 pub fn validate_and_get_domain_name<'a>(
-    name_account: &AccountInfo,
-    reverse_name_account: &'a AccountInfo,
-    name_parent: &AccountInfo,
-    tld_house: &AccountInfo,
-    owner: &Pubkey,
+    name_account: &AccountView,
+    reverse_name_account: &'a AccountView,
+    name_parent: &AccountView,
+    tld_house: &AccountView,
+    owner: &Address,
     reverse_acc_hashed_name: &[u8; 32],
 ) -> Result<&'a [u8], ProgramError> {
     // === 1. Validate tld_house is owned by TLD House program ===
-    if tld_house.owner() != &TLD_HOUSE_PROGRAM_ID {
+    if unsafe { tld_house.owner() } != &TLD_HOUSE_PROGRAM_ID {
         return Err(ProgramError::IncorrectProgramId);
     }
 
     // === 2. Validate name_parent (TLD account) ===
-    let parent_data = name_parent.try_borrow_data()?;
+    let parent_data = name_parent.try_borrow()?;
     if parent_data.len() < NameRecordHeader::LEN {
         return Err(ProgramError::InvalidAccountData);
     }
@@ -170,13 +122,13 @@ pub fn validate_and_get_domain_name<'a>(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if !parent_header.is_owner(tld_house.key()) {
+    if !parent_header.is_owner(tld_house.address()) {
         return Err(ProgramError::IllegalOwner);
     }
     drop(parent_data);
 
     // === 3. Validate name_account (forward domain) ===
-    let name_data = name_account.try_borrow_data()?;
+    let name_data = name_account.try_borrow()?;
     if name_data.len() < NameRecordHeader::LEN {
         return Err(ProgramError::InvalidAccountData);
     }
@@ -190,7 +142,7 @@ pub fn validate_and_get_domain_name<'a>(
         return Err(ProgramError::IllegalOwner);
     }
 
-    if name_header.nclass != NULL_PUBKEY {
+    if &name_header.nclass != NULL_PUBKEY.as_array() {
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -199,13 +151,13 @@ pub fn validate_and_get_domain_name<'a>(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if name_header.parent_name != *name_parent.key() {
+    if &name_header.parent_name != name_parent.address().as_array() {
         return Err(ProgramError::InvalidAccountData);
     }
     drop(name_data);
 
     // === 4. Validate reverse_name_account header ===
-    let reverse_data = reverse_name_account.try_borrow_data()?;
+    let reverse_data = reverse_name_account.try_borrow()?;
     if reverse_data.len() < NameRecordHeader::LEN {
         return Err(ProgramError::InvalidAccountData);
     }
@@ -215,11 +167,11 @@ pub fn validate_and_get_domain_name<'a>(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if reverse_header.nclass != *tld_house.key() {
+    if &reverse_header.nclass != tld_house.address().as_array() {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if reverse_header.parent_name != NULL_PUBKEY {
+    if &reverse_header.parent_name != NULL_PUBKEY.as_array() {
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -244,35 +196,35 @@ pub fn validate_and_get_domain_name<'a>(
     let domain_name = &full_slice[NameRecordHeader::LEN..NameRecordHeader::LEN + domain_end];
 
     // === 5. Verify reverse name account PDA ===
-    // reverse_acc_hashed_name = SHA256("ALT Name Service" + name_account.key().to_base58())
-    // PDA seeds: [hash, tld_house.key(), NULL_PUBKEY]
+    // reverse_acc_hashed_name = SHA256("ALT Name Service" + name_account.address().to_base58())
+    // PDA seeds: [hash, tld_house.address(), NULL_PUBKEY]
     let reverse_seeds: &[&[u8]] = &[
         reverse_acc_hashed_name.as_ref(),
-        tld_house.key().as_ref(),
+        tld_house.address().as_ref(),
         NULL_PUBKEY.as_ref(),
     ];
 
     let (derived_reverse_pda, _) =
-        pinocchio::pubkey::find_program_address(reverse_seeds, &alt_name_service::ID);
+        pinocchio::Address::find_program_address(reverse_seeds, &alt_name_service::ID);
 
-    if derived_reverse_pda != *reverse_name_account.key() {
+    if derived_reverse_pda != *reverse_name_account.address() {
         return Err(ProgramError::InvalidAccountData);
     }
 
     // === 6. Verify forward name account PDA ===
-    // Forward PDA seeds: [hash(domain_name), NULL_PUBKEY, name_parent.key()]
+    // Forward PDA seeds: [hash(domain_name), NULL_PUBKEY, name_parent.address()]
     let hashed_name = compute_name_hash(domain_name);
 
     let forward_seeds: &[&[u8]] = &[
         hashed_name.as_ref(),
         NULL_PUBKEY.as_ref(),
-        name_parent.key().as_ref(),
+        name_parent.address().as_ref(),
     ];
 
     let (derived_forward_pda, _) =
-        pinocchio::pubkey::find_program_address(forward_seeds, &alt_name_service::ID);
+        pinocchio::Address::find_program_address(forward_seeds, &alt_name_service::ID);
 
-    if derived_forward_pda != *name_account.key() {
+    if derived_forward_pda != *name_account.address() {
         return Err(ProgramError::InvalidAccountData);
     }
 

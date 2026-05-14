@@ -29,9 +29,9 @@
 //! If a hero was sent with the expedition, it is returned to owner's wallet on claim.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -84,8 +84,8 @@ pub const ORIGIN_CITY_BONUS_BPS: u64 = 2500;
 /// # Instruction Data
 /// None required
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 9 with hero)
@@ -107,12 +107,12 @@ pub fn process(
     require_owner(expedition_account, program_id)?;
 
     // 3. Validate ExpeditionAccount PDA
-    let (expected_expedition_pda, _) = pinocchio::pubkey::find_program_address(
-        &[EXPEDITION_SEED, owner.key().as_ref()],
+    let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
+        &[EXPEDITION_SEED, owner.address().as_ref()],
         program_id,
     );
 
-    if expedition_account.key() != &expected_expedition_pda {
+    if expedition_account.address() != &expected_expedition_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -121,11 +121,11 @@ pub fn process(
 
     // 5. Load Expedition Data (before closing)
     let (expedition_type, tier, strikes, score, start_time, op_unit_1, op_unit_2, op_unit_3, hero_mint_key, expedition_city) = {
-        let expedition_data = expedition_account.try_borrow_data()?;
+        let expedition_data = expedition_account.try_borrow()?;
         let expedition = unsafe { ExpeditionAccount::load(&expedition_data) };
 
         // Verify expedition belongs to this player
-        if &expedition.player != owner.key() {
+        if &expedition.player != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -173,11 +173,11 @@ pub fn process(
     };
 
     // 7. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 7. Verify ownership
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -269,16 +269,20 @@ pub fn process(
 
     // 13a. Apply expedition hero affinity bonus AND origin city bonus (if hero was sent)
     // User requirement: "extra yield must be if matches expedition location AND has the affinity"
-    let affinity_adjusted = if has_hero && accounts.len() >= 8 {
-        let hero_mint = &accounts[4];
+    // hero_mint is `accounts[5]`, NOT `accounts[4]`. accounts[4] is
+    // `game_engine` per the doc-comment above. Reading the wrong index would
+    // cause every claim with an attached hero to abort (game_engine bytes parsed
+    // as None by parse_hero_nft + key mismatch), soft-locking the hero in escrow.
+    let affinity_adjusted = if has_hero && accounts.len() >= 9 {
+        let hero_mint = &accounts[5];
 
         // Verify hero mint matches what was stored in expedition
-        if hero_mint.key() != &hero_mint_key {
+        if hero_mint.address() != &hero_mint_key {
             return Err(GameError::InvalidParameter.into());
         }
 
         // Parse hero NFT for affinity buff and origin_city
-        let nft_data = hero_mint.try_borrow_data()?;
+        let nft_data = hero_mint.try_borrow()?;
         let (affinity_bonus, origin_matches) = if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
             // Look for MiningAffinity (17) or FishingAffinity (18) in hero's buffs
             let target_stat = if expedition_type == EXPEDITION_MINING { 17u8 } else { 18u8 };
@@ -384,29 +388,30 @@ pub fn process(
     // Drop player_data borrow before transfer
     drop(player_data_ref);
 
-    if has_hero && accounts.len() >= 8 {
-        let hero_mint = &accounts[4];
-        let hero_collection = &accounts[5];
-        let system_program = &accounts[6];
-        let p_core_program = &accounts[7];
+    // Hero accounts start at index 5, not 4 (accounts[4] is game_engine).
+    if has_hero && accounts.len() >= 9 {
+        let hero_mint = &accounts[5];
+        let hero_collection = &accounts[6];
+        let system_program = &accounts[7];
+        let p_core_program = &accounts[8];
 
         // Verify hero mint matches what was stored
-        if hero_mint.key() != &hero_mint_key {
+        if hero_mint.address() != &hero_mint_key {
             return Err(GameError::InvalidParameter.into());
         }
 
         // Derive expedition PDA signer
-        let (_, expedition_bump) = pinocchio::pubkey::find_program_address(
-            &[EXPEDITION_SEED, owner.key().as_ref()],
+        let (_, expedition_bump) = pinocchio::Address::find_program_address(
+            &[EXPEDITION_SEED, owner.address().as_ref()],
             program_id,
         );
         let bump_seed = [expedition_bump];
-        let expedition_seeds = pinocchio::seeds!(
+        let expedition_seeds = crate::seeds!(
             EXPEDITION_SEED,
-            owner.key().as_ref(),
+            owner.address(),
             &bump_seed
         );
-        let expedition_signer = pinocchio::instruction::Signer::from(&expedition_seeds);
+        let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
         // Transfer hero NFT from expedition back to owner
         p_core::instructions::TransferV1 {
@@ -425,11 +430,11 @@ pub fn process(
 
     // 19. Emit event
     // Re-borrow player_data to access name field
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
     emit!(ExpeditionClaimed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         expedition_type,
         total_yield: final_yield,

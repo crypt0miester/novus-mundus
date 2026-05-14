@@ -1,9 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -44,8 +43,8 @@ use crate::{
 ///
 /// Note: No buff_ranges needed - hero progression is deterministic using √φ scaling
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -59,11 +58,12 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Verify DAO authority
-    let game_engine_data = game_engine.try_borrow_data()?;
-    let game_engine_state = unsafe { GameEngine::load(&game_engine_data) };
-
-    if dao_authority.key() != &game_engine_state.authority {
-        return Err(GameError::DaoRequired.into());
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    {
+        let game_engine_state = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        if dao_authority.address() != &game_engine_state.authority {
+            return Err(GameError::DaoRequired.into());
+        }
     }
 
     // 4. Parse instruction data (Deterministic System - no buff_ranges needed)
@@ -129,17 +129,17 @@ pub fn process(
     // 5. Derive and verify PDA
     let (expected_template, bump) = HeroTemplate::derive_pda(template_id);
 
-    if hero_template.key() != &expected_template {
+    if hero_template.address() != &expected_template {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // 6. Create HeroTemplate account
-    let lamports = Rent::get()?.minimum_balance(HeroTemplate::LEN);
+    let lamports = crate::utils::rent_exempt_const(HeroTemplate::LEN);
 
     let template_id_bytes = template_id.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(crate::constants::HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(crate::constants::HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: dao_authority,
@@ -150,7 +150,7 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 7. Initialize template data
-    let mut template_data = hero_template.try_borrow_mut_data()?;
+    let mut template_data = hero_template.try_borrow_mut()?;
     let template = unsafe { HeroTemplate::load_mut(&mut template_data) };
 
     template.account_key = crate::state::AccountKey::HeroTemplate as u8;

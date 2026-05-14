@@ -17,9 +17,9 @@
 //! - week_number: u16 (2 bytes)
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -45,8 +45,8 @@ fn get_week_number(timestamp: i64) -> u16 {
 }
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -71,7 +71,7 @@ pub fn process(
     require_key_match(token_program, &pinocchio_token::ID)?;
 
     // SECURITY: Verify token account belongs to the PlayerAccount PDA
-    validate_token_account_owner(player_novi_ata, player_account.key())?;
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Parse instruction data
     if instruction_data.len() < 4 {
@@ -92,18 +92,18 @@ pub fn process(
     }
 
     // 5. Load player (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.key(), owner.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), owner.address(), program_id)?;
 
     // 6. Load and validate leaderboard PDA (kingdom-scoped)
     require_owner(leaderboard_account, program_id)?;
 
-    let (expected_pda, lb_bump) = DungeonLeaderboard::derive_pda(game_engine.key(), dungeon_id, week_number);
-    if leaderboard_account.key() != &expected_pda {
+    let (expected_pda, lb_bump) = DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
+    if leaderboard_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_data_len(leaderboard_account, DungeonLeaderboard::LEN)?;
-    let mut lb_data = leaderboard_account.try_borrow_mut_data()?;
+    let mut lb_data = leaderboard_account.try_borrow_mut()?;
     let leaderboard = unsafe { DungeonLeaderboard::load_mut(&mut lb_data) };
 
     // Verify leaderboard matches
@@ -117,7 +117,7 @@ pub fn process(
     }
 
     // 7. Find player's rank on leaderboard
-    let rank = leaderboard.find_rank(player_account.key())
+    let rank = leaderboard.find_rank(player_account.address())
         .ok_or(GameError::NotOnLeaderboard)?;
 
     // Check if already claimed
@@ -148,8 +148,8 @@ pub fn process(
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     let bump_seed = [game_engine_data.bump];
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
     drop(game_engine_data);
 
     // 11. Mint NOVI tokens to player's token account
@@ -170,7 +170,7 @@ pub fn process(
 
     // 12. Emit event
     emit!(DungeonLeaderboardPrizeClaimed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         dungeon_id,
         week_number,

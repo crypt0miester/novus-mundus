@@ -22,9 +22,7 @@ export {
 import { ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
 import { deriveTldHousePda, deriveNameAccountPda, deriveMainDomainPda } from '../pda';
 
-// ============================================================
 // Constants
-// ============================================================
 
 /** Hash prefix used by Alt Name Service for PDA derivation */
 export const HASH_PREFIX = 'ALT Name Service';
@@ -34,9 +32,7 @@ export const TLD_HOUSE_PREFIX = 'tld_house';
 export const TLD_PDA_SEED = 'tld_pda';
 export const MAIN_DOMAIN_PREFIX = 'main_domain';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Name record header data */
 export interface NameRecordHeader {
@@ -80,9 +76,7 @@ export interface DomainInfo {
   isExpired: boolean;
 }
 
-// ============================================================
 // Hash Functions
-// ============================================================
 
 /**
  * Compute name hash for Alt Name Service PDA derivation.
@@ -115,9 +109,7 @@ export function computeReverseLookupHash(pubkey: PublicKey): Uint8Array {
   return computeNameHash(base58String);
 }
 
-// ============================================================
 // Additional PDA Derivation Functions
-// ============================================================
 
 /**
  * Derive reverse lookup account PDA.
@@ -139,9 +131,7 @@ export function deriveReverseLookupPda(
   );
 }
 
-// ============================================================
 // Parsing Functions
-// ============================================================
 
 /** Name record header size in bytes */
 export const NAME_RECORD_HEADER_SIZE = 96;
@@ -230,9 +220,7 @@ export function parseTldHouseData(data: Buffer): TldHouseData | null {
   };
 }
 
-// ============================================================
 // Validation Functions
-// ============================================================
 
 /**
  * Validate a domain name format.
@@ -260,9 +248,7 @@ export function isNameExpired(header: NameRecordHeader, currentTimestamp: number
   return currentTimestamp > header.expiresAt;
 }
 
-// ============================================================
 // Fetch Functions
-// ============================================================
 
 /**
  * Fetch domain info by name.

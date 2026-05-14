@@ -23,9 +23,7 @@ import {
   deriveEstatePda,
 } from '../pda';
 
-// ============================================================
 // Intercity Start
-// ============================================================
 
 export interface IntercityStartAccounts {
   /** Player's wallet (signer, pays destination location rent) */
@@ -117,9 +115,7 @@ export function createIntercityStartInstruction(
   });
 }
 
-// ============================================================
 // Intercity Complete
-// ============================================================
 
 export interface IntercityCompleteAccounts {
   /** Player's wallet (signer) */
@@ -186,9 +182,7 @@ export function createIntercityCompleteInstruction(
   });
 }
 
-// ============================================================
 // Intercity Cancel
-// ============================================================
 
 export interface IntercityCancelAccounts {
   /** Player's wallet (signer) */
@@ -255,9 +249,7 @@ export function createIntercityCancelInstruction(
   });
 }
 
-// ============================================================
 // Intercity Teleport
-// ============================================================
 
 export interface IntercityTeleportAccounts {
   /** Player's wallet (signer, pays rent if needed) */
@@ -340,9 +332,7 @@ export function createIntercityTeleportInstruction(
   });
 }
 
-// ============================================================
 // Travel Speedup
-// ============================================================
 
 export interface TravelSpeedupAccounts {
   /** Player's wallet (signer) */
@@ -402,9 +392,7 @@ export function createTravelSpeedupInstruction(
   });
 }
 
-// ============================================================
 // Intracity Start
-// ============================================================
 
 export interface IntracityStartAccounts {
   /** Player's wallet (signer, pays destination location rent) */
@@ -492,9 +480,7 @@ export function createIntracityStartInstruction(
   });
 }
 
-// ============================================================
 // Intracity Complete
-// ============================================================
 
 export interface IntracityCompleteAccounts {
   /** Player's wallet (signer) */
@@ -544,9 +530,7 @@ export function createIntracityCompleteInstruction(
   });
 }
 
-// ============================================================
 // Intracity Cancel
-// ============================================================
 
 export interface IntracityCancelAccounts {
   /** Player's wallet (signer, pays origin location rent) */

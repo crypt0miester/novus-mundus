@@ -19,9 +19,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // GLSL Vertex Shader
-// ---------------------------------------------------------------------------
 
 const BIOME_VERTEX = /* glsl */ `
 precision highp float;
@@ -55,9 +53,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GLSL Fragment Shader
-// ---------------------------------------------------------------------------
 
 const BIOME_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -320,9 +316,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // BiomeShaderMaterial class
-// ---------------------------------------------------------------------------
 
 export class BiomeShaderMaterial extends THREE.ShaderMaterial {
   /**
@@ -368,9 +362,7 @@ export class BiomeShaderMaterial extends THREE.ShaderMaterial {
     this._uniforms = this.uniforms;
   }
 
-  // -------------------------------------------------------------------------
   // Public setters
-  // -------------------------------------------------------------------------
 
   /**
    * Set the average moisture level.
@@ -491,9 +483,7 @@ export class BiomeShaderMaterial extends THREE.ShaderMaterial {
     this._uniforms.uTerrainTexScale.value = scale;
   }
 
-  // -------------------------------------------------------------------------
   // Static factory: create material with per-vertex elevation/moisture data
-  // -------------------------------------------------------------------------
 
   /**
    * Attach per-vertex elevation and moisture attributes to a geometry,

@@ -4,7 +4,7 @@
 /// using the pinocchio-associated-token-account crate.
 
 use pinocchio::{
-    account_info::AccountInfo,
+    AccountView,
     ProgramResult,
 };
 use pinocchio_associated_token_account::instructions::CreateIdempotent;
@@ -27,12 +27,12 @@ use pinocchio_associated_token_account::instructions::CreateIdempotent;
 /// # Returns
 /// Ok(()) on success (account created or already exists)
 pub fn get_or_create_associated_token_account<'a>(
-    funding_account: &'a AccountInfo,
-    account: &'a AccountInfo,
-    wallet: &'a AccountInfo,
-    mint: &'a AccountInfo,
-    system_program: &'a AccountInfo,
-    token_program: &'a AccountInfo,
+    funding_account: &'a AccountView,
+    account: &'a AccountView,
+    wallet: &'a AccountView,
+    mint: &'a AccountView,
+    system_program: &'a AccountView,
+    token_program: &'a AccountView,
 ) -> ProgramResult {
     let create_ix = CreateIdempotent {
         funding_account,

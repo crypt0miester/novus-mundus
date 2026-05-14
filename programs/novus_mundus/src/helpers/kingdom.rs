@@ -5,8 +5,8 @@
 
 #![allow(dead_code)]
 
-use pinocchio::pubkey::Pubkey;
-use pinocchio::program_error::ProgramError;
+use pinocchio::Address;
+use pinocchio::error::ProgramError;
 use crate::error::GameError;
 
 /// Validate that a player belongs to the specified kingdom
@@ -19,8 +19,8 @@ use crate::error::GameError;
 /// Returns `GameError::KingdomMismatch` if the player is in a different kingdom
 #[inline]
 pub fn validate_player_kingdom(
-    player_game_engine: &Pubkey,
-    expected_game_engine: &Pubkey,
+    player_game_engine: &Address,
+    expected_game_engine: &Address,
 ) -> Result<(), ProgramError> {
     if player_game_engine != expected_game_engine {
         return Err(GameError::KingdomMismatch.into());
@@ -38,8 +38,8 @@ pub fn validate_player_kingdom(
 /// Returns `GameError::CrossKingdomNotAllowed` if the players are in different kingdoms
 #[inline]
 pub fn validate_same_kingdom(
-    player1_game_engine: &Pubkey,
-    player2_game_engine: &Pubkey,
+    player1_game_engine: &Address,
+    player2_game_engine: &Address,
 ) -> Result<(), ProgramError> {
     if player1_game_engine != player2_game_engine {
         return Err(GameError::CrossKingdomNotAllowed.into());
@@ -60,8 +60,8 @@ pub fn validate_same_kingdom(
 /// Returns `GameError::CrossKingdomNotAllowed` if they are in different kingdoms
 #[inline]
 pub fn validate_entity_kingdom(
-    player_game_engine: &Pubkey,
-    entity_game_engine: &Pubkey,
+    player_game_engine: &Address,
+    entity_game_engine: &Address,
 ) -> Result<(), ProgramError> {
     if player_game_engine != entity_game_engine {
         return Err(GameError::CrossKingdomNotAllowed.into());
@@ -79,8 +79,8 @@ pub fn validate_entity_kingdom(
 /// Returns `GameError::KingdomMismatch` if the city is in a different kingdom
 #[inline]
 pub fn validate_city_kingdom(
-    city_game_engine: &Pubkey,
-    expected_game_engine: &Pubkey,
+    city_game_engine: &Address,
+    expected_game_engine: &Address,
 ) -> Result<(), ProgramError> {
     if city_game_engine != expected_game_engine {
         return Err(GameError::KingdomMismatch.into());
@@ -98,8 +98,8 @@ pub fn validate_city_kingdom(
 /// Returns `GameError::CrossKingdomNotAllowed` if they are in different kingdoms
 #[inline]
 pub fn validate_group_membership(
-    group_game_engine: &Pubkey,
-    player_game_engine: &Pubkey,
+    group_game_engine: &Address,
+    player_game_engine: &Address,
 ) -> Result<(), ProgramError> {
     if group_game_engine != player_game_engine {
         return Err(GameError::CrossKingdomNotAllowed.into());
@@ -117,7 +117,7 @@ pub fn validate_group_membership(
 ///
 /// # Errors
 /// Returns `GameError::CrossKingdomNotAllowed` if any pubkeys differ
-pub fn validate_all_same_kingdom(game_engines: &[&Pubkey]) -> Result<(), ProgramError> {
+pub fn validate_all_same_kingdom(game_engines: &[&Address]) -> Result<(), ProgramError> {
     if game_engines.is_empty() {
         return Ok(());
     }

@@ -1,6 +1,8 @@
 #![no_std]
 
 // Program modules
+#[macro_use]
+mod macros;
 mod constants;
 mod error;
 mod types;
@@ -10,6 +12,7 @@ mod validation;
 mod processor;
 mod helpers;
 mod token_helpers;
+mod utils;
 pub mod events;
 
 // Re-exports
@@ -19,29 +22,45 @@ pub use types::*;
 pub use state::*;
 
 use pinocchio::{
-    account_info::AccountInfo,
-    msg,
+    AccountView,
     program_entrypoint,
-    default_allocator,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    no_allocator,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
-// Program ID - raw bytes (Pubkey is just [u8; 32])
-pub const ID: Pubkey = [
-    0xfd, 0x6a, 0x11, 0x5a, 0x69, 0xa1, 0x9d, 0x7c,
-    0x75, 0x54, 0x9e, 0x38, 0x7f, 0x11, 0x2d, 0x0b,
-    0xb3, 0xe5, 0xb2, 0x5d, 0x5f, 0x7c, 0xa4, 0x6e,
-    0x8b, 0x2e, 0x6c, 0xd1, 0xb9, 0xf6, 0x3b, 0x6c,
-];
+// Program ID — single source of truth. `constants::NOVI_MINT_PDA` derives
+// from `crate::ID.to_bytes()` so a redeploy under a new key only needs
+// this string updated.
+pinocchio::address::declare_id!("J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V");
 
 program_entrypoint!(process_instruction);
-default_allocator!();
+no_allocator!();
+
+// Manual panic handler. Pinocchio's `nostd_panic_handler!()` macro emits
+// `#[no_mangle]` on the handler, which current rustc rejects for language
+// items. So we inline an equivalent here.
+#[cfg(target_os = "solana")]
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    if let Some(location) = info.location() {
+        unsafe {
+            pinocchio::syscalls::sol_panic_(
+                location.file().as_ptr(),
+                location.file().len() as u64,
+                location.line() as u64,
+                location.column() as u64,
+            )
+        }
+    } else {
+        unsafe { pinocchio::syscalls::abort() }
+    }
+}
 
 pub fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // Verify program ID
@@ -53,7 +72,7 @@ pub fn process_instruction(
     if data.len() < 2 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    
+
     let discriminant = u16::from_le_bytes([data[0], data[1]]);
     let instruction_data = &data[2..];
 

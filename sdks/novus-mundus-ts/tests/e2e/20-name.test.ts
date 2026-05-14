@@ -47,9 +47,7 @@ import {
 } from '../utils/accounts';
 import { log } from '../utils/logger';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Name Service', () => {
   let ctx: TestContext;
@@ -65,9 +63,7 @@ describe('Name Service', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Player Name Tests
-  // ============================================================
 
   describe('Player Names', () => {
     it('should reject set name without real domain', async () => {
@@ -162,9 +158,7 @@ describe('Name Service', () => {
     });
   });
 
-  // ============================================================
   // Team Name Tests
-  // ============================================================
 
   describe('Team Names', () => {
     it('should reject set team name without real domain', async () => {
@@ -253,9 +247,7 @@ describe('Name Service', () => {
     });
   });
 
-  // ============================================================
   // Domain Validation Tests
-  // ============================================================
 
   describe('Domain Validation', () => {
     it('should reject invalid TLD', async () => {
@@ -327,9 +319,7 @@ describe('Name Service', () => {
     });
   });
 
-  // ============================================================
   // Name Display Tests
-  // ============================================================
 
   describe('Name Display', () => {
     it('should reject storing name without real domain', async () => {
@@ -360,9 +350,7 @@ describe('Name Service', () => {
     });
   });
 
-  // ============================================================
   // Name Transfer Tests
-  // ============================================================
 
   describe('Name Transfers', () => {
     it('should reject transfer without real domain on set', async () => {

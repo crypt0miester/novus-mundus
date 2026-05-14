@@ -1,5 +1,5 @@
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address}, sysvars::{Sysvar, clock::Clock}
+    ProgramResult, AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -7,7 +7,7 @@ use crate::{
     constants::EVENT_PARTICIPATION_SEED,
     error::GameError,
     state::{EventAccount, EventParticipation, PlayerAccount, require_extension, EXT_RESEARCH},
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::game_event::GameEventJoined,
 };
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -57,6 +57,11 @@ pub fn process(
     require_writable(event_participation_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
+    // Defensive — verify player_account and event_account are
+    // owned by this program before trusting any bytes from them.
+    require_owner(player_account, program_id)?;
+    require_owner(event_account, program_id)?;
+
     // 3. Load Clock
 
     let clock = Clock::get()?;
@@ -64,13 +69,13 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut event_account_data = event_account.try_borrow_mut_data()?;
+    let mut player_account_data = player_account.try_borrow_mut()?;
+    let mut event_account_data = event_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
     let event_data = unsafe { EventAccount::load_mut(&mut event_account_data) };
 
     // Verify ownership
-    if &player_data.owner != player_owner.key() {
+    if &player_data.owner != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -122,23 +127,22 @@ pub fn process(
 
     let event_id_bytes = event_data.id.to_le_bytes();
     let event_game_engine = event_data.game_engine;
-    let (expected_participation, bump) = find_program_address(
-        &[EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.key().as_ref()],
+    let (expected_participation, bump) = Address::find_program_address(
+        &[EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.address().as_ref()],
         program_id,
     );
 
-    if event_participation_account.key() != &expected_participation {
+    if event_participation_account.address() != &expected_participation {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 8. Create EventParticipation Account
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(EventParticipation::LEN);
+    let lamports = crate::utils::rent_exempt_const(EventParticipation::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.key(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(EVENT_PARTICIPATION_SEED, event_game_engine.as_ref(), &event_id_bytes, player_owner.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -150,9 +154,9 @@ pub fn process(
 
     // 9. Initialize EventParticipation Data
 
-    let mut participation_account_data = event_participation_account.try_borrow_mut_data()?;
+    let mut participation_account_data = event_participation_account.try_borrow_mut()?;
     let participation_data = unsafe { EventParticipation::load_mut(&mut participation_account_data) };
-    *participation_data = EventParticipation::new(event_game_engine, event_data.id, *player_owner.key(), now, bump);
+    *participation_data = EventParticipation::new(event_game_engine, event_data.id, *player_owner.address(), now, bump);
 
     // 10. Update Player and Event
 
@@ -161,8 +165,8 @@ pub fn process(
 
     // Emit event
     emit!(GameEventJoined {
-        event: *event_account.key(),
-        player: *player_account.key(),
+        event: *event_account.address(),
+        player: *player_account.address(),
         player_name: player_data.name,
         entry_fee: 0,
         participant_count: event_data.participant_count,

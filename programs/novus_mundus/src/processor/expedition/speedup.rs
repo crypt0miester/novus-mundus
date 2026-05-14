@@ -11,9 +11,9 @@
 //! `gem_cost = remaining_minutes × gems_per_minute × tier_multiplier`
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -47,8 +47,8 @@ pub const EXPEDITION_SPEEDUP_GEMS_PER_MINUTE: u64 = 100;
 /// # Instruction Data
 /// - speedup_tier: u8 (1 byte) - 1 or 2
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -78,12 +78,12 @@ pub fn process(
     }
 
     // 4. Validate ExpeditionAccount PDA
-    let (expected_expedition_pda, _) = pinocchio::pubkey::find_program_address(
-        &[EXPEDITION_SEED, owner.key().as_ref()],
+    let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
+        &[EXPEDITION_SEED, owner.address().as_ref()],
         program_id,
     );
 
-    if expedition_account.key() != &expected_expedition_pda {
+    if expedition_account.address() != &expected_expedition_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -91,11 +91,11 @@ pub fn process(
     require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 6. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 7. Verify ownership
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -103,11 +103,11 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     // 9. Load and modify expedition
-    let mut expedition_data_ref = expedition_account.try_borrow_mut_data()?;
+    let mut expedition_data_ref = expedition_account.try_borrow_mut()?;
     let expedition = unsafe { ExpeditionAccount::load_mut(&mut expedition_data_ref) };
 
     // Verify expedition belongs to this player
-    if &expedition.player != owner.key() {
+    if &expedition.player != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -167,7 +167,7 @@ pub fn process(
 
     // 16. Emit event
     emit!(ExpeditionSpeedup {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         speedup_seconds: time_saved,
         gems_spent: gem_cost,

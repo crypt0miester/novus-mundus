@@ -5,9 +5,7 @@
 import type BN from 'bn.js';
 import { type PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
-// ============================================================
 // ANSI Colors
-// ============================================================
 
 const isColorEnabled = process.env.NO_COLOR === undefined;
 
@@ -23,9 +21,7 @@ export const cyan   = c('36');
 export const white  = c('37');
 export const magenta = c('35');
 
-// ============================================================
 // Number Formatting
-// ============================================================
 
 export function formatSol(lamports: number | BN): string {
   const n = typeof lamports === 'number' ? lamports : lamports.toNumber();
@@ -61,9 +57,7 @@ export function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-// ============================================================
 // Address Formatting
-// ============================================================
 
 export function addr(pubkey: PublicKey | string): string {
   const s = typeof pubkey === 'string' ? pubkey : pubkey.toBase58();
@@ -71,9 +65,7 @@ export function addr(pubkey: PublicKey | string): string {
   return `${s.slice(0, 4)}..${s.slice(-4)}`;
 }
 
-// ============================================================
 // Table Formatting
-// ============================================================
 
 export interface Column {
   header: string;
@@ -125,9 +117,7 @@ function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
-// ============================================================
 // Section Headers
-// ============================================================
 
 export function section(title: string): string {
   return `\n${bold(title)}\n`;

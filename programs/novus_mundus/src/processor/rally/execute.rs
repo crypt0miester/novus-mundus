@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -58,8 +58,8 @@ use crate::{
 /// # Instruction Data
 /// None (target_type stored in RallyAccount)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Fixed Accounts
@@ -76,7 +76,7 @@ pub fn process(
     // Load rally to get participant count
     // RallyAccount doesn't have load_checked - verify program ownership manually
     require_owner(rally_account, program_id)?;
-    let rally_data_check = rally_account.try_borrow_data()?;
+    let rally_data_check = rally_account.try_borrow()?;
     let rally_header = unsafe { RallyAccount::load(&rally_data_check) };
     let participant_count = rally_header.participant_count as usize;
     let rally_creator = rally_header.creator;
@@ -101,7 +101,7 @@ pub fn process(
     for rp_account in rally_participant_accounts.iter() {
         require_writable(rp_account)?;
         // RallyParticipant doesn't have load_checked - verify program ownership
-        if rp_account.owner() != program_id {
+        if unsafe { rp_account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
     }
@@ -115,7 +115,7 @@ pub fn process(
 
     // RallyAccount doesn't have load_checked - verify program ownership manually
     require_owner(rally_account, program_id)?;
-    let rally_data_check = rally_account.try_borrow_data()?;
+    let rally_data_check = rally_account.try_borrow()?;
     let rally_data = unsafe { RallyAccount::load(&rally_data_check) };
     let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
@@ -140,7 +140,7 @@ pub fn process(
     }
 
     // Verify target matches rally target
-    if target_account.key() != &rally_data.target {
+    if target_account.address() != &rally_data.target {
         return Err(GameError::InvalidRallyTarget.into());
     }
 
@@ -169,7 +169,7 @@ pub fn process(
 
     for i in 0..participant_count {
         let rp_account = &rally_participant_accounts[i];
-        let mut rp_data_ref = rp_account.try_borrow_mut_data()?;
+        let mut rp_data_ref = rp_account.try_borrow_mut()?;
         let rp_data = unsafe { RallyParticipant::load_mut(&mut rp_data_ref) };
 
         // Verify RallyParticipant belongs to this rally
@@ -217,7 +217,7 @@ pub fn process(
     if total_contribution > 0 {
         for i in 0..participant_count {
             let rp_account = &rally_participant_accounts[i];
-            let mut rp_data_ref = rp_account.try_borrow_mut_data()?;
+            let mut rp_data_ref = rp_account.try_borrow_mut()?;
             let rp_data = unsafe { RallyParticipant::load_mut(&mut rp_data_ref) };
 
             if rp_data.included_in_march {
@@ -246,7 +246,7 @@ pub fn process(
     // Leader's Citadel provides 0.5% damage bonus per level
     // EstateAccount doesn't have load_checked - verify program ownership manually
     require_owner(leader_estate_account, program_id)?;
-    let leader_estate_data = leader_estate_account.try_borrow_data()?;
+    let leader_estate_data = leader_estate_account.try_borrow()?;
     let leader_estate = unsafe { EstateAccount::load(&leader_estate_data) };
     let citadel_bonus_bps = citadel_rally_damage_bps(leader_estate);
     drop(leader_estate_data);
@@ -277,12 +277,10 @@ pub fn process(
 
     match target_type {
         0 => {
-            // ============================================================
             // PvP Rally Attack - Full Weapon Combat Mechanics
-            // ============================================================
             // Target PlayerAccount - verify program ownership (not signer, so can't use load_checked)
             require_owner(target_account, program_id)?;
-            let mut target_account_data = target_account.try_borrow_mut_data()?;
+            let mut target_account_data = target_account.try_borrow_mut()?;
             let target_player = unsafe { PlayerAccount::load_mut(&mut target_account_data) };
 
             // Get defender's garrison
@@ -427,12 +425,10 @@ pub fn process(
             target_player.networth = calculate_networth(target_player, economic_config)?;
         },
         1 => {
-            // ============================================================
             // Encounter Rally Attack
-            // ============================================================
             // EncounterAccount - verify program ownership
             require_owner(target_account, program_id)?;
-            let mut target_account_data = target_account.try_borrow_mut_data()?;
+            let mut target_account_data = target_account.try_borrow_mut()?;
             let encounter = unsafe { EncounterAccount::load_mut(&mut target_account_data) };
 
             // Reduce encounter health
@@ -464,14 +460,12 @@ pub fn process(
             }
         },
         2 => {
-            // ============================================================
             // Castle Rally Attack - Siege the garrison
-            // ============================================================
             // Target CastleAccount - verify program ownership
             require_owner(target_account, program_id)?;
 
             // Load castle - extract city_id and castle_id from the account data
-            let mut target_account_data = target_account.try_borrow_mut_data()?;
+            let mut target_account_data = target_account.try_borrow_mut()?;
             let castle = unsafe { CastleAccount::load_mut(&mut target_account_data) };
 
             // Verify castle can be attacked
@@ -497,15 +491,15 @@ pub fn process(
             let mut best_hero_weapon_eff_bps: u16 = 0;
 
             for garrison_account in garrison_accounts.iter() {
-                if garrison_account.owner() != program_id || garrison_account.data_len() == 0 {
+                if unsafe { garrison_account.owner() } != program_id || garrison_account.data_len() == 0 {
                     continue;
                 }
 
-                let garrison_data = garrison_account.try_borrow_data()?;
+                let garrison_data = garrison_account.try_borrow()?;
                 let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
 
                 // Verify garrison belongs to this castle
-                if garrison.castle != *target_account.key() {
+                if garrison.castle != *target_account.address() {
                     continue;
                 }
 
@@ -645,7 +639,7 @@ pub fn process(
 
                     // Emit conquest event
                     emit!(CastleConquered {
-                        castle: *target_account.key(),
+                        castle: *target_account.address(),
                         castle_name: castle.name,
                         previous_king: defending_king,
                         new_king: rally_creator,
@@ -660,7 +654,7 @@ pub fn process(
 
                 // Emit defense event
                 emit!(CastleDefended {
-                    castle: *target_account.key(),
+                    castle: *target_account.address(),
                     castle_name: castle.name,
                     king: castle.king,
                     rally_id,
@@ -678,7 +672,7 @@ pub fn process(
     if total_contribution > 0 {
         for i in 0..participant_count {
             let rp_account = &rally_participant_accounts[i];
-            let mut rp_data_ref = rp_account.try_borrow_mut_data()?;
+            let mut rp_data_ref = rp_account.try_borrow_mut()?;
             let rp_data = unsafe { RallyParticipant::load_mut(&mut rp_data_ref) };
 
             if !rp_data.included_in_march {
@@ -734,7 +728,7 @@ pub fn process(
 
     // 10. Update Rally Account
 
-    let mut rally_data_mut = rally_account.try_borrow_mut_data()?;
+    let mut rally_data_mut = rally_account.try_borrow_mut()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_mut) };
 
     rally.total_units = total_units;
@@ -763,7 +757,7 @@ pub fn process(
     // Emit RallyExecuted event
     // Note: team_name not available here - would need to pass team account
     emit!(RallyExecuted {
-        rally: *rally_account.key(),
+        rally: *rally_account.address(),
         team_name: [0u8; 32], // Team name not available in execute, lookup via rally.team
         target: rally.target,
         damage_dealt: total_damage,

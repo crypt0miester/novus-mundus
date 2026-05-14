@@ -4,9 +4,7 @@
  * All game configuration values matching the on-chain program.
  */
 
-// ============================================================
 // Time Constants (in seconds)
-// ============================================================
 
 export const SECONDS_PER_DAY = 86_400;
 export const SECONDS_PER_HOUR = 3_600;
@@ -17,18 +15,14 @@ export const INACTIVE_ACCOUNT_THRESHOLD = 7_776_000; // 90 days
 export const ATTACK_IMMUNITY_DURATION = 259_200; // 3 days
 export const RESERVED_NOVI_VESTING_PERIOD = 604_800; // 7 days
 
-// ============================================================
 // Account Size Limits
-// ============================================================
 
 export const MAX_TEAM_NAME_LENGTH = 32;
 export const MAX_LOCATION_NAME_LENGTH = 32;
 export const MAX_EVENT_NAME_LENGTH = 64;
 export const MAX_EVENT_DESCRIPTION_LENGTH = 256;
 
-// ============================================================
 // Vector Capacity Limits
-// ============================================================
 
 export const MAX_TEAM_MEMBERS = 50;
 export const MAX_TEAM_INVITES = 20;
@@ -40,17 +34,13 @@ export const MAX_ACHIEVEMENTS_TRACKED = 100;
 export const MAX_EVENT_WINNERS = 100;
 export const MAX_ALLOWED_TEAMS_FOR_ENCOUNTER = 10;
 
-// ============================================================
 // Rally System Defaults
-// ============================================================
 
 export const DEFAULT_RALLY_RECRUITING_DURATION = 3_600; // 1 hour
 export const DEFAULT_MAX_RALLY_PARTICIPANTS = 5;
 export const MIN_RALLY_PARTICIPANTS = 2;
 
-// ============================================================
 // Rally Status
-// ============================================================
 
 export const RALLY_STATUS_GATHERING = 0;
 export const RALLY_STATUS_MARCHING = 1;
@@ -59,18 +49,14 @@ export const RALLY_STATUS_RETURNING = 3;
 export const RALLY_STATUS_COMPLETED = 4;
 export const RALLY_STATUS_CANCELLED = 5;
 
-// ============================================================
 // Reinforcement Status
-// ============================================================
 
 export const REINFORCEMENT_STATUS_TRAVELING = 0;
 export const REINFORCEMENT_STATUS_ACTIVE = 1;
 export const REINFORCEMENT_STATUS_RETURNING = 2;
 export const REINFORCEMENT_STATUS_COMPLETED = 3;
 
-// ============================================================
 // Subscription Tiers
-// ============================================================
 
 export const TIER_ROOKIE = 0;
 export const TIER_EXPERT = 1;
@@ -79,24 +65,18 @@ export const TIER_LEGENDARY = 3;
 
 export const MAX_TEAM_MEMBERS_BY_TIER = [5, 10, 25, 50] as const;
 
-// ============================================================
 // Starter Resources (New Player Onboarding)
-// ============================================================
 
 export const STARTER_LOCKED_NOVI = 100 * 10; // 100 NOVI (1 decimal)
 
-// ============================================================
 // Economic Constants
-// ============================================================
 
 export const DECIMAL_MULTIPLIER = 10; // 1 decimal
 export const MIN_BURN_AMOUNT = 10; // 1 NOVI (1 decimal)
 export const DEFAULT_BURN_TO_MINT_RATIO_NUMERATOR = 1;
 export const DEFAULT_BURN_TO_MINT_RATIO_DENOMINATOR = 2; // 1:0.5 ratio
 
-// ============================================================
 // Golden Ratio Constants (Deterministic Progression System)
-// ============================================================
 
 export const PHI = 1.618033988749895;
 export const GOLDEN_ROOT = 1.2720196495140689;
@@ -107,18 +87,14 @@ export const PHI_SQUARED_INVERSE = 0.3819660112501051;
 export const PHI_CUBED_INVERSE = 0.2360679774997897;
 export const GOLDEN_ANGLE = 2.399963229728653;
 
-// ============================================================
 // Combat Constants
-// ============================================================
 
 export const ATTACK_SUCCESS_THRESHOLD = 50;
 export const MAX_STEAL_PERCENTAGE = 30;
 export const UNIT_LOSS_PERCENTAGE_WINNER = 10;
 export const UNIT_LOSS_PERCENTAGE_LOSER = 25;
 
-// ============================================================
 // Strategic Combat System Constants
-// ============================================================
 
 export const OPERATIVE_FALLBACK_PENALTY_BPS = 5000; // 50%
 export const FALLBACK_LOOT_BONUS_BPS = 16180; // phi = 1.618x
@@ -129,9 +105,7 @@ export const MAX_REINFORCEMENT_RECEIVE = 10_000;
 export const BASE_REINFORCEMENT_SLOTS = 1;
 export const BASE_REINFORCEMENT_SEND_BPS = 2000; // 20%
 
-// ============================================================
 // Weapon Combat System Constants
-// ============================================================
 
 export const WEAPON_LOOT_RATE_BPS = 6000; // 60%
 export const WEAPON_RECOVERY_RATE_BPS = 8000; // 80%
@@ -140,9 +114,7 @@ export const ARMORY_RAID_UNDEFENDED_BPS = 5000; // 50%
 export const DAMAGE_PER_SIEGE_WEAPON = 500;
 export const SIEGE_CAPTURE_RATE_BPS = 8000; // 80%
 
-// ============================================================
 // Progression Constants
-// ============================================================
 
 export const MAX_LEVEL = 100;
 export const BASE_XP_PER_LEVEL = 1000;
@@ -154,9 +126,7 @@ export const REPUTATION_VETERAN = 5_000;
 export const REPUTATION_ELITE = 20_000;
 export const REPUTATION_LEGENDARY = 100_000;
 
-// ============================================================
 // Location Constants
-// ============================================================
 
 export const MIN_LATITUDE = -90.0;
 export const MAX_LATITUDE = 90.0;
@@ -167,9 +137,7 @@ export const EARTH_RADIUS_KM = 6371.0;
 export const TELEPORT_COST_PER_1000KM = 100_000;
 export const MAX_TELEPORT_DISTANCE_KM = 20_000.0;
 
-// ============================================================
 // Encounter Constants
-// ============================================================
 
 export const ENCOUNTER_COMMON_MAX_ATTACKERS = 2;
 export const ENCOUNTER_UNCOMMON_MAX_ATTACKERS = 3;
@@ -178,32 +146,24 @@ export const ENCOUNTER_EPIC_MAX_ATTACKERS = 6;
 export const ENCOUNTER_LEGENDARY_MAX_ATTACKERS = 10;
 export const ENCOUNTER_WORLD_EVENT_MAX_ATTACKERS = 20;
 
-// ============================================================
 // Resource Collection
-// ============================================================
 
 export const COLLECTION_COOLDOWN = 3_600; // 1 hour
 export const BASE_COLLECTION_AMOUNT = 1000;
 
-// ============================================================
 // Happiness System
-// ============================================================
 
 export const MAX_HAPPINESS = 100;
 export const MIN_HAPPINESS = -100;
 export const HAPPINESS_DECAY_PER_DAY = 5;
 export const MIN_HAPPINESS_TO_COLLECT = 0;
 
-// ============================================================
 // Transfer Limits
-// ============================================================
 
 export const MAX_TRANSFER_RATIO = 50;
 export const TRANSFER_RATIO_PRECISION = 100;
 
-// ============================================================
 // Theme Modifiers (percentage bonuses)
-// ============================================================
 
 export const THEME_NONE_BONUS = 0;
 export const THEME_ATTACK_BONUS = 10;
@@ -211,26 +171,20 @@ export const THEME_DEFENSE_BONUS = 15;
 export const THEME_COLLECTION_BONUS = 20;
 export const THEME_HAPPINESS_BONUS = 5;
 
-// ============================================================
 // Unit Constants
-// ============================================================
 
 export const NUM_DEFENSIVE_UNITS = 3;
 export const NUM_OPERATIVE_UNITS = 3;
 export const TOTAL_UNIT_TYPES = 6;
 
-// ============================================================
 // Resource Pricing (for purchasing with cash)
-// ============================================================
 
 export const WEAPON_PRICE = 1_000;
 export const PRODUCE_PRICE = 500;
 export const VEHICLE_PRICE = 5_000;
 
 
-// ============================================================
 // Combat Power Multipliers
-// ============================================================
 
 export const DEFENSIVE_UNIT_1_POWER = 10;
 export const DEFENSIVE_UNIT_2_POWER = 25;
@@ -241,9 +195,7 @@ export const OPERATIVE_UNIT_3_POWER = 80;
 export const WEAPON_POWER_MULTIPLIER = 5;
 export const VEHICLE_POWER_MULTIPLIER = 20;
 
-// ============================================================
 // Encounter Stamina System
-// ============================================================
 
 export const ENCOUNTER_STAMINA_COSTS = [10, 25, 50, 100, 250, 500] as const;
 export const STAMINA_REGEN_INTERVAL = 300; // 5 minutes per 1 stamina
@@ -252,17 +204,13 @@ export const MAX_STAMINA_BY_TIER = [100, 500, 1000, 10000] as const;
 export const ENCOUNTER_ATTACK_RANGE_METERS = 10.0;
 export const PVP_ATTACK_RANGE_METERS = 10.0;
 
-// ============================================================
 // City Encounter Scaling
-// ============================================================
 
 export const BASE_ENCOUNTERS_PER_CITY = 3;
 export const ENCOUNTERS_PER_PLAYER_COUNT = 10;
 export const MAX_ENCOUNTERS_PER_CITY = 50;
 
-// ============================================================
 // Expedition System Constants
-// ============================================================
 
 export const EXPEDITION_NONE = 0;
 export const EXPEDITION_MINING = 1;
@@ -297,9 +245,7 @@ export const OPERATIVE_TIER_1_MULTIPLIER_BPS = 10000;
 export const OPERATIVE_TIER_2_MULTIPLIER_BPS = 15000;
 export const OPERATIVE_TIER_3_MULTIPLIER_BPS = 20000;
 
-// ============================================================
 // Arena PvP System Constants
-// ============================================================
 
 export const ARENA_SEASON_DURATION = 7 * SECONDS_PER_DAY;
 export const ARENA_CLAIM_DEADLINE = 30 * SECONDS_PER_DAY;
@@ -327,9 +273,7 @@ export const ARENA_PRIZE_DISTRIBUTION = [
   3500, 2500, 1500, 750, 750, 200, 200, 200, 200, 200,
 ] as const;
 
-// ============================================================
 // Dungeon System Constants
-// ============================================================
 
 export const DUNGEON_MAX_MULTI_ATTACKS = 5;
 export const DUNGEON_DEFAULT_CHECKPOINT_INTERVAL = 3;
@@ -350,9 +294,7 @@ export const DUNGEON_FLOOR_MULTIPLIERS = [
 export const DUNGEON_UNIT_POWER = [15, 35, 80] as const;
 export const DUNGEON_UNIT_HEALTH = [100, 250, 600] as const;
 
-// ============================================================
 // Relic System Constants
-// ============================================================
 
 export const SYNERGY_OFFENSE = 0;
 export const SYNERGY_DEFENSE = 1;
@@ -385,9 +327,7 @@ export const SYNERGY_3_BONUS_BPS = [
   2500, 3000, 4000, 1000, 10000, 5000, 2500, 2000, 0,
 ] as const;
 
-// ============================================================
 // Darkness Mechanic Constants
-// ============================================================
 
 export const DARKNESS_DAMAGE_PENALTY_PER_FLOOR_BPS = 50;
 export const DARKNESS_CRIT_PENALTY_START_FLOOR = 4;
@@ -397,9 +337,7 @@ export const DARKNESS_DEFENSE_PENALTY_PER_FLOOR_BPS = 20;
 export const DARKNESS_ENEMY_BUFF_START_FLOOR = 10;
 export const DARKNESS_ENEMY_BUFF_PER_FLOOR_BPS = 50;
 
-// ============================================================
 // King's Castle System Constants
-// ============================================================
 
 export const CASTLE_TIER_OUTPOST = 0;
 export const CASTLE_TIER_KEEP = 1;
@@ -464,22 +402,16 @@ export const COURT_CASH_PER_DAY = 100_000;
 export const MEMBER_NOVI_PER_DAY = 5_000;
 export const MEMBER_CASH_PER_DAY = 25_000;
 
-// ============================================================
 // Event System Prize Distribution
-// ============================================================
 
 export const PRIZE_DISTRIBUTION = [
   3500, 2500, 1500, 750, 750, 200, 200, 200, 200, 200,
 ] as const;
 
-// ============================================================
 // Travel Speed Constants
-// ============================================================
 
 export const INTRACITY_WALKING_SPEED_KMH = 5.0;
 
-// ============================================================
 // Expedition Speedup Constants
-// ============================================================
 
 export const EXPEDITION_SPEEDUP_GEMS_PER_MINUTE = 100;

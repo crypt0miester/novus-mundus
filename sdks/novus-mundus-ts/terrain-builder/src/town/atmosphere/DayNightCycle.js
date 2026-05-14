@@ -1,11 +1,9 @@
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Time-of-day keyframes
 // Each entry: { hour, sunColor, sunIntensity, ambientColor, skyColor,
 //               fogColor, fogDensity, hemiSkyColor, hemiGroundColor,
 //               hemiIntensity }
-// ---------------------------------------------------------------------------
 
 const TIME_KEYFRAMES = [
   {
@@ -119,9 +117,7 @@ const TIME_KEYFRAMES = [
   },
 ];
 
-// ---------------------------------------------------------------------------
 // Billboard glow shader material (used for torch and window billboards)
-// ---------------------------------------------------------------------------
 
 const GLOW_BILLBOARD_VERTEX_SHADER = /* glsl */ `
   uniform float scale;
@@ -159,9 +155,7 @@ const GLOW_BILLBOARD_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Hermite-style smoothstep: t in [0,1] -> smooth [0,1]
@@ -233,9 +227,7 @@ function createGlowTexture(colorHex) {
   return texture;
 }
 
-// ---------------------------------------------------------------------------
 // Reusable geometry (allocated once, shared by all billboard quads)
-// ---------------------------------------------------------------------------
 
 let _sharedBillboardGeometry = null;
 function getSharedBillboardGeometry() {
@@ -263,9 +255,7 @@ function getSharedWindowPlaneGeometry() {
   return _sharedWindowPlaneGeometry;
 }
 
-// ---------------------------------------------------------------------------
 // DayNightCycle class
-// ---------------------------------------------------------------------------
 
 export class DayNightCycle {
   /**
@@ -332,9 +322,7 @@ export class DayNightCycle {
     this.setTime(this._hour);
   }
 
-  // -----------------------------------------------------------------------
   // Properties
-  // -----------------------------------------------------------------------
 
   /** @returns {THREE.DirectionalLight} */
   get sunLight() {
@@ -356,9 +344,7 @@ export class DayNightCycle {
     return this._hour;
   }
 
-  // -----------------------------------------------------------------------
   // Light initialization
-  // -----------------------------------------------------------------------
 
   _initLights() {
     const opts = this._options;
@@ -394,9 +380,7 @@ export class DayNightCycle {
     this.scene.add(this._hemisphere);
   }
 
-  // -----------------------------------------------------------------------
   // Time control
-  // -----------------------------------------------------------------------
 
   /**
    * Set the time immediately (0-24 float).
@@ -414,9 +398,7 @@ export class DayNightCycle {
     this.setTime(this._hour + dt);
   }
 
-  // -----------------------------------------------------------------------
   // Torch & lamp registration
-  // -----------------------------------------------------------------------
 
   /**
    * Register a torch / lamp at the given world position.
@@ -490,9 +472,7 @@ export class DayNightCycle {
     this._torches.delete(id);
   }
 
-  // -----------------------------------------------------------------------
   // Window glow registration
-  // -----------------------------------------------------------------------
 
   /**
    * Register a window glow point.
@@ -550,9 +530,7 @@ export class DayNightCycle {
     this._windows.delete(id);
   }
 
-  // -----------------------------------------------------------------------
   // Per-frame update
-  // -----------------------------------------------------------------------
 
   /**
    * Call every frame.
@@ -579,9 +557,7 @@ export class DayNightCycle {
     this._updateWind();
   }
 
-  // -----------------------------------------------------------------------
   // Sky / fog / wind queries
-  // -----------------------------------------------------------------------
 
   /** @returns {THREE.Color} current interpolated sky color (clone) */
   getSkyColor() {
@@ -619,9 +595,7 @@ export class DayNightCycle {
     return this._windStrength;
   }
 
-  // -----------------------------------------------------------------------
   // Dispose
-  // -----------------------------------------------------------------------
 
   dispose() {
     // Unregister all torches
@@ -661,9 +635,7 @@ export class DayNightCycle {
     this._hemisphere = null;
   }
 
-  // -----------------------------------------------------------------------
   // Private: sun position arc
-  // -----------------------------------------------------------------------
 
   _updateSunPosition() {
     const hour = this._hour;
@@ -682,9 +654,7 @@ export class DayNightCycle {
     this._sun.target.updateMatrixWorld();
   }
 
-  // -----------------------------------------------------------------------
   // Private: apply keyframe-interpolated lighting
-  // -----------------------------------------------------------------------
 
   _applyTimeToLighting() {
     const { a, b, t } = findKeyframePair(this._hour);
@@ -713,9 +683,7 @@ export class DayNightCycle {
     this._fogDensity = a.fogDensity + (b.fogDensity - a.fogDensity) * t;
   }
 
-  // -----------------------------------------------------------------------
   // Private: shadow camera tracks sun
-  // -----------------------------------------------------------------------
 
   _updateShadowCamera() {
     if (!this._options.enableShadows) return;
@@ -724,9 +692,7 @@ export class DayNightCycle {
     this._sun.shadow.camera.updateProjectionMatrix();
   }
 
-  // -----------------------------------------------------------------------
   // Private: torch flicker, culling, billboard update
-  // -----------------------------------------------------------------------
 
   _updateTorches(deltaTime, cameraPosition) {
     const hour = this._hour;
@@ -832,9 +798,7 @@ export class DayNightCycle {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Private: window glow
-  // -----------------------------------------------------------------------
 
   _updateWindows() {
     const hour = this._hour;
@@ -864,9 +828,7 @@ export class DayNightCycle {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Private: wind simulation
-  // -----------------------------------------------------------------------
 
   _updateWind() {
     const time = this._elapsedTime;

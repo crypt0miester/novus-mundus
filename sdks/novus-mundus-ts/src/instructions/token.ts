@@ -20,9 +20,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Reserved to Locked
-// ============================================================
 
 export interface ReservedToLockedAccounts {
   /** Player's wallet (signer) */
@@ -95,9 +93,7 @@ export function createReservedToLockedInstruction(
   });
 }
 
-// ============================================================
 // Withdraw Reserved
-// ============================================================
 
 export interface WithdrawReservedAccounts {
   /** Player's wallet (signer) */

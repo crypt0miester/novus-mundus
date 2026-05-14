@@ -55,17 +55,13 @@ import {
   advanceTime,
 } from '../fixtures/time';
 
-// ============================================================
 // Constants
-// ============================================================
 
 const ACTIVE_EVENT_ID = 1;
 const ENDED_EVENT_ID = 2;
 const HIGH_LEVEL_EVENT_ID = 3;
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Event System', () => {
   let ctx: TestContext;
@@ -99,7 +95,9 @@ describe('Event System', () => {
       }
     );
 
-    // Create ended event (started 2 hours ago, ended 1 hour ago)
+    // Create soon-to-end event: end_time briefly in the future so a setup
+    // player can join (which auto-activates it), after which we advance the
+    // clock past end_time below. Activation is what makes finalize legal.
     const createEndedEventIx = createCreateEventInstruction(
       {
         authority: ctx.daoAuthority.publicKey,
@@ -108,8 +106,8 @@ describe('Event System', () => {
       },
       {
         name: 'TestEndedEvent',
-        startTime: now - 7200,
-        endTime: now - 3600,
+        startTime: now - 60,
+        endTime: now + 60,
         eventType: 0,
         minLevel: 1,
         minReputation: 0,
@@ -158,15 +156,31 @@ describe('Event System', () => {
       new Transaction().add(createHighLevelEventIx),
       [ctx.daoAuthority]
     );
+
+    // Activate ENDED event by having a setup player join (status 0 → 1).
+    // Then advance the clock past end_time so finalize tests see an
+    // Active-but-time-expired event.
+    const setupPlayer = await factory.createPlayer({ initialize: true });
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        createJoinEventInstruction({
+          gameEngine: ctx.gameEngine,
+          payer: setupPlayer.publicKey,
+          playerOwner: setupPlayer.publicKey,
+          eventId: ENDED_EVENT_ID,
+        }),
+      ),
+      [setupPlayer.keypair],
+    );
+    await advanceTime(ctx.svm, 120); // past ENDED event's end_time
   });
 
   afterAll(() => {
     factory.clear();
   });
 
-  // ============================================================
   // Event Creation Tests
-  // ============================================================
 
   describe('Event Creation', () => {
     it('should create event with correct parameters', async () => {
@@ -232,9 +246,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Join Event Tests
-  // ============================================================
 
   describe('Joining Events', () => {
     it('should join active event and create participation account', async () => {
@@ -386,9 +398,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Event Participation Tracking
-  // ============================================================
 
   describe('Participation Tracking', () => {
     it('should initialize participation with zero score', async () => {
@@ -473,9 +483,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Event Finalization Tests
-  // ============================================================
 
   describe('Event Finalization', () => {
     it('should finalize ended event (permissionless)', async () => {
@@ -555,9 +563,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Prize Claiming Tests
-  // ============================================================
 
   describe('Claiming Prizes', () => {
     it('should reject claim for non-finalized event', async () => {
@@ -661,9 +667,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Event Account State Tests
-  // ============================================================
 
   describe('Event Account State', () => {
     it('should store start and end times correctly', async () => {
@@ -718,9 +722,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Multi-Event Isolation Tests
-  // ============================================================
 
   describe('Multiple Events', () => {
     it('should reject joining second event while in first', async () => {
@@ -808,9 +810,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Event PDA Derivation Tests
-  // ============================================================
 
   describe('PDA Derivation', () => {
     it('should derive consistent event PDAs', () => {
@@ -833,9 +833,7 @@ describe('Event System', () => {
     });
   });
 
-  // ============================================================
   // Full Lifecycle: Create → Join → Score → Finalize → Claim
-  // ============================================================
 
   describe('Event Lifecycle', () => {
     const LIFECYCLE_EVENT_ID = 4;

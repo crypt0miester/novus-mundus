@@ -1,5 +1,5 @@
 use pinocchio::{
-    account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, sysvars::{Sysvar, clock::Clock}
+    AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -9,7 +9,7 @@ use crate::{
     state::{PlayerAccount, GameEngine, CityAccount, LocationAccount},
     validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
     token_helpers::get_or_create_associated_token_account,
-    helpers::mint_tokens,
+    helpers::{mint_tokens, validate_token_account_owner},
     emit,
     events::PlayerJoinedKingdom,
 };
@@ -38,14 +38,14 @@ use crate::{
 /// - 24-hour New Player Protection (no PvP attacks)
 ///
 /// # Accounts Expected
-/// 1. `[writable]` player - Player account PDA to create ([b"player", game_engine, owner.key()])
+/// 1. `[writable]` player - Player account PDA to create ([b"player", game_engine, owner.address()])
 /// 2. `[signer, writable]` owner - Player's wallet (pays for account creation)
 /// 3. `[writable]` player_token_account - Player's NOVI token ATA
 /// 4. `[writable]` game_engine - GameEngine PDA (for config and novi_mint, increments total_players)
 /// 5. `[]` novi_mint - NOVI token mint
 /// 6. `[writable]` starting_city - CityAccount where player starts
 /// 7. `[writable]` spawn_location - LocationAccount for spawn cell
-/// 8. `[]` user - User account PDA ([b"user", owner.key()]) - must be created first
+/// 8. `[]` user - User account PDA ([b"user", owner.address()]) - must be created first
 /// 9. `[]` system_program - System program for account creation
 /// 10. `[]` token_program - SPL Token program
 /// 11. `[]` associated_token_program - Associated Token program
@@ -56,7 +56,7 @@ use crate::{
 /// [10..18] spawn_long: f64 (little-endian) - Spawn longitude (must be within city radius)
 ///
 /// # PDA Derivation
-/// Seeds: `[b"player", game_engine.key(), owner.key()]`
+/// Seeds: `[b"player", game_engine.address(), owner.address()]`
 /// The player account is deterministic per wallet within a kingdom
 ///
 /// # Returns
@@ -70,8 +70,8 @@ use crate::{
 /// - Account creation uses system program CPI
 /// - created_at timestamp is set from Clock sysvar
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
@@ -121,10 +121,10 @@ pub fn process(
 
     // Verify user account exists and matches expected PDA
     let (expected_user, _user_bump) = derive_pda(
-        &[USER_SEED, owner.key()],
+        &[USER_SEED, owner.address().as_ref()],
         program_id,
     );
-    if user.key() != &expected_user {
+    if user.address() != &expected_user {
         return Err(ProgramError::InvalidSeeds);
     }
     // User account must already be created (non-zero data)
@@ -138,12 +138,12 @@ pub fn process(
 
     // 4. Load GameEngine for config (mutable to increment total_players)
     require_writable(game_engine)?;
-    let mut game_engine_data_ref = game_engine.try_borrow_mut_data()?;
+    let mut game_engine_data_ref = game_engine.try_borrow_mut()?;
     let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_data_ref) };
 
     // 4a. Validate GameEngine PDA
     let (expected_game_engine, _ge_bump) = GameEngine::derive_pda(game_engine_data.kingdom_id);
-    if game_engine.key() != &expected_game_engine {
+    if game_engine.address() != &expected_game_engine {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -160,9 +160,9 @@ pub fn process(
 
     // 5. Derive and Validate Player PDA (kingdom-scoped)
 
-    let (expected_player, bump) = PlayerAccount::derive_pda(game_engine.key(), owner.key());
+    let (expected_player, bump) = PlayerAccount::derive_pda(game_engine.address(), owner.address());
 
-    if player.key() != &expected_player {
+    if player.address() != &expected_player {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -176,7 +176,7 @@ pub fn process(
     }
 
     // Verify city is in the same kingdom
-    if &city_data.game_engine != game_engine.key() {
+    if &city_data.game_engine != game_engine.address() {
         return Err(GameError::KingdomMismatch.into());
     }
 
@@ -188,7 +188,7 @@ pub fn process(
         let dlat = spawn_lat - city_data.latitude;
         let dlong = spawn_long - city_data.longitude;
         // Approximate distance in km (1 degree ≈ 111 km)
-        let dist_km = ((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0)).sqrt();
+        let dist_km = libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
         if dist_km > city_data.radius_km as f64 {
             return Err(GameError::OutOfRange.into());
         }
@@ -207,8 +207,9 @@ pub fn process(
         }
     }
 
-    // Verify novi_mint matches GameEngine configuration
-    if novi_mint.key() != &game_engine_data.novi_mint {
+    // Verify novi_mint matches the program-binary singleton. NOVI is one
+    // mint across all kingdoms, derived at compile time.
+    if novi_mint.address().as_array() != &crate::constants::NOVI_MINT_ADDRESS {
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -226,12 +227,11 @@ pub fn process(
 
     // 7. Calculate Rent and Create Account
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(PlayerAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(PlayerAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key(), owner.key(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: owner,
@@ -243,15 +243,15 @@ pub fn process(
 
     // 8. Initialize Player Data with Starting City and Resources
     {
-        let mut player_data_ref = player.try_borrow_mut_data()?;
+        let mut player_data_ref = player.try_borrow_mut()?;
         let player_data = unsafe {
             PlayerAccount::load_mut(&mut player_data_ref)
         };
 
         // Initialize with starter resources and city (kingdom-scoped)
         *player_data = PlayerAccount::init_with_city(
-            *game_engine.key(),
-            *owner.key(),
+            *game_engine.address(),
+            *owner.address(),
             created_at,
             bump,
             starting_city_id,
@@ -295,13 +295,13 @@ pub fn process(
     let long_bytes = spawn_grid_long.to_le_bytes();
 
     let (expected_spawn_pda, spawn_location_bump) = LocationAccount::derive_pda(
-        game_engine.key(),
+        game_engine.address(),
         starting_city_id,
         spawn_grid_lat,
         spawn_grid_long,
     );
 
-    if spawn_location.key() != &expected_spawn_pda {
+    if spawn_location.address() != &expected_spawn_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -317,19 +317,18 @@ pub fn process(
 
     if spawn_location_len == 0 {
         // Create new location account
-        let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let location_lamports = rent.minimum_balance(LocationAccount::LEN);
+        let location_lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let loc_bump_seed = [spawn_location_bump];
-        let location_seeds = pinocchio::seeds!(
+        let location_seeds = crate::seeds!(
             LOCATION_SEED,
-            game_engine.key(),
+            game_engine.address(),
             &city_bytes,
             &lat_bytes,
             &long_bytes,
             &loc_bump_seed
         );
-        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+        let location_signer = pinocchio::cpi::Signer::from(&location_seeds);
 
         CreateAccount {
             from: owner,
@@ -339,22 +338,22 @@ pub fn process(
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
 
-        let mut location_data = spawn_location.try_borrow_mut_data()?;
+        let mut location_data = spawn_location.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
-        location.game_engine = *game_engine.key();
+        location.game_engine = *game_engine.address();
         location.grid_lat = spawn_grid_lat;
         location.grid_long = spawn_grid_long;
         location.city_id = starting_city_id;
         location.bump = spawn_location_bump;
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
-        location.occupant = *player.key();
+        location.occupant = *player.address();
         location.occupied_since = created_at;
-        location.location_creator = *owner.key();
+        location.location_creator = *owner.address();
         location.reserved_arrival_time = 0;
     } else {
         // Location exists, check if occupied
-        let mut location_data = spawn_location.try_borrow_mut_data()?;
+        let mut location_data = spawn_location.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         if location.grid_lat != spawn_grid_lat || location.grid_long != spawn_grid_long {
@@ -367,9 +366,9 @@ pub fn process(
         }
 
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
-        location.occupant = *player.key();
+        location.occupant = *player.address();
         location.occupied_since = created_at;
-        location.location_creator = *owner.key();
+        location.location_creator = *owner.address();
         location.reserved_arrival_time = 0;
     }
 
@@ -384,11 +383,16 @@ pub fn process(
         token_program,
     )?;
 
+    // SECURITY (L-15): defensive ATA-owner check after CreateIdempotent.
+    // CreateIdempotent enforces this on creation, but explicit verification
+    // hardens against future helper changes.
+    validate_token_account_owner(player_token_account, player.address())?;
+
     // 13. Mint Starter NOVI Tokens to Player
     let kingdom_id_bytes = kingdom_id.to_le_bytes();
     let bump_seed = [ge_bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     mint_tokens(
         novi_mint,
@@ -401,9 +405,9 @@ pub fn process(
     // Emit PlayerJoinedKingdom event
     emit!(PlayerJoinedKingdom {
         kingdom_id,
-        game_engine: *game_engine.key(),
-        player: *player.key(),
-        owner: *owner.key(),
+        game_engine: *game_engine.address(),
+        player: *player.address(),
+        owner: *owner.address(),
         joined_at: created_at,
     });
 

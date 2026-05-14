@@ -37,9 +37,7 @@ import {
 } from '../src/index';
 import { getAssociatedTokenAddressSyncForPda } from '../src/utils/token';
 
-// ============================================================
 // Configuration
-// ============================================================
 
 const RPC_URL = process.env.RPC_URL || 'http://localhost:8899';
 const KINGDOM_ID = 0;
@@ -57,9 +55,7 @@ function logOk(step: string, msg: string) {
   console.log(`[${step}] ✅ ${msg}`);
 }
 
-// ============================================================
 // Keypair Management
-// ============================================================
 
 function loadOrCreateKeypair(name: string): Keypair {
   if (!fs.existsSync(KEYS_DIR)) {
@@ -75,9 +71,7 @@ function loadOrCreateKeypair(name: string): Keypair {
   return keypair;
 }
 
-// ============================================================
 // Helpers
-// ============================================================
 
 async function accountExists(connection: Connection, pubkey: PublicKey): Promise<boolean> {
   const info = await connection.getAccountInfo(pubkey);
@@ -147,9 +141,7 @@ async function sendTx(
   }
 }
 
-// ============================================================
 // Main
-// ============================================================
 
 async function main() {
   console.log('='.repeat(60));
@@ -172,9 +164,7 @@ async function main() {
   log('PDA', `GameEngine: ${gameEngine.toBase58()}`);
   log('PDA', `NOVI Mint: ${noviMint.toBase58()}`);
 
-  // ============================================================
   // Step 1: Airdrop
-  // ============================================================
   console.log('\n--- Step 1: Airdrop ---');
   const balance = await connection.getBalance(daoAuthority.publicKey);
   log('AIRDROP', `Current balance: ${balance / LAMPORTS_PER_SOL} SOL`);
@@ -186,9 +176,7 @@ async function main() {
     logOk('AIRDROP', `Already has enough SOL`);
   }
 
-  // ============================================================
   // Step 2: GameEngine
-  // ============================================================
   console.log('\n--- Step 2: GameEngine ---');
   if (await accountExists(connection, gameEngine)) {
     const size = await getAccountSize(connection, gameEngine);
@@ -217,9 +205,7 @@ async function main() {
     log('GAME_ENGINE', `Owner: ${geInfo.owner.toBase58()}`);
   }
 
-  // ============================================================
   // Step 3: Cities (just city 1 for debugging)
-  // ============================================================
   console.log('\n--- Step 3: City 1 ---');
   const [city1Pda] = deriveCityPda(gameEngine, 1);
   log('CITY', `City 1 PDA: ${city1Pda.toBase58()}`);
@@ -245,9 +231,7 @@ async function main() {
     await sendTx(connection, tx, [daoAuthority], 'CITY');
   }
 
-  // ============================================================
   // Step 4: Init Player
-  // ============================================================
   console.log('\n--- Step 4: Init Player ---');
   const playerKeypair = Keypair.generate();
   const [playerPda, playerBump] = derivePlayerPda(gameEngine, playerKeypair.publicKey);

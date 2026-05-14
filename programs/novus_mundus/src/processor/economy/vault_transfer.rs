@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -36,8 +36,8 @@ use crate::{
 /// - [0] direction: u8 (0 = deposit: hand→vault, 1 = withdraw: vault→hand)
 /// - [1..9] amount: u64 (little-endian)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -68,11 +68,11 @@ pub fn process(
     }
 
     // 4. Load Player Account
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -89,9 +89,8 @@ pub fn process(
     let (actual_amount, to_vault) = if direction == 0 {
         // Deposit: hand → vault
 
-        // Load GameEngine for safebox limit
-        let game_engine_data = game_engine_account.try_borrow_data()?;
-        let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+        // Validate game_engine account (ownership + PDA + discriminator + bump)
+        let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
         // Calculate max allowed in vault (e.g., 75% of total)
         let total_cash = player.cash_on_hand.saturating_add(player.cash_in_vault);
@@ -132,7 +131,7 @@ pub fn process(
     // Emit VaultTransfer event if actual transfer occurred
     if actual_amount > 0 {
         emit!(VaultTransfer {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player.name,
             amount: actual_amount,
             to_vault,

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -31,8 +31,8 @@ use crate::{
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -62,7 +62,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let mut leader = PlayerAccount::load_checked_mut_by_key(leader_account, program_id)?;
-    if &leader.owner != leader_owner.key() {
+    if &leader.owner != leader_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -81,12 +81,12 @@ pub fn process(
     // 5. Validate Leader Authority
 
     // Leader in the team?
-    if leader.team == NULL_PUBKEY || &leader.team != team_account.key() {
+    if leader.team == NULL_PUBKEY || &leader.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // Is caller the team leader? (leader is stored as player account pubkey)
-    if &team.leader != leader_account.key() {
+    if &team.leader != leader_account.address() {
         return Err(GameError::NotTeamLeader.into());
     }
 
@@ -129,9 +129,9 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TeamDisbanded {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        leader: *leader_account.key(),
+        leader: *leader_account.address(),
         treasury_distributed,
         timestamp: now,
     });

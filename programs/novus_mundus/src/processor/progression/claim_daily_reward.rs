@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -31,8 +31,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -58,13 +58,14 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut_data()?;
-    let mut game_engine_account_data = game_engine_account.try_borrow_mut_data()?;
+    let mut player_account_data = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_account_data) };
+
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify ownership
-    if &player_data.owner != player_owner.key() {
+    if &player_data.owner != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -127,7 +128,7 @@ pub fn process(
 
     // Emit XP gained event
     emit!(XpGained {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         amount: rewards.xp,
         source: 2, // 2=daily
@@ -138,7 +139,7 @@ pub fn process(
     // Emit level up event if player leveled
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
@@ -154,12 +155,9 @@ pub fn process(
     // 11. Emit Event
 
     emit!(DailyRewardClaimed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
-        day: 0, // Note: We don't track streak currently, could enhance
         cash: rewards.cash,
-        gems: 0, // Not implemented yet
-        bonus_type: 0, // Could track subscription tier here
         timestamp: now,
     });
 

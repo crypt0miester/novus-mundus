@@ -25,9 +25,7 @@ import {
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 import { BuildingType } from '../types/enums';
 
-// ============================================================
 // Create Estate
-// ============================================================
 
 export interface CreateEstateAccounts {
   /** Player's wallet (signer) */
@@ -80,9 +78,7 @@ export function createCreateEstateInstruction(
   });
 }
 
-// ============================================================
 // Build Building
-// ============================================================
 
 export interface BuildBuildingAccounts {
   /** Player's wallet (signer) */
@@ -133,9 +129,7 @@ export function createBuildBuildingInstruction(
   });
 }
 
-// ============================================================
 // Upgrade Building
-// ============================================================
 
 export interface UpgradeBuildingAccounts {
   /** Player's wallet (signer) */
@@ -186,9 +180,7 @@ export function createUpgradeBuildingInstruction(
   });
 }
 
-// ============================================================
 // Complete Building
-// ============================================================
 
 export interface CompleteBuildingAccounts {
   /** Player's wallet (signer, must be owner) */
@@ -238,9 +230,7 @@ export function createCompleteBuildingInstruction(
   });
 }
 
-// ============================================================
 // Buy Plot
-// ============================================================
 
 export interface BuyPlotAccounts {
   /** Player's wallet (signer) */
@@ -282,9 +272,7 @@ export function createBuyPlotInstruction(
   });
 }
 
-// ============================================================
 // Daily Claim
-// ============================================================
 
 export interface DailyClaimAccounts {
   /** Player's wallet (signer) */
@@ -320,9 +308,7 @@ export function createDailyClaimInstruction(
   });
 }
 
-// ============================================================
 // Daily Activity
-// ============================================================
 
 export interface DailyActivityAccounts {
   /** Player's wallet (signer) */
@@ -416,9 +402,7 @@ export function createDailyActivityInstruction(
   });
 }
 
-// ============================================================
 // Convert Materials
-// ============================================================
 
 export interface ConvertMaterialsAccounts {
   /** Player's wallet (signer) */
@@ -483,9 +467,7 @@ export function createConvertMaterialsInstruction(
   });
 }
 
-// ============================================================
 // Building Speedup
-// ============================================================
 
 export interface BuildingSpeedupAccounts {
   /** Player's wallet (signer) */
@@ -541,9 +523,7 @@ export function createBuildingSpeedupInstruction(
   });
 }
 
-// ============================================================
 // Recover Troops
-// ============================================================
 
 export interface RecoverTroopsAccounts {
   owner: PublicKey;

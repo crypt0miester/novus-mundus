@@ -19,16 +19,13 @@ pub mod arena;
 pub mod dungeon;
 pub mod castle;
 
-use pinocchio::account_info::{Ref, RefMut};
-use pinocchio::program_error::ProgramError;
+use pinocchio::account::{Ref, RefMut};
+use pinocchio::error::ProgramError;
 
-// ============================================================
 // ACCOUNT KEY DISCRIMINATOR
-// ============================================================
 // Every on-chain account stores this as byte 0 so that a single
 // `onProgramAccountChange` subscription can route raw bytes to
 // the correct deserializer without knowing the PDA seeds.
-// ============================================================
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -200,9 +197,26 @@ impl<'a, T> Loaded<'a, T> {
     /// Create a new Loaded wrapper
     ///
     /// # Safety
-    /// The caller must ensure the data pointer is valid for the lifetime of the guard
+    /// The caller must ensure:
+    /// - The data pointer is valid for the lifetime of the guard
+    /// - The account's discriminator (byte 0) has already been verified to match `T`
+    ///   (use `new_validated` instead if you have the expected `AccountKey`)
     pub unsafe fn new(guard: Ref<'a, [u8]>, data: *const T) -> Self {
         Self { _guard: guard, data }
+    }
+
+    /// Construct a Loaded after validating the underlying account data's
+    /// discriminator byte (byte 0) matches `expected`.
+    ///
+    /// This is the preferred constructor: it eliminates the account-type-confusion
+    /// attack surface by enforcing the discriminator at construction time.
+    pub fn new_validated(
+        guard: Ref<'a, [u8]>,
+        expected: AccountKey,
+    ) -> Result<Self, ProgramError> {
+        AccountKey::validate(&guard, expected)?;
+        let data = guard.as_ptr() as *const T;
+        Ok(Self { _guard: guard, data })
     }
 }
 
@@ -225,9 +239,23 @@ impl<'a, T> LoadedMut<'a, T> {
     /// Create a new LoadedMut wrapper
     ///
     /// # Safety
-    /// The caller must ensure the data pointer is valid for the lifetime of the guard
+    /// The caller must ensure:
+    /// - The data pointer is valid for the lifetime of the guard
+    /// - The account's discriminator (byte 0) has already been verified to match `T`
+    ///   (use `new_validated` instead if you have the expected `AccountKey`)
     pub unsafe fn new(guard: RefMut<'a, [u8]>, data: *mut T) -> Self {
         Self { _guard: guard, data }
+    }
+
+    /// Construct a LoadedMut after validating the underlying account data's
+    /// discriminator byte (byte 0) matches `expected`.
+    pub fn new_validated(
+        mut guard: RefMut<'a, [u8]>,
+        expected: AccountKey,
+    ) -> Result<Self, ProgramError> {
+        AccountKey::validate(&guard, expected)?;
+        let data = guard.as_mut_ptr() as *mut T;
+        Ok(Self { _guard: guard, data })
     }
 }
 

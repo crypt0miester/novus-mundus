@@ -1,12 +1,12 @@
 /// Castle system events - King's Castle territorial control
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new castle is created by DAO
 pub struct CastleCreated {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// City where castle is located
@@ -38,15 +38,15 @@ impl Event for CastleCreated {
 /// Emitted when a player claims a vacant castle
 pub struct CastleClaimed {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// New king (player account pubkey)
-    pub king: Pubkey,
+    pub king: Address,
     /// Player's name (48 bytes UTF-8)
     pub king_name: [u8; 48],
     /// King's team
-    pub team: Pubkey,
+    pub team: Address,
     /// Castle tier
     pub tier: u8,
     /// Unix timestamp
@@ -74,17 +74,17 @@ impl Event for CastleClaimed {
 /// Emitted when castle control changes hands (via rally attack)
 pub struct CastleConquered {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Previous king
-    pub previous_king: Pubkey,
+    pub previous_king: Address,
     /// New king
-    pub new_king: Pubkey,
+    pub new_king: Address,
     /// New king's name (48 bytes UTF-8)
     pub new_king_name: [u8; 48],
     /// New team
-    pub new_team: Pubkey,
+    pub new_team: Address,
     /// Rally ID that conquered
     pub rally_id: u64,
     /// Unix timestamp
@@ -113,11 +113,11 @@ impl Event for CastleConquered {
 /// Emitted when a castle defense succeeds
 pub struct CastleDefended {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Defending king
-    pub king: Pubkey,
+    pub king: Address,
     /// Rally ID that was repelled
     pub rally_id: u64,
     /// Damage dealt by garrison
@@ -148,17 +148,17 @@ impl Event for CastleDefended {
 /// Emitted when a court member is appointed
 pub struct CourtAppointed {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player appointed
-    pub appointee: Pubkey,
+    pub appointee: Address,
     /// Appointee's name (48 bytes UTF-8)
     pub appointee_name: [u8; 48],
     /// Position type (0=Advisor, 1=Scholar, 2=Guardian, 3=Treasurer, 4=Marshal)
     pub position_type: u8,
     /// King who appointed
-    pub appointed_by: Pubkey,
+    pub appointed_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -184,17 +184,17 @@ impl Event for CourtAppointed {
 /// Emitted when a court member is dismissed
 pub struct CourtDismissed {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player dismissed
-    pub dismissed: Pubkey,
+    pub dismissed: Address,
     /// Dismissed player's name (48 bytes UTF-8)
     pub dismissed_name: [u8; 48],
     /// Position type
     pub position_type: u8,
     /// King who dismissed (or NULL if resigned)
-    pub dismissed_by: Pubkey,
+    pub dismissed_by: Address,
     /// True if player resigned, false if dismissed by king
     pub resigned: bool,
     /// Unix timestamp
@@ -223,11 +223,11 @@ impl Event for CourtDismissed {
 /// Emitted when a player joins the garrison
 pub struct GarrisonJoined {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player joining
-    pub contributor: Pubkey,
+    pub contributor: Address,
     /// Contributor's name (48 bytes UTF-8)
     pub contributor_name: [u8; 48],
     /// Units committed (tier 1)
@@ -239,7 +239,7 @@ pub struct GarrisonJoined {
     /// Total weapons committed
     pub weapons: u64,
     /// Hero mint (or NULL if no hero)
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Current garrison count
     pub garrison_count: u8,
     /// Unix timestamp
@@ -271,11 +271,11 @@ impl Event for GarrisonJoined {
 /// Emitted when a player leaves the garrison
 pub struct GarrisonLeft {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player leaving
-    pub contributor: Pubkey,
+    pub contributor: Address,
     /// Contributor's name (48 bytes UTF-8)
     pub contributor_name: [u8; 48],
     /// Units returned (tier 1)
@@ -287,7 +287,7 @@ pub struct GarrisonLeft {
     /// Total weapons returned
     pub weapons: u64,
     /// Hero mint returned (or NULL if no hero)
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// True if relieved by king, false if voluntary
     pub relieved: bool,
     /// Current garrison count
@@ -322,11 +322,11 @@ impl Event for GarrisonLeft {
 /// Emitted when garrison loot is claimed
 pub struct GarrisonLootClaimed {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player claiming
-    pub claimer: Pubkey,
+    pub claimer: Address,
     /// Claimer's name (48 bytes UTF-8)
     pub claimer_name: [u8; 48],
     /// Melee weapons claimed
@@ -361,11 +361,11 @@ impl Event for GarrisonLootClaimed {
 /// Emitted when castle upgrade is initiated
 pub struct CastleUpgradeStarted {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// King initiating upgrade
-    pub king: Pubkey,
+    pub king: Address,
     /// Upgrade type (1=Fort, 2=Treasury, 3=Chambers, 4=Watchtower, 5=Armory)
     pub upgrade_type: u8,
     /// Current level
@@ -402,7 +402,7 @@ impl Event for CastleUpgradeStarted {
 /// Emitted when castle upgrade completes
 pub struct CastleUpgradeCompleted {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Upgrade type
@@ -431,7 +431,7 @@ impl Event for CastleUpgradeCompleted {
 /// Emitted when castle upgrade is cancelled
 pub struct CastleUpgradeCancelled {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Upgrade type that was cancelled
@@ -460,11 +460,11 @@ impl Event for CastleUpgradeCancelled {
 /// Emitted when castle rewards are claimed
 pub struct CastleRewardsClaimed {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Player claiming
-    pub claimer: Pubkey,
+    pub claimer: Address,
     /// Claimer's name (48 bytes UTF-8)
     pub claimer_name: [u8; 48],
     /// Role: 0=King, 1=Court, 2=TeamMember
@@ -502,11 +502,11 @@ impl Event for CastleRewardsClaimed {
 /// Emitted when protection period ends
 pub struct CastleProtectionExpired {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// King whose protection expired
-    pub king: Pubkey,
+    pub king: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -528,11 +528,11 @@ impl Event for CastleProtectionExpired {
 /// Emitted when a king is forcefully removed by DAO
 pub struct KingForceRemoved {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// King who was removed
-    pub removed_king: Pubkey,
+    pub removed_king: Address,
     /// Removed king's name (48 bytes UTF-8)
     pub removed_king_name: [u8; 48],
     /// Unix timestamp
@@ -558,7 +558,7 @@ impl Event for KingForceRemoved {
 /// Emitted when transition phase progresses
 pub struct CastleTransitionProgress {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Phase: "garrison", "court", "rewards", "finalize"
     pub phase: u8,
     /// Items cleaned in this phase
@@ -586,7 +586,7 @@ impl Event for CastleTransitionProgress {
 /// Emitted when castle status changes via permissionless update
 pub struct CastleStatusChanged {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Previous status
@@ -615,15 +615,15 @@ impl Event for CastleStatusChanged {
 /// Emitted when a castle is attacked (solo attack, not rally)
 pub struct CastleAttacked {
     /// Castle account pubkey
-    pub castle: Pubkey,
+    pub castle: Address,
     /// Castle name (32 bytes UTF-8)
     pub castle_name: [u8; 32],
     /// Attacker player
-    pub attacker: Pubkey,
+    pub attacker: Address,
     /// Attacker name (48 bytes UTF-8)
     pub attacker_name: [u8; 48],
     /// Defending king
-    pub king: Pubkey,
+    pub king: Address,
     /// Damage dealt to garrison
     pub damage_dealt: u64,
     /// Damage received by attacker

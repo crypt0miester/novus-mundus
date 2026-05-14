@@ -13,9 +13,9 @@
 //! 2. `[WRITE]` season_authority: Must match season.authority, receives the rent
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -35,8 +35,8 @@ const SEASONS_BEHIND_FOR_AUTO_CLOSE: u32 = 4;
 /// - city_id: u16 (2 bytes)
 /// Total: 6 bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -81,7 +81,7 @@ pub fn process(
 
     // 6. Load Arena Season
     require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
-    let season_data = arena_season.try_borrow_data()?;
+    let season_data = arena_season.try_borrow()?;
     let season = unsafe { &*(season_data.as_ptr() as *const ArenaSeasonAccount) };
 
     // Verify season_id and city_id match
@@ -93,7 +93,7 @@ pub fn process(
     }
 
     // Verify season_authority matches stored authority
-    if season_authority.key() != &season.authority {
+    if season_authority.address() != &season.authority {
         return Err(GameError::Unauthorized.into());
     }
 

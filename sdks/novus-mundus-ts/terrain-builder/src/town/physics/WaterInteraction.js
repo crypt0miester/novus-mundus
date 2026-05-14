@@ -14,9 +14,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // GLSL — wave equation propagation (ping-pong)
-// ---------------------------------------------------------------------------
 
 const PROPAGATION_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -54,9 +52,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GLSL — ripple spike injection
-// ---------------------------------------------------------------------------
 
 const SPIKE_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -83,9 +79,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // Reusable temporaries
-// ---------------------------------------------------------------------------
 
 const _v3a = new THREE.Vector3();
 const _v3b = new THREE.Vector3();
@@ -96,9 +90,7 @@ const _up  = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 const _mat4 = new THREE.Matrix4();
 
-// ---------------------------------------------------------------------------
 // WaterInteraction
-// ---------------------------------------------------------------------------
 
 export class WaterInteraction {
 
@@ -188,9 +180,7 @@ export class WaterInteraction {
     this._clearTarget(this._rtB);
   }
 
-  // -------------------------------------------------------------------------
   // Helpers
-  // -------------------------------------------------------------------------
 
   /** Clear a render target to black. */
   _clearTarget(rt) {
@@ -216,9 +206,7 @@ export class WaterInteraction {
     };
   }
 
-  // -------------------------------------------------------------------------
   // Boat registration
-  // -------------------------------------------------------------------------
 
   /**
    * Register a floating object (boat, raft, debris).
@@ -251,9 +239,7 @@ export class WaterInteraction {
     this._boats.delete(id);
   }
 
-  // -------------------------------------------------------------------------
   // Ripple creation
-  // -------------------------------------------------------------------------
 
   /**
    * Queue a ripple at a world-space position.
@@ -269,9 +255,7 @@ export class WaterInteraction {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Per-frame update
-  // -------------------------------------------------------------------------
 
   /**
    * Advance the water interaction by one frame.
@@ -330,9 +314,7 @@ export class WaterInteraction {
     this._updateBoats();
   }
 
-  // -------------------------------------------------------------------------
   // Boat physics
-  // -------------------------------------------------------------------------
 
   _updateBoats() {
     for (const entry of this._boats.values()) {
@@ -379,9 +361,7 @@ export class WaterInteraction {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Public accessors
-  // -------------------------------------------------------------------------
 
   /**
    * Get the ripple heightmap texture for the water surface shader.
@@ -392,9 +372,7 @@ export class WaterInteraction {
     return this._current.texture;
   }
 
-  // -------------------------------------------------------------------------
   // Cleanup
-  // -------------------------------------------------------------------------
 
   dispose() {
     this._rtA.dispose();

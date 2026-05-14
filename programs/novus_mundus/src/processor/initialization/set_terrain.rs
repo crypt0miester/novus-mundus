@@ -23,10 +23,9 @@
 //!   - anchors: [Anchor × N] (N × 8 bytes)
 
 use pinocchio::{
-    account_info::AccountInfo,
-    msg,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, rent::Rent},
 };
@@ -82,8 +81,8 @@ const MAX_ANCHORS: u16 = 100;
 /// - `InvalidCityId` — city's stored game_engine doesn't match account 1
 /// - `InvalidSeeds` — city account address doesn't match derived PDA
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // ── Parse accounts ─────────────────────────────────────────
@@ -105,12 +104,12 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::Unauthorized.into());
     }
 
     // Verify city account ownership
-    if city_account.owner() != program_id {
+    if unsafe { city_account.owner() } != program_id {
         return Err(ProgramError::IllegalOwner);
     }
 
@@ -149,13 +148,13 @@ pub fn process(
     let stored_city_id;
     let stored_bump;
     {
-        let city_data = city_account.try_borrow_data()?;
+        let city_data = city_account.try_borrow()?;
         let city = unsafe { &*(city_data.as_ptr() as *const CityAccount) };
         stored_city_id = city.city_id;
         stored_bump = city.bump;
 
         // Verify city belongs to this game engine
-        if &city.game_engine != game_engine_account.key() {
+        if &city.game_engine != game_engine_account.address() {
             return Err(GameError::InvalidCityId.into());
         }
     }
@@ -166,8 +165,8 @@ pub fn process(
     }
 
     // Verify PDA
-    let expected_pda = CityAccount::create_pda(game_engine_account.key(), city_id, stored_bump)?;
-    if city_account.key() != &expected_pda {
+    let expected_pda = CityAccount::create_pda(game_engine_account.address(), city_id, stored_bump)?;
+    if city_account.address() != &expected_pda {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -177,7 +176,7 @@ pub fn process(
 
     if new_size != current_size {
         let rent = Rent::get()?;
-        let required_lamports = rent.minimum_balance(new_size);
+        let required_lamports = rent.try_minimum_balance(new_size)?;
         let current_lamports = city_account.lamports();
 
         if new_size > current_size {
@@ -197,7 +196,7 @@ pub fn process(
 
     // ── Write terrain data ─────────────────────────────────────
     {
-        let mut city_data = city_account.try_borrow_mut_data()?;
+        let mut city_data = city_account.try_borrow_mut()?;
         let city = unsafe { &mut *(city_data.as_mut_ptr() as *mut CityAccount) };
 
         // Write terrain header fields
@@ -218,7 +217,7 @@ pub fn process(
 
     // ── Emit event ─────────────────────────────────────────────
     crate::emit!(crate::events::TerrainSet {
-        city: *city_account.key(),
+        city: *city_account.address(),
         city_id,
         anchor_count,
         terrain_seed,

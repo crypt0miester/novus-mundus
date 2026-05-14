@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -36,8 +36,8 @@ pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
 /// # Instruction Data
 /// - speedup_tier: u8 (1 byte) - 1 or 2
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -72,20 +72,20 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 5. Load Sender Player
-    let mut sender_data_ref = sender_player.try_borrow_mut_data()?;
+    let mut sender_data_ref = sender_player.try_borrow_mut()?;
     let sender = unsafe { PlayerAccount::load_mut(&mut sender_data_ref) };
 
     // Validate sender ownership
-    if &sender.owner != sender_owner.key() {
+    if &sender.owner != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 6. Load Reinforcement
-    let mut reinf_data_ref = reinforcement_account.try_borrow_mut_data()?;
+    let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
 
     // Validate sender owns this reinforcement
-    if &reinf.sender != sender_owner.key() {
+    if &reinf.sender != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -129,7 +129,7 @@ pub fn process(
     let new_remaining_seconds = (remaining_seconds as f64 * time_multiplier) as i64;
 
     // 10. Calculate Gem Cost
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data_ref = game_engine.try_borrow()?;
     let game_engine_state = unsafe { GameEngine::load(&game_engine_data_ref) };
 
     let gems_per_minute = game_engine_state.gameplay_config.gem_cost_per_minute_speedup;
@@ -162,7 +162,7 @@ pub fn process(
 
     // Emit event
     emit!(ReinforcementSpeedup {
-        reinforcement: *reinforcement_account.key(),
+        reinforcement: *reinforcement_account.address(),
         sender: reinf.sender,
         sender_name: sender.name,
         receiver: reinf.destination,

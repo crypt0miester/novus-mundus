@@ -9,9 +9,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Research Template Interface
-// ============================================================
 
 export interface ResearchTemplateAccount {
   researchType: number;
@@ -30,9 +28,7 @@ export interface ResearchTemplateAccount {
 /** ResearchTemplate size in bytes (repr(C) layout with alignment padding) */
 export const RESEARCH_TEMPLATE_SIZE = 32;
 
-// ============================================================
 // Research Progress Interface
-// ============================================================
 
 export interface ResearchProgressAccount {
   player: PublicKey;
@@ -72,9 +68,7 @@ export interface ResearchProgressAccount {
 /** ResearchProgress size in bytes (repr(C) layout with alignment padding) */
 export const RESEARCH_PROGRESS_SIZE = 144;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize ResearchTemplate from raw bytes */
 export function deserializeResearchTemplate(data: Uint8Array | Buffer): ResearchTemplateAccount {
@@ -187,9 +181,7 @@ export function deserializeResearchProgress(data: Uint8Array | Buffer): Research
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse ResearchTemplate from account info */
 export function parseResearchTemplate(accountInfo: AccountInfo<Buffer>): ResearchTemplateAccount | null {
@@ -207,9 +199,7 @@ export function parseResearchProgress(accountInfo: AccountInfo<Buffer>): Researc
   return deserializeResearchProgress(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if currently researching */
 export function isResearching(progress: ResearchProgressAccount): boolean {

@@ -12,9 +12,7 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { TeamMemberRank } from '../types/enums';
 
-// ============================================================
 // Team Settings & Permissions
-// ============================================================
 
 /** Team settings bitfield */
 export const TeamSettings = {
@@ -32,9 +30,7 @@ export const TeamPermissions = {
   SETTINGS: 1 << 5,
 } as const;
 
-// ============================================================
 // Team Account Interface
-// ============================================================
 
 export interface TeamAccount {
   id: BN;
@@ -59,9 +55,7 @@ export interface TeamAccount {
 /** TeamAccount size in bytes */
 export const TEAM_ACCOUNT_SIZE = 280;
 
-// ============================================================
 // Team Member Slot Interface
-// ============================================================
 
 export interface TeamMemberSlot {
   team: PublicKey;
@@ -77,9 +71,7 @@ export interface TeamMemberSlot {
 /** TeamMemberSlot size in bytes */
 export const TEAM_MEMBER_SLOT_SIZE = 104;
 
-// ============================================================
 // Team Invite Account Interface
-// ============================================================
 
 export interface TeamInviteAccount {
   team: PublicKey;
@@ -93,9 +85,7 @@ export interface TeamInviteAccount {
 /** TeamInviteAccount size in bytes */
 export const TEAM_INVITE_ACCOUNT_SIZE = 136;
 
-// ============================================================
 // Treasury Request Interface
-// ============================================================
 
 export interface TreasuryRequest {
   team: PublicKey;
@@ -109,9 +99,7 @@ export interface TreasuryRequest {
 /** TreasuryRequest size in bytes */
 export const TREASURY_REQUEST_SIZE = 112;
 
-// ============================================================
 // Deserialization Functions
-// ============================================================
 
 /** Deserialize TeamAccount from raw bytes */
 export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
@@ -262,9 +250,7 @@ export function deserializeTreasuryRequest(data: Uint8Array | Buffer): TreasuryR
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse TeamAccount from account info */
 export function parseTeam(accountInfo: AccountInfo<Buffer>): TeamAccount | null {
@@ -298,9 +284,7 @@ export function parseTreasuryRequest(accountInfo: AccountInfo<Buffer>): Treasury
   return deserializeTreasuryRequest(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if team is active (not disbanded and has valid leader) */
 export function isTeamActive(team: TeamAccount): boolean {

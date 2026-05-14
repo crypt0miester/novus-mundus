@@ -9,9 +9,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // User Account Interface
-// ============================================================
 
 export interface UserAccount {
   /** Wallet owner */
@@ -43,9 +41,7 @@ export interface UserAccount {
 /** UserAccount size in bytes (repr(C) with account_key discriminator) */
 export const USER_ACCOUNT_SIZE = 152;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize UserAccount from raw bytes */
 export function deserializeUser(data: Uint8Array | Buffer): UserAccount {

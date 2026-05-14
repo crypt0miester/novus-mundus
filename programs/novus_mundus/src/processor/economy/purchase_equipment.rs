@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -82,8 +82,8 @@ impl TryFrom<u8> for EquipmentType {
 /// - quantity: u64 (8 bytes) - Amount to purchase
 /// - pay_with_cash: bool (1 byte) - True=use cash_on_hand, False=use locked_novi
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
@@ -118,7 +118,7 @@ pub fn process(
 
     // 4. Load and verify accounts (kingdom-scoped)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.key(), owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Calculate total cost with DAO multiplier
@@ -238,22 +238,22 @@ pub fn process(
             // Load event participation with ownership validation (kingdom-scoped)
             let mut participation = crate::state::EventParticipation::load_checked_mut(
                 event_participation,
-                game_engine.key(),
+                game_engine.address(),
                 player_data.current_event,
-                owner.key(),
+                owner.address(),
                 program_id,
             )?;
 
             // Load event with ownership validation (kingdom-scoped)
             let mut event_data = crate::state::EventAccount::load_checked_mut(
                 event,
-                game_engine.key(),
+                game_engine.address(),
                 player_data.current_event,
                 program_id,
             )?;
 
-            let player_key = owner.key();
-            let event_key = event.key();
+            let player_key = owner.address();
+            let event_key = event.address();
 
             // DETERMINISTIC: Use exact cost value (no randomness)
             // MostNoviConsumed: Add locked_novi spent (deterministic)
@@ -273,7 +273,7 @@ pub fn process(
     // Emit EquipmentPurchased event (only for non-cash purchases since that burns NOVI)
     if !pay_with_cash {
         emit!(EquipmentPurchased {
-            player: *player.key(),
+            player: *player.address(),
             player_name: player_data.name,
             slot: equipment_type as u8,
             tier: 1, // Base tier (no upgrade tiers in current implementation)

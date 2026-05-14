@@ -10,9 +10,9 @@
 //! - Armory: +3% defense quality per level
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -55,8 +55,8 @@ const UPGRADE_COST_MULTIPLIER: u64 = 15; // 1.5x per level (divided by 10)
 /// 5. [] Token program
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -91,10 +91,10 @@ pub fn process(
     // Load king player - read needed fields, then drop borrow for CPI
     require_owner(king_account, program_id)?;
     let (king_locked_novi, king_bump, king_game_engine) = {
-        let king_data = king_account.try_borrow_data()?;
+        let king_data = king_account.try_borrow()?;
         let king = unsafe { PlayerAccount::load(&king_data) };
 
-        if &king.owner != king_wallet.key() {
+        if &king.owner != king_wallet.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -105,7 +105,7 @@ pub fn process(
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
-    if castle.king != *king_account.key() {
+    if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
     }
 
@@ -145,8 +145,8 @@ pub fn process(
     // Burn NOVI tokens from locked token account
     // PlayerAccount PDA is the authority over locked tokens
     let bump_seed = [king_bump];
-    let king_seeds = pinocchio::seeds!(PLAYER_SEED, king_game_engine.as_ref(), king_wallet.key().as_ref(), &bump_seed);
-    let king_signer = pinocchio::instruction::Signer::from(&king_seeds);
+    let king_seeds = crate::seeds!(PLAYER_SEED, king_game_engine.as_ref(), king_wallet.address(), &bump_seed);
+    let king_signer = pinocchio::cpi::Signer::from(&king_seeds);
 
     burn_tokens(
         locked_token_account,
@@ -157,7 +157,7 @@ pub fn process(
     )?;
 
     // Re-borrow king to update cached balance
-    let mut king_data = king_account.try_borrow_mut_data()?;
+    let mut king_data = king_account.try_borrow_mut()?;
     let king = unsafe { PlayerAccount::load_mut(&mut king_data) };
     king.locked_novi = king.locked_novi.saturating_sub(cost);
 
@@ -176,9 +176,9 @@ pub fn process(
 
     // Emit event
     emit!(CastleUpgradeStarted {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        king: *king_account.key(),
+        king: *king_account.address(),
         upgrade_type,
         current_level,
         target_level,

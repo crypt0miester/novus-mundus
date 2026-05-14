@@ -35,9 +35,7 @@ import {
 } from '../utils/accounts';
 import { log } from '../utils/logger';
 
-// ============================================================
 // Helpers
-// ============================================================
 
 /** Log player assets and on-chain networth for visibility */
 function logPlayerNetworth(label: string, p: PlayerAccount) {
@@ -52,9 +50,7 @@ function logPlayerNetworth(label: string, p: PlayerAccount) {
   log.info(`  du=[${du}] op=[${op}] wp=[${wp}] eq=[${eq}] cash=${cash}`);
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Networth Calculation', () => {
   let ctx: TestContext;
@@ -86,9 +82,7 @@ describe('Networth Calculation', () => {
     );
   }
 
-  // ============================================================
   // Baseline (no subscription)
-  // ============================================================
 
   describe('Baseline Networth', () => {
     it('should compute non-zero networth at init from starter assets', async () => {
@@ -104,9 +98,7 @@ describe('Networth Calculation', () => {
     });
   });
 
-  // ============================================================
   // Per-tier networth verification
-  // ============================================================
 
   describe('Networth After Subscription', () => {
     it('should increase after Rookie (tier 0) subscription', async () => {
@@ -194,9 +186,7 @@ describe('Networth Calculation', () => {
     });
   });
 
-  // ============================================================
   // Cross-tier ordering
-  // ============================================================
 
   describe('Tier Ordering', () => {
     it('should have Legendary > Epic > Expert > Rookie > Baseline', () => {
@@ -222,9 +212,7 @@ describe('Networth Calculation', () => {
     });
   });
 
-  // ============================================================
   // Cross-check: two baseline players should have the same networth
-  // ============================================================
 
   describe('Consistency', () => {
     it('should compute identical networth for two baseline players', async () => {

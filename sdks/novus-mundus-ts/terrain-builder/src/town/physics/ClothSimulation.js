@@ -15,9 +15,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Reusable temporaries (avoid per-frame allocation)
-// ---------------------------------------------------------------------------
 
 const _delta  = new THREE.Vector3();
 const _tmpV   = new THREE.Vector3();
@@ -25,9 +23,7 @@ const _normal = new THREE.Vector3();
 const _ab     = new THREE.Vector3();
 const _ac     = new THREE.Vector3();
 
-// ---------------------------------------------------------------------------
 // Particle
-// ---------------------------------------------------------------------------
 
 class Particle {
   /**
@@ -47,9 +43,7 @@ class Particle {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Constraint
-// ---------------------------------------------------------------------------
 
 class Constraint {
   /**
@@ -64,9 +58,7 @@ class Constraint {
   }
 }
 
-// ---------------------------------------------------------------------------
 // ClothSimulation
-// ---------------------------------------------------------------------------
 
 export class ClothSimulation {
 
@@ -166,9 +158,7 @@ export class ClothSimulation {
     this._syncGeometry();
   }
 
-  // -------------------------------------------------------------------------
   // Public accessors
-  // -------------------------------------------------------------------------
 
   /** @returns {THREE.Mesh} The cloth mesh (add to your scene). */
   get mesh() { return this._mesh; }
@@ -183,9 +173,7 @@ export class ClothSimulation {
     this._mesh.material = mat;
   }
 
-  // -------------------------------------------------------------------------
   // Pinning
-  // -------------------------------------------------------------------------
 
   /**
    * Pin a single vertex to a fixed world position.
@@ -231,9 +219,7 @@ export class ClothSimulation {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Forces
-  // -------------------------------------------------------------------------
 
   /**
    * Apply a global wind force this frame.
@@ -264,9 +250,7 @@ export class ClothSimulation {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Simulation step
-  // -------------------------------------------------------------------------
 
   /**
    * Advance the simulation by deltaTime seconds.
@@ -383,9 +367,7 @@ export class ClothSimulation {
     this._windStrength = 0;
   }
 
-  // -------------------------------------------------------------------------
   // Geometry sync
-  // -------------------------------------------------------------------------
 
   /** Copy particle positions into the PlaneGeometry attributes. */
   _syncGeometry() {
@@ -401,9 +383,7 @@ export class ClothSimulation {
     this._geometry.computeVertexNormals();
   }
 
-  // -------------------------------------------------------------------------
   // Cleanup
-  // -------------------------------------------------------------------------
 
   dispose() {
     if (this._geometry) {

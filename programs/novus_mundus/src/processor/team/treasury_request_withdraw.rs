@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -35,8 +35,8 @@ use crate::{
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - slot_index: u16 (2 bytes) - Member's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -76,7 +76,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
@@ -99,14 +99,14 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if player.team == NULL_PUBKEY || &player.team != team_account.key() {
+    if player.team == NULL_PUBKEY || &player.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Member Slot and Get Rank
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if member_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if member_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -114,10 +114,10 @@ pub fn process(
 
     let rank: u8;
     {
-        let slot_data = member_slot_account.try_borrow_data()?;
+        let slot_data = member_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *player_account.key() {
+        if slot.player != *player_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -138,9 +138,9 @@ pub fn process(
 
     // 9. Verify Request PDA and Check No Existing Request
 
-    let (expected_request, request_bump) = TreasuryRequest::derive_pda(team_account.key(), player_account.key());
+    let (expected_request, request_bump) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
 
-    if request_account.key() != &expected_request {
+    if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -153,17 +153,16 @@ pub fn process(
     let now = clock.unix_timestamp;
     let cooldown_seconds = team.get_cooldown_seconds();
 
-    let request_lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(TreasuryRequest::LEN);
+    let request_lamports = crate::utils::rent_exempt_const(TreasuryRequest::LEN);
 
     let request_bump_seed = [request_bump];
-    let request_seeds = pinocchio::seeds!(
+    let request_seeds = crate::seeds!(
         TREASURY_REQUEST_SEED,
-        team_account.key().as_ref(),
-        player_account.key().as_ref(),
+        team_account.address(),
+        player_account.address(),
         &request_bump_seed
     );
-    let request_signer = pinocchio::instruction::Signer::from(&request_seeds);
+    let request_signer = pinocchio::cpi::Signer::from(&request_seeds);
 
     CreateAccount {
         from: owner,
@@ -175,12 +174,12 @@ pub fn process(
 
     // 11. Initialize Request Data
 
-    let mut request_data = request_account.try_borrow_mut_data()?;
+    let mut request_data = request_account.try_borrow_mut()?;
     let request = unsafe { TreasuryRequest::load_mut(&mut request_data) };
 
     *request = TreasuryRequest::init(
-        *team_account.key(),
-        *player_account.key(),
+        *team_account.address(),
+        *player_account.address(),
         amount,
         now,
         cooldown_seconds,
@@ -190,9 +189,9 @@ pub fn process(
     // 12. Emit Event
 
     emit!(TreasuryWithdrawRequested {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        requester: *player_account.key(),
+        requester: *player_account.address(),
         amount,
         timestamp: now,
     });

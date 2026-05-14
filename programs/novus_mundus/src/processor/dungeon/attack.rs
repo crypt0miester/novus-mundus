@@ -1,30 +1,30 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
+    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType, GameEngine},
     helpers::dungeon::{
         calculate_unit_power,
         calculate_dungeon_damage,
         calculate_enemy_damage,
         calculate_damage_taken,
         calculate_room_xp,
-        has_stalwart,
-        has_phoenix_feather,
+        has_one_shot_immunity_relic,
+        has_resurrection_relic,
         calculate_relic_lifesteal,
         calculate_synergy_bonuses,
-        double_strike_chance,
+        double_attack_chance,
         // Crit system
         calculate_relic_crit_chance,
         calculate_relic_crit_damage,
         calculate_darkness_crit_penalty,
-        has_torch_bearer,
+        has_darkness_crit_immunity_relic,
         // Time of day
         TimePeriod,
         calculate_xp_with_time,
@@ -55,15 +55,19 @@ use crate::{
 ///
 /// # Accounts
 /// - [signer] owner: Player's wallet
+/// - [signer] game_authority: Game server (validates RNG flags + next room type)
 /// - [writable] player: PlayerAccount PDA
 /// - [] dungeon_template: DungeonTemplate PDA
 /// - [writable] dungeon_run: DungeonRun PDA
+/// - [] game_engine: GameEngine PDA (for game_authority validation)
 ///
 /// # Instruction Data
-/// - next_room_type: u8 (provided by backend for auto-advance)
+/// - next_room_type: u8 (provided by backend for auto-advance; signature-bound)
+/// - double_strike: u8 (1 = double strike triggered, validated by game_authority signature)
+/// - crit: u8 (1 = critical hit triggered, validated by game_authority signature)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     process_attacks(program_id, accounts, data, 1)
@@ -71,28 +75,32 @@ pub fn process(
 
 /// Core attack processing logic (shared with attack_multi)
 pub fn process_attacks(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
     attack_count: u8,
 ) -> ProgramResult {
-    // 1. Parse accounts
+    // 1. Parse accounts (game_authority co-signs to authenticate RNG flags)
     let [
         owner,
+        game_authority,
         player_account,
         dungeon_template_account,
         dungeon_run_account,
+        game_engine_account,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // 2. Validate signer
+    // 2. Validate signers
     require_signer(owner)?;
+    require_signer(game_authority)?;
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
 
-    // 3. Parse instruction data
-    // data[0]: next_room_type
+    // 3. Parse instruction data — these flags are authenticated by the game_authority
+    //    signature on the surrounding transaction.
+    // data[0]: next_room_type (chosen by backend; client cannot freely pick room types)
     // data[1]: double_strike flag (1 = double strike triggered by backend RNG)
     // data[2]: crit flag (1 = critical hit triggered by backend RNG)
     let next_room_type = if !data.is_empty() { data[0] } else { 0 };
@@ -101,15 +109,26 @@ pub fn process_attacks(
 
     // 4. Load and validate player using load_checked_by_key (kingdom-scoped)
     let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
+    // 4a. Validate game_authority against the player's kingdom GameEngine
+    {
+        let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        if game_engine_account.address() != &player.game_engine {
+            return Err(GameError::KingdomMismatch.into());
+        }
+        if game_authority.address() != &game_engine.game_authority {
+            return Err(GameError::Unauthorized.into());
+        }
+    }
+
     // 5. Load and validate dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;
+    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
-    if &run.player != player_account.key() {
+    if &run.player != player_account.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -149,7 +168,7 @@ pub fn process_attacks(
             run.status = DungeonStatus::Failed as u8;
 
             emit!(DungeonFailed {
-                player: *player_account.key(),
+                player: *player_account.address(),
                 player_name: player.name,
                 dungeon_id: run.dungeon_id,
                 floor: run.current_floor,
@@ -170,18 +189,18 @@ pub fn process_attacks(
     let synergies = calculate_synergy_bonuses(&run);
     let lifesteal_bps = calculate_relic_lifesteal(&run).saturating_add(synergies.lifesteal_bps);
 
-    // Check for Double Strike relic (15% chance, verified by backend)
-    let has_double_strike = double_strike_chance(&run) > 0;
-    let apply_double_strike = has_double_strike && double_strike_triggered;
+    // Check for double-attack relic (id 14, 15% chance, verified by backend)
+    let has_double_attack = double_attack_chance(&run) > 0;
+    let apply_double_strike = has_double_attack && double_strike_triggered;
 
     // Calculate crit chance and damage (verified by backend RNG)
     // Crit chance = relic bonus + synergy bonus - darkness penalty
     let base_crit_chance = calculate_relic_crit_chance(&run).saturating_add(synergies.crit_chance_bps);
-    let torch_bearer = has_torch_bearer(&run);
+    let crit_immune = has_darkness_crit_immunity_relic(&run);
     let darkness_crit_penalty = calculate_darkness_crit_penalty(
         run.current_floor,
         synergies.darkness_reduction_bps,
-        torch_bearer,
+        crit_immune,
     );
     let effective_crit_chance = base_crit_chance.saturating_sub(darkness_crit_penalty);
     let has_crit = effective_crit_chance > 0;
@@ -198,7 +217,7 @@ pub fn process_attacks(
 
     // Get time period and theme for modifiers
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
-    let dungeon_theme = DungeonTheme::from_u8(run.dungeon_theme).unwrap_or(DungeonTheme::Crypts);
+    let dungeon_theme = DungeonTheme::from_u8(run.dungeon_theme).unwrap_or(DungeonTheme::RadiantWeakness);
     let is_first_light = TimePeriod::is_first_light(now);
 
     // Get hero specialization for bonuses
@@ -232,7 +251,7 @@ pub fn process_attacks(
         // Apply Warrior attack bonus (+20%) or Guardian penalty (-15%)
         let warrior_damage = apply_warrior_attack_bonus(base_damage, hero_spec);
 
-        // Apply Hero's Blessing relic bonus (+25% hero effectiveness)
+        // Apply hero-effectiveness relic bonus (id 9, +25%)
         let hero_bonus = calculate_relic_hero_bonus(&run);
         let hero_boosted_damage = if hero_bonus > 0 {
             apply_bp(warrior_damage, 10000u64 + hero_bonus as u64).unwrap_or(warrior_damage)
@@ -253,7 +272,7 @@ pub fn process_attacks(
             }
         }
 
-        // Determine number of strikes (1 or 2 with Double Strike)
+        // Determine number of strikes (1 or 2 with double-attack relic id 14)
         let strike_count = if apply_double_strike { 2u8 } else { 1u8 };
 
         // Apply damage for each strike
@@ -290,14 +309,14 @@ pub fn process_attacks(
                     // Initialize ability based on theme
                     let ability = get_boss_ability(dungeon_theme, run.enemy_max_health, &run);
                     run.boss_ability_counter = ability.remaining_attacks;
-                    if dungeon_theme == DungeonTheme::Forge {
+                    if dungeon_theme == DungeonTheme::ArmoredMobs {
                         run.boss_shield = ability.shield_hp;
                     }
                 }
             }
 
-            // CRYPTS BOSS: Boss heals from damage dealt (Soul Harvest)
-            if run.is_boss && run.boss_ability_active && dungeon_theme == DungeonTheme::Crypts {
+            // RadiantWeakness boss: Boss heals from damage dealt (lifesteal ability)
+            if run.is_boss && run.boss_ability_active && dungeon_theme == DungeonTheme::RadiantWeakness {
                 // Check if player has SUSTAIN 3-piece (reverses lifesteal)
                 if synergies.lifesteal_bps < 1000 { // No strong sustain counter
                     let boss_heal = apply_bp(actual_damage, 2000u64).unwrap_or(0); // 20% lifesteal
@@ -333,8 +352,8 @@ pub fn process_attacks(
                     enemy_damage = apply_bp(enemy_damage, wrath_damage_mult as u64).unwrap_or(enemy_damage);
                 }
 
-                // ABYSS BOSS: Darkness multiplier (x3 darkness effects when ability active)
-                if run.boss_ability_active && dungeon_theme == DungeonTheme::Abyss {
+                // DarknessVulnerable boss: x3 darkness effects when ability active
+                if run.boss_ability_active && dungeon_theme == DungeonTheme::DarknessVulnerable {
                     // Extra darkness damage (darkness already applied in calculate_enemy_damage)
                     // Apply 2x more since base already has 1x
                     let extra_darkness = apply_bp(enemy_damage, 2000u64).unwrap_or(0);
@@ -347,9 +366,9 @@ pub fn process_attacks(
                         break;
                     }
 
-                    // CAVERNS BOSS: Defense pierce (Blood Frenzy)
+                    // FastMobs boss: Defense pierce when ability active
                     let effective_defense = if run.boss_ability_active
-                        && dungeon_theme == DungeonTheme::Caverns
+                        && dungeon_theme == DungeonTheme::FastMobs
                         && run.boss_ability_counter > 0
                     {
                         // Ignores player defense
@@ -369,8 +388,8 @@ pub fn process_attacks(
                     // Apply Guardian survival bonus (+25% damage reduction)
                     let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
-                    // Apply stalwart protection (min 1 unit survives per hit)
-                    let protected_damage = if has_stalwart(&run) {
+                    // Apply one-shot immunity relic (min 1 unit survives per hit)
+                    let protected_damage = if has_one_shot_immunity_relic(&run) {
                         let total_hp = crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
                         damage_taken.min(total_hp.saturating_sub(1))
                     } else {
@@ -391,8 +410,8 @@ pub fn process_attacks(
                 // Apply Guardian survival bonus (+25% damage reduction)
                 let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
-                // Apply stalwart protection (min 1 unit survives per hit)
-                let protected_damage = if has_stalwart(&run) {
+                // Apply one-shot immunity relic (min 1 unit survives per hit)
+                let protected_damage = if has_one_shot_immunity_relic(&run) {
                     let total_hp = crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
                     damage_taken.min(total_hp.saturating_sub(1))
                 } else {
@@ -411,20 +430,20 @@ pub fn process_attacks(
 
     // 8. Check for wipe
     if run.is_wiped() {
-        // Check for Phoenix Feather (one-time resurrection)
-        if has_phoenix_feather(&run) && run.relic_mask & (1 << 11) != 0 {
+        // Check for resurrection relic (id 11, one-time)
+        if has_resurrection_relic(&run) && run.relic_mask & (1 << 11) != 0 {
             // Resurrect with 25% of original DEFENSIVE units from dungeon entry
             run.remaining_units[0] = run.original_units[0] / 4;
             run.remaining_units[1] = run.original_units[1] / 4;
             run.remaining_units[2] = run.original_units[2] / 4;
-            // Mark Phoenix Feather as used (clear the bit)
+            // Consume the resurrection relic (id 11) so it can't trigger again
             run.relic_mask &= !(1 << 11);
         } else {
             // Run failed
             run.status = DungeonStatus::Failed as u8;
 
             emit!(DungeonFailed {
-                player: *player_account.key(),
+                player: *player_account.address(),
                 player_name: player.name,
                 dungeon_id: run.dungeon_id,
                 floor: run.current_floor,
@@ -464,7 +483,7 @@ pub fn process_attacks(
         run.pending_xp = run.pending_xp.saturating_add(room_xp);
 
         emit!(DungeonRoomCleared {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player.name,
             dungeon_id: run.dungeon_id,
             floor: run.current_floor,
@@ -475,16 +494,25 @@ pub fn process_attacks(
 
         // Check if floor complete
         if run.current_room >= template.rooms_per_floor {
-            // Floor complete - await relic selection
-            run.status = DungeonStatus::AwaitingRelic as u8;
-
             // Grant floor NOVI
             let floor_novi = crate::helpers::dungeon::calculate_floor_novi(
                 template.base_novi_per_floor,
                 run.current_floor,
-                crate::helpers::dungeon::has_golden_touch(&run),
+                crate::helpers::dungeon::has_double_novi_relic(&run),
             );
             run.pending_novi = run.pending_novi.saturating_add(floor_novi);
+
+            // If the killed enemy was the boss AND this is the final floor,
+            // the run is COMPLETED. Otherwise (non-final-floor or non-boss), await
+            // relic selection like before. This unlocks the dungeon victory loop.
+            let was_boss = run.is_boss;
+            let is_final_floor = run.current_floor >= template.total_floors;
+
+            if was_boss && is_final_floor {
+                run.status = DungeonStatus::Completed as u8;
+            } else {
+                run.status = DungeonStatus::AwaitingRelic as u8;
+            }
 
             // Check for checkpoint
             if template.is_checkpoint(run.current_floor) {
@@ -495,7 +523,7 @@ pub fn process_attacks(
             }
 
             emit!(DungeonFloorCompleted {
-                player: *player_account.key(),
+                player: *player_account.address(),
                 player_name: player.name,
                 dungeon_id: run.dungeon_id,
                 floor: run.current_floor,

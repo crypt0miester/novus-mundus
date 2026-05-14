@@ -25,11 +25,11 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-use pinocchio::program_error::ProgramError;
+use pinocchio::error::ProgramError;
 
-// ============================================================================
+
 // CONSTANTS
-// ============================================================================
+
 
 /// Pyth magic number for account validation
 pub const PYTH_MAGIC: u32 = 0xa1b2c3d4;
@@ -46,9 +46,9 @@ pub const PRICE_STATUS_TRADING: u8 = 1;
 /// Minimum data length required (header up to and including agg)
 pub const MIN_PRICE_ACCOUNT_LEN: usize = 240;
 
-// ============================================================================
+
 // ERROR CODES
-// ============================================================================
+
 
 /// Pyth-specific error codes
 #[repr(u32)]
@@ -74,9 +74,9 @@ impl From<PythError> for ProgramError {
     }
 }
 
-// ============================================================================
+
 // DATA STRUCTURES
-// ============================================================================
+
 
 /// Rational number representation used by Pyth for EMA values
 ///
@@ -331,9 +331,9 @@ impl PythPriceAccount {
     }
 }
 
-// ============================================================================
+
 // OUTPUT TYPES
-// ============================================================================
+
 
 /// Normalized price output from oracle
 ///
@@ -408,9 +408,9 @@ impl OraclePrice {
     }
 }
 
-// ============================================================================
+
 // HELPER FUNCTIONS
-// ============================================================================
+
 
 /// Load Pyth price from account info
 ///
@@ -445,9 +445,9 @@ pub fn load_pyth_price_with_confidence(
     Ok(price)
 }
 
-// ============================================================================
+
 // TESTS
-// ============================================================================
+
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,12 @@
 /// Token events - NOVI operations (withdraw, reserved to claimed)
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when reserved NOVI is moved to locked
 pub struct NoviReservedToLocked {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Amount moved
@@ -37,7 +37,7 @@ impl Event for NoviReservedToLocked {
 /// Emitted when reserved NOVI is withdrawn (claimed)
 pub struct NoviWithdrawn {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Amount withdrawn

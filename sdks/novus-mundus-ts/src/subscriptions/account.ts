@@ -7,9 +7,7 @@
 import { PublicKey } from '@solana/web3.js';
 import type { Connection, AccountInfo, Context, Commitment, SignatureResult, KeyedAccountInfo, Logs } from '@solana/web3.js';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Subscription callback for parsed account data */
 export type SubscriptionCallback<T> = (
@@ -39,9 +37,7 @@ export interface SubscriptionOptions {
   encoding?: 'base64' | 'base64+zstd' | 'jsonParsed';
 }
 
-// ============================================================
 // Core Subscription Functions
-// ============================================================
 
 /**
  * Subscribe to raw account changes.
@@ -106,9 +102,7 @@ export function subscribeToAccountWithParser<T>(
   return subscribeToAccount(connection, address, rawCallback, options);
 }
 
-// ============================================================
 // Multi-Account Subscriptions
-// ============================================================
 
 /** Multi-subscription handle */
 export interface MultiSubscriptionHandle {
@@ -182,9 +176,7 @@ export function subscribeToAccounts(
   return multi;
 }
 
-// ============================================================
 // Program Account Subscriptions
-// ============================================================
 
 /** Program account change callback */
 export type ProgramSubscriptionCallback = (
@@ -224,9 +216,7 @@ export function subscribeToProgramAccounts(
   };
 }
 
-// ============================================================
 // Slot and Root Subscriptions
-// ============================================================
 
 /** Slot change callback */
 export type SlotChangeCallback = (slotInfo: { slot: number; parent: number; root: number }) => void;
@@ -269,9 +259,7 @@ export function subscribeToRootChanges(
   };
 }
 
-// ============================================================
 // Signature Subscriptions
-// ============================================================
 
 /** Signature status callback */
 export type SignatureStatusCallback = (
@@ -347,9 +335,7 @@ export function waitForSignature(
   });
 }
 
-// ============================================================
 // Logs Subscriptions
-// ============================================================
 
 /** Log callback */
 export type LogsCallback = (

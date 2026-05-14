@@ -14,9 +14,7 @@ import {
   derivePlayerPda,
 } from '../pda';
 
-// ============================================================
 // Claim Daily Reward
-// ============================================================
 
 export interface ClaimDailyRewardAccounts {
   /** Player's wallet (signer) */

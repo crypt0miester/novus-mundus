@@ -1,7 +1,7 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    account_info::AccountInfo,
-    program_error::ProgramError,
+    Address,
+    AccountView,
+    error::ProgramError,
     ProgramResult,
 };
 use crate::{NULL_PUBKEY, constants::GAME_ENGINE_SEED, types::Theme};
@@ -37,23 +37,23 @@ pub struct GameEngine {
     pub _padding_theme: [u8; 7],                // 7 bytes (alignment)
 
     /// DAO governance program authority
-    pub authority: Pubkey,                      // 32 bytes
+    pub authority: Address,                      // 32 bytes
 
     /// Backend payment authority (verifies real-money subscription purchases)
-    pub payment_authority: Pubkey,              // 32 bytes
+    pub payment_authority: Address,              // 32 bytes
 
     /// Game server authority (co-signs mini-game completions, off-chain verified actions)
-    pub game_authority: Pubkey,                 // 32 bytes
+    pub game_authority: Address,                 // 32 bytes
 
     /// Treasury wallet (receives SOL subscription payments)
-    pub treasury_wallet: Pubkey,                // 32 bytes
+    pub treasury_wallet: Address,                // 32 bytes
 
     /// PDA bump for this GameEngine account
     pub bump: u8,                               // 1 byte
     pub _padding0: [u8; 7],                     // 7 bytes (alignment)
 
     /// Novi token mint
-    pub novi_mint: Pubkey,                      // 32 bytes
+    pub novi_mint: Address,                      // 32 bytes
     pub novi_mint_bump: u8,                     // 1 byte
     pub _padding1: [u8; 7],                     // 7 bytes
 
@@ -132,9 +132,9 @@ impl GameEngine {
     /// Derive the PDA for the game engine account (finds bump - slower)
     /// Use this only during account creation
     /// Seeds: ["game_engine", kingdom_id]
-    pub fn derive_pda(kingdom_id: u16) -> (Pubkey, u8) {
+    pub fn derive_pda(kingdom_id: u16) -> (Address, u8) {
         let kingdom_id_bytes = kingdom_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[GAME_ENGINE_SEED, &kingdom_id_bytes],
             &crate::ID,
         )
@@ -142,32 +142,33 @@ impl GameEngine {
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(kingdom_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(kingdom_id: u16, bump: u8) -> Result<Address, ProgramError> {
         let kingdom_id_bytes = kingdom_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify GameEngine immutably.
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked<'a>(
-        account: &'a AccountInfo,
+        account: &'a AccountView,
         kingdom_id: u16,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(kingdom_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::GameEngine)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -183,22 +184,23 @@ impl GameEngine {
     }
 
     /// Load and verify GameEngine mutably.
-    /// Checks: program ownership, PDA derivation, bump field.
+    /// Checks: program ownership, PDA derivation, bump field, account discriminator.
     pub fn load_checked_mut<'a>(
-        account: &'a AccountInfo,
+        account: &'a AccountView,
         kingdom_id: u16,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(kingdom_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::GameEngine)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -216,20 +218,21 @@ impl GameEngine {
     /// Load GameEngine by verifying against its stored kingdom_id
     /// Use when you have the account but not the kingdom_id upfront
     pub fn load_checked_by_key<'a>(
-        account: &'a AccountInfo,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::GameEngine)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored kingdom_id
         let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
@@ -242,20 +245,21 @@ impl GameEngine {
 
     /// Load GameEngine mutably by verifying against its stored kingdom_id
     pub fn load_checked_mut_by_key<'a>(
-        account: &'a AccountInfo,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::GameEngine)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored kingdom_id
         let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
@@ -268,11 +272,11 @@ impl GameEngine {
 
     /// Validate game engine account PDA using stored bump (fast)
     pub fn validate_pda(
-        account: &AccountInfo,
+        account: &AccountView,
         engine_data: &GameEngine,
     ) -> ProgramResult {
         let expected_address = Self::create_pda(engine_data.kingdom_id, engine_data.bump)?;
-        if account.key() != &expected_address {
+        if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
@@ -699,10 +703,10 @@ pub struct NoviPurchaseConfig {
     pub novi_streak_bonus_bps: [u16; 7],
 
     // === Oracle Configuration (72 bytes) ===
-    /// Pyth NOVI/USD price feed (Pubkey::default() = not configured)
-    pub novi_pyth_feed: Pubkey,
-    /// Switchboard NOVI/USD price feed (Pubkey::default() = not configured)
-    pub novi_switchboard_feed: Pubkey,
+    /// Pyth NOVI/USD price feed (Address::default() = not configured)
+    pub novi_pyth_feed: Address,
+    /// Switchboard NOVI/USD price feed (Address::default() = not configured)
+    pub novi_switchboard_feed: Address,
     /// Max staleness in slots before oracle price is rejected
     pub novi_max_staleness_slots: u16,
     /// Max confidence interval for Pyth (basis points)
@@ -807,9 +811,7 @@ impl NoviPurchaseConfig {
     }
 }
 
-// ============================================================
 // Arena PvP Configuration (136 bytes)
-// ============================================================
 
 /// Arena PvP system configuration — all DAO-adjustable
 #[repr(C)]
@@ -895,9 +897,7 @@ impl ArenaConfig {
     }
 }
 
-// ============================================================
 // Expedition Configuration (240 bytes)
-// ============================================================
 
 /// Expedition (mining/fishing) system configuration — all DAO-adjustable
 #[repr(C)]
@@ -975,9 +975,7 @@ impl ExpeditionConfig {
     }
 }
 
-// ============================================================
 // Dungeon Configuration (224 bytes)
-// ============================================================
 
 /// Dungeon system configuration — all DAO-adjustable
 #[repr(C)]
@@ -1078,9 +1076,7 @@ impl DungeonConfig {
     }
 }
 
-// ============================================================
 // Castle Configuration (96 bytes)
-// ============================================================
 
 /// King's Castle system configuration — all DAO-adjustable
 #[repr(C)]
@@ -1161,9 +1157,7 @@ impl CastleConfig {
     }
 }
 
-// ============================================================
 // Combat Configuration (160 bytes)
-// ============================================================
 
 /// Combat system configuration — all DAO-adjustable
 #[repr(C)]

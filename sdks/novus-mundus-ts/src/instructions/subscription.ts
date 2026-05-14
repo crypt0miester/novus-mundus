@@ -21,9 +21,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Purchase Subscription
-// ============================================================
 
 export interface PurchaseSubscriptionAccounts {
   /** Player's wallet (signer) */
@@ -132,9 +130,7 @@ export function createPurchaseSubscriptionInstruction(
   });
 }
 
-// ============================================================
 // Update Tier Configuration (DAO ONLY)
-// ============================================================
 
 export interface UpdateTierConfigAccounts {
   /** DAO governance authority (signer) */
@@ -306,9 +302,7 @@ export function createUpdateTierConfigInstruction(
  */
 export const createUpdateTierInstruction = createUpdateTierConfigInstruction;
 
-// ============================================================
 // Downgrade Expired
-// ============================================================
 
 export interface DowngradeExpiredAccounts {
   /** Player account to check/downgrade */

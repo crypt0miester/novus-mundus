@@ -3,7 +3,7 @@
 pub mod instructions;
 
 // TLD House Program ID: TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S
-pinocchio_pubkey::declare_id!("TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S");
+pinocchio::address::declare_id!("TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S");
 
 /// Alt Name Service Program ID
 pub const ALT_NAME_SERVICE_ID: [u8; 32] = [

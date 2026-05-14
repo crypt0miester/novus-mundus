@@ -7,10 +7,10 @@
 //! Must be called multiple times to initialize all cities (due to account limits).
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -49,8 +49,8 @@ pub const MAX_CITIES_PER_BATCH: usize = 8;
 ///   - radius_km: f32
 ///   - city_type: u8
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse header
@@ -82,16 +82,18 @@ pub fn process(
     }
 
     // 4. Load and validate GameEngine
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    if dao_authority.key() != &game_engine.authority {
-        return Err(GameError::DaoRequired.into());
+    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
+    // use raw pointer access to avoid holding RefCell borrows across the CreateAccount CPIs below.
+    {
+        let ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        if dao_authority.address() != &ge.authority {
+            return Err(GameError::DaoRequired.into());
+        }
     }
+    let game_engine = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     // 5. Get rent for city accounts
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(CityAccount::SIZE);
+    let lamports = crate::utils::rent_exempt_const(CityAccount::SIZE);
     let now = Clock::get()?.unix_timestamp;
 
     // 6. Parse city data from instruction and initialize each city
@@ -139,16 +141,16 @@ pub fn process(
         offset += 1;
 
         // Derive and validate city PDA
-        let (expected_city_pda, bump) = CityAccount::derive_pda(game_engine_account.key(), city_id);
-        if city_account.key() != &expected_city_pda {
+        let (expected_city_pda, bump) = CityAccount::derive_pda(game_engine_account.address(), city_id);
+        if city_account.address() != &expected_city_pda {
             return Err(ProgramError::InvalidSeeds);
         }
 
         // Create city account
         let city_id_bytes = city_id.to_le_bytes();
         let bump_seed = [bump];
-        let seeds = pinocchio::seeds!(CITY_SEED, game_engine_account.key(), &city_id_bytes, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+        let seeds = crate::seeds!(CITY_SEED, game_engine_account.address(), &city_id_bytes, &bump_seed);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
 
         CreateAccount {
             from: dao_authority,
@@ -162,7 +164,7 @@ pub fn process(
         let city_data = unsafe { CityAccount::load_mut(city_account)? };
 
         city_data.account_key = crate::state::AccountKey::City as u8;
-        city_data.game_engine = *game_engine_account.key();
+        city_data.game_engine = *game_engine_account.address();
         city_data.city_id = city_id;
 
         // Copy name
@@ -195,7 +197,7 @@ pub fn process(
     // Emit KingdomCitiesInitialized event
     emit!(KingdomCitiesInitialized {
         kingdom_id: game_engine.kingdom_id,
-        game_engine: *game_engine_account.key(),
+        game_engine: *game_engine_account.address(),
         start_city_id,
         cities_count: count as u8,
         initialized_at: now,

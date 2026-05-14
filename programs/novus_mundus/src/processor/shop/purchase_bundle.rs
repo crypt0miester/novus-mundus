@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use pinocchio_system::instructions::Transfer;
@@ -11,6 +11,7 @@ use crate::{
     helpers::{
         add_to_inventory,
         estate::{market_discount_bps, load_estate_for_player, require_market},
+        is_inventory_item_type,
         process_token_payment_flow,
     },
     state::{
@@ -49,8 +50,8 @@ use crate::{
 /// - bundle_id: u32
 /// - payment_type: u8 (0 = SOL, 2+ = Token via AllowedToken - future)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -94,11 +95,11 @@ pub fn process(
 
     // 4. Load and Validate Game Engine / Treasury
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify treasury matches
-    if treasury.key() != &game_engine.treasury_wallet {
+    if treasury.address() != &game_engine.treasury_wallet {
         return Err(GameError::InvalidTreasury.into());
     }
 
@@ -109,18 +110,18 @@ pub fn process(
 
     // 5. Load Shop Config
 
-    let shop_config_data_ref = shop_config_account.try_borrow_data()?;
+    let shop_config_data_ref = shop_config_account.try_borrow()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
 
     // 6. Load and Validate Bundle
 
     // Verify bundle PDA
-    let (expected_bundle, _bump) = BundleAccount::derive_pda(game_engine_account.key(), bundle_id);
-    if bundle_account.key() != &expected_bundle {
+    let (expected_bundle, _bump) = BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
+    if bundle_account.address() != &expected_bundle {
         return Err(GameError::InvalidPDA.into());
     }
 
-    let mut bundle_data_ref = bundle_account.try_borrow_mut_data()?;
+    let mut bundle_data_ref = bundle_account.try_borrow_mut()?;
     let bundle = unsafe { BundleAccount::load_mut(&mut bundle_data_ref) };
 
     // Check bundle is active
@@ -142,9 +143,9 @@ pub fn process(
 
     // 7. Check extensions and unlock INVENTORY before loading player mutably
     {
-        let data = player_account.try_borrow_data()?;
+        let data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&data) };
-        if player.owner != *buyer.key() {
+        if player.owner != *buyer.address() {
             return Err(GameError::NotOwner.into());
         }
         require_extension(player, EXT_RESEARCH)?;
@@ -152,7 +153,7 @@ pub fn process(
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
     // 8. Load Player mutably for remaining operations
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // Get effective subscription tier (handles expiration)
@@ -229,7 +230,7 @@ pub fn process(
         // Use unified token payment helper
         process_token_payment_flow(
             &accounts[token_offset..],
-            game_engine_account.key(),
+            game_engine_account.address(),
             program_id,
             shop_config,
             buyer,
@@ -256,14 +257,14 @@ pub fn process(
 
             // Verify this is the correct shop item
             let (expected_item_pda, _) = ShopItemAccount::derive_pda(
-                game_engine_account.key(),
+                game_engine_account.address(),
                 bundle_item.item_id,
             );
-            if shop_item_account.key() != &expected_item_pda {
+            if shop_item_account.address() != &expected_item_pda {
                 return Err(GameError::InvalidAccount.into());
             }
 
-            let shop_item_data_ref = shop_item_account.try_borrow_data()?;
+            let shop_item_data_ref = shop_item_account.try_borrow()?;
             let shop_item = unsafe { ShopItemAccount::load(&shop_item_data_ref) };
 
             let amount = bundle_item.quantity as u64 * shop_item.quantity_per_purchase as u64;
@@ -274,7 +275,7 @@ pub fn process(
                     add_to_inventory(
                         program_id,
                         buyer,
-                        buyer.key(),
+                        buyer.address(),
                         inventory_account,
                         system_program,
                         shop_item.item_type,
@@ -307,7 +308,7 @@ pub fn process(
                     add_to_inventory(
                         program_id,
                         buyer,
-                        buyer.key(),
+                        buyer.address(),
                         inventory_account,
                         system_program,
                         item_type,
@@ -363,7 +364,7 @@ pub fn process(
 
     // Emit event
     emit!(BundlePurchased {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         bundle_id,
         price: final_price,
@@ -374,9 +375,7 @@ pub fn process(
     Ok(())
 }
 
-// ============================================================
 // HELPER FUNCTIONS
-// ============================================================
 
 fn calculate_subscription_discount(tier: u8) -> u16 {
     match tier {
@@ -482,11 +481,6 @@ fn calculate_final_price(
     // Enforce max discount
     let min_price = apply_bp_penalty(base_price, max_total_discount_bps).unwrap_or(0);
     price.max(min_price).max(1)
-}
-
-/// Check if item type goes to PlayerInventoryAccount instead of direct PlayerAccount fields
-fn is_inventory_item_type(item_type: u16) -> bool {
-    matches!(item_type, 3 | 300..=399 | 1000..)
 }
 
 fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> ProgramResult {

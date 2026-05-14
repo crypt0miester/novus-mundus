@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -41,8 +41,8 @@ use crate::{
 /// # Instruction Data
 /// None (loot_id derived from PDA validation)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
@@ -63,12 +63,12 @@ pub fn process(
     require_owner(loot, program_id)?;
 
     // Validate PDAs
-    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.key(), owner.key()], program_id)?;
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Load Loot Account
 
-    let mut loot_data_ref = loot.try_borrow_mut_data()?;
+    let mut loot_data_ref = loot.try_borrow_mut()?;
     let loot_data = unsafe { LootAccount::load_mut(&mut loot_data_ref) };
 
     // 4. SECURITY CHECKS (order matters!)
@@ -79,12 +79,12 @@ pub fn process(
     }
 
     // CHECK 2: Ownership validation (loot.owner = player PDA)
-    if &loot_data.owner != player.key() {
+    if &loot_data.owner != player.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // CHECK 2b: Creator validation (must match who paid rent)
-    if &loot_data.creator != creator.key() {
+    if &loot_data.creator != creator.address() {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -95,8 +95,8 @@ pub fn process(
     }
 
     // CHECK 4: PDA validation (ensure loot_id matches)
-    let (expected_loot, _) = LootAccount::derive_pda(player.key(), loot_data.loot_id);
-    if loot.key() != &expected_loot {
+    let (expected_loot, _) = LootAccount::derive_pda(player.address(), loot_data.loot_id);
+    if loot.address() != &expected_loot {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -106,21 +106,21 @@ pub fn process(
 
     // 6. Load Player and User Accounts
 
-    let mut player_data_ref = player.try_borrow_mut_data()?;
+    let mut player_data_ref = player.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    let mut user_data_ref = user.try_borrow_mut_data()?;
+    let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
     // Verify ownership matches
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if player_data.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    if &user_data.owner != owner.key() {
+    if &user_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if user_data.bump != user_bump {
@@ -177,7 +177,7 @@ pub fn process(
 
     // 8. Recalculate Networth
 
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data_ref = game_engine.try_borrow()?;
     let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
     player_data.networth = calculate_networth(player_data, &game_engine_data.economic_config)?;
 
@@ -206,7 +206,7 @@ pub fn process(
 
     // Save values for event
     let event_cash = loot_data.cash;
-    let event_player = *player.key();
+    let event_player = *player.address();
     let event_player_name = player_data.name;
 
     // 10. CLOSE ACCOUNT (rent reclamation)

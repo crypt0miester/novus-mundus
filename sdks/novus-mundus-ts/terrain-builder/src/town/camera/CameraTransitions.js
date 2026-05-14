@@ -9,9 +9,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Easing
-// ---------------------------------------------------------------------------
 
 /**
  * Cubic ease-in-out: [0,1] -> [0,1].
@@ -24,9 +22,7 @@ function easeInOutCubic(t) {
   return 0.5 * f * f * f + 1;
 }
 
-// ---------------------------------------------------------------------------
 // Default overview parameters
-// ---------------------------------------------------------------------------
 
 const OVERVIEW_DISTANCE = 6.0;
 const OVERVIEW_TARGET_Y = 0.1;
@@ -36,9 +32,7 @@ const FOCUS_MARGIN = 2.2;
 const FOCUS_MIN_DISTANCE = 1.8;
 const FOCUS_MAX_DISTANCE = 4.0;
 
-// ---------------------------------------------------------------------------
 // CameraTransitions
-// ---------------------------------------------------------------------------
 
 export class CameraTransitions {
   /**
@@ -69,9 +63,7 @@ export class CameraTransitions {
     this._tmpVec = new THREE.Vector3();
   }
 
-  // -----------------------------------------------------------------------
   // Public API
-  // -----------------------------------------------------------------------
 
   /**
    * Fly camera to focus on a building.
@@ -158,9 +150,7 @@ export class CameraTransitions {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Internal
-  // -----------------------------------------------------------------------
 
   /**
    * Begin a transition from current camera state to a new target + distance.

@@ -26,9 +26,7 @@ import { deserializeLocation, type LocationAccount } from './location';
 import { deserializeResearchTemplate, deserializeResearchProgress, type ResearchTemplateAccount, type ResearchProgressAccount } from './research';
 import { deserializeHeroTemplate, type HeroTemplateAccount } from './hero';
 
-// ============================================================
 // Routed Account Types
-// ============================================================
 
 export type RoutedAccount =
   | { key: AccountKey.GameEngine; account: GameEngine }
@@ -74,9 +72,7 @@ export type RoutedAccount =
   | { key: AccountKey.ResearchProgress; account: ResearchProgressAccount }
   | { key: AccountKey.HeroTemplate; account: HeroTemplateAccount };
 
-// ============================================================
 // Router
-// ============================================================
 
 /**
  * Deserialize any Novus Mundus account by reading byte 0 as AccountKey

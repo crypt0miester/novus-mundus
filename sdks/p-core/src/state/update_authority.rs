@@ -1,5 +1,3 @@
-use pinocchio::pubkey::Pubkey;
-
 /// An enum representing the types of accounts that can update data on an asset.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -7,16 +5,16 @@ pub enum UpdateAuthority {
     /// No update authority, used for immutability.
     None,
     /// A standard address or PDA.
-    Address(Pubkey),
+    Address([u8; 32]),
     /// Authority delegated to a collection.
-    Collection(Pubkey),
+    Collection([u8; 32]),
 }
 
 impl UpdateAuthority {
     /// Get the address of the update authority.
-    pub fn key(&self) -> Pubkey {
+    pub fn key(&self) -> [u8; 32] {
         match self {
-            Self::None => Pubkey::from([0u8; 32]),
+            Self::None => [0u8; 32],
             Self::Address(address) => *address,
             Self::Collection(address) => *address,
         }
@@ -35,8 +33,8 @@ impl UpdateAuthority {
     pub fn from_bytes(discriminator: u8, key: &[u8; 32]) -> Self {
         match discriminator {
             0 => Self::None,
-            1 => Self::Address(Pubkey::from(*key)),
-            2 => Self::Collection(Pubkey::from(*key)),
+            1 => Self::Address(*key),
+            2 => Self::Collection(*key),
             _ => Self::None,
         }
     }

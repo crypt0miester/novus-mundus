@@ -5,7 +5,7 @@
 export interface DungeonTemplateData {
   templateId: number;
   name: string;
-  theme: number;           // 0=Crypts, 1=Caverns, 2=Abyss, 3=Forge
+  theme: number;           // 0=RadiantWeakness, 1=FastMobs, 2=DarknessVulnerable, 3=ArmoredMobs
   totalFloors: number;
   roomsPerFloor: number;
   checkpointInterval: number;

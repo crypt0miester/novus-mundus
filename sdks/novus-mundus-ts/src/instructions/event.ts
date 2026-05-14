@@ -25,9 +25,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Create Event (Admin)
-// ============================================================
 
 export interface CreateEventAccounts {
   /** Authority (DAO) */
@@ -130,9 +128,7 @@ export function createCreateEventInstruction(
   });
 }
 
-// ============================================================
 // Join Event
-// ============================================================
 
 export interface JoinEventAccounts {
   /** Payer for account creation (can be backend for free joins) */
@@ -189,9 +185,7 @@ export function createJoinEventInstruction(
   });
 }
 
-// ============================================================
 // Finalize Event (Permissionless)
-// ============================================================
 
 export interface FinalizeEventAccounts {
   /** GameEngine PDA */
@@ -227,9 +221,7 @@ export function createFinalizeEventInstruction(
   });
 }
 
-// ============================================================
 // Claim Prize
-// ============================================================
 
 export interface ClaimPrizeAccounts {
   /** Payer for transaction fees (can be backend for gas-less claims) */

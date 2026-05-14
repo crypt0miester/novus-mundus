@@ -1,14 +1,14 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::USER_SEED,
-    state::{UserAccount, GameEngine},
+    state::UserAccount,
     validation::{require_signer, require_writable, require_key_match, derive_pda},
     token_helpers::get_or_create_associated_token_account,
     emit,
@@ -27,7 +27,7 @@ use crate::{
 /// - Statistics and progression tracking
 ///
 /// # Accounts Expected
-/// 1. `[writable]` user - User account PDA to create ([b"user", owner.key()])
+/// 1. `[writable]` user - User account PDA to create ([b"user", owner.address()])
 /// 2. `[signer, writable]` owner - User's wallet (pays for account creation)
 /// 3. `[writable]` user_token_account - User's NOVI token ATA (for reserved_novi)
 /// 4. `[]` game_engine - GameEngine PDA (to get novi_mint address)
@@ -40,7 +40,7 @@ use crate::{
 /// None required (uses owner's pubkey for PDA derivation)
 ///
 /// # PDA Derivation
-/// Seeds: `[b"user", owner.key()]`
+/// Seeds: `[b"user", owner.address()]`
 /// The user account is deterministic per wallet
 ///
 /// # Returns
@@ -53,8 +53,8 @@ use crate::{
 /// - created_at timestamp is set from Clock sysvar
 /// - Account size is fixed at UserAccount::LEN bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
@@ -89,12 +89,12 @@ pub fn process(
 
     // Derive expected user PDA
     let (expected_user, bump) = derive_pda(
-        &[USER_SEED, owner.key()],
+        &[USER_SEED, owner.address().as_ref()],
         program_id,
     );
 
     // Verify user account matches expected PDA
-    if user.key() != &expected_user {
+    if user.address() != &expected_user {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -106,14 +106,13 @@ pub fn process(
     // 5. Calculate Rent and Create Account
 
     // Calculate minimum lamports for rent exemption
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(UserAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(UserAccount::LEN);
 
     // Create the user account via system program CPI
-    // Seeds: [b"user", owner.key(), bump]
+    // Seeds: [b"user", owner.address(), bump]
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(USER_SEED, owner.key(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(USER_SEED, owner.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: owner,
@@ -127,7 +126,7 @@ pub fn process(
     {
         // Scope the mutable borrow so it's dropped before the ATA CPI below,
         // which needs to re-borrow `user` internally.
-        let mut user_data_ref = user.try_borrow_mut_data()?;
+        let mut user_data_ref = user.try_borrow_mut()?;
         let user_data = unsafe {
             UserAccount::load_mut(&mut user_data_ref)
         };
@@ -136,17 +135,16 @@ pub fn process(
 
         // Initialize with default values (free tier subscription)
         // player field starts as NULL_PUBKEY - will be set when player joins a kingdom
-        *user_data = UserAccount::init(*owner.key(), NULL_PUBKEY, bump);
+        *user_data = UserAccount::init(*owner.address(), NULL_PUBKEY, bump);
     }
 
     // 7. Create User's NOVI Token Account (ATA)
 
     // Verify novi_mint matches GameEngine configuration
     {
-        let game_engine_data_ref = game_engine.try_borrow_data()?;
-        let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+        let _game_engine_data_ref = game_engine.try_borrow()?;
 
-        if novi_mint.key() != &game_engine_data.novi_mint {
+        if novi_mint.address().as_array() != &crate::constants::NOVI_MINT_ADDRESS {
             return Err(ProgramError::InvalidAccountData);
         }
     }
@@ -163,8 +161,8 @@ pub fn process(
 
     // Emit UserCreated event
     emit!(UserCreated {
-        user: *user.key(),
-        wallet: *owner.key(),
+        user: *user.address(),
+        wallet: *owner.address(),
         timestamp: created_at,
     });
 

@@ -27,9 +27,7 @@ import {
   validateName,
 } from './common';
 
-// ============================================================
 // Team State Validation
-// ============================================================
 
 /** Validate team is active */
 export function validateTeamActive(team: TeamAccount): ValidationResult {
@@ -63,9 +61,7 @@ export function validateTeamMemberCount(team: TeamAccount, minMembers: number): 
   return valid();
 }
 
-// ============================================================
 // Permission Validation
-// ============================================================
 
 /** Validate member has specific permission */
 export function validateHasPermission(
@@ -110,9 +106,7 @@ export function validateCanUpdateSettings(team: TeamAccount, memberRank: number)
   return validateHasPermission(team, memberRank, TeamPermissions.SETTINGS);
 }
 
-// ============================================================
 // Rank Validation
-// ============================================================
 
 /** Validate rank is valid (0-4: Leader, Officer, Veteran, Member, Recruit) */
 export function validateRank(rank: number): ValidationResult {
@@ -150,9 +144,7 @@ export function validateDemotionRank(currentRank: number, newRank: number): Vali
   return valid();
 }
 
-// ============================================================
 // Member Validation
-// ============================================================
 
 /** Validate player is a team member */
 export function validateIsMember(
@@ -184,9 +176,7 @@ export function validateNotLeader(memberSlot: TeamMemberSlot): ValidationResult 
   return valid();
 }
 
-// ============================================================
 // Invite Validation
-// ============================================================
 
 /** Validate invite is not expired */
 export function validateInviteNotExpired(invite: TeamInviteAccount, nowSeconds: number): ValidationResult {
@@ -204,9 +194,7 @@ export function validateInviteRecipient(invite: TeamInviteAccount, player: Publi
   return valid();
 }
 
-// ============================================================
 // Treasury Validation
-// ============================================================
 
 /** Validate treasury has sufficient funds */
 export function validateTreasuryBalance(team: TeamAccount, amount: BN): ValidationResult {
@@ -242,9 +230,7 @@ export function validateTreasuryRequestAmount(
   return valid();
 }
 
-// ============================================================
 // Team Creation Validation
-// ============================================================
 
 /** Validate team name */
 export function validateTeamName(name: string): ValidationResult {
@@ -270,9 +256,7 @@ export function validateCanCreateTeam(player: PlayerCore): ValidationResult {
   return valid();
 }
 
-// ============================================================
 // Combined Validations
-// ============================================================
 
 /** Validate player can join a team */
 export function validateCanJoinTeam(

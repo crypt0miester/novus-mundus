@@ -47,9 +47,7 @@ import {
   type LogsCallback,
 } from './account';
 
-// ============================================================
 // Game Account Subscriptions
-// ============================================================
 
 /**
  * Subscribe to player account changes.
@@ -350,9 +348,7 @@ export function subscribeToGameEngine(
   );
 }
 
-// ============================================================
 // Program-Wide Subscriptions
-// ============================================================
 
 /**
  * Subscribe to all Novus Mundus program account changes.
@@ -407,9 +403,7 @@ export function subscribeToGameLogs(
   return subscribeToLogs(connection, PROGRAM_ID, callback, options);
 }
 
-// ============================================================
 // Subscription Manager
-// ============================================================
 
 /** Handler callback for a specific AccountKey */
 export type AccountHandler<T = unknown> = (

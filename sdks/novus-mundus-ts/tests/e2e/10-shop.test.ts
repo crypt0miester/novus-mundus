@@ -49,6 +49,7 @@ import {
   type TestContext,
   beforeAllTests,
 } from '../fixtures/setup';
+import { seedMockPythFeed } from '../fixtures/svm';
 import {
   PlayerFactory,
   type TestPlayer,
@@ -74,9 +75,7 @@ import { BuildingType } from '../../src/index';
 
 setDefaultTimeout(120_000);
 
-// ============================================================
 // Helper: Create player with estate + Market (needed for shop purchases)
-// ============================================================
 async function createShopReadyPlayer(
   ctx: TestContext,
   factory: PlayerFactory
@@ -89,9 +88,7 @@ async function createShopReadyPlayer(
   return player;
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Shop System', () => {
   let ctx: TestContext;
@@ -107,9 +104,7 @@ describe('Shop System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Shop Configuration Tests
-  // ============================================================
 
   describe('Shop Configuration', () => {
     it('should initialize shop config (DAO)', async () => {
@@ -152,9 +147,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Shop Item Tests
-  // ============================================================
 
   describe('Shop Items', () => {
     const TEST_ITEM_ID = 5001;
@@ -258,9 +251,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Item Purchase Tests
-  // ============================================================
 
   describe('Item Purchases', () => {
     it('should purchase shop item', async () => {
@@ -324,9 +315,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Bundle Tests
-  // ============================================================
 
   describe('Bundles', () => {
     const TEST_BUNDLE_ID = 7001;
@@ -448,9 +437,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Flash Sale Tests
-  // ============================================================
 
   describe('Flash Sales', () => {
     it('should reject purchase of non-existent flash sale', async () => {
@@ -477,13 +464,16 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Allowed Payment Token Tests
-  // ============================================================
 
   describe('Allowed Payment Tokens', () => {
     const [testTokenMint] = deriveNoviMintPda(); // Use real on-chain NOVI mint (82 bytes)
-    const mockPythFeed = Keypair.generate().publicKey; // Mock price feed
+    // Synthetic Pyth feed: random pubkey + an account at that pubkey
+    // owned by the Pyth program with a minimally-valid `PythPriceAccount`
+    // header. Satisfies `validate_oracle_feed_at_config` (owner check +
+    // magic/version/atype check) without actually publishing a price.
+    const mockPythFeed = Keypair.generate().publicKey;
+    beforeAll(() => seedMockPythFeed(ctx.svm, mockPythFeed));
 
     /** Create a real SPL mint on-chain (82 bytes) so it passes the data_len check */
     async function createRealMint(): Promise<Keypair> {
@@ -698,9 +688,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Payment Tests
-  // ============================================================
 
   describe('Payments', () => {
     it('should accept SOL payment for item', async () => {
@@ -736,9 +724,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Daily Deal Tests
-  // ============================================================
 
   describe('Daily Deals', () => {
     it('should have rotating daily deals', async () => {
@@ -784,9 +770,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Weekly Sale Tests
-  // ============================================================
 
   describe('Weekly Sales', () => {
     it('should create a weekly sale', async () => {
@@ -818,9 +802,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Seasonal Sale Tests
-  // ============================================================
 
   describe('Seasonal Sales', () => {
     it('should create a seasonal sale linked to event', async () => {
@@ -880,9 +862,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // DAO Promotion Tests
-  // ============================================================
 
   describe('DAO Promotions', () => {
     it('should create a DAO promotion', async () => {
@@ -918,9 +898,7 @@ describe('Shop System', () => {
     });
   });
 
-  // ============================================================
   // Shop Analytics Tests
-  // ============================================================
 
   describe('Shop Analytics', () => {
     it('should track item stock changes', async () => {

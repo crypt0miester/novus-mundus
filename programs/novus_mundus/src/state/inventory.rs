@@ -1,5 +1,5 @@
-use pinocchio::pubkey::Pubkey;
-use pinocchio::program_error::ProgramError;
+use pinocchio::Address;
+use pinocchio::error::ProgramError;
 use crate::constants::INVENTORY_SEED;
 
 /// Inventory item stored in player's inventory account
@@ -53,7 +53,7 @@ impl Default for InventoryItem {
 pub struct PlayerInventoryHeader {
     /// Account discriminator
     pub account_key: u8,
-    pub owner: Pubkey,          // 32 bytes - Player's wallet
+    pub owner: Address,          // 32 bytes - Player's wallet
     pub bump: u8,               // 1 byte
     pub _padding: [u8; 3],      // 3 bytes - Alignment
     pub slot_count: u16,        // 2 bytes - Total slots allocated
@@ -89,20 +89,20 @@ impl PlayerInventoryHeader {
 
     /// Derive PDA for player inventory
     /// Seeds: [INVENTORY_SEED, player]
-    pub fn derive_pda(player: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(player: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[INVENTORY_SEED, player.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(player: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[INVENTORY_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 

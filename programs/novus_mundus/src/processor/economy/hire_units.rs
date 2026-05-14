@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -27,7 +27,7 @@ use crate::{
 /// Hire units by consuming locked NOVI
 ///
 /// # Accounts Expected
-/// 1. `[writable]` player - Player account PDA ([b"player", game_engine, owner.key()])
+/// 1. `[writable]` player - Player account PDA ([b"player", game_engine, owner.address()])
 /// 2. `[signer]` owner - Player's wallet (authority)
 /// 3. `[writable]` player_token_account - Player's NOVI token account (ATA)
 /// 4. `[writable]` novi_mint - NOVI token mint
@@ -43,8 +43,8 @@ use crate::{
 /// [1..9]   novi_amount: u64  - Amount of locked NOVI to consume (little-endian)
 /// ```
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
@@ -62,7 +62,7 @@ pub fn process(
     require_owner(player, program_id)?;
 
     // Verify player PDA matches expected derivation
-    let bump = require_pda(player, &[PLAYER_SEED, game_engine.key(), owner.key()], program_id)?;
+    let bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
 
     // 3. Parse Instruction Data
     if data.len() != 9 {
@@ -77,13 +77,13 @@ pub fn process(
 
     // 4. PHASE 1: Validate and calculate (scoped player borrow - dropped before CPI)
     let (units_with_time_bonus, units_to_hire, time_bonus_bps, player_name, current_event, now) = {
-        let mut player_data_ref = player.try_borrow_mut_data()?;
+        let mut player_data_ref = player.try_borrow_mut()?;
         let player_data = unsafe {
             PlayerAccount::load_mut(&mut player_data_ref)
         };
 
         // Verify owner matches
-        if &player_data.owner != owner.key() {
+        if &player_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -93,9 +93,8 @@ pub fn process(
         let required_level = required_level_for_unit(unit_type);
         require_building(estate, building, required_level)?;
 
-        // Load GameEngine for cost configuration
-        let game_engine_data_ref = game_engine.try_borrow_data()?;
-        let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref) };
+        // Validate game_engine account (ownership + PDA + discriminator + bump)
+        let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
         let economic_config = &game_engine_data.economic_config;
 
         // Verify bump matches
@@ -198,8 +197,8 @@ pub fn process(
     // 5. PHASE 2: Burn NOVI tokens (CPI - requires no active borrows on player)
     // Player PDA owns the token account, so player is the burn authority
     let bump_seed = [bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, game_engine.key(), owner.key(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     crate::helpers::burn_tokens(
         player_token_account,
@@ -211,7 +210,7 @@ pub fn process(
 
     // 6. PHASE 3: Re-borrow and update state (after CPI)
     {
-        let mut player_data_ref = player.try_borrow_mut_data()?;
+        let mut player_data_ref = player.try_borrow_mut()?;
         let player_data = unsafe {
             PlayerAccount::load_mut(&mut player_data_ref)
         };
@@ -262,8 +261,7 @@ pub fn process(
         }
 
         // Recalculate networth (re-borrow game_engine for economic_config)
-        let game_engine_data_ref = game_engine.try_borrow_data()?;
-        let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref) };
+        let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
         let economic_config = &game_engine_data.economic_config;
         player_data.networth = calculate_networth(player_data, economic_config)?;
 
@@ -271,21 +269,21 @@ pub fn process(
         if let (Some(event_participation), Some(event)) = (event_participation, event) {
             let mut participation = crate::state::EventParticipation::load_checked_mut(
                 event_participation,
-                game_engine.key(),
+                game_engine.address(),
                 current_event,
-                owner.key(),
+                owner.address(),
                 program_id,
             )?;
 
             let mut event_data = crate::state::EventAccount::load_checked_mut(
                 event,
-                game_engine.key(),
+                game_engine.address(),
                 current_event,
                 program_id,
             )?;
 
-            let player_key = owner.key();
-            let event_key = event.key();
+            let player_key = owner.address();
+            let event_key = event.address();
 
             let _ = update_event_score(
                 &mut *participation,
@@ -302,7 +300,7 @@ pub fn process(
 
     // Emit UnitsHired event
     emit!(UnitsHired {
-        player: *player.key(),
+        player: *player.address(),
         player_name,
         unit_type: unit_type as u8,
         base_quantity: units_to_hire,

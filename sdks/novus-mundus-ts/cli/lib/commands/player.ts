@@ -41,9 +41,7 @@ export async function handlePlayer(ctx: CLIContext, args: ParsedArgs): Promise<v
   }
 }
 
-// ============================================================
 // fund
-// ============================================================
 
 async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const noviFlag = getFlag(args.flags, '--novi');
@@ -110,9 +108,7 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   log.info('  Player must call reservedToLocked to convert to usable NOVI.');
 }
 
-// ============================================================
 // travel
-// ============================================================
 
 async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const cityFlag = getFlag(args.flags, '--city');
@@ -180,9 +176,7 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   log.info(`  Teleported: ${originCity.name} (${originCityId}) → ${destCity.name} (${destCityId})`);
 }
 
-// ============================================================
 // helpers
-// ============================================================
 
 function resolvePlayer(extra: string): PublicKey | null {
   if (!extra) return null;

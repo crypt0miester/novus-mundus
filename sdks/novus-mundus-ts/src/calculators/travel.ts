@@ -6,9 +6,7 @@
 
 import { EARTH_RADIUS_KM } from './constants';
 
-// ============================================================
 // Distance Calculations
-// ============================================================
 
 /**
  * Calculate distance between two coordinates using Haversine formula.
@@ -67,9 +65,7 @@ export function calculateDistanceMeters(
   return calculateDistance(lat1, long1, lat2, long2) * 1000;
 }
 
-// ============================================================
 // Travel Time Calculations
-// ============================================================
 
 /**
  * Calculate travel time in seconds.
@@ -154,9 +150,7 @@ export function applyStablesTravelReduction(
   return Math.max(1, travelTimeSeconds - reduction);
 }
 
-// ============================================================
 // Teleport Cost Calculations
-// ============================================================
 
 /**
  * Calculate teleport cost in NOVI.
@@ -175,9 +169,7 @@ export function calculateTeleportCost(
   return baseCost + distanceBlocks * costPer100km;
 }
 
-// ============================================================
 // Speedup Calculations
-// ============================================================
 
 /**
  * Calculate speedup cost in gems.
@@ -210,9 +202,7 @@ export function calculateTimeReduced(
   return minutesReduced * 60;
 }
 
-// ============================================================
 // Validation Functions
-// ============================================================
 
 /**
  * Check if latitude is valid (-90 to 90).

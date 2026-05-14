@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::{AccountMeta, Instruction, Signer},
-    program::invoke_signed,
+    AccountView,
+    instruction::{InstructionAccount, InstructionView}, cpi::Signer,
+    cpi::invoke_signed,
     ProgramResult,
 };
 
@@ -16,11 +16,11 @@ use crate::DELETE_DISCRIMINATOR;
 ///   3. `[]` Name class account
 ///   4. `[]` Parent name account
 pub struct Delete<'a> {
-    pub owner: &'a AccountInfo,
-    pub name_account: &'a AccountInfo,
-    pub refund_target: &'a AccountInfo,
-    pub name_class: &'a AccountInfo,
-    pub parent_name: &'a AccountInfo,
+    pub owner: &'a AccountView,
+    pub name_account: &'a AccountView,
+    pub refund_target: &'a AccountView,
+    pub name_class: &'a AccountView,
+    pub parent_name: &'a AccountView,
     pub hashed_name: [u8; 32],
 }
 
@@ -32,12 +32,12 @@ impl<'a> Delete<'a> {
 
     #[inline(always)]
     pub fn invoke_signed(&self, signers: &[Signer]) -> ProgramResult {
-        let account_metas: [AccountMeta; 5] = [
-            AccountMeta::readonly_signer(self.owner.key()),
-            AccountMeta::writable(self.name_account.key()),
-            AccountMeta::writable(self.refund_target.key()),
-            AccountMeta::readonly(self.name_class.key()),
-            AccountMeta::readonly(self.parent_name.key()),
+        let account_metas: [InstructionAccount; 5] = [
+            InstructionAccount::readonly_signer(self.owner.address()),
+            InstructionAccount::writable(self.name_account.address()),
+            InstructionAccount::writable(self.refund_target.address()),
+            InstructionAccount::readonly(self.name_class.address()),
+            InstructionAccount::readonly(self.parent_name.address()),
         ];
 
         // discriminator (8) + hashed_name (32) = 40
@@ -45,7 +45,7 @@ impl<'a> Delete<'a> {
         data[0..8].copy_from_slice(&DELETE_DISCRIMINATOR);
         data[8..40].copy_from_slice(&self.hashed_name);
 
-        let instruction = Instruction {
+        let instruction = InstructionView {
             program_id: &crate::ID,
             accounts: &account_metas,
             data: &data,

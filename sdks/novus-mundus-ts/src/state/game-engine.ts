@@ -10,9 +10,7 @@ import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { BufferWriter } from '../utils/serialize';
 
-// ============================================================
 // Nested Types
-// ============================================================
 
 export interface GameCaps {
   maxReservedNoviPerPlayer: BN;
@@ -209,9 +207,7 @@ export interface NoviPurchaseConfig {
   noviConfidenceThresholdBps: number;
 }
 
-// ============================================================
 // Arena PvP Configuration
-// ============================================================
 
 export interface ArenaConfig {
   seasonDuration: BN;
@@ -235,9 +231,7 @@ export interface ArenaConfig {
   minBattlesForDailyReward: number;
 }
 
-// ============================================================
 // Expedition Configuration
-// ============================================================
 
 export interface ExpeditionConfig {
   miningNoviCost: BN[];
@@ -259,9 +253,7 @@ export interface ExpeditionConfig {
   perfectScoreThreshold: number;
 }
 
-// ============================================================
 // Dungeon Configuration
-// ============================================================
 
 export interface DungeonConfig {
   resumeGemCost: BN;
@@ -287,9 +279,7 @@ export interface DungeonConfig {
   darknessEnemyBuffStartFloor: number;
 }
 
-// ============================================================
 // Castle Configuration
-// ============================================================
 
 export interface CastleConfig {
   contestDuration: BN;
@@ -312,9 +302,7 @@ export interface CastleConfig {
   maxArmoryLevel: number;
 }
 
-// ============================================================
 // Combat Configuration
-// ============================================================
 
 export interface CombatConfig {
   damagePerSiegeWeapon: BN;
@@ -336,9 +324,7 @@ export interface CombatConfig {
   maxEncountersPerCity: number;
 }
 
-// ============================================================
 // Update Flags (bitmask for update_game_config instruction)
-// ============================================================
 
 export const UPDATE_FLAGS = {
   CAPS: 1 << 0,
@@ -355,9 +341,7 @@ export const UPDATE_FLAGS = {
   COMBAT: 1 << 11,
 } as const;
 
-// ============================================================
 // Main GameEngine Interface
-// ============================================================
 
 export interface GameEngine {
   kingdomId: number;
@@ -393,9 +377,7 @@ export interface GameEngine {
   combatConfig: CombatConfig;
 }
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 function deserializeRallyCaps(reader: BufferReader): RallyCaps {
   const maxActiveRalliesJoined = reader.readU8();
@@ -981,9 +963,7 @@ function deserializeCombatConfig(reader: BufferReader): CombatConfig {
   };
 }
 
-// ============================================================
 // Config Serializers (for update_game_config instruction)
-// ============================================================
 
 /** Serialize GameCaps to raw #[repr(C)] bytes (64 bytes) */
 export function serializeGameCaps(config: GameCaps): Buffer {

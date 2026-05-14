@@ -1,12 +1,12 @@
 /// Loot events - rewards from encounters and activities
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when loot is claimed from an encounter
 pub struct LootClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Cash earned
@@ -38,9 +38,9 @@ impl Event for LootClaimed {
 /// Emitted when encounter spawns (for indexers to track)
 pub struct EncounterSpawned {
     /// Encounter account pubkey
-    pub encounter: Pubkey,
+    pub encounter: Address,
     /// City where spawned
-    pub city: Pubkey,
+    pub city: Address,
     /// Encounter type
     pub encounter_type: u8,
     /// Difficulty/level

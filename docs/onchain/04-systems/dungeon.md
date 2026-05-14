@@ -495,7 +495,7 @@ Higher score = better rank
 struct DungeonTemplate {
     dungeon_id: u16,
     name: [u8; 32],
-    theme: u8,              // 0=Crypts, 1=Caverns, 2=Abyss, 3=Forge
+    theme: u8,              // 0=RadiantWeakness, 1=FastMobs, 2=DarknessVulnerable, 3=ArmoredMobs
 
     // Structure
     total_floors: u8,

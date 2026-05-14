@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// - [0..8] speed_up_seconds: u64 (0 = complete all remaining)
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    _program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -61,21 +61,21 @@ pub fn process(
     ]);
 
     // 4. Load accounts
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
+    let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
-    let template_data = research_template.try_borrow_data()?;
+    let template_data = research_template.try_borrow()?;
     let template = unsafe { ResearchTemplate::load(&template_data) };
 
     // 5. Verify ownership
-    if !player.is_owner(player_owner.key()) {
+    if !player.is_owner(player_owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
-    if &progress.player != player_owner.key() {
+    if &progress.player != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -126,7 +126,7 @@ pub fn process(
 
     // 13. Emit ResearchSpeedup event
     emit!(ResearchSpeedup {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         research_id: progress.current_research as u16,
         speedup_seconds: actual_speed_up,

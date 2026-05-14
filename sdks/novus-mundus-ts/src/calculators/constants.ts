@@ -27,9 +27,7 @@ export {
   OPERATIVE_UNIT_3_POWER as OP3_POWER_COST,
 } from '../constants';
 
-// ============================================================
 // Basis Points Helpers
-// ============================================================
 
 /** 100% in basis points */
 export const BPS_100 = 10000;
@@ -67,9 +65,7 @@ export function mulDiv(value: number, numerator: number, denominator: number): n
   return Math.floor((value * numerator) / denominator);
 }
 
-// ============================================================
 // NOVI Consumption Constants
-// ============================================================
 
 /** Base multiplier for NOVI -> Power conversion (13.75x) */
 export const NOVI_BASE_MULTIPLIER = 13.75;

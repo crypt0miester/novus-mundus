@@ -7,9 +7,7 @@
 
 import { ALLDOMAINS_API } from "./constants";
 
-// ---------------------------------------------------------------------------
 // Filters
-// ---------------------------------------------------------------------------
 
 /** Web2 TLDs — not usable for on-chain player names. */
 const WEB2_TLDS = new Set([".id", ".com", ".xyz"]);
@@ -39,9 +37,7 @@ export function requiresCosigner(tld: string): boolean {
   return normalizeTld(tld) in COSIGNER_TLD_SLUGS;
 }
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export interface DomainCheckResult {
   tld: string;
@@ -85,9 +81,7 @@ export interface MainDomainResult {
   nameAccount: string | null;
 }
 
-// ---------------------------------------------------------------------------
 // API calls
-// ---------------------------------------------------------------------------
 
 /**
  * Check if a domain is available and get its price.

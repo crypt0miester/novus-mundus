@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -29,8 +29,8 @@ use crate::{
 /// - [0..2] template_id: u16 (little-endian)
 /// - [2..6] new_supply_cap: u32 (little-endian)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -57,26 +57,26 @@ pub fn process(
     ]);
 
     // 4. Verify DAO authority
-    let game_engine_data = game_engine.try_borrow_data()?;
-    let ge = unsafe { GameEngine::load(&game_engine_data) };
-
-    if dao_authority.key() != &ge.authority {
-        return Err(GameError::DaoRequired.into());
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    {
+        let ge = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        if dao_authority.address() != &ge.authority {
+            return Err(GameError::DaoRequired.into());
+        }
     }
-    drop(game_engine_data);
 
     // 5. Verify template PDA
     let template_id_bytes = template_id.to_le_bytes();
-    let (expected_pda, _) = find_program_address(
+    let (expected_pda, _) = Address::find_program_address(
         &[HERO_TEMPLATE_SEED, &template_id_bytes],
         program_id,
     );
-    if hero_template.key() != &expected_pda {
+    if hero_template.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 6. Load template and validate
-    let template_data = hero_template.try_borrow_data()?;
+    let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     if template.template_id != template_id {
@@ -92,7 +92,7 @@ pub fn process(
     }
 
     // 8. Update supply cap
-    let mut template_data = hero_template.try_borrow_mut_data()?;
+    let mut template_data = hero_template.try_borrow_mut()?;
     let template_mut = unsafe { HeroTemplate::load_mut(&mut template_data) };
     template_mut.supply_cap = new_supply_cap;
     drop(template_data);

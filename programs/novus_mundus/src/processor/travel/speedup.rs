@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -38,8 +38,8 @@ pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
 /// 1. `[SIGNER]` owner - Player's wallet
 /// 2. `[]` game_engine - For gem cost configuration
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -73,7 +73,7 @@ pub fn process(
     // 4. Load Accounts (kingdom-scoped)
 
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
 
     // 6. Validate Currently Traveling
 
@@ -151,7 +151,7 @@ pub fn process(
     let is_intercity = player_data.travel_type == TravelType::Intercity as u8;
 
     emit!(TravelSpeedup {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         is_intercity,
         speedup_tier,

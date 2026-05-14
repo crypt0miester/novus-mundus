@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -30,8 +30,8 @@ use crate::{
 /// - motd_len: u8 (1 byte) - Length of MOTD
 /// - motd: [u8; N] - MOTD content (up to 32 bytes)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -77,7 +77,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let member = PlayerAccount::load_checked_by_key(member_account, program_id)?;
-    if &member.owner != member_owner.key() {
+    if &member.owner != member_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -100,24 +100,24 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if member.team == NULL_PUBKEY || &member.team != team_account.key() {
+    if member.team == NULL_PUBKEY || &member.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 5a. Verify Member Slot and Check Permission
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if member_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if member_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(member_slot_account, program_id)?;
 
     {
-        let slot_data = member_slot_account.try_borrow_data()?;
+        let slot_data = member_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *member_account.key() {
+        if slot.player != *member_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -142,9 +142,9 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     emit!(MotdUpdated {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        updated_by: *member_account.key(),
+        updated_by: *member_account.address(),
         timestamp: now,
     });
 

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -36,8 +36,8 @@ use crate::{
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - slot_index: u16 (2 bytes) - Member's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -75,7 +75,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -98,24 +98,24 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if player.team == NULL_PUBKEY || &player.team != team_account.key() {
+    if player.team == NULL_PUBKEY || &player.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify and Load Member Slot
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if member_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if member_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(member_slot_account, program_id)?;
 
-    let mut slot_data = member_slot_account.try_borrow_mut_data()?;
+    let mut slot_data = member_slot_account.try_borrow_mut()?;
     let slot = unsafe { TeamMemberSlot::load_mut(&mut slot_data) };
 
     // Verify slot belongs to this player
-    if slot.player != *player_account.key() {
+    if slot.player != *player_account.address() {
         return Err(GameError::NotSlotOwner.into());
     }
 
@@ -167,9 +167,9 @@ pub fn process(
     // 14. Emit Event
 
     emit!(TreasuryWithdraw {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        withdrawer: *player_account.key(),
+        withdrawer: *player_account.address(),
         amount,
         new_balance: team.treasury,
         timestamp: now,

@@ -1,12 +1,12 @@
 /// Shop events - purchases and transactions
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a shop item is purchased
 pub struct ItemPurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Item ID
@@ -40,7 +40,7 @@ impl Event for ItemPurchased {
 /// Emitted when a bundle is purchased
 pub struct BundlePurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Bundle ID
@@ -71,7 +71,7 @@ impl Event for BundlePurchased {
 /// Emitted when a flash sale item is purchased
 pub struct FlashSalePurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Sale ID
@@ -105,9 +105,9 @@ impl Event for FlashSalePurchased {
 /// Emitted when NOVI is purchased from the shop
 pub struct NoviPurchased {
     /// Buyer wallet pubkey
-    pub buyer: Pubkey,
+    pub buyer: Address,
     /// User account pubkey
-    pub user: Pubkey,
+    pub user: Address,
     /// Package index purchased (0-4)
     pub package_index: u8,
     /// Base NOVI amount (before bonuses, with 1 decimal)

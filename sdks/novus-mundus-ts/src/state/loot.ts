@@ -9,9 +9,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Loot Source Type
-// ============================================================
 
 export enum LootSourceType {
   Encounter = 0,
@@ -19,9 +17,7 @@ export enum LootSourceType {
   Rally = 2,
 }
 
-// ============================================================
 // Loot Account Interface
-// ============================================================
 
 export interface LootAccount {
   // Identity & Security
@@ -60,9 +56,7 @@ export const LOOT_ACCOUNT_SIZE = 200;
 /** Loot expiration duration (30 days in seconds) */
 export const LOOT_EXPIRATION_DURATION = 30 * 86400;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize LootAccount from raw bytes */
 export function deserializeLoot(data: Uint8Array | Buffer): LootAccount {
@@ -136,9 +130,7 @@ export function parseLoot(accountInfo: AccountInfo<Buffer>): LootAccount | null 
   return deserializeLoot(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if loot has any rewards */
 export function lootHasRewards(loot: LootAccount): boolean {

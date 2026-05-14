@@ -27,9 +27,7 @@ import {
   combine,
 } from './common';
 
-// ============================================================
 // Location Validation
-// ============================================================
 
 /** Validate player is not currently traveling */
 export function validateNotTraveling(player: PlayerCore): ValidationResult {
@@ -78,9 +76,7 @@ export function validateAtLocation(
   return valid();
 }
 
-// ============================================================
 // Subscription Validation
-// ============================================================
 
 /** Validate player has an active subscription */
 export function validateSubscriptionActive(player: PlayerCore, nowSeconds: number): ValidationResult {
@@ -103,9 +99,7 @@ export function validateMinimumTier(
   return valid();
 }
 
-// ============================================================
 // Team Validation
-// ============================================================
 
 /** Validate player is in a team */
 export function validateInTeam(player: PlayerCore): ValidationResult {
@@ -134,9 +128,7 @@ export function validateInSpecificTeam(player: PlayerCore, teamPubkey: PublicKey
   return valid();
 }
 
-// ============================================================
 // Resource Validation
-// ============================================================
 
 /** Validate player has enough cash on hand */
 export function validateHasCash(player: PlayerCore, amount: BN): ValidationResult {
@@ -211,9 +203,7 @@ export function validateHasMaterials(
   return valid();
 }
 
-// ============================================================
 // Units Validation
-// ============================================================
 
 /** Validate player has minimum defensive units */
 export function validateMinDefensiveUnits(player: PlayerCore, minUnits: BN): ValidationResult {
@@ -311,9 +301,7 @@ export function validateHasOperativeUnit(
   return valid();
 }
 
-// ============================================================
 // Stamina Validation
-// ============================================================
 
 /** Validate player has enough stamina */
 export function validateHasStamina(player: PlayerCore, amount: BN): ValidationResult {
@@ -323,9 +311,7 @@ export function validateHasStamina(player: PlayerCore, amount: BN): ValidationRe
   return valid();
 }
 
-// ============================================================
 // Hero Validation
-// ============================================================
 
 /** Validate player is not meditating */
 export function validateNotMeditating(player: PlayerCore): ValidationResult {
@@ -354,9 +340,7 @@ export function validateDefensiveHeroAssigned(player: PlayerCore): ValidationRes
   return valid();
 }
 
-// ============================================================
 // Level Validation
-// ============================================================
 
 /** Validate player has minimum level */
 export function validateMinLevel(player: PlayerCore, minLevel: number): ValidationResult {
@@ -366,9 +350,7 @@ export function validateMinLevel(player: PlayerCore, minLevel: number): Validati
   return valid();
 }
 
-// ============================================================
 // Protection Validation
-// ============================================================
 
 /** Validate player's new player protection has expired */
 export function validateProtectionExpired(player: PlayerCore, nowSeconds: number): ValidationResult {
@@ -395,9 +377,7 @@ export function validateNotFlagged(player: PlayerCore): ValidationResult {
   return valid();
 }
 
-// ============================================================
 // Consumable Validation
-// ============================================================
 
 /** Validate player has stamina potions */
 export function validateHasStaminaPotions(player: PlayerCore, amount: number): ValidationResult {
@@ -431,9 +411,7 @@ export function validateHasRallyHorns(player: PlayerCore, amount: number): Valid
   return valid();
 }
 
-// ============================================================
 // Combined Validations
-// ============================================================
 
 /** Validate player can perform basic actions (not traveling) */
 export function validateCanAct(player: PlayerCore, nowSeconds: number): ValidationResult {

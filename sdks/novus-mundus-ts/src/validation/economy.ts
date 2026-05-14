@@ -22,9 +22,7 @@ import {
   validateHasLockedNovi,
 } from './player';
 
-// ============================================================
 // Constants
-// ============================================================
 
 /** Maximum transfer amount (u64 max) */
 const MAX_TRANSFER_AMOUNT = new BN('18446744073709551615');
@@ -35,9 +33,7 @@ const MIN_TRANSFER_AMOUNT = new BN(1);
 /** Maximum units that can be hired at once */
 const MAX_HIRE_BATCH = 10000;
 
-// ============================================================
 // Transfer Validation
-// ============================================================
 
 /** Validate transfer amount is within valid range */
 export function validateTransferAmount(amount: BN): ValidationResult {
@@ -58,9 +54,7 @@ export function validateCanTransferCash(player: PlayerCore, amount: BN): Validat
   );
 }
 
-// ============================================================
 // Hiring Validation
-// ============================================================
 
 /** Validate unit type is valid for hiring (0-5) */
 export function validateHireableUnitType(unitType: number): ValidationResult {
@@ -99,9 +93,7 @@ export function validateCanHireUnits(
   );
 }
 
-// ============================================================
 // Purchase Validation
-// ============================================================
 
 /** Validate a shop purchase quantity */
 export function validatePurchaseQuantity(quantity: number, maxQuantity: number): ValidationResult {
@@ -128,9 +120,7 @@ export function validateCanAffordPurchase(
   }
 }
 
-// ============================================================
 // Speedup Validation
-// ============================================================
 
 /** Validate speedup amount */
 export function validateSpeedupAmount(speedupSeconds: number): ValidationResult {
@@ -152,9 +142,7 @@ export function validateCanAffordSpeedup(
   return validateHasGems(player, speedupCost);
 }
 
-// ============================================================
 // Stake/Lock Validation
-// ============================================================
 
 /** Validate token lock amount */
 export function validateLockAmount(amount: BN): ValidationResult {
@@ -169,9 +157,7 @@ export function validateUnlockAmount(player: PlayerCore, amount: BN): Validation
   );
 }
 
-// ============================================================
 // Material Validation
-// ============================================================
 
 /** Validate player has required crafting materials */
 export function validateHasCraftingMaterials(
@@ -205,9 +191,7 @@ export function validateHasCraftingMaterials(
   return results.length > 0 ? combine(...results) : valid();
 }
 
-// ============================================================
 // Daily Transfer Limits
-// ============================================================
 
 /** Validate player hasn't exceeded daily transfer limit */
 export function validateDailyTransferLimit(

@@ -31,9 +31,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
-// ============================================================
 // Create Template (Admin)
-// ============================================================
 
 export interface CreateDungeonTemplateAccounts {
   /** DAO authority (signer, pays for account) */
@@ -45,7 +43,7 @@ export interface CreateDungeonTemplateAccounts {
 export interface CreateDungeonTemplateParams {
   /** Template ID (dungeon_id) */
   templateId: number;
-  /** Theme (0=Crypts, 1=Caverns, 2=Abyss, 3=Forge) */
+  /** Theme (0=RadiantWeakness, 1=FastMobs, 2=DarknessVulnerable, 3=ArmoredMobs) */
   theme?: number;
   /** Total floors (1-10) */
   totalFloors: number;
@@ -185,9 +183,7 @@ export function createCreateDungeonTemplateInstruction(
   });
 }
 
-// ============================================================
 // Create Leaderboard (Admin)
-// ============================================================
 
 export interface CreateLeaderboardAccounts {
   /** Payer for account creation */
@@ -243,9 +239,7 @@ export function createCreateLeaderboardInstruction(
   });
 }
 
-// ============================================================
 // Enter Dungeon
-// ============================================================
 
 export interface EnterDungeonAccounts {
   /** Player's wallet (signer) */
@@ -261,7 +255,7 @@ export interface EnterDungeonParams {
   templateId: number;
   /** First room type (provided by backend) */
   firstRoomType: number;
-  /** Hero specialization (0=Warrior, 1=Guardian, 2=Scout, 3=Mystic) */
+  /** Hero specialization (0=Warrior, 1=Guardian, 2=Scout, 3=Tactician) */
   heroSpecialization: number;
 }
 
@@ -318,15 +312,15 @@ export function createEnterDungeonInstruction(
   });
 }
 
-// ============================================================
 // Attack Enemy
-// ============================================================
 
 export interface AttackAccounts {
   /** Player's wallet (signer) */
   owner: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
+  /** Game authority (signer) — authenticates backend RNG flags */
+  gameAuthority: PublicKey;
 }
 
 export interface AttackParams {
@@ -354,16 +348,20 @@ export function createAttackInstruction(
   const [template] = deriveDungeonTemplatePda(params.templateId);
   const [dungeonRun] = deriveDungeonRunPda(player);
 
-  // Rust account order:
+  // Rust account order (process_attacks):
   // 0. owner (signer)
-  // 1. player (writable)
-  // 2. dungeon_template (read)
-  // 3. dungeon_run (writable)
+  // 1. game_authority (signer)
+  // 2. player_account (writable)
+  // 3. dungeon_template_account
+  // 4. dungeon_run_account (writable)
+  // 5. game_engine_account
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameAuthority, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: false },
     { pubkey: dungeonRun, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: next_room_type (u8), double_strike (u8), crit (u8)
@@ -381,15 +379,15 @@ export function createAttackInstruction(
   });
 }
 
-// ============================================================
 // Attack Multi
-// ============================================================
 
 export interface AttackMultiAccounts {
   /** Player's wallet (signer) */
   owner: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
+  /** Game authority (signer) — authenticates backend RNG flags */
+  gameAuthority: PublicKey;
 }
 
 export interface AttackMultiParams {
@@ -419,12 +417,14 @@ export function createAttackMultiInstruction(
   const [template] = deriveDungeonTemplatePda(params.templateId);
   const [dungeonRun] = deriveDungeonRunPda(player);
 
-  // Same accounts as attack
+  // Same accounts as single attack (see createAttackInstruction)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameAuthority, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: false },
     { pubkey: dungeonRun, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: attack_count (u8), next_room_type (u8), double_strike (u8), crit (u8)
@@ -443,9 +443,7 @@ export function createAttackMultiInstruction(
   });
 }
 
-// ============================================================
 // Interact
-// ============================================================
 
 export interface InteractAccounts {
   /** Player's wallet (signer) */
@@ -512,9 +510,7 @@ export function createInteractInstruction(
   });
 }
 
-// ============================================================
 // Choose Relic
-// ============================================================
 
 export interface ChooseRelicAccounts {
   /** Player's wallet (signer) */
@@ -583,9 +579,7 @@ export function createChooseRelicInstruction(
   });
 }
 
-// ============================================================
 // Flee
-// ============================================================
 
 export interface FleeAccounts {
   /** Player's wallet (signer) */
@@ -637,9 +631,7 @@ export function createFleeInstruction(
   });
 }
 
-// ============================================================
 // Claim
-// ============================================================
 
 export interface ClaimDungeonAccounts {
   /** Player's wallet (signer) */
@@ -709,9 +701,7 @@ export function createClaimDungeonInstruction(
   });
 }
 
-// ============================================================
 // Resume
-// ============================================================
 
 export interface ResumeAccounts {
   /** Player's wallet (signer) */
@@ -766,9 +756,7 @@ export function createResumeInstruction(
   });
 }
 
-// ============================================================
 // Claim Leaderboard Prize
-// ============================================================
 
 export interface ClaimLeaderboardPrizeAccounts {
   /** Player's wallet (signer) */

@@ -1,22 +1,16 @@
 /// Progression events - daily rewards, subscriptions, achievements
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when daily reward is claimed
 pub struct DailyRewardClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
-    /// Day number in current streak
-    pub day: u16,
     /// Cash rewarded
     pub cash: u64,
-    /// Gems rewarded
-    pub gems: u32,
-    /// Other rewards (encoded)
-    pub bonus_type: u8,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -28,10 +22,7 @@ impl Event for DailyRewardClaimed {
         let mut offset = 0;
         offset += self.player.pack(&mut buf[offset..]);
         offset += self.player_name.pack(&mut buf[offset..]);
-        offset += self.day.pack(&mut buf[offset..]);
         offset += self.cash.pack(&mut buf[offset..]);
-        offset += self.gems.pack(&mut buf[offset..]);
-        offset += self.bonus_type.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
     }
@@ -40,7 +31,7 @@ impl Event for DailyRewardClaimed {
 /// Emitted when a subscription is purchased
 pub struct SubscriptionPurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Subscription tier
@@ -74,7 +65,7 @@ impl Event for SubscriptionPurchased {
 /// Emitted when player gains XP
 pub struct XpGained {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// XP amount gained
@@ -105,7 +96,7 @@ impl Event for XpGained {
 /// Emitted when player levels up
 pub struct PlayerLeveledUp {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Previous level
@@ -133,11 +124,11 @@ impl Event for PlayerLeveledUp {
 /// Emitted when a game event prize is claimed
 pub struct EventPrizeClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Event account pubkey
-    pub event: Pubkey,
+    pub event: Address,
     /// Player's rank in event
     pub rank: u16,
     /// Prize amount (NOVI)
@@ -164,7 +155,7 @@ impl Event for EventPrizeClaimed {
 /// Emitted when a subscription tier is updated (upgraded/extended)
 pub struct SubscriptionTierUpdated {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Previous tier
@@ -195,7 +186,7 @@ impl Event for SubscriptionTierUpdated {
 /// Emitted when a subscription expires and is downgraded
 pub struct SubscriptionExpired {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Previous tier that expired

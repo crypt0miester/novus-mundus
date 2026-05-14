@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -35,8 +35,8 @@ use crate::{
 ///   - 7: prerequisite_level
 /// - [1..9] new_value: u64 (or appropriate size for field)
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -49,10 +49,10 @@ pub fn process(
     require_writable(research_template)?;
 
     // 3. Verify DAO authority
-    let game_engine_data = game_engine.try_borrow_data()?;
-    let game_engine_state = unsafe { GameEngine::load(&game_engine_data) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine_state = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
-    if dao_authority.key() != &game_engine_state.authority {
+    if dao_authority.address() != &game_engine_state.authority {
         return Err(GameError::DaoRequired.into());
     }
 
@@ -64,7 +64,7 @@ pub fn process(
     let field_to_update = instruction_data[0];
 
     // 5. Load template
-    let mut template_data = research_template.try_borrow_mut_data()?;
+    let mut template_data = research_template.try_borrow_mut()?;
     let template = unsafe { ResearchTemplate::load_mut(&mut template_data) };
 
     // 6. Update the specified field

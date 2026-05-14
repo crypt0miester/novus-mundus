@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 
 use crate::{
@@ -28,8 +28,8 @@ use crate::{
 /// - tier_index: u8 (0-3)
 /// - Updated SubscriptionTier struct (serialized)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
@@ -42,7 +42,7 @@ pub fn process(
     require_writable(game_engine)?;
 
     // 3. Load game engine (before PDA check so we can read kingdom_id)
-    let mut game_engine_data_check = game_engine.try_borrow_mut_data()?;
+    let mut game_engine_data_check = game_engine.try_borrow_mut()?;
     let game_engine_data = unsafe {
         GameEngine::load_mut(&mut game_engine_data_check)
     };
@@ -51,7 +51,7 @@ pub fn process(
     let _bump = require_pda(game_engine, &[GAME_ENGINE_SEED, &kingdom_id_bytes], program_id)?;
 
     // 4. Verify DAO authority
-    if authority.key() != &game_engine_data.authority {
+    if authority.address() != &game_engine_data.authority {
         return Err(GameError::DaoRequired.into());
     }
 

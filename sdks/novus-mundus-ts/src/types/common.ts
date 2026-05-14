@@ -7,16 +7,12 @@
 import type { PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
 
-// ============================================================
 // Null Pubkey Constant
-// ============================================================
 
 /** 32-byte null public key (all zeros) */
 export const NULL_PUBKEY_BYTES = new Uint8Array(32);
 
-// ============================================================
 // Account Info Types
-// ============================================================
 
 /** Generic account with pubkey */
 export interface AccountWithPubkey<T> {
@@ -30,9 +26,7 @@ export type MultiAccountResult<T> = Map<string, T>;
 /** Ordered result of fetching multiple accounts */
 export type OrderedAccountResult<T> = (T | null)[];
 
-// ============================================================
 // Coordinates
-// ============================================================
 
 export interface Coordinates {
   latitude: number;
@@ -43,9 +37,7 @@ export interface CoordinatesWithCity extends Coordinates {
   cityId: number;
 }
 
-// ============================================================
 // Unit Counts
-// ============================================================
 
 export interface DefensiveUnits {
   tier1: BN;
@@ -64,9 +56,7 @@ export interface AllUnits {
   operative: OperativeUnits;
 }
 
-// ============================================================
 // Resources
-// ============================================================
 
 export interface Resources {
   lockedNovi: BN;
@@ -79,9 +69,7 @@ export interface Resources {
   fragments: BN;
 }
 
-// ============================================================
 // Crafted Equipment
-// ============================================================
 
 export interface CraftedEquipment {
   meleeWeapon: number;
@@ -90,9 +78,7 @@ export interface CraftedEquipment {
   armor: number;
 }
 
-// ============================================================
 // Hero Stats
-// ============================================================
 
 export interface HeroStats {
   level: number;
@@ -104,18 +90,14 @@ export interface HeroStats {
   economyBuff: number;
 }
 
-// ============================================================
 // Time Ranges
-// ============================================================
 
 export interface TimeRange {
   start: BN;
   end: BN;
 }
 
-// ============================================================
 // Pagination
-// ============================================================
 
 export interface PaginationParams {
   offset?: number;
@@ -128,9 +110,7 @@ export interface PaginatedResult<T> {
   hasMore: boolean;
 }
 
-// ============================================================
 // Eligibility Result
-// ============================================================
 
 export interface EligibilityResult {
   eligible: boolean;
@@ -138,9 +118,7 @@ export interface EligibilityResult {
   errorCode?: number;
 }
 
-// ============================================================
 // Transaction Result
-// ============================================================
 
 export interface TransactionResult {
   signature: string;
@@ -149,9 +127,7 @@ export interface TransactionResult {
   error?: string;
 }
 
-// ============================================================
 // Price Info
-// ============================================================
 
 export interface PriceInfo {
   price: BN;
@@ -160,9 +136,7 @@ export interface PriceInfo {
   timestamp: number;
 }
 
-// ============================================================
 // Leaderboard Entry
-// ============================================================
 
 export interface LeaderboardEntry<T> {
   rank: number;
@@ -171,9 +145,7 @@ export interface LeaderboardEntry<T> {
   score: BN;
 }
 
-// ============================================================
 // Callback Types
-// ============================================================
 
 export type AccountChangeCallback<T> = (
   previous: T | null,
@@ -183,9 +155,7 @@ export type AccountChangeCallback<T> = (
 
 export type ErrorCallback = (error: Error) => void;
 
-// ============================================================
 // Type Guards
-// ============================================================
 
 /** Check if a value is a BN instance */
 export function isBN(value: unknown): value is BN {

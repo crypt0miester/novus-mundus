@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -45,8 +45,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -62,11 +62,11 @@ pub fn process(
     require_owner(crafted_equipment, program_id)?;
 
     // 3. Load Player Account (read-only for ownership check)
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data_ref) };
 
     // Verify ownership
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -82,11 +82,11 @@ pub fn process(
     drop(player_data_ref);
 
     // 5. Load Crafted Equipment Account
-    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
+    let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;
     let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
 
     // Verify ownership
-    if crafted.owner != *owner.key() {
+    if crafted.owner != *owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -132,7 +132,7 @@ pub fn process(
 
     // Emit strike event
     emit!(CraftStrike {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         stage: crafted.current_stage,
         quality: (precision / 2000) as u8, // Map 0-10000 precision to 0-5 quality
@@ -199,7 +199,7 @@ pub fn process(
 
         // Emit craft completed event before clearing state
         emit!(CraftCompleted {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name,
             item_type: equipment_type as u8,
             quality: quality_tier as u8,
@@ -216,7 +216,7 @@ pub fn process(
 
         // Grant mastery XP to Forge building
         if final_mastery_xp > 0 {
-            let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+            let mut estate_data_ref = estate_account.try_borrow_mut()?;
             let estate = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
             if let Some(forge) = estate.find_building_mut(BuildingType::Forge) {

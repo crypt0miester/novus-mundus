@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -38,8 +38,8 @@ use crate::{
 /// - [] hero_collection: Hero collection PDA
 /// - [] system_program: System program
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -63,16 +63,16 @@ pub fn process(
 
     // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 4. Load dungeon run using load_checked (PDA derived from player_account)
-    let (_, run_bump) = DungeonRun::derive_pda(player_account.key());
-    let run = DungeonRun::load_checked(dungeon_run_account, player_account.key(), program_id)?;
+    let (_, run_bump) = DungeonRun::derive_pda(player_account.address());
+    let run = DungeonRun::load_checked(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
-    if &run.player != player_account.key() {
+    if &run.player != player_account.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -105,7 +105,7 @@ pub fn process(
     let stored_hero_mint = run.hero_mint;
 
     // Verify hero_mint matches the stored one
-    if hero_mint.key() != &stored_hero_mint {
+    if hero_mint.address() != &stored_hero_mint {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -115,12 +115,12 @@ pub fn process(
 
     // 7. Transfer hero back from DungeonRun PDA to owner using MPL Core
     let run_bump_seed = [run_bump];
-    let run_seeds = pinocchio::seeds!(
+    let run_seeds = crate::seeds!(
         DUNGEON_RUN_SEED,
-        player_account.key().as_ref(),
+        player_account.address(),
         &run_bump_seed
     );
-    let run_signer = pinocchio::instruction::Signer::from(&run_seeds);
+    let run_signer = pinocchio::cpi::Signer::from(&run_seeds);
 
     p_core::instructions::TransferV1 {
         asset: hero_mint,
@@ -137,7 +137,7 @@ pub fn process(
 
     // 9. Emit event
     emit!(DungeonFled {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         dungeon_id,
         floor: current_floor,

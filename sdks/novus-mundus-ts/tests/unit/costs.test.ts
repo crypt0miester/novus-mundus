@@ -25,6 +25,7 @@ import {
 
 import {
   PHI,
+  PHI_SQUARED,
   GOLDEN_ROOT,
   NOVI_BASE_MULTIPLIER,
   NOVI_GOLDEN_MULTIPLIER,
@@ -32,39 +33,37 @@ import {
 
 import { TimeOfDay } from '../../src/calculators/time';
 
-// ============================================================
 // Upgrade Cost Tests
-// ============================================================
 
 describe('calculateUpgradeCost', () => {
-  it('should return baseCost at level 1 (scaling^0 = 1)', () => {
-    expect(calculateUpgradeCost(100, 1)).toBe(100);
+  it('should return baseCost at level 0 (scaling^0 = 1)', () => {
+    expect(calculateUpgradeCost(100, 0)).toBe(100);
   });
 
-  it('should scale by PHI at level 2', () => {
+  it('should scale by PHI_SQUARED at level 1', () => {
+    const cost = calculateUpgradeCost(100, 1);
+    expect(cost).toBe(Math.floor(100 * PHI_SQUARED));
+  });
+
+  it('should scale by PHI_SQUARED^2 at level 2 (iterated floor)', () => {
     const cost = calculateUpgradeCost(100, 2);
-    expect(cost).toBe(Math.floor(100 * PHI));
-  });
-
-  it('should scale by PHI^2 at level 3', () => {
-    const cost = calculateUpgradeCost(100, 3);
-    expect(cost).toBe(Math.floor(100 * Math.pow(PHI, 2)));
+    expect(cost).toBe(Math.floor(Math.floor(100 * PHI_SQUARED) * PHI_SQUARED));
   });
 
   it('should increase with each level', () => {
+    const cost0 = calculateUpgradeCost(100, 0);
     const cost1 = calculateUpgradeCost(100, 1);
     const cost2 = calculateUpgradeCost(100, 2);
-    const cost3 = calculateUpgradeCost(100, 3);
     const cost5 = calculateUpgradeCost(100, 5);
+    expect(cost1).toBeGreaterThan(cost0);
     expect(cost2).toBeGreaterThan(cost1);
-    expect(cost3).toBeGreaterThan(cost2);
-    expect(cost5).toBeGreaterThan(cost3);
+    expect(cost5).toBeGreaterThan(cost2);
   });
 
   it('should accept a custom scaling factor', () => {
+    // scaling=2.0, level=3 → 3 iterations: 100 → 200 → 400 → 800
     const cost = calculateUpgradeCost(100, 3, 2.0);
-    // 100 * 2^(3-1) = 100 * 4 = 400
-    expect(cost).toBe(400);
+    expect(cost).toBe(800);
   });
 
   it('should handle baseCost of 0', () => {
@@ -78,19 +77,17 @@ describe('calculateUpgradeCost', () => {
   });
 
   it('should floor the result', () => {
-    // PHI is irrational, result must be floored
-    const cost = calculateUpgradeCost(1, 2);
-    expect(cost).toBe(Math.floor(PHI));
+    // PHI_SQUARED is irrational, result must be floored
+    const cost = calculateUpgradeCost(1, 1);
+    expect(cost).toBe(Math.floor(PHI_SQUARED));
     expect(Number.isInteger(cost)).toBe(true);
   });
 });
 
-// ============================================================
 // Cumulative Upgrade Cost Tests
-// ============================================================
 
 describe('calculateCumulativeUpgradeCost', () => {
-  it('should return 0 for targetLevel 1 (no upgrades needed)', () => {
+  it('should return 0 for targetLevel 1 (already at baseline)', () => {
     expect(calculateCumulativeUpgradeCost(100, 1)).toBe(0);
   });
 
@@ -121,9 +118,9 @@ describe('calculateCumulativeUpgradeCost', () => {
   });
 
   it('should accept custom scaling factor', () => {
-    // With scaling=2: costs are 100, 200, 400 for levels 1,2,3
-    // Cumulative to level 4 = 100 + 200 + 400 = 700
-    expect(calculateCumulativeUpgradeCost(100, 4, 2.0)).toBe(700);
+    // With scaling=2 (0-indexed iteration): upgrade costs at levels 1,2,3 are 200, 400, 800
+    // Cumulative to level 4 = 200 + 400 + 800 = 1400
+    expect(calculateCumulativeUpgradeCost(100, 4, 2.0)).toBe(1400);
   });
 
   it('should handle baseCost of 0', () => {
@@ -131,9 +128,7 @@ describe('calculateCumulativeUpgradeCost', () => {
   });
 });
 
-// ============================================================
 // Research Cost Tests
-// ============================================================
 
 describe('calculateResearchCost', () => {
   it('should return baseCost * GOLDEN_ROOT^0 = baseCost at level 0', () => {
@@ -173,9 +168,7 @@ describe('calculateResearchCost', () => {
   });
 });
 
-// ============================================================
 // Hiring Cost Tests
-// ============================================================
 
 describe('calculateHiringCost', () => {
   it('should return a positive cost for valid inputs', () => {
@@ -224,9 +217,7 @@ describe('calculateHiringCost', () => {
   });
 });
 
-// ============================================================
 // Total Hiring Cost Tests
-// ============================================================
 
 describe('calculateTotalHiringCost', () => {
   const costs = {
@@ -279,9 +270,7 @@ describe('calculateTotalHiringCost', () => {
   });
 });
 
-// ============================================================
 // Purchase Cost Tests
-// ============================================================
 
 describe('calculatePurchaseCost', () => {
   it('should return a positive cost', () => {
@@ -311,9 +300,7 @@ describe('calculatePurchaseCost', () => {
   });
 });
 
-// ============================================================
 // NOVI to Power Tests
-// ============================================================
 
 describe('calculateNoviToPower', () => {
   it('should convert using base multiplier by default', () => {
@@ -347,9 +334,7 @@ describe('calculateNoviToPower', () => {
   });
 });
 
-// ============================================================
 // NOVI Required Tests
-// ============================================================
 
 describe('calculateNoviRequired', () => {
   it('should be inverse of calculateNoviToPower (base)', () => {
@@ -387,9 +372,7 @@ describe('calculateNoviRequired', () => {
   });
 });
 
-// ============================================================
 // Partial Speedup Cost Tests
-// ============================================================
 
 describe('calculatePartialSpeedupCost', () => {
   it('should return cost for 60 seconds at 1 gem/minute', () => {
@@ -420,9 +403,7 @@ describe('calculatePartialSpeedupCost', () => {
   });
 });
 
-// ============================================================
 // Subscription Cost Per Day Tests
-// ============================================================
 
 describe('calculateSubscriptionCostPerDay', () => {
   it('should divide USDC price by duration', () => {
@@ -448,9 +429,7 @@ describe('calculateSubscriptionCostPerDay', () => {
   });
 });
 
-// ============================================================
 // Attack Tax Tests
-// ============================================================
 
 describe('calculateAttackTax', () => {
   it('should apply 10% tax (1000 bps)', () => {
@@ -479,9 +458,7 @@ describe('calculateAttackTax', () => {
   });
 });
 
-// ============================================================
 // Shop Price Tests
-// ============================================================
 
 describe('calculateShopPrice', () => {
   it('should return base price for tier 0 with no discount', () => {
@@ -515,9 +492,7 @@ describe('calculateShopPrice', () => {
   });
 });
 
-// ============================================================
 // Format Cost With Bonus Tests
-// ============================================================
 
 describe('formatCostWithBonus', () => {
   it('should show discount when actualCost < 95% of baseCost', () => {
@@ -548,9 +523,7 @@ describe('formatCostWithBonus', () => {
   });
 });
 
-// ============================================================
 // Cost Time Bonus Description Tests
-// ============================================================
 
 describe('getCostTimeBonusDescription', () => {
   it('should return a non-empty string for each time of day', () => {
@@ -589,9 +562,7 @@ describe('getCostTimeBonusDescription', () => {
   });
 });
 
-// ============================================================
 // Recovery Cost Tests
-// ============================================================
 
 describe('calculateRecoveryCost', () => {
   it('should be 50% of base hiring cost with no discounts', () => {
@@ -648,17 +619,15 @@ describe('calculateRecoveryCost', () => {
   });
 });
 
-// ============================================================
 // Mathematical Properties
-// ============================================================
 
 describe('Cost Mathematical Properties', () => {
-  it('upgrade cost should be exponential (each level multiplied by PHI)', () => {
+  it('upgrade cost should be exponential (each level multiplied by PHI_SQUARED)', () => {
     const baseCost = 100;
-    for (let level = 1; level <= 5; level++) {
-      const currentCost = calculateUpgradeCost(baseCost, level);
-      const expectedCost = Math.floor(baseCost * Math.pow(PHI, level - 1));
-      expect(currentCost).toBe(expectedCost);
+    let expected = baseCost;
+    for (let level = 0; level <= 5; level++) {
+      expect(calculateUpgradeCost(baseCost, level)).toBe(expected);
+      expected = Math.floor(expected * PHI_SQUARED);
     }
   });
 

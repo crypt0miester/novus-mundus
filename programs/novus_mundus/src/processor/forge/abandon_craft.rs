@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -13,7 +13,7 @@ use crate::{
         PlayerAccount,
         estate::CraftedEquipmentAccount,
     },
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
 use pinocchio::sysvars::{Sysvar, clock::Clock};
@@ -37,8 +37,8 @@ use pinocchio::sysvars::{Sysvar, clock::Clock};
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -51,13 +51,19 @@ pub fn process(
     require_owner(player_account, program_id)?;
     require_writable(crafted_equipment)?;
     require_owner(crafted_equipment, program_id)?;
+    // Validate CraftedEquipmentAccount PDA derivation
+    require_pda(
+        crafted_equipment,
+        &[b"crafted_equipment", owner.address().as_ref()],
+        program_id,
+    )?;
 
     // 3. Load Player Account (for ownership check)
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data_ref) };
 
     // Verify ownership
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -67,11 +73,11 @@ pub fn process(
     drop(player_data_ref);
 
     // 4. Load Crafted Equipment Account
-    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
+    let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;
     let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
 
     // Verify ownership
-    if crafted.owner != *owner.key() {
+    if crafted.owner != *owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -92,7 +98,7 @@ pub fn process(
 
     // 8. Emit event before clearing craft state
     emit!(CraftAbandoned {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         item_type,
         stage_reached,

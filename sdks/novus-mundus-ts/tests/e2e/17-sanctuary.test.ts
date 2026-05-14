@@ -41,9 +41,7 @@ import {
   getCurrentTimestamp,
 } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Sanctuary System', () => {
   let ctx: TestContext;
@@ -59,9 +57,7 @@ describe('Sanctuary System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Starting Meditation Tests
-  // ============================================================
 
   describe('Starting Meditation', () => {
     it('should reject meditation without real hero in slot', async () => {
@@ -130,9 +126,7 @@ describe('Sanctuary System', () => {
     });
   });
 
-  // ============================================================
   // Claim Meditation Tests
-  // ============================================================
 
   describe('Claiming Meditation', () => {
     it('should reject claim when no meditation active', async () => {
@@ -191,9 +185,7 @@ describe('Sanctuary System', () => {
     });
   });
 
-  // ============================================================
   // Meditation Rewards Tests
-  // ============================================================
 
   describe('Meditation Rewards', () => {
     it('should grant XP to hero', async () => {
@@ -221,9 +213,7 @@ describe('Sanctuary System', () => {
     });
   });
 
-  // ============================================================
   // Sanctuary Building Tests
-  // ============================================================
 
   describe('Sanctuary Building', () => {
     it('should require sanctuary for meditation', async () => {
@@ -243,9 +233,7 @@ describe('Sanctuary System', () => {
     });
   });
 
-  // ============================================================
   // Hero Integration Tests
-  // ============================================================
 
   describe('Hero Integration', () => {
     it('should lock hero during meditation', async () => {

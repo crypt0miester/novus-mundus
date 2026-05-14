@@ -63,9 +63,7 @@ import {
 import { log } from '../utils/logger';
 import { advanceTime } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Rally System', () => {
   let ctx: TestContext;
@@ -155,9 +153,7 @@ describe('Rally System', () => {
     return result;
   }
 
-  // ============================================================
   // Rally Creation Tests
-  // ============================================================
 
   describe('Rally Creation', () => {
     it('should create a rally targeting a player with correct on-chain state', async () => {
@@ -368,9 +364,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Join Tests
-  // ============================================================
 
   describe('Rally Join', () => {
     it('should allow a team member to join a rally and create participant account', async () => {
@@ -536,9 +530,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Leave Tests
-  // ============================================================
 
   describe('Rally Leave', () => {
     it('should allow a non-leader participant to leave during gathering phase', async () => {
@@ -642,9 +634,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Cancel Tests
-  // ============================================================
 
   describe('Rally Cancel', () => {
     it('should allow the rally creator to cancel during gathering phase', async () => {
@@ -770,9 +760,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Speedup Tests
-  // ============================================================
 
   describe('Rally Speedup', () => {
     it('should speedup rally participant gather travel using gems', async () => {
@@ -844,9 +832,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Process Return & Close Tests
-  // ============================================================
 
   describe('Rally Process Return & Close', () => {
     it('should process return after cancel and then close the rally', async () => {
@@ -982,9 +968,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally State Tests
-  // ============================================================
 
   describe('Rally State', () => {
     it('should increment participant count when members join', async () => {
@@ -1179,9 +1163,7 @@ describe('Rally System', () => {
     });
   });
 
-  // ============================================================
   // Rally Execute Tests
-  // ============================================================
 
   describe('Rally Execute', () => {
     it('should execute rally after gather time expires', async () => {

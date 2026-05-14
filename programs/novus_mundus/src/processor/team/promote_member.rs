@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -33,8 +33,8 @@ use crate::{
 /// - target_slot_index: u16 (2 bytes) - Target's slot index
 /// - new_rank: u8 (1 byte) - New rank for target (1-4, cannot promote to 0)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -74,7 +74,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let promoter = PlayerAccount::load_checked_by_key(promoter_account, program_id)?;
-    if &promoter.owner != promoter_owner.key() {
+    if &promoter.owner != promoter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -92,7 +92,7 @@ pub fn process(
 
     // 5. Validate Promoter is in Team
 
-    if promoter.team == NULL_PUBKEY || &promoter.team != team_account.key() {
+    if promoter.team == NULL_PUBKEY || &promoter.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -103,8 +103,8 @@ pub fn process(
 
     // 6. Verify Promoter Slot and Get Rank
 
-    let (expected_promoter_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), promoter_slot_index);
-    if promoter_slot_account.key() != &expected_promoter_slot {
+    let (expected_promoter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), promoter_slot_index);
+    if promoter_slot_account.address() != &expected_promoter_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -112,10 +112,10 @@ pub fn process(
 
     let promoter_rank: u8;
     {
-        let slot_data = promoter_slot_account.try_borrow_data()?;
+        let slot_data = promoter_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *promoter_account.key() {
+        if slot.player != *promoter_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -130,8 +130,8 @@ pub fn process(
 
     // 8. Verify Target Slot
 
-    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), target_slot_index);
-    if target_slot_account.key() != &expected_target_slot {
+    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
+    if target_slot_account.address() != &expected_target_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -139,11 +139,11 @@ pub fn process(
 
     // 9. Load Target Slot and Validate Promotion
 
-    let mut target_data = target_slot_account.try_borrow_mut_data()?;
+    let mut target_data = target_slot_account.try_borrow_mut()?;
     let target_slot = unsafe { TeamMemberSlot::load_mut(&mut target_data) };
 
     // Verify target is in same team
-    if target_slot.team != *team_account.key() {
+    if target_slot.team != *team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -174,12 +174,12 @@ pub fn process(
     // 12. Emit Event
 
     emit!(MemberRankChanged {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
         member: member_pubkey,
         old_rank,
         new_rank,
-        changed_by: *promoter_account.key(),
+        changed_by: *promoter_account.address(),
         timestamp: clock.unix_timestamp,
     });
 

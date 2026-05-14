@@ -27,9 +27,7 @@ import { ExpeditionType } from '../types/enums';
 /** MPL Core program ID */
 const P_CORE_PROGRAM_ID = new PublicKey('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
 
-// ============================================================
 // Expedition Start
-// ============================================================
 
 export interface ExpeditionStartAccounts {
   /** Player's wallet (signer, pays for expedition account rent) */
@@ -118,9 +116,7 @@ export function createExpeditionStartInstruction(
   });
 }
 
-// ============================================================
 // Expedition Strike
-// ============================================================
 
 export interface ExpeditionStrikeAccounts {
   /** Player's wallet (signer) */
@@ -174,9 +170,7 @@ export function createExpeditionStrikeInstruction(
   });
 }
 
-// ============================================================
 // Expedition Claim
-// ============================================================
 
 export interface ExpeditionClaimAccounts {
   /** Player's wallet (signer, receives rent refund) */
@@ -238,9 +232,7 @@ export function createExpeditionClaimInstruction(
   });
 }
 
-// ============================================================
 // Expedition Abort
-// ============================================================
 
 export interface ExpeditionAbortAccounts {
   /** Player's wallet (signer, receives rent refund) */
@@ -290,9 +282,7 @@ export function createExpeditionAbortInstruction(
   });
 }
 
-// ============================================================
 // Expedition Speedup
-// ============================================================
 
 export interface ExpeditionSpeedupAccounts {
   /** Player's wallet (signer) */

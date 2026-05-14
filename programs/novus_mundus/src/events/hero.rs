@@ -1,16 +1,16 @@
 /// Hero events - NFT hero operations
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new hero NFT is minted
 pub struct HeroMinted {
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Player account who minted (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero template ID
@@ -40,11 +40,11 @@ impl Event for HeroMinted {
 /// Emitted when a hero is locked to a player
 pub struct HeroLocked {
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Player account who locked the hero (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero slot index
@@ -71,11 +71,11 @@ impl Event for HeroLocked {
 /// Emitted when a hero is unlocked from a player
 pub struct HeroUnlocked {
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Player account who unlocked (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Unix timestamp
@@ -99,11 +99,11 @@ impl Event for HeroUnlocked {
 /// Emitted when a hero levels up
 pub struct HeroLeveledUp {
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Player account who owns the hero (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Previous level
@@ -136,11 +136,11 @@ impl Event for HeroLeveledUp {
 /// Emitted when a hero is assigned to defense
 pub struct HeroAssignedDefensive {
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Player account who assigned (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Whether assigned (true) or unassigned (false)
@@ -167,9 +167,9 @@ impl Event for HeroAssignedDefensive {
 /// Emitted when a hero NFT is burned
 pub struct HeroBurned {
     /// Hero NFT mint pubkey (now destroyed)
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Player account who burned
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero template ID

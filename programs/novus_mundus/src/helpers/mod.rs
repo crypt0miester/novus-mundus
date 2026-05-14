@@ -25,7 +25,8 @@ pub use token_ops::{
     burn_tokens, mint_tokens, process_token_payment_flow, transfer_tokens,
     validate_token_account_owner,
     // Oracle helpers
-    detect_oracle_type, get_pyth_price, OracleType,
+    consume_optional_feed_slot, detect_oracle_type, get_pyth_price,
+    pin_oracle_feed, read_switchboard_price, OracleType, ZERO_PUBKEY,
 };
 
 // Hero helpers (NFT-Only System)
@@ -46,7 +47,7 @@ pub use hero::{
 pub use nft_parser::parse_hero_nft;
 
 // Inventory helpers (auto-create and expand)
-pub use inventory::add_to_inventory;
+pub use inventory::{add_to_inventory, is_inventory_item_type};
 
 // Name service validation
 pub use name_service::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name};

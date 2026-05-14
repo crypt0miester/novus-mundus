@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -53,8 +53,8 @@ use crate::{
 /// # Instruction Data
 /// - [0] hero_slot: u8 (0-2, which active_heroes slot)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -83,11 +83,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 5. Load Player Account
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -103,19 +103,19 @@ pub fn process(
     }
 
     // 8. Verify the passed hero_mint matches the slot
-    if hero_mint.key() != &slot_hero_mint {
+    if hero_mint.address() != &slot_hero_mint {
         return Err(GameError::HeroMismatch.into());
     }
 
     // 9. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
-    let nft_data = hero_mint.try_borrow_data()?;
+    let nft_data = hero_mint.try_borrow()?;
     let parsed_hero = parse_hero_nft(&nft_data)
         .ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 10. Load Hero Template and verify city requirement
-    let template_data = hero_template.try_borrow_data()?;
+    let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     // Verify template matches hero
@@ -125,11 +125,11 @@ pub fn process(
 
     // Verify template PDA
     let template_id_bytes = parsed_hero.template_id.to_le_bytes();
-    let (expected_template_pda, _) = pinocchio::pubkey::find_program_address(
+    let (expected_template_pda, _) = pinocchio::Address::find_program_address(
         &[HERO_TEMPLATE_SEED, &template_id_bytes],
         program_id,
     );
-    if hero_template.key() != &expected_template_pda {
+    if hero_template.address() != &expected_template_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -146,11 +146,11 @@ pub fn process(
 
     drop(template_data);
 
-    // 12. Load Estate and verify Sanctuary
+    // 12. Load Estate and verify MeditationChamber
     let estate = load_estate_for_player(estate_account, player, program_id)?;
 
     if !can_meditate(estate) {
-        return Err(GameError::SanctuaryRequired.into());
+        return Err(GameError::MeditationChamberRequired.into());
     }
 
     let sanctuary_level = get_sanctuary_level(estate);
@@ -173,9 +173,9 @@ pub fn process(
 
     // 14. Emit event
     emit!(MeditationStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
-        hero_mint: *hero_mint.key(),
+        hero_mint: *hero_mint.address(),
         hero_name,
         duration_hours,
         completes_at,

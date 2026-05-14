@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -28,8 +28,8 @@ use crate::{
 /// 2. `[]` current_city - City player is arriving in (for validation)
 /// 3. `[WRITE]` destination_location - LocationAccount for destination cell (already reserved)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -53,7 +53,7 @@ pub fn process(
 
     let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -95,13 +95,13 @@ pub fn process(
         dest_grid_long,
     );
 
-    if destination_location_account.key() != &expected_location_pda {
+    if destination_location_account.address() != &expected_location_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 10. Verify Player Already Owns Destination (reserved at travel_start)
     {
-        let mut location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut location_data = destination_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         // Verify grid coordinates match
@@ -110,7 +110,7 @@ pub fn process(
         }
 
         // Verify player owns this cell (was reserved at start)
-        if !location.is_occupied_by(player_account.key()) {
+        if !location.is_occupied_by(player_account.address()) {
             return Err(GameError::NotCellOccupant.into());
         }
 
@@ -135,7 +135,7 @@ pub fn process(
     // 13. Emit Event
 
     emit!(IntracityTravelCompleted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         x: dest_grid_lat,
         y: dest_grid_long,

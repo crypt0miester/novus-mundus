@@ -7,9 +7,9 @@
 //! Can also be triggered automatically when registration_closes_at timestamp is reached.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// None required - just the 2-byte discriminant
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -55,7 +55,7 @@ pub fn process(
     // Either:
     // a) Caller is DAO authority and signs
     // b) registration_closes_at has passed (anyone can trigger)
-    let is_dao_authority = caller.key() == &game_engine.authority && caller.is_signer();
+    let is_dao_authority = caller.address() == &game_engine.authority && caller.is_signer();
     let registration_expired = game_engine.registration_closes_at > 0
         && now >= game_engine.registration_closes_at;
 
@@ -69,7 +69,7 @@ pub fn process(
     // 7. Emit event (uses existing event from kingdom.rs)
     emit!(KingdomRegistrationClosed {
         kingdom_id: game_engine.kingdom_id,
-        game_engine: *game_engine_account.key(),
+        game_engine: *game_engine_account.address(),
         total_players: game_engine.total_players,
         closed_at: now,
     });

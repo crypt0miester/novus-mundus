@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -36,8 +36,8 @@ use crate::{
 /// - slot_index: u16 (2 bytes) - Inviter's slot index
 /// - expires_in_seconds: i64 (8 bytes) - Optional custom expiry (0 = use default 7 days)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -80,13 +80,13 @@ pub fn process(
 
     // Inviter: use load_checked_by_key (read-only, has signer)
     let inviter = PlayerAccount::load_checked_by_key(inviter_player_account, program_id)?;
-    if &inviter.owner != inviter_owner.key() {
+    if &inviter.owner != inviter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // Invitee: manual load (we don't have invitee's wallet key)
     require_owner(invitee_player_account, program_id)?;
-    let invitee_data_ref = invitee_player_account.try_borrow_data()?;
+    let invitee_data_ref = invitee_player_account.try_borrow()?;
     let invitee = unsafe { PlayerAccount::load(&invitee_data_ref) };
 
     // Team: use load_checked_by_key (read-only)
@@ -114,24 +114,24 @@ pub fn process(
     }
 
     // Inviter in the team?
-    if inviter.team == NULL_PUBKEY || &inviter.team != team_account.key() {
+    if inviter.team == NULL_PUBKEY || &inviter.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 5a. Verify Inviter Slot and Check Permission
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if inviter_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if inviter_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(inviter_slot_account, program_id)?;
 
     {
-        let slot_data = inviter_slot_account.try_borrow_data()?;
+        let slot_data = inviter_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *inviter_player_account.key() {
+        if slot.player != *inviter_player_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -162,12 +162,12 @@ pub fn process(
 
     // 7. Verify Invite PDA
 
-    let (expected_invite, invite_bump) = find_program_address(
-        &[TEAM_INVITE_SEED, team_account.key().as_ref(), invitee_player_account.key().as_ref()],
+    let (expected_invite, invite_bump) = Address::find_program_address(
+        &[TEAM_INVITE_SEED, team_account.address().as_ref(), invitee_player_account.address().as_ref()],
         program_id,
     );
 
-    if invite_account.key() != &expected_invite {
+    if invite_account.address() != &expected_invite {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -185,17 +185,16 @@ pub fn process(
         now.saturating_add(TEAM_INVITE_EXPIRY)
     };
 
-    let invite_lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(TeamInviteAccount::LEN);
+    let invite_lamports = crate::utils::rent_exempt_const(TeamInviteAccount::LEN);
 
     let invite_bump_seed = [invite_bump];
-    let invite_seeds = pinocchio::seeds!(
+    let invite_seeds = crate::seeds!(
         TEAM_INVITE_SEED,
-        team_account.key().as_ref(),
-        invitee_player_account.key().as_ref(),
+        team_account.address(),
+        invitee_player_account.address(),
         &invite_bump_seed
     );
-    let invite_signer = pinocchio::instruction::Signer::from(&invite_seeds);
+    let invite_signer = pinocchio::cpi::Signer::from(&invite_seeds);
 
     CreateAccount {
         from: inviter_owner,
@@ -207,14 +206,14 @@ pub fn process(
 
     // 9. Initialize Invite Data
 
-    let mut invite_data = invite_account.try_borrow_mut_data()?;
+    let mut invite_data = invite_account.try_borrow_mut()?;
     let invite = unsafe { TeamInviteAccount::load_mut(&mut invite_data) };
 
     *invite = TeamInviteAccount::init(
-        *team_account.key(),
-        *invitee_player_account.key(),
+        *team_account.address(),
+        *invitee_player_account.address(),
         invite_bump,
-        *inviter_player_account.key(),
+        *inviter_player_account.address(),
         now,
         expires_at,
     );
@@ -222,10 +221,10 @@ pub fn process(
     // 10. Emit Event
 
     emit!(InviteSent {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        invitee: *invitee_player_account.key(),
-        inviter: *inviter_player_account.key(),
+        invitee: *invitee_player_account.address(),
+        inviter: *inviter_player_account.address(),
         timestamp: now,
     });
 

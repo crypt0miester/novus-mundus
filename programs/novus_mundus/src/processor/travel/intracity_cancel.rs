@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -37,8 +37,8 @@ use crate::{
 /// 5. `[WRITE]` return_location - LocationAccount for origin position (to reserve)
 /// 6. `[]` system_program - For creating return location account
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -65,7 +65,7 @@ pub fn process(
 
     let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -121,7 +121,7 @@ pub fn process(
         dest_grid_long,
     );
 
-    if dest_location_account.key() != &expected_dest_pda {
+    if dest_location_account.address() != &expected_dest_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -131,12 +131,12 @@ pub fn process(
 
     if dest_location_len > 0 {
         // Destination exists - check if we own it
-        let dest_data = dest_location_account.try_borrow_data()?;
+        let dest_data = dest_location_account.try_borrow()?;
         let dest_location = unsafe { LocationAccount::load(&dest_data) };
 
-        if dest_location.is_occupied_by(player_account.key()) {
+        if dest_location.is_occupied_by(player_account.address()) {
             // We own it - validate refund recipient now, close after CPI
-            if dest_creator_refund.key() != &dest_location.location_creator {
+            if dest_creator_refund.address() != &dest_location.location_creator {
                 return Err(GameError::InvalidParameter.into());
             }
             should_close_dest = true;
@@ -166,7 +166,7 @@ pub fn process(
         return_grid_long,
     );
 
-    if return_location_account.key() != &expected_return_pda {
+    if return_location_account.address() != &expected_return_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -174,12 +174,11 @@ pub fn process(
 
     if return_location_len == 0 {
         // Create new return location account
-        let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let lamports = rent.minimum_balance(LocationAccount::LEN);
+        let lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let bump_seed = [return_bump];
         let ge_bytes = player_data.game_engine;
-        let location_seeds = pinocchio::seeds!(
+        let location_seeds = crate::seeds!(
             LOCATION_SEED,
             &ge_bytes,
             &city_bytes,
@@ -187,7 +186,7 @@ pub fn process(
             &return_long_bytes,
             &bump_seed
         );
-        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+        let location_signer = pinocchio::cpi::Signer::from(&location_seeds);
 
         CreateAccount {
             from: owner,
@@ -197,7 +196,7 @@ pub fn process(
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
 
-        let mut return_data = return_location_account.try_borrow_mut_data()?;
+        let mut return_data = return_location_account.try_borrow_mut()?;
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
 
         return_location.account_key = crate::state::AccountKey::Location as u8;
@@ -206,13 +205,13 @@ pub fn process(
         return_location.city_id = player_data.current_city;
         return_location.bump = return_bump;
         return_location.occupant_type = OCCUPANT_PLAYER;
-        return_location.occupant = *player_account.key();
+        return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
-        return_location.location_creator = *owner.key();
+        return_location.location_creator = *owner.address();
         return_location.reserved_arrival_time = now + return_travel_time_seconds;
     } else {
         // Return location exists - check if available
-        let mut return_data = return_location_account.try_borrow_mut_data()?;
+        let mut return_data = return_location_account.try_borrow_mut()?;
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
 
         if return_location.grid_lat != return_grid_lat || return_location.grid_long != return_grid_long {
@@ -220,14 +219,14 @@ pub fn process(
         }
 
         // Cell must be empty or already owned by this player
-        if return_location.is_occupied() && !return_location.is_occupied_by(player_account.key()) {
+        if return_location.is_occupied() && !return_location.is_occupied_by(player_account.address()) {
             return Err(GameError::CellOccupied.into());
         }
 
         return_location.occupant_type = OCCUPANT_PLAYER;
-        return_location.occupant = *player_account.key();
+        return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
-        return_location.location_creator = *owner.key();
+        return_location.location_creator = *owner.address();
         return_location.reserved_arrival_time = now + return_travel_time_seconds;
     }
 
@@ -256,7 +255,7 @@ pub fn process(
     // 12. Emit Event
 
     emit!(TravelCancelled {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         is_intercity: false,
         was_bumped,

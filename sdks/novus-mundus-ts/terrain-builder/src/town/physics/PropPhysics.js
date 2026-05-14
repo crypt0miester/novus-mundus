@@ -13,9 +13,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Internal enum for prop type
-// ---------------------------------------------------------------------------
 
 const TYPE_PENDULUM = 0;
 const TYPE_SPRING   = 1;
@@ -25,16 +23,12 @@ const TYPE_HINGE    = 3;
 // Default capacity — grows automatically if exceeded.
 const DEFAULT_MAX_PROPS = 128;
 
-// ---------------------------------------------------------------------------
 // Reusable temporaries
-// ---------------------------------------------------------------------------
 
 const _windVec = new THREE.Vector3();
 const _tmpVec  = new THREE.Vector3();
 
-// ---------------------------------------------------------------------------
 // PropPhysicsSystem
-// ---------------------------------------------------------------------------
 
 export class PropPhysicsSystem {
 
@@ -98,9 +92,7 @@ export class PropPhysicsSystem {
     this._nextAutoId = 0;
   }
 
-  // -------------------------------------------------------------------------
   // Internal helpers
-  // -------------------------------------------------------------------------
 
   /** Grow all parallel arrays to at least `newCap`. */
   _grow(newCap) {
@@ -183,9 +175,7 @@ export class PropPhysicsSystem {
     return slot;
   }
 
-  // -------------------------------------------------------------------------
   // Registration
-  // -------------------------------------------------------------------------
 
   /**
    * Register a swinging sign or lantern (damped pendulum).
@@ -275,9 +265,7 @@ export class PropPhysicsSystem {
     return id;
   }
 
-  // -------------------------------------------------------------------------
   // External forces
-  // -------------------------------------------------------------------------
 
   /**
    * Apply an impulse to a registered prop.
@@ -313,9 +301,7 @@ export class PropPhysicsSystem {
     this._hingeTarget[slot] = targetAngle;
   }
 
-  // -------------------------------------------------------------------------
   // Per-frame update
-  // -------------------------------------------------------------------------
 
   /**
    * Step all prop physics and write back to mesh transforms.
@@ -439,9 +425,7 @@ export class PropPhysicsSystem {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Removal
-  // -------------------------------------------------------------------------
 
   /**
    * Remove a prop from the simulation.

@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 use crate::{
     error::GameError,
@@ -24,8 +24,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -47,10 +47,10 @@ pub fn process(
 
     // 3. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if authority.key() != &game_engine.authority {
+    if authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
@@ -60,11 +60,11 @@ pub fn process(
 
     // Verify PDA matches
     let (expected_pda, _) = AllowedTokenAccount::derive_pda(
-        game_engine_account.key(),
-        token_mint.key(),
+        game_engine_account.address(),
+        token_mint.address(),
     );
 
-    if allowed_token_account.key() != &expected_pda {
+    if allowed_token_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 

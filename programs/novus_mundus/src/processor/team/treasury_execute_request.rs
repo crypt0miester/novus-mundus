@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -32,8 +32,8 @@ use crate::{
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - slot_index: u16 (2 bytes) - Member's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -68,7 +68,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -86,7 +86,7 @@ pub fn process(
 
     // 5. Validate Player is Still in Team
 
-    if player.team == NULL_PUBKEY || &player.team != team_account.key() {
+    if player.team == NULL_PUBKEY || &player.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -97,8 +97,8 @@ pub fn process(
 
     // 6. Verify Member Slot and Get Current Rank
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if member_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if member_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -106,10 +106,10 @@ pub fn process(
 
     let rank: u8;
     {
-        let slot_data = member_slot_account.try_borrow_data()?;
+        let slot_data = member_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *player_account.key() {
+        if slot.player != *player_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -127,8 +127,8 @@ pub fn process(
 
     // 8. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.key(), player_account.key());
-    if request_account.key() != &expected_request {
+    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
+    if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -137,15 +137,15 @@ pub fn process(
 
     let amount: u64;
     {
-        let request_data = request_account.try_borrow_data()?;
+        let request_data = request_account.try_borrow()?;
         let request = unsafe { TreasuryRequest::load(&request_data) };
 
         // Verify request is for this team and player
-        if &request.team != team_account.key() {
+        if &request.team != team_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
-        if &request.requester != player_account.key() {
+        if &request.requester != player_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -154,6 +154,17 @@ pub fn process(
         let now = clock.unix_timestamp;
 
         if !request.is_executable(now) {
+            return Err(GameError::TreasuryRequestNotExecutable.into());
+        }
+
+        // Also enforce the CURRENT team cooldown setting, not just the
+        // one locked in at request creation. If the team lowered its cooldown
+        // after this request was created, that lower bound is fine. If the team
+        // raised its cooldown (e.g., to defend against abuse), the new bound
+        // must apply — otherwise an in-flight request bypasses the tightening.
+        let current_cooldown = team.get_cooldown_seconds();
+        let current_executable_at = request.created_at.saturating_add(current_cooldown);
+        if now < current_executable_at {
             return Err(GameError::TreasuryRequestNotExecutable.into());
         }
 
@@ -196,10 +207,10 @@ pub fn process(
     let clock = Clock::get()?;
 
     emit!(TreasuryRequestExecuted {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: event_team_name,
-        executor: *player_account.key(),
-        requester: *player_account.key(),
+        executor: *player_account.address(),
+        requester: *player_account.address(),
         amount,
         new_balance,
         timestamp: clock.unix_timestamp,

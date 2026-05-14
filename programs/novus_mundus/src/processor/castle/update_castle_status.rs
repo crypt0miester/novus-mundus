@@ -10,9 +10,9 @@
 //! TRANSITIONING status requires finalize_transition (needs cleanup verification).
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -36,8 +36,8 @@ use crate::{
 /// 1. [writable] Castle account
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -86,7 +86,7 @@ pub fn process(
     // Only emit if status actually changed
     if new_status != old_status {
         emit!(CastleStatusChanged {
-            castle: *castle_account.key(),
+            castle: *castle_account.address(),
             castle_name: castle.name,
             old_status,
             new_status,

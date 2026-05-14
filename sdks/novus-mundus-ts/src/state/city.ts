@@ -17,9 +17,7 @@ import {
   ANCHOR_SIZE,
 } from '../calculators/terrain';
 
-// ============================================================
 // City Account Interface
-// ============================================================
 
 export interface CityAccount {
   /** Game engine pubkey (kingdom reference) */
@@ -71,9 +69,7 @@ export interface CityAccount {
 /** CityAccount fixed size in bytes (repr(C) layout, excluding trailing anchors) */
 export const CITY_ACCOUNT_SIZE = 152;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /**
  * Deserialize CityAccount from raw account bytes.

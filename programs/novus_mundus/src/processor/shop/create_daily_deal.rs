@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -32,8 +32,8 @@ use crate::{
 /// - next_item_id: u32
 /// - next_discount_bps: u16
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -86,35 +86,34 @@ pub fn process(
 
     // 5. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // 6. Derive and Verify Daily Deal PDA
 
-    let (expected_pda, bump) = DailyDealAccount::derive_pda(game_engine_account.key(), slot_index);
+    let (expected_pda, bump) = DailyDealAccount::derive_pda(game_engine_account.address(), slot_index);
 
-    if daily_deal_account.key() != &expected_pda {
+    if daily_deal_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 7. Create Daily Deal Account
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(DailyDealAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(DailyDealAccount::LEN);
 
     let slot_seed = [slot_index];
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         DAILY_DEAL_SEED,
-        game_engine_account.key().as_ref(),
+        game_engine_account.address(),
         &slot_seed,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -129,7 +128,7 @@ pub fn process(
     let clock = pinocchio::sysvars::clock::Clock::get()?;
     let now = clock.unix_timestamp;
 
-    let mut daily_deal_data_ref = daily_deal_account.try_borrow_mut_data()?;
+    let mut daily_deal_data_ref = daily_deal_account.try_borrow_mut()?;
     let daily_deal = unsafe { DailyDealAccount::load_mut(&mut daily_deal_data_ref) };
 
     daily_deal.account_key = crate::state::AccountKey::DailyDeal as u8;

@@ -10,9 +10,9 @@
 //! owner wallet (unlocked state).
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -26,13 +26,13 @@ use crate::{
         player::NULL_PUBKEY,
         is_hero_at_home, location_bonus_for_tier,
     },
-    constants::{GARRISON_SEED},
+    constants::{GARRISON_SEED, HERO_TEMPLATE_SEED},
     helpers::{
         close_account,
         parse_hero_nft,
         add_hero_buffs_to_player_with_location,
     },
-    validation::{require_owner, require_initialized},
+    validation::{require_owner, require_initialized, require_pda},
 };
 
 /// Accounts:
@@ -50,8 +50,8 @@ use crate::{
 /// 9. [] p_core program
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -72,10 +72,10 @@ pub fn process(
 
     // Load player
     require_owner(player_account, program_id)?;
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    if &player.owner != player_wallet.key() {
+    if &player.owner != player_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -86,20 +86,20 @@ pub fn process(
     require_owner(garrison_account, program_id)?;
 
     let (expected_garrison_pda, garrison_bump) = GarrisonContributionAccount::derive_pda(
-        castle_account.key(),
-        player_account.key(),
+        castle_account.address(),
+        player_account.address(),
     );
-    if garrison_account.key() != &expected_garrison_pda {
+    if garrison_account.address() != &expected_garrison_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_initialized(garrison_account).map_err(|_| GameError::NotInGarrison)?;
 
-    let garrison_data = garrison_account.try_borrow_data()?;
+    let garrison_data = garrison_account.try_borrow()?;
     let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
 
     // Verify contributor matches
-    if garrison.contributor != *player_account.key() {
+    if garrison.contributor != *player_account.address() {
         return Err(GameError::NotInGarrison.into());
     }
 
@@ -135,7 +135,7 @@ pub fn process(
         let p_core_program = &accounts[9];
 
         // Verify hero mint matches
-        if hero_mint.key() != &hero_mint_key {
+        if hero_mint.address() != &hero_mint_key {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -150,30 +150,39 @@ pub fn process(
 
         // Derive garrison PDA signer
         let bump_seed = [garrison_bump];
-        let garrison_seeds = pinocchio::seeds!(
+        let garrison_seeds = crate::seeds!(
             GARRISON_SEED,
-            castle_account.key().as_ref(),
-            player_account.key().as_ref(),
+            castle_account.address(),
+            player_account.address(),
             &bump_seed
         );
-        let garrison_signer = pinocchio::instruction::Signer::from(&garrison_seeds);
+        let garrison_signer = pinocchio::cpi::Signer::from(&garrison_seeds);
 
         if let Some(slot) = target_slot {
             // Slot available: transfer to player PDA (re-lock)
             player.active_heroes[slot] = hero_mint_key;
 
             // Re-add hero buffs
-            let template_data = hero_template_account.try_borrow_data()?;
-            let template = unsafe { HeroTemplate::load(&template_data) };
-            let nft_data = hero_mint.try_borrow_data()?;
+            let nft_data = hero_mint.try_borrow()?;
             if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
+                // Validate HeroTemplate program ownership AND PDA derivation
+                require_owner(hero_template_account, program_id)?;
+                let template_id_bytes = parsed_hero.template_id.to_le_bytes();
+                require_pda(
+                    hero_template_account,
+                    &[HERO_TEMPLATE_SEED, &template_id_bytes],
+                    program_id,
+                )?;
+
+                let template_data = hero_template_account.try_borrow()?;
+                let template = unsafe { HeroTemplate::load(&template_data) };
                 let at_home = is_hero_at_home(parsed_hero.origin_city, player.current_city);
                 let location_bonus = if at_home { location_bonus_for_tier(crate::state::tier_from_mint_cost(template.mint_cost_sol)) } else { 0 };
                 player.slot_location_bonus[slot] = location_bonus;
                 add_hero_buffs_to_player_with_location(player, parsed_hero.level, template, location_bonus);
+                drop(template_data);
             }
             drop(nft_data);
-            drop(template_data);
 
             // Drop borrows before CPI
             drop(garrison_data);
@@ -214,7 +223,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Copy player name for event
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player_ref = unsafe { PlayerAccount::load(&player_data_ref) };
     let mut player_name = [0u8; 48];
     player_name.copy_from_slice(&player_ref.name);
@@ -234,9 +243,9 @@ pub fn process(
 
     // Emit event
     emit!(GarrisonLeft {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name,
-        contributor: *player_account.key(),
+        contributor: *player_account.address(),
         contributor_name: player_name,
         units_1,
         units_2,

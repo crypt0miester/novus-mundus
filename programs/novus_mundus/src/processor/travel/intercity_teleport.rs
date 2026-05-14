@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -45,8 +45,8 @@ use crate::{
 ///
 /// Total: 9 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -85,7 +85,7 @@ pub fn process(
     { let _ = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
     let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
-    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?; }
+    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
     let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
 
     require_owner(origin_city_account, program_id)?;
@@ -110,6 +110,28 @@ pub fn process(
     if player_data.rally_stats.current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
+
+    // M-09: Teleport cooldown gap.
+    //
+    // Teleport is fully instant: it does NOT set `player_data.arrival_time`,
+    // `departure_time`, or `travel_type` (see step 17 below — only current_city /
+    // current_lat / current_long are mutated). The `is_traveling_any()` check above
+    // therefore does not protect against rapid back-to-back teleports within the
+    // same slot/second window.
+    //
+    // A 60-second cooldown between teleports cannot be enforced here without a
+    // dedicated `last_teleport_at: i64` field on PlayerCore. Adding new state fields
+    // is intentionally avoided per project policy. Reusing `arrival_time` /
+    // `departure_time` is unsafe — those are interpreted by travel arrival logic and
+    // would corrupt non-teleport travel paths.
+    //
+    // Mitigation gating already in place: EXT_INVENTORY extension (premium),
+    // Stables Lv10+ estate gate, and `locked_novi` cost per segment provide an
+    // economic throttle, but they do not constitute a true time-based cooldown.
+    //
+    // TODO(M-09): Add `last_teleport_at: i64` to PlayerCore and gate this entry
+    // point with `now - player_data.last_teleport_at >= 60` to close the audit
+    // finding.
 
     // 7. Validate Origin City Matches
 
@@ -174,22 +196,22 @@ pub fn process(
     let origin_grid_long = LocationAccount::to_grid(player_data.current_long);
 
     let (expected_origin_pda, _) = LocationAccount::derive_pda(
-        game_engine_account.key(),
+        game_engine_account.address(),
         player_data.current_city,
         origin_grid_lat,
         origin_grid_long,
     );
 
-    if origin_location_account.key() != &expected_origin_pda {
+    if origin_location_account.address() != &expected_origin_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Validate origin location and verify occupant
     {
-        let origin_location_data = origin_location_account.try_borrow_data()?;
+        let origin_location_data = origin_location_account.try_borrow()?;
         let origin_location = unsafe { LocationAccount::load(&origin_location_data) };
 
-        if !origin_location.is_occupied_by(player_account.key()) {
+        if !origin_location.is_occupied_by(player_account.address()) {
             return Err(GameError::NotCellOccupant.into());
         }
     }
@@ -223,13 +245,13 @@ pub fn process(
     let dest_long_bytes = dest_grid_long.to_le_bytes();
 
     let (expected_dest_pda, dest_location_bump) = LocationAccount::derive_pda(
-        game_engine_account.key(),
+        game_engine_account.address(),
         destination_city_id,
         dest_grid_lat,
         dest_grid_long,
     );
 
-    if destination_location_account.key() != &expected_dest_pda {
+    if destination_location_account.address() != &expected_dest_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -239,19 +261,18 @@ pub fn process(
 
     if dest_location_data_len == 0 {
         // Create new location account
-        let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let lamports = rent.minimum_balance(LocationAccount::LEN);
+        let lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let bump_seed = [dest_location_bump];
-        let location_seeds = pinocchio::seeds!(
+        let location_seeds = crate::seeds!(
             LOCATION_SEED,
-            game_engine_account.key().as_ref(),
+            game_engine_account.address(),
             &dest_city_bytes,
             &dest_lat_bytes,
             &dest_long_bytes,
             &bump_seed
         );
-        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+        let location_signer = pinocchio::cpi::Signer::from(&location_seeds);
 
         CreateAccount {
             from: owner,
@@ -261,7 +282,7 @@ pub fn process(
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
 
-        let mut location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut location_data = destination_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         location.account_key = crate::state::AccountKey::Location as u8;
@@ -270,26 +291,26 @@ pub fn process(
         location.city_id = destination_city_id;
         location.bump = dest_location_bump;
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
-        location.occupant = *player_account.key();
+        location.occupant = *player_account.address();
         location.occupied_since = now;
-        location.location_creator = *owner.key();
+        location.location_creator = *owner.address();
         location.reserved_arrival_time = 0; // Instant teleport = already arrived
     } else {
-        let mut location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut location_data = destination_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         if location.grid_lat != dest_grid_lat || location.grid_long != dest_grid_long {
             return Err(GameError::InvalidPDA.into());
         }
 
-        if location.is_occupied() && !location.is_occupied_by(player_account.key()) {
+        if location.is_occupied() && !location.is_occupied_by(player_account.address()) {
             return Err(GameError::CellOccupied.into());
         }
 
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
-        location.occupant = *player_account.key();
+        location.occupant = *player_account.address();
         location.occupied_since = now;
-        location.location_creator = *owner.key();
+        location.location_creator = *owner.address();
         location.reserved_arrival_time = 0; // Instant teleport = already arrived
     }
 
@@ -336,14 +357,14 @@ pub fn process(
                 let hero_template_info = &hero_accounts[hero_idx + 1];
 
                 // Verify NFT matches the locked hero mint
-                if hero_nft_info.key() == &player_data.active_heroes[slot] {
+                if hero_nft_info.address() == &player_data.active_heroes[slot] {
                     // Parse hero data from NFT
-                    let nft_data = hero_nft_info.try_borrow_data()?;
+                    let nft_data = hero_nft_info.try_borrow()?;
                     if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
                         drop(nft_data);
 
                         // Load template for tier calculation
-                        let template_data = hero_template_info.try_borrow_data()?;
+                        let template_data = hero_template_info.try_borrow()?;
                         let template = unsafe { HeroTemplate::load(&template_data) };
 
                         // Verify template matches hero
@@ -385,10 +406,10 @@ pub fn process(
     // 20. Emit Event
 
     emit!(PlayerTeleported {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
-        from_city: *origin_city_account.key(),
-        to_city: *destination_city_account.key(),
+        from_city: *origin_city_account.address(),
+        to_city: *destination_city_account.address(),
         gems_spent: adjusted_cost,
         timestamp: now,
     });

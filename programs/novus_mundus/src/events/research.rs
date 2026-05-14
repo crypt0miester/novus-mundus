@@ -1,12 +1,12 @@
 /// Research events - tech tree progression
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when research starts
 pub struct ResearchStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Research ID
@@ -37,7 +37,7 @@ impl Event for ResearchStarted {
 /// Emitted when research completes
 pub struct ResearchCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Research ID
@@ -65,7 +65,7 @@ impl Event for ResearchCompleted {
 /// Emitted when research is cancelled
 pub struct ResearchCancelled {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Research ID that was cancelled
@@ -90,7 +90,7 @@ impl Event for ResearchCancelled {
 /// Emitted when research is sped up using gems
 pub struct ResearchSpeedup {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Research ID being sped up
@@ -124,7 +124,7 @@ impl Event for ResearchSpeedup {
 /// Emitted when a research node is ascended
 pub struct ResearchAscended {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Research tree (research ID)
@@ -155,7 +155,7 @@ impl Event for ResearchAscended {
 /// Emitted when a player ascends
 pub struct PlayerAscended {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// New ascension level

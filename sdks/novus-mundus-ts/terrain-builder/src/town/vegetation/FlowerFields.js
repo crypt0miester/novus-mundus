@@ -6,9 +6,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_INSTANCES = 15000;
 const POISSON_MAX_ATTEMPTS = 30;
@@ -30,9 +28,7 @@ const SHRINE_COLORS = [
 
 const CROP_COLOR = new THREE.Color(0.75, 0.65, 0.2); // golden wheat
 
-// ---------------------------------------------------------------------------
 // Seeded RNG
-// ---------------------------------------------------------------------------
 
 function makeRng(seed) {
   let s = seed | 0;
@@ -42,9 +38,7 @@ function makeRng(seed) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Flower blade geometry — stem + wide petal tip
-// ---------------------------------------------------------------------------
 
 /**
  * Create a single flower stalk geometry.
@@ -181,9 +175,7 @@ function createWheatGeometry() {
   return geo;
 }
 
-// ---------------------------------------------------------------------------
 // Shader materials
-// ---------------------------------------------------------------------------
 
 /**
  * Wildflower material — wind-animated stems with colored petal tips.
@@ -572,9 +564,7 @@ function createShrineMaterial() {
   });
 }
 
-// ---------------------------------------------------------------------------
 // Poisson disk sampling
-// ---------------------------------------------------------------------------
 
 function poissonDiskSample(bounds, radius, maxPoints, rng) {
   const cellSize = radius / Math.SQRT2;
@@ -652,9 +642,7 @@ function poissonDiskSample(bounds, radius, maxPoints, rng) {
   return points;
 }
 
-// ---------------------------------------------------------------------------
 // FlowerFieldSystem class
-// ---------------------------------------------------------------------------
 
 export class FlowerFieldSystem {
   /**

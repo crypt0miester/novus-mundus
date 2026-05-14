@@ -6,33 +6,25 @@
  * can trigger animations, audio cues, and UI updates in listeners.
  */
 
-// ---------------------------------------------------------------------------
 // Building status enum (mirrors Rust BuildingStatus)
-// ---------------------------------------------------------------------------
 
 const BUILDING_STATUS_EMPTY = 0;
 const BUILDING_STATUS_BUILDING = 1;
 const BUILDING_STATUS_ACTIVE = 2;
 const BUILDING_STATUS_UPGRADING = 3;
 
-// ---------------------------------------------------------------------------
 // Daily window bitmask constants
-// ---------------------------------------------------------------------------
 
 const WINDOW_DAWN = 0b001;    // L — Morning (Dawn)
 const WINDOW_MIDDAY = 0b010;  // M — Midday
 const WINDOW_DUSK = 0b100;    // D — Dusk
 
-// ---------------------------------------------------------------------------
 // Population table: base + per-level
-// ---------------------------------------------------------------------------
 
 const BASE_POPULATION = 3;
 const POPULATION_PER_LEVEL = 2;
 
-// ---------------------------------------------------------------------------
 // Milestone thresholds
-// ---------------------------------------------------------------------------
 
 const MILESTONES = [
   { id: 'first-building',     label: 'First Building',      check: (s) => s.buildings.some(b => b.status === BUILDING_STATUS_ACTIVE) },
@@ -49,9 +41,7 @@ const MILESTONES = [
   { id: 'high-networth',      label: 'High Networth',        check: (s) => s.networth >= 1_000_000n },
 ];
 
-// ---------------------------------------------------------------------------
 // TownStateManager
-// ---------------------------------------------------------------------------
 
 export class TownStateManager {
   constructor() {
@@ -67,9 +57,7 @@ export class TownStateManager {
     this._prevWindowsCompleted = 0;
   }
 
-  // -----------------------------------------------------------------------
   // Loading
-  // -----------------------------------------------------------------------
 
   /**
    * Load initial state from on-chain accounts.
@@ -146,9 +134,7 @@ export class TownStateManager {
     this._emit('state-loaded', s);
   }
 
-  // -----------------------------------------------------------------------
   // Live updates (from WebSocket / subscription)
-  // -----------------------------------------------------------------------
 
   /**
    * Update a single building slot.
@@ -282,9 +268,7 @@ export class TownStateManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Queries
-  // -----------------------------------------------------------------------
 
   /**
    * Get the current visual state.
@@ -324,9 +308,7 @@ export class TownStateManager {
     }));
   }
 
-  // -----------------------------------------------------------------------
   // Event emitter
-  // -----------------------------------------------------------------------
 
   /**
    * Subscribe to a state change event.
@@ -350,9 +332,7 @@ export class TownStateManager {
     if (set) set.delete(callback);
   }
 
-  // -----------------------------------------------------------------------
   // Internals
-  // -----------------------------------------------------------------------
 
   /** @private */
   _emit(event, data) {

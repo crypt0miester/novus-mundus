@@ -56,9 +56,7 @@ import { advanceTime } from './time';
 
 import { type TestContext, airdropIfNeeded, sendTx } from './setup';
 
-// ============================================================
 // Types
-// ============================================================
 
 export interface TestPlayer {
   keypair: Keypair;
@@ -96,9 +94,7 @@ const DEFAULT_FACTORY_CONFIG: PlayerFactoryConfig = {
   initialBalance: 5 * LAMPORTS_PER_SOL,
 };
 
-// ============================================================
 // Player Pool
-// ============================================================
 
 const KEYS_DIR = path.join(__dirname, '../../keys/players');
 
@@ -122,9 +118,7 @@ function loadOrCreatePlayerKeypair(index: number): Keypair {
   return keypair;
 }
 
-// ============================================================
 // Player Factory
-// ============================================================
 
 export class PlayerFactory {
   private ctx: TestContext;
@@ -1171,9 +1165,7 @@ export class PlayerFactory {
   }
 }
 
-// ============================================================
 // Pre-configured Player Scenarios
-// ============================================================
 
 export interface CombatReadyPlayers {
   attacker: TestPlayer;
@@ -1207,20 +1199,23 @@ export async function createCombatReadyPlayers(
   const moveToRange = options.moveToRange ?? true;
 
   // Create defender first (in city 1) - needs Barracks for units, Market for equipment
-  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+  const defender = await factory.createPlayer({ initialize: true, cityId: 1, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay] });
 
   // Create attacker in a DIFFERENT city (to avoid spawn collision) - needs Stables for travel
-  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+  const attacker = await factory.createPlayer({ initialize: true, cityId: 2, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay] });
 
-  // Give attacker more operatives
-  await factory.hireUnits(attacker, 0, 100); // operative unit 1
-  await factory.hireUnits(attacker, 1, 50);  // operative unit 2
+  // Give attacker more operatives. Use ≥ 500 NOVI per hire — both the Consuming
+  // and Hiring time-of-day multipliers compound (each can be 0.618), so 100 NOVI
+  // can still floor to 0 units at unfavorable times (~0.382 effective). 500 is
+  // safely above that threshold and matches the lifecycle helper's choice.
+  await factory.hireUnits(attacker, 0, 500); // defensive unit 1
+  await factory.hireUnits(attacker, 1, 500); // defensive unit 2
   await factory.purchaseEquipment(attacker, 0, 50); // melee weapons
   await factory.purchaseEquipment(attacker, 1, 30); // ranged weapons
 
   // Give defender more defensives
-  await factory.hireUnits(defender, 0, 150); // defensive unit 1
-  await factory.hireUnits(defender, 1, 75);  // defensive unit 2
+  await factory.hireUnits(defender, 0, 500); // defensive unit 1
+  await factory.hireUnits(defender, 1, 500); // defensive unit 2
   await factory.purchaseEquipment(defender, 3, 100); // armor
 
   // Move attacker to within combat range of defender
@@ -1267,7 +1262,7 @@ export async function createRallyReadyPlayers(
   const creator = await factory.createPlayer({
     initialize: true,
     createEstate: true,
-    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Citadel, BuildingType.Stables],
+    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Citadel, BuildingType.TransportBay],
   });
 
   const participants: TestPlayer[] = [];
@@ -1277,7 +1272,7 @@ export async function createRallyReadyPlayers(
     const participant = await factory.createPlayer({
       initialize: true,
       createEstate: true,
-      buildings: [BuildingType.Barracks, BuildingType.Stables],
+      buildings: [BuildingType.Barracks, BuildingType.TransportBay],
     });
     // Give each participant some defensive units (type 0 = defensive_unit_1)
     await factory.hireUnits(participant, 0, 50000);
@@ -1288,7 +1283,7 @@ export async function createRallyReadyPlayers(
   const target = await factory.createPlayer({
     initialize: true,
     createEstate: true,
-    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables],
+    buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay],
   });
   await factory.hireUnits(target, 0, 100000);
   await factory.hireUnits(target, 1, 50000);

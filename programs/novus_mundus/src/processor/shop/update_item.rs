@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 use crate::{
     error::GameError,
@@ -41,8 +41,8 @@ pub enum UpdateField {
 /// - max_global_stock: u64 (if flag set)
 /// - current_global_stock: u64 (if flag set)
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -72,23 +72,23 @@ pub fn process(
 
     // 4. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // 5. Verify PDA
 
-    let (expected_pda, _) = ShopItemAccount::derive_pda(game_engine_account.key(), item_id);
-    if shop_item_account.key() != &expected_pda {
+    let (expected_pda, _) = ShopItemAccount::derive_pda(game_engine_account.address(), item_id);
+    if shop_item_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 6. Load and Update Shop Item
 
-    let mut shop_item_data_ref = shop_item_account.try_borrow_mut_data()?;
+    let mut shop_item_data_ref = shop_item_account.try_borrow_mut()?;
     let shop_item = unsafe { ShopItemAccount::load_mut(&mut shop_item_data_ref) };
 
     // Track data offset for variable-length updates

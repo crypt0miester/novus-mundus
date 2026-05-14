@@ -6,9 +6,9 @@
 //! clearing their buffs and closing the CourtPositionAccount.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -37,8 +37,8 @@ use crate::{
 /// 4. [writable] Rent recipient (player wallet)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -61,10 +61,10 @@ pub fn process(
 
     // Load player
     require_owner(player_account, program_id)?;
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    if &player.owner != player_wallet.key() {
+    if &player.owner != player_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -76,16 +76,16 @@ pub fn process(
 
     require_initialized(court_position_account).map_err(|_| GameError::NotCourtMember)?;
 
-    let court_data = court_position_account.try_borrow_data()?;
+    let court_data = court_position_account.try_borrow()?;
     let court = unsafe { CourtPositionAccount::load(&court_data) };
 
     // Verify player is the holder
-    if court.holder != *player_account.key() {
+    if court.holder != *player_account.address() {
         return Err(GameError::NotCourtMember.into());
     }
 
     // Verify court is for this castle
-    if court.castle != *castle_account.key() {
+    if court.castle != *castle_account.address() {
         return Err(GameError::InvalidAccount.into());
     }
 
@@ -123,9 +123,9 @@ pub fn process(
 
     // Emit event (resigned = true)
     emit!(CourtDismissed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name,
-        dismissed: *player_account.key(),
+        dismissed: *player_account.address(),
         dismissed_name: player_name,
         position_type,
         dismissed_by: NULL_PUBKEY, // Self-resignation

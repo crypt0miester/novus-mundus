@@ -1,12 +1,12 @@
 /// Game event events - event creation, participation, finalization
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a game event is created
 pub struct GameEventCreated {
     /// Event account pubkey
-    pub event: Pubkey,
+    pub event: Address,
     /// Event type (0=pvp, 1=boss, 2=territory, etc.)
     pub event_type: u8,
     /// Start timestamp
@@ -37,9 +37,9 @@ impl Event for GameEventCreated {
 /// Emitted when a player joins a game event
 pub struct GameEventJoined {
     /// Event account pubkey
-    pub event: Pubkey,
+    pub event: Address,
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Entry fee paid (if any)
@@ -68,7 +68,7 @@ impl Event for GameEventJoined {
 /// Emitted when a game event is finalized
 pub struct GameEventFinalized {
     /// Event account pubkey
-    pub event: Pubkey,
+    pub event: Address,
     /// Total participants
     pub total_participants: u32,
     /// Total prize pool distributed
@@ -93,9 +93,9 @@ impl Event for GameEventFinalized {
 /// Emitted when a player's score is updated in an event
 pub struct EventScoreUpdated {
     /// Event account pubkey
-    pub event: Pubkey,
+    pub event: Address,
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Score delta (positive = increase)

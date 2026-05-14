@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use crate::{
@@ -55,8 +55,8 @@ impl SaleType {
 /// - sale_type: u8 (SaleType enum)
 /// - sale_id: u64 (or item_id for PlayerPurchase)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -88,10 +88,10 @@ pub fn process(
 
     // 4. Load Game Engine for Authority Check
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    let is_dao = authority.key() == &game_engine.authority;
+    let is_dao = authority.address() == &game_engine.authority;
 
     // 5. Validate and Close Based on Sale Type
 
@@ -102,7 +102,7 @@ pub fn process(
         SaleType::FlashSale => {
             close_flash_sale(
                 program_id,
-                game_engine_account.key(),
+                game_engine_account.address(),
                 sale_account,
                 rent_recipient,
                 sale_id,
@@ -113,7 +113,7 @@ pub fn process(
         SaleType::WeeklySale => {
             close_weekly_sale(
                 program_id,
-                game_engine_account.key(),
+                game_engine_account.address(),
                 sale_account,
                 rent_recipient,
                 sale_id,
@@ -134,7 +134,7 @@ pub fn process(
         SaleType::DAOPromotion => {
             close_dao_promotion(
                 program_id,
-                game_engine_account.key(),
+                game_engine_account.address(),
                 sale_account,
                 rent_recipient,
                 sale_id,
@@ -150,7 +150,7 @@ pub fn process(
 
             close_player_purchase(
                 program_id,
-                authority.key(),
+                authority.address(),
                 sale_account,
                 rent_recipient,
                 shop_item_account,
@@ -163,33 +163,31 @@ pub fn process(
     Ok(())
 }
 
-// ============================================================
 // CLOSE IMPLEMENTATIONS
-// ============================================================
 
 fn close_flash_sale(
-    _program_id: &Pubkey,
-    game_engine: &Pubkey,
-    sale_account: &AccountInfo,
-    rent_recipient: &AccountInfo,
+    _program_id: &Address,
+    game_engine: &Address,
+    sale_account: &AccountView,
+    rent_recipient: &AccountView,
     sale_id: u64,
     is_dao: bool,
     now: i64,
 ) -> ProgramResult {
     // Verify PDA
     let (expected, _) = FlashSaleAccount::derive_pda(game_engine, sale_id);
-    if sale_account.key() != &expected {
+    if sale_account.address() != &expected {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Load and verify can close
-    let sale_data = sale_account.try_borrow_data()?;
+    let sale_data = sale_account.try_borrow()?;
     let flash_sale = unsafe { FlashSaleAccount::load(&sale_data) };
 
     // DAO can always close, otherwise check can_close
     if !is_dao {
         // Check recipient is payer
-        if rent_recipient.key() != &flash_sale.payer {
+        if rent_recipient.address() != &flash_sale.payer {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -206,24 +204,24 @@ fn close_flash_sale(
 }
 
 fn close_weekly_sale(
-    _program_id: &Pubkey,
-    game_engine: &Pubkey,
-    sale_account: &AccountInfo,
-    rent_recipient: &AccountInfo,
+    _program_id: &Address,
+    game_engine: &Address,
+    sale_account: &AccountView,
+    rent_recipient: &AccountView,
     week_number: u64,
     is_dao: bool,
     now: i64,
 ) -> ProgramResult {
     let (expected, _) = WeeklySaleAccount::derive_pda(game_engine, week_number);
-    if sale_account.key() != &expected {
+    if sale_account.address() != &expected {
         return Err(GameError::InvalidPDA.into());
     }
 
-    let sale_data = sale_account.try_borrow_data()?;
+    let sale_data = sale_account.try_borrow()?;
     let weekly_sale = unsafe { WeeklySaleAccount::load(&sale_data) };
 
     if !is_dao {
-        if rent_recipient.key() != &weekly_sale.payer {
+        if rent_recipient.address() != &weekly_sale.payer {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -237,19 +235,19 @@ fn close_weekly_sale(
 }
 
 fn close_seasonal_sale(
-    _program_id: &Pubkey,
-    sale_account: &AccountInfo,
-    rent_recipient: &AccountInfo,
+    _program_id: &Address,
+    sale_account: &AccountView,
+    rent_recipient: &AccountView,
     is_dao: bool,
 ) -> ProgramResult {
     // Seasonal sale PDA uses event pubkey, harder to verify here
     // Just load and check payer/status
 
-    let sale_data = sale_account.try_borrow_data()?;
+    let sale_data = sale_account.try_borrow()?;
     let seasonal_sale = unsafe { SeasonalSaleAccount::load(&sale_data) };
 
     if !is_dao {
-        if rent_recipient.key() != &seasonal_sale.payer {
+        if rent_recipient.address() != &seasonal_sale.payer {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -263,23 +261,23 @@ fn close_seasonal_sale(
 }
 
 fn close_dao_promotion(
-    _program_id: &Pubkey,
-    game_engine: &Pubkey,
-    sale_account: &AccountInfo,
-    rent_recipient: &AccountInfo,
+    _program_id: &Address,
+    game_engine: &Address,
+    sale_account: &AccountView,
+    rent_recipient: &AccountView,
     proposal_id: u64,
     is_dao: bool,
 ) -> ProgramResult {
     let (expected, _) = DAOPromotionAccount::derive_pda(game_engine, proposal_id);
-    if sale_account.key() != &expected {
+    if sale_account.address() != &expected {
         return Err(GameError::InvalidPDA.into());
     }
 
-    let sale_data = sale_account.try_borrow_data()?;
+    let sale_data = sale_account.try_borrow()?;
     let dao_promo = unsafe { DAOPromotionAccount::load(&sale_data) };
 
     if !is_dao {
-        if rent_recipient.key() != &dao_promo.payer {
+        if rent_recipient.address() != &dao_promo.payer {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -293,11 +291,11 @@ fn close_dao_promotion(
 }
 
 fn close_player_purchase(
-    _program_id: &Pubkey,
-    authority: &Pubkey,
-    purchase_account: &AccountInfo,
-    rent_recipient: &AccountInfo,
-    shop_item_account: &AccountInfo,
+    _program_id: &Address,
+    authority: &Address,
+    purchase_account: &AccountView,
+    rent_recipient: &AccountView,
+    shop_item_account: &AccountView,
     item_id: u32,
     is_dao: bool,
 ) -> ProgramResult {
@@ -307,15 +305,15 @@ fn close_player_purchase(
 
     // Either the purchase account matches (authority is player)
     // Or DAO is closing it
-    if purchase_account.key() != &expected && !is_dao {
+    if purchase_account.address() != &expected && !is_dao {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Load shop item to check can_close
-    let item_data = shop_item_account.try_borrow_data()?;
+    let item_data = shop_item_account.try_borrow()?;
     let shop_item = unsafe { ShopItemAccount::load(&item_data) };
 
-    let purchase_data = purchase_account.try_borrow_data()?;
+    let purchase_data = purchase_account.try_borrow()?;
     let player_purchase = unsafe { PlayerPurchaseAccount::load(&purchase_data) };
 
     if !is_dao && !player_purchase.can_close(&shop_item) {

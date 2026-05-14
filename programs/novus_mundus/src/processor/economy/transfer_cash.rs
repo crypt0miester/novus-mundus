@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -59,13 +59,11 @@ use crate::{
 /// - amount: u64 (8 bytes) - Amount of cash to transfer
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
-    // ============================================================
     // 1. Parse Instruction Data
-    // ============================================================
 
     if data.len() < 16 {
         return Err(ProgramError::InvalidInstructionData);
@@ -77,9 +75,7 @@ pub fn process(
         return Err(GameError::InvalidAmount.into());
     }
 
-    // ============================================================
     // 2. Parse Accounts
-    // ============================================================
 
     let [
         sender,
@@ -92,42 +88,40 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // ============================================================
+    // Reject self-transfers — would let a player launder their own funds and bypass anti-Sybil
+    // tracking (total_sent / total_received) by funneling cash through themselves.
+    if sender_player_account.address() == receiver_player_account.address() {
+        return Err(GameError::CannotTransferToSelf.into());
+    }
+
     // 3. Validate Signer
-    // ============================================================
 
     if !sender.is_signer() {
         return Err(GameError::Unauthorized.into());
     }
 
-    // ============================================================
     // 4. Load Accounts (kingdom-scoped)
-    // ============================================================
 
     // GameEngine: load_checked_by_key (validates ownership and gets config)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Sender: load_checked (verifies PDA + ownership, kingdom-scoped)
-    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, game_engine_account.key(), sender.key(), program_id)?;
+    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, game_engine_account.address(), sender.address(), program_id)?;
 
     // Receiver: manual load (we don't have receiver's wallet key in accounts)
     // Must verify program ownership to prevent fake account attacks
     require_owner(receiver_player_account, program_id)?;
-    let mut receiver_data_ref = receiver_player_account.try_borrow_mut_data()?;
+    let mut receiver_data_ref = receiver_player_account.try_borrow_mut()?;
     let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
 
     // Team: load_checked (verifies PDA + ownership using team_id, kingdom-scoped)
-    let _team = TeamAccount::load_checked(team_account, game_engine_account.key(), team_id, program_id)?;
+    let _team = TeamAccount::load_checked(team_account, game_engine_account.address(), team_id, program_id)?;
 
-    // ============================================================
     // 6. Get Current Time
-    // ============================================================
 
     let now = Clock::get()?.unix_timestamp;
 
-    // ============================================================
     // 7. Validate Account Age (7+ days for both)
-    // ============================================================
 
     let min_account_age = game_engine.caps.min_account_age_for_events;
 
@@ -139,9 +133,7 @@ pub fn process(
         return Err(GameError::AccountTooNew.into());
     }
 
-    // ============================================================
     // 8. Validate Same Team
-    // ============================================================
 
     if sender_player.team == NULL_PUBKEY || receiver_player.team == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
@@ -152,7 +144,7 @@ pub fn process(
     }
 
     // Verify team account matches
-    if team_account.key() != &sender_player.team {
+    if team_account.address() != &sender_player.team {
         return Err(GameError::InvalidTeam.into());
     }
 
@@ -161,9 +153,7 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    // ============================================================
     // 9. Load Estate and Validate Vault Requirement
-    // ============================================================
 
     // Load sender's estate to check Vault building
     let estate = load_estate_for_player(estate_account, &*sender_player, program_id)?;
@@ -174,9 +164,7 @@ pub fn process(
     // Get transfer limit bonus from Vault
     let vault_bonus_bps = vault_transfer_bonus_bps(estate);
 
-    // ============================================================
     // 10. Get Tier-Based Transfer Limits
-    // ============================================================
 
     // Determine active tier (free tier 0 if expired)
     let tier_index = if sender_player.subscription_end > now {
@@ -192,23 +180,26 @@ pub fn process(
         return Err(GameError::TransfersDisabledForTier.into());
     }
 
-    // ============================================================
     // 11. Reset Daily Counters if New Day
-    // ============================================================
 
     const SECONDS_PER_DAY: i64 = 86400;
     let current_day = now / SECONDS_PER_DAY;
     let last_reset_day = sender_player.last_transfer_reset / SECONDS_PER_DAY;
 
+    // NOTE (cosmetic): Before the player's first-ever transfer,
+    // `last_transfer_reset` is 0, so `last_reset_day` is 0 and this branch
+    // will fire on every call until the first real transfer completes. The
+    // counters being zeroed are already 0 in that pre-transfer state, so the
+    // behavior is harmless — no double-spend or limit bypass — and the
+    // `last_transfer_reset = now` assignment below stabilizes the state from
+    // the first transfer onward. Left intentional to avoid a special-case.
     if current_day > last_reset_day {
         sender_player.daily_transferred = 0;
         sender_player.daily_transfer_count = 0;
         sender_player.last_transfer_reset = now;
     }
 
-    // ============================================================
     // 12. Validate Transfer Limits
-    // ============================================================
 
     // Calculate daily amount limit with Vault bonus
     // u16::MAX from vault_transfer_bonus_bps means unlimited transfers
@@ -233,17 +224,13 @@ pub fn process(
         return Err(GameError::DailyTransferCountExceeded.into());
     }
 
-    // ============================================================
     // 13. Validate Sufficient Balance
-    // ============================================================
 
     if sender_player.cash_on_hand < amount {
         return Err(GameError::InsufficientCash.into());
     }
 
-    // ============================================================
     // 14. Execute Transfer
-    // ============================================================
 
     // Deduct from sender
     sender_player.cash_on_hand = sender_player.cash_on_hand.saturating_sub(amount);
@@ -251,9 +238,7 @@ pub fn process(
     // Add to receiver
     receiver_player.cash_on_hand = receiver_player.cash_on_hand.saturating_add(amount);
 
-    // ============================================================
     // 15. Update Transfer Tracking
-    // ============================================================
 
     // Daily limits
     sender_player.daily_transferred = new_daily_total;
@@ -265,9 +250,9 @@ pub fn process(
 
     // Emit CashTransferred event
     emit!(CashTransferred {
-        from: *sender_player_account.key(),
+        from: *sender_player_account.address(),
         from_name: sender_player.name,
-        to: *receiver_player_account.key(),
+        to: *receiver_player_account.address(),
         to_name: receiver_player.name,
         amount,
         fee: 0, // No transfer fee in current implementation

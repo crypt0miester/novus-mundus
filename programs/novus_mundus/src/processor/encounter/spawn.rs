@@ -1,5 +1,5 @@
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address}, sysvars::{Sysvar, clock::Clock}
+    ProgramResult, AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -52,8 +52,8 @@ use crate::{
 /// # Instruction Data
 /// - encounter_type: u8 - Type to spawn (0=Common, 1=Uncommon, 2=Rare, or Epic/Legendary for auto-spawn)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -104,13 +104,13 @@ pub fn process(
 
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 
-    let game_engine_data = game_engine_account.try_borrow_data()?;
+    let game_engine_data = game_engine_account.try_borrow()?;
     let game_engine_data = unsafe {
         crate::state::GameEngine::load(&game_engine_data)
     };
 
     // Check if this is an auto-spawn (authority is game_engine.authority)
-    let is_auto_spawn = authority.key() == &game_engine_data.authority;
+    let is_auto_spawn = authority.address() == &game_engine_data.authority;
 
     // 5. Validate Encounter Type Based on Spawn Mode
 
@@ -126,11 +126,11 @@ pub fn process(
         // Player spawns require player account validation
         require_writable(player_account)?;
 
-        let mut player_account_data = player_account.try_borrow_mut_data()?;
+        let mut player_account_data = player_account.try_borrow_mut()?;
         let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
 
         // Verify player ownership
-        if &player_data.owner != authority.key() {
+        if &player_data.owner != authority.address() {
             return Err(GameError::Unauthorized.into());
         }
     }
@@ -141,7 +141,7 @@ pub fn process(
 
     // Verify player is in city (skip for auto-spawn)
     if !is_auto_spawn {
-        let mut player_account_data = player_account.try_borrow_mut_data()?;
+        let mut player_account_data = player_account.try_borrow_mut()?;
         let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
         if player_data.current_city != city_data.city_id {
             return Err(GameError::WrongCity.into());
@@ -182,9 +182,7 @@ pub fn process(
             let dao_adjusted_cost = apply_bp(base_burn_cost, game_engine_data.economic_config.cost_multiplier as u64)
                 .ok_or(GameError::MathOverflow)?;
 
-            // ============================================================
             // 7a. Apply Time-Based Spawn Cost Discount (DETERMINISTIC)
-            // ============================================================
             // Spawning at optimal time = cheaper (spawn weight as discount)
             // - Rare at Dawn/Dusk (φ² weight) = cost / φ² = 38% of base cost
             // - Legendary at DeepNight (φ² weight) = cost / φ² = 38% of base cost
@@ -200,8 +198,8 @@ pub fn process(
 
             let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine_data.bump];
-            let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-            let signer = pinocchio::instruction::Signer::from(&seeds);
+            let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+            let signer = pinocchio::cpi::Signer::from(&seeds);
 
             // Burn tokens from player
             burn_tokens(
@@ -258,13 +256,13 @@ pub fn process(
     let spawn_long_bytes = spawn_grid_long.to_le_bytes();
 
     let (expected_spawn_location, spawn_location_bump) = LocationAccount::derive_pda(
-        game_engine_account.key(),
+        game_engine_account.address(),
         city_data.city_id,
         spawn_grid_lat,
         spawn_grid_long,
     );
 
-    if spawn_location_account.key() != &expected_spawn_location {
+    if spawn_location_account.address() != &expected_spawn_location {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -277,13 +275,13 @@ pub fn process(
 
     let city_id_bytes = city_data.city_id.to_le_bytes();
     let encounter_id_bytes = encounter_id.to_le_bytes();
-    let (expected_encounter, encounter_bump) = find_program_address(
-        &[ENCOUNTER_SEED, game_engine_account.key().as_ref(), &city_id_bytes, &encounter_id_bytes],
+    let (expected_encounter, encounter_bump) = Address::find_program_address(
+        &[ENCOUNTER_SEED, game_engine_account.address().as_ref(), &city_id_bytes, &encounter_id_bytes],
         program_id,
     );
 
-    if encounter_account.key() != &expected_encounter {
-        pinocchio::msg!("encounter PDA mismatch");
+    if encounter_account.address() != &expected_encounter {
+        crate::msg!("encounter PDA mismatch");
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -293,19 +291,18 @@ pub fn process(
 
     if spawn_location_len == 0 {
         // Create new LocationAccount for encounter
-        let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let location_lamports = rent.minimum_balance(LocationAccount::LEN);
+        let location_lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let loc_bump_seed = [spawn_location_bump];
-        let location_seeds = pinocchio::seeds!(
+        let location_seeds = crate::seeds!(
             LOCATION_SEED,
-            game_engine_account.key().as_ref(),
+            game_engine_account.address(),
             &spawn_city_bytes,
             &spawn_lat_bytes,
             &spawn_long_bytes,
             &loc_bump_seed
         );
-        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+        let location_signer = pinocchio::cpi::Signer::from(&location_seeds);
 
         CreateAccount {
             from: payer,
@@ -315,7 +312,7 @@ pub fn process(
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
 
-        let mut location_data = spawn_location_account.try_borrow_mut_data()?;
+        let mut location_data = spawn_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         location.account_key = crate::state::AccountKey::Location as u8;
@@ -324,13 +321,13 @@ pub fn process(
         location.city_id = city_data.city_id;
         location.bump = spawn_location_bump;
         location.occupant_type = OCCUPANT_ENCOUNTER;
-        location.occupant = *encounter_account.key();
+        location.occupant = *encounter_account.address();
         location.occupied_since = now;
-        location.location_creator = *payer.key();
+        location.location_creator = *payer.address();
         location.reserved_arrival_time = 0; // Encounters don't travel
     } else {
         // Cell exists - check if available
-        let mut location_data = spawn_location_account.try_borrow_mut_data()?;
+        let mut location_data = spawn_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         // Validate grid coordinates match
@@ -345,9 +342,9 @@ pub fn process(
 
         // Claim the cell for the encounter
         location.occupant_type = OCCUPANT_ENCOUNTER;
-        location.occupant = *encounter_account.key();
+        location.occupant = *encounter_account.address();
         location.occupied_since = now;
-        location.location_creator = *payer.key();
+        location.location_creator = *payer.address();
         location.reserved_arrival_time = 0; // Encounters don't travel
     }
 
@@ -355,11 +352,11 @@ pub fn process(
 
     let space = EncounterAccount::calculate_len(0);
     let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(space);
+        .try_minimum_balance(space)?;
 
     let enc_bump_seed = [encounter_bump];
-    let seeds = pinocchio::seeds!(ENCOUNTER_SEED, game_engine_account.key().as_ref(), &city_id_bytes, &encounter_id_bytes, &enc_bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(ENCOUNTER_SEED, game_engine_account.address(), &city_id_bytes, &encounter_id_bytes, &enc_bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,  // Payer pays rent (can be backend for auto-spawns!)
@@ -372,7 +369,7 @@ pub fn process(
     // 12. Initialize Encounter Data
     // (clock already obtained above for time-of-day check)
 
-    let mut encounter_account_data = encounter_account.try_borrow_mut_data()?;
+    let mut encounter_account_data = encounter_account.try_borrow_mut()?;
     let encounter_data = unsafe {
         EncounterAccount::load_mut(&mut encounter_account_data)
     };
@@ -401,7 +398,7 @@ pub fn process(
 
     *encounter_data = EncounterAccount {
         account_key: crate::state::AccountKey::Encounter as u8,
-        game_engine: *game_engine_account.key(),
+        game_engine: *game_engine_account.address(),
         id: encounter_id,
         city_id: city_data.city_id,
         level: encounter_level,                 
@@ -427,8 +424,8 @@ pub fn process(
 
     // 14. Emit EncounterSpawned event
     emit!(EncounterSpawned {
-        encounter: *encounter_account.key(),
-        city: *city_account.key(),
+        encounter: *encounter_account.address(),
+        city: *city_account.address(),
         encounter_type: encounter_type as u8,
         level: encounter_level,
         x: spawn_grid_lat,
@@ -459,7 +456,7 @@ pub fn process(
 fn calculate_encounter_level(
     city_data: &CityAccount,
     _encounter_type: EncounterType,
-    player_account: &AccountInfo,
+    player_account: &AccountView,
     is_auto_spawn: bool,
 ) -> Result<u8, ProgramError> {
     let min = city_data.min_encounter_level;
@@ -472,7 +469,7 @@ fn calculate_encounter_level(
         Ok(crate::logic::deterministic_encounter_level(min, max, spawn_index))
     } else {
         // Player spawn: Spawn at player's level (deterministic, no variance)
-        let player_account_data = player_account.try_borrow_data()?;
+        let player_account_data = player_account.try_borrow()?;
         let player_data = unsafe {
             PlayerAccount::load(&player_account_data)
         };

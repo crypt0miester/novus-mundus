@@ -7,9 +7,7 @@
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Validation result type */
 export interface ValidationResult {
@@ -36,9 +34,7 @@ export function combine(...results: ValidationResult[]): ValidationResult {
   return errors.length === 0 ? valid() : invalid(...errors);
 }
 
-// ============================================================
 // PublicKey Validation
-// ============================================================
 
 /** Check if a value is a valid PublicKey */
 export function isValidPubkey(value: unknown): value is PublicKey {
@@ -77,9 +73,7 @@ export function validateDifferentPubkeys(
   return valid();
 }
 
-// ============================================================
 // Number Validation
-// ============================================================
 
 /** Validate a number is positive */
 export function validatePositive(value: number | BN, fieldName: string): ValidationResult {
@@ -155,9 +149,7 @@ export function validateMinimumBN(value: BN, min: BN, fieldName: string): Valida
   return valid();
 }
 
-// ============================================================
 // String Validation
-// ============================================================
 
 /** Validate a string is not empty */
 export function validateNonEmpty(value: string, fieldName: string): ValidationResult {
@@ -208,9 +200,7 @@ export function validateName(value: string, fieldName: string): ValidationResult
   return result;
 }
 
-// ============================================================
 // Array Validation
-// ============================================================
 
 /** Validate an array is not empty */
 export function validateNonEmptyArray<T>(arr: T[], fieldName: string): ValidationResult {
@@ -237,9 +227,7 @@ export function validateArrayLength<T>(
   return valid();
 }
 
-// ============================================================
 // Enum Validation
-// ============================================================
 
 /** Validate a value is a valid enum member */
 export function validateEnum<T extends Record<string, number>>(
@@ -254,9 +242,7 @@ export function validateEnum<T extends Record<string, number>>(
   return valid();
 }
 
-// ============================================================
 // Boolean Validation
-// ============================================================
 
 /** Validate a condition is true */
 export function validateCondition(
@@ -280,9 +266,7 @@ export function validateNot(
   return valid();
 }
 
-// ============================================================
 // Timestamp Validation
-// ============================================================
 
 /** Validate a timestamp is in the future */
 export function validateFutureTimestamp(
@@ -320,9 +304,7 @@ export function validateNotExpired(
   return valid();
 }
 
-// ============================================================
 // Utility Functions
-// ============================================================
 
 /** Check if all validation results are valid */
 export function allValid(...results: ValidationResult[]): boolean {

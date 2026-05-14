@@ -176,7 +176,7 @@
 | 7904 | `HeroSlotEmpty` | No hero in slot | Select occupied slot |
 | 7905 | `InvalidHeroTemplate` | Template doesn't exist | Use valid template |
 | 7906 | `HeroOnCooldown` | Hero action cooldown | Wait for cooldown |
-| 7907 | `SanctuaryRequired` | Sanctuary building needed | Build Sanctuary |
+| 7907 | `MeditationChamberRequired` | MeditationChamber building needed | Build MeditationChamber |
 | 7908 | `HeroMeditating` | Hero in meditation | Claim meditation first |
 | 7909 | `HeroOnExpedition` | Hero on expedition | Complete expedition first |
 

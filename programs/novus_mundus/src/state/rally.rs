@@ -1,12 +1,10 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    program_error::ProgramError,
+    Address,
+    error::ProgramError,
 };
 use crate::constants::{RALLY_SEED, RALLY_PARTICIPANT_SEED};
 
-// ============================================================
 // Rally Status
-// ============================================================
 
 /// Rally status enum (stored as u8)
 #[repr(u8)]
@@ -40,9 +38,7 @@ impl RallyStatus {
     }
 }
 
-// ============================================================
 // Rally Account (Strategic Combat System)
-// ============================================================
 
 /// Rally Account - Coordinates team attacks across cities
 /// KINGDOM-SCOPED: Rallies exist within a kingdom
@@ -63,12 +59,12 @@ pub struct RallyAccount {
     pub account_key: u8,
 
     // Kingdom Reference (32 bytes)
-    pub game_engine: Pubkey,                // Kingdom this rally belongs to
+    pub game_engine: Address,                // Kingdom this rally belongs to
 
     // Identity (48 bytes)
     pub id: u64,                            // Unique rally ID
-    pub creator: Pubkey,                    // Rally leader (created it)
-    pub team: Pubkey,                       // Team this rally belongs to
+    pub creator: Address,                    // Rally leader (created it)
+    pub team: Address,                       // Team this rally belongs to
 
     // Location (8 bytes)
     pub rally_city: u16,                    // City where rally gathers
@@ -77,7 +73,7 @@ pub struct RallyAccount {
     pub _padding1: [u8; 3],
 
     // Target (32 bytes)
-    pub target: Pubkey,                     // Target player or encounter
+    pub target: Address,                     // Target player or encounter
 
     // Timing (48 bytes)
     pub created_at: i64,                    // When rally was created
@@ -209,42 +205,43 @@ impl RallyAccount {
 
     /// Derive the PDA for a rally account
     /// Seeds: [RALLY_SEED, game_engine, creator, rally_id]
-    pub fn derive_pda(game_engine: &Pubkey, creator: &Pubkey, rally_id: u64) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, creator: &Address, rally_id: u64) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[RALLY_SEED, game_engine.as_ref(), creator.as_ref(), &rally_id.to_le_bytes()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Pubkey, creator: &Pubkey, rally_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, creator: &Address, rally_id: u64, bump: u8) -> Result<Address, ProgramError> {
         let rally_id_bytes = rally_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[RALLY_SEED, game_engine.as_ref(), creator.as_ref(), &rally_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify a RallyAccount immutably.
     /// Checks: program ownership, PDA derivation, bump field, kingdom membership.
     pub fn load_checked<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
-        creator: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
+        creator: &Address,
         rally_id: u64,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, creator, rally_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::Rally)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -262,22 +259,23 @@ impl RallyAccount {
     /// Load and verify a RallyAccount mutably.
     /// Checks: program ownership, PDA derivation, bump field, kingdom membership.
     pub fn load_checked_mut<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
-        creator: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
+        creator: &Address,
         rally_id: u64,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, creator, rally_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::Rally)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -293,14 +291,12 @@ impl RallyAccount {
     }
 
     /// Check if rally belongs to a specific kingdom
-    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+    pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine
     }
 }
 
-// ============================================================
 // Rally Participant Account
-// ============================================================
 
 /// Rally Participant - Per-joiner state for a rally
 ///
@@ -317,8 +313,8 @@ pub struct RallyParticipant {
 
     // Identity (48 bytes)
     pub rally_id: u64,                      // Which rally
-    pub rally_creator: Pubkey,              // Rally creator (for PDA derivation)
-    pub participant: Pubkey,                // This participant's wallet
+    pub rally_creator: Address,              // Rally creator (for PDA derivation)
+    pub participant: Address,                // This participant's wallet
 
     // Home location (4 bytes)
     pub home_city: u16,                     // Where to return after rally
@@ -345,7 +341,7 @@ pub struct RallyParticipant {
     pub _padding2: [u8; 2],
 
     // Hero (40 bytes)
-    pub hero: Pubkey,                       // Committed hero (NULL_PUBKEY if none)
+    pub hero: Address,                       // Committed hero (NULL_PUBKEY if none)
     pub hero_power_contribution: u64,       // Hero's power contribution
 
     // Travel to rally point (24 bytes)
@@ -489,8 +485,8 @@ impl RallyParticipant {
 
     /// Derive the PDA for a rally participant account
     /// Seeds: [RALLY_PARTICIPANT_SEED, game_engine, rally_creator, rally_id, participant]
-    pub fn derive_pda(game_engine: &Pubkey, rally_creator: &Pubkey, rally_id: u64, participant: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, rally_creator: &Address, rally_id: u64, participant: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[
                 RALLY_PARTICIPANT_SEED,
                 game_engine.as_ref(),
@@ -504,15 +500,15 @@ impl RallyParticipant {
 
     /// Create PDA from known bump
     pub fn create_pda(
-        game_engine: &Pubkey,
-        rally_creator: &Pubkey,
+        game_engine: &Address,
+        rally_creator: &Address,
         rally_id: u64,
-        participant: &Pubkey,
+        participant: &Address,
         bump: u8,
-    ) -> Result<Pubkey, ProgramError> {
+    ) -> Result<Address, ProgramError> {
         let rally_id_bytes = rally_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[
                 RALLY_PARTICIPANT_SEED,
                 game_engine.as_ref(),
@@ -522,28 +518,29 @@ impl RallyParticipant {
                 &bump_seed,
             ],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify a RallyParticipant immutably.
     pub fn load_checked<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
-        rally_creator: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
+        rally_creator: &Address,
         rally_id: u64,
-        participant: &Pubkey,
-        program_id: &Pubkey,
+        participant: &Address,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, rally_creator, rally_id, participant);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::RallyParticipant)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -556,23 +553,24 @@ impl RallyParticipant {
 
     /// Load and verify a RallyParticipant mutably.
     pub fn load_checked_mut<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
-        rally_creator: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
+        rally_creator: &Address,
         rally_id: u64,
-        participant: &Pubkey,
-        program_id: &Pubkey,
+        participant: &Address,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, rally_creator, rally_id, participant);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::RallyParticipant)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -584,9 +582,7 @@ impl RallyParticipant {
     }
 }
 
-// ============================================================
 // Legacy Compatibility (for existing processors)
-// ============================================================
 
 impl RallyAccount {
     /// Base size for rent calculation
@@ -599,13 +595,13 @@ impl RallyAccount {
 
     /// Get participants (legacy - returns empty in new design)
     /// New design uses separate RallyParticipant accounts
-    pub fn participants<'a>(&self, _data: &'a [u8]) -> &'a [pinocchio::pubkey::Pubkey] {
+    pub fn participants<'a>(&self, _data: &'a [u8]) -> &'a [pinocchio::Address] {
         &[]
     }
 
     /// Check if participant exists (legacy compatibility)
     /// New design uses separate RallyParticipant accounts
-    pub fn has_participant(&self, _data: &[u8], _pubkey: &Pubkey) -> bool {
+    pub fn has_participant(&self, _data: &[u8], _pubkey: &Address) -> bool {
         false // Always false - use RallyParticipant accounts
     }
 }

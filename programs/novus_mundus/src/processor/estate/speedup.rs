@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -33,8 +33,8 @@ pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
 /// 2. `[SIGNER]` owner - Player's wallet
 /// 3. `[]` game_engine - For gem cost configuration
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -69,8 +69,8 @@ pub fn process(
 
     // 4. Load Accounts
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?;
-    let mut estate_data = EstateAccount::load_checked_mut(estate_account, player_account.key(), owner.key(), program_id)?;
+    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
+    let mut estate_data = EstateAccount::load_checked_mut(estate_account, player_account.address(), owner.address(), program_id)?;
 
     // 5. Find the building
     let building = estate_data.find_building_mut(building_type)

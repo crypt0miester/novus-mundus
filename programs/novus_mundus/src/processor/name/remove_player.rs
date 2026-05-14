@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    instruction::Signer,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    cpi::Signer,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -14,7 +14,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, validate_and_get_domain_name},
     state::PlayerAccount,
-    validation::{require_key_match, require_signer, require_writable},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::PlayerNameRemoved,
     NULL_PUBKEY,
@@ -38,7 +38,7 @@ use crate::{
 /// # Effects
 /// - Transfers domain ownership from player PDA → user wallet
 /// - Clears domain name from player account (reverts to default "Player #X")
-pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
     let [
         player_account,
@@ -65,25 +65,27 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     require_writable(player_account)?;
     require_writable(name_account)?;
     require_key_match(alt_name_service_program, &alt_name_service::ID)?;
+    require_owner(name_account, &alt_name_service::ID)?;
+    require_owner(reverse_name_account, &alt_name_service::ID)?;
 
-    if name_class.key() != &NULL_PUBKEY {
+    if name_class.address() != &NULL_PUBKEY {
         return Err(ProgramError::InvalidAccountData);
     }
 
     // 4. Load and validate player
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Derive player PDA and get bump for signing
     let player_ge = player.game_engine;
-    let player_seeds: &[&[u8]] = &[PLAYER_SEED, &player_ge, owner.key().as_ref()];
-    let (player_pda, bump) = pinocchio::pubkey::find_program_address(player_seeds, program_id);
+    let player_seeds: &[&[u8]] = &[PLAYER_SEED, player_ge.as_ref(), owner.address().as_ref()];
+    let (player_pda, bump) = pinocchio::Address::find_program_address(player_seeds, program_id);
 
-    if player_pda != *player_account.key() {
+    if player_pda != *player_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -102,7 +104,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
 
     // 8. Transfer domain ownership: player PDA → user wallet
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
+    let seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), owner.address(), &bump_seed);
     let signer = Signer::from(&seeds);
 
     Transfer {
@@ -111,7 +113,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
         name_class,
         parent_name: name_parent,
         hashed_name,
-        new_owner: owner.key(), // Transfer back to user
+        new_owner: owner.address(), // Transfer back to user
     }
     .invoke_signed(&[signer])?;
 
@@ -123,7 +125,7 @@ pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Pr
     // 10. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameRemoved {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: [0u8; 48], // Name was just cleared
         timestamp: now,
     });

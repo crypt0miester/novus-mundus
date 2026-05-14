@@ -15,9 +15,7 @@ import {
 // Re-export constants from main module for convenience
 export { STAMINA_REGEN_INTERVAL, ENCOUNTER_STAMINA_COSTS, MAX_STAMINA_BY_TIER };
 
-// ============================================================
 // Stamina Regeneration
-// ============================================================
 
 /**
  * Calculate stamina regeneration with time-of-day bonus.
@@ -93,9 +91,7 @@ export function calculateSimpleStaminaRegen(
   return [newStamina, actualGained];
 }
 
-// ============================================================
 // Stamina Consumption
-// ============================================================
 
 /**
  * Check if player has enough stamina for an encounter.
@@ -139,9 +135,7 @@ export function consumeStamina(
   return [currentStamina - cost, true];
 }
 
-// ============================================================
 // Stamina Addition
-// ============================================================
 
 /**
  * Add stamina to player (from purchases, rewards, achievements).
@@ -161,9 +155,7 @@ export function addStamina(
   return [newStamina, actualAdded];
 }
 
-// ============================================================
 // Max Stamina Calculations
-// ============================================================
 
 /**
  * Get max stamina for a subscription tier.
@@ -187,9 +179,7 @@ export function calculateMaxStamina(tier: number, bonusBps: number = 0): number 
   return bonusBps > 0 ? applyBpsBonus(baseMax, bonusBps) : baseMax;
 }
 
-// ============================================================
 // Time Estimation
-// ============================================================
 
 /**
  * Calculate time until full stamina recovery.

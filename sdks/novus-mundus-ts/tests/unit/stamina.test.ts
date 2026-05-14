@@ -23,9 +23,7 @@ import {
 
 import { TimeOfDay } from '../../src/calculators/time';
 
-// ============================================================
 // Stamina Regeneration (Full) Tests
-// ============================================================
 
 describe('calculateStaminaRegeneration', () => {
   it('should return no gain if not enough time elapsed', () => {
@@ -89,9 +87,7 @@ describe('calculateStaminaRegeneration', () => {
   });
 });
 
-// ============================================================
 // Simple Stamina Regen Tests
-// ============================================================
 
 describe('calculateSimpleStaminaRegen', () => {
   it('should gain 1 stamina per interval', () => {
@@ -139,9 +135,7 @@ describe('calculateSimpleStaminaRegen', () => {
   });
 });
 
-// ============================================================
 // Has Enough Stamina Tests
-// ============================================================
 
 describe('hasEnoughStamina', () => {
   it('should return true when stamina meets cost', () => {
@@ -177,9 +171,7 @@ describe('hasEnoughStamina', () => {
   });
 });
 
-// ============================================================
 // Get Encounter Stamina Cost Tests
-// ============================================================
 
 describe('getEncounterStaminaCost', () => {
   it('should return correct cost for each type', () => {
@@ -205,9 +197,7 @@ describe('getEncounterStaminaCost', () => {
   });
 });
 
-// ============================================================
 // Consume Stamina Tests
-// ============================================================
 
 describe('consumeStamina', () => {
   it('should consume and return remaining stamina on success', () => {
@@ -252,9 +242,7 @@ describe('consumeStamina', () => {
   });
 });
 
-// ============================================================
 // Add Stamina Tests
-// ============================================================
 
 describe('addStamina', () => {
   it('should add stamina normally', () => {
@@ -294,9 +282,7 @@ describe('addStamina', () => {
   });
 });
 
-// ============================================================
 // Max Stamina For Tier Tests
-// ============================================================
 
 describe('getMaxStaminaForTier', () => {
   it('should return correct max for each tier', () => {
@@ -321,9 +307,7 @@ describe('getMaxStaminaForTier', () => {
   });
 });
 
-// ============================================================
 // Calculate Max Stamina With Bonus Tests
-// ============================================================
 
 describe('calculateMaxStamina', () => {
   it('should return base max with no bonus', () => {
@@ -360,9 +344,7 @@ describe('calculateMaxStamina', () => {
   });
 });
 
-// ============================================================
 // Time Until Full Stamina Tests
-// ============================================================
 
 describe('timeUntilFullStamina', () => {
   it('should return 0 when already full', () => {
@@ -398,15 +380,14 @@ describe('timeUntilFullStamina', () => {
   });
 
   it('should handle large max stamina', () => {
-    const time = timeUntilFullStamina(0, 10000, TimeOfDay.Afternoon);
+    // Morning has 1.0x StaminaRegen multiplier
+    const time = timeUntilFullStamina(0, 10000, TimeOfDay.Morning);
     expect(time).toBeGreaterThan(0);
     expect(time).toBe(Math.ceil(10000 / 1.0) * STAMINA_REGEN_INTERVAL);
   });
 });
 
-// ============================================================
 // Time Until Encounter Ready Tests
-// ============================================================
 
 describe('timeUntilEncounterReady', () => {
   it('should return 0 when already have enough stamina', () => {
@@ -447,9 +428,7 @@ describe('timeUntilEncounterReady', () => {
   });
 });
 
-// ============================================================
 // Stamina Constants Tests
-// ============================================================
 
 describe('Stamina Constants', () => {
   it('STAMINA_REGEN_INTERVAL should be 300 seconds (5 minutes)', () => {
@@ -481,9 +460,7 @@ describe('Stamina Constants', () => {
   });
 });
 
-// ============================================================
 // Mathematical Properties
-// ============================================================
 
 describe('Stamina Mathematical Properties', () => {
   it('simple regen should increase monotonically with time', () => {

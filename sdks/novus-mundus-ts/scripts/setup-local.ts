@@ -33,9 +33,7 @@ import {
   derivePlayerPda,
 } from '../src/index';
 
-// ============================================================
 // Configuration
-// ============================================================
 
 const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'http://localhost:8899',
@@ -43,9 +41,7 @@ const CONFIG = {
   skipPreflight: true,
 };
 
-// ============================================================
 // Test Data
-// ============================================================
 
 /** Cities to create */
 const CITIES = [
@@ -186,9 +182,7 @@ const RESEARCH_TEMPLATES = [
   },
 ];
 
-// ============================================================
 // Utility Functions
-// ============================================================
 
 function loadKeypair(filepath: string): Keypair {
   const fullPath = path.resolve(filepath);
@@ -241,9 +235,7 @@ async function sendTx(
   }
 }
 
-// ============================================================
 // Setup Functions
-// ============================================================
 
 async function setupGameEngine(
   connection: Connection,
@@ -409,9 +401,7 @@ async function setupTestPlayer(
   await sendTx(connection, tx, [playerKeypair], 'InitPlayer');
 }
 
-// ============================================================
 // Main
-// ============================================================
 
 async function main() {
   console.log('==============================================');

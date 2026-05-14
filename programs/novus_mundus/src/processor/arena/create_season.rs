@@ -11,10 +11,10 @@
 //! 3. `[]` system_program: System program
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -42,8 +42,8 @@ use crate::{
 /// - min_level_required: u8 (1 byte)
 /// Total: 29 bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -64,7 +64,7 @@ pub fn process(
 
     // 3. Load and validate GameEngine - authority must be game authority (kingdom-scoped)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
-    if authority.key() != &game_engine_data.game_authority {
+    if authority.address() != &game_engine_data.game_authority {
         return Err(GameError::Unauthorized.into());
     }
     let kingdom_id = game_engine_data.kingdom_id;
@@ -101,28 +101,26 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 6. Verify and create Arena Season PDA (kingdom-scoped)
-    let (expected_pda, bump) = ArenaSeasonAccount::derive_pda(game_engine.key(), season_id);
-    if arena_season.key() != &expected_pda {
+    let (expected_pda, bump) = ArenaSeasonAccount::derive_pda(game_engine.address(), season_id);
+    if arena_season.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Check account doesn't already exist
-    if !arena_season.data_is_empty() {
+    if !arena_season.is_data_empty() {
         return Err(GameError::ArenaSeasonAlreadyExists.into());
     }
-
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(ARENA_SEASON_ACCOUNT_SIZE);
+    let lamports = crate::utils::rent_exempt_const(ARENA_SEASON_ACCOUNT_SIZE);
 
     let bump_seed = [bump];
     let season_id_bytes = season_id.to_le_bytes();
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         ARENA_SEASON_SEED,
-        game_engine.key().as_ref(),
+        game_engine.address(),
         &season_id_bytes,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: authority,
@@ -133,7 +131,7 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 7. Initialize ArenaSeasonAccount
-    let mut data_ref = arena_season.try_borrow_mut_data()?;
+    let mut data_ref = arena_season.try_borrow_mut()?;
     let season = unsafe { ArenaSeasonAccount::load_mut(&mut data_ref) };
 
     // Calculate timing
@@ -145,12 +143,12 @@ pub fn process(
     *season = ArenaSeasonAccount {
         account_key: crate::state::AccountKey::ArenaSeason as u8,
         // Kingdom reference
-        game_engine: *game_engine.key(),
+        game_engine: *game_engine.address(),
 
         // Identity
         season_id,
         city_id: 0, // 0 = kingdom-wide arena
-        authority: *authority.key(),
+        authority: *authority.address(),
 
         // Timing
         start_time,
@@ -184,7 +182,7 @@ pub fn process(
     // Emit KingdomArenaSeasonStarted event
     emit!(KingdomArenaSeasonStarted {
         kingdom_id,
-        game_engine: *game_engine.key(),
+        game_engine: *game_engine.address(),
         season_id,
         start_time,
         end_time,

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -33,8 +33,8 @@ use crate::{
 /// - target_slot_index: u16 (2 bytes) - Target's slot index
 /// - new_rank: u8 (1 byte) - New rank for target (must be > current rank)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -74,7 +74,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let demoter = PlayerAccount::load_checked_by_key(demoter_account, program_id)?;
-    if &demoter.owner != demoter_owner.key() {
+    if &demoter.owner != demoter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -92,7 +92,7 @@ pub fn process(
 
     // 5. Validate Demoter is in Team
 
-    if demoter.team == NULL_PUBKEY || &demoter.team != team_account.key() {
+    if demoter.team == NULL_PUBKEY || &demoter.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -103,8 +103,8 @@ pub fn process(
 
     // 6. Verify Demoter Slot and Get Rank
 
-    let (expected_demoter_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), demoter_slot_index);
-    if demoter_slot_account.key() != &expected_demoter_slot {
+    let (expected_demoter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), demoter_slot_index);
+    if demoter_slot_account.address() != &expected_demoter_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -112,10 +112,10 @@ pub fn process(
 
     let demoter_rank: u8;
     {
-        let slot_data = demoter_slot_account.try_borrow_data()?;
+        let slot_data = demoter_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *demoter_account.key() {
+        if slot.player != *demoter_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -124,8 +124,8 @@ pub fn process(
 
     // 7. Verify Target Slot
 
-    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), target_slot_index);
-    if target_slot_account.key() != &expected_target_slot {
+    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
+    if target_slot_account.address() != &expected_target_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -133,11 +133,11 @@ pub fn process(
 
     // 8. Load Target Slot and Validate Demotion
 
-    let mut target_data = target_slot_account.try_borrow_mut_data()?;
+    let mut target_data = target_slot_account.try_borrow_mut()?;
     let target_slot = unsafe { TeamMemberSlot::load_mut(&mut target_data) };
 
     // Verify target is in same team
-    if target_slot.team != *team_account.key() {
+    if target_slot.team != *team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -173,12 +173,12 @@ pub fn process(
     // 11. Emit Event
 
     emit!(MemberRankChanged {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
         member: member_pubkey,
         old_rank,
         new_rank,
-        changed_by: *demoter_account.key(),
+        changed_by: *demoter_account.address(),
         timestamp: clock.unix_timestamp,
     });
 

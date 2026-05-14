@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -34,8 +34,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -50,19 +50,19 @@ pub fn process(
     require_owner(player_account, program_id)?;  // CRITICAL: Verify program ownership
 
     // 3. Load accounts
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
+    let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Validate player PDA (CRITICAL: prevents writing to arbitrary accounts)
-    let player_bump = require_pda(player_account, &[PLAYER_SEED, &player.game_engine, &player.owner], program_id)?;
+    let player_bump = require_pda(player_account, &[PLAYER_SEED, player.game_engine.as_ref(), player.owner.as_ref()], program_id)?;
     if player.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let template_data = research_template.try_borrow_data()?;
+    let template_data = research_template.try_borrow()?;
     let template = unsafe { ResearchTemplate::load(&template_data) };
 
     // 3a. Require EXT_RESEARCH to be unlocked
@@ -182,7 +182,7 @@ pub fn process(
 
     // 12. Emit ResearchCompleted event
     emit!(ResearchCompleted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         research_id: research_type as u16,
         level: new_level,

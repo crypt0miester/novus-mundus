@@ -82,9 +82,7 @@ import {
   deriveShopItemPda,
 } from '../../src/index';
 
-// ============================================================
 // Types
-// ============================================================
 
 export interface AccountSnapshot<T> {
   pubkey: PublicKey;
@@ -99,9 +97,7 @@ export interface AccountDiff<T> {
   changes: Partial<Record<keyof T, { before: any; after: any }>>;
 }
 
-// ============================================================
 // Generic Account Fetching
-// ============================================================
 
 /**
  * Fetch raw account data.
@@ -139,9 +135,7 @@ export async function accountExists(
   return info !== null && info.data.length > 0;
 }
 
-// ============================================================
 // Player Account
-// ============================================================
 
 export async function fetchPlayer(
   svm: LiteSVM,
@@ -176,9 +170,7 @@ export async function snapshotPlayer(
   };
 }
 
-// ============================================================
 // Team Accounts
-// ============================================================
 
 export async function fetchTeam(
   svm: LiteSVM,
@@ -231,9 +223,7 @@ export async function fetchTreasuryRequest(
   return deserializeTreasuryRequest(info.data);
 }
 
-// ============================================================
 // Rally Accounts
-// ============================================================
 
 export async function fetchRally(
   svm: LiteSVM,
@@ -267,9 +257,7 @@ export async function fetchRallyParticipant(
   return deserializeRallyParticipant(info.data);
 }
 
-// ============================================================
 // Reinforcement Accounts
-// ============================================================
 
 export async function fetchReinforcement(
   svm: LiteSVM,
@@ -283,9 +271,7 @@ export async function fetchReinforcement(
   return deserializeReinforcement(info.data);
 }
 
-// ============================================================
 // Encounter Accounts
-// ============================================================
 
 export async function fetchEncounter(
   svm: LiteSVM,
@@ -306,9 +292,7 @@ export async function fetchEncounterByCity(
   return fetchEncounter(svm, encounterPda);
 }
 
-// ============================================================
 // Expedition Accounts
-// ============================================================
 
 export async function fetchExpedition(
   svm: LiteSVM,
@@ -320,9 +304,7 @@ export async function fetchExpedition(
   return deserializeExpedition(info.data);
 }
 
-// ============================================================
 // Arena Accounts
-// ============================================================
 
 export async function fetchArenaSeason(
   svm: LiteSVM,
@@ -347,9 +329,7 @@ export async function fetchArenaParticipant(
   return deserializeArenaParticipant(info.data);
 }
 
-// ============================================================
 // Loot Accounts
-// ============================================================
 
 export async function fetchLoot(
   svm: LiteSVM,
@@ -362,9 +342,7 @@ export async function fetchLoot(
   return deserializeLoot(info.data);
 }
 
-// ============================================================
 // Event Accounts
-// ============================================================
 
 export async function fetchEvent(
   svm: LiteSVM,
@@ -389,9 +367,7 @@ export async function fetchEventParticipation(
   return deserializeEventParticipation(info.data);
 }
 
-// ============================================================
 // Castle Accounts
-// ============================================================
 
 export async function fetchCastleRaw(
   svm: LiteSVM,
@@ -403,9 +379,7 @@ export async function fetchCastleRaw(
   return fetchAccount(svm, castlePda);
 }
 
-// ============================================================
 // Dungeon Accounts
-// ============================================================
 
 export async function fetchDungeonRunRaw(
   svm: LiteSVM,
@@ -415,9 +389,7 @@ export async function fetchDungeonRunRaw(
   return fetchAccount(svm, runPda);
 }
 
-// ============================================================
 // Estate Accounts
-// ============================================================
 
 export async function fetchEstateRaw(
   svm: LiteSVM,
@@ -427,9 +399,7 @@ export async function fetchEstateRaw(
   return fetchAccount(svm, estatePda);
 }
 
-// ============================================================
 // Core Accounts
-// ============================================================
 
 export async function fetchGameEngine(
   svm: LiteSVM,
@@ -473,9 +443,7 @@ export async function fetchShopItem(
   return deserializeShopItem(info.data);
 }
 
-// ============================================================
 // Snapshot & Diff Utilities
-// ============================================================
 
 /**
  * Compare two player snapshots and return differences.

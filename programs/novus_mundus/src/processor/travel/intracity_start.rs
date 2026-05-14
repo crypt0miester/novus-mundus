@@ -1,14 +1,14 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
-use pinocchio::msg;
+use crate::msg;
 
 use crate::{
     emit,
@@ -50,8 +50,8 @@ use crate::{
 /// 7. `[]` system_program - For creating destination location account
 /// 8. `[WRITE]` (optional) bumped_player - Player being bumped (required when stealing)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for stealing)
@@ -115,7 +115,7 @@ pub fn process(
     { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
     let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
-    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), owner.key(), program_id)?; }
+    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
     let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
     msg!("INTRA_START: accounts loaded ok");
 
@@ -225,13 +225,13 @@ pub fn process(
     let dest_long_bytes = dest_grid_long.to_le_bytes();
 
     let (expected_dest_pda, dest_bump) = LocationAccount::derive_pda(
-        game_engine_account.key(),
+        game_engine_account.address(),
         player_data.current_city,
         dest_grid_lat,
         dest_grid_long,
     );
 
-    if destination_location_account.key() != &expected_dest_pda {
+    if destination_location_account.address() != &expected_dest_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -240,19 +240,18 @@ pub fn process(
     if dest_location_len == 0 {
         // Create new destination location account
         msg!("INTRA_START: creating dest location (CPI)");
-        let rent = pinocchio::sysvars::rent::Rent::get()?;
-        let lamports = rent.minimum_balance(LocationAccount::LEN);
+        let lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let bump_seed = [dest_bump];
-        let location_seeds = pinocchio::seeds!(
+        let location_seeds = crate::seeds!(
             LOCATION_SEED,
-            game_engine_account.key().as_ref(),
+            game_engine_account.address(),
             &city_bytes,
             &dest_lat_bytes,
             &dest_long_bytes,
             &bump_seed
         );
-        let location_signer = pinocchio::instruction::Signer::from(&location_seeds);
+        let location_signer = pinocchio::cpi::Signer::from(&location_seeds);
 
         CreateAccount {
             from: owner,
@@ -263,7 +262,7 @@ pub fn process(
         }.invoke_signed(&[location_signer])?;
         msg!("INTRA_START: CPI done ok");
 
-        let mut dest_location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut dest_location_data = destination_location_account.try_borrow_mut()?;
         let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
 
         dest_location.account_key = crate::state::AccountKey::Location as u8;
@@ -272,20 +271,20 @@ pub fn process(
         dest_location.city_id = player_data.current_city;
         dest_location.bump = dest_bump;
         dest_location.occupant_type = OCCUPANT_PLAYER;
-        dest_location.occupant = *player_account.key();
+        dest_location.occupant = *player_account.address();
         dest_location.occupied_since = now;
-        dest_location.location_creator = *owner.key();
+        dest_location.location_creator = *owner.address();
         dest_location.reserved_arrival_time = arrival_time;
     } else {
         // Destination exists - check if available or can be stolen
-        let mut dest_location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut dest_location_data = destination_location_account.try_borrow_mut()?;
         let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
 
         if dest_location.grid_lat != dest_grid_lat || dest_location.grid_long != dest_grid_long {
             return Err(GameError::InvalidPDA.into());
         }
 
-        if dest_location.is_occupied() && !dest_location.is_occupied_by(player_account.key()) {
+        if dest_location.is_occupied() && !dest_location.is_occupied_by(player_account.address()) {
             // Cell is occupied by someone else - check if we can steal it
             if dest_location.can_steal_reservation(arrival_time) {
                 // We can steal! Need bumped player account to reverse their travel
@@ -293,13 +292,23 @@ pub fn process(
                     .ok_or(GameError::InvalidParameter)?;
 
                 // Validate bumped player is the current occupant
-                if bumped_player.key() != &dest_location.occupant {
+                if bumped_player.address() != &dest_location.occupant {
                     return Err(GameError::InvalidParameter.into());
                 }
 
+                // M-08: Verify bumped player account is owned by this program
+                // to prevent attacker-supplied account spoofing.
+                require_owner(bumped_player, program_id)?;
+
                 // Reverse the bumped player's travel
-                let mut bumped_data = bumped_player.try_borrow_mut_data()?;
+                let mut bumped_data = bumped_player.try_borrow_mut()?;
                 let bumped = unsafe { PlayerAccount::load_mut(&mut bumped_data) };
+
+                // M-08: Verify bumped player is in the same kingdom (game_engine)
+                // before mutating their state.
+                if bumped.game_engine != player_data.game_engine {
+                    return Err(GameError::InvalidParameter.into());
+                }
 
                 // Calculate how far they've traveled (proportional time)
                 let bumped_total_time = bumped.arrival_time - bumped.departure_time;
@@ -319,6 +328,8 @@ pub fn process(
                 bumped.traveling_to_long = bumped.current_long;
                 bumped.departure_time = now;
                 bumped.arrival_time = now + return_time_seconds;
+                // M-08: Reset travel_speed_locked since this is a fresh (reversed) travel.
+                bumped.travel_speed_locked = 0.0;
                 // travel_type stays Intracity - they need to run cancel to complete
 
                 // Note: bumped player loses their destination reservation
@@ -331,9 +342,9 @@ pub fn process(
 
         // Reserve the destination (either was empty, ours, or we just stole it)
         dest_location.occupant_type = OCCUPANT_PLAYER;
-        dest_location.occupant = *player_account.key();
+        dest_location.occupant = *player_account.address();
         dest_location.occupied_since = now;
-        dest_location.location_creator = *owner.key();
+        dest_location.location_creator = *owner.address();
         dest_location.reserved_arrival_time = arrival_time;
     }
 
@@ -343,22 +354,22 @@ pub fn process(
     let origin_grid_long = LocationAccount::to_grid(player_data.current_long);
 
     let (expected_origin_pda, _) = LocationAccount::derive_pda(
-        game_engine_account.key(),
+        game_engine_account.address(),
         player_data.current_city,
         origin_grid_lat,
         origin_grid_long,
     );
 
-    if origin_location_account.key() != &expected_origin_pda {
+    if origin_location_account.address() != &expected_origin_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Validate origin location occupant
     {
-        let origin_data = origin_location_account.try_borrow_data()?;
+        let origin_data = origin_location_account.try_borrow()?;
         let origin_location = unsafe { LocationAccount::load(&origin_data) };
 
-        if !origin_location.is_occupied_by(player_account.key()) {
+        if !origin_location.is_occupied_by(player_account.address()) {
             return Err(GameError::NotCellOccupant.into());
         }
     }
@@ -380,9 +391,9 @@ pub fn process(
     // 14. Emit Event
 
     emit!(IntracityTravelStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
-        city: *current_city_account.key(),
+        city: *current_city_account.address(),
         dest_x: dest_grid_lat,
         dest_y: dest_grid_long,
         arrival_at: arrival_time,

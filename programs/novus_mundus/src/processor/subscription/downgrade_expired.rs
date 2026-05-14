@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -34,8 +34,8 @@ use crate::{
 /// - Ok(()) if subscription was downgraded or already at free tier
 /// - Err if account validation fails
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -47,11 +47,11 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // 3. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 4. Validate Player PDA
-    let player_bump = require_pda(player_account, &[PLAYER_SEED, &player_data.game_engine, &player_data.owner], program_id)?;
+    let player_bump = require_pda(player_account, &[PLAYER_SEED, player_data.game_engine.as_ref(), player_data.owner.as_ref()], program_id)?;
     if player_data.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -80,7 +80,7 @@ pub fn process(
     // 8. Emit Event
 
     emit!(SubscriptionExpired {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         old_tier,
         timestamp: now,

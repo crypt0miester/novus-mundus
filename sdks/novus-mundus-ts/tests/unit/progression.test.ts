@@ -24,9 +24,7 @@ import {
 import { TimeOfDay } from '../../src/calculators/time';
 import { PHI_SQUARED } from '../../src/calculators/constants';
 
-// ============================================================
 // XP Required For Level Tests
-// ============================================================
 
 describe('xpRequiredForLevel', () => {
   it('should return 0 for level 1', () => {
@@ -85,9 +83,7 @@ describe('xpRequiredForLevel', () => {
   });
 });
 
-// ============================================================
 // XP To Next Level Tests
-// ============================================================
 
 describe('xpToNextLevel', () => {
   it('should return xpRequiredForLevel(currentLevel + 1)', () => {
@@ -114,9 +110,7 @@ describe('xpToNextLevel', () => {
   });
 });
 
-// ============================================================
 // Cumulative XP For Level Tests
-// ============================================================
 
 describe('cumulativeXpForLevel', () => {
   it('should return 0 for level 1', () => {
@@ -162,9 +156,7 @@ describe('cumulativeXpForLevel', () => {
   });
 });
 
-// ============================================================
 // Level From XP Tests
-// ============================================================
 
 describe('levelFromXp', () => {
   it('should return level 1 for 0 XP', () => {
@@ -205,9 +197,7 @@ describe('levelFromXp', () => {
   });
 });
 
-// ============================================================
 // Level And Overflow From XP Tests
-// ============================================================
 
 describe('levelAndOverflowFromXp', () => {
   it('should return [1, 0] for 0 XP', () => {
@@ -260,9 +250,7 @@ describe('levelAndOverflowFromXp', () => {
   });
 });
 
-// ============================================================
 // Simulate Grant XP Tests
-// ============================================================
 
 describe('simulateGrantXp', () => {
   it('should add XP without leveling up', () => {
@@ -326,9 +314,7 @@ describe('simulateGrantXp', () => {
   });
 });
 
-// ============================================================
 // Calculate XP With Time Bonus Tests
-// ============================================================
 
 describe('calculateXpWithTimeBonus', () => {
   it('should return a positive value for positive base XP', () => {
@@ -353,17 +339,15 @@ describe('calculateXpWithTimeBonus', () => {
   });
 });
 
-// ============================================================
 // Get XP Bonus Multiplier Tests
-// ============================================================
 
 describe('getXpBonusMultiplier', () => {
-  it('should return PHI_SQUARED for Dawn', () => {
-    expect(getXpBonusMultiplier(TimeOfDay.Dawn)).toBeCloseTo(PHI_SQUARED, 5);
+  it('should return GOLDEN_ROOT for DeepNight (night wisdom)', () => {
+    expect(getXpBonusMultiplier(TimeOfDay.DeepNight)).toBeCloseTo(1.272, 2);
   });
 
-  it('should return PHI_SQUARED for Dusk', () => {
-    expect(getXpBonusMultiplier(TimeOfDay.Dusk)).toBeCloseTo(PHI_SQUARED, 5);
+  it('should return GOLDEN_ROOT for Evening (night wisdom)', () => {
+    expect(getXpBonusMultiplier(TimeOfDay.Evening)).toBeCloseTo(1.272, 2);
   });
 
   it('should return 1.0 for Afternoon', () => {
@@ -380,18 +364,19 @@ describe('getXpBonusMultiplier', () => {
     }
   });
 
-  it('Dawn/Dusk should be the best XP periods', () => {
-    const dawnMult = getXpBonusMultiplier(TimeOfDay.Dawn);
+  it('DeepNight/Evening should be the best XP periods', () => {
+    const deepNightMult = getXpBonusMultiplier(TimeOfDay.DeepNight);
+    const eveningMult = getXpBonusMultiplier(TimeOfDay.Evening);
     const middayMult = getXpBonusMultiplier(TimeOfDay.Midday);
     const afternoonMult = getXpBonusMultiplier(TimeOfDay.Afternoon);
-    expect(dawnMult).toBeGreaterThan(middayMult);
-    expect(dawnMult).toBeGreaterThan(afternoonMult);
+    expect(deepNightMult).toBeGreaterThan(middayMult);
+    expect(deepNightMult).toBeGreaterThan(afternoonMult);
+    expect(eveningMult).toBeGreaterThan(middayMult);
+    expect(eveningMult).toBeGreaterThan(afternoonMult);
   });
 });
 
-// ============================================================
 // Level Progress Percent Tests
-// ============================================================
 
 describe('levelProgressPercent', () => {
   it('should return 0 at start of level', () => {
@@ -424,9 +409,7 @@ describe('levelProgressPercent', () => {
   });
 });
 
-// ============================================================
 // XP Remaining To Next Level Tests
-// ============================================================
 
 describe('xpRemainingToNextLevel', () => {
   it('should return full requirement at 0 XP', () => {
@@ -451,9 +434,7 @@ describe('xpRemainingToNextLevel', () => {
   });
 });
 
-// ============================================================
 // Format Level Progress Tests
-// ============================================================
 
 describe('formatLevelProgress', () => {
   it('should format progress correctly', () => {
@@ -479,9 +460,7 @@ describe('formatLevelProgress', () => {
   });
 });
 
-// ============================================================
 // Actions To Level Up Tests
-// ============================================================
 
 describe('actionsToLevelUp', () => {
   it('should calculate actions needed', () => {
@@ -517,9 +496,7 @@ describe('actionsToLevelUp', () => {
   });
 });
 
-// ============================================================
 // Estimate XP Per Hour Tests
-// ============================================================
 
 describe('estimateXpPerHour', () => {
   it('should calculate base XP rate', () => {
@@ -542,10 +519,10 @@ describe('estimateXpPerHour', () => {
   });
 
   it('should apply time bonus', () => {
-    // Dawn has PHI_SQUARED (2.618x) bonus for XP
+    // DeepNight has GOLDEN_ROOT (1.272x) bonus for XP (night wisdom)
     const xpAfternoon = estimateXpPerHour(10, 0, TimeOfDay.Afternoon);
-    const xpDawn = estimateXpPerHour(10, 0, TimeOfDay.Dawn);
-    expect(xpDawn).toBeGreaterThan(xpAfternoon);
+    const xpDeepNight = estimateXpPerHour(10, 0, TimeOfDay.DeepNight);
+    expect(xpDeepNight).toBeGreaterThan(xpAfternoon);
   });
 
   it('should handle 0 encounters', () => {
@@ -560,9 +537,7 @@ describe('estimateXpPerHour', () => {
   });
 });
 
-// ============================================================
 // Mathematical Properties
-// ============================================================
 
 describe('Progression Mathematical Properties', () => {
   it('XP curve should be exponential (ratio between levels is constant 2.5)', () => {

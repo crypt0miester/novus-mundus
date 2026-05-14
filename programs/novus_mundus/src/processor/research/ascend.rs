@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -43,8 +43,8 @@ use crate::{
 /// # Instruction Data
 /// - [0] research_type: u8 (which research to ascend)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -72,16 +72,16 @@ pub fn process(
     }
 
     // 4. Load Player Account
-    let player_data = player_account.try_borrow_data()?;
+    let player_data = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data) };
 
     // Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Load Research Progress
-    let mut progress_data = research_progress.try_borrow_mut_data()?;
+    let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
     // Verify ownership
@@ -90,7 +90,7 @@ pub fn process(
     }
 
     // 6. Load Research Template to get max_level
-    let template_data = research_template.try_borrow_data()?;
+    let template_data = research_template.try_borrow()?;
     let template = unsafe { ResearchTemplate::load(&template_data) };
 
     // Verify template matches
@@ -108,7 +108,7 @@ pub fn process(
     }
 
     // 8. Load Estate and find Academy
-    let mut estate_data = estate_account.try_borrow_mut_data()?;
+    let mut estate_data = estate_account.try_borrow_mut()?;
     let estate = unsafe { EstateAccount::load_mut(&mut estate_data) };
 
     // Verify estate ownership
@@ -153,7 +153,7 @@ pub fn process(
     let new_ascension_level = 1u8; // Simplified - research can be ascended once based on the ascend() logic
 
     emit!(ResearchAscended {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         research_tree: research_type as u16,
         new_ascension_level,

@@ -102,7 +102,7 @@ impl Attributes {
     pub fn new(authority: PluginAuthority) -> Self {
         let mut authority_key = [0u8; 32];
         if let PluginAuthority::Address(pubkey) = authority {
-            authority_key.copy_from_slice(pubkey.as_ref());
+            authority_key.copy_from_slice(&pubkey);
         }
 
         Self {
@@ -168,11 +168,11 @@ impl Attributes {
 
     /// Load Attributes plugin from account data
     pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
+        unsafe { &*(data.as_ptr() as *const Self) }
     }
 
     /// Load mutable Attributes plugin from account data
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
+        unsafe { &mut *(data.as_mut_ptr() as *mut Self) }
     }
 }

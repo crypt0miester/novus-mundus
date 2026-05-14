@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -46,8 +46,8 @@ use crate::{
 /// 3. Update cached balances in PlayerAccount and UserAccount
 /// 4. UserAccount PDA signs the transfer (uses PDA signer)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -73,8 +73,8 @@ pub fn process(
     require_owner(player, program_id)?;
     require_owner(user, program_id)?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, _game_engine.key(), owner.key()], program_id)?;
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, _game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Parse Instruction Data
 
@@ -94,10 +94,10 @@ pub fn process(
     // 4. Validate ownership and balances (borrow, check, drop before CPI)
 
     {
-        let player_data_ref = player.try_borrow_data()?;
+        let player_data_ref = player.try_borrow()?;
         let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-        if &player_data.owner != owner.key() {
+        if &player_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
         if player_data.bump != player_bump {
@@ -106,10 +106,10 @@ pub fn process(
     }
 
     {
-        let user_data_ref = user.try_borrow_data()?;
+        let user_data_ref = user.try_borrow()?;
         let user_data = unsafe { UserAccount::load(&user_data_ref) };
 
-        if &user_data.owner != owner.key() {
+        if &user_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
         if user_data.bump != user_bump {
@@ -125,8 +125,8 @@ pub fn process(
     // Borrows must be dropped before CPI so runtime can access user account
 
     let user_bump_seed = [user_bump];
-    let user_seeds = pinocchio::seeds!(USER_SEED, owner.key().as_ref(), &user_bump_seed);
-    let user_signer = pinocchio::instruction::Signer::from(&user_seeds);
+    let user_seeds = crate::seeds!(USER_SEED, owner.address(), &user_bump_seed);
+    let user_signer = pinocchio::cpi::Signer::from(&user_seeds);
 
     crate::helpers::transfer_tokens(
         reserved_token_account,  // From: Token account owned by UserAccount PDA
@@ -138,7 +138,7 @@ pub fn process(
 
     // 6. Update Cached Balances (re-borrow after CPI)
 
-    let mut user_data_ref = user.try_borrow_mut_data()?;
+    let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
     user_data.reserved_novi = user_data.reserved_novi
@@ -148,7 +148,7 @@ pub fn process(
     let remaining_reserved = user_data.reserved_novi;
     drop(user_data_ref);
 
-    let mut player_data_ref = player.try_borrow_mut_data()?;
+    let mut player_data_ref = player.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     player_data.locked_novi = player_data.locked_novi
@@ -163,7 +163,7 @@ pub fn process(
 
     let clock = Clock::get()?;
     emit!(NoviReservedToLocked {
-        player: *player.key(),
+        player: *player.address(),
         player_name: player_data.name,
         amount,
         new_locked: player_data.locked_novi,

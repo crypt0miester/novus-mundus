@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
 };
 
@@ -69,18 +69,15 @@ use crate::{
 /// - [] token_mint: SPL Token mint for payment
 /// - [writable] buyer_token_ata: Buyer's token account
 /// - [writable] treasury_token_ata: Treasury's token account
-/// - [] sol_oracle_feed: SOL/USD oracle (Pyth or Switchboard)
-/// - [] token_oracle_feed: TOKEN/USD oracle
-/// - (Switchboard only) [] switchboard_queue
-/// - (Switchboard only) [] slothashes_sysvar
-/// - (Switchboard only) [] instructions_sysvar
+/// - [] sol_oracle_feed: SOL/USD price feed (Pyth or Switchboard pull feed)
+/// - [] token_oracle_feed: TOKEN/USD price feed (same oracle program as sol)
 ///
 /// # Instruction Data
 /// - payment_type: u8 (0 = ONCHAIN SOL, 1 = OFFCHAIN, 2 = TOKEN)
 /// - new_tier_index: u8 (0-3: Rookie, Expert, Epic, Legendary)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
@@ -100,10 +97,10 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // SECURITY: Verify token account belongs to the UserAccount PDA
-    crate::helpers::validate_token_account_owner(user_novi_ata, user.key())?;
+    crate::helpers::validate_token_account_owner(user_novi_ata, user.address())?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.key(), owner.key()], program_id)?;
-    let user_bump = require_pda(user, &[USER_SEED, owner.key()], program_id)?;
+    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Parse instruction data
     if data.len() != 2 {
@@ -124,7 +121,7 @@ pub fn process(
     }
 
     // 6. Load game engine
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data_ref = game_engine.try_borrow()?;
     let game_engine_data = unsafe {
         GameEngine::load(&game_engine_data_ref)
     };
@@ -139,7 +136,7 @@ pub fn process(
         require_signer(payment_authority)?;
 
         // Verify payment authority
-        if payment_authority.key() != &game_engine_data.payment_authority {
+        if payment_authority.address() != &game_engine_data.payment_authority {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -154,7 +151,7 @@ pub fn process(
         require_writable(treasury_wallet)?;
 
         // Verify treasury wallet matches game engine config
-        if treasury_wallet.key() != &game_engine_data.treasury_wallet {
+        if treasury_wallet.address() != &game_engine_data.treasury_wallet {
             return Err(GameError::InvalidAccount.into());
         }
     }
@@ -167,24 +164,24 @@ pub fn process(
     }
 
     // 8. Load player and user data
-    let mut player_data_ref = player.try_borrow_mut_data()?;
+    let mut player_data_ref = player.try_borrow_mut()?;
     let player_data = unsafe {
         PlayerAccount::load_mut(&mut player_data_ref)
     };
 
-    let mut user_data_ref = user.try_borrow_mut_data()?;
+    let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe {
         UserAccount::load_mut(&mut user_data_ref)
     };
 
     // Verify ownership and bumps
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if player_data.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }
-    if &user_data.owner != owner.key() {
+    if &user_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     if user_data.bump != user_bump {
@@ -195,23 +192,43 @@ pub fn process(
     // Players should understand the game basics before spending money
     require_extension(player_data, EXT_RESEARCH)?;
 
-    // 9. Validate tier upgrade (can't downgrade, but can renew same tier)
-    if new_tier_index < player_data.subscription_tier {
-        return Err(GameError::CannotDowngradeSubscription.into());
+    // 9. Validate tier upgrade.
+    //
+    // Tier upgrade rules (prevents paying a cheaper tier to extend a higher one):
+    //
+    //   • Buying a HIGHER tier while active → REPLACE: new tier overwrites,
+    //     new expiration = now + duration. (User must accept that they
+    //     forfeit the remainder of the cheaper tier.)
+    //   • Buying the SAME tier while active → EXTEND from subscription_end.
+    //   • Buying a LOWER tier while active → REJECT. The user must wait for
+    //     the current subscription to expire (then they can buy the lower
+    //     tier). This prevents the price-arbitrage exploit.
+    //   • Buying any tier when expired/none → start fresh from `now`.
+    //
+    // This is fair: same-tier renewals stack, upgrades are immediate at
+    // full new-tier price, downgrades require letting the current tier run out.
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    if player_data.subscription_end > now {
+        // Currently active — reject downgrade while active.
+        if new_tier_index < player_data.subscription_tier {
+            return Err(GameError::CannotDowngradeSubscription.into());
+        }
     }
 
     // 10. Get subscription tier config
     let tier = &game_engine_data.subscription_tiers[new_tier_index as usize];
 
     // 11. Calculate expiration timestamp
-    let clock = Clock::get()?;
-    let now = clock.unix_timestamp;
-
-    // If player already has an active subscription, extend from current expiration
-    // Otherwise, start from now
-    let expiration_base = if player_data.subscription_end > now {
+    let expiration_base = if player_data.subscription_end > now
+        && new_tier_index == player_data.subscription_tier
+    {
+        // Same-tier renewal while active: extend from current expiration.
         player_data.subscription_end
     } else {
+        // Upgrade (higher tier) or fresh purchase: start from now.
+        // For upgrades while active, the cheaper-tier remainder is forfeited.
         now
     };
 
@@ -254,11 +271,11 @@ pub fn process(
         let shop_config_account = &accounts[10];
 
         // Validate shop_config PDA
-        require_pda(shop_config_account, &[SHOP_CONFIG_SEED, game_engine.key()], program_id)?;
+        require_pda(shop_config_account, &[SHOP_CONFIG_SEED, game_engine.address().as_ref()], program_id)?;
         require_owner(shop_config_account, program_id)?;
 
         // Load shop config for SOL oracle settings
-        let shop_config_data = shop_config_account.try_borrow_data()?;
+        let shop_config_data = shop_config_account.try_borrow()?;
         let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data) };
 
         // Token payment accounts start at index 11
@@ -267,7 +284,7 @@ pub fn process(
         // Process token payment using the unified helper
         process_token_payment_flow(
             token_accounts,
-            game_engine.key(),
+            game_engine.address(),
             program_id,
             shop_config,
             owner,
@@ -283,8 +300,8 @@ pub fn process(
         // Create PDA signer for GameEngine (mint authority)
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+        let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
 
         // Mint NOVI tokens directly to user's token account
         crate::helpers::mint_tokens(
@@ -366,7 +383,7 @@ pub fn process(
 
         // Emit XP gained event
         emit!(XpGained {
-            player: *player.key(),
+            player: *player.address(),
             player_name: player_data.name,
             amount: tier.xp,
             source: 4, // 4=subscription
@@ -377,7 +394,7 @@ pub fn process(
         // Emit level up event if player leveled
         if levels_gained > 0 {
             emit!(PlayerLeveledUp {
-                player: *player.key(),
+                player: *player.address(),
                 player_name: player_data.name,
                 old_level: old_level.into(),
                 new_level: new_level.into(),
@@ -401,7 +418,7 @@ pub fn process(
     // 17. Emit Events
 
     emit!(SubscriptionPurchased {
-        player: *player.key(),
+        player: *player.address(),
         player_name: player_data.name,
         tier: new_tier_index,
         duration_days: tier.duration_days as u16,
@@ -413,7 +430,7 @@ pub fn process(
     // If tier changed (not just renewal), emit tier update event
     if old_tier != new_tier_index {
         emit!(SubscriptionTierUpdated {
-            player: *player.key(),
+            player: *player.address(),
             player_name: player_data.name,
             old_tier,
             new_tier: new_tier_index,

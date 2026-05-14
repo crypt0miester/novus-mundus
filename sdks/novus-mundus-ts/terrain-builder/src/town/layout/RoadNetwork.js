@@ -12,9 +12,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const ROAD_Y_OFFSET = 0.003; // slight raise to prevent z-fighting
 const BRIDGE_Y_RISE = 0.06;  // bridge deck height above water
@@ -39,9 +37,7 @@ const ROAD_TIERS = [
 
 const MAIN_ROAD_SCALE = 1.6; // main roads are this much wider than side paths
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function dist2d(ax, az, bx, bz) {
   const dx = ax - bx, dz = az - bz;
@@ -61,9 +57,7 @@ function quantizeKey(x, z) {
   return `${Math.round(x * 1000)},${Math.round(z * 1000)}`;
 }
 
-// ---------------------------------------------------------------------------
 // Null terrain sampler
-// ---------------------------------------------------------------------------
 
 const NULL_SAMPLER = {
   getHeight(x, z) { return 0; },
@@ -73,9 +67,7 @@ const NULL_SAMPLER = {
   getSlope(x, z) { return 0; },
 };
 
-// ---------------------------------------------------------------------------
 // Road graph builder
-// ---------------------------------------------------------------------------
 
 /**
  * Build the road graph from raw Voronoi edges + district layout.
@@ -264,9 +256,7 @@ function sampleRoadPath(x0, z0, x1, z1, sampler, isBridge) {
   return points;
 }
 
-// ---------------------------------------------------------------------------
 // Mesh generation
-// ---------------------------------------------------------------------------
 
 /**
  * Generate road ribbon geometry from a smoothed path.
@@ -466,9 +456,7 @@ function applyRoadColors(geometry, mainColor, borderColor) {
   colorAttr.needsUpdate = true;
 }
 
-// ---------------------------------------------------------------------------
 // Junction geometry: intersection discs and dead-end caps
-// ---------------------------------------------------------------------------
 
 /**
  * Generate a flat circular disc at a road intersection.
@@ -662,9 +650,7 @@ function generateJunctionGeometry(nodes, edges, rawPaths, sampler, mainColor) {
   return geos;
 }
 
-// ---------------------------------------------------------------------------
 // Bridge mesh generation
-// ---------------------------------------------------------------------------
 
 /**
  * Generate bridge geometry: flat deck + side rails + support arches.
@@ -783,9 +769,7 @@ function generateBridgeMesh(pathPoints, width, group, bridgeMaterial, railMateri
   }
 }
 
-// ---------------------------------------------------------------------------
 // Spatial lookup for isOnRoad queries
-// ---------------------------------------------------------------------------
 
 /**
  * Build a flat array of road segments for efficient spatial queries.
@@ -833,9 +817,7 @@ function pointToSegment2D(px, pz, x0, z0, x1, z1) {
   return { dist: dd, nearestX: nx, nearestZ: nz };
 }
 
-// ---------------------------------------------------------------------------
 // RoadNetwork
-// ---------------------------------------------------------------------------
 
 export class RoadNetwork {
   /**

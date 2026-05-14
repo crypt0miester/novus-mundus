@@ -15,9 +15,9 @@
 //! 7. `[]` token_program: Token program
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -34,8 +34,8 @@ use crate::{
 /// - season_id: u32 (4 bytes)
 /// Total: 4 bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -58,7 +58,7 @@ pub fn process(
     require_key_match(token_program, &pinocchio_token::ID)?;
 
     // SECURITY: Verify token account belongs to the PlayerAccount PDA
-    validate_token_account_owner(player_novi_ata, player_account.key())?;
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Parse Instruction Data (4 bytes minimum)
     if instruction_data.len() < 4 {
@@ -77,12 +77,19 @@ pub fn process(
     // 5. Load Arena Season
     require_owner(arena_season, program_id)?;
     require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
-    let mut season_data = arena_season.try_borrow_mut_data()?;
+    let mut season_data = arena_season.try_borrow_mut()?;
     let season = unsafe { &mut *(season_data.as_mut_ptr() as *mut ArenaSeasonAccount) };
 
     // Verify season_id
     if season.season_id != season_id {
         return Err(GameError::InvalidParameter.into());
+    }
+
+    // Auto-finalize the season once its end_time has passed. The Active -> Finalized
+    // transition is permissionless and lazy (mirrors event auto-activation) so callers
+    // don't need a dedicated finalize ix to unlock master rewards.
+    if season.status == ArenaStatus::Active as u8 && now > season.end_time {
+        season.status = ArenaStatus::Finalized as u8;
     }
 
     // Season must be finalized (or later)
@@ -100,9 +107,9 @@ pub fn process(
     // 6. Load Participant using player_account PDA for derivation (kingdom-scoped)
     let mut participant = ArenaParticipantAccount::load_checked_mut(
         participant_account,
-        game_engine.key(),
+        game_engine.address(),
         season_id,
-        player_account.key(),
+        player_account.address(),
         program_id,
     )?;
 
@@ -155,8 +162,8 @@ pub fn process(
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
     let bump_seed = [game_engine_data.bump];
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
     drop(game_engine_data);
 
     // 12. Mint NOVI tokens to player's token account
@@ -169,7 +176,7 @@ pub fn process(
     )?;
 
     // 13. Update player's locked_novi balance (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.key(), player_owner.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), player_owner.address(), program_id)?;
     player.locked_novi = player.locked_novi.saturating_add(reward);
 
     Ok(())

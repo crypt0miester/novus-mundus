@@ -84,9 +84,7 @@ import type { HeroTemplateAccount } from './state/hero';
 import bs58 from 'bs58';
 import { AccountKey } from './types/enums';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Options for client configuration */
 export interface NovusMundusClientOptions {
@@ -178,9 +176,7 @@ export interface FetchPlayersOptions {
   minLevel?: number;
 }
 
-// ============================================================
 // Client Class
-// ============================================================
 
 /**
  * High-level client for Novus Mundus program.
@@ -224,9 +220,7 @@ export class NovusMundusClient {
     }
   }
 
-  // ============================================================
   // Account Fetching
-  // ============================================================
 
   /**
    * Fetch the game engine account.
@@ -545,9 +539,7 @@ export class NovusMundusClient {
     return accounts.map(a => a?.data ?? null);
   }
 
-  // ============================================================
   // Bulk Account Fetching (getProgramAccounts)
-  // ============================================================
 
   /**
    * Fetch all team member slots for a team.
@@ -969,9 +961,7 @@ export class NovusMundusClient {
       .filter((r): r is BulkFetchResult<HeroTemplateAccount> => r !== null);
   }
 
-  // ============================================================
   // Transaction Building
-  // ============================================================
 
   /**
    * Build a transaction with compute budget instructions.
@@ -1041,9 +1031,7 @@ export class NovusMundusClient {
     return new VersionedTransaction(message);
   }
 
-  // ============================================================
   // Simulation
-  // ============================================================
 
   /**
    * Simulate a transaction and return results with parsed events.
@@ -1078,9 +1066,7 @@ export class NovusMundusClient {
     };
   }
 
-  // ============================================================
   // Transaction Sending
-  // ============================================================
 
   /**
    * Send and confirm a transaction.
@@ -1156,9 +1142,7 @@ export class NovusMundusClient {
     return this.connection.sendRawTransaction(transaction.serialize(), options);
   }
 
-  // ============================================================
   // Utilities
-  // ============================================================
 
   /**
    * Get the program ID.
@@ -1206,9 +1190,7 @@ export class NovusMundusClient {
   }
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /**
  * Create a client for mainnet.

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, rent::Rent},
     ProgramResult,
 };
@@ -35,8 +35,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -50,11 +50,11 @@ pub fn process(
     require_writable(crafted_equipment)?;
 
     // 3. Load Player Account
-    let player_data_ref = player_account.try_borrow_data()?;
+    let player_data_ref = player_account.try_borrow()?;
     let player = unsafe { PlayerAccount::load(&player_data_ref) };
 
     // Verify ownership
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -65,29 +65,29 @@ pub fn process(
     drop(player_data_ref);
 
     // 5. Derive and validate CraftedEquipment PDA
-    let (expected_pda, bump) = CraftedEquipmentAccount::derive_pda(owner.key());
-    if crafted_equipment.key() != &expected_pda {
+    let (expected_pda, bump) = CraftedEquipmentAccount::derive_pda(owner.address());
+    if crafted_equipment.address() != &expected_pda {
         return Err(GameError::InvalidAccount.into());
     }
 
     // 6. Check account doesn't already exist
-    if !crafted_equipment.data_is_empty() {
+    if !crafted_equipment.is_data_empty() {
         return Err(GameError::AccountAlreadyExists.into());
     }
 
     // 7. Calculate rent
     let rent = Rent::get()?;
     let space = CraftedEquipmentAccount::LEN;
-    let lamports = rent.minimum_balance(space);
+    let lamports = rent.try_minimum_balance(space)?;
 
     // 8. Create the account
     let bump_seed = [bump];
-    let signer_seeds = pinocchio::seeds!(
+    let signer_seeds = crate::seeds!(
         b"crafted_equipment",
-        owner.key().as_ref(),
+        owner.address(),
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&signer_seeds);
+    let signer = pinocchio::cpi::Signer::from(&signer_seeds);
 
     CreateAccount {
         from: owner,
@@ -98,9 +98,9 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 9. Initialize account data
-    let mut crafted_data_ref = crafted_equipment.try_borrow_mut_data()?;
+    let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;
     let crafted = unsafe { CraftedEquipmentAccount::load_mut(&mut crafted_data_ref) };
-    *crafted = CraftedEquipmentAccount::init(*owner.key(), bump);
+    *crafted = CraftedEquipmentAccount::init(*owner.address(), bump);
 
     Ok(())
 }

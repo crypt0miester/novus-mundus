@@ -7,9 +7,7 @@
 import { BPS_100, applyBps, applyBpsBonus, mulDiv } from './constants';
 import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 
-// ============================================================
 // Networth Calculation
-// ============================================================
 
 /** Asset values for networth calculation */
 export interface AssetValues {
@@ -139,9 +137,7 @@ export function calculateNetworthBreakdown(
   };
 }
 
-// ============================================================
 // Resource Collection
-// ============================================================
 
 /**
  * Calculate resource collection amount with time bonus.
@@ -246,9 +242,7 @@ export function calculateFarmingWithTimeBonus(
   return amount;
 }
 
-// ============================================================
 // Resource Consumption
-// ============================================================
 
 /**
  * Calculate produce consumption based on unit count.
@@ -287,9 +281,7 @@ export function calculateWeaponDeficit(sumOfUnits: number, weapons: number): num
   return Math.max(0, sumOfUnits - weapons);
 }
 
-// ============================================================
 // Resource Generation (Estates/Buildings)
-// ============================================================
 
 /**
  * Calculate estate resource generation per cycle.
@@ -335,13 +327,9 @@ export function calculateStorageCapacity(
   return levelCapacity;
 }
 
-// ============================================================
 // Resource Transfer Calculations
-// ============================================================
 
-// ============================================================
 // Resource Ratio Calculations
-// ============================================================
 
 /**
  * Calculate weapon coverage ratio.
@@ -379,9 +367,42 @@ export function calculateArmorCoverage(armor: number, units: number): number {
   return armor / units;
 }
 
-// ============================================================
+// Transfer & Fee Calculations
+
+/**
+ * Calculate vault fee in basis points.
+ *
+ * @param amount - Transfer amount
+ * @param feeBps - Fee in basis points (10000 = 100%)
+ * @returns Fee amount (floored)
+ */
+export function calculateVaultFee(amount: number, feeBps: number): number {
+  return Math.floor((amount * feeBps) / 10000);
+}
+
+/**
+ * Calculate amount remaining after fee is deducted.
+ *
+ * @param amount - Transfer amount
+ * @param feeBps - Fee in basis points (10000 = 100%)
+ * @returns Amount after fee
+ */
+export function calculateAmountAfterFee(amount: number, feeBps: number): number {
+  return amount - calculateVaultFee(amount, feeBps);
+}
+
+/**
+ * Calculate transfer tax in basis points.
+ *
+ * @param amount - Transfer amount
+ * @param taxBps - Tax in basis points (10000 = 100%)
+ * @returns Tax amount (floored)
+ */
+export function calculateTransferTax(amount: number, taxBps: number): number {
+  return Math.floor((amount * taxBps) / 10000);
+}
+
 // Resource Display Helpers
-// ============================================================
 
 /**
  * Format large numbers with abbreviations.

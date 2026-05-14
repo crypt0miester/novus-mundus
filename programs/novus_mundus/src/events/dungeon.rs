@@ -1,18 +1,18 @@
 /// Dungeon system events - The Catacombs roguelike PvE
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player enters a dungeon
 pub struct DungeonEntered {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
     pub dungeon_id: u16,
     /// Hero NFT mint locked in dungeon
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Stamina spent to enter
@@ -40,7 +40,7 @@ impl Event for DungeonEntered {
 /// Emitted when a room is cleared (combat or interaction)
 pub struct DungeonRoomCleared {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -74,7 +74,7 @@ impl Event for DungeonRoomCleared {
 /// Emitted when a floor is completed
 pub struct DungeonFloorCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -108,7 +108,7 @@ impl Event for DungeonFloorCompleted {
 /// Emitted when a relic is chosen between floors
 pub struct DungeonRelicChosen {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -142,7 +142,7 @@ impl Event for DungeonRelicChosen {
 /// Emitted when boss fight begins (final floor)
 pub struct DungeonBossFight {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -176,7 +176,7 @@ impl Event for DungeonBossFight {
 /// Emitted when a dungeon run fails (units wiped)
 pub struct DungeonFailed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -210,7 +210,7 @@ impl Event for DungeonFailed {
 /// Emitted when player flees dungeon early
 pub struct DungeonFled {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -250,7 +250,7 @@ impl Event for DungeonFled {
 /// Emitted when dungeon run is completed and rewards claimed
 pub struct DungeonCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -305,7 +305,7 @@ impl Event for DungeonCompleted {
 /// Emitted when player resumes from checkpoint after failure
 pub struct DungeonResumed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID
@@ -342,7 +342,7 @@ impl Event for DungeonResumed {
 /// Emitted when player claims their weekly leaderboard prize
 pub struct DungeonLeaderboardPrizeClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Dungeon template ID

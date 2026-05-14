@@ -48,9 +48,7 @@ export async function handleEncounters(ctx: CLIContext, args: ParsedArgs): Promi
   }
 }
 
-// ============================================================
 // spawn
-// ============================================================
 
 async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const cityFlag = getFlag(args.flags, '--city');
@@ -154,9 +152,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   log.info(`\nDone — ${totalSpawned} encounter(s) spawned.`);
 }
 
-// ============================================================
 // status
-// ============================================================
 
 async function handleStatus(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const cityFlag = getFlag(args.flags, '--city');
@@ -199,9 +195,7 @@ async function handleStatus(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   log.info(`\n  Total: ${totalSpawned} spawned, ${totalActive} active across ${citiesChecked} cities`);
 }
 
-// ============================================================
 // helpers
-// ============================================================
 
 function getFlag(flags: string[], name: string): string | undefined {
   const idx = flags.indexOf(name);

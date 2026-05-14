@@ -3,9 +3,7 @@ import { getCachedTier } from "@/lib/hooks/useTierTheme";
 
 type TransitionPhase = "idle" | "entering" | "holding" | "exiting";
 
-// ============================================================
 // Transition Messages
-// ============================================================
 
 const ENTER_MESSAGES = [
   "Entering the Kingdom...",
@@ -75,9 +73,7 @@ export function exitMessage(): string {
   return pick(getCachedTier() >= 4 ? LEGENDARY_EXIT_MESSAGES : EXIT_MESSAGES);
 }
 
-// ============================================================
 // Store
-// ============================================================
 
 interface TransitionStore {
   phase: TransitionPhase;

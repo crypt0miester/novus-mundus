@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use pinocchio_system::instructions::Transfer;
@@ -11,11 +11,12 @@ use crate::{
     helpers::{
         add_to_inventory,
         estate::{market_discount_bps, load_estate_for_player, require_market},
+        is_inventory_item_type,
         process_token_payment_flow,
     },
     state::{
         GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus,
-        ShopItemAccount, BundleAccount, PlayerAccount,
+        ShopItemAccount, BundleAccount, PlayerAccount, MAX_BUNDLE_ITEMS,
         unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner},
@@ -59,8 +60,8 @@ use crate::{
 /// - quantity: u16 (usually 1 for flash sales)
 /// - payment_type: u8 (optional, 0 = SOL, 2+ = Token via AllowedToken)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -115,7 +116,7 @@ pub fn process(
 
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if treasury.key() != &game_engine.treasury_wallet {
+    if treasury.address() != &game_engine.treasury_wallet {
         return Err(GameError::InvalidTreasury.into());
     }
 
@@ -125,18 +126,18 @@ pub fn process(
 
     // 5. Load Shop Config
     require_owner(shop_config_account, program_id)?;
-    let shop_config_data_ref = shop_config_account.try_borrow_data()?;
+    let shop_config_data_ref = shop_config_account.try_borrow()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
 
     // 6. Load and Validate Flash Sale
 
-    let (expected_pda, _) = FlashSaleAccount::derive_pda(game_engine_account.key(), sale_id);
-    if flash_sale_account.key() != &expected_pda {
+    let (expected_pda, _) = FlashSaleAccount::derive_pda(game_engine_account.address(), sale_id);
+    if flash_sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(flash_sale_account, program_id)?;
-    let mut flash_sale_data_ref = flash_sale_account.try_borrow_mut_data()?;
+    let mut flash_sale_data_ref = flash_sale_account.try_borrow_mut()?;
     let flash_sale = unsafe { FlashSaleAccount::load_mut(&mut flash_sale_data_ref) };
 
     // Check timing
@@ -164,7 +165,7 @@ pub fn process(
     // 7. Read Player for Validation and Discount Calculation (kingdom-scoped)
 
     let (fib_discount_bps, sub_discount_bps, milestone_discount_bps, streak_discount_bps) = {
-        let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+        let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
 
         // PREREQUISITE: Require EXT_RESEARCH to be unlocked before shopping
         require_extension(&*player, EXT_RESEARCH)?;
@@ -185,15 +186,15 @@ pub fn process(
     let (base_price, item_type, items_per_purchase) = if flash_sale.is_bundle {
         // Load bundle
         let (expected_bundle, _) = BundleAccount::derive_pda(
-            game_engine_account.key(),
+            game_engine_account.address(),
             flash_sale.item_id,
         );
-        if item_or_bundle_account.key() != &expected_bundle {
+        if item_or_bundle_account.address() != &expected_bundle {
             return Err(GameError::InvalidAccount.into());
         }
 
         require_owner(item_or_bundle_account, program_id)?;
-        let bundle_data_ref = item_or_bundle_account.try_borrow_data()?;
+        let bundle_data_ref = item_or_bundle_account.try_borrow()?;
         let bundle = unsafe { BundleAccount::load(&bundle_data_ref) };
 
         // Use SOL price for bundles in flash sales
@@ -201,15 +202,15 @@ pub fn process(
     } else {
         // Load shop item
         let (expected_item, _) = ShopItemAccount::derive_pda(
-            game_engine_account.key(),
+            game_engine_account.address(),
             flash_sale.item_id,
         );
-        if item_or_bundle_account.key() != &expected_item {
+        if item_or_bundle_account.address() != &expected_item {
             return Err(GameError::InvalidAccount.into());
         }
 
         require_owner(item_or_bundle_account, program_id)?;
-        let item_data_ref = item_or_bundle_account.try_borrow_data()?;
+        let item_data_ref = item_or_bundle_account.try_borrow()?;
         let item = unsafe { ShopItemAccount::load(&item_data_ref) };
 
         if !item.is_active {
@@ -230,7 +231,7 @@ pub fn process(
 
     // HARD GATE: Require Market building to use shop
     // Need to load player again for estate ownership verification
-    let player_for_estate = PlayerAccount::load_checked(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+    let player_for_estate = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
     let estate = load_estate_for_player(estate_account, &*player_for_estate, program_id)?;
     require_market(estate, 1)?;
 
@@ -269,7 +270,7 @@ pub fn process(
         // Use unified token payment helper
         process_token_payment_flow(
             &accounts[token_offset..],
-            game_engine_account.key(),
+            game_engine_account.address(),
             program_id,
             shop_config,
             buyer,
@@ -285,14 +286,17 @@ pub fn process(
 
     if flash_sale.is_bundle {
         // Load bundle for fulfillment (was loaded earlier for pricing, borrow dropped)
-        let bundle_data_ref = item_or_bundle_account.try_borrow_data()?;
+        let bundle_data_ref = item_or_bundle_account.try_borrow()?;
         let bundle = unsafe { BundleAccount::load(&bundle_data_ref) };
-        let item_count = bundle.item_count as usize;
+        // Clamp to MAX_BUNDLE_ITEMS — bundle.item_count is a u8 written at create time,
+        // but the in-program items array is fixed-size; a corrupted/legacy value > 10
+        // would otherwise cause OOB indexing into bundle.items below.
+        let item_count = (bundle.item_count as usize).min(MAX_BUNDLE_ITEMS);
 
         // Two-pass fulfillment to avoid borrow conflicts:
         // Pass 1: Fulfill non-inventory items (needs mutable player)
         {
-            let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+            let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
             for i in 0..item_count {
                 let bundle_item = &bundle.items[i];
                 if bundle_item.quantity == 0 {
@@ -322,7 +326,7 @@ pub fn process(
                     add_to_inventory(
                         program_id,
                         buyer,
-                        buyer.key(),
+                        buyer.address(),
                         inventory_account,
                         system_program,
                         item_type,
@@ -340,7 +344,7 @@ pub fn process(
             add_to_inventory(
                 program_id,
                 buyer,
-                buyer.key(),
+                buyer.address(),
                 inventory_account,
                 system_program,
                 item_type,
@@ -352,7 +356,7 @@ pub fn process(
         }
     } else {
         // Items that go directly to PlayerAccount fields
-        let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+        let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
         fulfill_item(&mut *player, item_type, total_items)?;
     }
 
@@ -370,13 +374,13 @@ pub fn process(
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
     // 14. Update Player Shop State
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.key(), buyer.key(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
 
     update_player_shop_state(&mut *player, final_price, now, shop_config);
 
     // Emit event
     emit!(FlashSalePurchased {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         sale_id,
         original_price: total_base,
@@ -388,14 +392,7 @@ pub fn process(
     Ok(())
 }
 
-// ============================================================
 // HELPER FUNCTIONS
-// ============================================================
-
-/// Check if item type goes to inventory (armor, cosmetics, event items)
-fn is_inventory_item_type(item_type: u16) -> bool {
-    matches!(item_type, 3 | 300..=399 | 1000..)
-}
 
 /// Update player shop state after purchase
 fn update_player_shop_state(

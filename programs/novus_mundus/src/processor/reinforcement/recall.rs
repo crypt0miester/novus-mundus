@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -35,8 +35,8 @@ use crate::{
 /// # Instruction Data
 /// None required
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -63,11 +63,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Reinforcement
-    let mut reinf_data_ref = reinforcement_account.try_borrow_mut_data()?;
+    let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
 
     // 5. Validate Sender
-    if &reinf.sender != sender_owner.key() {
+    if &reinf.sender != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -84,7 +84,7 @@ pub fn process(
 
     // 8. Load Destination and Update Aggregates (only if Active)
     if status == ReinforcementStatus::Active {
-        let mut dest_data_ref = destination_player.try_borrow_mut_data()?;
+        let mut dest_data_ref = destination_player.try_borrow_mut()?;
         let dest = unsafe { PlayerAccount::load_mut(&mut dest_data_ref) };
 
         // Validate destination matches
@@ -141,6 +141,19 @@ pub fn process(
     }
 
     // 9. Calculate Return Travel Time
+    // H-03: Verify city accounts are owned by this program and match expected PDAs.
+    require_owner(sender_city, program_id)?;
+    require_owner(destination_city, program_id)?;
+    let (expected_sender_city_pda, _) =
+        CityAccount::derive_pda(game_engine.address(), reinf.sender_city);
+    if sender_city.address() != &expected_sender_city_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    let (expected_dest_city_pda, _) =
+        CityAccount::derive_pda(game_engine.address(), reinf.destination_city);
+    if destination_city.address() != &expected_dest_city_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
     let sender_city_data = unsafe { CityAccount::load(sender_city)? };
     let dest_city_data = unsafe { CityAccount::load(destination_city)? };
 
@@ -155,7 +168,7 @@ pub fn process(
     let return_duration = if reinf.sender_city == reinf.destination_city {
         0i32
     } else {
-        let game_engine_data_ref = game_engine.try_borrow_data()?;
+        let game_engine_data_ref = game_engine.try_borrow()?;
         let game_engine_state = unsafe { GameEngine::load(&game_engine_data_ref) };
         let current_theme = game_engine_state.theme_config.current_theme as usize;
         let theme_speed = game_engine_state.gameplay_config.theme_travel_speeds_kmh[current_theme];
@@ -177,7 +190,7 @@ pub fn process(
 
     // Emit event
     emit!(ReinforcementRecalled {
-        reinforcement: *reinforcement_account.key(),
+        reinforcement: *reinforcement_account.address(),
         sender: reinf.sender,
         sender_name: [0u8; 48], // Sender player account not loaded
         receiver: reinf.destination,

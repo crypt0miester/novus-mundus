@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// (none required - PDA derived from accounts)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -55,7 +55,7 @@ pub fn process(
     // 3. Load Player Account (using by_key for kingdom scoping)
 
     let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -64,12 +64,12 @@ pub fn process(
 
     // 4. Verify Invite PDA
 
-    let (expected_invite, _) = find_program_address(
-        &[TEAM_INVITE_SEED, team_account.key().as_ref(), player_account.key().as_ref()],
+    let (expected_invite, _) = Address::find_program_address(
+        &[TEAM_INVITE_SEED, team_account.address().as_ref(), player_account.address().as_ref()],
         program_id,
     );
 
-    if invite_account.key() != &expected_invite {
+    if invite_account.address() != &expected_invite {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -78,17 +78,17 @@ pub fn process(
     require_owner(invite_account, program_id)?;
 
     // Verify invite is for this player and get team name
-    let team_pubkey: pinocchio::pubkey::Pubkey;
+    let team_pubkey: pinocchio::Address;
     let team_name: [u8; 32];
     {
-        let invite_data = invite_account.try_borrow_data()?;
+        let invite_data = invite_account.try_borrow()?;
         let invite = unsafe { TeamInviteAccount::load(&invite_data) };
 
-        if &invite.invitee != player_account.key() {
+        if &invite.invitee != player_account.address() {
             return Err(GameError::InviteNotFound.into());
         }
 
-        if &invite.team != team_account.key() {
+        if &invite.team != team_account.address() {
             return Err(GameError::InviteNotFound.into());
         }
 
@@ -97,7 +97,7 @@ pub fn process(
 
     // Load team name for event
     {
-        let team_data = team_account.try_borrow_data()?;
+        let team_data = team_account.try_borrow()?;
         let team = unsafe { crate::state::TeamAccount::load(&team_data) };
         team_name = team.name;
     }
@@ -114,7 +114,7 @@ pub fn process(
     emit!(InviteDeclined {
         team: team_pubkey,
         team_name,
-        player: *player_account.key(),
+        player: *player_account.address(),
         timestamp: now,
     });
 

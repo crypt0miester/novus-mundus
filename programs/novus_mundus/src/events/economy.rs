@@ -1,12 +1,12 @@
 /// Economy events - resources, transfers, purchases
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player collects resources (cash/mining/fishing)
 pub struct ResourcesCollected {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Collection type (0=cash, 1=mining, 2=fishing)
@@ -49,7 +49,7 @@ impl Event for ResourcesCollected {
 /// Emitted when a player hires units
 pub struct UnitsHired {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Unit type (0=DefensiveUnit1, 1=DefensiveUnit2, etc.)
@@ -86,11 +86,11 @@ impl Event for UnitsHired {
 /// Emitted when cash is transferred between players
 pub struct CashTransferred {
     /// Sender player account pubkey (not wallet)
-    pub from: Pubkey,
+    pub from: Address,
     /// Sender's name (48 bytes UTF-8)
     pub from_name: [u8; 48],
     /// Receiver player account pubkey (not wallet)
-    pub to: Pubkey,
+    pub to: Address,
     /// Receiver's name (48 bytes UTF-8)
     pub to_name: [u8; 48],
     /// Amount transferred
@@ -120,7 +120,7 @@ impl Event for CashTransferred {
 /// Emitted when NOVI is locked/staked
 pub struct NoviLocked {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Amount locked
@@ -148,7 +148,7 @@ impl Event for NoviLocked {
 /// Emitted when equipment is purchased
 pub struct EquipmentPurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Equipment slot
@@ -179,7 +179,7 @@ impl Event for EquipmentPurchased {
 /// Emitted when stamina is purchased
 pub struct StaminaPurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Stamina amount purchased
@@ -207,7 +207,7 @@ impl Event for StaminaPurchased {
 /// Emitted when vault transfer occurs
 pub struct VaultTransfer {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Amount transferred

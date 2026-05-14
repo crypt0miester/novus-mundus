@@ -1,4 +1,4 @@
-use pinocchio::program_error::ProgramError;
+use pinocchio::error::ProgramError;
 use crate::error::GameError;
 
 #[repr(u8)]

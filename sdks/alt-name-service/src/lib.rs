@@ -3,7 +3,7 @@
 pub mod instructions;
 pub mod state;
 
-pinocchio_pubkey::declare_id!("ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK");
+pinocchio::address::declare_id!("ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK");
 
 /// 8-byte instruction discriminators
 pub const CREATE_DISCRIMINATOR: [u8; 8] = [24, 30, 200, 40, 5, 28, 7, 119];

@@ -174,9 +174,7 @@ import { sendTransaction, sendInstruction, buildTransaction } from '../utils/tra
 import { log } from '../utils/logger';
 import { getCurrentTimestamp, advanceTime } from '../fixtures/time';
 
-// ============================================================
 // Test
-// ============================================================
 
 describe('Full Game Lifecycle', () => {
   let ctx: TestContext;
@@ -369,9 +367,7 @@ describe('Full Game Lifecycle', () => {
     heroFactory.clear();
   });
 
-  // ============================================================
   // Single lifecycle test
-  // ============================================================
 
   it('runs the complete game lifecycle across all 24 systems', async () => {
 
@@ -443,8 +439,8 @@ describe('Full Game Lifecycle', () => {
     for (const b of [
       BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp,
       BuildingType.Market, BuildingType.Vault, BuildingType.Academy,
-      BuildingType.Sanctuary, BuildingType.Citadel, BuildingType.Forge,
-      BuildingType.Dock, BuildingType.Stables, BuildingType.Mine,
+      BuildingType.MeditationChamber, BuildingType.Citadel, BuildingType.Forge,
+      BuildingType.Dock, BuildingType.TransportBay, BuildingType.Mine,
     ]) {
       await factory.buildAndCompleteBuilding(alpha, b);
       log.txSuccess(`Alpha built ${BuildingType[b]}`);
@@ -453,14 +449,14 @@ describe('Full Game Lifecycle', () => {
     // Bravo: 6 buildings (Mansion, Barracks, Camp, Market, Sanctuary, Arena)
     for (const b of [
       BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Market,
-      BuildingType.Sanctuary, BuildingType.Arena,
+      BuildingType.MeditationChamber, BuildingType.Arena,
     ]) {
       await factory.buildAndCompleteBuilding(bravo, b);
     }
     log.txSuccess('Bravo: all buildings constructed');
 
     // Charlie: 4 buildings (Mansion, Barracks, Camp, Stables)
-    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Stables]) {
+    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.TransportBay]) {
       await factory.buildAndCompleteBuilding(charlie, b);
     }
 
@@ -470,7 +466,7 @@ describe('Full Game Lifecycle', () => {
     }
 
     // Echo: 5 buildings (Mansion, Barracks, Camp, Arena, Catacombs)
-    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Arena, BuildingType.Catacombs]) {
+    for (const b of [BuildingType.Mansion, BuildingType.Barracks, BuildingType.Camp, BuildingType.Arena, BuildingType.DungeonEntry]) {
       await factory.buildAndCompleteBuilding(echo, b);
     }
 
@@ -502,30 +498,32 @@ describe('Full Game Lifecycle', () => {
       log.info(`lockedNovi diff: ${Object.keys(diff.changes).join(', ') || 'none (fresh player)'}`);
     }
 
-    // All players: hireUnits (Barracks now built for all)
+    // All players: hireUnits (Barracks/Camp now built for all)
+    // Use 500+ NOVI per call to clear the InsufficientPower threshold even
+    // when the time-of-day Hiring multiplier penalizes (e.g. DeepNight 0.618x).
     log.step('Hiring units for all players');
-    await factory.hireUnits(alpha, 0, 200);
-    await factory.hireUnits(alpha, 1, 100);
-    await factory.hireUnits(alpha, 3, 200);
-    await factory.hireUnits(alpha, 4, 100);
+    await factory.hireUnits(alpha, 0, 500);
+    await factory.hireUnits(alpha, 1, 500);
+    await factory.hireUnits(alpha, 3, 500);
+    await factory.hireUnits(alpha, 4, 500);
     log.txSuccess('Alpha: units hired');
 
-    await factory.hireUnits(bravo, 0, 100);
-    await factory.hireUnits(bravo, 1, 50);
+    await factory.hireUnits(bravo, 0, 500);
+    await factory.hireUnits(bravo, 1, 500);
     log.txSuccess('Bravo: units hired');
 
-    await factory.hireUnits(charlie, 0, 50);
+    await factory.hireUnits(charlie, 0, 500);
     log.txSuccess('Charlie: units hired');
 
-    await factory.hireUnits(delta, 0, 300);
-    await factory.hireUnits(delta, 1, 150);
+    await factory.hireUnits(delta, 0, 500);
+    await factory.hireUnits(delta, 1, 500);
     log.txSuccess('Delta: units hired');
 
-    await factory.hireUnits(echo, 0, 150);
-    await factory.hireUnits(echo, 1, 50);
+    await factory.hireUnits(echo, 0, 500);
+    await factory.hireUnits(echo, 1, 500);
     log.txSuccess('Echo: units hired');
 
-    await factory.hireUnits(foxtrot, 0, 30);
+    await factory.hireUnits(foxtrot, 0, 500);
     log.txSuccess('Foxtrot: units hired');
 
     // Alpha: collectResources (cash)
@@ -1615,7 +1613,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Echo: enterDungeon');
 
       const attackIx = createAttackInstruction(
-        { owner: echo.publicKey, gameEngine: ctx.gameEngine },
+        { owner: echo.publicKey, gameEngine: ctx.gameEngine, gameAuthority: ctx.daoAuthority.publicKey },
         {
           templateId: DUNGEON_TEMPLATE_ID,
           nextRoomType: 0,
@@ -1623,7 +1621,7 @@ describe('Full Game Lifecycle', () => {
           crit: false,
         }
       );
-      await sendTx(ctx.svm, new Transaction().add(attackIx), [echo.keypair], ctx.config);
+      await sendTx(ctx.svm, new Transaction().add(attackIx), [echo.keypair, ctx.daoAuthority], ctx.config);
       log.txSuccess('Echo: dungeon attackRoom');
 
       const fleeIx = createFleeInstruction({
@@ -1653,7 +1651,9 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(ix), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: claimVacantCastle');
 
-      // Transition castle: CONTEST → PROTECTED (CASTLE_CONTEST_DURATION=0 for testing)
+      // Transition castle: CONTEST → PROTECTED.
+      // CASTLE_CONTEST_DURATION is 7200s on-chain; advance past it.
+      await advanceTime(ctx.svm, 7201);
       const statusIx = createUpdateCastleStatusInstruction({
         caller: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,

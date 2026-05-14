@@ -10,9 +10,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Progression Account Interface
-// ============================================================
 
 export interface ProgressionAccount {
   player: PublicKey;
@@ -24,9 +22,7 @@ export interface ProgressionAccount {
 /** ProgressionAccount size in bytes (repr(C) layout with alignment padding) */
 export const PROGRESSION_ACCOUNT_SIZE = 56;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize ProgressionAccount from raw bytes */
 export function deserializeProgression(data: Uint8Array | Buffer): ProgressionAccount {

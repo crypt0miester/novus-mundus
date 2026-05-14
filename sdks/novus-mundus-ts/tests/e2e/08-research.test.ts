@@ -43,9 +43,7 @@ import {
 } from '../utils/accounts';
 import { log } from '../utils/logger';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Research System', () => {
   let ctx: TestContext;
@@ -70,9 +68,7 @@ describe('Research System', () => {
     });
   }
 
-  // ============================================================
   // Starting Research Tests
-  // ============================================================
 
   describe('Starting Research', () => {
     it('should start battle research with Academy', async () => {
@@ -176,9 +172,7 @@ describe('Research System', () => {
     });
   });
 
-  // ============================================================
   // Completing Research Tests
-  // ============================================================
 
   describe('Completing Research', () => {
     it('should complete research after speedup', async () => {
@@ -242,9 +236,7 @@ describe('Research System', () => {
     });
   });
 
-  // ============================================================
   // Cancel Research Tests
-  // ============================================================
 
   describe('Canceling Research', () => {
     it('should cancel ongoing research', async () => {
@@ -327,9 +319,7 @@ describe('Research System', () => {
     });
   });
 
-  // ============================================================
   // Speedup Tests
-  // ============================================================
 
   describe('Research Speedup', () => {
     it('should speedup research with gems', async () => {
@@ -374,9 +364,7 @@ describe('Research System', () => {
     });
   });
 
-  // ============================================================
   // Full Research Cycle Test
-  // ============================================================
 
   describe('Full Research Cycle', () => {
     it('should complete full start → speedup → complete → start next cycle', async () => {

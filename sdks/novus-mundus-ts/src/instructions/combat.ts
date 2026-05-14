@@ -20,9 +20,7 @@ import {
   deriveEventPda,
 } from '../pda';
 
-// ============================================================
 // Attack Player (PvP)
-// ============================================================
 
 export interface AttackPlayerAccounts {
   /** Attacker's wallet (signer) */
@@ -117,9 +115,7 @@ export function createAttackPlayerInstruction(
   });
 }
 
-// ============================================================
 // Attack Encounter (PvE)
-// ============================================================
 
 export interface AttackEncounterAccounts {
   /** Attacker's wallet (signer, pays rent for loot if encounter dies) */

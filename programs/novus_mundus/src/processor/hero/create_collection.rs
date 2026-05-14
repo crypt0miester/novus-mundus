@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::{Pubkey, find_program_address},
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -39,8 +39,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -53,23 +53,22 @@ pub fn process(
     require_writable(hero_collection)?;
 
     // 3. Load and verify GameEngine
-    let game_engine_data = game_engine.try_borrow_data()?;
-    let ge = unsafe { GameEngine::load(&game_engine_data) };
-
-    // SAFETY: Verify DAO authority
-    if ge.authority != *dao_authority.key() {
-        return Err(GameError::Unauthorized.into());
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    {
+        let ge = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        // SAFETY: Verify DAO authority
+        if ge.authority != *dao_authority.address() {
+            return Err(GameError::Unauthorized.into());
+        }
     }
 
-    drop(game_engine_data);
-
     // 4. SAFETY: Verify hero_collection PDA derivation
-    let (expected_collection_pda, collection_bump) = find_program_address(
+    let (expected_collection_pda, collection_bump) = Address::find_program_address(
         &[HERO_COLLECTION_SEED],
         program_id,
     );
 
-    if hero_collection.key() != &expected_collection_pda {
+    if hero_collection.address() != &expected_collection_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -79,8 +78,8 @@ pub fn process(
     // 6. Create collection using p-core CreateCollectionV1
     // Collection PDA must sign, and game_engine is update_authority
     let collection_bump_seed = [collection_bump];
-    let collection_seeds = pinocchio::seeds!(HERO_COLLECTION_SEED, &collection_bump_seed);
-    let collection_signer = pinocchio::instruction::Signer::from(&collection_seeds);
+    let collection_seeds = crate::seeds!(HERO_COLLECTION_SEED, &collection_bump_seed);
+    let collection_signer = pinocchio::cpi::Signer::from(&collection_seeds);
 
     p_core::instructions::CreateCollectionV1 {
         collection: hero_collection,  // Collection PDA signs

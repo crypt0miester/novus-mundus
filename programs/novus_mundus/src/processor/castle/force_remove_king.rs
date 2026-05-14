@@ -7,9 +7,9 @@
 //! to make castle vacant.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -38,8 +38,8 @@ use crate::{
 /// 4. [writable] King registry account
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -62,7 +62,7 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -83,24 +83,24 @@ pub fn process(
     }
 
     // Verify king account matches
-    if castle.king != *king_account.key() {
+    if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
     }
 
     // Load king player for event
     require_owner(king_account, program_id)?;
-    let king_data = king_account.try_borrow_data()?;
+    let king_data = king_account.try_borrow()?;
     let king = unsafe { PlayerAccount::load(&king_data) };
 
     // Verify and update king registry
     require_owner(king_registry, program_id)?;
-    let (expected_registry_pda, _) = KingRegistryAccount::derive_pda(king_account.key());
-    if king_registry.key() != &expected_registry_pda {
+    let (expected_registry_pda, _) = KingRegistryAccount::derive_pda(king_account.address());
+    if king_registry.address() != &expected_registry_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     if king_registry.data_len() > 0 {
-        let mut registry_data = king_registry.try_borrow_mut_data()?;
+        let mut registry_data = king_registry.try_borrow_mut()?;
         let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
 
         // Remove castle from king's registry
@@ -129,7 +129,7 @@ pub fn process(
 
     // Emit event
     emit!(KingForceRemoved {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
         removed_king,
         removed_king_name: king_name,

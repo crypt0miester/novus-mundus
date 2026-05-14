@@ -12,9 +12,7 @@ import { parseEventsFromLogs } from '../events/parser';
 import type { NovusMundusEvent } from '../events/types';
 import { PROGRAM_ID } from '../program';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Parsed instruction with account keys */
 export interface ParsedTransactionInstruction extends ParsedInstruction {
@@ -58,9 +56,7 @@ export interface ParseTransactionOptions {
   parseEvents?: boolean;
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 function isVersionedResponse(
   response: VersionedTransactionResponse | TransactionResponse
@@ -118,9 +114,7 @@ function getInstructions(
   return legacyMessage.instructions;
 }
 
-// ============================================================
 // Main Parser
-// ============================================================
 
 /**
  * Parse a transaction response from the RPC.

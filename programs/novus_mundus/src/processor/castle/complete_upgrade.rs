@@ -6,9 +6,9 @@
 //! Applies the upgrade bonus to the castle.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -33,8 +33,8 @@ use crate::{
 /// 1. [writable] Castle account
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -94,7 +94,7 @@ pub fn process(
 
     // Emit event
     emit!(CastleUpgradeCompleted {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
         upgrade_type,
         new_level: target_level,

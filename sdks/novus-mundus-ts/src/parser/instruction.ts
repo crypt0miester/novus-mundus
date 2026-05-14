@@ -10,9 +10,7 @@ import type BN from 'bn.js';
 import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Types
-// ============================================================
 
 /** Base parsed instruction with discriminator info */
 export interface ParsedInstructionBase {
@@ -26,9 +24,7 @@ export interface ParsedInstruction<T = unknown> extends ParsedInstructionBase {
   data: T;
 }
 
-// ============================================================
 // Instruction Data Types
-// ============================================================
 
 // Initialization
 export interface InitGameEngineData {
@@ -332,9 +328,7 @@ export interface UpdateCastleConfigData {
   memberCashPerDay: BN;
 }
 
-// ============================================================
 // Instruction Category Mapping
-// ============================================================
 
 function getCategory(discriminator: number): string {
   if (discriminator >= 0 && discriminator <= 9) return 'Initialization';
@@ -364,9 +358,7 @@ function getCategory(discriminator: number): string {
   return 'Unknown';
 }
 
-// ============================================================
 // Individual Parsers
-// ============================================================
 
 function parseHireUnits(reader: BufferReader): HireUnitsData {
   return {
@@ -729,9 +721,7 @@ function parseUpdateCastleConfig(reader: BufferReader): UpdateCastleConfigData {
   };
 }
 
-// ============================================================
 // Main Parser
-// ============================================================
 
 /** Parse raw instruction data into structured object */
 export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstruction | null {

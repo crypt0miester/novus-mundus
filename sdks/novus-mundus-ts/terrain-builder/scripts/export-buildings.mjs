@@ -15,9 +15,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// ---------------------------------------------------------------------------
 // Node.js polyfills required by Three.js GLTFExporter
-// ---------------------------------------------------------------------------
 
 if (typeof globalThis.FileReader === 'undefined') {
   globalThis.FileReader = class FileReader {
@@ -57,9 +55,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
 import { BuildingFactory } from '../src/town/buildings/BuildingFactory.js';
 
-// ---------------------------------------------------------------------------
 // Config
-// ---------------------------------------------------------------------------
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -78,9 +74,7 @@ const BUILDING_NAMES = [
 //   tier 4 (Legendary)   = level 20
 const TIER_LEVELS = [3, 8, 15, 20];
 
-// ---------------------------------------------------------------------------
 // CLI args
-// ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 let filterType = null;
@@ -91,9 +85,7 @@ for (let i = 0; i < args.length; i++) {
   if (args[i] === '--tier' && args[i + 1]) filterTier = parseInt(args[++i], 10);
 }
 
-// ---------------------------------------------------------------------------
 // Export
-// ---------------------------------------------------------------------------
 
 async function exportBuilding(exporter, factory, typeId, tierIdx) {
   const name = BUILDING_NAMES[typeId];

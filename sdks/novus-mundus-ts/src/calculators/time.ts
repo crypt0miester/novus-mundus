@@ -14,9 +14,7 @@ import {
   PHI_SQUARED_INVERSE,
 } from './constants';
 
-// ============================================================
 // Time Periods
-// ============================================================
 
 export enum TimeOfDay {
   DeepNight = 0,  // 00:00-03:00 local (0-125 in 0-1000 scale)
@@ -44,9 +42,7 @@ export enum ActivityType {
   LootDrop = 15,
 }
 
-// ============================================================
 // Time Calculation Functions
-// ============================================================
 
 /**
  * Calculate local time based on timestamp and longitude.
@@ -99,9 +95,7 @@ export function getCurrentTimeOfDay(timestamp: number, longitude: number): TimeO
   return getTimeOfDay(localTime);
 }
 
-// ============================================================
 // Time Period Helpers
-// ============================================================
 
 /** Check if a time period is a golden hour (dawn or dusk) */
 export function isGoldenHour(time: TimeOfDay): boolean {
@@ -128,9 +122,7 @@ export function isDeepNight(time: TimeOfDay): boolean {
   return time === TimeOfDay.DeepNight;
 }
 
-// ============================================================
 // Activity Multipliers (Golden Ratio Family)
-// ============================================================
 
 /**
  * Get the time multiplier for an activity at a given time period.
@@ -287,9 +279,7 @@ export function applyTimeMultiplier(value: number, activity: ActivityType, time:
   return Math.floor(value * multiplier);
 }
 
-// ============================================================
 // Time Display Helpers
-// ============================================================
 
 /**
  * Get human-readable time period name.

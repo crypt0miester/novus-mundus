@@ -25,9 +25,7 @@ import {
   deriveTeamPda,
 } from '../pda';
 
-// ============================================================
 // Send Reinforcements
-// ============================================================
 
 export interface SendReinforcementAccounts {
   /** Sender's wallet (signer, pays rent) */
@@ -149,9 +147,7 @@ export function createSendReinforcementInstruction(
   });
 }
 
-// ============================================================
 // Process Arrival (Permissionless Crank)
-// ============================================================
 
 export interface ProcessArrivalAccounts {
   /** Reinforcement account */
@@ -190,9 +186,7 @@ export function createProcessArrivalInstruction(
   });
 }
 
-// ============================================================
 // Recall Reinforcements
-// ============================================================
 
 export interface RecallReinforcementAccounts {
   /** Sender's wallet (signer) */
@@ -251,9 +245,7 @@ export function createRecallReinforcementInstruction(
   });
 }
 
-// ============================================================
 // Relieve Reinforcements
-// ============================================================
 
 export interface RelieveReinforcementAccounts {
   /** Destination owner's wallet (signer) */
@@ -312,9 +304,7 @@ export function createRelieveReinforcementInstruction(
   });
 }
 
-// ============================================================
 // Process Return (Permissionless Crank)
-// ============================================================
 
 export interface ProcessReturnAccounts {
   /** Reinforcement account */
@@ -362,9 +352,7 @@ export function createProcessReturnInstruction(
   });
 }
 
-// ============================================================
 // Speedup
-// ============================================================
 
 export interface ReinforcementSpeedupAccounts {
   /** Sender's wallet (signer, pays gems) */

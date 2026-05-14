@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -18,12 +18,19 @@ use crate::{
 /// Approve a treasury withdrawal request (higher rank)
 ///
 /// Higher ranked member approves a pending request, executing it immediately.
-/// Approver must outrank the requester (lower rank number).
+/// Approver must STRICTLY outrank the requester (lower rank number == higher rank).
 /// Request PDA is closed, rent returned to requester.
+///
+/// This ix requires the *requester's* slot account so we can
+/// verify the approver outranks the requester at *current* rank, not via a
+/// permission heuristic. Without this, two RANK_1 co-leaders could
+/// cross-approve each other's requests and drain the treasury without leader
+/// involvement.
 ///
 /// # Accounts
 /// - [] approver_player: PlayerAccount (approver)
 /// - [] approver_slot: TeamMemberSlot (for approver rank)
+/// - [] requester_slot: TeamMemberSlot (for requester's current rank)
 /// - [writable] requester_player: PlayerAccount (receives funds)
 /// - [writable] team: TeamAccount
 /// - [writable] request: TreasuryRequest PDA (to be closed)
@@ -34,8 +41,8 @@ use crate::{
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 /// - approver_slot_index: u16 (2 bytes) - Approver's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -52,6 +59,7 @@ pub fn process(
     let [
         approver_account,
         approver_slot_account,
+        requester_slot_account,
         requester_account,
         team_account,
         request_account,
@@ -72,7 +80,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let approver = PlayerAccount::load_checked_by_key(approver_account, program_id)?;
-    if &approver.owner != approver_owner.key() {
+    if &approver.owner != approver_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -95,14 +103,14 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if approver.team == NULL_PUBKEY || &approver.team != team_account.key() {
+    if approver.team == NULL_PUBKEY || &approver.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Approver Slot and Get Rank
 
-    let (expected_approver_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), approver_slot_index);
-    if approver_slot_account.key() != &expected_approver_slot {
+    let (expected_approver_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), approver_slot_index);
+    if approver_slot_account.address() != &expected_approver_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -110,10 +118,10 @@ pub fn process(
 
     let approver_rank: u8;
     {
-        let slot_data = approver_slot_account.try_borrow_data()?;
+        let slot_data = approver_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *approver_account.key() {
+        if slot.player != *approver_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -122,8 +130,8 @@ pub fn process(
 
     // 7. Load and Validate Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.key(), requester_account.key());
-    if request_account.key() != &expected_request {
+    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), requester_account.address());
+    if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -132,15 +140,15 @@ pub fn process(
 
     let amount: u64;
     {
-        let request_data = request_account.try_borrow_data()?;
+        let request_data = request_account.try_borrow()?;
         let request = unsafe { TreasuryRequest::load(&request_data) };
 
         // Verify request is for this team and requester
-        if &request.team != team_account.key() {
+        if &request.team != team_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
-        if &request.requester != requester_account.key() {
+        if &request.requester != requester_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -162,11 +170,11 @@ pub fn process(
 
     let requester_slot_index: u16;
     {
-        let requester_data = requester_account.try_borrow_data()?;
+        let requester_data = requester_account.try_borrow()?;
         let requester = unsafe { PlayerAccount::load(&requester_data) };
 
         // Verify requester is still in team
-        if requester.team != *team_account.key() {
+        if requester.team != *team_account.address() {
             drop(requester_data);
             close_account(request_account, requester_refund)?;
             return Err(GameError::NotTeamMember.into());
@@ -175,19 +183,29 @@ pub fn process(
         requester_slot_index = requester.team_slot_index;
     }
 
-    // Get requester's rank from their slot (for future rank-based approval validation)
-    let (_requester_slot_pda, _) = TeamMemberSlot::derive_pda(team_account.key(), requester_slot_index);
-    // We don't have the requester slot account passed in, so we need to trust the request
-    // The request was created when they had permission, but we should verify they still do
-    // For simplicity, we'll allow approval if approver outranks based on the request being valid
+    // Load requester's slot to get their CURRENT rank, then enforce
+    // approver_rank < requester_rank STRICTLY. Equal ranks cannot approve each
+    // other (closes the co-leader cross-approval drain).
+    let (expected_requester_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), requester_slot_index);
+    if requester_slot_account.address() != &expected_requester_slot {
+        return Err(GameError::InvalidPDA.into());
+    }
+    require_owner(requester_slot_account, program_id)?;
 
-    // Actually, we need the requester slot to verify their current rank
-    // Let's just check that approver is higher rank than RANK_1 (so they can approve anyone below them)
-    // Or we require requester_slot to be passed in
+    let requester_rank: u8;
+    {
+        let slot_data = requester_slot_account.try_borrow()?;
+        let slot = unsafe { TeamMemberSlot::load(&slot_data) };
+        if slot.player != *requester_account.address() {
+            return Err(GameError::NotSlotOwner.into());
+        }
+        requester_rank = slot.rank;
+    }
 
-    // For now, let's require approver to be at least RANK_0 or RANK_1 (leader or high rank)
-    // Only leader can approve any request, RANK_1 can approve RANK_2+
-    if approver_rank > TeamMemberSlot::RANK_1 {
+    // Strict rank check: a smaller `rank` number means a HIGHER position
+    // (RANK_0 = Leader, RANK_1 = Co-leader, RANK_2 = Officer, RANK_3 = Member).
+    // The approver must strictly outrank the requester. Equal ranks are rejected.
+    if approver_rank >= requester_rank {
         return Err(GameError::InsufficientTeamPermissions.into());
     }
 
@@ -201,7 +219,7 @@ pub fn process(
 
     // 10. Execute Withdrawal - Load requester mutably
 
-    let mut requester_data = requester_account.try_borrow_mut_data()?;
+    let mut requester_data = requester_account.try_borrow_mut()?;
     let requester = unsafe { PlayerAccount::load_mut(&mut requester_data) };
 
     team.treasury = team.treasury.saturating_sub(amount);
@@ -221,10 +239,10 @@ pub fn process(
     // 13. Emit Event
 
     emit!(TreasuryRequestApproved {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        approver: *approver_account.key(),
-        requester: *requester_account.key(),
+        approver: *approver_account.address(),
+        requester: *requester_account.address(),
         timestamp: clock.unix_timestamp,
     });
 

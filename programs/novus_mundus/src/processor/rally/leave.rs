@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -16,7 +16,7 @@ use crate::{
     events::RallyLeft,
 };
 
-/// Leave a rally during Gathering phase (NEW architecture)
+/// Leave a rally during Gathering phase
 ///
 /// Starts the participant's return journey home. Units and weapons remain
 /// committed until they call process_return after arriving home.
@@ -40,8 +40,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -68,14 +68,14 @@ pub fn process(
 
     // 4. Load Player and validate ownership (using by_key for kingdom scoping)
     let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
-    if &player.owner != player_owner.key() {
+    if &player.owner != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     drop(player);
 
     // 5. Load Rally and validate state
     require_owner(rally_account, program_id)?;
-    let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
+    let mut rally_data_ref = rally_account.try_borrow_mut()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     // Rally must be in Gathering phase (can't leave after march starts)
@@ -89,13 +89,13 @@ pub fn process(
     let rally_city = rally.rally_city;
 
     // Creator cannot leave (must use cancel)
-    if &rally_creator == player_owner.key() {
+    if &rally_creator == player_owner.address() {
         return Err(GameError::CreatorCannotLeaveRally.into());
     }
 
     // 6. Load RallyParticipant and validate
     require_owner(participant_account, program_id)?;
-    let mut participant_data_ref = participant_account.try_borrow_mut_data()?;
+    let mut participant_data_ref = participant_account.try_borrow_mut()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
     // Validate participant belongs to this rally
@@ -104,7 +104,7 @@ pub fn process(
     }
 
     // Validate caller is this participant
-    if &participant.participant != player_owner.key() {
+    if &participant.participant != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -186,9 +186,9 @@ pub fn process(
     // 11. Emit event
     // Note: team_name not available here - would need to pass team account
     emit!(RallyLeft {
-        rally: *rally_account.key(),
+        rally: *rally_account.address(),
         team_name: [0u8; 32], // Team name not available, lookup via rally.team
-        player: *player_account.key(),
+        player: *player_account.address(),
         units: [
             participant.units_committed_1,
             participant.units_committed_2,

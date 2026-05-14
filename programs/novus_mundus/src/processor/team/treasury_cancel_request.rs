@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -28,8 +28,8 @@ use crate::{
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -60,7 +60,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let team = TeamAccount::load_checked_by_key(team_account, program_id)?;
@@ -83,8 +83,8 @@ pub fn process(
 
     // 6. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.key(), player_account.key());
-    if request_account.key() != &expected_request {
+    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
+    if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -93,14 +93,14 @@ pub fn process(
 
     // Validate request belongs to this player and team
     {
-        let request_data = request_account.try_borrow_data()?;
+        let request_data = request_account.try_borrow()?;
         let request = unsafe { TreasuryRequest::load(&request_data) };
 
-        if &request.team != team_account.key() {
+        if &request.team != team_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
-        if &request.requester != player_account.key() {
+        if &request.requester != player_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
     }
@@ -115,9 +115,9 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryRequestCancelled {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        requester: *player_account.key(),
+        requester: *player_account.address(),
         timestamp: now,
     });
 

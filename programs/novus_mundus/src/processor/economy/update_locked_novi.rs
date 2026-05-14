@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -60,8 +60,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -86,23 +86,23 @@ pub fn process(
     }
 
     // SECURITY: Verify token account belongs to the PlayerAccount PDA
-    crate::helpers::validate_token_account_owner(player_token_account, player_account.key())?;
+    crate::helpers::validate_token_account_owner(player_token_account, player_account.address())?;
 
     // 3. Load Accounts
 
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    let user_data_ref = user_account.try_borrow_data()?;
+    let user_data_ref = user_account.try_borrow()?;
     let user_data = unsafe { UserAccount::load(&user_data_ref) };
 
     // 4. Validate Ownership
 
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
-    if &user_data.owner != owner.key() {
+    if &user_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -124,9 +124,12 @@ pub fn process(
 
     // 7. Determine Generation Rate from Subscription Tier
 
-    // Load GameEngine to get subscription tier config
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
+    // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
+    {
+        let _ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    }
+    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     // Determine active tier (free tier 0 if expired)
     let tier_index = if player_data.subscription_end > now {
@@ -194,8 +197,8 @@ pub fn process(
         // Create PDA signer for GameEngine (mint authority)
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+        let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
 
         // Mint tokens to player's token account (increases total supply)
         crate::helpers::mint_tokens(
@@ -208,7 +211,7 @@ pub fn process(
 
         // Emit NoviLocked event
         emit!(NoviLocked {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player_data.name,
             amount: actual_tokens_generated,
             total_locked: player_data.locked_novi,

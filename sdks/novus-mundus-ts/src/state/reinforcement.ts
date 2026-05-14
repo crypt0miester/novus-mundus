@@ -10,18 +10,14 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { ReinforcementStatus } from '../types/enums';
 
-// ============================================================
 // Reinforcement Target Type
-// ============================================================
 
 export enum ReinforcementTargetType {
   Player = 0,
   Castle = 1,
 }
 
-// ============================================================
 // Reinforcement Account Interface
-// ============================================================
 
 export interface ReinforcementAccount {
   // Identity
@@ -75,9 +71,7 @@ export interface ReinforcementAccount {
 /** ReinforcementAccount size in bytes (repr(C) layout including account_key + game_engine) */
 export const REINFORCEMENT_ACCOUNT_SIZE = 256;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize ReinforcementAccount from raw bytes */
 export function deserializeReinforcement(data: Uint8Array | Buffer): ReinforcementAccount {
@@ -179,9 +173,7 @@ export function parseReinforcement(accountInfo: AccountInfo<Buffer>): Reinforcem
   return deserializeReinforcement(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Get total units sent */
 export function getReinforcementTotalUnits(r: ReinforcementAccount): BN {

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -35,8 +35,8 @@ use crate::{
 /// - kicker_slot_index: u16 (2 bytes) - Kicker's slot index
 /// - kicked_slot_index: u16 (2 bytes) - Kicked player's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -75,13 +75,13 @@ pub fn process(
 
     // Kicker: use load_checked_by_key (read-only, has signer)
     let kicker = PlayerAccount::load_checked_by_key(kicker_account, program_id)?;
-    if &kicker.owner != kicker_owner.key() {
+    if &kicker.owner != kicker_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // Kicked player: manual load (we don't have kicked player's wallet key)
     require_owner(kicked_account, program_id)?;
-    let mut kicked_data_ref = kicked_account.try_borrow_mut_data()?;
+    let mut kicked_data_ref = kicked_account.try_borrow_mut()?;
     let kicked = unsafe { PlayerAccount::load_mut(&mut kicked_data_ref) };
 
     // Team: use load_checked_mut_by_key
@@ -106,23 +106,23 @@ pub fn process(
     }
 
     // Kicker in the team?
-    if kicker.team == NULL_PUBKEY || &kicker.team != team_account.key() {
+    if kicker.team == NULL_PUBKEY || &kicker.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Kicker's Slot and Get Rank
-    let (expected_kicker_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), kicker_slot_index);
-    if kicker_slot_account.key() != &expected_kicker_slot {
+    let (expected_kicker_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), kicker_slot_index);
+    if kicker_slot_account.address() != &expected_kicker_slot {
         return Err(GameError::InvalidPDA.into());
     }
     require_owner(kicker_slot_account, program_id)?;
 
     let kicker_rank: u8;
     {
-        let kicker_slot_data = kicker_slot_account.try_borrow_data()?;
+        let kicker_slot_data = kicker_slot_account.try_borrow()?;
         let kicker_slot = unsafe { TeamMemberSlot::load(&kicker_slot_data) };
 
-        if kicker_slot.player != *kicker_account.key() {
+        if kicker_slot.player != *kicker_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
         kicker_rank = kicker_slot.rank;
@@ -131,37 +131,37 @@ pub fn process(
     // 7. Validate Kicked Player
 
     // Cannot kick yourself
-    if kicked_account.key() == kicker_account.key() {
+    if kicked_account.address() == kicker_account.address() {
         return Err(GameError::InvalidParameter.into());
     }
 
     // Kicked player in the team?
-    if kicked.team == NULL_PUBKEY || &kicked.team != team_account.key() {
+    if kicked.team == NULL_PUBKEY || &kicked.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // Verify kicked_owner matches kicked player's owner
-    if &kicked.owner != kicked_owner.key() {
+    if &kicked.owner != kicked_owner.address() {
         return Err(GameError::InvalidAccount.into());
     }
 
     // 8. Verify Kicked Slot PDA and Get Target Rank
-    let (expected_kicked_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), kicked_slot_index);
-    if kicked_slot_account.key() != &expected_kicked_slot {
+    let (expected_kicked_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), kicked_slot_index);
+    if kicked_slot_account.address() != &expected_kicked_slot {
         return Err(GameError::InvalidPDA.into());
     }
     require_owner(kicked_slot_account, program_id)?;
 
     let kicked_rank: u8;
     {
-        let kicked_slot_data = kicked_slot_account.try_borrow_data()?;
+        let kicked_slot_data = kicked_slot_account.try_borrow()?;
         let kicked_slot = unsafe { TeamMemberSlot::load(&kicked_slot_data) };
 
-        if kicked_slot.player != *kicked_account.key() {
+        if kicked_slot.player != *kicked_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
-        if &kicked_slot.team != team_account.key() {
+        if &kicked_slot.team != team_account.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -191,10 +191,10 @@ pub fn process(
     // 11. Emit Event
 
     emit!(MemberKicked {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        kicked: *kicked_account.key(),
-        kicked_by: *kicker_account.key(),
+        kicked: *kicked_account.address(),
+        kicked_by: *kicker_account.address(),
         timestamp: now,
     });
 

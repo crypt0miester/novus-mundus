@@ -15,9 +15,7 @@ import {
 } from './constants';
 import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 
-// ============================================================
 // Unit Hiring Costs
-// ============================================================
 
 /** Base hiring costs by unit type */
 export interface UnitHiringCosts {
@@ -108,9 +106,7 @@ export function calculateTotalHiringCost(
   return total;
 }
 
-// ============================================================
 // Purchase Costs
-// ============================================================
 
 /**
  * Calculate equipment purchase cost with time bonus.
@@ -144,9 +140,7 @@ export function calculatePurchaseCost(
   return totalCost;
 }
 
-// ============================================================
 // Upgrade Costs
-// ============================================================
 
 /**
  * Calculate building upgrade cost.
@@ -164,21 +158,22 @@ export function calculateUpgradeCost(
   currentLevel: number,
   scalingFactor: number = PHI_SQUARED
 ): number {
-  // Match Rust integer math: cost * 2618 / 1000 per level
   let cost = baseCost;
   for (let i = 0; i < currentLevel; i++) {
-    cost = Math.floor(cost * 2618 / 1000);
+    cost = Math.floor(cost * scalingFactor);
   }
   return cost;
 }
 
 /**
- * Calculate cumulative upgrade cost (total cost to reach a level from level 0).
+ * Calculate cumulative upgrade cost (total cost to upgrade from level 1 to targetLevel).
+ *
+ * Level 1 is the post-construction baseline state; upgrades start from there.
  *
  * @param baseCost - Base cost for the building type
  * @param targetLevel - Target level to reach
  * @param scalingFactor - Scaling factor per level
- * @returns Total cost from level 0 to targetLevel
+ * @returns Total upgrade cost from level 1 to targetLevel (0 if already at or above target)
  */
 export function calculateCumulativeUpgradeCost(
   baseCost: number,
@@ -186,7 +181,7 @@ export function calculateCumulativeUpgradeCost(
   scalingFactor: number = PHI_SQUARED
 ): number {
   let total = 0;
-  for (let level = 0; level < targetLevel; level++) {
+  for (let level = 1; level < targetLevel; level++) {
     total += calculateUpgradeCost(baseCost, level, scalingFactor);
   }
   return total;
@@ -208,9 +203,7 @@ export function calculateResearchCost(
   return Math.floor(baseCost * Math.pow(scalingFactor, researchLevel));
 }
 
-// ============================================================
 // NOVI Costs
-// ============================================================
 
 /**
  * Calculate NOVI consumption cost for power.
@@ -245,9 +238,7 @@ export function calculateNoviRequired(
   return Math.ceil(desiredPower / multiplier);
 }
 
-// ============================================================
 // Speedup Costs
-// ============================================================
 
 // Note: calculateSpeedupCost and calculateTimeReduced are exported from travel.ts
 
@@ -266,9 +257,7 @@ export function calculatePartialSpeedupCost(
   return minutesToSkip * gemCostPerMinute;
 }
 
-// ============================================================
 // Subscription Costs
-// ============================================================
 
 /** Subscription tier configuration */
 export interface SubscriptionTierConfigCosts {
@@ -292,9 +281,7 @@ export function calculateSubscriptionCostPerDay(
   return price / tierConfig.durationDays;
 }
 
-// ============================================================
 // Tax and Fee Calculations
-// ============================================================
 
 /**
  * Calculate attack tax based on resources looted.
@@ -324,9 +311,7 @@ export function calculateShopPrice(
   return discount ? applyBpsPenalty(basePrice, discount) : basePrice;
 }
 
-// ============================================================
 // Cost Display Helpers
-// ============================================================
 
 /**
  * Format cost with time bonus indicator.
@@ -374,9 +359,7 @@ export function getCostTimeBonusDescription(timeOfDay: TimeOfDay): string {
   return 'Normal prices';
 }
 
-// ============================================================
 // Troop Recovery Costs (Infirmary)
-// ============================================================
 
 /** Recovery cost discount: 50% of normal hire cost */
 const RECOVERY_COST_DISCOUNT_BPS = 5000;

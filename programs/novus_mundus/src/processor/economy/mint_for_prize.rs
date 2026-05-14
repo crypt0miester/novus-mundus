@@ -1,7 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::Sysvar,
     ProgramResult,
 };
 
@@ -46,9 +47,19 @@ use crate::{
 /// - 4: Partnerships (collaborations)
 /// - 5: Treasury (reserve fund)
 /// - 6: Liquidity (DEX pools)
+///
+/// # Atomicity Caveat (audit M-17)
+/// The per-purpose `total_minted_*` cap reads/writes on GameEngine are NOT atomic
+/// across a multi-instruction transaction. If two `mint_for_prize` instructions
+/// for the same purpose are batched in one tx, each checks the cap before either
+/// writes the updated total, so both can pass even though their combined effect
+/// would exceed the cap. DAO front-ends MUST issue exactly one `mint_for_prize`
+/// per transaction (and ideally serialize on the off-chain side) to avoid
+/// circumventing the configured allocation limits. The on-chain check assumes
+/// single-instruction transactions.
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -88,19 +99,22 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // Validate account ownership, then use raw pointer access to avoid
-    // holding RefCell borrows across the mint_tokens CPI call.
-    require_owner(game_engine_account, program_id)?;
+    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
+    // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
+    // load_checked_by_key drops the borrow at end of scope; we re-acquire the raw pointer
+    // after the auth check (account is still program-owned and the bytes are validated).
+    {
+        let ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        if dao_authority.address() != &ge.authority {
+            return Err(GameError::DaoRequired.into());
+        }
+    }
     require_owner(recipient_user, program_id)?;
 
     let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
 
-    if dao_authority.key() != &game_engine_data.authority {
-        return Err(GameError::DaoRequired.into());
-    }
-
     // SECURITY: Verify token account belongs to the UserAccount PDA
-    validate_token_account_owner(user_token_account, recipient_user.key())?;
+    validate_token_account_owner(user_token_account, recipient_user.address())?;
 
     // 4. Load Recipient User Account
 
@@ -199,8 +213,8 @@ pub fn process(
     // Create PDA signer for GameEngine (mint authority)
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let bump_seed = [game_engine_data.bump];
-    let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     // Mint tokens to user's reserved token account (increases total supply)
     crate::helpers::mint_tokens(
@@ -259,6 +273,12 @@ pub fn process(
     user_data.total_reserved_earned = user_data.total_reserved_earned
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
+
+    // Update reserved_novi_earned_at so the 7-day vesting check in
+    // withdraw_reserved starts from NOW for this tranche. Without this, fresh
+    // users with default 0 earned_at could withdraw immediately (now - 0 ≫ 7d).
+    let clock = pinocchio::sysvars::clock::Clock::get()?;
+    user_data.reserved_novi_earned_at = clock.unix_timestamp;
 
     Ok(())
 }

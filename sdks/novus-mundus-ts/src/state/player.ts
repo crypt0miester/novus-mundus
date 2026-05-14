@@ -10,9 +10,7 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { TravelType, SubscriptionTier } from '../types/enums';
 
-// ============================================================
 // Extension Flags
-// ============================================================
 
 export const ExtensionFlags = {
   RESEARCH: 1 << 0,
@@ -24,9 +22,7 @@ export const ExtensionFlags = {
   COURT: 1 << 6,
 } as const;
 
-// ============================================================
 // Section Sizes & Offsets
-// ============================================================
 
 export const CORE_SIZE = 1056;
 export const RESEARCH_SIZE = 96;
@@ -47,9 +43,7 @@ export const COSMETICS_OFFSET = TEAM_OFFSET + TEAM_SIZE;
 export const COURT_OFFSET = COSMETICS_OFFSET + COSMETICS_SIZE;
 export const MAX_SIZE = COURT_OFFSET + COURT_SIZE;
 
-// ============================================================
 // Rally Stats & Caps
-// ============================================================
 
 export interface RallyStats {
   currentRalliesJoined: number;
@@ -68,9 +62,7 @@ export interface PlayerRallyCaps {
   maxRalliesPerDay: number;
 }
 
-// ============================================================
 // Player Core Interface
-// ============================================================
 
 export interface PlayerCore {
   // Kingdom Reference
@@ -290,9 +282,7 @@ export type PlayerAccount = PlayerCore;
 /** PlayerCore size in bytes */
 export const PLAYER_CORE_SIZE = CORE_SIZE;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 function deserializeRallyStats(reader: BufferReader): RallyStats {
   const currentRalliesJoined = reader.readU8();
@@ -725,9 +715,7 @@ export function parsePlayer(accountInfo: AccountInfo<Buffer>): PlayerCore | null
   return deserializePlayer(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if player has extension unlocked */
 export function hasExtension(player: PlayerCore, ext: number): boolean {

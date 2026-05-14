@@ -28,9 +28,7 @@ import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 // Note: TOKEN_PROGRAM_ID used for start_research
 // Note: getAssociatedTokenAddressSyncForPda used for start_research
 
-// ============================================================
 // Initialize Template (Admin)
-// ============================================================
 
 export interface InitializeTemplateAccounts {
   /** DAO authority (signer + payer) */
@@ -117,9 +115,7 @@ export function createInitializeTemplateInstruction(
   });
 }
 
-// ============================================================
 // Update Template (Admin)
-// ============================================================
 
 export interface UpdateTemplateAccounts {
   /** DAO authority (signer) */
@@ -174,9 +170,7 @@ export function createUpdateTemplateInstruction(
   });
 }
 
-// ============================================================
 // Create Progress
-// ============================================================
 
 export interface CreateProgressAccounts {
   /** Player's wallet (signer) */
@@ -215,9 +209,7 @@ export function createCreateProgressInstruction(
   });
 }
 
-// ============================================================
 // Start Research
-// ============================================================
 
 export interface StartResearchAccounts {
   /** Player's wallet (signer) */
@@ -269,9 +261,7 @@ export function createStartResearchInstruction(
   });
 }
 
-// ============================================================
 // Complete Research
-// ============================================================
 
 export interface CompleteResearchAccounts {
   /** Anyone can call (permissionless) */
@@ -313,9 +303,7 @@ export function createCompleteResearchInstruction(
   });
 }
 
-// ============================================================
 // Speed Up Research
-// ============================================================
 
 export interface SpeedUpResearchAccounts {
   /** Player's wallet (signer) */
@@ -373,9 +361,7 @@ export function createSpeedUpResearchInstruction(
   });
 }
 
-// ============================================================
 // Cancel Research
-// ============================================================
 
 export interface CancelResearchAccounts {
   /** Player's wallet (signer) */
@@ -423,9 +409,7 @@ export function createCancelResearchInstruction(
   });
 }
 
-// ============================================================
 // Ascend (Prestige)
-// ============================================================
 
 export interface AscendAccounts {
   /** Player's wallet (signer) */

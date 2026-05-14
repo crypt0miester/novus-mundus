@@ -7,9 +7,7 @@
 import { PublicKey } from '@solana/web3.js';
 import BN from 'bn.js';
 
-// ============================================================
 // Combat Events
-// ============================================================
 
 export interface PlayerAttackedEvent {
   attacker: PublicKey;
@@ -53,9 +51,7 @@ export interface EncounterDefeatedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Economy Events
-// ============================================================
 
 export interface ResourcesCollectedEvent {
   player: PublicKey;
@@ -125,9 +121,7 @@ export interface VaultTransferEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Team Events
-// ============================================================
 
 export interface TeamCreatedEvent {
   team: PublicKey;
@@ -298,9 +292,7 @@ export interface TreasuryRequestCancelledEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Travel Events
-// ============================================================
 
 export interface IntercityTravelStartedEvent {
   player: PublicKey;
@@ -363,9 +355,7 @@ export interface TravelSpeedupEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Rally Events
-// ============================================================
 
 export interface RallyCreatedEvent {
   rally: PublicKey;
@@ -440,9 +430,7 @@ export interface RallyParticipantReturnedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Reinforcement Events
-// ============================================================
 
 export interface ReinforcementSentEvent {
   sender: PublicKey;
@@ -502,9 +490,7 @@ export interface ReinforcementSpeedupEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Expedition Events
-// ============================================================
 
 export interface ExpeditionStartedEvent {
   player: PublicKey;
@@ -551,9 +537,7 @@ export interface ExpeditionSpeedupEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Loot Events
-// ============================================================
 
 export interface LootClaimedEvent {
   player: PublicKey;
@@ -573,17 +557,12 @@ export interface EncounterSpawnedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Progression Events
-// ============================================================
 
 export interface DailyRewardClaimedEvent {
   player: PublicKey;
   playerName: string;
-  day: number;
   cash: BN;
-  gems: number;
-  bonusType: number;
   timestamp: BN;
 }
 
@@ -639,9 +618,7 @@ export interface SubscriptionExpiredEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Estate Events
-// ============================================================
 
 export interface EstateCreatedEvent {
   estate: PublicKey;
@@ -695,9 +672,7 @@ export interface EstateDailyClaimedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Forge Events
-// ============================================================
 
 export interface CraftStartedEvent {
   player: PublicKey;
@@ -746,9 +721,7 @@ export interface ItemEquippedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Research Events
-// ============================================================
 
 export interface ResearchStartedEvent {
   player: PublicKey;
@@ -801,9 +774,7 @@ export interface PlayerAscendedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Sanctuary Events
-// ============================================================
 
 export interface MeditationStartedEvent {
   player: PublicKey;
@@ -825,9 +796,7 @@ export interface MeditationClaimedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Hero Events
-// ============================================================
 
 export interface HeroMintedEvent {
   heroMint: PublicKey;
@@ -895,9 +864,7 @@ export interface SupplyCapUpdatedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Shop Events
-// ============================================================
 
 export interface ItemPurchasedEvent {
   player: PublicKey;
@@ -941,9 +908,7 @@ export interface NoviPurchasedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Initialization Events
-// ============================================================
 
 export interface PlayerCreatedEvent {
   player: PublicKey;
@@ -970,9 +935,7 @@ export interface GameEngineInitializedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Name Events
-// ============================================================
 
 export interface PlayerNameSetEvent {
   player: PublicKey;
@@ -1016,9 +979,7 @@ export interface TeamNameUpdatedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Token Events
-// ============================================================
 
 export interface NoviReservedToLockedEvent {
   player: PublicKey;
@@ -1037,9 +998,7 @@ export interface NoviWithdrawnEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Dungeon Events
-// ============================================================
 
 export interface DungeonEnteredEvent {
   player: PublicKey;
@@ -1152,9 +1111,7 @@ export interface DungeonLeaderboardPrizeClaimedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Castle Events
-// ============================================================
 
 export interface CastleCreatedEvent {
   castle: PublicKey;
@@ -1342,9 +1299,7 @@ export interface CastleAttackedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Game Event Events
-// ============================================================
 
 export interface GameEventCreatedEvent {
   event: PublicKey;
@@ -1380,9 +1335,7 @@ export interface EventScoreUpdatedEvent {
   timestamp: BN;
 }
 
-// ============================================================
 // Kingdom Events
-// ============================================================
 
 export interface KingdomCreatedEvent {
   kingdomId: number;
@@ -1444,9 +1397,7 @@ export interface KingdomCitiesInitializedEvent {
   initializedAt: BN;
 }
 
-// ============================================================
 // Discriminated Union
-// ============================================================
 
 export type NovusMundusEvent =
   // Combat
@@ -1619,8 +1570,6 @@ export type NovusMundusEvent =
   | { name: 'KingdomDungeonLeaderboardCreated'; data: KingdomDungeonLeaderboardCreatedEvent }
   | { name: 'KingdomCitiesInitialized'; data: KingdomCitiesInitializedEvent };
 
-// ============================================================
 // Event Name Union
-// ============================================================
 
 export type EventName = NovusMundusEvent['name'];

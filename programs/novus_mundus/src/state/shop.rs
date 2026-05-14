@@ -1,8 +1,8 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    program_error::ProgramError,
+    Address,
+    error::ProgramError,
 };
-use pinocchio::account_info::AccountInfo;
+use pinocchio::AccountView;
 use crate::constants::{
     SHOP_CONFIG_SEED, SHOP_ITEM_SEED, BUNDLE_SEED, DAILY_DEAL_SEED,
     FLASH_SALE_SEED, WEEKLY_SALE_SEED, SEASONAL_SALE_SEED,
@@ -63,8 +63,8 @@ pub struct ShopConfigAccount {
 
     // ===== SOL Oracle Configuration (68 bytes) =====
     // Used for token payments: convert token USD price to SOL amount
-    pub sol_pyth_feed: Pubkey,           // Pyth SOL/USD price feed (32 bytes)
-    pub sol_switchboard_feed: Pubkey,    // Switchboard SOL/USD feed (32 bytes)
+    pub sol_pyth_feed: Address,           // Pyth SOL/USD price feed (32 bytes)
+    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD feed (32 bytes)
     pub sol_max_staleness_slots: u16,    // Max age in slots before rejection
     pub sol_confidence_threshold_bps: u16, // Max confidence interval for Pyth
 
@@ -88,19 +88,19 @@ impl ShopConfigAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[SHOP_CONFIG_SEED, game_engine.as_ref()],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[SHOP_CONFIG_SEED, game_engine.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 
@@ -164,21 +164,21 @@ impl ShopItemAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, item_id: u32) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, item_id: u32) -> (Address, u8) {
         let item_id_bytes = item_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[SHOP_ITEM_SEED, game_engine.as_ref(), &item_id_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, item_id: u32, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, item_id: u32, bump: u8) -> Result<Address, ProgramError> {
         let item_id_bytes = item_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[SHOP_ITEM_SEED, game_engine.as_ref(), &item_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 
@@ -250,21 +250,21 @@ impl BundleAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, bundle_id: u32) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, bundle_id: u32) -> (Address, u8) {
         let bundle_id_bytes = bundle_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[BUNDLE_SEED, game_engine.as_ref(), &bundle_id_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, bundle_id: u32, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, bundle_id: u32, bump: u8) -> Result<Address, ProgramError> {
         let bundle_id_bytes = bundle_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[BUNDLE_SEED, game_engine.as_ref(), &bundle_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 
@@ -312,19 +312,19 @@ impl DailyDealAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, slot_index: u8) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, slot_index: u8) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[DAILY_DEAL_SEED, game_engine.as_ref(), &[slot_index]],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, slot_index: u8, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, slot_index: u8, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[DAILY_DEAL_SEED, game_engine.as_ref(), &[slot_index], &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 
@@ -362,7 +362,7 @@ pub struct FlashSaleAccount {
     /// Account discriminator (AccountKey::FlashSale)
     pub account_key: u8,
     // Payer for rent return (32 bytes)
-    pub payer: Pubkey,                   // Receives rent on close
+    pub payer: Address,                   // Receives rent on close
 
     // Item (8 bytes)
     pub item_id: u32,                    // Item or bundle ID
@@ -403,21 +403,21 @@ impl FlashSaleAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, sale_id: u64) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, sale_id: u64) -> (Address, u8) {
         let sale_id_bytes = sale_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[FLASH_SALE_SEED, game_engine.as_ref(), &sale_id_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, sale_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, sale_id: u64, bump: u8) -> Result<Address, ProgramError> {
         let sale_id_bytes = sale_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[FLASH_SALE_SEED, game_engine.as_ref(), &sale_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed (ended or sold out)
@@ -450,7 +450,7 @@ pub struct WeeklySaleAccount {
     /// Account discriminator (AccountKey::WeeklySale)
     pub account_key: u8,
     // Payer for rent return (32 bytes)
-    pub payer: Pubkey,
+    pub payer: Address,
 
     // Theme (8 bytes)
     pub theme: u8,                       // WeeklySaleTheme
@@ -489,21 +489,21 @@ impl WeeklySaleAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, week_number: u64) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, week_number: u64) -> (Address, u8) {
         let week_bytes = week_number.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[WEEKLY_SALE_SEED, game_engine.as_ref(), &week_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, week_number: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, week_number: u64, bump: u8) -> Result<Address, ProgramError> {
         let week_bytes = week_number.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[WEEKLY_SALE_SEED, game_engine.as_ref(), &week_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed (week has ended)
@@ -535,7 +535,7 @@ pub struct SeasonalSaleAccount {
     /// Account discriminator (AccountKey::SeasonalSale)
     pub account_key: u8,
     // Payer for rent return (32 bytes)
-    pub payer: Pubkey,
+    pub payer: Address,
 
     // Sale Info (32 bytes)
     pub name: [u8; 32],                  // "Summer Combat Festival"
@@ -583,19 +583,19 @@ impl SeasonalSaleAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, event: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, event: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[SEASONAL_SALE_SEED, game_engine.as_ref(), event.as_ref()],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, event: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, event: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[SEASONAL_SALE_SEED, game_engine.as_ref(), event.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed
@@ -626,7 +626,7 @@ pub struct DAOPromotionAccount {
     /// Account discriminator (AccountKey::DaoPromotion)
     pub account_key: u8,
     // Payer for rent return (32 bytes)
-    pub payer: Pubkey,
+    pub payer: Address,
 
     // Promotion Info (32 bytes)
     pub title: [u8; 32],
@@ -675,21 +675,21 @@ impl DAOPromotionAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(game_engine: &Pubkey, proposal_id: u64) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, proposal_id: u64) -> (Address, u8) {
         let proposal_bytes = proposal_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[DAO_PROMOTION_SEED, game_engine.as_ref(), &proposal_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(game_engine: &Pubkey, proposal_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, proposal_id: u64, bump: u8) -> Result<Address, ProgramError> {
         let proposal_bytes = proposal_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[DAO_PROMOTION_SEED, game_engine.as_ref(), &proposal_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if this promotion can be closed
@@ -733,21 +733,21 @@ impl PlayerPurchaseAccount {
         &mut *(data.as_mut_ptr() as *mut Self)
     }
 
-    pub fn derive_pda(player: &Pubkey, item_id: u32) -> (Pubkey, u8) {
+    pub fn derive_pda(player: &Address, item_id: u32) -> (Address, u8) {
         let item_id_bytes = item_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[PLAYER_PURCHASE_SEED, player.as_ref(), &item_id_bytes],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(player: &Pubkey, item_id: u32, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Address, item_id: u32, bump: u8) -> Result<Address, ProgramError> {
         let item_id_bytes = item_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[PLAYER_PURCHASE_SEED, player.as_ref(), &item_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if this account can be closed
@@ -853,11 +853,11 @@ pub struct AllowedTokenAccount {
     /// Account discriminator (AccountKey::AllowedToken)
     pub account_key: u8,
     // ===== Token Identity (32 bytes) =====
-    pub mint: Pubkey,
+    pub mint: Address,
 
     // ===== Dual Oracle Configuration (64 bytes) =====
-    pub pyth_feed: Pubkey,                 // Pyth TOKEN/USD price account
-    pub switchboard_feed: Pubkey,          // Switchboard TOKEN/USD quote account
+    pub pyth_feed: Address,                 // Pyth TOKEN/USD price account
+    pub switchboard_feed: Address,          // Switchboard TOKEN/USD quote account
 
     // ===== Pricing Parameters (8 bytes) =====
     pub max_staleness_slots: u16,          // Max age in SLOTS before rejection
@@ -885,8 +885,8 @@ impl AllowedTokenAccount {
 
     /// Derive the PDA for the allowed token account (finds bump - slower)
     /// Use this only during account creation
-    pub fn derive_pda(game_engine: &Pubkey, token_mint: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, token_mint: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref()],
             &crate::ID,
         )
@@ -894,32 +894,33 @@ impl AllowedTokenAccount {
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(game_engine: &Pubkey, token_mint: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, token_mint: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify AllowedTokenAccount immutably.
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked<'a>(
-        account: &'a AccountInfo,
-        game_engine: &Pubkey,
-        token_mint: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        game_engine: &Address,
+        token_mint: &Address,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::AllowedToken)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -933,21 +934,22 @@ impl AllowedTokenAccount {
     /// Load and verify AllowedTokenAccount mutably.
     /// Checks: program ownership, PDA derivation, bump field.
     pub fn load_checked_mut<'a>(
-        account: &'a AccountInfo,
-        game_engine: &Pubkey,
-        token_mint: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        game_engine: &Address,
+        token_mint: &Address,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::AllowedToken)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -960,13 +962,13 @@ impl AllowedTokenAccount {
 
     /// Validate allowed token account PDA using stored bump (fast)
     pub fn validate_pda(
-        account: &AccountInfo,
-        game_engine: &Pubkey,
-        token_mint: &Pubkey,
+        account: &AccountView,
+        game_engine: &Address,
+        token_mint: &Address,
         bump: u8,
     ) -> Result<(), ProgramError> {
         let expected_address = Self::create_pda(game_engine, token_mint, bump)?;
-        if account.key() != &expected_address {
+        if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())

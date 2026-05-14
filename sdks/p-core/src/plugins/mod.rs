@@ -4,8 +4,6 @@ pub use attributes::*;
 mod plugin_types;
 pub use plugin_types::*;
 
-use pinocchio::pubkey::Pubkey;
-
 /// Maximum number of attributes per asset
 pub const MAX_ATTRIBUTES: usize = 10;
 
@@ -41,6 +39,14 @@ pub enum PluginType {
     ImmutableMetadata = 12,
     /// Verified Creators plugin (authority managed)
     VerifiedCreators = 13,
+    /// Autograph plugin (owner managed)
+    Autograph = 14,
+    /// BubblegumV2 plugin (permanent, cNFT integration)
+    BubblegumV2 = 15,
+    /// Freeze Execute plugin (owner managed)
+    FreezeExecute = 16,
+    /// Permanent Freeze Execute plugin (permanent)
+    PermanentFreezeExecute = 17,
 }
 
 impl From<u8> for PluginType {
@@ -60,6 +66,10 @@ impl From<u8> for PluginType {
             11 => PluginType::AddBlocker,
             12 => PluginType::ImmutableMetadata,
             13 => PluginType::VerifiedCreators,
+            14 => PluginType::Autograph,
+            15 => PluginType::BubblegumV2,
+            16 => PluginType::FreezeExecute,
+            17 => PluginType::PermanentFreezeExecute,
             _ => PluginType::Attributes, // Default fallback
         }
     }
@@ -76,7 +86,7 @@ pub enum PluginAuthority {
     /// Update authority can update
     UpdateAuthority,
     /// Specific address can update
-    Address(Pubkey),
+    Address([u8; 32]),
 }
 
 impl PluginAuthority {
@@ -96,7 +106,7 @@ impl PluginAuthority {
             0 => PluginAuthority::None,
             1 => PluginAuthority::Owner,
             2 => PluginAuthority::UpdateAuthority,
-            3 => PluginAuthority::Address(Pubkey::from(*key)),
+            3 => PluginAuthority::Address(*key),
             _ => PluginAuthority::None,
         }
     }
@@ -117,12 +127,12 @@ impl PluginHeaderV1 {
 
     /// Load plugin header from account data
     pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
+        unsafe { &*(data.as_ptr() as *const Self) }
     }
 
     /// Load mutable plugin header from account data
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
+        unsafe { &mut *(data.as_mut_ptr() as *mut Self) }
     }
 }
 
@@ -144,11 +154,11 @@ impl PluginRegistryV1 {
 
     /// Load plugin registry from account data
     pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
+        unsafe { &*(data.as_ptr() as *const Self) }
     }
 
     /// Load mutable plugin registry from account data
     pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
+        unsafe { &mut *(data.as_mut_ptr() as *mut Self) }
     }
 }

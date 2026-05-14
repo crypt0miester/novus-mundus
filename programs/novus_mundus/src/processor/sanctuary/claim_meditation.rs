@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -70,8 +70,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -92,11 +92,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Player Account
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -110,12 +110,12 @@ pub fn process(
     let meditating_hero_mint = player.active_heroes[hero_slot as usize];
 
     // 7. Verify the passed hero_mint matches the meditating hero
-    if hero_mint.key() != &meditating_hero_mint {
+    if hero_mint.address() != &meditating_hero_mint {
         return Err(GameError::HeroMismatch.into());
     }
 
     // 8. Load Estate to get Sanctuary level
-    let mut estate_data = estate_account.try_borrow_mut_data()?;
+    let mut estate_data = estate_account.try_borrow_mut()?;
     let estate = unsafe { EstateAccount::load_mut(&mut estate_data) };
 
     // Verify estate ownership
@@ -125,7 +125,7 @@ pub fn process(
 
     let sanctuary_level = get_sanctuary_level(estate);
     if sanctuary_level == 0 {
-        return Err(GameError::SanctuaryRequired.into());
+        return Err(GameError::MeditationChamberRequired.into());
     }
 
     // 9. Calculate elapsed time and XP earned
@@ -137,13 +137,13 @@ pub fn process(
 
     // 10. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
-    let nft_data = hero_mint.try_borrow_data()?;
+    let nft_data = hero_mint.try_borrow()?;
     let parsed_hero = parse_hero_nft(&nft_data)
         .ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 11. Load Hero Template (for buff power calculation)
-    let template_data = hero_template.try_borrow_data()?;
+    let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
     // Verify template matches hero
@@ -198,8 +198,8 @@ pub fn process(
 
     drop(template_data);
 
-    // 17. Award Sanctuary mastery XP (1 per hour of meditation)
-    if let Some(sanctuary) = estate.find_building_mut(BuildingType::Sanctuary) {
+    // 17. Award MeditationChamber mastery XP (1 per hour of meditation)
+    if let Some(sanctuary) = estate.find_building_mut(BuildingType::MeditationChamber) {
         if sanctuary.is_active() {
             let hours_meditated = (capped_elapsed / 3600) as u32;
             sanctuary.mastery_xp = sanctuary.mastery_xp.saturating_add(hours_meditated);
@@ -224,7 +224,7 @@ pub fn process(
     drop(player_data);
 
     // 19. Update NFT with new meditation state
-    let game_engine_data = game_engine.try_borrow_data()?;
+    let game_engine_data = game_engine.try_borrow()?;
     let ge = unsafe { crate::state::GameEngine::load(&game_engine_data) };
     let ge_bump = ge.bump;
     let kingdom_id_bytes = ge.kingdom_id.to_le_bytes();
@@ -237,8 +237,8 @@ pub fn process(
 
     // Derive game_engine PDA signer
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
-    let ge_signer = pinocchio::instruction::Signer::from(&game_engine_seeds);
+    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     // Update all NFT attributes
     p_core::instructions::UpdatePluginV1 {
@@ -255,9 +255,9 @@ pub fn process(
 
     // 20. Emit event
     emit!(MeditationClaimed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
-        hero_mint: *hero_mint.key(),
+        hero_mint: *hero_mint.address(),
         hero_name,
         xp_earned,
         levels_gained: levels_to_grant as u8,

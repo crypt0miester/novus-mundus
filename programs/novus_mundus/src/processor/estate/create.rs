@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// - city_id: u16 (2 bytes) - City where estate will be located
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -56,17 +56,17 @@ pub fn process(
     let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
 
     // 4. Load Player Account
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // Verify ownership
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Derive and verify estate PDA (scoped to player PDA)
-    let (expected_pda, bump) = EstateAccount::derive_pda(player_account.key());
-    if estate_account.key() != &expected_pda {
+    let (expected_pda, bump) = EstateAccount::derive_pda(player_account.address());
+    if estate_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -83,12 +83,12 @@ pub fn process(
     // 8. Calculate rent
     let rent = pinocchio::sysvars::rent::Rent::get()?;
     let space = EstateAccount::LEN;
-    let lamports = rent.minimum_balance(space);
+    let lamports = rent.try_minimum_balance(space)?;
 
     // 9. Create estate account via CPI (seeds use player PDA)
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(ESTATE_SEED, player_account.key().as_ref(), &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(ESTATE_SEED, player_account.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: owner,
@@ -100,7 +100,7 @@ pub fn process(
     .invoke_signed(&[signer])?;
 
     // 10. Initialize estate data
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let mut estate_data_ref = estate_account.try_borrow_mut()?;
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
     *estate_data = EstateAccount::init(player_data.owner, city_id, now, bump);
@@ -111,8 +111,8 @@ pub fn process(
 
     // 12. Emit EstateCreated event
     emit!(EstateCreated {
-        estate: *estate_account.key(),
-        player: *player_account.key(),
+        estate: *estate_account.address(),
+        player: *player_account.address(),
         player_name: player_data.name,
         timestamp: now,
     });

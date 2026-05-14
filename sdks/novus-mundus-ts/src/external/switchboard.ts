@@ -7,9 +7,7 @@
 import { PublicKey } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
 
-// ============================================================
 // Program IDs
-// ============================================================
 
 /** Switchboard V2 Program ID (Mainnet) */
 export const SWITCHBOARD_V2_PROGRAM_ID = new PublicKey(
@@ -26,9 +24,7 @@ export const SWITCHBOARD_ON_DEMAND_PROGRAM_ID = new PublicKey(
   'SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv'
 );
 
-// ============================================================
 // Aggregator Data Types
-// ============================================================
 
 /** Switchboard aggregator result */
 export interface SwitchboardAggregatorResult {
@@ -58,9 +54,7 @@ export interface SwitchboardAggregatorConfig {
   varianceThreshold: number;
 }
 
-// ============================================================
 // Aggregator Parsing Functions
-// ============================================================
 
 /**
  * Parse Switchboard aggregator account data (V2).
@@ -179,9 +173,7 @@ export function parseSwitchboardOnDemand(data: Buffer): SwitchboardAggregatorRes
   };
 }
 
-// ============================================================
 // Price Validation Functions
-// ============================================================
 
 /**
  * Check if Switchboard result is stale.
@@ -266,9 +258,7 @@ export function validateSwitchboardResult(
   return { valid: true };
 }
 
-// ============================================================
 // Fetch Functions
-// ============================================================
 
 /**
  * Fetch and parse Switchboard aggregator data from the network.

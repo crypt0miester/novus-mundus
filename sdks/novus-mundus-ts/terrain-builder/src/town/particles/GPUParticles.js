@@ -11,9 +11,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Utility helpers
-// ---------------------------------------------------------------------------
 
 const _v3 = new THREE.Vector3();
 
@@ -38,9 +36,7 @@ function lerpColorArray(a, b, t) {
   ];
 }
 
-// ---------------------------------------------------------------------------
 // Shader chunks shared across all particle types
-// ---------------------------------------------------------------------------
 
 const COMMON_VERTEX_HEADER = /* glsl */ `
   uniform float time;
@@ -416,9 +412,7 @@ const TORCH_FRAGMENT = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
 // Falling leaves — uses InstancedMesh with small quads so they can tumble
-// ---------------------------------------------------------------------------
 
 const LEAF_VERTEX_SHADER = /* glsl */ `
   uniform float time;
@@ -492,9 +486,7 @@ const LEAF_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
 // Preset definitions
-// ---------------------------------------------------------------------------
 
 const PRESETS = {
   'forge-smoke': {
@@ -791,9 +783,7 @@ const PRESETS = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // ParticleEmitter — wraps a single THREE.Points (or InstancedMesh for leaves)
-// ---------------------------------------------------------------------------
 
 export class ParticleEmitter {
   /**
@@ -1068,9 +1058,7 @@ export class ParticleEmitter {
   }
 }
 
-// ---------------------------------------------------------------------------
 // GPUParticleSystem — high-level manager
-// ---------------------------------------------------------------------------
 
 export class GPUParticleSystem {
   /**

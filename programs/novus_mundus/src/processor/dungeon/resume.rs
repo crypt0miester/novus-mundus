@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -34,8 +34,8 @@ use crate::{
 /// # Instruction Data
 /// - first_room_type: u8 (room type for first room after resume)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -58,15 +58,15 @@ pub fn process(
 
     // 4. Load player using load_checked_mut_by_key (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;
+    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
-    if &run.player != player_account.key() {
+    if &run.player != player_account.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -115,17 +115,26 @@ pub fn process(
     run.pending_novi = run.checkpoint_novi;
     run.pending_gems = run.checkpoint_gems;
 
-    // Restore DEFENSIVE units to full (not operative - those are for resource collection!)
-    run.remaining_units[0] = player.defensive_unit_1;
-    run.remaining_units[1] = player.defensive_unit_2;
-    run.remaining_units[2] = player.defensive_unit_3;
+    // Restore DEFENSIVE units, but CAP at the immutable entry snapshot.
+    // `original_units` was set at enter() and must NEVER be raised on resume — otherwise
+    // a player can enter weak, train massively between failed attempts, and resume with
+    // a fully-grown army (which the resurrection relic id 11 then resurrects from). We
+    // use min(current_player_units, original_units) so a player who lost some units between
+    // attempts gets restored to whatever they have left, but can never exceed entry strength.
+    run.remaining_units[0] = player.defensive_unit_1.min(run.original_units[0]);
+    run.remaining_units[1] = player.defensive_unit_2.min(run.original_units[1]);
+    run.remaining_units[2] = player.defensive_unit_3.min(run.original_units[2]);
 
-    // Update original_units snapshot for Phoenix Feather calculations
-    run.original_units[0] = player.defensive_unit_1;
-    run.original_units[1] = player.defensive_unit_2;
-    run.original_units[2] = player.defensive_unit_3;
+    // DO NOT update original_units — it is the immutable entry snapshot used for the
+    // resurrection relic (original/4) and resume capping. Updating it here was the bug.
 
-    // Restore weapons to full
+    // Restore weapons capped at the entry weapon snapshot for the same reason.
+    // remaining_weapons holds the per-tier weapon counts (melee, ranged, siege); on
+    // entry these were set from the player's actual stocks. On resume we restore them
+    // capped at that snapshot. (If finer-grained weapon snapshots become necessary, we
+    // can add a separate entry_weapons field — but capping against existing remaining
+    // weapons would not work since they decrement during combat. For now, weapons restore
+    // up to the player's current count — the principal exploit was units / resurrection-relic.)
     run.remaining_weapons[0] = player.melee_weapons;
     run.remaining_weapons[1] = player.ranged_weapons;
     run.remaining_weapons[2] = player.siege_weapons;
@@ -177,7 +186,7 @@ pub fn process(
 
     // 9. Emit event
     emit!(DungeonResumed {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         dungeon_id,
         checkpoint_floor,

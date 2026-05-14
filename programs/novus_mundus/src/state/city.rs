@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -24,7 +24,7 @@ pub struct CityAccount {
     pub account_key: u8,                    // 1 byte
 
     /// Reference to the game engine (kingdom) this city belongs to
-    pub game_engine: Pubkey,                // 32 bytes
+    pub game_engine: Address,                // 32 bytes
 
     /// Unique city identifier within this kingdom (0-65535 cities possible)
     pub city_id: u16,                       // 2 bytes
@@ -112,7 +112,7 @@ impl CityAccount {
     ///
     /// # Safety
     /// Caller must ensure the account data is properly initialized as a CityAccount
-    pub unsafe fn load(account: &AccountInfo) -> Result<&Self, ProgramError> {
+    pub unsafe fn load(account: &AccountView) -> Result<&Self, ProgramError> {
         if account.data_len() < Self::SIZE {
             return Err(ProgramError::AccountDataTooSmall);
         }
@@ -123,7 +123,7 @@ impl CityAccount {
     ///
     /// # Safety
     /// Caller must ensure the account data is properly initialized as a CityAccount
-    pub unsafe fn load_mut(account: &AccountInfo) -> Result<&mut Self, ProgramError> {
+    pub unsafe fn load_mut(account: &AccountView) -> Result<&mut Self, ProgramError> {
         if account.data_len() < Self::SIZE {
             return Err(ProgramError::AccountDataTooSmall);
         }
@@ -133,8 +133,8 @@ impl CityAccount {
     /// Derive the PDA for a city account (finds bump - slower)
     /// Use this only during account creation
     /// Seeds: ["city", game_engine, city_id]
-    pub fn derive_pda(game_engine: &Pubkey, city_id: u16) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, city_id: u16) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[CITY_SEED, game_engine.as_ref(), &city_id.to_le_bytes()],
             &crate::ID,
         )
@@ -142,29 +142,29 @@ impl CityAccount {
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(game_engine: &Pubkey, city_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, city_id: u16, bump: u8) -> Result<Address, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[CITY_SEED, game_engine.as_ref(), &city_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Validate city account PDA using stored bump (fast)
     pub fn validate_pda(
-        account: &AccountInfo,
+        account: &AccountView,
         city_data: &CityAccount,
     ) -> ProgramResult {
         let expected_address = Self::create_pda(&city_data.game_engine, city_data.city_id, city_data.bump)?;
-        if account.key() != &expected_address {
+        if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
     }
 
     /// Check if city belongs to a specific kingdom
-    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+    pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine
     }
 
@@ -200,7 +200,7 @@ impl CityAccount {
     /// # Safety
     /// Caller must ensure account data extends at least
     /// `SIZE + anchor_count * ANCHOR_SIZE` bytes.
-    pub unsafe fn terrain_from_account<'a>(account: &'a AccountInfo) -> CityTerrain<'a> {
+    pub unsafe fn terrain_from_account<'a>(account: &'a AccountView) -> CityTerrain<'a> {
         let city = &*(account.data_ptr() as *const CityAccount);
         let count = city.anchor_count as usize;
         let anchors = if count > 0 {
@@ -219,7 +219,7 @@ impl CityAccount {
 
     /// Check if a coordinate offset from city center is passable terrain.
     /// Returns true if no terrain is configured (anchor_count == 0).
-    pub fn is_terrain_passable(&self, account: &AccountInfo, ox: i32, oy: i32) -> bool {
+    pub fn is_terrain_passable(&self, account: &AccountView, ox: i32, oy: i32) -> bool {
         if self.anchor_count == 0 {
             return true;
         }

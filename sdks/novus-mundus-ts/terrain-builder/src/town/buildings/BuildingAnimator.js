@@ -8,9 +8,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Noise texture generation (64x64 Perlin-like via canvas)
-// ---------------------------------------------------------------------------
 
 /** Generate a 64x64 Perlin-style noise DataTexture using canvas. */
 function generateNoiseTexture() {
@@ -78,9 +76,7 @@ function generateNoiseTexture() {
   return texture;
 }
 
-// ---------------------------------------------------------------------------
 // Y-Clip Reveal Shader (construction)
-// ---------------------------------------------------------------------------
 
 const CONSTRUCTION_VERTEX = /* glsl */ `
   varying vec3 vWorldPosition;
@@ -174,9 +170,7 @@ const CONSTRUCTION_FRAGMENT = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
 // Quality tier color map
-// ---------------------------------------------------------------------------
 
 const QUALITY_COLORS = {
   0: new THREE.Color(0xffffff),   // Common: white
@@ -199,9 +193,7 @@ const PRISMATIC_COLORS = [
   new THREE.Color(0xaa44ff),
 ];
 
-// ---------------------------------------------------------------------------
 // Scaffolding geometry constants
-// ---------------------------------------------------------------------------
 
 const SCAFFOLD_POLE_RADIUS = 0.004;
 const SCAFFOLD_PLANK_THICKNESS = 0.003;
@@ -209,9 +201,7 @@ const SCAFFOLD_PLANK_WIDTH = 0.006;
 const SCAFFOLD_WOOD_COLOR = 0x9a7a50;
 const SCAFFOLD_OPACITY = 0.8;
 
-// ---------------------------------------------------------------------------
 // BuildingAnimator
-// ---------------------------------------------------------------------------
 
 export class BuildingAnimator {
   /**

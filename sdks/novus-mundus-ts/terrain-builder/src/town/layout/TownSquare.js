@@ -15,9 +15,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const STAGE_THRESHOLDS = [1, 10, 20, 40, 60]; // estate levels
 
@@ -50,9 +48,7 @@ const ORB_BOB_AMPLITUDE = 0.02;
 const FLAME_FLICKER_SPEED = 6.0;
 const GOLDEN_WATER_COLOR = 0xffd700;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function getStage(estateLevel) {
   if (estateLevel >= 60) return 4;
@@ -78,9 +74,7 @@ function disposeGroup(group) {
   if (group.parent) group.parent.remove(group);
 }
 
-// ---------------------------------------------------------------------------
 // Stage builders
-// ---------------------------------------------------------------------------
 
 /**
  * Stage 1: Camp (Level 1-9)
@@ -944,9 +938,7 @@ function buildStage5(group, radius) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Activity board builder
-// ---------------------------------------------------------------------------
 
 /**
  * Build the activity board with 3 rune indicators.
@@ -1034,9 +1026,7 @@ function buildActivityBoard(x, z) {
   return { boardGroup, runes };
 }
 
-// ---------------------------------------------------------------------------
 // Milestone decorations
-// ---------------------------------------------------------------------------
 
 /**
  * Build milestone-specific visual decorations.
@@ -1244,9 +1234,7 @@ function buildMilestoneDecorations(group, milestones, radius) {
   group.add(milestoneGroup);
 }
 
-// ---------------------------------------------------------------------------
 // TownSquare class
-// ---------------------------------------------------------------------------
 
 export class TownSquare {
   /**

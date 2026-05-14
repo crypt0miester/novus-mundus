@@ -1,12 +1,12 @@
 /// Name service events - player and team name operations
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player name is set
 pub struct PlayerNameSet {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Domain hash (for lookup)
@@ -32,7 +32,7 @@ impl Event for PlayerNameSet {
 /// Emitted when a player name is removed
 pub struct PlayerNameRemoved {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8) - the old name being removed
     pub player_name: [u8; 48],
     /// Unix timestamp
@@ -54,7 +54,7 @@ impl Event for PlayerNameRemoved {
 /// Emitted when a player name is updated (changed)
 pub struct PlayerNameUpdated {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Old player name (48 bytes UTF-8)
     pub old_name: [u8; 48],
     /// New player name (48 bytes UTF-8)
@@ -83,7 +83,7 @@ impl Event for PlayerNameUpdated {
 /// Emitted when a team name is set
 pub struct TeamNameSet {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Domain hash (for lookup)
@@ -109,7 +109,7 @@ impl Event for TeamNameSet {
 /// Emitted when a team name is removed
 pub struct TeamNameRemoved {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8) - the old name being removed
     pub team_name: [u8; 32],
     /// Unix timestamp
@@ -131,7 +131,7 @@ impl Event for TeamNameRemoved {
 /// Emitted when a team name is updated (changed)
 pub struct TeamNameUpdated {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Old team name (32 bytes UTF-8)
     pub old_name: [u8; 32],
     /// New team name (32 bytes UTF-8)

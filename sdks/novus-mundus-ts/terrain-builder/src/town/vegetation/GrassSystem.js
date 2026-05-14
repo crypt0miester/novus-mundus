@@ -8,9 +8,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_BLADES = 200000;
 const DEFAULT_DENSITY = 15000;
@@ -20,9 +18,7 @@ const BLADE_MAX_HEIGHT = 0.055;
 
 const POISSON_MAX_ATTEMPTS = 30;
 
-// ---------------------------------------------------------------------------
 // Cross-quad blade geometry — 3 intersecting quads at 0°/60°/120°
-// ---------------------------------------------------------------------------
 
 /**
  * Build a grass clump as 3 intersecting blade strips (star pattern).
@@ -93,9 +89,7 @@ function createBladeGeometry(baseHalfWidth = 0.0075) {
   return geo;
 }
 
-// ---------------------------------------------------------------------------
 // Shader material — vertex-animated instanced grass
-// ---------------------------------------------------------------------------
 
 function createGrassMaterial() {
   return new THREE.ShaderMaterial({
@@ -223,9 +217,7 @@ function createGrassMaterial() {
   });
 }
 
-// ---------------------------------------------------------------------------
 // Poisson disk sampling
-// ---------------------------------------------------------------------------
 
 /**
  * Generate 2D Poisson-disk distributed points within rectangular bounds.
@@ -320,9 +312,7 @@ function poissonDiskSample(bounds, radius, maxPoints, isValid, rng) {
   return points;
 }
 
-// ---------------------------------------------------------------------------
 // Seeded RNG
-// ---------------------------------------------------------------------------
 
 function makeRng(seed) {
   let s = seed | 0;
@@ -332,9 +322,7 @@ function makeRng(seed) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // GrassSystem class
-// ---------------------------------------------------------------------------
 
 export class GrassSystem {
   /**

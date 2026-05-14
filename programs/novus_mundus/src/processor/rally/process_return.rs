@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -62,8 +62,8 @@ use crate::{
 /// 10. `[]` hero_collection - Hero collection PDA (only needed if all hero slots full, for NFT transfer)
 /// 11. `[]` system_program - System program (only needed if all hero slots full, for NFT transfer)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -92,7 +92,7 @@ pub fn process(
 
     // 4. Load Rally Account
     require_owner(rally_account, program_id)?;
-    let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
+    let mut rally_data_ref = rally_account.try_borrow_mut()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     let rally_id = rally.id;
@@ -103,7 +103,7 @@ pub fn process(
 
     // 5. Load RallyParticipant
     require_owner(rally_participant_account, program_id)?;
-    let mut participant_data_ref = rally_participant_account.try_borrow_mut_data()?;
+    let mut participant_data_ref = rally_participant_account.try_borrow_mut()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
     // Validate participant belongs to this rally
@@ -112,7 +112,7 @@ pub fn process(
     }
 
     // Validate participant_owner matches the participant (rent refund destination)
-    if &participant.participant != participant_owner.key() {
+    if &participant.participant != participant_owner.address() {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -235,7 +235,7 @@ pub fn process(
 
     // 9. Load PlayerAccount (using by_key, participant_owner already validated above)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != participant_owner.key() {
+    if &player.owner != participant_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -356,18 +356,18 @@ pub fn process(
         let hero_template_account = &accounts[9];
 
         // Verify mint matches participant's committed hero
-        if hero_mint.key() != &committed_hero_key {
+        if hero_mint.address() != &committed_hero_key {
             return Err(GameError::InvalidParameter.into());
         }
 
         // Parse hero NFT to get level and template_id
-        let nft_data = hero_mint.try_borrow_data()?;
+        let nft_data = hero_mint.try_borrow()?;
         let parsed_hero = parse_hero_nft(&nft_data)
             .ok_or(GameError::InvalidParameter)?;
         drop(nft_data);
 
         // Load and verify template
-        let template_data = hero_template_account.try_borrow_data()?;
+        let template_data = hero_template_account.try_borrow()?;
         let template = unsafe { HeroTemplate::load(&template_data) };
         if parsed_hero.template_id != template.template_id {
             return Err(GameError::InvalidParameter.into());
@@ -426,8 +426,8 @@ pub fn process(
     player.networth = calculate_networth(&*player, &game_engine.economic_config)?;
 
     // Store keys for event before dropping borrows
-    let rally_key = *rally_account.key();
-    let player_key = *participant_owner.key();
+    let rally_key = *rally_account.address();
+    let player_key = *participant_owner.address();
 
     // Store player PDA info for hero transfer if needed
     let player_ge = player.game_engine;
@@ -452,8 +452,8 @@ pub fn process(
         require_writable(hero_mint)?;
 
         let bump_seed = [player_bump];
-        let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, participant_owner.key(), &bump_seed);
-        let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+        let player_seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), participant_owner.address(), &bump_seed);
+        let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
         p_core::instructions::TransferV1 {
             asset: hero_mint,

@@ -7,9 +7,7 @@
 import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 import { applyBpsBonus } from './constants';
 
-// ============================================================
 // XP Requirements
-// ============================================================
 
 /**
  * XP required to reach a specific level (cumulative from level 1).
@@ -64,9 +62,7 @@ export function cumulativeXpForLevel(level: number): number {
   return total;
 }
 
-// ============================================================
 // Level Calculations
-// ============================================================
 
 /**
  * Calculate the level for a given amount of XP.
@@ -142,9 +138,7 @@ export function simulateGrantXp(
   return [level, xp, levelsGained];
 }
 
-// ============================================================
 // XP with Time Bonus
-// ============================================================
 
 /**
  * Calculate XP with time-of-day bonus.
@@ -187,9 +181,7 @@ export function getXpBonusMultiplier(timeOfDay: TimeOfDay): number {
   return getActivityMultiplier(ActivityType.XPGain, timeOfDay);
 }
 
-// ============================================================
 // Progress Display Helpers
-// ============================================================
 
 /**
  * Calculate progress percentage to next level.
@@ -229,9 +221,7 @@ export function formatLevelProgress(currentLevel: number, currentXp: number): st
   return `${currentXp.toLocaleString()} / ${xpForNext.toLocaleString()} XP (${percent}%)`;
 }
 
-// ============================================================
 // XP Estimation
-// ============================================================
 
 /**
  * Estimate actions needed to level up.

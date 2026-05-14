@@ -1,5 +1,5 @@
 // Pure business logic - framework agnostic
-// These functions contain NO AccountInfo references
+// These functions contain NO AccountView references
 // Can be tested independently and reused across frameworks
 
 pub mod safe_math;

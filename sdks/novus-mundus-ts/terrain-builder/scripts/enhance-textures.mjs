@@ -36,9 +36,7 @@ const UPSCALE   = parseInt(process.env.UPSCALE ?? '0', 10); // 0 = no upscale
 const NORMAL_STRENGTH = parseFloat(process.env.NORMAL_STRENGTH ?? '1.5');
 const MAX_TEX = 512; // cap generated maps at this resolution
 
-// ---------------------------------------------------------------------------
 // Normal map generation — Sobel filter on grayscale
-// ---------------------------------------------------------------------------
 
 async function generateNormalMap(imageBuffer, strength = 1.5) {
   const meta = await sharp(imageBuffer).metadata();
@@ -91,9 +89,7 @@ async function generateNormalMap(imageBuffer, strength = 1.5) {
     .toBuffer();
 }
 
-// ---------------------------------------------------------------------------
 // Occlusion map — derived from grayscale luminance
-// ---------------------------------------------------------------------------
 
 async function generateOcclusionMap(imageBuffer) {
   const meta = await sharp(imageBuffer).metadata();
@@ -110,9 +106,7 @@ async function generateOcclusionMap(imageBuffer) {
     .toBuffer();
 }
 
-// ---------------------------------------------------------------------------
 // Process a single GLB
-// ---------------------------------------------------------------------------
 
 let _io = null;
 async function getIO() {
@@ -220,9 +214,7 @@ async function enhanceGLB(filepath) {
   return enhanced;
 }
 
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
 
 async function main() {
   const args = process.argv.slice(2);

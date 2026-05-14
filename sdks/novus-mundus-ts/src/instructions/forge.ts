@@ -25,9 +25,7 @@ import {
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 import { CraftableEquipment, QualityTier } from '../types/enums';
 
-// ============================================================
 // Initialize Crafted Equipment
-// ============================================================
 
 export interface InitializeForgeAccounts {
   /** Player's wallet (signer) */
@@ -74,9 +72,7 @@ export function createInitializeForgeInstruction(
   });
 }
 
-// ============================================================
 // Start Craft
-// ============================================================
 
 export interface StartCraftAccounts {
   /** Player's wallet (signer) */
@@ -133,9 +129,7 @@ export function createStartCraftInstruction(
   });
 }
 
-// ============================================================
 // Strike
-// ============================================================
 
 export interface StrikeAccounts {
   /** Player's wallet (signer) */
@@ -179,9 +173,7 @@ export function createStrikeInstruction(
   });
 }
 
-// ============================================================
 // Abandon Craft
-// ============================================================
 
 export interface AbandonCraftAccounts {
   /** Player's wallet (signer) */
@@ -221,9 +213,7 @@ export function createAbandonCraftInstruction(
   });
 }
 
-// ============================================================
 // Equip Crafted Item
-// ============================================================
 
 export interface EquipAccounts {
   /** Player's wallet (signer) */

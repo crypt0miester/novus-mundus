@@ -35,9 +35,7 @@ import {
 } from '../pda';
 import { RallyTargetType } from '../types/enums';
 
-// ============================================================
 // Rally Speedup Type (matches on-chain SpeedupType enum)
-// ============================================================
 
 export enum RallySpeedupType {
   Gather = 0,
@@ -45,9 +43,7 @@ export enum RallySpeedupType {
   Return = 2,
 }
 
-// ============================================================
 // Rally Create
-// ============================================================
 
 export interface RallyCreateAccounts {
   /** Creator's wallet (signer) */
@@ -199,9 +195,7 @@ export function createRallyCreateInstruction(
   });
 }
 
-// ============================================================
 // Rally Join
-// ============================================================
 
 export interface RallyJoinAccounts {
   /** Joiner's wallet (signer) */
@@ -328,9 +322,7 @@ export function createRallyJoinInstruction(
   });
 }
 
-// ============================================================
 // Rally Leave
-// ============================================================
 
 export interface RallyLeaveAccounts {
   /** Leaver's wallet (signer) */
@@ -396,9 +388,7 @@ export function createRallyLeaveInstruction(
   });
 }
 
-// ============================================================
 // Rally Cancel
-// ============================================================
 
 export interface RallyCancelAccounts {
   /** Creator's wallet (signer) */
@@ -454,9 +444,7 @@ export function createRallyCancelInstruction(
   });
 }
 
-// ============================================================
 // Rally Execute
-// ============================================================
 
 export interface RallyExecuteAccounts {
   /** GameEngine account */
@@ -523,9 +511,7 @@ export function createRallyExecuteInstruction(
   });
 }
 
-// ============================================================
 // Rally Process Return
-// ============================================================
 
 export interface RallyProcessReturnAccounts {
   /** GameEngine account */
@@ -618,9 +604,7 @@ export function createRallyProcessReturnInstruction(
   });
 }
 
-// ============================================================
 // Rally Speedup
-// ============================================================
 
 export interface RallySpeedupAccounts {
   /** Payer's wallet (signer) - anyone can pay for speedup */
@@ -700,9 +684,7 @@ export function createRallySpeedupInstruction(
   });
 }
 
-// ============================================================
 // Rally Close
-// ============================================================
 
 export interface RallyCloseAccounts {
   /** Leader's wallet to receive rent (signer not required) */

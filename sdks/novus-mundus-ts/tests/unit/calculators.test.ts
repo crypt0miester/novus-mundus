@@ -45,9 +45,7 @@ import {
   EARTH_RADIUS_KM,
 } from '../../src/calculators/constants';
 
-// ============================================================
 // Constants Tests
-// ============================================================
 
 describe('Golden Ratio Constants', () => {
   it('should have correct PHI value', () => {
@@ -135,9 +133,7 @@ describe('Basis Point Helpers', () => {
   });
 });
 
-// ============================================================
 // Travel Calculator Tests
-// ============================================================
 
 describe('Travel Calculators', () => {
   describe('calculateDistance', () => {
@@ -339,9 +335,7 @@ describe('Travel Calculators', () => {
   });
 });
 
-// ============================================================
 // Combat Calculator Tests
-// ============================================================
 
 describe('Combat Calculators', () => {
   describe('WeaponSet', () => {
@@ -401,9 +395,7 @@ describe('Combat Calculators', () => {
   });
 });
 
-// ============================================================
 // Earth Radius Constant Test
-// ============================================================
 
 describe('Geographic Constants', () => {
   it('should have correct Earth radius', () => {
@@ -411,9 +403,7 @@ describe('Geographic Constants', () => {
   });
 });
 
-// ============================================================
 // applyBpsPenalty Tests
-// ============================================================
 
 import { applyBpsPenalty } from '../../src/calculators/constants';
 
@@ -440,9 +430,7 @@ describe('applyBpsPenalty', () => {
   });
 });
 
-// ============================================================
 // applyStablesTravelReduction Tests
-// ============================================================
 
 import { applyStablesTravelReduction } from '../../src/calculators/travel';
 
@@ -480,9 +468,7 @@ describe('applyStablesTravelReduction', () => {
   });
 });
 
-// ============================================================
 // Combat Calculator Extended Tests
-// ============================================================
 
 import {
   resolveWeaponCombat,
@@ -507,9 +493,7 @@ import {
   OP3_POWER_COST,
 } from '../../src/calculators/constants';
 
-// ============================================================
 // Power Calculation Tests
-// ============================================================
 
 describe('Power Calculations', () => {
   describe('calculatePower', () => {
@@ -589,9 +573,7 @@ describe('Power Calculations', () => {
   });
 });
 
-// ============================================================
 // Damage Output Tests
-// ============================================================
 
 describe('calculateDamageOutput', () => {
   it('should return 0 for 0 units', () => {
@@ -666,9 +648,7 @@ describe('calculateDamageOutput', () => {
   });
 });
 
-// ============================================================
 // inflictDamage Tests
-// ============================================================
 
 describe('inflictDamage', () => {
   it('should distribute damage across 3 unit types', () => {
@@ -755,9 +735,7 @@ describe('inflictDamage', () => {
   });
 });
 
-// ============================================================
 // Infirmary Recovery Tests
-// ============================================================
 
 describe('calculateInfirmaryRecovery', () => {
   it('should return 0 when no units lost', () => {
@@ -792,9 +770,7 @@ describe('calculateInfirmaryRecovery', () => {
   });
 });
 
-// ============================================================
 // Happiness Tests
-// ============================================================
 
 describe('updateHappinessDefensive', () => {
   it('should return 0.0 when no units', () => {
@@ -863,9 +839,7 @@ describe('updateHappinessOperative', () => {
   });
 });
 
-// ============================================================
 // Abandonment Tests
-// ============================================================
 
 describe('calculateAbandonment', () => {
   it('should return 0 for 0 units', () => {
@@ -912,9 +886,7 @@ describe('calculateAbandonment', () => {
   });
 });
 
-// ============================================================
 // resolveWeaponCombat Tests
-// ============================================================
 
 describe('resolveWeaponCombat', () => {
   it('should return empty result when attacker has 0 troops', () => {

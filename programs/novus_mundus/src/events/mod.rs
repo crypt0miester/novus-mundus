@@ -11,8 +11,8 @@
 /// use crate::events::{Event, discriminator, combat::PlayerAttacked};
 ///
 /// emit!(PlayerAttacked {
-///     attacker: *attacker.key(),
-///     defender: *defender.key(),
+///     attacker: *attacker.address(),
+///     defender: *defender.address(),
 ///     damage_dealt: 1000,
 ///     damage_received: 500,
 ///     cash_stolen: 250,
@@ -20,7 +20,7 @@
 /// });
 /// ```
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 
 // Event modules
 pub mod combat;
@@ -70,9 +70,7 @@ pub use dungeon::*;
 pub use castle::*;
 pub use kingdom::*;
 
-// ============================================================================
 // Compile-time SHA256 for discriminator generation
-// ============================================================================
 
 /// SHA256 initial hash values
 const H: [u32; 8] = [
@@ -215,9 +213,7 @@ pub const fn discriminator(s: &str) -> [u8; 8] {
     [hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7]]
 }
 
-// ============================================================================
 // Event trait and emission
-// ============================================================================
 
 /// Trait for events that can be emitted via `emit!`
 pub trait Event {
@@ -237,7 +233,21 @@ pub fn emit_event<E: Event>(event: &E) {
     let mut buf = [0u8; MAX_EVENT_SIZE];
     buf[..8].copy_from_slice(&E::DISCRIMINATOR);
     let data_len = event.serialize(&mut buf[8..]);
-    pinocchio::log::sol_log_data(&[&buf[..(8 + data_len)]]);
+
+    #[cfg(target_os = "solana")]
+    {
+        // sol_log_data takes a pointer to an array of slice headers + count.
+        let slices: [&[u8]; 1] = [&buf[..(8 + data_len)]];
+        unsafe {
+            pinocchio::syscalls::sol_log_data(
+                slices.as_ptr() as *const u8,
+                slices.len() as u64,
+            );
+        }
+    }
+    // On host builds, emit_event is a no-op (only used in tests).
+    #[cfg(not(target_os = "solana"))]
+    let _ = data_len;
 }
 
 /// Emit an event to transaction logs
@@ -248,9 +258,7 @@ macro_rules! emit {
     }};
 }
 
-// ============================================================================
 // Serialization helpers
-// ============================================================================
 
 /// Helper trait for packing types into byte buffers
 pub trait PackBytes {
@@ -258,12 +266,30 @@ pub trait PackBytes {
     fn pack(&self, buf: &mut [u8]) -> usize;
 }
 
-impl PackBytes for Pubkey {
+impl PackBytes for Address {
+    const SIZE: usize = 32;
+    #[inline]
+    fn pack(&self, buf: &mut [u8]) -> usize {
+        buf[..32].copy_from_slice(self.as_ref());
+        32
+    }
+}
+
+impl PackBytes for [u8; 32] {
     const SIZE: usize = 32;
     #[inline]
     fn pack(&self, buf: &mut [u8]) -> usize {
         buf[..32].copy_from_slice(self);
         32
+    }
+}
+
+impl PackBytes for [u8; 8] {
+    const SIZE: usize = 8;
+    #[inline]
+    fn pack(&self, buf: &mut [u8]) -> usize {
+        buf[..8].copy_from_slice(self);
+        8
     }
 }
 
@@ -340,7 +366,7 @@ impl PackBytes for u128 {
 }
 
 // Fixed-size byte arrays for names
-// Note: [u8; 32] is handled by the Pubkey impl since Pubkey derefs to [u8; 32]
+// Note: [u8; 32] is handled by the Address impl since Address derefs to [u8; 32]
 // We use a newtype wrapper for name fields to avoid conflicts
 
 /// 32-byte name field (team names, hero names)

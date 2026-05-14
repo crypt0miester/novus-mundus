@@ -1,9 +1,9 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
+    sysvars::Sysvar,
 };
 use pinocchio_system::instructions::CreateAccount;
 use pinocchio_token::instructions::InitializeMint;
@@ -54,8 +54,8 @@ use crate::{
 /// - kingdom_start_time: i64 (when kingdom gameplay begins)
 /// - registration_closes_at: i64 (when registration closes, 0 = never)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // Parse instruction data
@@ -70,7 +70,7 @@ pub fn process(
     let registration_closes_at = i64::from_le_bytes(data[43..51].try_into().unwrap());
 
     // 1. Parse accounts
-    let [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar] = accounts else {
+    let [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar, program_data] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
@@ -81,30 +81,29 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
     require_key_match(token_program, &pinocchio_token::ID)?;
 
+    assert_is_program_authority(program_id, authority, program_data)?;
+
     // 3. Derive GameEngine PDA with kingdom_id
     let (expected_game_engine, game_engine_bump) = GameEngine::derive_pda(kingdom_id);
 
-    if game_engine.key() != &expected_game_engine {
+    if game_engine.address() != &expected_game_engine {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // 4. Derive NOVI mint PDA
-    let (expected_novi_mint, novi_mint_bump) = pinocchio::pubkey::find_program_address(
-        &[NOVI_MINT_SEED],
-        program_id,
-    );
-
-    if novi_mint.key() != &expected_novi_mint {
+    // 4. NOVI mint PDA — compile-time singleton from `crate::constants`.
+    // Skips the runtime `find_program_address` curve-check loop.
+    if novi_mint.address().as_array() != &crate::constants::NOVI_MINT_ADDRESS {
         return Err(ProgramError::InvalidSeeds);
     }
+    let novi_mint_bump = crate::constants::NOVI_MINT_BUMP;
 
     // 5. Create GameEngine account
-    let lamports = Rent::get()?.minimum_balance(GameEngine::LEN);
+    let lamports = crate::utils::rent_exempt_const(GameEngine::LEN);
 
     let kingdom_id_bytes = kingdom_id.to_le_bytes();
     let bump_seed = [game_engine_bump];
-    let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: authority,
@@ -117,11 +116,11 @@ pub fn process(
     // 6. Create NOVI mint account
     // Mint account size: 82 bytes for SPL Token Mint
     const MINT_LEN: usize = 82;
-    let mint_lamports = Rent::get()?.minimum_balance(MINT_LEN);
+    let mint_lamports = crate::utils::rent_exempt_const(MINT_LEN);
 
     let mint_bump_seed = [novi_mint_bump];
-    let mint_seeds = pinocchio::seeds!(NOVI_MINT_SEED, &mint_bump_seed);
-    let mint_signer = pinocchio::instruction::Signer::from(&mint_seeds);
+    let mint_seeds = crate::seeds!(NOVI_MINT_SEED, &mint_bump_seed);
+    let mint_signer = pinocchio::cpi::Signer::from(&mint_seeds);
 
     CreateAccount {
         from: authority,
@@ -141,7 +140,7 @@ pub fn process(
     }.invoke()?;
 
     // 8. Initialize GameEngine state with kingdom configuration
-    let mut game_engine_data_ref = game_engine.try_borrow_mut_data()?;
+    let mut game_engine_data_ref = game_engine.try_borrow_mut()?;
     let game_engine_data = unsafe {
         GameEngine::load_mut(&mut game_engine_data_ref)
     };
@@ -152,9 +151,9 @@ pub fn process(
         theme,
         kingdom_start_time,
         registration_closes_at,
-        *authority.key(),
-        *novi_mint.key(),
-        *treasury_wallet.key(),
+        *authority.address(),
+        *novi_mint.address(),
+        *treasury_wallet.address(),
         game_engine_bump,
         novi_mint_bump,
     );
@@ -167,10 +166,62 @@ pub fn process(
         theme,
         start_time: kingdom_start_time,
         registration_closes_at,
-        created_by: *authority.key(),
+        created_by: *authority.address(),
         created_at: clock.unix_timestamp,
     });
 
+    Ok(())
+}
+
+
+// The BPF Loader Upgradeable program stores per-program metadata in a
+// PDA at `["<program_id>"]` under loader id `BPFLoaderUpgradeab1e11111111111111111111111`.
+// That account's layout is `UpgradeableLoaderState::ProgramData`:
+//   bytes 0..4: enum tag (3 = ProgramData)
+//   bytes 4..12: slot (u64)
+//   bytes 12: Option<Address> tag (1 = Some, 0 = None)
+//   bytes 13..45: upgrade_authority_address (only valid if tag == 1)
+//
+// We verify:
+//   - program_data is owned by the BPF Loader Upgradeable
+//   - program_data is the canonical PDA for THIS program
+//   - program_data has an upgrade authority set
+//   - authority.address() == upgrade_authority_address
+fn assert_is_program_authority(program_id: &pinocchio::Address, authority: &AccountView, program_data: &AccountView) -> Result<(), ProgramError> {
+        const BPF_LOADER_UPGRADEABLE_ID: pinocchio::Address = pinocchio::Address::new_from_array(
+            five8_const::decode_32_const("BPFLoaderUpgradeab1e11111111111111111111111"),
+        );
+
+        if unsafe { program_data.owner() } != &BPF_LOADER_UPGRADEABLE_ID {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+
+        // Verify program_data PDA matches THIS program
+        let (expected_program_data, _) = pinocchio::Address::find_program_address(
+            &[program_id.as_ref()],
+            &BPF_LOADER_UPGRADEABLE_ID,
+        );
+        if program_data.address() != &expected_program_data {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+
+        let pd_data = program_data.try_borrow()?;
+        // ProgramData layout: 4-byte enum tag + 8-byte slot + 1-byte Option tag + 32-byte pubkey
+        if pd_data.len() < 45 {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+        // Option tag at byte 12: 1 = Some(upgrade_authority), 0 = None (immutable)
+        let has_upgrade_authority = pd_data[12] == 1;
+        if !has_upgrade_authority {
+            // Program is immutable and has no upgrade authority — nobody can init.
+            // (Deploy with an upgrade authority, init the kingdom, then optionally
+            // make the program immutable afterward.)
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
+        let upgrade_authority_bytes = &pd_data[13..45];
+        if upgrade_authority_bytes != authority.address().as_ref() {
+            return Err(crate::error::GameError::Unauthorized.into());
+        }
     Ok(())
 }
 
@@ -181,9 +232,9 @@ fn create_default_game_engine(
     theme: u8,
     kingdom_start_time: i64,
     registration_closes_at: i64,
-    authority: Pubkey,
-    novi_mint: Pubkey,
-    treasury_wallet: Pubkey,
+    authority: Address,
+    novi_mint: Address,
+    treasury_wallet: Address,
     game_engine_bump: u8,
     novi_mint_bump: u8,
 ) -> GameEngine {

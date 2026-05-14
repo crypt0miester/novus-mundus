@@ -11,9 +11,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Building type constants (must stay in sync with core/constants.js)
-// ---------------------------------------------------------------------------
 
 const TYPE_MANSION     = 0;
 const TYPE_BARRACKS    = 1;
@@ -31,9 +29,7 @@ const TYPE_CITADEL     = 12;
 
 const TOWN_SQUARE_ID = -1;
 
-// ---------------------------------------------------------------------------
 // District ground definitions
-// ---------------------------------------------------------------------------
 
 const DISTRICT_GROUND = {
   [TOWN_SQUARE_ID]: { type: 'cobblestone',  color: new THREE.Color(0xa09880), roughness: 0.80, props: ['fountain', 'lamp_post', 'bench'] },
@@ -52,9 +48,7 @@ const DISTRICT_GROUND = {
   [TYPE_CITADEL]:     { type: 'battlements',   color: new THREE.Color(0x606060), roughness: 0.80, props: ['siege_equipment', 'watchtower'] },
 };
 
-// ---------------------------------------------------------------------------
 // Seeded PRNG (xorshift32)
-// ---------------------------------------------------------------------------
 
 function _xorshift32(state) {
   let s = state | 0;
@@ -73,9 +67,7 @@ class SeededRandom {
   range(min, max) { return min + this.next() * (max - min); }
 }
 
-// ---------------------------------------------------------------------------
 // Geometry helpers
-// ---------------------------------------------------------------------------
 
 function dist2d(ax, az, bx, bz) {
   const dx = ax - bx, dz = az - bz;
@@ -190,9 +182,7 @@ function lineIntersect(p1, p2, p3, p4) {
   return { x: p1.x + t * d1x, z: p1.z + t * d1z };
 }
 
-// ---------------------------------------------------------------------------
 // Bowyer-Watson Delaunay triangulation
-// ---------------------------------------------------------------------------
 
 function circumcircle(ax, az, bx, bz, cx, cz) {
   const D = 2 * (ax * (bz - cz) + bx * (cz - az) + cx * (az - bz));
@@ -302,9 +292,7 @@ function delaunayTriangulate(points) {
   return { triangles: result, points: allPoints.slice(0, n) };
 }
 
-// ---------------------------------------------------------------------------
 // Voronoi diagram from Delaunay
-// ---------------------------------------------------------------------------
 
 /**
  * Build Voronoi cells from Delaunay triangulation.
@@ -523,9 +511,7 @@ function extendCellToRect(sortedCircumcenters, seed, rect) {
   return sortVerticesCCW(verts, cx, cz);
 }
 
-// ---------------------------------------------------------------------------
 // Null terrain sampler (fallback when no sampler is provided)
-// ---------------------------------------------------------------------------
 
 const NULL_SAMPLER = {
   getHeight(x, z) { return 0.0; },
@@ -534,9 +520,7 @@ const NULL_SAMPLER = {
   getSlope(x, z) { return 0.0; },
 };
 
-// ---------------------------------------------------------------------------
 // Prop generation
-// ---------------------------------------------------------------------------
 
 function generateProps(district, rng) {
   const ground = DISTRICT_GROUND[district.buildingType] || DISTRICT_GROUND[TOWN_SQUARE_ID];
@@ -581,9 +565,7 @@ function generateProps(district, rng) {
   return props;
 }
 
-// ---------------------------------------------------------------------------
 // Road extraction from Voronoi edges
-// ---------------------------------------------------------------------------
 
 function extractRoads(cells, sampler) {
   const edgeMap = new Map();
@@ -645,13 +627,9 @@ function detectBridges(roads, sampler) {
   return bridges;
 }
 
-// ---------------------------------------------------------------------------
 // DistrictSystem
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // Deterministic town layout from JSON config
-// ---------------------------------------------------------------------------
 
 import { TOWN_LAYOUT } from './town-layout.js';
 
@@ -1079,9 +1057,7 @@ export class DistrictSystem {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Helpers (private)
-// ---------------------------------------------------------------------------
 
 function fallbackCell(center, radius) {
   const verts = [];

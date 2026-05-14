@@ -1,8 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::Sysvar,
 };
 use crate::{
@@ -37,8 +37,8 @@ const SALE_TYPE_DAO_PROMO: u8 = 1;
 ///   - Seasonal: event pubkey (32 bytes)
 ///   - DAO Promo: proposal_id (8 bytes)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -74,7 +74,7 @@ pub fn process(
     match sale_type {
         SALE_TYPE_SEASONAL => {
             activate_seasonal_sale(
-                game_engine_account.key(),
+                game_engine_account.address(),
                 sale_account,
                 instruction_data,
                 now,
@@ -83,7 +83,7 @@ pub fn process(
         }
         SALE_TYPE_DAO_PROMO => {
             activate_dao_promotion(
-                game_engine_account.key(),
+                game_engine_account.address(),
                 sale_account,
                 instruction_data,
                 now,
@@ -95,30 +95,30 @@ pub fn process(
 }
 
 fn activate_seasonal_sale(
-    game_engine_key: &Pubkey,
-    sale_account: &AccountInfo,
+    game_engine_key: &Address,
+    sale_account: &AccountView,
     instruction_data: &[u8],
     now: i64,
-    program_id: &Pubkey,
+    program_id: &Address,
 ) -> ProgramResult {
     // Need event pubkey (32 bytes)
     if instruction_data.len() < 33 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let event_key = Pubkey::try_from(&instruction_data[1..33])
+    let event_key = Address::try_from(&instruction_data[1..33])
         .map_err(|_| ProgramError::InvalidInstructionData)?;
 
     // Verify PDA
     let (expected_pda, _) = SeasonalSaleAccount::derive_pda(game_engine_key, &event_key);
-    if sale_account.key() != &expected_pda {
+    if sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // SeasonalSaleAccount doesn't have load_checked - verify program ownership manually
     require_owner(sale_account, program_id)?;
     // Load and update status
-    let mut sale_data_ref = sale_account.try_borrow_mut_data()?;
+    let mut sale_data_ref = sale_account.try_borrow_mut()?;
     let sale = unsafe { SeasonalSaleAccount::load_mut(&mut sale_data_ref) };
 
     let current_status = SeasonalSaleStatus::from_u8(sale.status);
@@ -143,11 +143,11 @@ fn activate_seasonal_sale(
 }
 
 fn activate_dao_promotion(
-    game_engine_key: &Pubkey,
-    sale_account: &AccountInfo,
+    game_engine_key: &Address,
+    sale_account: &AccountView,
     instruction_data: &[u8],
     now: i64,
-    program_id: &Pubkey,
+    program_id: &Address,
 ) -> ProgramResult {
     // Need proposal_id (8 bytes)
     if instruction_data.len() < 9 {
@@ -160,14 +160,14 @@ fn activate_dao_promotion(
 
     // Verify PDA
     let (expected_pda, _) = DAOPromotionAccount::derive_pda(game_engine_key, proposal_id);
-    if sale_account.key() != &expected_pda {
+    if sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // DAOPromotionAccount doesn't have load_checked - verify program ownership manually
     require_owner(sale_account, program_id)?;
     // Load and update status
-    let mut promo_data_ref = sale_account.try_borrow_mut_data()?;
+    let mut promo_data_ref = sale_account.try_borrow_mut()?;
     let promo = unsafe { DAOPromotionAccount::load_mut(&mut promo_data_ref) };
 
     let current_status = DAOPromotionStatus::from_u8(promo.status);

@@ -68,9 +68,7 @@ import {
   snapshotPlayer,
 } from '../utils/accounts';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Economy', () => {
   let ctx: TestContext;
@@ -86,9 +84,7 @@ describe('Economy', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Hire Units Tests
-  // ============================================================
 
   describe('Hire Units', () => {
     it('should hire defensive unit 1', async () => {
@@ -251,9 +247,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Purchase Equipment Tests
-  // ============================================================
 
   describe('Purchase Equipment', () => {
     it('should purchase melee weapons', async () => {
@@ -337,9 +331,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Purchase Stamina Tests
-  // ============================================================
 
   describe('Purchase Stamina', () => {
     it('should purchase stamina refill', async () => {
@@ -381,9 +373,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Transfer Cash Tests
-  // ============================================================
 
   describe('Transfer Cash', () => {
     let sender: TestPlayer;
@@ -609,9 +599,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Vault Transfer Tests
-  // ============================================================
 
   describe('Vault Transfer', () => {
     it('should move cash from hand to vault', async () => {
@@ -716,9 +704,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Collect Resources Tests
-  // ============================================================
 
   describe('Collect Resources', () => {
     it('should collect resources from estate buildings', async () => {
@@ -816,9 +802,7 @@ describe('Economy', () => {
     });
   });
 
-  // ============================================================
   // Update Locked NOVI Tests
-  // ============================================================
 
   describe('Update Locked NOVI', () => {
     it('should sync locked NOVI from token account', async () => {

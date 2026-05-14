@@ -1,14 +1,14 @@
 /// Estate events - buildings and plots
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when an estate is created for a player
 pub struct EstateCreated {
     /// Estate account pubkey
-    pub estate: Pubkey,
+    pub estate: Address,
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Unix timestamp
@@ -31,7 +31,7 @@ impl Event for EstateCreated {
 /// Emitted when building construction starts
 pub struct BuildingStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Building type
@@ -62,7 +62,7 @@ impl Event for BuildingStarted {
 /// Emitted when a building is completed
 pub struct BuildingCompleted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Building type
@@ -93,7 +93,7 @@ impl Event for BuildingCompleted {
 /// Emitted when a building upgrade starts
 pub struct BuildingUpgradeStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Building type
@@ -127,7 +127,7 @@ impl Event for BuildingUpgradeStarted {
 /// Emitted when a plot is purchased
 pub struct PlotPurchased {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Plot index
@@ -158,7 +158,7 @@ impl Event for PlotPurchased {
 /// Emitted when daily estate rewards are claimed
 pub struct EstateDailyClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Materials earned
@@ -186,7 +186,7 @@ impl Event for EstateDailyClaimed {
 /// Emitted when wounded troops are recovered via Infirmary
 pub struct TroopsRecovered {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Unit type recovered (UnitType enum)

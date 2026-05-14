@@ -91,9 +91,7 @@ impl TimeOfDay {
     }
 }
 
-// ========================================================
 // Activity Types
-// ========================================================
 
 /// Activity types for time-based multiplier lookup
 #[repr(u8)]
@@ -127,9 +125,7 @@ pub enum ActivityType {
     LootDrop = 15,     // Loot quality/quantity multiplier (best at golden hours)
 }
 
-// ========================================================
 // Core Time Calculation Functions
-// ========================================================
 
 /// Calculate local time of day based on timestamp and longitude
 ///
@@ -181,9 +177,7 @@ pub fn get_time_of_day(timestamp: i64, longitude: f64) -> TimeOfDay {
     }
 }
 
-// ========================================================
 // Activity Multipliers (Golden Ratio Based)
-// ========================================================
 
 /// Get the time-based multiplier for an activity
 ///
@@ -311,9 +305,7 @@ pub fn apply_time_multiplier(base: u64, time: TimeOfDay, activity: ActivityType)
     crate::logic::apply_multiplier(base, multiplier)
 }
 
-// ========================================================
 // Encounter Spawn Timing
-// ========================================================
 
 /// Rarity spawn weights by time of day
 ///
@@ -373,9 +365,7 @@ pub fn can_spawn_rarity_at_time(time: TimeOfDay, rarity: u8) -> bool {
     }
 }
 
-// ========================================================
 // Tests
-// ========================================================
 
 #[cfg(test)]
 mod tests {

@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -40,10 +40,10 @@ use crate::{
 /// # Instruction Data
 /// - dungeon_id: u16 (2 bytes, little-endian)
 /// - first_room_type: u8 (provided by backend, signed)
-/// - hero_specialization: u8 (0=Warrior, 1=Guardian, 2=Scout, 3=Mystic)
+/// - hero_specialization: u8 (0=Warrior, 1=Guardian, 2=Scout, 3=Tactician)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -86,7 +86,7 @@ pub fn process(
 
     // 4. Load and validate player using load_checked_mut_by_key (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -110,10 +110,10 @@ pub fn process(
         return Err(GameError::InsufficientStamina.into());
     }
 
-    // Check Catacombs building level (dungeons require Catacombs, split from Arena)
+    // Check DungeonEntry building level (dungeons require DungeonEntry, split from Arena)
     let estate = load_estate_for_player(estate_account, &player, program_id)?;
-    if !has_building_at_level(&estate, crate::state::BuildingType::Catacombs, template.required_building_level) {
-        return Err(GameError::CatacombsRequired.into());
+    if !has_building_at_level(&estate, crate::state::BuildingType::DungeonEntry, template.required_building_level) {
+        return Err(GameError::DungeonEntryRequired.into());
     }
 
     // Calculate building bonuses (5% per level, capped at 25%)
@@ -144,11 +144,11 @@ pub fn process(
     }
 
     // 8. Validate hero NFT ownership via MPL Core
-    let asset_data = hero_mint.try_borrow_data()?;
-    let asset = unsafe { p_core::state::AssetV1::load(&asset_data) };
+    let asset_data = hero_mint.try_borrow()?;
+    let asset = p_core::state::AssetV1::from_borsh(&asset_data);
 
     // CRITICAL: Verify current owner is the signer's wallet
-    if asset.owner != *owner.key() {
+    if asset.owner != *owner.address().as_array() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -159,23 +159,22 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 9. Create DungeonRun PDA (derived from player_account, not owner)
-    let (expected_run_pda, run_bump) = DungeonRun::derive_pda(player_account.key());
-    if dungeon_run_account.key() != &expected_run_pda {
+    let (expected_run_pda, run_bump) = DungeonRun::derive_pda(player_account.address());
+    if dungeon_run_account.address() != &expected_run_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Calculate rent
-    let rent = pinocchio::sysvars::rent::Rent::get()?;
-    let run_lamports = rent.minimum_balance(DungeonRun::LEN);
+    let run_lamports = crate::utils::rent_exempt_const(DungeonRun::LEN);
 
-    // Create account - signer seeds use player_account.key()
+    // Create account - signer seeds use player_account.address()
     let run_bump_seed = [run_bump];
-    let run_seeds = pinocchio::seeds!(
+    let run_seeds = crate::seeds!(
         DUNGEON_RUN_SEED,
-        player_account.key().as_ref(),
+        player_account.address(),
         &run_bump_seed
     );
-    let run_signer = pinocchio::instruction::Signer::from(&run_seeds);
+    let run_signer = pinocchio::cpi::Signer::from(&run_seeds);
 
     CreateAccount {
         from: owner,
@@ -220,13 +219,13 @@ pub fn process(
     drop(player);
 
     // 12. Initialize DungeonRun
-    let mut run_data_ref = dungeon_run_account.try_borrow_mut_data()?;
+    let mut run_data_ref = dungeon_run_account.try_borrow_mut()?;
     let run_data = unsafe { DungeonRun::load_mut(&mut run_data_ref) };
 
     // Initialize run state - store player_account PDA for authorization (matches PDA derivation)
     run_data.account_key = crate::state::AccountKey::DungeonRun as u8;
-    run_data.player = *player_account.key();
-    run_data.hero_mint = *hero_mint.key();
+    run_data.player = *player_account.address();
+    run_data.hero_mint = *hero_mint.address();
     run_data.dungeon_id = dungeon_id;
     run_data.status = DungeonStatus::Active as u8;
     run_data.current_floor = 1;
@@ -241,7 +240,7 @@ pub fn process(
     let time_of_day = crate::logic::time_cycle::get_time_of_day(now, 0.0); // UTC
     let time_period = crate::helpers::dungeon::TimePeriod::from_time_of_day(time_of_day);
     let dungeon_theme = crate::helpers::dungeon::DungeonTheme::from_u8(template.theme)
-        .unwrap_or(crate::helpers::dungeon::DungeonTheme::Crypts);
+        .unwrap_or(crate::helpers::dungeon::DungeonTheme::RadiantWeakness);
 
     if room_type.is_combat() {
         let base_floor_power = template.get_floor_power(1);
@@ -276,7 +275,7 @@ pub fn process(
     run_data.boss_shield = 0;
 
     run_data.remaining_units = remaining_units;
-    run_data.original_units = remaining_units; // Store original for Phoenix Feather and healing
+    run_data.original_units = remaining_units; // Used by resurrection relic (id 11) and healing
     run_data.remaining_weapons = remaining_weapons;
     run_data.relic_mask = 0;
     run_data.synergy_mask = 0;
@@ -309,10 +308,10 @@ pub fn process(
 
     // 13. Emit event
     emit!(DungeonEntered {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         dungeon_id,
-        hero_mint: *hero_mint.key(),
+        hero_mint: *hero_mint.address(),
         hero_name: [0u8; 32], // Hero template not loaded in enter - name unavailable
         stamina_spent: template.stamina_cost,
         timestamp: now,

@@ -1,4 +1,4 @@
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 
 use crate::NAME_RECORD_DISCRIMINATOR;
 
@@ -7,9 +7,9 @@ use crate::NAME_RECORD_DISCRIMINATOR;
 #[derive(Copy, Clone)]
 pub struct NameRecordHeader {
     pub discriminator: [u8; 8],
-    pub parent_name: Pubkey,
-    pub owner: Pubkey,
-    pub nclass: Pubkey,
+    pub parent_name: [u8; 32],
+    pub owner: [u8; 32],
+    pub nclass: [u8; 32],
     pub expires_at: u64,
     pub created_at: u64,
     pub non_transferable: bool,
@@ -35,8 +35,8 @@ impl NameRecordHeader {
     }
 
     #[inline(always)]
-    pub fn is_owner(&self, owner: &Pubkey) -> bool {
-        &self.owner == owner
+    pub fn is_owner(&self, owner: &Address) -> bool {
+        &self.owner == owner.as_array()
     }
 }
 

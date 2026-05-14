@@ -55,9 +55,7 @@ import { useEventStore, serializeEventData, type EventEntry } from "./events";
 import { classifyEvent } from "@/lib/events/classify";
 import { resolvePendingTx } from "@/lib/hooks/useTransact";
 
-// ============================================================
 // Subscription Bridge
-// ============================================================
 
 /**
  * Start game subscriptions:

@@ -6,8 +6,8 @@
 //!
 //! Seeds: ["expedition", player_pubkey]
 
-use pinocchio::pubkey::Pubkey;
-use pinocchio::program_error::ProgramError;
+use pinocchio::Address;
+use pinocchio::error::ProgramError;
 
 use crate::constants::{
     EXPEDITION_SEED,
@@ -94,9 +94,7 @@ impl FishingTier {
     }
 }
 
-// ============================================================
 // EXPEDITION ACCOUNT (104 bytes)
-// ============================================================
 
 /// Temporary account that exists only during an active expedition.
 /// Created on start_expedition, closed on claim_expedition (rent refunded).
@@ -116,11 +114,11 @@ pub struct ExpeditionAccount {
     pub account_key: u8,
 
     /// Player who owns this expedition (32 bytes)
-    pub player: Pubkey,
+    pub player: Address,
 
     /// Hero NFT mint address (32 bytes)
     /// If [0; 32], no hero is assigned to this expedition
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
 
     /// Type of expedition: Mining (1) or Fishing (2)
     pub expedition_type: u8,
@@ -162,8 +160,8 @@ impl ExpeditionAccount {
 
     /// Initialize a new expedition account
     pub fn init(
-        player: Pubkey,
-        hero_mint: Pubkey,
+        player: Address,
+        hero_mint: Address,
         expedition_type: u8,
         tier: u8,
         bump: u8,
@@ -290,20 +288,20 @@ impl ExpeditionAccount {
 
     /// Derive PDA for an expedition account
     /// Seeds: [EXPEDITION_SEED, player]
-    pub fn derive_pda(player: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(player: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[EXPEDITION_SEED, player.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(player: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[EXPEDITION_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 }
 

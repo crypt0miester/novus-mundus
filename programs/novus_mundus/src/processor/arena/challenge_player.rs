@@ -20,9 +20,9 @@
 //! 13. `[WRITE]` arena_season: ArenaSeasonAccount
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -51,8 +51,8 @@ use crate::{
 /// - season_id: u32 (4 bytes) - Season ID for PDA derivation
 /// Total: 20 bytes
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (14 required)
@@ -105,7 +105,7 @@ pub fn process(
 
     // 5. Validate GameEngine and game_authority (kingdom-scoped)
     let ge_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
-    if game_authority.key() != &ge_data.game_authority {
+    if game_authority.address() != &ge_data.game_authority {
         return Err(GameError::Unauthorized.into());
     }
     drop(ge_data);
@@ -113,7 +113,7 @@ pub fn process(
     // 6. Load Arena Season and validate
     require_owner(arena_season, program_id)?;
     require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
-    let mut season_data = arena_season.try_borrow_mut_data()?;
+    let mut season_data = arena_season.try_borrow_mut()?;
     let season = unsafe { &mut *(season_data.as_mut_ptr() as *mut ArenaSeasonAccount) };
 
     // Verify season_id
@@ -136,15 +136,15 @@ pub fn process(
     // 7. Load Players (kingdom-scoped)
     let challenger_player_data = PlayerAccount::load_checked(
         challenger_player,
-        game_engine.key(),
-        challenger_authority.key(),
+        game_engine.address(),
+        challenger_authority.address(),
         program_id,
     )?;
 
     // Get defender authority from their player account
     require_owner(defender_player, program_id)?;
     require_data_len(defender_player, crate::state::CORE_SIZE)?;
-    let defender_player_raw = defender_player.try_borrow_data()?;
+    let defender_player_raw = defender_player.try_borrow()?;
     let defender_player_data = unsafe { &*(defender_player_raw.as_ptr() as *const PlayerAccount) };
     let defender_authority_key = defender_player_data.owner;
     drop(defender_player_raw);
@@ -152,38 +152,36 @@ pub fn process(
     // 8. Load Participants (kingdom-scoped, keyed by player PDA)
     let mut challenger_part = ArenaParticipantAccount::load_checked_mut(
         challenger_participant,
-        game_engine.key(),
+        game_engine.address(),
         season_id,
-        challenger_player.key(),
+        challenger_player.address(),
         program_id,
     )?;
 
     let mut defender_part = ArenaParticipantAccount::load_checked_mut(
         defender_participant,
-        game_engine.key(),
+        game_engine.address(),
         season_id,
-        defender_player.key(),
+        defender_player.address(),
         program_id,
     )?;
 
     // 9. Load Loadouts (kingdom-scoped, keyed by player PDA)
     let challenger_loadout_data = ArenaLoadoutAccount::load_checked(
         challenger_loadout,
-        game_engine.key(),
-        challenger_player.key(),
+        game_engine.address(),
+        challenger_player.address(),
         program_id,
     )?;
 
     let defender_loadout_data = ArenaLoadoutAccount::load_checked(
         defender_loadout,
-        game_engine.key(),
-        defender_player.key(),
+        game_engine.address(),
+        defender_player.address(),
         program_id,
     )?;
 
-    // ============================================================
     // VALIDATION
-    // ============================================================
 
     // Prevent match replay - match_id must be greater than last used
     if match_id <= challenger_part.last_match_id {
@@ -199,7 +197,7 @@ pub fn process(
     }
 
     // Cannot challenge self
-    if challenger_authority.key() == &defender_authority_key {
+    if challenger_authority.address() == &defender_authority_key {
         return Err(GameError::ArenaCannotChallengeYourself.into());
     }
 
@@ -225,33 +223,31 @@ pub fn process(
 
     // Validate hero NFTs if loadouts have heroes set
     // Heroes are Metaplex Core NFTs - we verify the account key matches the loadout
-    if challenger_loadout_data.arena_hero != Pubkey::default() {
+    if challenger_loadout_data.arena_hero != Address::default() {
         // Verify hero NFT key matches loadout
-        if challenger_hero.key() != &challenger_loadout_data.arena_hero {
+        if challenger_hero.address() != &challenger_loadout_data.arena_hero {
             return Err(GameError::ArenaHeroMismatch.into());
         }
         // Verify it's a valid hero NFT
-        let nft_data = challenger_hero.try_borrow_data()?;
+        let nft_data = challenger_hero.try_borrow()?;
         if parse_hero_nft(&nft_data).is_none() {
             return Err(GameError::ArenaHeroAccountRequired.into());
         }
     }
 
-    if defender_loadout_data.arena_hero != Pubkey::default() {
+    if defender_loadout_data.arena_hero != Address::default() {
         // Verify hero NFT key matches loadout
-        if defender_hero.key() != &defender_loadout_data.arena_hero {
+        if defender_hero.address() != &defender_loadout_data.arena_hero {
             return Err(GameError::ArenaHeroMismatch.into());
         }
         // Verify it's a valid hero NFT
-        let nft_data = defender_hero.try_borrow_data()?;
+        let nft_data = defender_hero.try_borrow()?;
         if parse_hero_nft(&nft_data).is_none() {
             return Err(GameError::ArenaHeroAccountRequired.into());
         }
     }
 
-    // ============================================================
     // COMBAT RESOLUTION
-    // ============================================================
 
     // Calculate arena power for challenger
     let challenger_power = calculate_arena_power(
@@ -266,7 +262,7 @@ pub fn process(
 
     // Calculate arena power for defender
     // Re-borrow defender player data
-    let defender_player_raw2 = defender_player.try_borrow_data()?;
+    let defender_player_raw2 = defender_player.try_borrow()?;
     let defender_player_data2 = unsafe { &*(defender_player_raw2.as_ptr() as *const PlayerAccount) };
 
     let defender_power = calculate_arena_power(
@@ -301,9 +297,7 @@ pub fn process(
         is_draw,
     );
 
-    // ============================================================
     // UPDATE STATE
-    // ============================================================
 
     // Update challenger
     challenger_part.last_match_id = match_id;
@@ -348,9 +342,9 @@ pub fn process(
 fn calculate_arena_power(
     loadout: &ArenaLoadoutAccount,
     player: &PlayerAccount,
-    hero_account: &AccountInfo,
-    estate_account: &AccountInfo,
-    program_id: &Pubkey,
+    hero_account: &AccountView,
+    estate_account: &AccountView,
+    program_id: &Address,
 ) -> u64 {
     // Base power from defensive units
     let unit_power = loadout.defensive_units[0]
@@ -391,8 +385,8 @@ fn calculate_arena_power(
 
     // Arena-specific hero bonus (if loadout specifies a hero)
     // Heroes are Metaplex Core NFTs - parse buff data from NFT attributes
-    let arena_hero_bonus_bps = if loadout.arena_hero != Pubkey::default() {
-        if let Ok(nft_data) = hero_account.try_borrow_data() {
+    let arena_hero_bonus_bps = if loadout.arena_hero != Address::default() {
+        if let Ok(nft_data) = hero_account.try_borrow() {
             if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
                 // Sum AttackPower(1) + DefensePower(2) buffs
                 let mut bonus: u64 = 0;
@@ -415,8 +409,8 @@ fn calculate_arena_power(
     };
 
     // Estate buffs
-    let estate_bonus_bps = if estate_account.owner() == program_id {
-        if let Ok(estate_data) = estate_account.try_borrow_data() {
+    let estate_bonus_bps = if unsafe { estate_account.owner() } == program_id {
+        if let Ok(estate_data) = estate_account.try_borrow() {
             if estate_data.len() >= EstateAccount::LEN {
                 let estate = unsafe { &*(estate_data.as_ptr() as *const EstateAccount) };
                 estate.attack_bps as u64

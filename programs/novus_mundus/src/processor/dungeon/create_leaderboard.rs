@@ -17,10 +17,10 @@
 //! - prize_pool: u64 (8 bytes) - initial prize pool (optional, can be 0)
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 
@@ -44,8 +44,8 @@ fn get_week_number(timestamp: i64) -> u16 {
 }
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -80,10 +80,11 @@ pub fn process(
     let _template = DungeonTemplate::load_checked(dungeon_template_account, dungeon_id, program_id)?;
 
     // 4b. Load GameEngine for kingdom_id
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
-    let kingdom_id = game_engine_data.kingdom_id;
-    drop(game_engine_data_ref);
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let kingdom_id = {
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        game_engine_data.kingdom_id
+    };
 
     // 5. Validate week number is current or future
     let clock = Clock::get()?;
@@ -99,26 +100,25 @@ pub fn process(
     }
 
     // 7. Verify PDA (kingdom-scoped)
-    let (expected_pda, bump) = DungeonLeaderboard::derive_pda(game_engine.key(), dungeon_id, week_number);
-    if leaderboard_account.key() != &expected_pda {
+    let (expected_pda, bump) = DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
+    if leaderboard_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 8. Create account
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(DungeonLeaderboard::LEN);
+    let lamports = crate::utils::rent_exempt_const(DungeonLeaderboard::LEN);
 
     let dungeon_id_bytes = dungeon_id.to_le_bytes();
     let week_bytes = week_number.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         DUNGEON_LEADERBOARD_SEED,
-        game_engine.key().as_ref(),
+        game_engine.address(),
         &dungeon_id_bytes,
         &week_bytes,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -129,11 +129,11 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 9. Initialize leaderboard
-    let mut lb_data = leaderboard_account.try_borrow_mut_data()?;
+    let mut lb_data = leaderboard_account.try_borrow_mut()?;
     let leaderboard = unsafe { DungeonLeaderboard::load_mut(&mut lb_data) };
 
     leaderboard.account_key = crate::state::AccountKey::DungeonLeaderboard as u8;
-    leaderboard.game_engine = *game_engine.key();
+    leaderboard.game_engine = *game_engine.address();
     leaderboard.dungeon_id = dungeon_id;
     leaderboard.week_number = week_number;
     leaderboard.leaderboard_count = 0;
@@ -143,14 +143,14 @@ pub fn process(
 
     // Initialize empty leaderboard entries
     for i in 0..10 {
-        leaderboard.leaderboard[i].player = [0u8; 32];
+        leaderboard.leaderboard[i].player = pinocchio::Address::new_from_array([0u8; 32]);
         leaderboard.leaderboard[i].score = 0;
     }
 
     // Emit KingdomDungeonLeaderboardCreated event
     emit!(KingdomDungeonLeaderboardCreated {
         kingdom_id,
-        game_engine: *game_engine.key(),
+        game_engine: *game_engine.address(),
         dungeon_id,
         week_number,
         prize_pool,

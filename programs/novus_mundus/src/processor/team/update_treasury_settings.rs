@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -34,8 +34,8 @@ use crate::{
 /// - daily_caps: [u64; 4] (32 bytes) - New daily caps for ranks 1-4
 /// - cooldown_hours: u8 (1 byte) - New cooldown (1-72 hours)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -87,7 +87,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let leader = PlayerAccount::load_checked_by_key(leader_account, program_id)?;
-    if &leader.owner != leader_owner.key() {
+    if &leader.owner != leader_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -105,7 +105,7 @@ pub fn process(
 
     // 5. Validate Leader is in Team
 
-    if leader.team == NULL_PUBKEY || &leader.team != team_account.key() {
+    if leader.team == NULL_PUBKEY || &leader.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -116,18 +116,18 @@ pub fn process(
 
     // 6. Verify Leader Slot and Rank
 
-    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), slot_index);
-    if leader_slot_account.key() != &expected_slot {
+    let (expected_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), slot_index);
+    if leader_slot_account.address() != &expected_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(leader_slot_account, program_id)?;
 
     {
-        let slot_data = leader_slot_account.try_borrow_data()?;
+        let slot_data = leader_slot_account.try_borrow()?;
         let slot = unsafe { TeamMemberSlot::load(&slot_data) };
 
-        if slot.player != *leader_account.key() {
+        if slot.player != *leader_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -151,9 +151,9 @@ pub fn process(
     // 9. Emit Event
 
     emit!(TreasurySettingsUpdated {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        updated_by: *leader_account.key(),
+        updated_by: *leader_account.address(),
         timestamp: clock.unix_timestamp,
     });
 

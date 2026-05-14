@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -34,8 +34,8 @@ use crate::{
 /// # Instruction Data
 /// - [0] slot_index: u8 (0-2)
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    _program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -60,11 +60,11 @@ pub fn process(
     }
 
     // 5. Load player account
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // 6. SAFETY: Verify ownership
-    if !player.is_owner(owner.key()) {
+    if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -85,7 +85,7 @@ pub fn process(
     emit!(HeroAssignedDefensive {
         hero_mint,
         hero_name: [0u8; 32], // No template loaded in assign - name unavailable
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         assigned: true,
         timestamp: clock.unix_timestamp,

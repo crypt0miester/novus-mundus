@@ -13,9 +13,7 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { CastleTier, CastleStatus, CourtPosition } from '../types/enums';
 
-// ============================================================
 // Castle Account Interface
-// ============================================================
 
 export interface CastleAccount {
   // Identity
@@ -95,9 +93,7 @@ export interface CastleAccount {
   hasKing: boolean;
 }
 
-// ============================================================
 // King Registry Account
-// ============================================================
 
 export interface KingRegistryAccount {
   king: PublicKey;
@@ -105,9 +101,7 @@ export interface KingRegistryAccount {
   bump: number;
 }
 
-// ============================================================
 // Court Position Account
-// ============================================================
 
 export interface CourtPositionAccount {
   castle: PublicKey;
@@ -118,9 +112,7 @@ export interface CourtPositionAccount {
   bump: number;
 }
 
-// ============================================================
 // Garrison Contribution Account
-// ============================================================
 
 export interface GarrisonContributionAccount {
   castle: PublicKey;
@@ -133,9 +125,7 @@ export interface GarrisonContributionAccount {
   bump: number;
 }
 
-// ============================================================
 // Team Castle Reward Account
-// ============================================================
 
 export interface TeamCastleRewardAccount {
   castle: PublicKey;
@@ -145,9 +135,7 @@ export interface TeamCastleRewardAccount {
   bump: number;
 }
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   const reader = new BufferReader(data);
@@ -362,9 +350,7 @@ export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCast
   return { castle, team, member, lastClaimedAt, bump };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse CastleAccount from account info */
 export function parseCastle(accountInfo: AccountInfo<Buffer>): CastleAccount | null {

@@ -2849,9 +2849,9 @@ Lv.20: Lock 5 heroes, "Hero Master" title
 **Processor Modification:**
 ```rust
 // hero/lock.rs - ADD gate
-let sanctuary = get_building(&estate_data, BuildingType::Sanctuary)?;
+let sanctuary = get_building(&estate_data, BuildingType::MeditationChamber)?;
 if sanctuary.is_none() {
-    return Err(GameError::SanctuaryRequired.into());
+    return Err(GameError::MeditationChamberRequired.into());
 }
 
 // Check hero slot limits
@@ -3011,7 +3011,7 @@ pub enum GameError {
     MarketRequired,
     AcademyRequired,
     ArenaRequired,
-    SanctuaryRequired,
+    MeditationChamberRequired,
     ObservatoryRequired,
     TreasuryRequired,
     CitadelRequired,

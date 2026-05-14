@@ -1,54 +1,66 @@
 # NOVI Token Flow: Technical Implementation
 
-> **Detailed token flow mechanics using Pinocchio framework with deterministic golden ratio mathematics**
+> **Instruction-level NOVI token flow using Pinocchio. Multi-kingdom-aware.**
 
 ---
 
 ## Overview
 
-This document describes the complete token flow implementation where:
-1. **GameEngine is the mint authority** of NOVI tokens
-2. **Tokens are generated over time** based on subscription tier
-3. **Burning happens on consumption** with deterministic multipliers
-4. **Fibonacci amounts grant efficiency bonuses** (√φ multiplier)
-5. **DAO controls minting** for prizes and events
-6. **All calculations are deterministic** (no randomness)
+This document describes the complete NOVI token flow:
+
+1. **Single shared SPL mint** across all kingdoms. PDA seed: `["novi_mint"]` — no kingdom_id.
+2. **Mint authority** is the **kingdom 0** `GameEngine` PDA. The mint is initialized inside `init_game_engine` for the first kingdom.
+3. **Subscription-tier generation** mints NOVI to a player's locked token account on demand via `economy::update_locked_novi`.
+4. **Consumption** burns NOVI from the SPL supply (deflationary).
+5. **DAO mints** are capped per purpose in `MintingConfig` and gated by the DAO authority on each kingdom's GameEngine.
+6. **Calculations are deterministic** — golden-ratio multipliers + basis-point math. The few skill/RNG-influenced flows (dungeon crits, expedition strikes, forge precision, estate daily activity) are designed to be co-signed by an off-chain `game_authority`.
 
 ---
 
-## Token Types
+## Token Buckets
 
-### Locked NOVI (`player.locked_novi`)
-
-| Property | Value |
-|----------|-------|
-| **Withdrawable** | No |
-| **Source** | Time generation, purchases, deposits |
-| **Consumption** | Hiring, attacking, collecting, etc. |
-| **On Use** | BURNED from SPL supply |
-| **Tracked In** | PlayerAccount |
-
-### Reserved NOVI (`user.reserved_novi`)
+### Locked NOVI (`PlayerAccount.locked_novi` + Player's locked ATA)
 
 | Property | Value |
-|----------|-------|
-| **Withdrawable** | Yes (after 7-day vesting) |
-| **Source** | Events, encounters, leaderboards |
-| **Expiration** | 90 days if unclaimed |
-| **Tracked In** | UserAccount |
+|---|---|
+| Withdrawable | No (token account is owned by PlayerAccount PDA) |
+| Sources | Starter NOVI, time generation, SOL→NOVI swap, reserved→locked, castle rewards (low tier) |
+| Outflows | Consumed (burned or escrowed) by gameplay instructions |
+| Tracked in | `PlayerAccount.locked_novi` cache |
+| Storage | SPL token account owned by `["player", game_engine, owner]` PDA |
+
+### Reserved NOVI (`UserAccount.reserved_novi` + User's reserved ATA)
+
+| Property | Value |
+|---|---|
+| Withdrawable | Yes — after 7-day vesting (`RESERVED_NOVI_VESTING_PERIOD = 604_800`) |
+| Sources | Events, encounter loot (Rare+), arena, dungeon leaderboard, castle (high tier), mint_for_prize, purchase_novi |
+| Tracked in | `UserAccount.reserved_novi`, `reserved_novi_earned_at`, `total_reserved_earned` |
+| Storage | SPL token account owned by `["user", owner_wallet]` PDA |
+
+---
+
+## NOVI Mint PDA Signer
+
+Every mint or burn CPI signed by the GameEngine uses:
+
+```rust
+let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+let bump_seed = [game_engine_data.bump];
+let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+let signer = pinocchio::instruction::Signer::from(&seeds);
+```
+
+The NOVI mint authority is exclusively **kingdom 0's** GameEngine PDA. Multi-kingdom mints work because: (1) the mint PDA is shared (no kingdom_id in seed), (2) but only kingdom 0 was the authority when `InitializeMint` ran during `init_game_engine`. Any cross-kingdom CPI that wants to mint NOVI must therefore use kingdom 0's `kingdom_id_le_bytes + bump` in the signer seeds.
 
 ---
 
 ## Token Generation Flow
 
-### Subscription-Based Generation
+### Subscription-Based Generation (`economy::update_locked_novi`, instruction 10)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    SUBSCRIPTION FLOW                             │
-└─────────────────────────────────────────────────────────────────┘
-
-User subscribes (pays SOL to treasury)
+User holds a subscription
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -56,234 +68,190 @@ User subscribes (pays SOL to treasury)
 │  player.subscription_end = now + duration                       │
 └─────────────────────────────────────────────────────────────────┘
          │
-         ▼ (on claim_locked_novi call)
+         ▼ on update_locked_novi call (or any instruction that calls it inline)
          │
 ┌─────────────────────────────────────────────────────────────────┐
-│  intervals = (now - last_claim_timestamp) / 5_minutes           │
-│  tokens_to_mint = intervals × generation_rate[tier]             │
-│  tokens_to_mint = min(tokens_to_mint, max_cap - current)        │
+│  intervals = (now - last_updated_tokens_at) / 5_minutes         │
+│  rate = subscription_tiers[tier].locked_novi_per_5min           │
+│  tokens_to_mint = intervals × rate                              │
+│  cap_remaining = subscription_tiers[tier].max_locked_novi       │
+│                  - player.locked_novi                           │
+│  tokens_to_mint = min(tokens_to_mint, cap_remaining)            │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  GameEngine MINTS tokens via SPL CPI                            │
+│  GameEngine PDA signs the SPL mint CPI                          │
+│  mint_to(novi_mint, player_locked_ata, GameEngine_PDA, amount)? │
 │  player.locked_novi += tokens_to_mint                           │
-│  player.last_claim_timestamp = now                              │
+│  player.last_updated_tokens_at = now                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Generation Rates by Tier
+### Starter NOVI (`init_player`, instruction 1)
 
-| Tier | Generation (per 5 min) | Max Cap | Max Stamina |
-|------|------------------------|---------|-------------|
-| Rookie (Free) | 1 NOVI | 3,000 | 100 |
-| Expert | 2 NOVI | 6,000 | 500 |
-| Epic | 10 NOVI | 30,000 | 1,000 |
-| Legendary | 50 NOVI | 150,000 | 10,000 |
-
-**Max Cap Formula**: `max_locked_novi` from tier config (caps at 3K-150K based on tier)
+Every new player gets `STARTER_LOCKED_NOVI = 1_000_000` minted at registration. ATA is created via `CreateIdempotent` with `player` (PDA) as the wallet owner.
 
 ---
 
-## Token Consumption Flow (Burning)
+## Token Consumption Flow (Burns + Escrows)
 
 ### Deterministic Consumption Formula
 
 ```rust
-/// Calculate NOVI consumption amount (DETERMINISTIC - no randomness!)
+/// (logic/consume.rs)
 pub fn calculate_consumption(
     novi_amount: u64,
-    base_mult_bp: u64,        // From economy_config
-    secondary_mult_bp: u64,   // From research/hero
-    luck_bp: u64,             // From research
+    base_mult_bp: u64,        // from economic_config
+    secondary_mult_bp: u64,   // from research / hero buffs
+    luck_bp: u64,             // from research
     is_fibonacci: bool,       // Fibonacci efficiency bonus
 ) -> u64 {
-    // Base consumption calculation using basis points
     let base_value = ((novi_amount as u128)
         .saturating_mul(base_mult_bp as u128)
         .saturating_mul(secondary_mult_bp as u128)
         .saturating_mul(luck_bp as u128)
         / 1_000_000_000_000u128) as u64;
 
-    // Fibonacci bonus: √φ (1.272x) efficiency
-    let fib_bonus_bp = if is_fibonacci {
-        12720u64  // √φ = 1.272x
-    } else {
-        10000u64  // 1.0x
-    };
-
-    ((base_value as u128).saturating_mul(fib_bonus_bp) / 10000) as u64
+    let fib_bonus_bp = if is_fibonacci { 12_720 } else { 10_000 };  // √φ
+    ((base_value as u128).saturating_mul(fib_bonus_bp) / 10_000) as u64
 }
 ```
 
-### Hiring Units
+### Hire Units (`economy::hire_units`, instruction 11)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     HIRE UNITS FLOW                              │
-└─────────────────────────────────────────────────────────────────┘
-
-Player wants to hire 100 units
+Player wants to hire N units
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  base_cost = unit_cost × count                                  │
-│  time_mult = get_time_multiplier(hiring, time_of_day)           │
-│  final_cost = base_cost × time_mult                             │
-│  fib_efficiency = is_fibonacci(final_cost) ? √φ : 1.0           │
+│  Compute cost:                                                   │
+│   base_cost = unit_cost(tier) × N                                │
+│   adjusted = base_cost × cost_multiplier_bps / 10_000            │
+│   fib_bonus = is_fibonacci(adjusted) ? √φ : 1.0                  │
+│   final_cost = adjusted × fib_bonus_bps / 10_000                 │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  require!(player.locked_novi >= final_cost)                     │
-│  player.locked_novi -= final_cost                               │
-│  player.defensive_unit_N += count                               │
+│  require!(player.locked_novi >= final_cost)                      │
+│  player.locked_novi -= final_cost                                │
+│  player.defensive_unit_N += N (or operative_unit_N)              │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  // SPL Token Burn (actual supply reduction)                    │
-│  token::burn(cpi_ctx, final_cost)?;                             │
+│  SPL Token Burn (signed by GameEngine PDA)                       │
+│  burn_tokens(player_locked_ata, novi_mint, GameEngine, final)?;  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Collecting Resources
+### Collect Resources (`economy::collect_resources`, instruction 12)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   COLLECT RESOURCES FLOW                         │
-└─────────────────────────────────────────────────────────────────┘
-
-Player wants to collect with 1,000 NOVI
+Player wants to collect with X NOVI
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate operative units power:                               │
-│    power = Σ(operative_unit_i × weight_i)                       │
-│    efficiency = production_efficiency_bps (from research)       │
-│    time_mult = get_time_multiplier(collecting, time_of_day)     │
+│  Operative power:                                                │
+│    power = Σ(operative_unit_i × weight_i)                        │
+│    efficiency_bps = production_efficiency_bps (research)         │
+│    time_mult_bps = get_time_multiplier(Collecting, time_of_day)  │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate NOVI consumption:                                    │
-│    base = novi_amount × base_consumption_rate                   │
-│    fib_bonus = is_fibonacci(novi_amount) ? √φ : 1.0             │
-│    consumed = base × efficiency × time_mult × fib_bonus         │
+│  NOVI consumption:                                               │
+│    base = X × base_consumption_rate_bps / 10_000                 │
+│    fib_bonus_bps = is_fibonacci(X) ? √φ : 1.0                    │
+│    consumed = base × efficiency_bps × time_mult_bps × fib_bonus  │
+│              / 1_000_000_000_000                                  │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate cash generated:                                      │
-│    base_cash = power × consumed × cash_per_novi                 │
-│    research_bonus = cash_generation_bps / 10000                 │
-│    hero_bonus = hero_economy_bps / 10000                        │
-│    final_cash = base_cash × (1 + research + hero)               │
+│  Cash generated:                                                 │
+│    base_cash = power × consumed × cash_per_novi                  │
+│    research_bonus = cash_generation_bps                          │
+│    hero_bonus    = hero_economy_bps                              │
+│    final_cash = base_cash × (10_000 + research + hero) / 10_000  │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  player.locked_novi -= consumed                                 │
-│  player.cash_on_hand += final_cash                              │
-│  token::burn(cpi_ctx, consumed)?;  // Actual SPL burn           │
+│  player.locked_novi -= consumed                                  │
+│  player.cash_on_hand += final_cash                               │
+│  burn_tokens(player_locked_ata, novi_mint, GameEngine, consumed)?│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Attacking Players
+### Attack Player (`combat::attack_player`, instruction 20)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ATTACK PLAYER FLOW                            │
-└─────────────────────────────────────────────────────────────────┘
-
-Player initiates attack
+Attacker submits attack against defender
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate attack power (deterministic):                        │
-│    base = Σ(defensive_unit_i × tier_weight_i)                   │
-│    weapon_cov = min(weapons / total_units, 1.0)                 │
-│    time_mult = get_time_multiplier(attacking, time_of_day)      │
-│    research = research_attack_bps / 10000                       │
-│    hero = hero_attack_bps / 10000                               │
-│                                                                  │
-│  // Deterministic crit (skill-based, not random!)               │
-│    if research_crit_chance_bps >= 5000 {                        │
-│        crit_mult = 1.0 + (crit_damage_bps / 10000)              │
-│    }                                                             │
-│                                                                  │
-│    power = base × weapon_cov × time_mult × (1 + research + hero)│
+│  Validate same city, both within city radius (haversine)         │
+│  Validate not traveling, not in active rally                     │
+│  Validate cannot self-attack, defender not protected             │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate defense (deterministic):                             │
-│    Similar formula for defender                                 │
-│    Midday = φ bonus, Night = 1/φ penalty                        │
+│  Attacker power (deterministic):                                 │
+│   base = Σ(defensive_unit_i × power_i)                           │
+│   weapon_cov = min(weapons / total_units, 1.0)                   │
+│   time_mult = get_time_multiplier(Attacking, time_of_day)        │
+│   research_bps = research_attack_bps                             │
+│   hero_bps    = hero_attack_bps                                  │
+│   level_bonus = level/10                                         │
+│   total_bps = 10_000 + research + hero + level_bonus             │
+│   power = base × weapon_cov × time_mult × total_bps / 10_000     │
+│   if research_crit_chance_bps >= 5000 {                          │
+│       crit_mult_bps = 10_000 + research_crit_damage_bps          │
+│       power = power × crit_mult / 10_000                         │
+│   }                                                              │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Resolve combat:                                                │
-│    damage = attacker_power - (defender_power × defense_mult)    │
-│    loot = defender resources × loot_bps                         │
-│    Transfer loot to attacker                                    │
+│  Defender power similar — Midday φ, DeepNight 1/φ                │
+│  Both sides take mutual damage (combat::inflict_damage)          │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Burn NOVI (fixed attack cost):                                 │
-│    player.locked_novi -= attack_cost                            │
-│    token::burn(cpi_ctx, attack_cost)?;                          │
+│  Loot:                                                           │
+│   cash_loot = defender.cash_on_hand × loot_bps / 10_000          │
+│   weapon_loot = dead_enemy_weapons × WEAPON_LOOT_RATE_BPS/10_000 │
+│   transfer loot to attacker; update happiness/networth/XP        │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+PvP crit is research-driven and deterministic (`research_crit_chance_bps >= 5000` → guaranteed crit). See `combat/attack_player.rs:374, 451, 489`.
+
+### Dungeon Attack (`dungeon::attack`, instruction 251)
+
+`dungeon::attack` is intended to use `game_authority`-signed crit/double-strike flags but **currently reads them from instruction data (player-controlled)**:
+
+```rust
+// Current code:
+let double_strike_triggered = data.get(1).map(|&b| b == 1).unwrap_or(false);
+let crit_triggered           = data.get(2).map(|&b| b == 1).unwrap_or(false);
+```
+
+Production adds `game_authority` as a required signer and verifies with Ed25519-program payloads bound to `(player_pda, dungeon_run_pda, attack_index, nonce)`.
 
 ---
 
 ## Time-of-Day Multipliers
 
-### Activity Multiplier Matrix
-
-```rust
-pub fn get_time_multiplier(activity: ActivityType, time: TimeOfDay) -> f64 {
-    match (activity, time) {
-        // Attacking: Best at night
-        (Attacking, DeepNight) => PHI,          // 1.618x
-        (Attacking, Dawn) => GOLDEN_ROOT,       // 1.272x
-        (Attacking, _) => 1.0,
-
-        // Defending: Best at midday
-        (Defending, Midday) => PHI,             // 1.618x
-        (Defending, DeepNight) => INVERSE_PHI,  // 0.618x
-        (Defending, _) => 1.0,
-
-        // Hiring: Best at midday
-        (Hiring, Midday) => PHI,                // 1.618x
-        (Hiring, DeepNight) => INVERSE_PHI,     // 0.618x
-        (Hiring, Evening) => INVERSE_PHI,       // 0.618x
-        (Hiring, _) => 1.0,
-
-        // Collecting: Slight penalties at extremes
-        (Collecting, DeepNight) => INVERSE_PHI, // 0.618x
-        (Collecting, Evening) => INVERSE_PHI,   // 0.618x
-        (Collecting, _) => 1.0,
-
-        // Travel: Best at night (empty roads)
-        (Traveling, DeepNight) => PHI,          // 1.618x faster
-        (Traveling, Dawn) => GOLDEN_ROOT,       // 1.272x faster
-        (Traveling, Midday) => INVERSE_PHI,     // 0.618x slower (traffic)
-        (Traveling, _) => 1.0,
-
-        _ => 1.0,
-    }
-}
-```
-
-### Local Time Calculation
+`logic/time_cycle.rs`:
 
 ```rust
 pub fn get_local_hour(utc_timestamp: i64, longitude: f64) -> u8 {
-    let utc_hours = ((utc_timestamp % 86400) / 3600) as f64;
+    let utc_hours = ((utc_timestamp % 86_400) / 3_600) as f64;
     let offset = longitude / 15.0;  // 15° per hour
     let local = (utc_hours + offset + 24.0) % 24.0;
     local as u8
@@ -291,156 +259,191 @@ pub fn get_local_hour(utc_timestamp: i64, longitude: f64) -> u8 {
 
 pub fn get_time_of_day(hour: u8) -> TimeOfDay {
     match hour {
-        0..=2 => TimeOfDay::DeepNight,   // 00:00-03:00
-        3..=5 => TimeOfDay::Dawn,        // 03:00-06:00 (Golden Hour)
-        6..=8 => TimeOfDay::Morning,     // 06:00-09:00
-        9..=14 => TimeOfDay::Midday,     // 09:00-15:00
-        15..=17 => TimeOfDay::Afternoon, // 15:00-18:00
-        18..=20 => TimeOfDay::Dusk,      // 18:00-21:00 (Golden Hour)
-        21..=23 => TimeOfDay::Evening,   // 21:00-00:00
-        _ => TimeOfDay::Midday,
+        0..=2   => TimeOfDay::DeepNight,   // 00:00-03:00
+        3..=5   => TimeOfDay::Dawn,        // 03:00-06:00 (Golden Hour)
+        6..=8   => TimeOfDay::Morning,
+        9..=14  => TimeOfDay::Midday,
+        15..=17 => TimeOfDay::Afternoon,
+        18..=20 => TimeOfDay::Dusk,        // (Golden Hour)
+        21..=23 => TimeOfDay::Evening,
+        _       => TimeOfDay::Midday,
+    }
+}
+
+pub fn get_time_multiplier(activity: ActivityType, time: TimeOfDay) -> f64 {
+    match (activity, time) {
+        (Attacking, DeepNight) => PHI,
+        (Attacking, Dawn)      => GOLDEN_ROOT,
+        (Defending, Midday)    => PHI,
+        (Defending, DeepNight) => PHI_INVERSE,
+        (Hiring, Midday)       => PHI,
+        (Hiring, DeepNight) | (Hiring, Evening) => PHI_INVERSE,
+        (Collecting, DeepNight) | (Collecting, Evening) => PHI_INVERSE,
+        (Mining, DeepNight)    => PHI,
+        (Fishing, Dawn)        => PHI,
+        (Traveling, DeepNight) => PHI,
+        (Traveling, Dawn)      => GOLDEN_ROOT,
+        (Traveling, Midday)    => PHI_INVERSE,
+        _                       => 1.0,
     }
 }
 ```
 
 ---
 
-## Fibonacci Efficiency System
+## Fibonacci Efficiency Detection
 
-### Fibonacci Detection
+`logic/fibonacci.rs`:
 
 ```rust
 pub fn is_fibonacci(n: u64) -> bool {
     if n == 0 { return false; }
-
-    // A number is Fibonacci if 5n²+4 or 5n²-4 is a perfect square
     let n2 = n.saturating_mul(n);
     let five_n2 = n2.saturating_mul(5);
-
-    is_perfect_square(five_n2.saturating_add(4)) ||
-    is_perfect_square(five_n2.saturating_sub(4))
+    is_perfect_square(five_n2.saturating_add(4))
+        || is_perfect_square(five_n2.saturating_sub(4))
 }
 
 fn is_perfect_square(n: u64) -> bool {
     if n == 0 { return true; }
-    let sqrt = (libm::sqrt(n as f64)) as u64;
+    let sqrt = libm::sqrt(n as f64) as u64;
     sqrt.saturating_mul(sqrt) == n
 }
 ```
 
-### Efficiency Bonus Application
-
-```rust
-pub fn apply_fibonacci_bonus(base: u64, is_fib: bool) -> u64 {
-    if is_fib {
-        // √φ = 1.272x efficiency
-        ((base as u128).saturating_mul(12720) / 10000) as u64
-    } else {
-        base
-    }
-}
-```
-
-### Common Fibonacci Values (for UX reference)
-
-```
-1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987,
-1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025,
-121393, 196418, 317811, 514229, 832040, 1346269, 2178309,
-3524578, 5702887, 9227465, 14930352, 24157817, 39088169,
-63245986, 102334155, 165580141, 267914296, 433494437...
-```
+When `is_fibonacci(novi_amount)` is true, consumption applies `× √φ` (12_720 bps).
 
 ---
 
 ## Reserved NOVI Flow (Withdrawable)
 
-### Earning from Events
+### Earning via Events (`event::claim_prize`, instruction 83)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    EVENT WIN FLOW                                │
-└─────────────────────────────────────────────────────────────────┘
-
-Event ends, player ranked in top 10
+Event finalized; player ranked in top 10
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate prize share (deterministic):                         │
-│    Rank 1: 40%, Rank 2: 20%, Rank 3: 13%, etc.                 │
-│    player_prize = event.total_prize × share_bps / 10000        │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Check eligibility:                                             │
-│    account_age >= min_account_age                               │
-│    total_attacks >= min_attacks                                 │
-│    total_received / total_sent <= max_ratio                     │
-│    !flagged_by_governance                                       │
+│  Prize share (deterministic, PRIZE_DISTRIBUTION constant):       │
+│   Rank 1: 35%, Rank 2: 25%, Rank 3: 15%                          │
+│   Ranks 4-5: 7.5% each                                           │
+│   Ranks 6-10: 2% each                                            │
+│   share_bps = PRIZE_DISTRIBUTION[rank - 1]                       │
+│   player_prize = event.total_prize × share_bps / 10_000          │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Mint to user:                                                  │
-│    token::mint_to(cpi_ctx, player_prize)?;                      │
-│    user.reserved_novi += player_prize                           │
-│    user.reserved_novi_earned_at = now                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Withdrawal Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    WITHDRAWAL FLOW                               │
-└─────────────────────────────────────────────────────────────────┘
-
-Player requests withdrawal of N reserved NOVI
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Check vesting:                                                 │
-│    require!(now - reserved_novi_earned_at >= 7 days)            │
+│  Verify eligibility (logic/eligibility.rs):                      │
+│   account_age >= event.min_account_age                           │
+│   total_attacks >= event.min_attacks                             │
+│   total_received / total_sent <= event.max_transfer_ratio        │
+│   !flagged_by_governance                                         │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Check balance:                                                 │
-│    require!(user.reserved_novi >= amount)                       │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Transfer to wallet:                                            │
-│    token::transfer(cpi_ctx, amount)?;                           │
-│    user.reserved_novi -= amount                                 │
-│    user.last_withdrawal = now                                   │
+│  validate_token_account_owner(winner_novi_ata, winner.key())     │
+│  Mint NOVI to winner's reserved ATA (signed by GameEngine PDA)   │
+│  user.reserved_novi += player_prize                              │
+│  user.reserved_novi_earned_at = now                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Expiration Flow
+(Earlier docs cited a 40/20/13/9/6/4/3/2/2/1 prize split. The actual `PRIZE_DISTRIBUTION` constant in `src/constants.rs:160-171` is 35/25/15/7.5/7.5/2/2/2/2/2 = 100%.)
+
+### Withdrawal (`token::withdraw_reserved`, instruction 16)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    EXPIRATION FLOW                               │
-└─────────────────────────────────────────────────────────────────┘
-
-Crank processor runs (daily)
+Player wants to withdraw N reserved NOVI to their wallet
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  For each UserAccount with reserved_novi > 0:                   │
-│    if now - reserved_novi_earned_at > 90 days:                  │
-│        expired_amount = user.reserved_novi                      │
-│        user.reserved_novi = 0                                   │
-│        token::burn(cpi_ctx, expired_amount)?;                   │
+│  Vesting check:                                                  │
+│   require!(now - user.reserved_novi_earned_at                    │
+│            >= RESERVED_NOVI_VESTING_PERIOD)   // 7 days          │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Balance check:                                                  │
+│   require!(user.reserved_novi >= amount)                         │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Transfer signed by UserAccount PDA:                             │
+│   transfer(user_reserved_ata, wallet_ata, UserAccount, amount)   │
+│  user.reserved_novi -= amount                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Reserved → Locked (`token::reserved_to_locked`, instruction 15)
+
+One-way conversion: burns from reserved supply, credits player's locked balance.
+
+```
+Player wants to move R reserved NOVI to locked
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Validate accounts, check user.reserved_novi >= R                │
+│  Burn R from user_reserved_ata (signed by UserAccount PDA)       │
+│  player.locked_novi += R                                         │
+│  user.reserved_novi -= R                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+(There is no Reserved NOVI expiration today. The 90-day expiration mentioned in older docs is a design proposal, not a shipped instruction.)
+
+---
+
+## SOL → NOVI Purchase Flow
+
+### `shop::purchase_novi` (instruction 300)
+
+```
+Player chooses package_index (0-4) + max_lamports (slippage)
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Load GameEngine, ShopConfig (oracle settings).                  │
+│  base_amount = novi_purchase_config.get_purchase_amount(idx).    │
+│  Compute streak (consecutive day purchase, max 7).               │
+│  Reset daily counter if new day.                                 │
+│  Verify base_amount + already_today <= daily_cap[tier].          │
+│  Compute total_bonus_bps from:                                   │
+│    - package_index (bulk discount)                               │
+│    - subscription_tier bonus                                     │
+│    - streak_day bonus                                            │
+│  bonus_amount = base × total_bonus_bps / 10_000                  │
+│  total_novi = base + bonus_amount                                │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Compute SOL cost:                                               │
+│   If oracle configured & accounts supplied:                      │
+│     Pyth path:  load_pyth_price_with_confidence(...)             │
+│     Switchboard path: QuoteVerifier::new()...verify_account(...) │
+│     undercut = novi_market_undercut_bps (e.g. 15%)               │
+│     price = oracle_price × (10_000 - undercut) / 10_000          │
+│   Else (or on error): fallback = base × novi_base_price_lamports │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Slippage:  require!(cost_lamports <= max_lamports)              │
+│  validate_token_account_owner(reserved_ata, user.key())          │
+│  SOL transfer:  buyer -> treasury (system::transfer)             │
+│  Mint NOVI to reserved ATA (signed by GameEngine PDA)            │
+│  user.reserved_novi += total_novi                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Shop Purchase Flow
+## Shop Purchase Flow (Generic)
 
 ### Multi-Layer Discount Calculation
 
@@ -449,221 +452,234 @@ Crank processor runs (daily)
 │                    SHOP DISCOUNT LAYERS                          │
 └─────────────────────────────────────────────────────────────────┘
 
-Base price: 1,000 SOL
+Base price: 1,000,000 lamports
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: Base Discounts (up to 60%)                            │
-│    flash_sale_discount = 30%                                    │
-│    daily_deal_discount = 0%                                     │
-│    base_discount = min(30%, 60%) = 30%                          │
+│  Layer 1: Base Discounts (cap: max_base_discount_bps = 60%)      │
+│   flash_sale = 30%, daily_deal = 0%                              │
+│   base_discount = max applicable, capped to 60%                  │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 2: Bundle Savings (up to 35%)                            │
-│    bundle_type = Combat (15%)                                   │
-│    bundle_discount = 15%                                        │
+│  Layer 2: Bundle Savings (cap: max_bundle_discount_bps = 35%)    │
+│   bundle.discount_bps clamped to cap                             │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3: Milestone Loyalty (permanent)                         │
-│    total_spent = 10,000 SOL (Gold tier)                         │
-│    milestone_discount = 6%                                      │
+│  Layer 3: Milestone Loyalty (permanent)                          │
+│   total_spent crosses Bronze/Silver/Gold/Platinum/Diamond        │
+│   milestone_discount_bps = config (2%-10%)                       │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 4: Fibonacci Bonus (up to 20%)                           │
-│    final_price_lamports = 510 lamports (near 610 fib)           │
-│    fib_bonus = 0% (not exact match)                             │
+│  Layer 4: Fibonacci Bonus (cap: max_fib_discount_bps = 20%)      │
+│   Only if final price (lamports) is a Fibonacci number           │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Total discount calculation:                                    │
-│    total = 30% + 15% + 6% = 51%                                 │
-│    capped = min(51%, 75%) = 51%                                 │
-│    final_price = 1000 × (1 - 0.51) = 490 SOL                    │
+│  Combined cap (max_total_discount_bps = 75%):                    │
+│   total_discount = min(layer1 + layer2 + layer3 + layer4, cap)   │
+│   final_price = base × (10_000 - total) / 10_000                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Allowed-Token Payment Flow (`helpers/token_ops.rs::process_token_payment_flow`)
+
+Used by shop purchases priced in non-NOVI tokens (BONK, USDC, etc.):
+
+1. Load `AllowedTokenAccount::load_checked` (program ownership + PDA + bump verified).
+2. Detect oracle type (Pyth magic `0xa1b2c3d4` vs. Switchboard).
+3. Fetch SOL/USD and TOKEN/USD prices with staleness + confidence checks.
+4. Compute `token_amount = (sol_price_lamports × sol_usd) / token_usd` adjusted for token decimals.
+5. Apply `allowed_token.discount_bps` (Layer 0 — token-specific discount).
+6. SPL transfer from buyer to treasury.
 
 ---
 
 ## Research Cost & Buff Flow
 
-### Starting Research
+### Starting Research (`research::start_research`)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    START RESEARCH FLOW                           │
-└─────────────────────────────────────────────────────────────────┘
-
-Player starts "Attack Power" research (node 0, level 5)
+Player starts research node R, level L
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Check prerequisites:                                           │
-│    completed_levels[0] >= 4 (upgrading from 4 to 5)             │
-│    current_research == 255 (no active research)                 │
+│  Prerequisites:                                                  │
+│   completed_levels[R] >= L - 1 (upgrading)                       │
+│   current_research == NONE (no active research)                  │
+│   require_extension(player, EXT_RESEARCH)                        │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate cost:                                                │
-│    base_cost = template.base_novi_cost (e.g., 1000)             │
-│    cost = base_cost × 1.8^level                                 │
-│    cost = 1000 × 1.8^5 = 18,895 NOVI                            │
+│  Cost = template.base_novi_cost × 1.8^L                          │
+│  Time = template.base_time_secs × 1.5^L                          │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate time:                                                │
-│    base_time = template.base_time_secs (e.g., 3600)             │
-│    time = base_time × 1.5^level                                 │
-│    time = 3600 × 1.5^5 = 27,337 secs (~7.6 hours)               │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Deduct cost & start:                                           │
-│    player.locked_novi -= 18,895                                 │
-│    token::burn(cpi_ctx, 18,895)?;                               │
-│    research.current_research = 0                                │
-│    research.current_level = 5                                   │
-│    research.started_at = now                                    │
-│    research.completes_at = now + 27,337                         │
+│  Deduct cost & start:                                            │
+│   player.locked_novi -= cost                                     │
+│   burn_tokens(player_locked_ata, novi_mint, GameEngine, cost)?   │
+│   research.current_research = R                                  │
+│   research.current_level = L                                     │
+│   research.started_at = now                                      │
+│   research.completes_at = now + time                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Completing Research
+### Completing Research (`research::complete_research`)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   COMPLETE RESEARCH FLOW                         │
-└─────────────────────────────────────────────────────────────────┘
-
-Player completes "Attack Power" level 5
+Player completes research after timer
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Verify completion:                                             │
-│    require!(now >= research.completes_at)                       │
+│  require!(now >= research.completes_at)                          │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate buff:                                                │
-│    base_buff = template.base_buff_bps (e.g., 100 = 1%)          │
-│    buff = base_buff × (√φ)^(level/5)                            │
-│    buff = 100 × 1.272^1 = 127 bps (1.27%)                       │
+│  Compute new buff:                                               │
+│   base_buff = template.base_buff_bps                             │
+│   buff = base_buff × (√φ)^(level/5)                              │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Apply buff:                                                    │
-│    research.completed_levels[0] = 5                             │
-│    player.research_attack_bps = 127                             │
-│    research.current_research = 255 (none)                       │
+│  Apply buff:                                                     │
+│   research.completed_levels[R] = L                               │
+│   player.<corresponding>_bps = buff   (mirrored on PlayerCore)   │
+│   research.current_research = NONE                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Hero Buff Flow
+## Hero Buff Flow (MPL Core NFTs)
 
-### Leveling Hero
+### Lock / Unlock
+
+`hero::lock`:
+- Verify hero is owned by the caller (read MPL Core `AssetV1.owner`)
+- Verify `HeroTemplate` PDA derivation matches the parsed NFT's `template_id`
+- Add buffs: `player.hero_*_bps += template.base_*_bps × (√φ)^level`
+- Insert hero into `player.active_heroes[slot]`
+
+`hero::unlock`:
+- Subtract buffs: `player.hero_*_bps -= template.base_*_bps × (√φ)^level`
+- Clear slot
+
+### Level Up (`hero::level_up`)
 
 ```
+Player levels hero from L to L+1
+         │
+         ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    HERO LEVEL UP FLOW                            │
+│  Fragment cost = 10 × 1.5^L                                      │
+│  require!(player.fragments >= cost)                              │
+│  player.fragments -= cost                                        │
 └─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Update NFT level via MPL Core UpdatePluginV1                    │
+│  (hero is locked — program signs as authority)                   │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Apply buff delta:                                               │
+│   new_buff = template.base_attack × (√φ)^(L+1)                   │
+│   old_buff = template.base_attack × (√φ)^L                       │
+│   player.hero_attack_bps += (new_buff - old_buff)                │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-Player levels hero from 10 to 11
+### Burn (`hero::burn`)
+
+```
+Player burns hero NFT (must NOT be locked)
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Calculate fragment cost:                                       │
-│    cost = 10 × 1.5^current_level                                │
-│    cost = 10 × 1.5^10 = 576 fragments                           │
+│  Verify NFT.owner == caller AND hero not in player.active_heroes │
+│  Verify HeroTemplate PDA + HeroCollection PDA                    │
+│  Parse hero NFT attributes (level, template_id)                  │
+│  Compute reward = calculate_burn_reward(level, tier_from_cost)   │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Deduct fragments:                                              │
-│    require!(player.fragments >= 576)                            │
-│    player.fragments -= 576                                      │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Calculate new buff:                                            │
-│    base_attack_bps = template.base_attack_buff (e.g., 50)       │
-│    new_buff = 50 × (√φ)^11 = 50 × 13.83 = 691 bps (6.91%)       │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Update hero & player:                                          │
-│    hero.level = 11                                              │
-│    hero.total_fragments_invested += 576                         │
-│    hero.total_buff_power = recalculate_power()                  │
-│    player.hero_attack_bps = sum(locked_hero_buffs)              │
+│  Burn NFT via p_core::BurnV1                                     │
+│  player.locked_novi += reward                                    │
+│  template.minted_count -= 1   (recyclable supply)                │
+│  Close per-(burner, template) HeroMintReceipt if owned by burner │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## DAO-Controlled Minting
-
-### Prize Distribution
+## DAO-Controlled Minting (`economy::mint_for_prize`, instruction 14)
 
 ```rust
-pub fn mint_for_prize(
+// Purpose codes: 0/1 = prizes, 2 = marketing, 3 = development,
+//                4 = partnerships, 5 = treasury, 6 = liquidity
+pub fn process(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    amount: u64,
-    purpose: MintPurpose,
+    instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Verify DAO authority
-    require!(
-        dao_authority.key() == game_engine.authority,
-        ErrorCode::Unauthorized
-    );
+    // 1. Parse: dao_authority, recipient_user, game_engine, user_token_account, novi_mint
+    // 2. Verify dao_authority is signer
+    // 3. require_owner(game_engine_account, program_id)
+    //    (preferably load via GameEngine::load_checked_mut_by_key)
+    let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
+    require!(dao_authority.key() == &game_engine_data.authority, DaoRequired);
 
-    // 2. Check allocation caps
-    let current = match purpose {
-        MintPurpose::Prizes => game_engine.minted_for_prizes,
-        MintPurpose::Liquidity => game_engine.minted_for_liquidity,
-        MintPurpose::Marketing => game_engine.minted_for_marketing,
-        // ...
-    };
-    require!(
-        current + amount <= max_allocation_for_purpose(purpose),
-        ErrorCode::AllocationExceeded
-    );
+    // 4. Validate destination ATA
+    validate_token_account_owner(user_token_account, recipient_user.key())?;
 
-    // 3. Mint via CPI (Pinocchio)
-    invoke_signed(
-        &spl_token::instruction::mint_to(
-            token_program,
-            novi_mint,
-            recipient_ata,
-            game_engine_pda,
-            &[],
-            amount,
-        )?,
-        accounts,
-        &[&[GAME_ENGINE_SEED, &[game_engine.bump]]],
-    )?;
+    // 5. Cap checks (per purpose)
+    let minting_config = &mut game_engine_data.minting_config;
+    let new_total = minting_config.total_minted.checked_add(amount)?;
+    require!(new_total <= minting_config.max_supply_cap, ExceedsMaxCap);
+    require!(amount <= minting_config.max_mint_per_proposal, ExceedsMaxCap);
 
-    // 4. Update tracking
     match purpose {
-        MintPurpose::Prizes => game_engine.minted_for_prizes += amount,
-        // ...
-    };
-    game_engine.total_minted += amount;
+        0 | 1 => {                  // Prizes/Events
+            let new_prize_total = minting_config.minted_for_prizes.checked_add(amount)?;
+            let max_prize = apply_bp(minting_config.max_supply_cap, 500)?; // 5%
+            require!(new_prize_total <= max_prize, ExceedsMaxCap);
+        }
+        2 => { /* marketing */ }
+        3 => { /* development */ }
+        4 => { /* partnerships */ }
+        5 => { /* treasury */ }
+        6 => { /* liquidity */ }
+        _ => return Err(InvalidParameter.into()),
+    }
+
+    // 6. Mint via SPL CPI (GameEngine PDA signs)
+    let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+    let bump_seed = [game_engine_data.bump];
+    let seeds = seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let signer = Signer::from(&seeds);
+    mint_tokens(novi_mint, user_token_account, game_engine_account, amount, &[signer])?;
+
+    // 7. Update tracking
+    minting_config.total_minted = new_total;
+    // increment per-purpose tracker
+    user_data.reserved_novi = user_data.reserved_novi.checked_add(amount)?;
+    user_data.total_reserved_earned = user_data.total_reserved_earned.checked_add(amount)?;
+    // Also set user_data.reserved_novi_earned_at = now to start the vesting window
 
     Ok(())
 }
@@ -673,41 +689,42 @@ pub fn mint_for_prize(
 
 ## Supply Controls
 
-### Allocation Caps
+### `MintingConfig` (embedded in `GameEngine`)
 
 ```rust
 pub struct MintingConfig {
-    pub max_supply_cap: u64,             // 1,000,000,000 NOVI
-    pub max_mint_per_proposal: u64,      // 100,000,000 per DAO proposal
+    pub max_supply_cap: u64,                 // overall cap
+    pub max_mint_per_proposal: u64,          // per-call cap
+    pub total_minted: u64,                   // running total
 
-    // Purpose-specific caps
-    pub max_prize_allocation: u64,       // 400,000,000 (40%)
-    pub max_liquidity_allocation: u64,   // 200,000,000 (20%)
-    pub max_development_allocation: u64, // 150,000,000 (15%)
-    pub max_marketing_allocation: u64,   // 100,000,000 (10%)
-    pub max_partnership_allocation: u64, // 50,000,000 (5%)
-    pub max_treasury_allocation: u64,    // 50,000,000 (5%)
-    pub max_emergency_allocation: u64,   // 50,000,000 (5%)
+    // Purpose-specific caps (DAO-configurable)
+    pub max_marketing_allocation: u64,
+    pub max_development_allocation: u64,
+    pub max_partnership_allocation: u64,
+    pub max_treasury_allocation: u64,
+    pub max_liquidity_allocation: u64,
 
-    // Tracking
-    pub total_minted: u64,
+    // Per-purpose trackers
     pub minted_for_prizes: u64,
-    pub minted_for_liquidity: u64,
-    pub minted_for_development: u64,
     pub minted_for_marketing: u64,
+    pub minted_for_development: u64,
     pub minted_for_partnerships: u64,
     pub minted_for_treasury: u64,
-    pub minted_for_emergency: u64,
+    pub minted_for_liquidity: u64,
 }
 ```
 
-### Daily/Weekly Caps
+Prize/event cap is computed dynamically: `apply_bp(max_supply_cap, 500) = 5% of supply`.
+
+### `GameCaps`
 
 ```rust
 pub struct GameCaps {
-    pub max_event_minted_prize: u64,        // 10,000,000 per event
-    pub max_daily_minted_prize_pool: u64,   // 50,000,000 all events/day
-    pub max_weekly_minted_prize_pool: u64,  // 500,000,000 all events/week
+    pub min_account_age_for_events: i64,    // e.g. 604_800 (7 days)
+    pub max_event_minted_prize: u64,        // optional event cap
+    pub max_daily_minted_prize_pool: u64,   // optional daily cap
+    pub max_weekly_minted_prize_pool: u64,  // optional weekly cap
+    // ... plus various gameplay caps
 }
 ```
 
@@ -718,36 +735,32 @@ pub struct GameCaps {
 ### Token Flow Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      COMPLETE FLOW                               │
-└─────────────────────────────────────────────────────────────────┘
-
 INFLOW:
-  Subscription → Time generation → Locked NOVI → PlayerAccount
-  SOL Purchase → Shop → Locked NOVI → PlayerAccount
-  Event Win → Mint → Reserved NOVI → UserAccount
+  Subscription → time generation → mint to player_locked_ata
+  SOL purchase  → shop::purchase_novi → mint to user_reserved_ata
+  Reserved → Locked → burn + locked credit (one-way)
+  Event win / encounter loot / arena / dungeon / castle (high tier) → mint to user_reserved_ata
+  Starter NOVI → init_player → mint 1M to player_locked_ata
 
 OUTFLOW (BURNS):
-  Locked NOVI → Hire/Attack/Collect/Teleport → SPL burn()
-  Reserved NOVI → Expiration (90 days) → SPL burn()
+  Locked NOVI → hire / attack / collect / equipment / stamina / speedup / etc. → spl_token::burn
 
 WITHDRAWAL:
-  Reserved NOVI → 7-day vesting → SPL transfer() → Wallet
+  Reserved NOVI → 7-day vesting → user_reserved_ata transfer → wallet
 
 DETERMINISTIC MULTIPLIERS:
-  Time-of-Day: φ, √φ, 1, 1/φ based on activity
+  Time-of-Day: φ / √φ / 1 / 1/φ per activity
   Fibonacci: √φ efficiency for Fibonacci amounts
-  Level: (√φ)^(level/10) scaling
+  Level: (√φ)^(level/10) general progression
   Research: (√φ)^(level/5) buff scaling
   Hero: (√φ)^level buff scaling
 ```
 
 ### Key Implementation Points
 
-1. **GameEngine is mint authority** (PDA signs for mint/burn)
-2. **All burns use SPL `token::burn()`** (actual supply reduction)
-3. **All calculations are deterministic** (no randomness)
-4. **Golden ratio family** used for all multipliers
-5. **Fibonacci detection** grants efficiency bonuses
-6. **Basis points** used for all percentage values (10000 = 100%)
-7. **Saturating math** prevents overflow panics
+1. **GameEngine is mint authority** — PDA signs for SPL mint/burn CPIs. Kingdom 0's GameEngine is the canonical authority for the shared NOVI mint.
+2. **All burns use `spl_token::burn`** — actual supply reduction.
+3. **Core math is deterministic** — golden-ratio constants + basis-point arithmetic. A few skill/RNG moments (dungeon crits, expedition strikes, forge precision, estate daily) are `game_authority`-co-signed.
+4. **Fibonacci detection** grants √φ efficiency.
+5. **Basis points** for all percentages (10000 = 100%).
+6. **Saturating math** prevents overflow panics.

@@ -1,9 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -41,8 +40,8 @@ use crate::{
 /// - [19] prerequisite_level: u8
 /// - [20..22] gem_cost_per_minute: u16
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -56,10 +55,10 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Verify DAO authority
-    let game_engine_data = game_engine.try_borrow_data()?;
+    let game_engine_data = game_engine.try_borrow()?;
     let game_engine_state = unsafe { GameEngine::load(&game_engine_data) };
 
-    if dao_authority.key() != &game_engine_state.authority {
+    if dao_authority.address() != &game_engine_state.authority {
         return Err(GameError::DaoRequired.into());
     }
 
@@ -113,17 +112,17 @@ pub fn process(
     // 6. Derive and verify PDA
     let (expected_template, bump) = ResearchTemplate::derive_pda(research_type);
 
-    if research_template.key() != &expected_template {
+    if research_template.address() != &expected_template {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // 7. Create ResearchTemplate account
-    let lamports = Rent::get()?.minimum_balance(ResearchTemplate::LEN);
+    let lamports = crate::utils::rent_exempt_const(ResearchTemplate::LEN);
 
     let bump_seed = [bump];
     let research_type_seed = [research_type];
-    let seeds = pinocchio::seeds!(RESEARCH_TEMPLATE_SEED, &research_type_seed, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(RESEARCH_TEMPLATE_SEED, &research_type_seed, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: dao_authority,
@@ -134,7 +133,7 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 8. Initialize template data
-    let mut template_data = research_template.try_borrow_mut_data()?;
+    let mut template_data = research_template.try_borrow_mut()?;
     let template = unsafe { ResearchTemplate::load_mut(&mut template_data) };
 
     template.account_key = crate::state::AccountKey::ResearchTemplate as u8;

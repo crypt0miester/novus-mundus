@@ -7,8 +7,6 @@ pub use collection::*;
 mod update_authority;
 pub use update_authority::*;
 
-use pinocchio::pubkey::Pubkey;
-
 /// Account discriminator keys for MPL Core accounts
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -52,5 +50,5 @@ pub enum Authority {
     /// Authority managed by the update authority.
     UpdateAuthority = 2,
     /// Authority managed by an approved address.
-    Address { address: Pubkey } = 3,
+    Address { address: [u8; 32] } = 3,
 }

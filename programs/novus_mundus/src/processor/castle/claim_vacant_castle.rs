@@ -6,11 +6,11 @@
 //! Creates KingRegistryAccount if first time ruling.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{clock::Clock, Sysvar},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -42,8 +42,8 @@ use crate::{
 /// 4. [] System program
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -73,11 +73,11 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // Load player
-    let mut player_data = player_account.try_borrow_mut_data()?;
+    let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
     // Verify player wallet matches
-    if &player.owner != player_wallet.key() {
+    if &player.owner != player_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -93,15 +93,26 @@ pub fn process(
     require_owner(castle_account, program_id)?;
 
     let (expected_castle_pda, _castle_bump) = CastleAccount::derive_pda(&player_game_engine, city_id, castle_id);
-    if castle_account.key() != &expected_castle_pda {
+    if castle_account.address() != &expected_castle_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
-    let mut castle_data = castle_account.try_borrow_mut_data()?;
+    let mut castle_data = castle_account.try_borrow_mut()?;
     let castle = unsafe { CastleAccount::load_mut(&mut castle_data) };
 
-    // Verify castle is vacant
+    // Require castle.status == VACANT, not just king == NULL_PUBKEY.
+    // force_remove_king sets king=NULL but leaves status=TRANSITIONING with pending
+    // garrison/court cleanup. Claiming such a castle here would orphan those rent-
+    // bearing PDAs. The cleanup helpers must drain them first; only then can the
+    // castle be claimed as vacant.
+    if castle.status != crate::constants::CASTLE_STATUS_VACANT {
+        return Err(GameError::CastleNotVacant.into());
+    }
     if castle.king != NULL_PUBKEY {
+        return Err(GameError::CastleNotVacant.into());
+    }
+    if castle.garrison_count > 0 || castle.court_count > 0 {
+        // Pending cleanup — caller must run garrison_cleanup / court_cleanup first
         return Err(GameError::CastleNotVacant.into());
     }
 
@@ -130,8 +141,8 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Handle king registry account (create if doesn't exist)
-    let (expected_registry_pda, registry_bump) = KingRegistryAccount::derive_pda(player_account.key());
-    if king_registry_account.key() != &expected_registry_pda {
+    let (expected_registry_pda, registry_bump) = KingRegistryAccount::derive_pda(player_account.address());
+    if king_registry_account.address() != &expected_registry_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -139,16 +150,15 @@ pub fn process(
 
     if !registry_exists {
         // Create king registry account
-        let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(KingRegistryAccount::LEN);
+        let lamports = crate::utils::rent_exempt_const(KingRegistryAccount::LEN);
 
         let bump_seed = [registry_bump];
-        let seeds = pinocchio::seeds!(
+        let seeds = crate::seeds!(
             KING_REGISTRY_SEED,
-            player_account.key().as_ref(),
+            player_account.address(),
             &bump_seed
         );
-        let signer = pinocchio::instruction::Signer::from(&seeds);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
 
         CreateAccount {
             from: player_wallet,
@@ -159,11 +169,11 @@ pub fn process(
         }.invoke_signed(&[signer])?;
 
         // Initialize registry
-        let mut registry_data = king_registry_account.try_borrow_mut_data()?;
+        let mut registry_data = king_registry_account.try_borrow_mut()?;
         let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
 
         registry.account_key = crate::state::AccountKey::KingRegistry as u8;
-        registry.king = *player_account.key();
+        registry.king = *player_account.address();
         registry.bump = registry_bump;
         registry.castle_count = 0;
         registry.max_castles = MAX_CASTLES_PER_KING;
@@ -171,7 +181,7 @@ pub fn process(
     }
 
     // Load registry (after potential creation)
-    let mut registry_data = king_registry_account.try_borrow_mut_data()?;
+    let mut registry_data = king_registry_account.try_borrow_mut()?;
     let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
 
     // Check max castles limit
@@ -185,7 +195,7 @@ pub fn process(
     }
 
     // Update castle ownership
-    castle.king = *player_account.key();
+    castle.king = *player_account.address();
     castle.team = player.team;
     castle.claimed_at = now;
     castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
@@ -208,9 +218,9 @@ pub fn process(
 
     // Emit event
     emit!(CastleClaimed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        king: *player_account.key(),
+        king: *player_account.address(),
         king_name: player_name,
         team: player.team,
         tier: castle.tier,

@@ -1,9 +1,8 @@
 use pinocchio::{
     ProgramResult,
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::Sysvar,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 use pinocchio_system::instructions::CreateAccount;
 use crate::{
@@ -34,8 +33,8 @@ use crate::{
 /// - starts_at: i64
 /// - duration_days: u8
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -101,35 +100,34 @@ pub fn process(
 
     // 5. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
 
     // 6. Derive and Verify Weekly Sale PDA
 
-    let (expected_pda, bump) = WeeklySaleAccount::derive_pda(game_engine_account.key(), week_number);
+    let (expected_pda, bump) = WeeklySaleAccount::derive_pda(game_engine_account.address(), week_number);
 
-    if weekly_sale_account.key() != &expected_pda {
+    if weekly_sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 7. Create Weekly Sale Account
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(WeeklySaleAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(WeeklySaleAccount::LEN);
 
     let week_bytes = week_number.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         WEEKLY_SALE_SEED,
-        game_engine_account.key().as_ref(),
+        game_engine_account.address(),
         &week_bytes,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -143,12 +141,12 @@ pub fn process(
 
     let ends_at = starts_at + (duration_days as i64 * 86400);
 
-    let mut weekly_sale_data_ref = weekly_sale_account.try_borrow_mut_data()?;
+    let mut weekly_sale_data_ref = weekly_sale_account.try_borrow_mut()?;
     let weekly_sale = unsafe { WeeklySaleAccount::load_mut(&mut weekly_sale_data_ref) };
 
     // Payer receives rent on close
     weekly_sale.account_key = crate::state::AccountKey::WeeklySale as u8;
-    weekly_sale.payer = *payer.key();
+    weekly_sale.payer = *payer.address();
 
     weekly_sale.theme = theme;
     weekly_sale.bonus_type = bonus_type;

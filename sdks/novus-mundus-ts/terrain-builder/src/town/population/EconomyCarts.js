@@ -16,9 +16,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_CARTS = 64;
 const MAX_ARC_PARTICLES = 256;
@@ -73,9 +71,7 @@ const CART_MASS = 1.0;
 const ARC_HEIGHT = 0.15;
 const ARC_PARTICLE_SIZE = 0.006;
 
-// ---------------------------------------------------------------------------
 // Reusable THREE objects
-// ---------------------------------------------------------------------------
 
 const _mat4 = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
@@ -85,9 +81,7 @@ const _tangent = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _color = new THREE.Color();
 
-// ---------------------------------------------------------------------------
 // Cart route record
-// ---------------------------------------------------------------------------
 
 /**
  * @typedef {object} CartRoute
@@ -114,9 +108,7 @@ const _color = new THREE.Color();
  * @property {{ t: number, alive: boolean, startIdx: number }[]} particles
  */
 
-// ---------------------------------------------------------------------------
 // EconomyCartSystem
-// ---------------------------------------------------------------------------
 
 export class EconomyCartSystem {
   /**
@@ -170,9 +162,7 @@ export class EconomyCartSystem {
     this._activeCartCount = 0;
   }
 
-  // -----------------------------------------------------------------------
   // Public API
-  // -----------------------------------------------------------------------
 
   /**
    * Add a cart route between two positions, with optional waypoints.
@@ -324,9 +314,7 @@ export class EconomyCartSystem {
     this._arcs.clear();
   }
 
-  // -----------------------------------------------------------------------
   // Instanced mesh creation
-  // -----------------------------------------------------------------------
 
   /** @private */
   _createCartBodyInstanced(maxCount) {
@@ -382,9 +370,7 @@ export class EconomyCartSystem {
     return mesh;
   }
 
-  // -----------------------------------------------------------------------
   // Route update
-  // -----------------------------------------------------------------------
 
   /** @private */
   _updateRoutes(dt, terrainSampler) {
@@ -484,9 +470,7 @@ export class EconomyCartSystem {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Arc particle update
-  // -----------------------------------------------------------------------
 
   /** @private */
   _updateArcs(dt) {
@@ -555,9 +539,7 @@ export class EconomyCartSystem {
     this._arcGeo.attributes.color.needsUpdate = true;
   }
 
-  // -----------------------------------------------------------------------
   // Internals
-  // -----------------------------------------------------------------------
 
   /** @private */
   _updateInstanceCounts() {

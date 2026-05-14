@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -30,8 +30,8 @@ use crate::{
 /// # Instruction Data
 /// None required
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -53,7 +53,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 4. Load Reinforcement
-    let mut reinf_data_ref = reinforcement_account.try_borrow_mut_data()?;
+    let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
 
     // 5. Validate Status is Traveling
@@ -73,7 +73,7 @@ pub fn process(
     }
 
     // 8. Validate Destination Account Matches
-    let mut dest_data_ref = destination_player.try_borrow_mut_data()?;
+    let mut dest_data_ref = destination_player.try_borrow_mut()?;
     let dest = unsafe { PlayerAccount::load_mut(&mut dest_data_ref) };
 
     if dest.owner != reinf.destination {
@@ -116,7 +116,7 @@ pub fn process(
 
     // Emit event
     emit!(ReinforcementArrived {
-        reinforcement: *reinforcement_account.key(),
+        reinforcement: *reinforcement_account.address(),
         sender: reinf.sender,
         sender_name: [0u8; 48], // Player account not loaded
         receiver: reinf.destination,

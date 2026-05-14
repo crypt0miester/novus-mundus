@@ -1,48 +1,41 @@
 /// Game constants and configuration values
 
-// ============================================================
+// Oracle Program IDs
+// Used to verify the owner of an oracle feed account so a buyer can't
+// pass an account whose bytes match the Pyth magic / SB discriminator
+// but is owned by some unrelated program.
+pub const PYTH_PROGRAM_ID: [u8; 32] =
+    five8_const::decode_32_const("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
+pub const SWITCHBOARD_PROGRAM_ID: [u8; 32] =
+    five8_const::decode_32_const("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
+
 // Time Constants (in seconds)
-// ============================================================
 pub const SECONDS_PER_DAY: i64 = 86_400;
 pub const SECONDS_PER_HOUR: i64 = 3_600;
 pub const TEAM_INVITE_EXPIRY: i64 = 604_800; // 7 days
 pub const RESERVED_NOVI_VESTING_PERIOD: i64 = 604_800; // 7 days
 
-// ============================================================
 // Account Size Limits
-// ============================================================
 pub const MAX_EVENT_NAME_LENGTH: usize = 64;
 
-// ============================================================
 // Rally System Defaults
-// ============================================================
 pub const DEFAULT_RALLY_RECRUITING_DURATION: i64 = 3_600; // 1 hour
 pub const MIN_RALLY_PARTICIPANTS: u8 = 2;
 
-// ============================================================
 // Travel Speed Constants (km/h)
-// ============================================================
 /// Walking speed for intracity travel (5 km/h)
 pub const INTRACITY_WALKING_SPEED_KMH: f32 = 5.0;
 
-// ============================================================
 // Subscription Tiers
-// ============================================================
 pub const TIER_ROOKIE: u8 = 0;
 
-// ============================================================
 // Team System
-// ============================================================
 pub const MAX_TEAM_MEMBERS_BY_TIER: [u8; 4] = [5, 10, 25, 50];
 
-// ============================================================
 // Starter Resources (New Player Onboarding)
-// ============================================================
 pub const STARTER_LOCKED_NOVI: u64 = 1_000_000; // 1M NOVI for immediate gameplay + buildings
 
-// ============================================================
 // Golden Ratio Constants (Deterministic Progression System)
-// ============================================================
 // The golden ratio family provides mathematically elegant multipliers
 // for all game progression systems. No randomness - pure determinism.
 // These are irrational numbers, preserving full f64 precision.
@@ -72,9 +65,7 @@ pub const PHI_SQUARED_INVERSE: f64 = 0.3819660112501051;
 /// Used for: Extreme penalties, near-impossible day spawns for Legendary
 pub const PHI_CUBED_INVERSE: f64 = 0.2360679774997897;
 
-// ============================================================
 // Weapon Combat System Constants
-// ============================================================
 
 /// Loot rate for dropped weapons from dead enemy troops (60%)
 /// When enemy troops die, this percentage of their weapons can be looted
@@ -102,11 +93,17 @@ pub const MAX_REINFORCEMENT_RECEIVE: u64 = 10_000;
 /// Recovery cost discount: 50% of normal hire cost
 pub const RECOVERY_COST_DISCOUNT_BPS: u64 = 5000;
 
-// ============================================================
 // PDA Seeds
-// ============================================================
 pub const GAME_ENGINE_SEED: &[u8] = b"game_engine";
 pub const NOVI_MINT_SEED: &[u8] = b"novi_mint";
+
+const NOVI_MINT_PDA: ([u8; 32], u8) =
+    const_crypto::ed25519::derive_program_address(
+        &[NOVI_MINT_SEED],
+        &crate::ID.to_bytes(),
+    );
+pub const NOVI_MINT_ADDRESS: [u8; 32] = NOVI_MINT_PDA.0;
+pub const NOVI_MINT_BUMP: u8 = NOVI_MINT_PDA.1;
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const USER_SEED: &[u8] = b"user";
 pub const CITY_SEED: &[u8] = b"city";
@@ -149,9 +146,7 @@ pub const ALLOWED_TOKEN_SEED: &[u8] = b"allowed_token";
 pub const ESTATE_SEED: &[u8] = b"estate";
 
 
-// ============================================================
 // Event System
-// ============================================================
 
 /// Prize distribution for top 10 leaderboard (basis points, must sum to 10000)
 /// - Ranks 1-3: Decrementing rewards for top performers
@@ -170,21 +165,26 @@ pub const PRIZE_DISTRIBUTION: [u16; 10] = [
     200,   // Rank 10: 2%
 ];
 
-// ============================================================
+// Compile-time guarantee that the prize distribution sums to exactly 10000 bps.
+const _: () = {
+    let mut sum: u32 = 0;
+    let mut i = 0;
+    while i < PRIZE_DISTRIBUTION.len() {
+        sum += PRIZE_DISTRIBUTION[i] as u32;
+        i += 1;
+    }
+    assert!(sum == 10_000, "PRIZE_DISTRIBUTION must sum to 10000 basis points");
+};
+
 // Validation Constants
-// ============================================================
 pub const MIN_EVENT_NAME_LENGTH: usize = 3;
 
-// ============================================================
 // Combat Power Multipliers
-// ============================================================
 pub const DEFENSIVE_UNIT_1_POWER: u64 = 10;
 pub const DEFENSIVE_UNIT_2_POWER: u64 = 25;
 pub const DEFENSIVE_UNIT_3_POWER: u64 = 60;
 
-// ============================================================
 // Encounter Stamina System
-// ============================================================
 
 /// Stamina cost to attack encounters (by rarity)
 /// Order: Common, Uncommon, Rare, Epic, Legendary, WorldEvent
@@ -214,20 +214,6 @@ pub const ENCOUNTER_ATTACK_RANGE_METERS: f64 = 10.0;
 
 /// Attack range for PvP combat (meters)
 pub const PVP_ATTACK_RANGE_METERS: f64 = 15.0;
-
-// ============================================================
-// City Encounter Scaling
-// ============================================================
-
-// Encounter scaling values are now configured via CombatConfig in GameEngine (on-chain).
-
-// ============================================================
-// City data is now passed via instruction data from the TypeScript SDK.
-// See cli/data/cities.ts and tests/fixtures/setup.ts for the canonical city list.
-
-// ============================================================
-// Expedition System Constants
-// ============================================================
 
 /// Expedition types
 pub const EXPEDITION_MINING: u8 = 1;
@@ -286,9 +272,7 @@ pub const OPERATIVE_TIER_3_MULTIPLIER_BPS: u64 = 20000; // 2.0x
 /// Expedition seeds
 pub const EXPEDITION_SEED: &[u8] = b"expedition";
 
-// ============================================================
 // Arena PvP System Constants
-// ============================================================
 
 /// Arena PDA seeds
 pub const ARENA_SEASON_SEED: &[u8] = b"arena_season";
@@ -357,9 +341,18 @@ pub const ARENA_PRIZE_DISTRIBUTION: [u16; 10] = [
     200,   // Rank 10: 2%
 ];
 
-// ============================================================
+// Compile-time guarantee that the arena prize distribution sums to 10000 bps.
+const _: () = {
+    let mut sum: u32 = 0;
+    let mut i = 0;
+    while i < ARENA_PRIZE_DISTRIBUTION.len() {
+        sum += ARENA_PRIZE_DISTRIBUTION[i] as u32;
+        i += 1;
+    }
+    assert!(sum == 10_000, "ARENA_PRIZE_DISTRIBUTION must sum to 10000 basis points");
+};
+
 // Dungeon System Constants
-// ============================================================
 
 /// Dungeon PDA seeds
 pub const DUNGEON_TEMPLATE_SEED: &[u8] = b"dungeon_template";
@@ -388,9 +381,7 @@ pub const DUNGEON_TRAP_DAMAGE_PERCENT: u8 = 10;
 /// Base gem cost to resume from checkpoint
 pub const DUNGEON_RESUME_GEM_COST: u64 = 500;
 
-// ============================================================
 // Relic System Constants
-// ============================================================
 
 /// Synergy tag IDs
 pub const SYNERGY_OFFENSE: u8 = 0;
@@ -403,54 +394,57 @@ pub const SYNERGY_BOSS: u8 = 6;
 pub const SYNERGY_HERO: u8 = 7;
 pub const SYNERGY_META: u8 = 8;
 
-/// Relic IDs and their synergy tags
+/// Relic IDs and their synergy tags.
+/// Display names are theme-mapped by the SDK; in-program code refers to relics
+/// by ID and mechanical effect only.
 /// Format: [relic_id] = synergy_tag
 pub const RELIC_SYNERGY_TAGS: [u8; 20] = [
-    SYNERGY_OFFENSE,  // 0: Warrior's Fury (+15% attack)
-    SYNERGY_DEFENSE,  // 1: Iron Skin (+10% damage reduction)
-    SYNERGY_CRIT,     // 2: Swift Blade (+20% crit chance)
-    SYNERGY_CRIT,     // 3: Executioner (+30% crit damage)
-    SYNERGY_SUSTAIN,  // 4: Vampiric Touch (5% lifesteal)
-    SYNERGY_DARKNESS, // 5: Shadow Cloak (-30% darkness)
-    SYNERGY_LOOT,     // 6: Fortune's Favor (+25% loot)
-    SYNERGY_BOSS,     // 7: Time Dilation (-15% boss power)
-    SYNERGY_DEFENSE,  // 8: Unit Rally (+15% unit survival)
-    SYNERGY_HERO,     // 9: Hero's Blessing (+25% hero effectiveness)
-    SYNERGY_LOOT,     // 10: Treasure Sense (guaranteed rare find)
-    SYNERGY_SUSTAIN,  // 11: Phoenix Feather (one-time resurrection)
-    SYNERGY_OFFENSE,  // 12: Berserker (+30% attack, +15% damage taken)
-    SYNERGY_DEFENSE,  // 13: Stalwart (cannot be one-shot)
-    SYNERGY_OFFENSE,  // 14: Double Strike (15% double attack)
-    SYNERGY_LOOT,     // 15: Golden Touch (2x NOVI)
-    SYNERGY_DARKNESS, // 16: Torch Bearer (immune to crit penalty)
-    SYNERGY_OFFENSE,  // 17: Glass Cannon (+50% attack, -30% defense)
-    SYNERGY_SUSTAIN,  // 18: Blood Pact (+40% attack at <50% units)
-    SYNERGY_META,     // 19: Relic Hunter (+1 relic choice)
+    SYNERGY_OFFENSE,  // 0: +15% attack
+    SYNERGY_DEFENSE,  // 1: +10% damage reduction
+    SYNERGY_CRIT,     // 2: +20% crit chance
+    SYNERGY_CRIT,     // 3: +30% crit damage
+    SYNERGY_SUSTAIN,  // 4: 5% lifesteal
+    SYNERGY_DARKNESS, // 5: -30% darkness
+    SYNERGY_LOOT,     // 6: +25% loot
+    SYNERGY_BOSS,     // 7: -15% boss power
+    SYNERGY_DEFENSE,  // 8: +15% unit survival
+    SYNERGY_HERO,     // 9: +25% hero effectiveness
+    SYNERGY_LOOT,     // 10: guaranteed rare find (flag)
+    SYNERGY_SUSTAIN,  // 11: one-time resurrection (flag)
+    SYNERGY_OFFENSE,  // 12: +30% attack, +15% damage taken
+    SYNERGY_DEFENSE,  // 13: cannot be one-shot (flag)
+    SYNERGY_OFFENSE,  // 14: 15% double-attack chance
+    SYNERGY_LOOT,     // 15: 2x NOVI
+    SYNERGY_DARKNESS, // 16: immune to darkness crit penalty (flag)
+    SYNERGY_OFFENSE,  // 17: +50% attack, -30% defense
+    SYNERGY_SUSTAIN,  // 18: +40% attack at <50% units
+    SYNERGY_META,     // 19: +1 relic choice (flag)
 ];
 
-/// Relic effect values (basis points or special values)
-/// Index matches relic ID
+/// Relic effect values (basis points or special flag = 1).
+/// Display names are theme-mapped by the SDK.
+/// Index matches relic ID.
 pub const RELIC_EFFECTS: [u16; 20] = [
-    1500,  // 0: Warrior's Fury: +15% attack
-    1000,  // 1: Iron Skin: +10% defense
-    2000,  // 2: Swift Blade: +20% crit chance
-    3000,  // 3: Executioner: +30% crit damage
-    500,   // 4: Vampiric Touch: 5% lifesteal
-    3000,  // 5: Shadow Cloak: -30% darkness
-    2500,  // 6: Fortune's Favor: +25% loot
-    1500,  // 7: Time Dilation: -15% boss power
-    1500,  // 8: Unit Rally: +15% survival
-    2500,  // 9: Hero's Blessing: +25% hero
-    1,     // 10: Treasure Sense: flag (guaranteed rare)
-    1,     // 11: Phoenix Feather: flag (one-time)
-    3000,  // 12: Berserker: +30% attack (+15% damage taken)
-    1,     // 13: Stalwart: flag (min 1 unit)
-    1500,  // 14: Double Strike: 15% chance
-    20000, // 15: Golden Touch: 2x NOVI
-    1,     // 16: Torch Bearer: flag (crit immunity)
-    5000,  // 17: Glass Cannon: +50% attack (-30% defense)
-    4000,  // 18: Blood Pact: +40% when hurt
-    1,     // 19: Relic Hunter: flag (+1 choice)
+    1500,  // 0: +15% attack
+    1000,  // 1: +10% defense
+    2000,  // 2: +20% crit chance
+    3000,  // 3: +30% crit damage
+    500,   // 4: 5% lifesteal
+    3000,  // 5: -30% darkness
+    2500,  // 6: +25% loot
+    1500,  // 7: -15% boss power
+    1500,  // 8: +15% survival
+    2500,  // 9: +25% hero
+    1,     // 10: flag (guaranteed rare)
+    1,     // 11: flag (one-time resurrection)
+    3000,  // 12: +30% attack (+15% damage taken)
+    1,     // 13: flag (min 1 unit)
+    1500,  // 14: 15% double-attack chance
+    20000, // 15: 2x NOVI
+    1,     // 16: flag (darkness crit penalty immunity)
+    5000,  // 17: +50% attack (-30% defense)
+    4000,  // 18: +40% when hurt
+    1,     // 19: flag (+1 choice)
 ];
 
 /// 2-piece synergy bonuses (basis points)
@@ -481,9 +475,7 @@ pub const SYNERGY_3_BONUS_BPS: [u16; 9] = [
     0,     // META: no bonus
 ];
 
-// ============================================================
 // Darkness Mechanic Constants
-// ============================================================
 
 /// Darkness penalty per floor (basis points per floor)
 pub const DARKNESS_DAMAGE_PENALTY_PER_FLOOR_BPS: u16 = 50; // 0.5% per floor
@@ -500,9 +492,7 @@ pub const DARKNESS_DEFENSE_PENALTY_PER_FLOOR_BPS: u16 = 20; // 0.2% per floor
 pub const DARKNESS_ENEMY_BUFF_START_FLOOR: u8 = 10;
 pub const DARKNESS_ENEMY_BUFF_PER_FLOOR_BPS: u16 = 50; // 0.5% per floor
 
-// ============================================================
 // Dungeon Reward Constants
-// ============================================================
 
 /// Precomputed floor reward multipliers (×10000 for precision)
 /// floor_multiplier = 1.2 ^ floor
@@ -533,9 +523,7 @@ pub const DUNGEON_UNIT_HEALTH: [u64; 3] = [
     600, // Tier 3: 600 HP
 ];
 
-// ============================================================
 // King's Castle System Constants
-// ============================================================
 
 /// Castle PDA seeds
 pub const CASTLE_SEED: &[u8] = b"castle";
@@ -552,7 +540,7 @@ pub const CASTLE_STATUS_VULNERABLE: u8 = 3;
 pub const CASTLE_STATUS_TRANSITIONING: u8 = 4;
 
 /// Castle time constants
-pub const CASTLE_CONTEST_DURATION: i64 = 0;            // 0 for testing (production: 7_200 = 2 hours)
+pub const CASTLE_CONTEST_DURATION: i64 = 7_200;       // 2 hours
 pub const CASTLE_PROTECTION_DURATION: i64 = 864_000;  // 10 days
 
 /// Castle limits

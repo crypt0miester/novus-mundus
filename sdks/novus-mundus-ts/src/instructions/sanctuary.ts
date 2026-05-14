@@ -20,9 +20,7 @@ import {
   deriveHeroCollectionPda,
 } from '../pda';
 
-// ============================================================
 // Start Meditation
-// ============================================================
 
 export interface StartMeditationAccounts {
   /** Player's wallet (signer) */
@@ -75,9 +73,7 @@ export function createStartMeditationInstruction(
   });
 }
 
-// ============================================================
 // Claim Meditation
-// ============================================================
 
 export interface ClaimMeditationAccounts {
   /** Player's wallet (signer) */
@@ -139,9 +135,7 @@ export function createClaimMeditationInstruction(
   });
 }
 
-// ============================================================
 // Speedup Meditation
-// ============================================================
 
 export interface SpeedupMeditationAccounts {
   /** Player's wallet (signer) */

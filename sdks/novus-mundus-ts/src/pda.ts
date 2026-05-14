@@ -33,9 +33,7 @@ function u64le(v: number | bigint): Uint8Array {
 }
 function strBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
 
-// ============================================================
 // Core Account PDAs
-// ============================================================
 
 /** Derive GameEngine PDA for a specific kingdom */
 export function deriveGameEnginePda(kingdomId: number): [PublicKey, number] {
@@ -74,9 +72,7 @@ export function deriveCityPda(gameEngine: PublicKey, cityId: number): [PublicKey
   );
 }
 
-// ============================================================
 // Team System PDAs
-// ============================================================
 
 /** Derive Team PDA from game engine and team ID */
 export function deriveTeamPda(gameEngine: PublicKey, teamId: bigint | number): [PublicKey, number] {
@@ -119,9 +115,7 @@ export function deriveTreasuryRequestPda(
   );
 }
 
-// ============================================================
 // Rally System PDAs
-// ============================================================
 
 /** Derive Rally PDA */
 export function deriveRallyPda(
@@ -148,9 +142,7 @@ export function deriveRallyParticipantPda(
   );
 }
 
-// ============================================================
 // Reinforcement System PDAs
-// ============================================================
 
 /** Derive Reinforcement PDA (player-to-player) */
 export function deriveReinforcementPda(
@@ -187,9 +179,7 @@ export function deriveGarrisonPda(
   );
 }
 
-// ============================================================
 // Location PDAs
-// ============================================================
 
 /** Derive Location PDA from game engine, city and grid coordinates */
 export function deriveLocationPda(
@@ -204,9 +194,7 @@ export function deriveLocationPda(
   );
 }
 
-// ============================================================
 // Encounter & Loot PDAs
-// ============================================================
 
 /** Derive Encounter PDA */
 export function deriveEncounterPda(
@@ -231,9 +219,7 @@ export function deriveLootPda(
   );
 }
 
-// ============================================================
 // Event System PDAs
-// ============================================================
 
 /** Derive Event PDA */
 export function deriveEventPda(gameEngine: PublicKey, eventId: bigint | number): [PublicKey, number] {
@@ -255,9 +241,7 @@ export function deriveEventParticipationPda(
   );
 }
 
-// ============================================================
 // Progression System PDAs
-// ============================================================
 
 /** Derive Progression PDA */
 export function deriveProgressionPda(player: PublicKey): [PublicKey, number] {
@@ -267,9 +251,7 @@ export function deriveProgressionPda(player: PublicKey): [PublicKey, number] {
   );
 }
 
-// ============================================================
 // Research System PDAs
-// ============================================================
 
 /** Derive Research Template PDA */
 export function deriveResearchTemplatePda(
@@ -289,9 +271,7 @@ export function deriveResearchPda(player: PublicKey): [PublicKey, number] {
   );
 }
 
-// ============================================================
 // Hero System PDAs
-// ============================================================
 
 /** Derive Hero Template PDA */
 export function deriveHeroTemplatePda(templateId: number): [PublicKey, number] {
@@ -317,9 +297,7 @@ export function deriveHeroMintReceiptPda(
   );
 }
 
-// ============================================================
 // Shop System PDAs
-// ============================================================
 
 /** Derive Shop Config PDA */
 export function deriveShopConfigPda(
@@ -438,9 +416,7 @@ export function deriveAllowedTokenPda(
   );
 }
 
-// ============================================================
 // Estate System PDAs
-// ============================================================
 
 /** Derive Estate PDA (scoped to player PDA) */
 export function deriveEstatePda(playerPda: PublicKey): [PublicKey, number] {
@@ -460,9 +436,7 @@ export function deriveCraftedEquipmentPda(
   );
 }
 
-// ============================================================
 // Expedition System PDAs
-// ============================================================
 
 /** Derive Expedition PDA for a player */
 export function deriveExpeditionPda(owner: PublicKey): [PublicKey, number] {
@@ -472,9 +446,7 @@ export function deriveExpeditionPda(owner: PublicKey): [PublicKey, number] {
   );
 }
 
-// ============================================================
 // Arena System PDAs
-// ============================================================
 
 /** Derive Arena Season PDA */
 export function deriveArenaSeasonPda(
@@ -510,9 +482,7 @@ export function deriveArenaLoadoutPda(
   );
 }
 
-// ============================================================
 // Dungeon System PDAs
-// ============================================================
 
 /** Derive Dungeon Template PDA */
 export function deriveDungeonTemplatePda(
@@ -544,9 +514,7 @@ export function deriveDungeonLeaderboardPda(
   );
 }
 
-// ============================================================
 // Castle System PDAs
-// ============================================================
 
 /** Derive Castle PDA from game engine, city ID and castle ID */
 export function deriveCastlePda(gameEngine: PublicKey, cityId: number, castleId: number): [PublicKey, number] {
@@ -586,9 +554,7 @@ export function deriveTeamCastleRewardPda(
   );
 }
 
-// ============================================================
 // Name Service PDAs (ANS / TLD House)
-// ============================================================
 
 /** Hash prefix for ALT Name Service */
 const ANS_HASH_PREFIX = 'ALT Name Service';
@@ -646,9 +612,7 @@ export function deriveTldHousePda(tld: string): [PublicKey, number] {
   );
 }
 
-// ============================================================
 // Helper: Hash domain name for ANS
-// ============================================================
 
 /** Get hashed name bytes for ANS operations */
 export function getHashedName(domainName: string): Uint8Array {

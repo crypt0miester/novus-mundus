@@ -1,6 +1,6 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    program_error::ProgramError,
+    Address,
+    error::ProgramError,
 };
 
 /// Loot account - Physical rewards from encounters/PvP/rallies
@@ -24,8 +24,8 @@ pub struct LootAccount {
     pub account_key: u8,
 
     // Identity & Security (80 bytes)
-    pub owner: Pubkey,                      // 32 - Who can claim this loot
-    pub creator: Pubkey,                    // 32 - Who paid rent (gets refund on claim)
+    pub owner: Address,                      // 32 - Who can claim this loot
+    pub creator: Address,                    // 32 - Who paid rent (gets refund on claim)
     pub loot_id: u64,                       // 8  - Monotonic counter per player
     pub bump: u8,                           // 1  - PDA bump
     pub source_type: u8,                    // 1  - 0=Encounter, 1=PvP, 2=Rally
@@ -64,20 +64,20 @@ impl LootAccount {
     ///
     /// Uses player PDA + monotonic loot_id for uniqueness.
     /// Player-specific so only the player account owner can claim.
-    pub fn derive_pda(player: &Pubkey, loot_id: u64) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(player: &Address, loot_id: u64) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[b"loot", player.as_ref(), &loot_id.to_le_bytes()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump (fast validation)
-    pub fn create_pda(player: &Pubkey, loot_id: u64, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player: &Address, loot_id: u64, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[b"loot", player.as_ref(), &loot_id.to_le_bytes(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// UNSAFE: Load from raw account data

@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{Sysvar, clock::Clock, rent::Rent},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -35,8 +35,8 @@ use crate::{
 /// 2. `[]` game_engine - GameEngine account for authority validation and kingdom scoping
 /// 3. `[]` system_program - System Program
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -96,12 +96,11 @@ pub fn process(
 
     // 4. Validate GameEngine and DAO Authority
 
-    // Load GameEngine to verify DAO authority
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
-    if dao_authority.key() != &game_engine_data.authority {
+    if dao_authority.address() != &game_engine_data.authority {
         return Err(GameError::DaoRequired.into());
     }
 
@@ -110,9 +109,9 @@ pub fn process(
     }
 
     // 5. Validate City PDA (kingdom-scoped)
-    let (expected_city_address, bump) = CityAccount::derive_pda(game_engine_account.key(), city_id);
+    let (expected_city_address, bump) = CityAccount::derive_pda(game_engine_account.address(), city_id);
 
-    if city_account.key() != &expected_city_address {
+    if city_account.address() != &expected_city_address {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -120,12 +119,11 @@ pub fn process(
 
     let city_id_bytes = city_id.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(CITY_SEED, game_engine_account.key(), &city_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(CITY_SEED, game_engine_account.address(), &city_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     // Calculate rent for city account
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(CityAccount::SIZE);
+    let lamports = crate::utils::rent_exempt_const(CityAccount::SIZE);
 
     // Create account
     CreateAccount {
@@ -143,7 +141,7 @@ pub fn process(
     let city_data = unsafe { CityAccount::load_mut(city_account)? };
 
     city_data.account_key = crate::state::AccountKey::City as u8;
-    city_data.game_engine = *game_engine_account.key();
+    city_data.game_engine = *game_engine_account.address();
     city_data.city_id = city_id;
     city_data.name = name;
     city_data.latitude = latitude;
@@ -162,7 +160,7 @@ pub fn process(
 
     // Emit CityInitialized event
     emit!(CityInitialized {
-        city: *city_account.key(),
+        city: *city_account.address(),
         city_index: city_id,
         timestamp: now,
     });

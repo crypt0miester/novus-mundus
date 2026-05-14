@@ -7,17 +7,13 @@ export interface ModelDefinition {
   prompt: string;
 }
 
-// ---------------------------------------------------------------------------
 // CRITICAL RULE: ALL characters and creatures must be FACELESS.
 // No visible face on any human, NPC, hero, or animal. Identity is conveyed
 // through silhouette, armor, weapons, posture, and culturally appropriate
 // face-coverings (helmets, masks, hoods, veils, blinders, harnesses).
 // Animals must also have their faces hidden or turned away from camera.
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // Prefixes
-// ---------------------------------------------------------------------------
 
 const BUILDING_PREFIX = 'stylized low-poly medieval fantasy, hand-painted textures, soft colors, warm lighting, game-ready asset, clean topology, single mesh, isometric top-down view.';
 
@@ -32,9 +28,7 @@ const PROP_PREFIX = 'stylized low-poly medieval fantasy prop, hand-painted textu
 const MOUNTAIN_PREFIX = 'stylized low-poly medieval fantasy, hand-painted textures, soft colors, warm lighting, game-ready environment asset, clean topology, isometric top-down view. CRITICAL: no base, no ground, no grass platform, no earth slab, no terrain chunk underneath. The rock formation floats on a clean white background with nothing below it — raw rock at the bottom, as if sliced off. This is a placeable object, not a diorama. ';
 
 
-// ---------------------------------------------------------------------------
 // Helper
-// ---------------------------------------------------------------------------
 
 function b(tier: number, buildingName: string, description: string): ModelDefinition {
   const id = `${buildingName}-t${tier}`;
@@ -67,9 +61,7 @@ function mountain(id: string, name: string, description: string): ModelDefinitio
   return { id, name, category: 'mountains', prompt: MOUNTAIN_PREFIX + description };
 }
 
-// ---------------------------------------------------------------------------
 // Estate helpers — 12 piece types
-// ---------------------------------------------------------------------------
 
 const ESTATE_PREFIX = 'Isometric 3D game asset, single isolated object, no background, no environment, clean white backdrop, consistent top-left lighting. ';
 
@@ -125,9 +117,7 @@ function estateCrown(stage: number, desc: string): ModelDefinition {
   return { id: `estate-crown-${pad(stage)}`, name: `Estate Crown (Stage ${stage})`, category: 'estate', prompt: `${ESTATE_PREFIX}Small crown/beacon element that sits atop a keep tower, roughly 1x1 meter footprint, 2-4 meters tall. ${desc}` };
 }
 
-// ---------------------------------------------------------------------------
 // Buildings — 19 types × 4 tiers = 76
-// ---------------------------------------------------------------------------
 
 const BUILDINGS: ModelDefinition[] = [
   // 0 — Mansion
@@ -245,9 +235,7 @@ const BUILDINGS: ModelDefinition[] = [
   b(4, 'infirmary', 'Grand hospital hall, roughly 16m x 10m footprint. An imposing two-story stone building of polished cream-colored ashlar with a slate gabled roof and a central bell tower (8m tall) topped with a verdigris copper dome and a golden cross finial. Grand arched entrance with carved stone columns and a large green cross relief carved into the stone tympanum above the door. Heavy oak double doors with polished brass fixtures, both open. Six tall arched stained-glass windows across the front facade — each depicting herbs, flowers, and healing motifs in green, gold, and white glass, warm light glowing through. A two-story interior visible through the entrance: a long ward hall with arched stone columns down the center, high vaulted ceiling, and rows of wooden beds with white linen. An attached apothecary wing (5m x 4m) with arched windows displaying elaborate shelves of colored glass potion bottles, brass alembic distillation equipment, and ceramic jars. A walled courtyard garden (5m x 4m) with a stone path, medicinal herb beds, a small stone fountain basin for clean water, and flowering bushes. Iron lanterns on ornate brackets along the facade. Stone steps (five) leading to the entrance with carved stone balustrade railings. A brass bell in the tower. Overall impression: a grand medieval hospital and center of healing arts.'),
 ];
 
-// ---------------------------------------------------------------------------
 // Heroes — 69
-// ---------------------------------------------------------------------------
 
 const HEROES: ModelDefinition[] = [
   // Common Starters
@@ -328,9 +316,7 @@ const HEROES: ModelDefinition[] = [
   h('hana-luckbringer', 'Hana Luckbringer', 'Lucky charm priestess, face fully hidden behind a smiling porcelain fortune mask — a smooth rounded porcelain mask with a lucky-cat (maneki-neko) inspired design: painted crescent-moon eyes, a small painted smile, rosy circles on cheeks, clearly a decorative mask. A flower crown of daisies, clovers, and wildflowers on the head. Bright green and white robes with four-leaf clover patterns. Right hand wielding a staff topped with a golden four-leaf clover, glowing faint gold. A horseshoe pendant (gold, open end up) on a chain. Dice (two golden dice showing sixes) and coins woven into the belt on small chains. Green ribbons at the wrists and ankles. Simple green leather shoes. Playful good-fortune blessing stance, staff raised.'),
 ];
 
-// ---------------------------------------------------------------------------
 // NPCs — 12
-// ---------------------------------------------------------------------------
 
 const NPCS: ModelDefinition[] = [
   npc('worker', 'Worker', 'Medieval peasant worker, face hidden under a wide-brimmed leather work hat tilted forward and a cloth wrap over the lower face. Brown linen tunic, leather tool belt with hammer and nails, simple leather boots, rolled up sleeves, sturdy build, carrying wooden plank on shoulder.'),
@@ -347,9 +333,7 @@ const NPCS: ModelDefinition[] = [
   npc('visitor', 'Visitor', 'Medieval traveling visitor, face hidden in deep shadow beneath a red hooded cloak pulled forward over the face. Red hooded cloak over traveling clothes, leather backpack, walking stick, dusty boots.'),
 ];
 
-// ---------------------------------------------------------------------------
 // Animals — 4
-// ---------------------------------------------------------------------------
 
 const ANIMALS: ModelDefinition[] = [
   animal('bird', 'Bird', 'Small songbird viewed from behind and slightly above, face turned completely away from camera. Round plump body with spread wings in mid-flap, short forked tail feathers, brown and cream plumage with darker wing tips, bright orange breast patch visible at the side, thin twig-like legs with three-toed feet, perched-on-branch pose with wings extended upward. No face or eyes visible.'),
@@ -358,9 +342,7 @@ const ANIMALS: ModelDefinition[] = [
   animal('fish', 'Fish', 'River fish (trout-like) viewed from the side with head angled slightly away from camera. Streamlined torpedo-shaped body, silver-gray scales with subtle iridescent sheen, darker gray-green back, lighter cream belly. Dorsal fin, two pectoral fins, anal fin, and forked tail fin — all with visible fin-ray lines. Medium size (roughly 30cm). Swimming pose with a slight S-curve, tail angled as if mid-stroke. No face or eyes visible, head turned away.'),
 ];
 
-// ---------------------------------------------------------------------------
 // Props — 9
-// ---------------------------------------------------------------------------
 
 const PROPS: ModelDefinition[] = [
   prop('anvil', 'Anvil', 'Iron blacksmith anvil on an oak stump base. Classic London-pattern anvil shape — flat rectangular face on top, conical horn (beak) from one end, square heel at the other, narrow waist connecting to a heavy pyramidal base. Dark gray cast-iron color with hammer-strike dent marks on the face. Mounted on a thick oak tree-stump base (rough bark, smooth-cut flat top) roughly knee-height.'),
@@ -374,9 +356,7 @@ const PROPS: ModelDefinition[] = [
   prop('fountain', 'Fountain', 'Medieval stone town fountain. Tiered circular design — large lower basin (2m diameter, 40cm wall), medium middle basin (1m) elevated on a stone pedestal column, small top finial. A carved stone fish spout on the middle basin with water arcing into the lower basin. Aged gray stone with mossy patches. Carved vine patterns on basin rims. A few stone lily pads in the water. Cobblestone base pad (3m x 3m).'),
 ];
 
-// ---------------------------------------------------------------------------
 // Mountains — 13 (4 types × 3-4 variants each)
-// ---------------------------------------------------------------------------
 
 const MOUNTAINS: ModelDefinition[] = [
   // --- Peak variants (4) — tall single peaks with different silhouettes ---
@@ -401,9 +381,7 @@ const MOUNTAINS: ModelDefinition[] = [
   mountain('mountain-cluster-v3', 'Mountain Cluster (Staggered)', 'Group of 4 small peaks in a staggered line (tallest roughly 3.5m, shortest roughly 1.5m), stepping down in height from left to right like a descending staircase. Faceted low-poly rock. Warm reddish-brown sandstone. Only the tallest has a tiny snow cap. Each peak is slightly offset from the line, creating depth. Connected at the bases by rocky ridgeline. A mesa-like quality. '),
 ];
 
-// ---------------------------------------------------------------------------
 // Estate — 109 GLBs across 12 piece types
-// ---------------------------------------------------------------------------
 
 const ESTATE: ModelDefinition[] = [
   // --- Terrain Tile (8 stages) — flat tileable ground section ---
@@ -540,9 +518,7 @@ const ESTATE: ModelDefinition[] = [
   estateCrown(6, 'Mythic era. A beacon — a gold spire tip (#D4AF37) from which a column of blue light (#4A90D4) shoots upward into the sky. At the apex, a gold sigil floats inside a blue energy sphere. The beacon is visible from great distance. About 4 meters tall. Black, gold, blue palette only.'),
 ];
 
-// ---------------------------------------------------------------------------
 // Export
-// ---------------------------------------------------------------------------
 
 export const MODEL_DEFINITIONS: ModelDefinition[] = [
   ...BUILDINGS,

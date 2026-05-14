@@ -6,9 +6,9 @@
 //! and closing the CourtPositionAccount PDA.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -39,8 +39,8 @@ use crate::{
 /// 5. [writable] Rent recipient (king wallet)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -69,10 +69,10 @@ pub fn process(
 
     // Load king player
     require_owner(king_account, program_id)?;
-    let king_data = king_account.try_borrow_data()?;
+    let king_data = king_account.try_borrow()?;
     let king = unsafe { PlayerAccount::load(&king_data) };
 
-    if &king.owner != king_wallet.key() {
+    if &king.owner != king_wallet.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -80,33 +80,40 @@ pub fn process(
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
-    if castle.king != *king_account.key() {
+    if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
     }
 
     // Load court position
     require_owner(court_position_account, program_id)?;
 
-    let (expected_court_pda, _court_bump) = CourtPositionAccount::derive_pda(castle_account.key(), position_type);
-    if court_position_account.key() != &expected_court_pda {
+    let (expected_court_pda, _court_bump) = CourtPositionAccount::derive_pda(castle_account.address(), position_type);
+    if court_position_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Verify position exists
     require_initialized(court_position_account).map_err(|_| GameError::CourtPositionVacant)?;
 
-    let court_data = court_position_account.try_borrow_data()?;
+    let court_data = court_position_account.try_borrow()?;
     let court = unsafe { CourtPositionAccount::load(&court_data) };
 
     // Verify dismissed account matches holder
-    if court.holder != *dismissed_account.key() {
+    if court.holder != *dismissed_account.address() {
         return Err(GameError::InvalidAccount.into());
     }
 
     // Load dismissed player
     require_owner(dismissed_account, program_id)?;
-    let mut dismissed_data = dismissed_account.try_borrow_mut_data()?;
+    let mut dismissed_data = dismissed_account.try_borrow_mut()?;
     let dismissed = unsafe { PlayerAccount::load_mut(&mut dismissed_data) };
+
+    // Refund the court position account rent to the dismissed
+    // player's wallet (they originally paid the rent when appointed), not
+    // to a caller-supplied recipient (defaulting to the king's wallet).
+    if rent_recipient.address() != &dismissed.owner {
+        return Err(GameError::InvalidAccount.into());
+    }
 
     // Get current timestamp
     let clock = Clock::get()?;
@@ -140,12 +147,12 @@ pub fn process(
 
     // Emit event
     emit!(CourtDismissed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name,
-        dismissed: *dismissed_account.key(),
+        dismissed: *dismissed_account.address(),
         dismissed_name,
         position_type,
-        dismissed_by: *king_account.key(),
+        dismissed_by: *king_account.address(),
         resigned: false,
         timestamp: now,
     });

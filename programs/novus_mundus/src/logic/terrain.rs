@@ -1,5 +1,5 @@
 // Terrain System — pure elevation functions
-// No AccountInfo, no framework dependencies.
+// No AccountView, no framework dependencies.
 // Identical logic runs in the TypeScript SDK.
 
 /// Weighted point beneath the surface. Heavy anchors sink (water),

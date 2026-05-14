@@ -10,9 +10,7 @@ import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { EncounterType } from '../types/enums';
 
-// ============================================================
 // Encounter Account Interface
-// ============================================================
 
 export interface EncounterAccount {
   id: BN;
@@ -40,9 +38,7 @@ export function calculateEncounterAccountSize(attackerCount: number): number {
   return ENCOUNTER_ACCOUNT_BASE_SIZE + attackerCount * 32;
 }
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize EncounterAccount from raw bytes */
 export function deserializeEncounter(data: Uint8Array | Buffer): EncounterAccount {
@@ -103,9 +99,7 @@ export function parseEncounter(accountInfo: AccountInfo<Buffer>): EncounterAccou
   return deserializeEncounter(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if encounter is alive */
 export function isEncounterAlive(encounter: EncounterAccount): boolean {

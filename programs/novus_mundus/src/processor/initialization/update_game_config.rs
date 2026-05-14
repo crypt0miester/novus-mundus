@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -54,8 +54,8 @@ const UPDATE_COMBAT: u16 = 1 << 11;
 /// 7: ArenaConfig, 8: ExpeditionConfig, 9: DungeonConfig,
 /// 10: CastleConfig, 11: CombatConfig
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // Need at least 2 bytes for update_flags
@@ -76,17 +76,11 @@ pub fn process(
     require_signer(authority)?;
     require_writable(game_engine_account)?;
 
-    // Verify ownership
-    if game_engine_account.owner() != program_id {
-        return Err(ProgramError::IllegalOwner);
-    }
-
-    // Load GameEngine mutably
-    let mut game_engine_data = game_engine_account.try_borrow_mut_data()?;
-    let engine = unsafe { GameEngine::load_mut(&mut game_engine_data) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let mut engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
-    if engine.authority != *authority.key() {
+    if engine.authority != *authority.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -127,8 +121,50 @@ pub fn process(
     apply_update!(UPDATE_CASTLE, engine.castle_config, CastleConfig);
     apply_update!(UPDATE_COMBAT, engine.combat_config, CombatConfig);
 
-    // Verify all flagged data was consumed (no trailing garbage)
-    let _ = offset;
+    // Reject trailing garbage bytes.
+    if offset != data.len() {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // Per-field sanity bounds on critical fields.
+    // These prevent a coerced/leaked DAO key from setting absurd values that
+    // would zero out denominators, uncap discounts, or break tier indices.
+    // Each branch only fires when its corresponding flag was set.
+    if update_flags & UPDATE_GAMEPLAY != 0 {
+        // safebox_protection_percent is stored as basis points; cap at 10000 (100%).
+        if engine.gameplay_config.safebox_protection_percent > 10_000 {
+            return Err(GameError::InvalidParameter.into());
+        }
+        // Damage redistribution percentages should not exceed 10000 bps each.
+        // (Individual fields; bounds chosen conservatively.)
+        if engine.gameplay_config.damage_unit_1_percent > 10_000
+            || engine.gameplay_config.damage_unit_2_percent > 10_000
+            || engine.gameplay_config.damage_unit_3_percent > 10_000
+        {
+            return Err(GameError::InvalidParameter.into());
+        }
+    }
+    if update_flags & UPDATE_ECONOMIC != 0 {
+        // cost_multiplier == 0 would cause free-cost exploits or div-by-zero.
+        if engine.economic_config.cost_multiplier == 0 {
+            return Err(GameError::InvalidParameter.into());
+        }
+    }
+    if update_flags & UPDATE_SUBSCRIPTIONS != 0 {
+        // Each tier should reference its own index (defense-in-depth against
+        // accidental misalignment by the DAO front-end).
+        for i in 0..4 {
+            if engine.subscription_tiers[i].tier_index != i as u8 {
+                return Err(GameError::InvalidParameter.into());
+            }
+        }
+    }
+    if update_flags & UPDATE_MINTING != 0 {
+        // Per-proposal cap must not exceed total supply cap.
+        if engine.minting_config.max_mint_per_proposal > engine.minting_config.max_supply_cap {
+            return Err(GameError::InvalidParameter.into());
+        }
+    }
 
     // Increment config version
     engine.version = engine.version.saturating_add(1);

@@ -11,18 +11,14 @@ import type { AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Buff Config
-// ============================================================
 
 export interface HeroBuffConfig {
   stat: number;
   baseBps: number;
 }
 
-// ============================================================
 // Hero Template Interface
-// ============================================================
 
 export interface HeroTemplateAccount {
   templateId: number;
@@ -43,9 +39,7 @@ export interface HeroTemplateAccount {
 /** HeroTemplate size in bytes (repr(C) layout with alignment padding) */
 export const HERO_TEMPLATE_SIZE = 96;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize a single HeroBuffConfig (6 bytes in repr(C) layout) */
 function deserializeHeroBuffConfig(reader: BufferReader): HeroBuffConfig {
@@ -110,9 +104,7 @@ export function parseHeroTemplate(accountInfo: AccountInfo<Buffer>): HeroTemplat
   return deserializeHeroTemplate(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if hero template can still be minted */
 export function canMintHero(template: HeroTemplateAccount): boolean {

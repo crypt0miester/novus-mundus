@@ -45,9 +45,7 @@ import {
 } from '../utils/accounts';
 import { log } from '../utils/logger';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 setDefaultTimeout(120_000);
 
@@ -94,9 +92,7 @@ describe('Forge System', () => {
     return player;
   }
 
-  // ============================================================
   // Start Craft Tests
-  // ============================================================
 
   describe('Starting Craft', () => {
     it('should start equipment crafting', async () => {
@@ -187,9 +183,7 @@ describe('Forge System', () => {
     });
   });
 
-  // ============================================================
   // Strike Forge Tests
-  // ============================================================
 
   describe('Striking Forge', () => {
     it('should reject strike before window opens', async () => {
@@ -302,9 +296,7 @@ describe('Forge System', () => {
     });
   });
 
-  // ============================================================
   // Abandon Craft Tests
-  // ============================================================
 
   describe('Abandoning Craft', () => {
     it('should abandon ongoing craft', async () => {
@@ -383,9 +375,7 @@ describe('Forge System', () => {
     });
   });
 
-  // ============================================================
   // Equip Tests
-  // ============================================================
 
   describe('Equipment', () => {
     it('should reject equip without completed craft', async () => {
@@ -450,9 +440,7 @@ describe('Forge System', () => {
     });
   });
 
-  // ============================================================
   // Recipe Tests
-  // ============================================================
 
   describe('Recipes', () => {
     it('should require specific materials for higher tiers', async () => {
@@ -505,9 +493,7 @@ describe('Forge System', () => {
     });
   });
 
-  // ============================================================
   // Quality Tests
-  // ============================================================
 
   describe('Craft Quality', () => {
     it('should track craft state after starting', async () => {

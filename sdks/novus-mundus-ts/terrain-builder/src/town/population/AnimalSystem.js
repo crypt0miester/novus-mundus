@@ -11,9 +11,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_BIRDS = 50;
 const MAX_CHICKENS = 10;
@@ -56,9 +54,7 @@ const BUILDING_BARRACKS = 1;
 const BUILDING_DOCK = 4;
 const BUILDING_MARKET = 6;
 
-// ---------------------------------------------------------------------------
 // Seeded RNG
-// ---------------------------------------------------------------------------
 
 function makeRng(seed) {
   let s = (seed | 0) || 1;
@@ -68,9 +64,7 @@ function makeRng(seed) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Reusable THREE objects
-// ---------------------------------------------------------------------------
 
 const _mat4 = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
@@ -79,9 +73,7 @@ const _scale = new THREE.Vector3(1, 1, 1);
 const _up = new THREE.Vector3(0, 1, 0);
 const _color = new THREE.Color();
 
-// ---------------------------------------------------------------------------
 // Geometry builders
-// ---------------------------------------------------------------------------
 
 /**
  * Bird geometry: body triangle + 2 wing triangles = 3 triangles (9 verts).
@@ -275,9 +267,7 @@ function mergeGeometries(geometries) {
   return merged;
 }
 
-// ---------------------------------------------------------------------------
 // AnimalSystem
-// ---------------------------------------------------------------------------
 
 export class AnimalSystem {
   /**

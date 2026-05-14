@@ -135,9 +135,7 @@ pub fn mul_div(a: u64, b: u64, c: u64) -> Option<u64> {
     a_div.checked_mul(b)
 }
 
-// ============================================================
 // Integer Square Root
-// ============================================================
 
 /// Integer square root (Newton's method, u64-only)
 ///

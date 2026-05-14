@@ -28,9 +28,7 @@ pub fn format_u32_to_bytes(value: u32, buf: &mut [u8; 10]) -> &[u8] {
     &buf[pos..10]
 }
 
-// ========================================================
 // Location Synergy - Buff Operations with Location Bonus
-// ========================================================
 
 /// Add one hero's buffs to player's cached totals with location bonus applied
 ///
@@ -186,9 +184,7 @@ fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, 
 }
 
 
-// ========================================================
 // NFT Attribute Building
-// ========================================================
 
 /// Captured hero data for NFT attribute updates (Deterministic System)
 ///

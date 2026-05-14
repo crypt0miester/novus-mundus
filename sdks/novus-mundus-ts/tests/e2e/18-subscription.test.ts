@@ -22,6 +22,7 @@ import {
   type TestContext,
   beforeAllTests,
 } from '../fixtures/setup';
+import { advanceTime } from '../fixtures/time';
 import {
   PlayerFactory,
   type TestPlayer,
@@ -38,9 +39,7 @@ import {
   getCurrentTimestamp,
 } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Subscription System', () => {
   let ctx: TestContext;
@@ -71,9 +70,7 @@ describe('Subscription System', () => {
     );
   }
 
-  // ============================================================
   // Purchase Subscription Tests
-  // ============================================================
 
   describe('Purchasing Subscriptions', () => {
     it('should purchase Expert subscription (tier 1)', async () => {
@@ -191,6 +188,10 @@ describe('Subscription System', () => {
       const afterExpert = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterExpert!.subscriptionTier).toBe(SubscriptionTier.Expert);
 
+      // Advance the clock so the upgrade-tier path's `expiration_base = now`
+      // results in a strictly later end-of-subscription than the Expert one.
+      await advanceTime(ctx.svm, 60);
+
       // Upgrade to Epic (tier 2)
       await sendTransaction(
         ctx.svm,
@@ -206,9 +207,7 @@ describe('Subscription System', () => {
     });
   });
 
-  // ============================================================
   // Subscription Bonuses Tests
-  // ============================================================
 
   describe('Subscription Bonuses', () => {
     it('should grant cash on hand', async () => {
@@ -343,9 +342,7 @@ describe('Subscription System', () => {
     }, 15_000);
   });
 
-  // ============================================================
   // Tier Comparison Tests
-  // ============================================================
 
   describe('Tier Comparisons', () => {
     it('should default to free tier', async () => {
@@ -411,9 +408,7 @@ describe('Subscription System', () => {
     });
   });
 
-  // ============================================================
   // Expiration Tests
-  // ============================================================
 
   describe('Subscription Expiration', () => {
     it('should set expiry 30 days from now', async () => {
@@ -509,9 +504,7 @@ describe('Subscription System', () => {
     });
   });
 
-  // ============================================================
   // Payment Tests
-  // ============================================================
 
   describe('Subscription Payments', () => {
     it('should deduct SOL for purchase', async () => {
@@ -616,9 +609,7 @@ describe('Subscription System', () => {
     });
   });
 
-  // ============================================================
   // Tier Verification Tests
-  // ============================================================
 
   describe('Tier Verification', () => {
     it('should set tier and expiry for Expert (tier 1)', async () => {
@@ -689,9 +680,7 @@ describe('Subscription System', () => {
     });
   });
 
-  // ============================================================
   // Grace Period Tests
-  // ============================================================
 
   describe('Grace Period', () => {
     it('should set future expiry on purchase', async () => {

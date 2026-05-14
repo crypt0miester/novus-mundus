@@ -1,4 +1,3 @@
-use pinocchio::pubkey::Pubkey;
 use super::{Key, UpdateAuthority};
 
 /// Maximum length for asset name
@@ -13,7 +12,7 @@ pub struct AssetV1 {
     /// The account discriminator.
     pub key: Key,
     /// The owner of the asset.
-    pub owner: Pubkey,
+    pub owner: [u8; 32],
     /// The update authority of the asset.
     pub update_authority: UpdateAuthority,
     /// The name of the asset (fixed size with actual length).
@@ -45,19 +44,77 @@ impl AssetV1 {
         + 1 // has_seq bool
         + 7; // padding
 
-    /// Load an AssetV1 from account data
-    pub unsafe fn load(data: &[u8]) -> &Self {
-        &*(data.as_ptr() as *const Self)
-    }
+    /// Parse an AssetV1 from Borsh-encoded account data (mainnet MPL Core format).
+    ///
+    /// Borsh layout: key(1) + owner(32) + update_authority(1+0|32) + name(4+N) + uri(4+M) + seq(1+0|8)
+    pub fn from_borsh(data: &[u8]) -> Self {
+        let key = Key::from(data[0]);
 
-    /// Load a mutable AssetV1 from account data
-    pub unsafe fn load_mut(data: &mut [u8]) -> &mut Self {
-        &mut *(data.as_mut_ptr() as *mut Self)
+        let mut owner = [0u8; 32];
+        owner.copy_from_slice(&data[1..33]);
+
+        // update_authority: enum discriminant(1) + optional pubkey(32)
+        let ua_disc = data[33];
+        let mut ua_key = [0u8; 32];
+        let mut offset = 34;
+        if ua_disc == 1 || ua_disc == 2 {
+            ua_key.copy_from_slice(&data[34..66]);
+            offset = 66;
+        }
+        let update_authority = UpdateAuthority::from_bytes(ua_disc, &ua_key);
+
+        // name: Borsh string
+        let name_len = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]) as usize;
+        offset += 4;
+        let mut name = [0u8; MAX_NAME_LEN];
+        let copy_len = name_len.min(MAX_NAME_LEN);
+        name[..copy_len].copy_from_slice(&data[offset..offset + copy_len]);
+        offset += name_len;
+
+        // uri: Borsh string
+        let uri_len = u32::from_le_bytes([
+            data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+        ]) as usize;
+        offset += 4;
+        let mut uri = [0u8; MAX_URI_LEN];
+        let uri_copy_len = uri_len.min(MAX_URI_LEN);
+        uri[..uri_copy_len].copy_from_slice(&data[offset..offset + uri_copy_len]);
+        offset += uri_len;
+
+        // seq: Option<u64>
+        let mut seq = 0u64;
+        let mut has_seq = false;
+        if offset < data.len() {
+            let seq_option = data[offset];
+            offset += 1;
+            if seq_option == 1 && offset + 8 <= data.len() {
+                seq = u64::from_le_bytes([
+                    data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+                    data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7],
+                ]);
+                has_seq = true;
+            }
+        }
+
+        Self {
+            key,
+            owner,
+            update_authority,
+            name,
+            name_len: name_len as u32,
+            uri,
+            uri_len: uri_len as u32,
+            seq,
+            has_seq,
+            _padding: [0u8; 7],
+        }
     }
 
     /// Create a new AssetV1
     pub fn new(
-        owner: Pubkey,
+        owner: [u8; 32],
         update_authority: UpdateAuthority,
         name: &[u8],
         uri: &[u8],
@@ -103,17 +160,5 @@ impl AssetV1 {
     /// Check if this is a valid AssetV1 account
     pub fn is_valid(&self) -> bool {
         self.key == Key::AssetV1
-    }
-
-    /// Check if the asset is compressed
-    pub fn is_compressed(&self) -> bool {
-        self.has_seq
-    }
-
-    /// Increment sequence number if asset is compressed
-    pub fn increment_seq(&mut self) {
-        if self.has_seq {
-            self.seq = self.seq.saturating_add(1);
-        }
     }
 }

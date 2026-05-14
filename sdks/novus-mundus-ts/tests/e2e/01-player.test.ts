@@ -53,9 +53,7 @@ import {
   SECONDS_PER_DAY,
 } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Player Lifecycle', () => {
   let ctx: TestContext;
@@ -71,9 +69,7 @@ describe('Player Lifecycle', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Initialization Tests
-  // ============================================================
 
   describe('Initialization', () => {
     it('should initialize a new player in city 1', async () => {
@@ -154,9 +150,7 @@ describe('Player Lifecycle', () => {
     });
   });
 
-  // ============================================================
   // Starter Resources Tests
-  // ============================================================
 
   describe('Starter Resources', () => {
     it('should grant starter locked NOVI', async () => {
@@ -284,9 +278,7 @@ describe('Player Lifecycle', () => {
     });
   });
 
-  // ============================================================
   // New Player Protection Tests
-  // ============================================================
 
   describe('New Player Protection', () => {
     it('should have 24-hour protection', async () => {
@@ -325,9 +317,7 @@ describe('Player Lifecycle', () => {
     });
   });
 
-  // ============================================================
   // Player State Tests
-  // ============================================================
 
   describe('Player State', () => {
     it('should have correct owner set', async () => {
@@ -401,9 +391,7 @@ describe('Player Lifecycle', () => {
     });
   });
 
-  // ============================================================
   // PDA Derivation Tests
-  // ============================================================
 
   describe('PDA Derivation', () => {
     it('should derive correct player PDA', async () => {

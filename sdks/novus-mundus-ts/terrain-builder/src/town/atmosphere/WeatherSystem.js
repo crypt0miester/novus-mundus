@@ -16,9 +16,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Deterministic hash (matches terrain calculator's terrainHash)
-// ---------------------------------------------------------------------------
 
 function rotateLeft(v, n) {
   return ((v << n) | (v >>> (32 - n))) >>> 0;
@@ -34,9 +32,7 @@ function terrainHash(seed, x, y) {
   return h & 0xFF;
 }
 
-// ---------------------------------------------------------------------------
 // Weather type determination from seed + day
-// ---------------------------------------------------------------------------
 
 function weatherForDay(seed, dayOfYear) {
   const h = terrainHash(seed, dayOfYear, 0);
@@ -48,9 +44,7 @@ function weatherForDay(seed, dayOfYear) {
   return 'clear';
 }
 
-// ---------------------------------------------------------------------------
 // Weather parameter presets
-// ---------------------------------------------------------------------------
 
 const WEATHER_PARAMS = {
   clear: {
@@ -125,9 +119,7 @@ const WEATHER_PARAMS = {
   },
 };
 
-// ---------------------------------------------------------------------------
 // WeatherSystem
-// ---------------------------------------------------------------------------
 
 export class WeatherSystem {
   /**
@@ -191,9 +183,7 @@ export class WeatherSystem {
     this._resetLightningTimer();
   }
 
-  // -------------------------------------------------------------------------
   // Deterministic weather from seed
-  // -------------------------------------------------------------------------
 
   /**
    * Set weather deterministically from terrain seed and day-of-year.
@@ -227,9 +217,7 @@ export class WeatherSystem {
     this.transitionTo(type);
   }
 
-  // -------------------------------------------------------------------------
   // Manual weather control
-  // -------------------------------------------------------------------------
 
   /**
    * Override weather to a specific type with smooth transition.
@@ -277,9 +265,7 @@ export class WeatherSystem {
     }
   }
 
-  // -------------------------------------------------------------------------
   // State queries
-  // -------------------------------------------------------------------------
 
   /**
    * @returns {THREE.Vector2} Current wind direction (normalized)
@@ -365,9 +351,7 @@ export class WeatherSystem {
     return this._snowIntensity;
   }
 
-  // -------------------------------------------------------------------------
   // Per-frame update
-  // -------------------------------------------------------------------------
 
   /**
    * Update weather simulation. Call once per frame.
@@ -398,9 +382,7 @@ export class WeatherSystem {
     this._updateFogColor();
   }
 
-  // -------------------------------------------------------------------------
   // Transition handling
-  // -------------------------------------------------------------------------
 
   /** @private */
   _updateTransition(deltaTime) {
@@ -443,9 +425,7 @@ export class WeatherSystem {
     this._lightningEnabled = params.lightningEnabled;
   }
 
-  // -------------------------------------------------------------------------
   // Wind simulation
-  // -------------------------------------------------------------------------
 
   /** @private */
   _updateWind(deltaTime) {
@@ -478,9 +458,7 @@ export class WeatherSystem {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Wetness accumulation / evaporation
-  // -------------------------------------------------------------------------
 
   /** @private */
   _updateWetness(deltaTime) {
@@ -494,9 +472,7 @@ export class WeatherSystem {
     this._wetness = Math.max(0, Math.min(1, this._wetness));
   }
 
-  // -------------------------------------------------------------------------
   // Snow accumulation / melting
-  // -------------------------------------------------------------------------
 
   /** @private */
   _updateSnowAccumulation(deltaTime) {
@@ -508,9 +484,7 @@ export class WeatherSystem {
     this._snowAmount = Math.max(0, Math.min(1, this._snowAmount));
   }
 
-  // -------------------------------------------------------------------------
   // Lightning
-  // -------------------------------------------------------------------------
 
   /** @private */
   _resetLightningTimer() {
@@ -562,9 +536,7 @@ export class WeatherSystem {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Fog color
-  // -------------------------------------------------------------------------
 
   /** @private */
   _updateFogColor() {
@@ -587,9 +559,7 @@ export class WeatherSystem {
     }
   }
 
-  // -------------------------------------------------------------------------
   // Dispose
-  // -------------------------------------------------------------------------
 
   /**
    * Release all resources.

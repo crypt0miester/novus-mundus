@@ -4,9 +4,9 @@
 /// Hard gates ensure players must build specific buildings to access features.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
 };
 
 use crate::{
@@ -17,9 +17,7 @@ use crate::{
     },
 };
 
-// ============================================================
 // Building Requirement Validation
-// ============================================================
 
 /// Load and validate a building requirement
 ///
@@ -74,22 +72,20 @@ fn building_type_to_error(building_type: BuildingType) -> GameError {
         BuildingType::Market => GameError::MarketRequired,
         BuildingType::Academy => GameError::AcademyRequired,
         BuildingType::Arena => GameError::ArenaRequired,
-        BuildingType::Sanctuary => GameError::SanctuaryRequired,
+        BuildingType::MeditationChamber => GameError::MeditationChamberRequired,
         BuildingType::Observatory => GameError::ObservatoryRequired,
         BuildingType::Treasury => GameError::TreasuryRequired,
         BuildingType::Citadel => GameError::CitadelRequired,
         BuildingType::Camp => GameError::CampRequired,
         BuildingType::Mine => GameError::MineRequired,
-        BuildingType::Catacombs => GameError::CatacombsRequired,
+        BuildingType::DungeonEntry => GameError::DungeonEntryRequired,
         BuildingType::Farm => GameError::FarmRequired,
-        BuildingType::Stables => GameError::StablesRequired,
+        BuildingType::TransportBay => GameError::TransportBayRequired,
         BuildingType::Infirmary => GameError::InfirmaryRequired,
     }
 }
 
-// ============================================================
 // Specific Building Requirement Helpers
-// ============================================================
 
 /// Require Mansion at minimum level
 #[inline]
@@ -140,10 +136,10 @@ pub fn require_academy(estate: &EstateAccount, min_level: u8) -> Result<&Buildin
     require_building(estate, BuildingType::Academy, min_level)
 }
 
-/// Require Sanctuary at minimum level
+/// Require MeditationChamber at minimum level
 #[inline]
 pub fn require_sanctuary(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Sanctuary, min_level)
+    require_building(estate, BuildingType::MeditationChamber, min_level)
 }
 
 /// Require Citadel at minimum level
@@ -165,11 +161,11 @@ pub fn require_mine(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSl
     require_building(estate, BuildingType::Mine, min_level)
 }
 
-/// Require Catacombs at minimum level (dungeon access)
+/// Require DungeonEntry at minimum level (dungeon access)
 #[inline]
 #[allow(dead_code)]
 pub fn require_catacombs(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Catacombs, min_level)
+    require_building(estate, BuildingType::DungeonEntry, min_level)
 }
 
 /// Require Farm at minimum level (produce collection)
@@ -178,10 +174,10 @@ pub fn require_farm(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSl
     require_building(estate, BuildingType::Farm, min_level)
 }
 
-/// Require Stables at minimum level (travel gating)
+/// Require TransportBay at minimum level (travel gating)
 #[inline]
 pub fn require_stables(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
-    require_building(estate, BuildingType::Stables, min_level)
+    require_building(estate, BuildingType::TransportBay, min_level)
 }
 
 /// Require Infirmary at minimum level (unit recovery)
@@ -190,9 +186,7 @@ pub fn require_infirmary(estate: &EstateAccount, min_level: u8) -> Result<&Build
     require_building(estate, BuildingType::Infirmary, min_level)
 }
 
-// ============================================================
 // Unit Hiring Requirements (Barracks/Camp levels)
-// ============================================================
 
 use crate::types::UnitType;
 
@@ -224,9 +218,7 @@ pub const fn required_barracks_level_for_unit(unit_type: UnitType) -> u8 {
 }
 
 
-// ============================================================
 // Research Category Requirements (Academy levels)
-// ============================================================
 
 use crate::state::research::ResearchCategory;
 
@@ -240,9 +232,7 @@ pub const fn required_academy_level_for_research(category: ResearchCategory) -> 
 }
 
 
-// ============================================================
 // Hero Management Requirements (Sanctuary levels)
-// ============================================================
 
 /// Get maximum heroes that can be locked based on Sanctuary level
 pub const fn max_locked_heroes_for_sanctuary_level(level: u8) -> u8 {
@@ -256,9 +246,9 @@ pub const fn max_locked_heroes_for_sanctuary_level(level: u8) -> u8 {
     }
 }
 
-/// Check if Sanctuary allows locking another hero
+/// Check if MeditationChamber allows locking another hero
 pub fn can_lock_hero(estate: &EstateAccount, current_locked_count: u8) -> bool {
-    if let Some(sanctuary) = estate.find_building(BuildingType::Sanctuary) {
+    if let Some(sanctuary) = estate.find_building(BuildingType::MeditationChamber) {
         if sanctuary.is_active() {
             let max = max_locked_heroes_for_sanctuary_level(sanctuary.level);
             return current_locked_count < max;
@@ -284,10 +274,10 @@ pub const fn max_hero_level_for_sanctuary(sanctuary_level: u8) -> u8 {
     }
 }
 
-/// Get the hero level cap for this estate's Sanctuary
-/// Returns 0 if no Sanctuary
+/// Get the hero level cap for this estate's MeditationChamber
+/// Returns 0 if no MeditationChamber
 pub fn hero_level_cap(estate: &EstateAccount) -> u8 {
-    if let Some(sanctuary) = estate.find_building(BuildingType::Sanctuary) {
+    if let Some(sanctuary) = estate.find_building(BuildingType::MeditationChamber) {
         if sanctuary.is_active() {
             return max_hero_level_for_sanctuary(sanctuary.level);
         }
@@ -295,9 +285,7 @@ pub fn hero_level_cap(estate: &EstateAccount) -> u8 {
     0
 }
 
-// ============================================================
 // Sanctuary Meditation System (φ-based)
-// ============================================================
 //
 // Meditation is extremely slow passive leveling for heroes:
 // - XP accumulates over time → converts to levels
@@ -466,9 +454,9 @@ pub fn meditation_levels_from_xp(current_level: u32, current_xp: u32) -> (u32, u
     (levels_gained, xp)
 }
 
-/// Get Sanctuary building level from estate (0 if not found/not active)
+/// Get MeditationChamber building level from estate (0 if not found/not active)
 pub fn get_sanctuary_level(estate: &EstateAccount) -> u8 {
-    if let Some(sanctuary) = estate.find_building(BuildingType::Sanctuary) {
+    if let Some(sanctuary) = estate.find_building(BuildingType::MeditationChamber) {
         if sanctuary.is_active() {
             return sanctuary.level;
         }
@@ -476,17 +464,15 @@ pub fn get_sanctuary_level(estate: &EstateAccount) -> u8 {
     0
 }
 
-/// Check if estate has an active Sanctuary for meditation
+/// Check if estate has an active MeditationChamber for meditation
 pub fn can_meditate(estate: &EstateAccount) -> bool {
-    if let Some(sanctuary) = estate.find_building(BuildingType::Sanctuary) {
+    if let Some(sanctuary) = estate.find_building(BuildingType::MeditationChamber) {
         return sanctuary.is_active() && sanctuary.level >= 1;
     }
     false
 }
 
-// ============================================================
 // Vault Bonuses
-// ============================================================
 
 /// Get NOVI cap bonus from Vault level (basis points)
 pub fn vault_novi_cap_bonus_bps(estate: &EstateAccount) -> u16 {
@@ -521,9 +507,7 @@ pub fn vault_transfer_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Market Discount
-// ============================================================
 
 /// Get shop discount from Market level (basis points)
 pub fn market_discount_bps(estate: &EstateAccount) -> u16 {
@@ -536,9 +520,7 @@ pub fn market_discount_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Forge Crafting Requirements
-// ============================================================
 
 use crate::state::estate::QualityTier;
 
@@ -548,9 +530,7 @@ pub fn can_craft_quality_tier(estate: &EstateAccount, tier: QualityTier) -> bool
     has_building_at_level(estate, BuildingType::Forge, required)
 }
 
-// ============================================================
 // Staged Tempering Helpers (Forge bonuses)
-// ============================================================
 
 /// Calculate window duration with Forge level bonus
 ///
@@ -603,9 +583,7 @@ pub fn get_forge_level(estate: &EstateAccount) -> u8 {
     0
 }
 
-// ============================================================
 // Workshop Mining Bonus
-// ============================================================
 
 /// Get mining output bonus from Workshop level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
@@ -619,9 +597,7 @@ pub fn workshop_mining_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Dock Fishing Bonus
-// ============================================================
 
 /// Get fishing output bonus from Dock level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
@@ -635,9 +611,7 @@ pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
 }
 
 
-// ============================================================
 // Mine Mining Bonus
-// ============================================================
 
 /// Get mining output bonus from Mine level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
@@ -650,9 +624,7 @@ pub fn mine_mining_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Farm Produce Bonus
-// ============================================================
 
 /// Get produce output bonus from Farm level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
@@ -665,9 +637,7 @@ pub fn farm_produce_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Camp Operative Speed Bonus
-// ============================================================
 
 /// Get operative training speed bonus from Camp level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
@@ -681,14 +651,12 @@ pub fn camp_operative_speed_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
-// Stables Travel Reduction
-// ============================================================
+// TransportBay Travel Reduction
 
-/// Get travel time reduction from Stables level (basis points)
+/// Get travel time reduction from TransportBay level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
 pub fn stables_travel_reduction_bps(estate: &EstateAccount) -> u16 {
-    if let Some(stables) = estate.find_building(BuildingType::Stables) {
+    if let Some(stables) = estate.find_building(BuildingType::TransportBay) {
         if stables.is_active() {
             return stables.level as u16 * 50;
         }
@@ -696,9 +664,7 @@ pub fn stables_travel_reduction_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Infirmary Recovery
-// ============================================================
 
 /// Get unit recovery rate from Infirmary level (basis points)
 /// Formula: 0.25% per level (25 bps per level, max 5% at lv20)
@@ -711,15 +677,13 @@ pub fn infirmary_recovery_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
-// Catacombs Dungeon Bonus
-// ============================================================
+// DungeonEntry Dungeon Bonus
 
-/// Get dungeon bonus from Catacombs level (basis points)
+/// Get dungeon bonus from DungeonEntry level (basis points)
 /// Formula: 0.5% per level (50 bps per level)
 #[allow(dead_code)]
 pub fn catacombs_dungeon_bonus_bps(estate: &EstateAccount) -> u16 {
-    if let Some(catacombs) = estate.find_building(BuildingType::Catacombs) {
+    if let Some(catacombs) = estate.find_building(BuildingType::DungeonEntry) {
         if catacombs.is_active() {
             return catacombs.level as u16 * 50;
         }
@@ -727,9 +691,7 @@ pub fn catacombs_dungeon_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Treasury Prize Bonuses
-// ============================================================
 
 /// Get prize bonus from Treasury level (basis points)
 pub fn treasury_prize_bonus_bps(estate: &EstateAccount) -> u16 {
@@ -748,9 +710,7 @@ pub fn treasury_prize_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Citadel Rally Bonuses
-// ============================================================
 
 /// Get rally capacity bonus from Citadel level (basis points)
 pub fn citadel_rally_capacity_bps(estate: &EstateAccount) -> u16 {
@@ -774,9 +734,7 @@ pub fn citadel_rally_damage_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Observatory Loot Bonuses
-// ============================================================
 
 /// Get loot bonus from Observatory level (basis points)
 pub fn observatory_loot_bonus_bps(estate: &EstateAccount) -> u16 {
@@ -795,9 +753,7 @@ pub fn observatory_loot_bonus_bps(estate: &EstateAccount) -> u16 {
     0
 }
 
-// ============================================================
 // Academy Research Speed & Mastery System
-// ============================================================
 
 // φ (golden ratio) constants for integer math
 // φ ≈ 1.618, we use 1618/1000 for precision
@@ -901,23 +857,21 @@ pub fn ascension_mastery_cost(ascension_count: u8) -> u8 {
     }
 }
 
-// ============================================================
 // Estate Loading Helper
-// ============================================================
 
 /// Load estate account from account info and verify ownership
 pub fn load_estate_for_player<'a>(
-    estate_account: &'a AccountInfo,
+    estate_account: &'a AccountView,
     player: &PlayerAccount,
-    program_id: &Pubkey,
+    program_id: &Address,
 ) -> Result<&'a EstateAccount, ProgramError> {
     // Verify estate account is owned by this program
-    if estate_account.owner() != program_id {
+    if unsafe { estate_account.owner() } != program_id {
         return Err(ProgramError::IllegalOwner);
     }
 
     // Load estate data
-    let estate_data = estate_account.try_borrow_data()?;
+    let estate_data = estate_account.try_borrow()?;
     let estate = unsafe { EstateAccount::load(&estate_data) };
 
     // Verify ownership matches player
@@ -933,17 +887,17 @@ pub fn load_estate_for_player<'a>(
 
 /// Load estate account mutably from account info and verify ownership
 pub fn load_estate_for_player_mut<'a>(
-    estate_account: &'a AccountInfo,
+    estate_account: &'a AccountView,
     player: &PlayerAccount,
-    program_id: &Pubkey,
+    program_id: &Address,
 ) -> Result<&'a mut EstateAccount, ProgramError> {
     // Verify estate account is owned by this program
-    if estate_account.owner() != program_id {
+    if unsafe { estate_account.owner() } != program_id {
         return Err(ProgramError::IllegalOwner);
     }
 
     // Load estate data mutably
-    let mut estate_data = estate_account.try_borrow_mut_data()?;
+    let mut estate_data = estate_account.try_borrow_mut()?;
     let estate = unsafe { EstateAccount::load_mut(&mut estate_data) };
 
     // Verify ownership matches player

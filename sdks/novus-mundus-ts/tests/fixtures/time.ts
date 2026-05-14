@@ -8,9 +8,7 @@
 import BN from 'bn.js';
 import { type LiteSVM, Clock } from './svm';
 
-// ============================================================
 // Constants
-// ============================================================
 
 export const SECONDS_PER_MINUTE = 60;
 export const SECONDS_PER_HOUR = 3600;
@@ -20,9 +18,7 @@ export const SECONDS_PER_WEEK = 604800;
 export const SLOTS_PER_SECOND = 2.5; // Approximate on Solana
 export const MS_PER_SLOT = 400;
 
-// ============================================================
 // Clock Utilities
-// ============================================================
 
 /**
  * Get current Unix timestamp from LiteSVM clock.
@@ -95,9 +91,7 @@ export async function advanceTime(
   svm.expireBlockhash();
 }
 
-// ============================================================
 // Time Calculation Helpers
-// ============================================================
 
 /**
  * Calculate timestamp N seconds in the future.
@@ -160,9 +154,7 @@ export function isWithinWindow(
   return timestamp >= windowStart && timestamp < windowEnd;
 }
 
-// ============================================================
 // Game Time Helpers
-// ============================================================
 
 /**
  * Calculate travel arrival time.
@@ -218,9 +210,7 @@ export function hasDailyReset(
   return newDay > oldDay;
 }
 
-// ============================================================
 // Protection & Cooldown Helpers
-// ============================================================
 
 /**
  * Check if new player protection is active.
@@ -258,9 +248,7 @@ export function isOnCooldown(
   return getCooldownRemaining(cooldownEnd, currentTime) > 0;
 }
 
-// ============================================================
 // Time-of-Day Helpers (Game Mechanics)
-// ============================================================
 
 /**
  * Get hour of day (0-23) from timestamp.

@@ -94,9 +94,7 @@ async function speedupTravel(
   }
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Travel System', () => {
   setDefaultTimeout(120_000);
@@ -114,13 +112,11 @@ describe('Travel System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Intracity Travel Tests
-  // ============================================================
 
   describe('Intracity Travel', () => {
     it('should start intracity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -150,7 +146,7 @@ describe('Travel System', () => {
     });
 
     it('should complete intracity travel after speedup', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -201,7 +197,7 @@ describe('Travel System', () => {
     });
 
     it('should reject travel while already traveling', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -254,7 +250,7 @@ describe('Travel System', () => {
     });
 
     it('should reject complete before travel finishes', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -299,13 +295,11 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Intercity Travel Tests
-  // ============================================================
 
   describe('Intercity Travel', () => {
     it('should start intercity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 2;
@@ -341,7 +335,7 @@ describe('Travel System', () => {
     });
 
     it('should complete intercity travel after speedup', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 3;
@@ -399,7 +393,7 @@ describe('Travel System', () => {
     });
 
     it('should cancel intercity travel and reverse direction', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 4;
@@ -520,17 +514,15 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Teleportation Tests
-  // ============================================================
 
   describe('Teleportation', () => {
     it('should teleport between cities instantly', async () => {
       // Teleport requires EXT_INVENTORY (unlocked via estate/shop) + Stables Lv 10
       // Stables is Tier 2 (50k base), upgrade cost scales as base×2.618^level → ~467M NOVI total for Lv 10
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       await factory.fundNovi(player, 500_000_000); // Fund 500M NOVI for expensive upgrades
-      await factory.upgradeAndCompleteBuilding(player, BuildingType.Stables, 10);
+      await factory.upgradeAndCompleteBuilding(player, BuildingType.TransportBay, 10);
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 5;
@@ -592,13 +584,11 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Speedup Tests
-  // ============================================================
 
   describe('Travel Speedup', () => {
     it('should speedup ongoing intercity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 6;
@@ -665,13 +655,11 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Travel State Tests
-  // ============================================================
 
   describe('Travel State', () => {
     it('should track travel departure time', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -711,7 +699,7 @@ describe('Travel System', () => {
     });
 
     it('should store destination info during intracity travel', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -748,14 +736,12 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Intracity Cancel Tests
-  // ============================================================
 
   describe('Intracity Cancel', () => {
     it('should cancel intracity travel and return to origin', async () => {
       // Use city 11 to avoid collision with other tests
-      const player = await factory.createPlayer({ cityId: 11, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 11, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 11;
       const city = CITIES[cityId]!;
@@ -841,13 +827,11 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Travel Restrictions Tests
-  // ============================================================
 
   describe('Travel Restrictions', () => {
     it('should prevent starting second travel while already traveling', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
       const city = CITIES[cityId]!;
@@ -906,8 +890,8 @@ describe('Travel System', () => {
       );
     });
 
-    it('should require Stables building for intercity travel', async () => {
-      // Player without Stables should fail intercity travel
+    it('should require TransportBay building for intercity travel', async () => {
+      // Player without TransportBay should fail intercity travel
       const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
@@ -939,7 +923,7 @@ describe('Travel System', () => {
     });
 
     it('should allow intercity travel with Stables', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const targetCityId = 13; // Use city 13 to avoid CellOccupied collision with other tests using city 2
@@ -980,14 +964,12 @@ describe('Travel System', () => {
     });
   });
 
-  // ============================================================
   // Multi-city Tests
-  // ============================================================
 
   describe('Multi-city Travel', () => {
     it('should travel between cities with start cancel complete start pattern', async () => {
       // Use city 10 as origin to avoid return-location collision with other tests
-      const player = await factory.createPlayer({ cityId: 10, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 10, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 10;
 
@@ -1096,7 +1078,7 @@ describe('Travel System', () => {
     });
 
     it('should arrive in destination city with correct position', async () => {
-      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.TransportBay] });
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 1;
       const destinationCityId = 9;

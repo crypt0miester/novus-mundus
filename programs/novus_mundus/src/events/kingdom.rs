@@ -2,7 +2,7 @@
 //!
 //! Events related to kingdom lifecycle and player membership
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use crate::events::{Event, PackBytes, discriminator, Name32};
 
 /// Emitted when a new kingdom is created
@@ -18,7 +18,7 @@ pub struct KingdomCreated {
     /// Registration deadline (0 = no deadline)
     pub registration_closes_at: i64,
     /// Who created the kingdom (DAO authority)
-    pub created_by: Pubkey,
+    pub created_by: Address,
     /// When the kingdom was created
     pub created_at: i64,
 }
@@ -44,7 +44,7 @@ pub struct KingdomRegistrationClosed {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey for this kingdom
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Total players registered before close
     pub total_players: u64,
     /// When registration was closed
@@ -69,11 +69,11 @@ pub struct PlayerJoinedKingdom {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey for this kingdom
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Player account pubkey
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's wallet owner
-    pub owner: Pubkey,
+    pub owner: Address,
     /// When the player joined
     pub joined_at: i64,
 }
@@ -97,7 +97,7 @@ pub struct KingdomEventCreated {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Event ID within kingdom
     pub event_id: u64,
     /// Event type (0=Combat, 1=Economy, etc.)
@@ -131,7 +131,7 @@ pub struct KingdomArenaSeasonStarted {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Season number
     pub season_id: u32,
     /// When season starts
@@ -162,7 +162,7 @@ pub struct KingdomDungeonLeaderboardCreated {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Dungeon template ID
     pub dungeon_id: u16,
     /// Week number
@@ -190,7 +190,7 @@ pub struct KingdomCitiesInitialized {
     /// Kingdom ID
     pub kingdom_id: u16,
     /// GameEngine pubkey
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Starting city ID of batch
     pub start_city_id: u16,
     /// Number of cities initialized

@@ -287,9 +287,7 @@ fn parse_attributes_data(data: &[u8], offset: usize, buffs: &mut [ParsedBuff; 4]
     buff_count
 }
 
-// ========================================================
 // Full Hero NFT Parsing (NFT-Only System)
-// ========================================================
 
 /// Complete parsed hero data from NFT attributes
 ///

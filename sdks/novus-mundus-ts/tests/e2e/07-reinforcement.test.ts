@@ -55,9 +55,7 @@ import {
 import { log } from '../utils/logger';
 import { advanceTime } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Reinforcement System', () => {
   let ctx: TestContext;
@@ -199,9 +197,7 @@ describe('Reinforcement System', () => {
     await sendTransaction(ctx.svm, new Transaction().add(ix), [sender.keypair]);
   }
 
-  // ============================================================
   // Send Reinforcement Tests
-  // ============================================================
 
   describe('Sending Reinforcements', () => {
     it('should send reinforcement to teammate in same city', async () => {
@@ -421,9 +417,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Arrival Processing Tests
-  // ============================================================
 
   describe('Arrival Processing', () => {
     it('should process same-city reinforcement arrival immediately', async () => {
@@ -502,9 +496,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Recall Tests
-  // ============================================================
 
   describe('Recalling Reinforcements', () => {
     it('should recall reinforcement by sender', async () => {
@@ -569,9 +561,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Relieve Tests
-  // ============================================================
 
   describe('Relieving Reinforcements', () => {
     it('should relieve reinforcement by receiver', async () => {
@@ -666,9 +656,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Return Processing Tests
-  // ============================================================
 
   describe('Return Processing', () => {
     it('should process reinforcement return and restore units', async () => {
@@ -785,9 +773,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Speedup Tests
-  // ============================================================
 
   describe('Reinforcement Speedup', () => {
     it('should speedup cross-city reinforcement travel', async () => {
@@ -882,9 +868,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Full Lifecycle with Speedup Tests
-  // ============================================================
 
   describe('Full Lifecycle', () => {
     it('should complete full send → arrive → relieve → return lifecycle with speedups', async () => {
@@ -1016,9 +1000,7 @@ describe('Reinforcement System', () => {
     });
   });
 
-  // ============================================================
   // Reinforcement State Tests
-  // ============================================================
 
   describe('Reinforcement State', () => {
     it('should track travel timing correctly', async () => {

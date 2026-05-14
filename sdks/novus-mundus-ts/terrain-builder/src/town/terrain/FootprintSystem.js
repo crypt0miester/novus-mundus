@@ -22,9 +22,7 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // GLSL -- Fade pass (full-screen triangle)
-// ---------------------------------------------------------------------------
 
 const FADE_VERTEX = /* glsl */ `
 precision highp float;
@@ -46,9 +44,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GLSL -- Footprint stamp (boot-print: heel ellipse + toe ellipse)
-// ---------------------------------------------------------------------------
 
 const STAMP_VERTEX = /* glsl */ `
 precision highp float;
@@ -132,9 +128,7 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // GLSL -- Track stamp (thick line segment with dual ruts in UV space)
-// ---------------------------------------------------------------------------
 
 const TRACK_VERTEX = /* glsl */ `
 precision highp float;
@@ -207,11 +201,9 @@ void main() {
 }
 `;
 
-// ---------------------------------------------------------------------------
 // Helper: create a full-screen triangle (more efficient than a quad --
 // single triangle with vertices at (-1,-1), (3,-1), (-1,3) covers the
 // entire [-1,1] clip-space region with no overdraw at the diagonal seam)
-// ---------------------------------------------------------------------------
 
 function createFullscreenTriangle() {
   const geometry = new THREE.BufferGeometry();
@@ -230,9 +222,7 @@ function createFullscreenTriangle() {
   return geometry;
 }
 
-// ---------------------------------------------------------------------------
 // FootprintSystem
-// ---------------------------------------------------------------------------
 
 class FootprintSystem {
   /**
@@ -342,9 +332,7 @@ class FootprintSystem {
     this._pendingTracks = [];
   }
 
-  // -----------------------------------------------------------------------
   // Render target creation / management
-  // -----------------------------------------------------------------------
 
   /** @returns {THREE.WebGLRenderTarget} */
   _createTarget() {
@@ -378,9 +366,7 @@ class FootprintSystem {
     renderer.setRenderTarget(savedTarget);
   }
 
-  // -----------------------------------------------------------------------
   // World-space <-> UV-space conversion
-  // -----------------------------------------------------------------------
 
   /**
    * Convert world XZ to footprint UV [0,1].
@@ -406,9 +392,7 @@ class FootprintSystem {
     return d / this._worldSize;
   }
 
-  // -----------------------------------------------------------------------
   // Public: stamp a single footprint
-  // -----------------------------------------------------------------------
 
   /**
    * Queue a single boot-print stamp at world position (x, z).
@@ -421,9 +405,7 @@ class FootprintSystem {
     this._pendingFootprints.push({ x, z, rotation, size });
   }
 
-  // -----------------------------------------------------------------------
   // Public: stamp a footprint pair (left/right foot along heading)
-  // -----------------------------------------------------------------------
 
   /**
    * Stamp a single left or right foot offset from the walk line.
@@ -456,9 +438,7 @@ class FootprintSystem {
     );
   }
 
-  // -----------------------------------------------------------------------
   // Public: stamp a cart wheel track segment
-  // -----------------------------------------------------------------------
 
   /**
    * Queue a wheel-track line segment from (x1,z1) to (x2,z2).
@@ -472,9 +452,7 @@ class FootprintSystem {
     this._pendingTracks.push({ x1, z1, x2, z2, width });
   }
 
-  // -----------------------------------------------------------------------
   // Public: per-frame update (fade + flush queued stamps)
-  // -----------------------------------------------------------------------
 
   /**
    * Call once per frame. Runs the fade pass and flushes all queued stamps
@@ -554,9 +532,7 @@ class FootprintSystem {
     renderer.autoClear = savedAutoClear;
   }
 
-  // -----------------------------------------------------------------------
   // Public: accessors
-  // -----------------------------------------------------------------------
 
   /**
    * Returns the current footprint texture for use in the terrain shader.
@@ -589,9 +565,7 @@ class FootprintSystem {
     };
   }
 
-  // -----------------------------------------------------------------------
   // Public: set stamp texture for more realistic footprints
-  // -----------------------------------------------------------------------
 
   /**
    * Set a texture to modulate the procedural boot-print SDF.
@@ -603,9 +577,7 @@ class FootprintSystem {
     this._stampMaterial.uniforms.uHasStampTex.value = 1.0;
   }
 
-  // -----------------------------------------------------------------------
   // Public: resize the coverage area
-  // -----------------------------------------------------------------------
 
   /**
    * Change the world-space area covered by the footprint map.
@@ -617,9 +589,7 @@ class FootprintSystem {
     this._clearTargets();
   }
 
-  // -----------------------------------------------------------------------
   // Public: cleanup
-  // -----------------------------------------------------------------------
 
   /** Dispose all GPU resources. Call when the system is no longer needed. */
   dispose() {

@@ -38,9 +38,7 @@ import {
   type AssetValues,
 } from '../../src/calculators/resources';
 
-// ============================================================
 // Test Fixtures
-// ============================================================
 
 function createEmptyAssets(): PlayerAssets {
   return {
@@ -97,9 +95,7 @@ function createUnitValues(): AssetValues {
   };
 }
 
-// ============================================================
 // Networth Calculation Tests
-// ============================================================
 
 describe('Networth Calculations', () => {
   describe('calculateNetworth', () => {
@@ -195,9 +191,7 @@ describe('Networth Calculations', () => {
   });
 });
 
-// ============================================================
 // Resource Collection Tests (Time-Based)
-// ============================================================
 
 describe('Resource Collection with Time Bonus', () => {
   // Use a fixed longitude (0 = Greenwich) so time-of-day is predictable
@@ -287,9 +281,7 @@ describe('Resource Collection with Time Bonus', () => {
   });
 });
 
-// ============================================================
 // Resource Consumption Tests
-// ============================================================
 
 describe('Resource Consumption', () => {
   describe('calculateProduceConsumption', () => {
@@ -361,9 +353,7 @@ describe('Resource Consumption', () => {
   });
 });
 
-// ============================================================
 // Estate Production & Storage Tests
-// ============================================================
 
 describe('Estate Resource Generation', () => {
   describe('calculateEstateProduction', () => {
@@ -413,9 +403,7 @@ describe('Estate Resource Generation', () => {
   });
 });
 
-// ============================================================
 // Transfer Calculation Tests
-// ============================================================
 
 describe('Transfer Calculations', () => {
   describe('calculateVaultFee', () => {
@@ -474,9 +462,7 @@ describe('Transfer Calculations', () => {
   });
 });
 
-// ============================================================
 // Coverage Ratio Tests
-// ============================================================
 
 describe('Coverage Ratios', () => {
   describe('calculateWeaponCoverage', () => {
@@ -538,9 +524,7 @@ describe('Coverage Ratios', () => {
   });
 });
 
-// ============================================================
 // Display Helper Tests
-// ============================================================
 
 describe('Display Helpers', () => {
   describe('formatResourceAmount', () => {

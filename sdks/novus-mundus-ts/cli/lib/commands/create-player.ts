@@ -128,9 +128,7 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
   log.info(`Done — ${count} ${config.name} player(s) created.`);
 }
 
-// ============================================================
 // Flag parsing
-// ============================================================
 
 function getFlag(flags: string[], name: string): string | undefined {
   const idx = flags.indexOf(name);
@@ -155,9 +153,7 @@ function detectNextPlayerIndex(): number {
   return indices.length > 0 ? Math.max(...indices) + 1 : 0;
 }
 
-// ============================================================
 // Step 1: Init user + player + research
-// ============================================================
 
 async function initPlayer(
   ctx: CLIContext,
@@ -199,9 +195,7 @@ async function initPlayer(
   log.create('initUser + initPlayer + unlockResearch');
 }
 
-// ============================================================
 // Step 2: Estate + gems
-// ============================================================
 
 async function createEstateAndBuyGems(
   ctx: CLIContext,
@@ -265,9 +259,7 @@ async function buyGems(ctx: CLIContext, keypair: Keypair, purchases: number): Pr
   log.create(`gems (${purchases} purchases)`);
 }
 
-// ============================================================
 // Step 3: Buildings
-// ============================================================
 
 const builtSet = new Map<string, Set<number>>();
 
@@ -385,9 +377,7 @@ async function completeExistingBuilding(
   }
 }
 
-// ============================================================
 // Step 4: Fund NOVI
-// ============================================================
 
 async function fundNovi(
   ctx: CLIContext,
@@ -437,9 +427,7 @@ async function fundNovi(
   log.create(`funded ${amount.toLocaleString()} NOVI`);
 }
 
-// ============================================================
 // Step 5: Hire units
-// ============================================================
 
 async function hireUnits(
   ctx: CLIContext,
@@ -455,9 +443,7 @@ async function hireUnits(
   log.create(`units type=${unitType} (${noviAmount} NOVI)`);
 }
 
-// ============================================================
 // Step 6: Purchase equipment
-// ============================================================
 
 async function purchaseEquipment(
   ctx: CLIContext,
@@ -473,9 +459,7 @@ async function purchaseEquipment(
   log.create(`equipment type=${equipmentType} qty=${quantity}`);
 }
 
-// ============================================================
 // Step 7: Research (start + speedup + complete per level)
-// ============================================================
 
 async function doResearch(
   ctx: CLIContext,
@@ -512,9 +496,7 @@ async function doResearch(
   }
 }
 
-// ============================================================
 // Helpers
-// ============================================================
 
 function extractCustomError(e: any): number | null {
   const txMsg = e?.transactionMessage ?? e?.message ?? '';

@@ -1,6 +1,5 @@
 use pinocchio::{
-    ProgramResult, account_info::AccountInfo, program_error::ProgramError, pubkey::{Pubkey, find_program_address},
-    sysvars::Sysvar,
+    ProgramResult, AccountView, error::ProgramError, Address,
 };
 use pinocchio_system::instructions::CreateAccount;
 use crate::{
@@ -37,11 +36,11 @@ use crate::{
 /// - required_subscription_tier: u8
 /// - prize_type: u8
 /// - prize_amount: u64
-/// - prize_token_mint: Pubkey (optional, only if prize_type=SPLToken)
+/// - prize_token_mint: Address (optional, only if prize_type=SPLToken)
 /// - auto_activate: bool
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -94,7 +93,7 @@ pub fn process(
     let prize_amount = u64::from_le_bytes(instruction_data[offset + 28..offset + 36].try_into().unwrap());
     let mut prize_token_mint_bytes = [0u8; 32];
     prize_token_mint_bytes.copy_from_slice(&instruction_data[offset + 36..offset + 68]);
-    let prize_token_mint = Pubkey::from(prize_token_mint_bytes);
+    let prize_token_mint = Address::from(prize_token_mint_bytes);
     let auto_activate = instruction_data.get(offset + 68).copied().unwrap_or(1) != 0; // default true
 
     // 4. Validate Data
@@ -112,32 +111,34 @@ pub fn process(
     // 5. Derive and Verify Event PDA (includes game_engine for kingdom isolation)
 
     let event_id_bytes = event_id.to_le_bytes();
-    let (expected_event, bump) = find_program_address(
-        &[EVENT_SEED, game_engine_account.key().as_ref(), &event_id_bytes],
+    let (expected_event, bump) = Address::find_program_address(
+        &[EVENT_SEED, game_engine_account.address().as_ref(), &event_id_bytes],
         program_id,
     );
 
-    if event_account.key() != &expected_event {
+    if event_account.address() != &expected_event {
         return Err(GameError::InvalidPDA.into());
     }
 
     // 6. Verify DAO Authority
 
-    let game_engine_data_ref = game_engine_account.try_borrow_data()?;
-    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
-
-    if dao_authority.key() != &game_engine_data.authority {
-        return Err(GameError::DaoRequired.into());
+    // Validate game_engine account (ownership + PDA + discriminator + bump), then
+    // use raw pointer access to avoid holding RefCell borrows across the CreateAccount CPI below.
+    {
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        if dao_authority.address() != &game_engine_data.authority {
+            return Err(GameError::DaoRequired.into());
+        }
     }
+    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     // 7. Create Event Account
 
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .minimum_balance(EventAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(EventAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(EVENT_SEED, game_engine_account.key().as_ref(), &event_id_bytes, &bump_seed);
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let seeds = crate::seeds!(EVENT_SEED, game_engine_account.address(), &event_id_bytes, &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: payer,
@@ -149,11 +150,11 @@ pub fn process(
 
     // 8. Initialize Event Data
 
-    let mut event_data_ref = event_account.try_borrow_mut_data()?;
+    let mut event_data_ref = event_account.try_borrow_mut()?;
     let event_data = unsafe { EventAccount::load_mut(&mut event_data_ref) };
 
     event_data.account_key = crate::state::AccountKey::Event as u8;
-    event_data.game_engine = *game_engine_account.key();
+    event_data.game_engine = *game_engine_account.address();
     event_data.id = event_id;
     event_data.name_len = name_len as u8;
     event_data.name[0..name_len].copy_from_slice(name_bytes);
@@ -184,7 +185,7 @@ pub fn process(
     // Emit KingdomEventCreated event
     emit!(KingdomEventCreated {
         kingdom_id: game_engine_data.kingdom_id,
-        game_engine: *game_engine_account.key(),
+        game_engine: *game_engine_account.address(),
         event_id,
         event_type,
         start_time,

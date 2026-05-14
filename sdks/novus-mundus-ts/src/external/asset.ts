@@ -22,18 +22,14 @@
 
 import { PublicKey } from '@solana/web3.js';
 
-// ============================================================
 // Constants
-// ============================================================
 
 const KEY_ASSET_V1 = 1;
 const KEY_PLUGIN_HEADER_V1 = 3;
 const KEY_PLUGIN_REGISTRY_V1 = 4;
 const PLUGIN_TYPE_ATTRIBUTES = 6;
 
-// ============================================================
 // Types
-// ============================================================
 
 export interface ParsedAssetV1 {
   /** Owner pubkey */
@@ -52,9 +48,7 @@ export interface ParsedAssetV1 {
   attributes: Record<string, string>;
 }
 
-// ============================================================
 // Parsing
-// ============================================================
 
 /**
  * Parse a Metaplex Core AssetV1 account buffer.
@@ -133,9 +127,7 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
   return { owner, updateAuthorityType: uaDisc, updateAuthority, name, uri, seq, attributes };
 }
 
-// ============================================================
 // Internal helpers
-// ============================================================
 
 function findAttributesPlugin(buf: Buffer, registryOffset: number): number {
   let pos = registryOffset + 1; // skip Key byte

@@ -1,5 +1,5 @@
-use pinocchio::pubkey::Pubkey;
-use pinocchio::program_error::ProgramError;
+use pinocchio::Address;
+use pinocchio::error::ProgramError;
 
 use crate::constants::LOCATION_SEED;
 
@@ -30,7 +30,7 @@ pub struct LocationAccount {
     pub account_key: u8,            // 1 byte
 
     /// Kingdom this location belongs to
-    pub game_engine: Pubkey,        // 32 bytes
+    pub game_engine: Address,        // 32 bytes
     /// Grid latitude (coordinate × 10000, rounded)
     pub grid_lat: i32,              // 4 bytes
     /// Grid longitude (coordinate × 10000, rounded)
@@ -42,11 +42,11 @@ pub struct LocationAccount {
     /// Type of occupant (0=none, 1=player, 2=encounter)
     pub occupant_type: u8,          // 1 byte
     /// Entity currently occupying this cell (NULL_OCCUPANT if empty)
-    pub occupant: Pubkey,           // 32 bytes
+    pub occupant: Address,           // 32 bytes
     /// Timestamp when occupant arrived/spawned (or will arrive if traveling)
     pub occupied_since: i64,        // 8 bytes
     /// Who created this location (receives rent refund when closed)
-    pub location_creator: Pubkey,   // 32 bytes
+    pub location_creator: Address,   // 32 bytes
     /// Expected arrival time for traveling occupants (0 if already arrived)
     /// Used for speed-based reservation stealing
     pub reserved_arrival_time: i64, // 8 bytes
@@ -59,7 +59,7 @@ impl LocationAccount {
     pub const GRID_PRECISION: f64 = 10000.0;
 
     /// Null pubkey for empty cells
-    pub const NULL_OCCUPANT: Pubkey = [0u8; 32];
+    pub const NULL_OCCUPANT: Address = Address::new_from_array([0u8; 32]);
 
     pub unsafe fn load(data: &[u8]) -> &Self {
         &*(data.as_ptr() as *const Self)
@@ -101,7 +101,7 @@ impl LocationAccount {
 
     /// Check if this cell is occupied by a specific entity
     #[inline]
-    pub fn is_occupied_by(&self, entity: &Pubkey) -> bool {
+    pub fn is_occupied_by(&self, entity: &Address) -> bool {
         self.is_occupied() && &self.occupant == entity
     }
 
@@ -124,49 +124,50 @@ impl LocationAccount {
 
     /// Derive the PDA for a location cell
     /// Seeds: [LOCATION_SEED, game_engine, city_id, grid_lat, grid_long]
-    pub fn derive_pda(game_engine: &Pubkey, city_id: u16, grid_lat: i32, grid_long: i32) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, city_id: u16, grid_lat: i32, grid_long: i32) -> (Address, u8) {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
 
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Pubkey, city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Address, ProgramError> {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
         let bump_seed = [bump];
 
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify a LocationAccount immutably.
     pub fn load_checked<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
         city_id: u16,
         grid_lat: i32,
         grid_long: i32,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::Location)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -183,23 +184,24 @@ impl LocationAccount {
 
     /// Load and verify a LocationAccount mutably.
     pub fn load_checked_mut<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        game_engine: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        game_engine: &Address,
         city_id: u16,
         grid_lat: i32,
         grid_long: i32,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::Location)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -215,7 +217,7 @@ impl LocationAccount {
     }
 
     /// Check if location belongs to a specific kingdom
-    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+    pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine
     }
 

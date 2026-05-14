@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -33,8 +33,8 @@ use crate::{
 /// - current_slot_index: u16 (2 bytes) - Current leader's slot index
 /// - new_slot_index: u16 (2 bytes) - New leader's slot index
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -71,13 +71,13 @@ pub fn process(
 
     // Current leader: use load_checked_by_key (read-only, has signer)
     let current_leader = PlayerAccount::load_checked_by_key(current_leader_account, program_id)?;
-    if &current_leader.owner != current_leader_owner.key() {
+    if &current_leader.owner != current_leader_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // New leader: manual load (we don't have new leader's wallet key)
     require_owner(new_leader_account, program_id)?;
-    let new_leader_data_ref = new_leader_account.try_borrow_data()?;
+    let new_leader_data_ref = new_leader_account.try_borrow()?;
     let new_leader = unsafe { PlayerAccount::load(&new_leader_data_ref) };
 
     // Team: use load_checked_mut_by_key
@@ -97,24 +97,24 @@ pub fn process(
     // 5. Validate Current Leader
 
     // Is current leader actually the team leader? (leader is stored as player account pubkey)
-    if &team.leader != current_leader_account.key() {
+    if &team.leader != current_leader_account.address() {
         return Err(GameError::NotTeamLeader.into());
     }
 
     // Current leader in the team?
-    if current_leader.team == NULL_PUBKEY || &current_leader.team != team_account.key() {
+    if current_leader.team == NULL_PUBKEY || &current_leader.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Validate New Leader
 
     // New leader must be in the team
-    if new_leader.team == NULL_PUBKEY || &new_leader.team != team_account.key() {
+    if new_leader.team == NULL_PUBKEY || &new_leader.team != team_account.address() {
         return Err(GameError::NewLeaderNotMember.into());
     }
 
     // Cannot transfer to self
-    if current_leader_account.key() == new_leader_account.key() {
+    if current_leader_account.address() == new_leader_account.address() {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -122,18 +122,18 @@ pub fn process(
 
     // 7. Verify and Update Current Leader's Slot
 
-    let (expected_current_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), current_slot_index);
-    if current_leader_slot_account.key() != &expected_current_slot {
+    let (expected_current_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), current_slot_index);
+    if current_leader_slot_account.address() != &expected_current_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(current_leader_slot_account, program_id)?;
 
     {
-        let mut current_slot_data = current_leader_slot_account.try_borrow_mut_data()?;
+        let mut current_slot_data = current_leader_slot_account.try_borrow_mut()?;
         let current_slot = unsafe { TeamMemberSlot::load_mut(&mut current_slot_data) };
 
-        if current_slot.player != *current_leader_account.key() {
+        if current_slot.player != *current_leader_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -148,18 +148,18 @@ pub fn process(
 
     // 8. Verify and Update New Leader's Slot
 
-    let (expected_new_slot, _) = TeamMemberSlot::derive_pda(team_account.key(), new_slot_index);
-    if new_leader_slot_account.key() != &expected_new_slot {
+    let (expected_new_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), new_slot_index);
+    if new_leader_slot_account.address() != &expected_new_slot {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_owner(new_leader_slot_account, program_id)?;
 
     {
-        let mut new_slot_data = new_leader_slot_account.try_borrow_mut_data()?;
+        let mut new_slot_data = new_leader_slot_account.try_borrow_mut()?;
         let new_slot = unsafe { TeamMemberSlot::load_mut(&mut new_slot_data) };
 
-        if new_slot.player != *new_leader_account.key() {
+        if new_slot.player != *new_leader_account.address() {
             return Err(GameError::NotSlotOwner.into());
         }
 
@@ -169,8 +169,8 @@ pub fn process(
 
     // 9. Transfer Leadership in TeamAccount
 
-    let old_leader = *current_leader_account.key();
-    team.leader = *new_leader_account.key();
+    let old_leader = *current_leader_account.address();
+    team.leader = *new_leader_account.address();
 
     // 10. Update Team Activity
 
@@ -180,10 +180,10 @@ pub fn process(
     // 11. Emit Event
 
     emit!(LeadershipTransferred {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
         old_leader,
-        new_leader: *new_leader_account.key(),
+        new_leader: *new_leader_account.address(),
         timestamp: clock.unix_timestamp,
     });
 

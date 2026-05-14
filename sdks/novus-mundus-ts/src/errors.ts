@@ -4,9 +4,7 @@
  * All 466 error codes with human-readable messages.
  */
 
-// ============================================================
 // Error Code Enum
-// ============================================================
 
 export enum GameError {
   // General Errors (6000-6012)
@@ -334,7 +332,7 @@ export enum GameError {
   MarketRequired = 7717,
   AcademyRequired = 7718,
   ArenaRequired = 7719,
-  SanctuaryRequired = 7720,
+  MeditationChamberRequired = 7720,
   ObservatoryRequired = 7721,
   TreasuryRequired = 7722,
   CitadelRequired = 7723,
@@ -352,7 +350,7 @@ export enum GameError {
   CampRequired = 7735,
   MineRequired = 7736,
   FarmRequired = 7737,
-  StablesRequired = 7738,
+  TransportBayRequired = 7738,
   InfirmaryRequired = 7739,
 
   // Staged Tempering Errors (7740-7743)
@@ -428,7 +426,7 @@ export enum GameError {
   EnemyAlreadyDead = 8009,
   NoCheckpoint = 8010,
   DungeonRunExists = 8011,
-  CatacombsRequired = 8012,
+  DungeonEntryRequired = 8012,
   InvalidRelicChoice = 8013,
   NotOnLeaderboard = 8014,
   LeaderboardPrizeAlreadyClaimed = 8015,
@@ -475,9 +473,7 @@ export enum GameError {
   CastleUpgradeNotReady = 8136,
 }
 
-// ============================================================
 // Human-Readable Error Messages
-// ============================================================
 
 export const ERROR_MESSAGES: Record<number, string> = {
   // General Errors
@@ -784,7 +780,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.EnemyAlreadyDead]: 'Enemy is already dead',
   [GameError.NoCheckpoint]: 'No checkpoint available',
   [GameError.DungeonRunExists]: 'Dungeon run already exists',
-  [GameError.CatacombsRequired]: 'Catacombs building required',
+  [GameError.DungeonEntryRequired]: 'DungeonEntry building required',
   [GameError.InvalidRelicChoice]: 'Invalid relic choice',
   [GameError.NotOnLeaderboard]: 'Not on leaderboard',
   [GameError.LeaderboardPrizeAlreadyClaimed]: 'Leaderboard prize already claimed',
@@ -840,7 +836,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.MarketRequired]: 'Market building required',
   [GameError.AcademyRequired]: 'Academy building required',
   [GameError.ArenaRequired]: 'Arena building required',
-  [GameError.SanctuaryRequired]: 'Sanctuary building required',
+  [GameError.MeditationChamberRequired]: 'MeditationChamber building required',
   [GameError.ObservatoryRequired]: 'Observatory building required',
   [GameError.TreasuryRequired]: 'Treasury building required',
   [GameError.CitadelRequired]: 'Citadel building required',
@@ -858,7 +854,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.CampRequired]: 'Camp building required',
   [GameError.MineRequired]: 'Mine building required',
   [GameError.FarmRequired]: 'Farm building required',
-  [GameError.StablesRequired]: 'Stables building required',
+  [GameError.TransportBayRequired]: 'TransportBay building required',
   [GameError.InfirmaryRequired]: 'Infirmary building required',
 
   // Staged Tempering Errors
@@ -878,9 +874,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.HeroCollectionExists]: 'Hero collection already exists',
 };
 
-// ============================================================
 // Error Parsing Functions
-// ============================================================
 
 /**
  * Parse error code to human-readable message

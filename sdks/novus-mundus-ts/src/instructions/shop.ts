@@ -14,8 +14,6 @@ import {
   PublicKey,
   TransactionInstruction,
   SystemProgram,
-  SYSVAR_SLOT_HASHES_PUBKEY,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
@@ -39,9 +37,7 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID } from '../utils/token';
 
-// ============================================================
 // Initialize Config (Admin)
-// ============================================================
 
 export interface InitializeConfigAccounts {
   /** Payer for account creation */
@@ -99,9 +95,7 @@ export function createInitializeConfigInstruction(
   });
 }
 
-// ============================================================
 // Create Item (Admin)
-// ============================================================
 
 export interface CreateItemAccounts {
   /** Payer for account creation */
@@ -189,9 +183,7 @@ export function createCreateItemInstruction(
   });
 }
 
-// ============================================================
 // Update Item (Admin)
-// ============================================================
 
 export interface UpdateItemAccounts {
   /** DAO authority (signer) */
@@ -312,9 +304,7 @@ export function createUpdateItemInstruction(
   });
 }
 
-// ============================================================
 // Purchase Item
-// ============================================================
 
 export interface PurchaseItemAccounts {
   /** Buyer's wallet (signer) */
@@ -403,9 +393,7 @@ export function createPurchaseItemInstruction(
   });
 }
 
-// ============================================================
 // Create Bundle (Admin)
-// ============================================================
 
 export interface CreateBundleItemInput {
   /** Item ID */
@@ -494,9 +482,7 @@ export function createCreateBundleInstruction(
   });
 }
 
-// ============================================================
 // Update Bundle (Admin)
-// ============================================================
 
 export interface UpdateBundleAccounts {
   /** DAO authority (signer) */
@@ -596,9 +582,7 @@ export function createUpdateBundleInstruction(
   });
 }
 
-// ============================================================
 // Purchase Bundle
-// ============================================================
 
 export interface PurchaseBundleAccounts {
   /** Buyer's wallet (signer) */
@@ -664,9 +648,7 @@ export function createPurchaseBundleInstruction(
   });
 }
 
-// ============================================================
 // Create Flash Sale (Admin)
-// ============================================================
 
 export interface CreateFlashSaleAccounts {
   /** Payer for account creation */
@@ -733,9 +715,7 @@ export function createCreateFlashSaleInstruction(
   });
 }
 
-// ============================================================
 // Purchase Flash Sale
-// ============================================================
 
 export interface PurchaseFlashSaleAccounts {
   /** Buyer's wallet (signer) */
@@ -808,9 +788,7 @@ export function createPurchaseFlashSaleInstruction(
   });
 }
 
-// ============================================================
 // Close Sale (Admin)
-// ============================================================
 
 export interface CloseSaleAccounts {
   /** Rent recipient */
@@ -850,9 +828,7 @@ export function createCloseSaleInstruction(
   });
 }
 
-// ============================================================
 // Create Daily Deal (Admin)
-// ============================================================
 
 export interface CreateDailyDealAccounts {
   /** Payer for account creation */
@@ -913,9 +889,7 @@ export function createCreateDailyDealInstruction(
   });
 }
 
-// ============================================================
 // Rotate Daily Deal (Admin)
-// ============================================================
 
 export interface RotateDailyDealAccounts {
   /** DAO authority (signer) */
@@ -966,9 +940,7 @@ export function createRotateDailyDealInstruction(
   });
 }
 
-// ============================================================
 // Create Weekly Sale (Admin)
-// ============================================================
 
 export interface CreateWeeklySaleAccounts {
   /** Payer for account creation */
@@ -1038,9 +1010,7 @@ export function createCreateWeeklySaleInstruction(
   });
 }
 
-// ============================================================
 // Create Seasonal Sale (Admin)
-// ============================================================
 
 export interface CreateSeasonalSaleAccounts {
   /** Payer for account creation */
@@ -1121,9 +1091,7 @@ export function createCreateSeasonalSaleInstruction(
   });
 }
 
-// ============================================================
 // Create DAO Promotion (Admin)
-// ============================================================
 
 export interface CreateDaoPromotionAccounts {
   /** Payer for account creation */
@@ -1207,9 +1175,7 @@ export function createCreateDaoPromotionInstruction(
   });
 }
 
-// ============================================================
 // Update Config (Admin)
-// ============================================================
 
 export interface UpdateConfigAccounts {
   /** DAO authority (signer) */
@@ -1229,11 +1195,20 @@ export interface UpdateConfigParams {
   solConfidenceThresholdBps?: number;
 }
 
+// Rust `update_config` update flag bits.
+const UPDATE_SOL_ORACLE = 32;
+
 /** ~20,000 CU */
 /**
  * Update shop config.
  *
- * Admin-only. Updates oracle configuration.
+ * Admin-only. Currently this builder only sets the SOL oracle config flag
+ * (other flags are pure DAO knobs not yet exposed). Layout matches the
+ * Rust processor: `[update_flags: u8] + [...conditional sections...]`.
+ *
+ * For each non-zero feed pubkey in the SOL oracle section, the
+ * corresponding feed account is appended after the 3 base accounts so
+ * the program can owner-check + layout-validate at DAO config time.
  */
 export function createUpdateConfigInstruction(
   accounts: UpdateConfigAccounts,
@@ -1242,26 +1217,44 @@ export function createUpdateConfigInstruction(
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
 
   // Rust order: dao_authority, game_engine, shop_config
+  // + trailing feed accounts for DAO-time validation when SOL oracle is being updated.
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: shopConfig, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(72);
-  // Write optional pubkeys (32 bytes each, zero if not provided)
-  if (params.solPythFeed) {
-    writer.writePubkey(params.solPythFeed);
-  } else {
-    writer.writeZeros(32);
+  // Decide whether we're touching the SOL oracle section.
+  const setsSolOracle =
+    params.solPythFeed !== undefined ||
+    params.solSwitchboardFeed !== undefined ||
+    params.solMaxStalenessSlots !== undefined ||
+    params.solConfidenceThresholdBps !== undefined;
+
+  let updateFlags = 0;
+  if (setsSolOracle) updateFlags |= UPDATE_SOL_ORACLE;
+
+  // 1 byte flags + 68 bytes SOL oracle section (when flagged).
+  const dataLen = 1 + (setsSolOracle ? 68 : 0);
+  const writer = new BufferWriter(dataLen);
+  writer.writeU8(updateFlags);
+
+  if (setsSolOracle) {
+    if (params.solPythFeed) {
+      writer.writePubkey(params.solPythFeed);
+      keys.push({ pubkey: params.solPythFeed, isSigner: false, isWritable: false });
+    } else {
+      writer.writeZeros(32);
+    }
+    if (params.solSwitchboardFeed) {
+      writer.writePubkey(params.solSwitchboardFeed);
+      keys.push({ pubkey: params.solSwitchboardFeed, isSigner: false, isWritable: false });
+    } else {
+      writer.writeZeros(32);
+    }
+    writer.writeU16(params.solMaxStalenessSlots ?? 0);
+    writer.writeU16(params.solConfidenceThresholdBps ?? 0);
   }
-  if (params.solSwitchboardFeed) {
-    writer.writePubkey(params.solSwitchboardFeed);
-  } else {
-    writer.writeZeros(32);
-  }
-  writer.writeU32(params.solMaxStalenessSlots ?? 0);
-  writer.writeU16(params.solConfidenceThresholdBps ?? 0);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_UPDATE_CONFIG, writer.toBuffer());
 
@@ -1272,9 +1265,7 @@ export function createUpdateConfigInstruction(
   });
 }
 
-// ============================================================
 // Activate Sale (Admin)
-// ============================================================
 
 export interface ActivateSaleAccounts {
   /** DAO authority (signer) */
@@ -1311,9 +1302,7 @@ export function createActivateSaleInstruction(
   });
 }
 
-// ============================================================
 // Create Allowed Token (Admin)
-// ============================================================
 
 export interface CreateAllowedTokenAccounts {
   /** Payer for account creation */
@@ -1327,9 +1316,9 @@ export interface CreateAllowedTokenAccounts {
 }
 
 export interface CreateAllowedTokenParams {
-  /** Pyth price feed for this token */
-  pythFeed: PublicKey;
-  /** Switchboard price feed (optional) */
+  /** Pyth price feed (optional — at least one of pyth/switchboard must be set) */
+  pythFeed?: PublicKey;
+  /** Switchboard price feed (optional — at least one of pyth/switchboard must be set) */
   switchboardFeed?: PublicKey;
   /** Max staleness in slots */
   maxStalenessSlots: number;
@@ -1352,6 +1341,8 @@ export function createCreateAllowedTokenInstruction(
     const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
   // Rust order: authority(signer+payer), game_engine, allowed_token, token_mint, system_program
+  // followed by 0–2 trailing feed accounts (pyth then switchboard) for
+  // DAO-time owner + discriminator validation.
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
@@ -1360,9 +1351,22 @@ export function createCreateAllowedTokenInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
+  // Pyth first, then Switchboard. Each only appears when the
+  // corresponding pubkey is set; the program iterates in this fixed order.
+  if (params.pythFeed) {
+    keys.push({ pubkey: params.pythFeed, isSigner: false, isWritable: false });
+  }
+  if (params.switchboardFeed) {
+    keys.push({ pubkey: params.switchboardFeed, isSigner: false, isWritable: false });
+  }
+
   // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) = 70 bytes
   const writer = new BufferWriter(70);
-  writer.writePubkey(params.pythFeed);
+  if (params.pythFeed) {
+    writer.writePubkey(params.pythFeed);
+  } else {
+    writer.writeZeros(32);
+  }
   if (params.switchboardFeed) {
     writer.writePubkey(params.switchboardFeed);
   } else {
@@ -1381,9 +1385,7 @@ export function createCreateAllowedTokenInstruction(
   });
 }
 
-// ============================================================
 // Update Allowed Token (Admin)
-// ============================================================
 
 export interface UpdateAllowedTokenAccounts {
   /** DAO authority (signer) */
@@ -1431,12 +1433,16 @@ export function createUpdateAllowedTokenInstruction(
   const instructions: TransactionInstruction[] = [];
 
   // Field enum: PythFeed=0, SwitchboardFeed=1, MaxStalenessSlots=2, ConfidenceThresholdBps=3, DiscountBps=4
+  // For PythFeed/SwitchboardFeed updates with a non-zero new pubkey, the
+  // program requires the matching feed account in slot 4 to validate
+  // owner + layout at DAO config time.
   if (params.pythFeed) {
     const writer = new BufferWriter(33);
     writer.writeU8(0); // PythFeed
     writer.writePubkey(params.pythFeed);
     instructions.push(new TransactionInstruction({
-      keys, programId: PROGRAM_ID,
+      keys: [...keys, { pubkey: params.pythFeed, isSigner: false, isWritable: false }],
+      programId: PROGRAM_ID,
       data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
     }));
   }
@@ -1445,7 +1451,8 @@ export function createUpdateAllowedTokenInstruction(
     writer.writeU8(1); // SwitchboardFeed
     writer.writePubkey(params.switchboardFeed);
     instructions.push(new TransactionInstruction({
-      keys, programId: PROGRAM_ID,
+      keys: [...keys, { pubkey: params.switchboardFeed, isSigner: false, isWritable: false }],
+      programId: PROGRAM_ID,
       data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
     }));
   }
@@ -1480,9 +1487,7 @@ export function createUpdateAllowedTokenInstruction(
   return instructions;
 }
 
-// ============================================================
 // Close Allowed Token (Admin)
-// ============================================================
 
 export interface CloseAllowedTokenAccounts {
   /** DAO authority (signer, receives rent) */
@@ -1521,9 +1526,7 @@ export function createCloseAllowedTokenInstruction(
   });
 }
 
-// ============================================================
 // Purchase NOVI
-// ============================================================
 
 export interface PurchaseNoviAccounts {
   /** Buyer's wallet (signer) */
@@ -1540,12 +1543,10 @@ export interface PurchaseNoviAccounts {
 export interface PurchaseNoviOracleAccounts {
   /** ShopConfig account (for SOL oracle config) */
   shopConfig: PublicKey;
-  /** SOL/USD oracle feed (Pyth or Switchboard) */
+  /** SOL/USD oracle feed (Pyth price account or Switchboard pull feed) */
   solOracleFeed: PublicKey;
-  /** NOVI/USD oracle feed (Pyth or Switchboard) */
+  /** NOVI/USD oracle feed (same oracle program as solOracleFeed) */
   noviOracleFeed: PublicKey;
-  /** Switchboard queue account (only for Switchboard, omit for Pyth) */
-  switchboardQueue?: PublicKey;
 }
 
 export interface PurchaseNoviParams {
@@ -1582,18 +1583,10 @@ export interface PurchaseNoviParams {
  * 7. [] token_program - SPL Token program
  * 8. [] system_program - System program
  *
- * # Accounts (Optional - Oracle Pricing with Pyth, +3)
+ * # Accounts (Optional - Oracle Pricing, +3; Pyth or Switchboard)
  * 9. [] shop_config - ShopConfigAccount
- * 10. [] sol_oracle_feed - SOL/USD Pyth price feed
- * 11. [] novi_oracle_feed - NOVI/USD Pyth price feed
- *
- * # Accounts (Optional - Oracle Pricing with Switchboard, +6)
- * 9. [] shop_config - ShopConfigAccount
- * 10. [] sol_oracle_feed - SOL/USD Switchboard quote
- * 11. [] novi_oracle_feed - NOVI/USD Switchboard quote
- * 12. [] switchboard_queue - Switchboard queue account
- * 13. [] slothashes_sysvar - SlotHashes sysvar
- * 14. [] instructions_sysvar - Instructions sysvar
+ * 10. [] sol_oracle_feed - SOL/USD feed (Pyth or Switchboard pull feed)
+ * 11. [] novi_oracle_feed - NOVI/USD feed (same oracle program as sol)
  */
 export function createPurchaseNoviInstruction(
   accounts: PurchaseNoviAccounts,
@@ -1617,7 +1610,6 @@ export function createPurchaseNoviInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // Add optional oracle accounts for price discovery
   if (params.oracleAccounts) {
     const oracle = params.oracleAccounts;
     keys.push(
@@ -1625,15 +1617,6 @@ export function createPurchaseNoviInstruction(
       { pubkey: oracle.solOracleFeed, isSigner: false, isWritable: false },
       { pubkey: oracle.noviOracleFeed, isSigner: false, isWritable: false },
     );
-
-    // Add Switchboard-specific accounts if using Switchboard
-    if (oracle.switchboardQueue) {
-      keys.push(
-        { pubkey: oracle.switchboardQueue, isSigner: false, isWritable: false },
-        { pubkey: SYSVAR_SLOT_HASHES_PUBKEY, isSigner: false, isWritable: false },
-        { pubkey: SYSVAR_INSTRUCTIONS_PUBKEY, isSigner: false, isWritable: false },
-      );
-    }
   }
 
   // Instruction data: package_index (u8) + max_lamports (u64)

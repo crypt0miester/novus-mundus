@@ -18,17 +18,13 @@
 
 import * as THREE from 'three';
 
-// ---------------------------------------------------------------------------
 // Bitmask constants (must match on-chain format: 0b00000DML)
-// ---------------------------------------------------------------------------
 
 const WINDOW_DAWN = 0b001;    // L — Morning
 const WINDOW_MIDDAY = 0b010;  // M — Midday
 const WINDOW_DUSK = 0b100;    // D — Dusk
 
-// ---------------------------------------------------------------------------
 // Rune checkmark billboard
-// ---------------------------------------------------------------------------
 
 const RUNE_VERTEX_SHADER = /* glsl */ `
   uniform float scale;
@@ -72,9 +68,7 @@ const RUNE_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-// ---------------------------------------------------------------------------
 // Effect intensity curves
-// ---------------------------------------------------------------------------
 
 /**
  * Smooth pulse oscillation for active window effects.
@@ -98,9 +92,7 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
-// ---------------------------------------------------------------------------
 // Time-of-day window detection
-// ---------------------------------------------------------------------------
 
 /**
  * Determine which window period the given hour falls into.
@@ -131,9 +123,7 @@ function windowIntensity(hour, start, end) {
   return 1;
 }
 
-// ---------------------------------------------------------------------------
 // Colors
-// ---------------------------------------------------------------------------
 
 const DAWN_COLOR = new THREE.Color(0xffd700);
 const MIDDAY_COLOR = new THREE.Color(0xff8c00);
@@ -142,9 +132,7 @@ const AFTERGLOW_COLOR = new THREE.Color(0xc0c0c0);
 const GOLD_FOUNTAIN_COLOR = new THREE.Color(0xffd700);
 const RUNE_COMPLETE_COLOR = new THREE.Color(0x90ee90);
 
-// ---------------------------------------------------------------------------
 // DailyWindows
-// ---------------------------------------------------------------------------
 
 export class DailyWindows {
   /**
@@ -206,9 +194,7 @@ export class DailyWindows {
     };
   }
 
-  // -----------------------------------------------------------------------
   // Public API
-  // -----------------------------------------------------------------------
 
   /**
    * Set which windows are active / completed.
@@ -351,9 +337,7 @@ export class DailyWindows {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Internal: rune spawning when a window is completed
-  // -----------------------------------------------------------------------
 
   /**
    * Spawn checkmark rune billboards on buildings associated with the given window.

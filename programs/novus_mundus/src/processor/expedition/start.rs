@@ -22,9 +22,9 @@
 //! - Hero provides MiningAffinity or FishingAffinity buff
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -76,8 +76,8 @@ use crate::{
 /// - operative_unit_2: u64 (8 bytes) - Number of tier 2 operatives to send
 /// - operative_unit_3: u64 (8 bytes) - Number of tier 3 operatives to send
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 8 with hero)
@@ -140,11 +140,11 @@ pub fn process(
     }
 
     // 7. Load Player Data
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 8. Verify ownership
-    if !player_data.is_owner(owner.key()) {
+    if !player_data.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -208,12 +208,12 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 14. Validate ExpeditionAccount PDA
-    let (expected_expedition_pda, expedition_bump) = pinocchio::pubkey::find_program_address(
-        &[EXPEDITION_SEED, owner.key().as_ref()],
+    let (expected_expedition_pda, expedition_bump) = pinocchio::Address::find_program_address(
+        &[EXPEDITION_SEED, owner.address().as_ref()],
         program_id,
     );
 
-    if expedition_account.key() != &expected_expedition_pda {
+    if expedition_account.address() != &expected_expedition_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -236,16 +236,15 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 18. Create ExpeditionAccount PDA
-    let rent = pinocchio::sysvars::rent::Rent::get()?;
-    let lamports = rent.minimum_balance(ExpeditionAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(ExpeditionAccount::LEN);
 
     let bump_seed = [expedition_bump];
-    let expedition_seeds = pinocchio::seeds!(
+    let expedition_seeds = crate::seeds!(
         EXPEDITION_SEED,
-        owner.key().as_ref(),
+        owner.address(),
         &bump_seed
     );
-    let expedition_signer = pinocchio::instruction::Signer::from(&expedition_seeds);
+    let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
     CreateAccount {
         from: owner,
@@ -264,13 +263,13 @@ pub fn process(
         require_writable(hero_mint)?;
 
         // Load asset to check current owner
-        let asset_data = hero_mint.try_borrow_data()?;
-        let asset = unsafe { p_core::state::AssetV1::load(&asset_data) };
+        let asset_data = hero_mint.try_borrow()?;
+        let asset = p_core::state::AssetV1::from_borsh(&asset_data);
         let current_owner_key = asset.owner;
         drop(asset_data);
 
         // Determine transfer authority based on current owner
-        if current_owner_key == *owner.key() {
+        if current_owner_key == *owner.address().as_array() {
             // Hero is in owner's wallet - owner signs directly
             p_core::instructions::TransferV1 {
                 asset: hero_mint,
@@ -281,12 +280,12 @@ pub fn process(
                 system_program,
                 log_wrapper: p_core_program,
             }.invoke()?;
-        } else if current_owner_key == *player_account.key() {
+        } else if current_owner_key == *player_account.address().as_array() {
             // Hero is locked in PlayerAccount PDA - need PDA signer
             let player_bump = player_data.bump;
             let player_bump_seed = [player_bump];
-            let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_data.game_engine, owner.key(), &player_bump_seed);
-            let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+            let player_seeds = crate::seeds!(PLAYER_SEED, player_data.game_engine.as_ref(), owner.address(), &player_bump_seed);
+            let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
             p_core::instructions::TransferV1 {
                 asset: hero_mint,
@@ -300,7 +299,7 @@ pub fn process(
 
             // Clear the active_heroes slot since hero is now on expedition
             for i in 0..3 {
-                if player_data.active_heroes[i] == *hero_mint.key() {
+                if player_data.active_heroes[i] == *hero_mint.address() {
                     player_data.active_heroes[i] = NULL_PUBKEY;
                     break;
                 }
@@ -310,17 +309,17 @@ pub fn process(
             return Err(GameError::Unauthorized.into());
         }
 
-        *hero_mint.key()
+        *hero_mint.address()
     } else {
         NULL_PUBKEY
     };
 
     // 20. Initialize ExpeditionAccount with locked operatives and hero
-    let mut expedition_data = expedition_account.try_borrow_mut_data()?;
+    let mut expedition_data = expedition_account.try_borrow_mut()?;
     let expedition = unsafe { ExpeditionAccount::load_mut(&mut expedition_data) };
 
     *expedition = ExpeditionAccount::init(
-        *owner.key(),
+        *owner.address(),
         hero_mint_key,
         expedition_type,
         tier,
@@ -334,7 +333,7 @@ pub fn process(
 
     // 21. Emit event
     emit!(ExpeditionStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         expedition_type,
         node_id: tier,

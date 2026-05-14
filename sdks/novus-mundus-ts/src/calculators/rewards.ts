@@ -11,9 +11,7 @@ import {
 } from './constants';
 import { getActivityMultiplier, TimeOfDay, ActivityType } from './time';
 
-// ============================================================
 // Oscillation Multiplier
-// ============================================================
 
 /**
  * Calculate oscillating multiplier for encounter rewards.
@@ -53,9 +51,7 @@ export function calculateOscillationMultiplier(
   return Math.max(2000, Math.min(20000, multiplier));
 }
 
-// ============================================================
 // Level Scaling
-// ============================================================
 
 /**
  * Calculate level scaling multiplier (exponential growth).
@@ -90,9 +86,7 @@ export function calculateLevelMultiplier(
   return Math.floor(multiplierF * 10000);
 }
 
-// ============================================================
 // Novi Award Determination
-// ============================================================
 
 /**
  * Determine if Novi should be awarded (Deterministic System).
@@ -128,9 +122,7 @@ export function shouldAwardNovi(level: number, rarity: number): boolean {
   return false;
 }
 
-// ============================================================
 // Reward Type Count
-// ============================================================
 
 /**
  * Determine number of reward types based on level (Deterministic).
@@ -167,9 +159,7 @@ export function determineRewardTypes(
   return [awardProduce, awardWeapons, awardVehicles, awardNovi];
 }
 
-// ============================================================
 // Fragment and Gem Awards
-// ============================================================
 
 /**
  * Determine if fragments should be awarded (Deterministic).
@@ -224,9 +214,7 @@ export function shouldAwardGems(
   return false;
 }
 
-// ============================================================
 // Fragment and Gem Amounts
-// ============================================================
 
 /**
  * Calculate fragment amount for loot (Deterministic).
@@ -310,9 +298,7 @@ export function calculateGemAmount(
   return chainBps(base, [levelMultBp, synchronyMult, timeMultBp]);
 }
 
-// ============================================================
 // Encounter Loot Pool
-// ============================================================
 
 /** Loot pool for an encounter */
 export interface EncounterLootPool {
@@ -421,9 +407,7 @@ export function lootPoolHasLoot(pool: EncounterLootPool): boolean {
   );
 }
 
-// ============================================================
 // XP Rewards
-// ============================================================
 
 /** Actions that grant XP */
 export enum XpAction {
@@ -460,9 +444,7 @@ export function calculateXpReward(action: XpAction, value: number): number {
   }
 }
 
-// ============================================================
 // Daily Rewards
-// ============================================================
 
 /** Daily reward amounts */
 export interface DailyRewards {
@@ -493,9 +475,7 @@ export function calculateDailyRewards(
   };
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Calculate local time from timestamp and longitude (0-999 scale) */
 function calculateLocalTimeFromTimestamp(timestamp: number, longitude: number): number {

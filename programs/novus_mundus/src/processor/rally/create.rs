@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -58,7 +58,7 @@ use crate::{
 ///
 /// # Instruction Data (108 bytes)
 /// - rally_id: u64 (8 bytes)
-/// - target: Pubkey (32 bytes)
+/// - target: Address (32 bytes)
 /// - target_type: u8 (1 byte) - 0=player, 1=encounter
 /// - gather_duration: i64 (8 bytes) - seconds before march starts
 /// - target_city: u16 (2 bytes) - city where target is located
@@ -75,8 +75,8 @@ use crate::{
 /// 9. `[]` hero_mint: Hero NFT AssetV1 account
 /// 10. `[]` hero_template: HeroTemplate PDA
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 base, +2 optional for hero commitment)
@@ -114,7 +114,7 @@ pub fn process(
 
     let mut target_bytes = [0u8; 32];
     target_bytes.copy_from_slice(&instruction_data[8..40]);
-    let target = Pubkey::from(target_bytes);
+    let target = Address::from(target_bytes);
 
     let target_type = instruction_data[40];
 
@@ -184,14 +184,14 @@ pub fn process(
 
     // 6a. Check extensions and unlock RALLY before mutable load (avoids borrow conflict with resize)
     {
-        let data = creator_player.try_borrow_data()?;
+        let data = creator_player.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&data) };
         require_extension(player, EXT_TEAM)?;
     }
     unlock_extension_if_eligible(creator_player, creator_owner, EXT_RALLY)?;
 
     // 6b. Load Player and validate (kingdom-scoped)
-    let mut creator = PlayerAccount::load_checked_mut(creator_player, game_engine.key(), creator_owner.key(), program_id)?;
+    let mut creator = PlayerAccount::load_checked_mut(creator_player, game_engine.address(), creator_owner.address(), program_id)?;
 
     // Player must not be traveling
     if creator.is_traveling_any() {
@@ -205,12 +205,12 @@ pub fn process(
     }
 
     // Verify team account matches player's team
-    if team_account.key() != &creator.team {
+    if team_account.address() != &creator.team {
         return Err(GameError::InvalidTeam.into());
     }
 
     // Load team and verify not disbanded (kingdom-scoped)
-    let team = TeamAccount::load_checked(team_account, game_engine.key(), team_id, program_id)?;
+    let team = TeamAccount::load_checked(team_account, game_engine.address(), team_id, program_id)?;
     if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
@@ -338,18 +338,18 @@ pub fn process(
         let hero_template = &accounts[10];
 
         // Verify mint matches player slot
-        if creator.active_heroes[slot] != *hero_mint.key() {
+        if creator.active_heroes[slot] != *hero_mint.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
         // Parse hero NFT
-        let nft_data = hero_mint.try_borrow_data()?;
+        let nft_data = hero_mint.try_borrow()?;
         let parsed_hero = parse_hero_nft(&nft_data)
             .ok_or(GameError::InvalidParameter)?;
         drop(nft_data);
 
         // Load and verify template
-        let template_data = hero_template.try_borrow_data()?;
+        let template_data = hero_template.try_borrow()?;
         let template = unsafe { HeroTemplate::load(&template_data) };
         if parsed_hero.template_id != template.template_id {
             return Err(GameError::InvalidParameter.into());
@@ -365,7 +365,7 @@ pub fn process(
         drop(template_data);
 
         // Clear player slot and location bonus
-        committed_hero = *hero_mint.key();
+        committed_hero = *hero_mint.address();
         creator.active_heroes[slot] = NULL_PUBKEY;
         creator.slot_location_bonus[slot] = 0;
     }
@@ -392,24 +392,22 @@ pub fn process(
     drop(game_engine_data);
 
     // 11. Verify and create Rally PDA (kingdom-scoped)
-    let (expected_rally_pda, rally_bump) = RallyAccount::derive_pda(game_engine.key(), creator_owner.key(), rally_id);
-    if rally_account.key() != &expected_rally_pda {
+    let (expected_rally_pda, rally_bump) = RallyAccount::derive_pda(game_engine.address(), creator_owner.address(), rally_id);
+    if rally_account.address() != &expected_rally_pda {
         return Err(GameError::InvalidPDA.into());
     }
-
-    let rent = Rent::get()?;
-    let rally_lamports = rent.minimum_balance(RallyAccount::LEN);
+    let rally_lamports = crate::utils::rent_exempt_const(RallyAccount::LEN);
 
     let rally_bump_seed = [rally_bump];
     let rally_id_bytes = rally_id.to_le_bytes();
-    let rally_seeds = pinocchio::seeds!(
+    let rally_seeds = crate::seeds!(
         RALLY_SEED,
-        game_engine.key().as_ref(),
-        creator_owner.key().as_ref(),
+        game_engine.address(),
+        creator_owner.address(),
         &rally_id_bytes,
         &rally_bump_seed
     );
-    let rally_signer = pinocchio::instruction::Signer::from(&rally_seeds);
+    let rally_signer = pinocchio::cpi::Signer::from(&rally_seeds);
 
     CreateAccount {
         from: creator_owner,
@@ -421,23 +419,23 @@ pub fn process(
 
     // 12. Verify and create RallyParticipant PDA for leader (kingdom-scoped)
     let (expected_participant_pda, participant_bump) =
-        RallyParticipant::derive_pda(game_engine.key(), creator_owner.key(), rally_id, creator_owner.key());
-    if participant_account.key() != &expected_participant_pda {
+        RallyParticipant::derive_pda(game_engine.address(), creator_owner.address(), rally_id, creator_owner.address());
+    if participant_account.address() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
-    let participant_lamports = rent.minimum_balance(RallyParticipant::LEN);
+    let participant_lamports = crate::utils::rent_exempt_const(RallyParticipant::LEN);
 
     let participant_bump_seed = [participant_bump];
-    let participant_seeds = pinocchio::seeds!(
+    let participant_seeds = crate::seeds!(
         RALLY_PARTICIPANT_SEED,
-        game_engine.key().as_ref(),
-        creator_owner.key().as_ref(),
+        game_engine.address(),
+        creator_owner.address(),
         &rally_id_bytes,
-        creator_owner.key().as_ref(),
+        creator_owner.address(),
         &participant_bump_seed
     );
-    let participant_signer = pinocchio::instruction::Signer::from(&participant_seeds);
+    let participant_signer = pinocchio::cpi::Signer::from(&participant_seeds);
 
     CreateAccount {
         from: creator_owner,
@@ -448,16 +446,16 @@ pub fn process(
     }.invoke_signed(&[participant_signer])?;
 
     // 13. Initialize RallyAccount
-    let mut rally_data_ref = rally_account.try_borrow_mut_data()?;
+    let mut rally_data_ref = rally_account.try_borrow_mut()?;
     let rally = unsafe { RallyAccount::load_mut(&mut rally_data_ref) };
 
     *rally = RallyAccount {
         account_key: crate::state::AccountKey::Rally as u8,
         // Kingdom reference
-        game_engine: *game_engine.key(),
+        game_engine: *game_engine.address(),
 
         id: rally_id,
-        creator: *creator_owner.key(),
+        creator: *creator_owner.address(),
         team: rally_team, // All rallies require team membership
 
         rally_city,
@@ -524,14 +522,14 @@ pub fn process(
     drop(rally_data_ref);
 
     // 14. Initialize RallyParticipant for leader
-    let mut participant_data_ref = participant_account.try_borrow_mut_data()?;
+    let mut participant_data_ref = participant_account.try_borrow_mut()?;
     let participant = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
     *participant = RallyParticipant {
         account_key: crate::state::AccountKey::RallyParticipant as u8,
         rally_id,
-        rally_creator: *creator_owner.key(),
-        participant: *creator_owner.key(),
+        rally_creator: *creator_owner.address(),
+        participant: *creator_owner.address(),
 
         home_city: rally_city, // Leader's home is rally city
         _padding1: [0; 2],
@@ -598,7 +596,7 @@ pub fn process(
         rally: expected_rally_pda,
         team: rally_team,
         team_name: team.name,
-        leader: *creator_player.key(),
+        leader: *creator_player.address(),
         target,
         gather_at: now + duration,
         timestamp: now,

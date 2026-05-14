@@ -15,9 +15,7 @@ import {
 } from '@solana/web3.js';
 import { type CLIContext } from './context';
 
-// ============================================================
 // Account Helpers
-// ============================================================
 
 export async function accountExists(
   connection: Connection,
@@ -27,9 +25,7 @@ export async function accountExists(
   return info !== null;
 }
 
-// ============================================================
 // Transaction Helpers
-// ============================================================
 
 export interface SendOptions {
   retries?: number;
@@ -192,9 +188,7 @@ export async function batchSend<T>(
   return sent;
 }
 
-// ============================================================
 // Create-or-Skip / Create-or-Update patterns
-// ============================================================
 
 export interface PhaseStats {
   created: number;
@@ -294,9 +288,7 @@ export async function updateOnly(
   return true;
 }
 
-// ============================================================
 // Logging
-// ============================================================
 
 export const log = {
   header(title: string) {

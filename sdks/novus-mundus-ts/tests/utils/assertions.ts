@@ -15,9 +15,7 @@ import type {
 } from '../../src/index';
 import { isNullPubkey } from '../../src/utils/deserialize';
 
-// ============================================================
 // BN Assertions
-// ============================================================
 
 /**
  * Assert that a BN equals an expected value.
@@ -112,9 +110,7 @@ export function assertBnNotZero(actual: BN, message?: string): void {
   expect(actual.isZero()).toBe(false);
 }
 
-// ============================================================
 // PublicKey Assertions
-// ============================================================
 
 /**
  * Assert that two PublicKeys are equal.
@@ -141,9 +137,7 @@ export function assertPubkeyNotNull(actual: PublicKey, message?: string): void {
   expect(isNullPubkey(actual)).toBe(false);
 }
 
-// ============================================================
 // Player State Assertions
-// ============================================================
 
 /**
  * Assert player has minimum resources.
@@ -301,9 +295,7 @@ export function assertPlayerSubscription(
   expect(active).toBe(isActive);
 }
 
-// ============================================================
 // Team State Assertions
-// ============================================================
 
 /**
  * Assert team member count.
@@ -372,9 +364,7 @@ export function assertTeamMemberSlot(
   }
 }
 
-// ============================================================
 // Combat Result Assertions
-// ============================================================
 
 export interface CombatResultSnapshot {
   attackerNoviPre: BN;
@@ -409,9 +399,7 @@ export function assertDefenderWon(snapshot: CombatResultSnapshot): void {
   // Defender should not have lost significant resources
 }
 
-// ============================================================
 // Resource Change Assertions
-// ============================================================
 
 /**
  * Assert resources changed by expected amounts.
@@ -449,9 +437,7 @@ export function assertResourceUnchanged(pre: BN, post: BN): void {
   expect(post.eq(pre)).toBe(true);
 }
 
-// ============================================================
 // Transaction Assertions
-// ============================================================
 
 /**
  * Assert transaction succeeded.

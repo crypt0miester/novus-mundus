@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -11,7 +11,7 @@ use crate::{
     state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_owner},
     emit,
     events::estate::BuildingUpgradeStarted,
 };
@@ -32,8 +32,8 @@ use crate::{
 /// # Instruction Data
 /// - building_type: u8 (1 byte) - BuildingType enum
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -54,6 +54,9 @@ pub fn process(
     require_writable(estate_account)?;
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
+    // Program-ownership gate (precedes the unsafe ::load calls below).
+    require_owner(player_account, program_id)?;
+    require_owner(estate_account, program_id)?;
 
     // 3. Parse Instruction Data
     if instruction_data.is_empty() {
@@ -64,17 +67,17 @@ pub fn process(
 
     // 4. Phase 1: Validate and capture values (scoped borrow, dropped before CPI)
     let (upgrade_cost, player_ge, player_bump, player_name) = {
-        let player_data_ref = player_account.try_borrow_data()?;
+        let player_data_ref = player_account.try_borrow()?;
         let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
-        let estate_data_ref = estate_account.try_borrow_data()?;
+        let estate_data_ref = estate_account.try_borrow()?;
         let estate_data = unsafe { EstateAccount::load(&estate_data_ref) };
 
         // 5. Verify ownership
-        if &player_data.owner != owner.key() {
+        if &player_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
-        if &estate_data.owner != owner.key() {
+        if &estate_data.owner != owner.address() {
             return Err(GameError::Unauthorized.into());
         }
 
@@ -106,8 +109,8 @@ pub fn process(
 
     // 11. Burn NOVI tokens (CPI - no active borrows)
     let bump_seed = [player_bump];
-    let player_seeds = pinocchio::seeds!(PLAYER_SEED, &player_ge, owner.key().as_ref(), &bump_seed);
-    let player_signer = pinocchio::instruction::Signer::from(&player_seeds);
+    let player_seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), owner.address(), &bump_seed);
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
         player_token_account,
@@ -118,11 +121,11 @@ pub fn process(
     )?;
 
     // 12. Phase 2: Update state after successful CPI (mutable borrow)
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
     player_data.locked_novi = player_data.locked_novi.saturating_sub(upgrade_cost);
 
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let mut estate_data_ref = estate_account.try_borrow_mut()?;
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
     // 13. Find building again for mutable update
@@ -149,7 +152,7 @@ pub fn process(
 
     // 17. Emit BuildingUpgradeStarted event
     emit!(BuildingUpgradeStarted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name,
         building_type: building_type as u8,
         from_level,

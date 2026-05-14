@@ -26,9 +26,7 @@ import { writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { MODEL_DEFINITIONS, type ModelDefinition, type ModelCategory } from './prompts';
 
-// ---------------------------------------------------------------------------
 // CLI arg parsing
-// ---------------------------------------------------------------------------
 
 interface CliOptions {
   category?: ModelCategory;
@@ -97,9 +95,7 @@ function parseArgs(): CliOptions {
   return opts;
 }
 
-// ---------------------------------------------------------------------------
 // Paths
-// ---------------------------------------------------------------------------
 
 const SDK_ROOT = resolve(import.meta.dir, '../..');
 const OUTPUT_ROOT = join(SDK_ROOT, 'assets', 'imagegen');
@@ -108,9 +104,7 @@ function modelOutputDir(def: ModelDefinition): string {
   return join(OUTPUT_ROOT, def.category, def.id);
 }
 
-// ---------------------------------------------------------------------------
 // Resume: count existing PNGs
-// ---------------------------------------------------------------------------
 
 function countExistingImages(def: ModelDefinition): number {
   const dir = modelOutputDir(def);
@@ -118,9 +112,7 @@ function countExistingImages(def: ModelDefinition): number {
   return readdirSync(dir).filter((f) => f.endsWith('.png')).length;
 }
 
-// ---------------------------------------------------------------------------
 // Filter models
-// ---------------------------------------------------------------------------
 
 function filterModels(opts: CliOptions): ModelDefinition[] {
   let models = MODEL_DEFINITIONS;
@@ -138,9 +130,7 @@ function filterModels(opts: CliOptions): ModelDefinition[] {
   return models;
 }
 
-// ---------------------------------------------------------------------------
 // Status display
-// ---------------------------------------------------------------------------
 
 function showStatus(models: ModelDefinition[], targetCount: number) {
   const categories = ['buildings', 'heroes', 'npcs', 'animals', 'props', 'mountains', 'estate'] as const;
@@ -178,9 +168,7 @@ function showStatus(models: ModelDefinition[], targetCount: number) {
   console.log(`\n  TOTAL: ${totalDone}/${totalModels} models complete (${totalImages} images)\n`);
 }
 
-// ---------------------------------------------------------------------------
 // Dry run display
-// ---------------------------------------------------------------------------
 
 function showDryRun(queue: ModelDefinition[], targetCount: number, apiModel: string) {
   console.log(`\n  DRY RUN — would generate images with model: ${apiModel}`);
@@ -210,9 +198,7 @@ function showDryRun(queue: ModelDefinition[], targetCount: number, apiModel: str
   console.log(`  Estimated time: ~${estMinutes} minutes\n`);
 }
 
-// ---------------------------------------------------------------------------
 // API: generate image
-// ---------------------------------------------------------------------------
 
 async function generateImage(
   ai: InstanceType<typeof GoogleGenAI>,
@@ -241,9 +227,7 @@ async function generateImage(
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Quota detection & details
-// ---------------------------------------------------------------------------
 
 /**
  * Parsed quota details from a 429 error response.
@@ -414,9 +398,7 @@ async function checkQuota(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Retry with backoff
-// ---------------------------------------------------------------------------
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -459,9 +441,7 @@ async function generateWithRetry(
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
 
 async function main() {
   const opts = parseArgs();

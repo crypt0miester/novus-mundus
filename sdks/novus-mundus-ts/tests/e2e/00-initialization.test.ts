@@ -32,9 +32,7 @@ describe('Initialization', () => {
     await afterAllTests();
   });
 
-  // ============================================================
   // GameEngine Init Verification
-  // ============================================================
 
   describe('GameEngine defaults', () => {
     it('should have initialized GameEngine with default configs', async () => {
@@ -121,9 +119,7 @@ describe('Initialization', () => {
     });
   });
 
-  // ============================================================
   // Update Game Config
-  // ============================================================
 
   describe('update_game_config', () => {
     it('should update ArenaConfig via DAO authority', async () => {

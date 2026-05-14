@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -27,8 +27,8 @@ use crate::{
 /// - amount: u64 (8 bytes) - Cash to deposit
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Instruction Data
@@ -63,7 +63,7 @@ pub fn process(
     // 4. Load Accounts (using by_key for kingdom scoping)
 
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    if &player.owner != owner.key() {
+    if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
     let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
@@ -90,7 +90,7 @@ pub fn process(
         return Err(GameError::NotInTeam.into());
     }
 
-    if &player.team != team_account.key() {
+    if &player.team != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -114,9 +114,9 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryDeposit {
-        team: *team_account.key(),
+        team: *team_account.address(),
         team_name: team.name,
-        depositor: *player_account.key(),
+        depositor: *player_account.address(),
         amount,
         new_balance: team.treasury,
         timestamp: now,

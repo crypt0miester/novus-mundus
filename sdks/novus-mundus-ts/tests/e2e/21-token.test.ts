@@ -53,9 +53,7 @@ import {
   getCurrentTimestamp,
 } from '../fixtures/time';
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Token Operations', () => {
   let ctx: TestContext;
@@ -71,9 +69,7 @@ describe('Token Operations', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Reserved to Locked Tests
-  // ============================================================
 
   describe('Reserved to Locked Conversion', () => {
     it('should reject conversion when no reserved NOVI', async () => {
@@ -158,9 +154,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Withdraw Reserved Tests
-  // ============================================================
 
   describe('Withdrawing Reserved Tokens', () => {
     it('should reject withdrawal when no reserved NOVI', async () => {
@@ -247,9 +241,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Update Locked NOVI Tests
-  // ============================================================
 
   describe('Updating Locked NOVI', () => {
     it('should update locked NOVI balance', async () => {
@@ -307,9 +299,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Balance Tests
-  // ============================================================
 
   describe('Token Balances', () => {
     it('should track reserved balance', async () => {
@@ -353,9 +343,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Earning Tests
-  // ============================================================
 
   describe('Token Earning', () => {
     it('should earn NOVI from combat victories', async () => {
@@ -400,9 +388,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Spending Tests
-  // ============================================================
 
   describe('Token Spending', () => {
     it('should spend NOVI on shop purchases', async () => {
@@ -446,9 +432,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Locked Token Mechanics Tests
-  // ============================================================
 
   describe('Locked Token Mechanics', () => {
     it('should lock tokens on hero mint', async () => {
@@ -487,9 +471,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Reserved Token Mechanics Tests
-  // ============================================================
 
   describe('Reserved Token Mechanics', () => {
     it('should reserve tokens from shop purchases', async () => {
@@ -517,9 +499,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Transfer Tests
-  // ============================================================
 
   describe('Token Transfers', () => {
     it('should reject transfer without team membership', async () => {
@@ -602,9 +582,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Vault Tests
-  // ============================================================
 
   describe('Token Vaults', () => {
     it('should reject deposit without sufficient balance', async () => {
@@ -662,9 +640,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Decimal Tests
-  // ============================================================
 
   describe('Token Decimals', () => {
     it('should handle decimal precision', async () => {
@@ -702,9 +678,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Economics Tests
-  // ============================================================
 
   describe('Token Economics', () => {
     it('should track total supply', async () => {
@@ -741,9 +715,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Security Tests
-  // ============================================================
 
   describe('Token Security', () => {
     it('should prevent unauthorized minting', async () => {
@@ -780,9 +752,7 @@ describe('Token Operations', () => {
     });
   });
 
-  // ============================================================
   // Token Integration Tests
-  // ============================================================
 
   describe('Token Integration', () => {
     it('should work with Solana SPL tokens', async () => {

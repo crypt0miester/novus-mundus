@@ -7,9 +7,9 @@
 //! accounts and returns rent to original members.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -19,7 +19,7 @@ use crate::{
     error::GameError,
     events::CastleTransitionProgress,
     state::{
-        CastleAccount, TeamCastleRewardAccount,
+        CastleAccount, PlayerAccount, TeamCastleRewardAccount,
     },
     constants::CASTLE_STATUS_TRANSITIONING,
     helpers::close_account,
@@ -41,8 +41,8 @@ const PHASE_REWARDS: u8 = 2;
 /// 4. [writable] Rent recipient (member wallet)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -68,22 +68,37 @@ pub fn process(
     require_owner(reward_account, program_id)?;
 
     let (expected_reward_pda, _) = TeamCastleRewardAccount::derive_pda(
-        castle_account.key(),
-        member_account.key(),
+        castle_account.address(),
+        member_account.address(),
     );
-    if reward_account.key() != &expected_reward_pda {
+    if reward_account.address() != &expected_reward_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     require_initialized(reward_account).map_err(|_| GameError::NoRewardsToClaim)?;
 
     // Verify reward account belongs to this castle
-    let reward_data = reward_account.try_borrow_data()?;
+    let reward_data = reward_account.try_borrow()?;
     let reward = unsafe { TeamCastleRewardAccount::load(&reward_data) };
 
-    if reward.castle != *castle_account.key() {
+    if reward.castle != *castle_account.address() {
         return Err(GameError::InvalidPDA.into());
     }
+
+    // Rent recipient must be the member's wallet (the player who
+    // originally paid the rent for this reward tracking account). The
+    // reward.member field stores the player PDA; load the player to obtain
+    // their wallet (owner) and validate.
+    if reward.member != *member_account.address() {
+        return Err(GameError::InvalidAccount.into());
+    }
+    require_owner(member_account, program_id)?;
+    let member_data = member_account.try_borrow()?;
+    let member = unsafe { PlayerAccount::load(&member_data) };
+    if rent_recipient.address() != &member.owner {
+        return Err(GameError::InvalidAccount.into());
+    }
+    drop(member_data);
 
     // Update castle transition progress
     castle.transition_rewards_cleaned = castle.transition_rewards_cleaned.saturating_add(1);
@@ -105,7 +120,7 @@ pub fn process(
 
     // Emit event
     emit!(CastleTransitionProgress {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         phase: PHASE_REWARDS,
         cleaned_count,
         total_count,

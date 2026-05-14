@@ -9,9 +9,7 @@
  * Layer 3: Point sources (3D-positioned via PannerNode, priority-culled)
  */
 
-// ---------------------------------------------------------------------------
 // Constants
-// ---------------------------------------------------------------------------
 
 const MAX_ACTIVE_SOURCES = 3;
 const PRIORITY_UPDATE_INTERVAL = 100; // ms between priority re-sorts
@@ -37,9 +35,7 @@ const SOUND_TYPES = [
   'levelup', 'wind_chime', 'crowd_cheer', 'fire_crackle',
 ];
 
-// ---------------------------------------------------------------------------
 // Procedural sound synthesis helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Fill a Float32Array with white noise samples in [-1, 1].
@@ -110,10 +106,8 @@ function distSq3(ax, ay, az, bx, by, bz) {
   return dx * dx + dy * dy + dz * dz;
 }
 
-// ---------------------------------------------------------------------------
 // Procedural sound generators — each returns a builder function that creates
 // the Web Audio subgraph and returns { node, stop(), playing }
-// ---------------------------------------------------------------------------
 
 /**
  * Build a filtered-noise wind layer.
@@ -1474,9 +1468,7 @@ function buildThunderGraph(ctx, noiseBuffer, destination, volume = 0.20) {
   };
 }
 
-// ---------------------------------------------------------------------------
 // One-shot sound builders (create, play, auto-cleanup)
-// ---------------------------------------------------------------------------
 
 /**
  * Play a one-shot fountain splash at a position.
@@ -1752,9 +1744,7 @@ function playLevelUpOneShot(ctx, destination, panner) {
   }, (duration + 0.5) * 1000 + 100);
 }
 
-// ---------------------------------------------------------------------------
 // AudioManager class
-// ---------------------------------------------------------------------------
 
 export class AudioManager {
   /**
@@ -1814,9 +1804,7 @@ export class AudioManager {
     this._fades = [];
   }
 
-  // -----------------------------------------------------------------------
   // Initialization
-  // -----------------------------------------------------------------------
 
   /**
    * Initialize the audio system. Must be called after a user gesture to
@@ -1874,9 +1862,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Lifecycle
-  // -----------------------------------------------------------------------
 
   /**
    * Enable or disable all audio output.
@@ -1922,9 +1908,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Layer 1: Base Ambience
-  // -----------------------------------------------------------------------
 
   /**
    * Set the current time of day and crossfade between day/night ambience.
@@ -1936,9 +1920,7 @@ export class AudioManager {
     this._applyTimeOfDay(this._currentHour);
   }
 
-  // -----------------------------------------------------------------------
   // Layer 2: Zone Ambience
-  // -----------------------------------------------------------------------
 
   /**
    * Crossfade to a new zone ambience. Fades out the old zone and fades in
@@ -2006,9 +1988,7 @@ export class AudioManager {
     this._activeZone = null;
   }
 
-  // -----------------------------------------------------------------------
   // Layer 3: Point Sources
-  // -----------------------------------------------------------------------
 
   /**
    * Register a 3D point source in the scene.
@@ -2147,9 +2127,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Weather
-  // -----------------------------------------------------------------------
 
   /**
    * Set weather type. Adds or removes rain/thunder ambient layers.
@@ -2194,9 +2172,7 @@ export class AudioManager {
     this._smoothParam(weatherGain.gain, 1.0, 2.0);
   }
 
-  // -----------------------------------------------------------------------
   // One-shot Sounds
-  // -----------------------------------------------------------------------
 
   /**
    * Play a one-shot (non-looping) sound, optionally at a 3D position.
@@ -2248,9 +2224,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Per-frame Update
-  // -----------------------------------------------------------------------
 
   /**
    * Call once per frame (or at your preferred update rate).
@@ -2276,9 +2250,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Dispose
-  // -----------------------------------------------------------------------
 
   /**
    * Dispose all audio resources and close the AudioContext.
@@ -2332,9 +2304,7 @@ export class AudioManager {
     this._initialized = false;
   }
 
-  // -----------------------------------------------------------------------
   // Private: Build Layer 1 ambience
-  // -----------------------------------------------------------------------
 
   _buildDayAmbience() {
     const ctx = this._ctx;
@@ -2441,9 +2411,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Private: Build Layer 2 zone ambience
-  // -----------------------------------------------------------------------
 
   _buildZone(zoneName) {
     if (this._zones.has(zoneName)) return;
@@ -2530,9 +2498,7 @@ export class AudioManager {
     zone.gain.disconnect();
   }
 
-  // -----------------------------------------------------------------------
   // Private: Build Layer 3 point source graphs
-  // -----------------------------------------------------------------------
 
   _buildPointSourceGraph(soundType, destination, loop) {
     const ctx = this._ctx;
@@ -2783,9 +2749,7 @@ export class AudioManager {
     }
   }
 
-  // -----------------------------------------------------------------------
   // Private: Point source priority system
-  // -----------------------------------------------------------------------
 
   _updateSourcePriority() {
     if (this._sources.size === 0) return;
@@ -2837,9 +2801,7 @@ export class AudioManager {
     this._activeSources = newActive;
   }
 
-  // -----------------------------------------------------------------------
   // Private: Weather layer disposal
-  // -----------------------------------------------------------------------
 
   _disposeWeatherLayers() {
     if (!this._weatherLayers) return;
@@ -2851,9 +2813,7 @@ export class AudioManager {
     this._weatherLayers = null;
   }
 
-  // -----------------------------------------------------------------------
   // Private: Smooth parameter transitions
-  // -----------------------------------------------------------------------
 
   /**
    * Smoothly ramp an AudioParam to a target value over the given duration.
@@ -2872,19 +2832,15 @@ export class AudioManager {
     param.linearRampToValueAtTime(targetValue, now + duration);
   }
 
-  // -----------------------------------------------------------------------
   // Private: Fade processing (unused if _smoothParam handles everything,
   // but kept for manual fade logic if needed)
-  // -----------------------------------------------------------------------
 
   _processFades(deltaTime) {
     // Currently all fades use Web Audio scheduling via _smoothParam.
     // This method is a hook for any future manual fade processing.
   }
 
-  // -----------------------------------------------------------------------
   // Private: Generic one-shot for unknown types
-  // -----------------------------------------------------------------------
 
   _playGenericOneShot(destination, panner) {
     const ctx = this._ctx;

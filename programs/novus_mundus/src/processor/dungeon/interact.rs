@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -16,7 +16,7 @@ use crate::{
         DUNGEON_REST_HEAL_PERCENT,
     },
     helpers::dungeon::{
-        calculate_room_xp, calculate_total_unit_hp, calculate_floor_novi, has_golden_touch,
+        calculate_room_xp, calculate_total_unit_hp, calculate_floor_novi, has_double_novi_relic,
         // Time of day
         TimePeriod,
         calculate_treasure_gems_with_time,
@@ -25,7 +25,7 @@ use crate::{
         apply_scout_loot_bonus,
         // Loot system
         calculate_loot_with_bonuses,
-        has_treasure_sense,
+        has_guaranteed_rare_drop_relic,
     },
     logic::safe_math::apply_bp,
     validation::{require_signer, require_writable},
@@ -53,8 +53,8 @@ use crate::{
 /// - camp_bonus_bps: u16 (only for camp rooms, validated by game_authority signature)
 /// - next_room_type: u8 (for auto-advance)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -77,7 +77,7 @@ pub fn process(
 
     // 3. Validate game_authority against GameEngine (kingdom-scoped)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    if game_authority.key() != &game_engine.game_authority {
+    if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
     drop(game_engine);
@@ -95,13 +95,13 @@ pub fn process(
     };
 
     // 5. Load player using load_checked (kingdom-scoped)
-    let player = PlayerAccount::load_checked(player_account, game_engine_account.key(), owner.key(), program_id)?;
+    let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), owner.address(), program_id)?;
 
     // 6. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;
+    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
-    if &run.player != player_account.key() {
+    if &run.player != player_account.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -136,7 +136,7 @@ pub fn process(
             run.status = DungeonStatus::Failed as u8;
 
             emit!(DungeonFailed {
-                player: *player_account.key(),
+                player: *player_account.address(),
                 player_name: player.name,
                 dungeon_id: run.dungeon_id,
                 floor: run.current_floor,
@@ -170,7 +170,7 @@ pub fn process(
             let treasure_bonus_gems = apply_bp(base_gems, DUNGEON_TREASURE_LOOT_MULTIPLIER_BPS as u64)
                 .unwrap_or(base_gems);
 
-            // Apply relic + synergy loot bonuses (Fortune's Favor, LOOT synergy)
+            // Apply relic + synergy loot bonuses (loot relic id 6 + LOOT synergy)
             let loot_bonus_gems = calculate_loot_with_bonuses(treasure_bonus_gems, &run, 0);
 
             // Apply Dusk bonus (2x gems in treasure rooms)
@@ -179,8 +179,8 @@ pub fn process(
             // Apply Scout loot bonus (+15%)
             let scout_bonus_gems = apply_scout_loot_bonus(time_bonus_gems, hero_spec);
 
-            // Treasure Sense relic: guaranteed rare find (+50% bonus)
-            _gems_gained = if has_treasure_sense(&run) {
+            // Guaranteed-rare-drop relic (id 10): +50% gems
+            _gems_gained = if has_guaranteed_rare_drop_relic(&run) {
                 apply_bp(scout_bonus_gems, 15000u64).unwrap_or(scout_bonus_gems) // +50%
             } else {
                 scout_bonus_gems
@@ -196,8 +196,8 @@ pub fn process(
             // Apply Scout loot bonus to materials too
             let scout_bonus_materials = apply_scout_loot_bonus(loot_bonus_materials, hero_spec);
 
-            // Treasure Sense bonus for materials too
-            let materials = if has_treasure_sense(&run) {
+            // Guaranteed-rare-drop relic also boosts materials
+            let materials = if has_guaranteed_rare_drop_relic(&run) {
                 apply_bp(scout_bonus_materials, 15000u64).unwrap_or(scout_bonus_materials) // +50%
             } else {
                 scout_bonus_materials
@@ -234,7 +234,7 @@ pub fn process(
     run.rooms_cleared = run.rooms_cleared.saturating_add(1);
 
     emit!(DungeonRoomCleared {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player.name,
         dungeon_id: run.dungeon_id,
         floor: run.current_floor,
@@ -252,7 +252,7 @@ pub fn process(
         let floor_novi = calculate_floor_novi(
             template.base_novi_per_floor,
             run.current_floor,
-            has_golden_touch(&run),
+            has_double_novi_relic(&run),
         );
         run.pending_novi = run.pending_novi.saturating_add(floor_novi);
 
@@ -265,7 +265,7 @@ pub fn process(
         }
 
         emit!(DungeonFloorCompleted {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player.name,
             dungeon_id: run.dungeon_id,
             floor: run.current_floor,

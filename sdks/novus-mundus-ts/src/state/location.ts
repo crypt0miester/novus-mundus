@@ -12,17 +12,13 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 
-// ============================================================
 // Occupant Type Constants
-// ============================================================
 
 export const OCCUPANT_NONE = 0;
 export const OCCUPANT_PLAYER = 1;
 export const OCCUPANT_ENCOUNTER = 2;
 
-// ============================================================
 // Location Account Interface
-// ============================================================
 
 export interface LocationAccount {
   gameEngine: PublicKey;
@@ -40,9 +36,7 @@ export interface LocationAccount {
 /** LocationAccount size in bytes (repr(C) layout with alignment padding) */
 export const LOCATION_ACCOUNT_SIZE = 128;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize LocationAccount from raw bytes */
 export function deserializeLocation(data: Uint8Array | Buffer): LocationAccount {
@@ -83,9 +77,7 @@ export function parseLocation(accountInfo: AccountInfo<Buffer>): LocationAccount
   return deserializeLocation(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if cell is currently occupied (by anyone) */
 export function isLocationOccupied(location: LocationAccount): boolean {

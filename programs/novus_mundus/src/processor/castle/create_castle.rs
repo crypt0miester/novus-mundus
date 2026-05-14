@@ -6,11 +6,11 @@
 //! Only callable by DAO authority.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{clock::Clock, Sysvar},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -19,7 +19,7 @@ use crate::{
     error::GameError,
     events::CastleCreated,
     state::{CastleAccount, GameEngine},
-    validation::{require_empty, require_owner},
+    validation::require_empty,
     constants::{
         CASTLE_SEED, CASTLE_STATUS_VACANT,
         CASTLE_TIER_MULTIPLIER_BPS,
@@ -50,8 +50,8 @@ use crate::{
 /// 4. [] Rent sysvar
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -71,12 +71,12 @@ pub fn process(
     }
 
     // Load game engine to verify DAO authority
-    require_owner(game_engine_account, program_id)?;
-    let game_engine_data = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data) };
-
-    if dao_authority.key() != &game_engine.authority {
-        return Err(GameError::DaoRequired.into());
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    {
+        let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        if dao_authority.address() != &game_engine.authority {
+            return Err(GameError::DaoRequired.into());
+        }
     }
 
     // Parse instruction data (discriminator already stripped by entry point)
@@ -119,9 +119,9 @@ pub fn process(
     // Derive PDA (kingdom-scoped)
     let city_id_bytes = city_id.to_le_bytes();
     let castle_id_bytes = castle_id.to_le_bytes();
-    let (expected_pda, bump) = CastleAccount::derive_pda(game_engine_account.key(), city_id, castle_id);
+    let (expected_pda, bump) = CastleAccount::derive_pda(game_engine_account.address(), city_id, castle_id);
 
-    if castle_account.key() != &expected_pda {
+    if castle_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -129,18 +129,17 @@ pub fn process(
     require_empty(castle_account).map_err(|_| GameError::CastleAlreadyExists)?;
 
     // Create PDA account
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(CastleAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(CastleAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         CASTLE_SEED,
-        game_engine_account.key().as_ref(),
+        game_engine_account.address(),
         &city_id_bytes,
         &castle_id_bytes,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: dao_authority,
@@ -155,12 +154,12 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Initialize castle data
-    let mut castle_data = castle_account.try_borrow_mut_data()?;
+    let mut castle_data = castle_account.try_borrow_mut()?;
     let castle = unsafe { CastleAccount::load_mut(&mut castle_data) };
 
     // Identity
     castle.account_key = crate::state::AccountKey::Castle as u8;
-    castle.game_engine = *game_engine_account.key();
+    castle.game_engine = *game_engine_account.address();
     castle.castle_id = castle_id;
     castle.city_id = city_id;
     castle.tier = tier;
@@ -176,8 +175,8 @@ pub fn process(
     castle.longitude = longitude;
 
     // Ruler info (vacant)
-    castle.king = [0u8; 32];
-    castle.team = [0u8; 32];
+    castle.king = pinocchio::Address::new_from_array([0u8; 32]);
+    castle.team = pinocchio::Address::new_from_array([0u8; 32]);
     castle.claimed_at = 0;
     castle.contest_end_at = 0;
 
@@ -232,11 +231,11 @@ pub fn process(
     castle.transition_garrison_cleaned = 0;
     castle.transition_court_cleaned = false;
     castle.transition_rewards_cleaned = 0;
-    castle.transition_new_king = [0u8; 32];
+    castle.transition_new_king = pinocchio::Address::new_from_array([0u8; 32]);
 
     // Emit event
     emit!(CastleCreated {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: name,
         city_id,
         castle_id,

@@ -27,9 +27,7 @@ import {
 import { type TestContext, sendTx } from './setup';
 import { type TestPlayer } from './players';
 
-// ============================================================
 // Types
-// ============================================================
 
 export interface TestHero {
   mint: Keypair;
@@ -41,9 +39,7 @@ export interface TestHero {
   level: number;
 }
 
-// ============================================================
 // Hero Factory
-// ============================================================
 
 export class HeroFactory {
   private ctx: TestContext;
@@ -247,9 +243,7 @@ export class HeroFactory {
   }
 }
 
-// ============================================================
 // Pre-configured Hero Scenarios
-// ============================================================
 
 export interface HeroLoadout {
   heroes: TestHero[];

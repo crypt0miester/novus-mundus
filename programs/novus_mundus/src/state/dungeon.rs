@@ -13,17 +13,15 @@
 //! - DungeonRun: ["dungeon_run", player]
 //! - DungeonLeaderboard: ["dungeon_leaderboard", dungeon_id, week_number]
 
-use pinocchio::pubkey::Pubkey;
-use pinocchio::program_error::ProgramError;
+use pinocchio::Address;
+use pinocchio::error::ProgramError;
 
 use crate::constants::{
     DUNGEON_TEMPLATE_SEED, DUNGEON_RUN_SEED, DUNGEON_LEADERBOARD_SEED,
 };
 use crate::state::event::LeaderboardEntry;
 
-// ============================================================
 // DUNGEON STATUS
-// ============================================================
 
 /// Status of a dungeon run
 #[repr(u8)]
@@ -65,9 +63,7 @@ impl DungeonStatus {
     }
 }
 
-// ============================================================
 // ROOM TYPES
-// ============================================================
 
 /// Type of room in a dungeon floor
 #[repr(u8)]
@@ -102,35 +98,36 @@ impl RoomType {
     }
 }
 
-// ============================================================
 // DUNGEON THEME
-// ============================================================
 
-/// Dungeon theme affects enemy types and which hero traits excel
+/// Dungeon mechanical category — abstract enemy archetypes that map to hero traits.
+/// Theme-flavored display names (e.g. "Crypts", "Server Farms") are supplied by the SDK.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DungeonTheme {
-    Crypts = 0,   // Undead - Holy damage, Radiant aura
-    Caverns = 1,  // Beasts - Beast slayer, Trap detection
-    Abyss = 2,    // Demons - Demon bane, Darkness resistance
-    Forge = 3,    // Constructs - Siege specialist, Armor pierce
+    /// Enemies weakened by radiant/light damage; aura damages player
+    RadiantWeakness = 0,
+    /// Fast enemies; rewards trap detection
+    FastMobs = 1,
+    /// Enemies amplified by darkness; rewards darkness resistance
+    DarknessVulnerable = 2,
+    /// Heavily armored enemies; rewards siege/armor pierce
+    ArmoredMobs = 3,
 }
 
 impl DungeonTheme {
     pub const fn from_u8(val: u8) -> Option<Self> {
         match val {
-            0 => Some(Self::Crypts),
-            1 => Some(Self::Caverns),
-            2 => Some(Self::Abyss),
-            3 => Some(Self::Forge),
+            0 => Some(Self::RadiantWeakness),
+            1 => Some(Self::FastMobs),
+            2 => Some(Self::DarknessVulnerable),
+            3 => Some(Self::ArmoredMobs),
             _ => None,
         }
     }
 }
 
-// ============================================================
 // HERO SPECIALIZATION
-// ============================================================
 
 /// Hero specialization affects dungeon combat bonuses
 #[repr(u8)]
@@ -142,8 +139,8 @@ pub enum HeroSpecialization {
     Guardian = 1,
     /// Scouts: -25% darkness effects, +15% loot
     Scout = 2,
-    /// Mystics: +30% to all relic effects
-    Mystic = 3,
+    /// Tacticians: +30% to all relic effects
+    Tactician = 3,
 }
 
 impl HeroSpecialization {
@@ -152,7 +149,7 @@ impl HeroSpecialization {
             0 => Some(Self::Warrior),
             1 => Some(Self::Guardian),
             2 => Some(Self::Scout),
-            3 => Some(Self::Mystic),
+            3 => Some(Self::Tactician),
             _ => None,
         }
     }
@@ -163,7 +160,7 @@ impl HeroSpecialization {
             Self::Warrior => 2000,   // +20%
             Self::Guardian => -1500, // -15%
             Self::Scout => 0,
-            Self::Mystic => 0,
+            Self::Tactician => 0,
         }
     }
 
@@ -173,7 +170,7 @@ impl HeroSpecialization {
             Self::Warrior => 0,
             Self::Guardian => 2500, // +25%
             Self::Scout => 0,
-            Self::Mystic => 0,
+            Self::Tactician => 0,
         }
     }
 
@@ -183,7 +180,7 @@ impl HeroSpecialization {
             Self::Warrior => -1000, // -10% healing
             Self::Guardian => 0,
             Self::Scout => 0,
-            Self::Mystic => 0,
+            Self::Tactician => 0,
         }
     }
 
@@ -193,7 +190,7 @@ impl HeroSpecialization {
             Self::Warrior => 0,
             Self::Guardian => 0,
             Self::Scout => 2500, // -25% darkness
-            Self::Mystic => 0,
+            Self::Tactician => 0,
         }
     }
 
@@ -203,7 +200,7 @@ impl HeroSpecialization {
             Self::Warrior => 0,
             Self::Guardian => 0,
             Self::Scout => 1500, // +15% loot
-            Self::Mystic => 0,
+            Self::Tactician => 0,
         }
     }
 
@@ -213,14 +210,12 @@ impl HeroSpecialization {
             Self::Warrior => 10000,
             Self::Guardian => 10000,
             Self::Scout => 10000,
-            Self::Mystic => 13000, // +30% relic effects
+            Self::Tactician => 13000, // +30% relic effects
         }
     }
 }
 
-// ============================================================
 // DUNGEON TEMPLATE (Global, DAO-created)
-// ============================================================
 
 /// Dungeon template defines a dungeon's configuration.
 /// Created by DAO, immutable after creation.
@@ -233,7 +228,7 @@ pub struct DungeonTemplate {
     pub account_key: u8,
     /// Unique dungeon identifier
     pub dungeon_id: u16,
-    /// Dungeon theme (0=Crypts, 1=Caverns, 2=Abyss, 3=Forge)
+    /// Dungeon theme (0=RadiantWeakness, 1=FastMobs, 2=DarknessVulnerable, 3=ArmoredMobs)
     pub theme: u8,
     /// Total number of floors
     pub total_floors: u8,
@@ -326,44 +321,45 @@ impl DungeonTemplate {
 
     /// Derive PDA for a dungeon template
     /// Seeds: [DUNGEON_TEMPLATE_SEED, dungeon_id]
-    pub fn derive_pda(dungeon_id: u16) -> (Pubkey, u8) {
+    pub fn derive_pda(dungeon_id: u16) -> (Address, u8) {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[DUNGEON_TEMPLATE_SEED, &dungeon_id_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(dungeon_id: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(dungeon_id: u16, bump: u8) -> Result<Address, ProgramError> {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[DUNGEON_TEMPLATE_SEED, &dungeon_id_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify a DungeonTemplate.
     /// Checks: program ownership, PDA derivation, dungeon_id field, bump field.
     pub fn load_checked<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
+        account: &'a pinocchio::AccountView,
         dungeon_id: u16,
-        program_id: &Pubkey,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
         // 1. Check account is owned by program
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(dungeon_id);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         // 3. Load data
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::DungeonTemplate)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -384,9 +380,7 @@ impl DungeonTemplate {
 // Compile-time size verification disabled - struct may be realigned
 // const _: () = assert!(DungeonTemplate::LEN == 152, "DungeonTemplate size changed");
 
-// ============================================================
 // DUNGEON RUN (Per-player, temporary)
-// ============================================================
 
 /// Active dungeon run state for a player.
 /// Created on enter_dungeon, closed on claim_rewards/flee/fail.
@@ -398,9 +392,9 @@ pub struct DungeonRun {
     /// Account discriminator
     pub account_key: u8,
     /// Player owner's wallet pubkey
-    pub player: Pubkey,
+    pub player: Address,
     /// Champion hero NFT mint (escrowed)
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
 
     /// Dungeon template ID
     pub dungeon_id: u16,
@@ -431,9 +425,9 @@ pub struct DungeonRun {
     /// Time period when dungeon was entered (affects mechanics)
     /// 0=Dawn, 1=Day, 2=Dusk, 3=Night
     pub time_period: u8,
-    /// Dungeon theme (0=Crypts, 1=Caverns, 2=Abyss, 3=Forge)
+    /// Dungeon theme (0=RadiantWeakness, 1=FastMobs, 2=DarknessVulnerable, 3=ArmoredMobs)
     pub dungeon_theme: u8,
-    /// Hero specialization (0=Warrior, 1=Guardian, 2=Scout, 3=Mystic)
+    /// Hero specialization (0=Warrior, 1=Guardian, 2=Scout, 3=Tactician)
     pub hero_specialization: u8,
     /// Padding for alignment
     pub _spec_padding: u8,
@@ -455,7 +449,7 @@ pub struct DungeonRun {
     pub remaining_units: [u64; 3],
 
     /// Original units at dungeon entry [tier1, tier2, tier3]
-    /// Used for Phoenix Feather resurrection (25% of original)
+    /// Used for resurrection relic (id 11): restores 25% of original on wipe
     pub original_units: [u64; 3],
 
     /// Remaining weapons during run [melee, ranged, siege]
@@ -614,9 +608,17 @@ impl DungeonRun {
             } else {
                 // Partial damage to tier
                 let units_killed = remaining_damage / tier_hp;
-                total_absorbed = total_absorbed.saturating_add(remaining_damage);
-                self.remaining_units[tier] = units.saturating_sub(units_killed.max(1));
-                remaining_damage = 0;
+                // Only count HP for units actually killed, not the unabsorbed remainder.
+                // If units_killed == 0, no damage is absorbed at this tier and remaining_damage
+                // carries over to the next tier (or is lost if this is the last tier).
+                let absorbed_here = tier_hp.saturating_mul(units_killed);
+                total_absorbed = total_absorbed.saturating_add(absorbed_here);
+                self.remaining_units[tier] = units.saturating_sub(units_killed);
+                if units_killed == 0 {
+                    // No units died — let leftover damage attempt the next tier.
+                    continue;
+                }
+                remaining_damage = remaining_damage.saturating_sub(absorbed_here);
             }
         }
 
@@ -675,43 +677,44 @@ impl DungeonRun {
     /// Derive PDA for a dungeon run
     /// Seeds: [DUNGEON_RUN_SEED, player_account_pda]
     /// The PDA is derived from the PlayerAccount PDA, not the wallet
-    pub fn derive_pda(player_account: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(player_account: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[DUNGEON_RUN_SEED, player_account.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(player_account: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(player_account: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[DUNGEON_RUN_SEED, player_account.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Load and verify a DungeonRun.
     /// Checks: program ownership, PDA derivation, bump field.
     /// Note: player_account is the PlayerAccount PDA, not the wallet
     pub fn load_checked<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        player_account: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        player_account: &Address,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
         // 1. Check account is owned by program
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(player_account);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         // 3. Load data
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::DungeonRun)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -727,23 +730,24 @@ impl DungeonRun {
     /// Checks: program ownership, PDA derivation, bump field.
     /// Note: player_account is the PlayerAccount PDA, not the wallet
     pub fn load_checked_mut<'a>(
-        account: &'a pinocchio::account_info::AccountInfo,
-        player_account: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a pinocchio::AccountView,
+        player_account: &Address,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
         // 1. Check account is owned by program
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(player_account);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         // 3. Load data
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::DungeonRun)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -759,9 +763,7 @@ impl DungeonRun {
 // Compile-time size verification (size = 256 bytes with resume_count field)
 // Note: resume_count replaced one padding byte in _padding4
 
-// ============================================================
 // DUNGEON LEADERBOARD (Weekly reset)
-// ============================================================
 
 /// Weekly leaderboard for a specific dungeon.
 /// Tracks top 10 fastest clears with prize distribution.
@@ -774,7 +776,7 @@ pub struct DungeonLeaderboard {
     /// Account discriminator
     pub account_key: u8,
     /// Kingdom this leaderboard belongs to
-    pub game_engine: Pubkey,
+    pub game_engine: Address,
     /// Dungeon template ID
     pub dungeon_id: u16,
     /// Week number (weeks since epoch)
@@ -828,7 +830,7 @@ impl DungeonLeaderboard {
 
     /// Try to insert a score into the leaderboard
     /// Returns true if the score made it into top 10
-    pub fn try_insert(&mut self, player: Pubkey, score: u64) -> bool {
+    pub fn try_insert(&mut self, player: Address, score: u64) -> bool {
         // Find insertion position
         let mut insert_pos = self.leaderboard_count as usize;
         for i in 0..self.leaderboard_count as usize {
@@ -861,7 +863,7 @@ impl DungeonLeaderboard {
     }
 
     /// Find player's rank (0-indexed, None if not in top 10)
-    pub fn find_rank(&self, player: &Pubkey) -> Option<usize> {
+    pub fn find_rank(&self, player: &Address) -> Option<usize> {
         for i in 0..self.leaderboard_count as usize {
             if &self.leaderboard[i].player == player {
                 return Some(i);
@@ -887,28 +889,28 @@ impl DungeonLeaderboard {
 
     /// Derive PDA for a dungeon leaderboard
     /// Seeds: [DUNGEON_LEADERBOARD_SEED, game_engine, dungeon_id, week_number]
-    pub fn derive_pda(game_engine: &Pubkey, dungeon_id: u16, week_number: u16) -> (Pubkey, u8) {
+    pub fn derive_pda(game_engine: &Address, dungeon_id: u16, week_number: u16) -> (Address, u8) {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
-        pinocchio::pubkey::find_program_address(
+        pinocchio::Address::find_program_address(
             &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Pubkey, dungeon_id: u16, week_number: u16, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, dungeon_id: u16, week_number: u16, bump: u8) -> Result<Address, ProgramError> {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes, &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Check if leaderboard belongs to a specific kingdom
-    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+    pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine
     }
 }

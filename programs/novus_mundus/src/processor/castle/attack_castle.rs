@@ -11,9 +11,9 @@
 //! transition to claim the castle (or it becomes vacant).
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -53,8 +53,8 @@ use crate::{
 /// 4..N. [writable] Garrison contribution accounts (for updating loot/casualties)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -99,7 +99,7 @@ pub fn process(
     }
 
     // Load attacker (kingdom-scoped)
-    let mut attacker = PlayerAccount::load_checked_mut(attacker_player, game_engine_account.key(), attacker_wallet.key(), program_id)?;
+    let mut attacker = PlayerAccount::load_checked_mut(attacker_player, game_engine_account.address(), attacker_wallet.address(), program_id)?;
 
     // Verify attacker is not traveling
     if attacker.is_traveling_any() {
@@ -143,21 +143,33 @@ pub fn process(
     let mut total_garrison_power: u64 = 0;
     let garrison_count = garrison_accounts.len().min(20);
 
+    // Dedupe garrison accounts to prevent double-counting strength
+    let mut seen: [Address; 20] = [Address::default(); 20];
+    let mut seen_count: usize = 0;
+
     // Load and validate garrison accounts
     for i in 0..garrison_count {
         let garrison_account = &garrison_accounts[i];
-        if garrison_account.owner() != program_id {
+        if unsafe { garrison_account.owner() } != program_id {
             continue;
         }
         if garrison_account.data_len() == 0 {
             continue;
         }
 
-        let garrison_data = garrison_account.try_borrow_data()?;
+        // Skip if already counted (deduplication)
+        let key = *garrison_account.address();
+        if seen[..seen_count].iter().any(|k| *k == key) {
+            continue;
+        }
+        seen[seen_count] = key;
+        seen_count += 1;
+
+        let garrison_data = garrison_account.try_borrow()?;
         let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
 
         // Verify garrison belongs to this castle
-        if garrison.castle != *castle_account.key() {
+        if garrison.castle != *castle_account.address() {
             continue;
         }
 
@@ -365,15 +377,15 @@ pub fn process(
     if total_garrison_power > 0 {
         for i in 0..garrison_count {
             let garrison_account = &garrison_accounts[i];
-            if garrison_account.owner() != program_id || garrison_account.data_len() == 0 {
+            if unsafe { garrison_account.owner() } != program_id || garrison_account.data_len() == 0 {
                 continue;
             }
 
-            let mut garrison_data = garrison_account.try_borrow_mut_data()?;
+            let mut garrison_data = garrison_account.try_borrow_mut()?;
             let garrison = unsafe { GarrisonContributionAccount::load_mut(&mut garrison_data) };
 
             // Skip if not this castle
-            if garrison.castle != *castle_account.key() {
+            if garrison.castle != *castle_account.address() {
                 continue;
             }
 
@@ -438,16 +450,16 @@ pub fn process(
             }
 
             // Update transition fields - new attacker claims the pending throne
-            castle.transition_new_king = *attacker_player.key();
+            castle.transition_new_king = *attacker_player.address();
             // Reset 2-hour contest window for others to challenge
             castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
 
             // Emit conquest event
             emit!(CastleConquered {
-                castle: *castle_account.key(),
+                castle: *castle_account.address(),
                 castle_name: castle.name,
                 previous_king: defending_king,
-                new_king: *attacker_player.key(),
+                new_king: *attacker_player.address(),
                 new_king_name: attacker_name,
                 new_team: attacker.team,
                 rally_id: 0, // Solo attack, no rally
@@ -459,7 +471,7 @@ pub fn process(
 
         // Emit defense event
         emit!(CastleDefended {
-            castle: *castle_account.key(),
+            castle: *castle_account.address(),
             castle_name: castle.name,
             king: defending_king,
             rally_id: 0, // Solo attack, no rally
@@ -471,9 +483,9 @@ pub fn process(
 
     // Emit attack event
     emit!(CastleAttacked {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        attacker: *attacker_player.key(),
+        attacker: *attacker_player.address(),
         attacker_name,
         king: defending_king,
         damage_dealt: attacker_damage,

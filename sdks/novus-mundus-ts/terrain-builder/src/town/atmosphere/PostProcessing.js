@@ -6,9 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GodRayPass } from './GodRays.js';
 
-// ---------------------------------------------------------------------------
 // SSAO Shader — custom screen-space ambient occlusion via hemisphere sampling
-// ---------------------------------------------------------------------------
 
 /**
  * Generate 16 hemisphere kernel samples distributed in a unit hemisphere,
@@ -192,9 +190,7 @@ const SSAOShader = {
   `,
 };
 
-// ---------------------------------------------------------------------------
 // Tilt-Shift Horizontal Blur Shader
-// ---------------------------------------------------------------------------
 const TiltShiftHorizontalShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -261,9 +257,7 @@ const TiltShiftHorizontalShader = {
   `,
 };
 
-// ---------------------------------------------------------------------------
 // Tilt-Shift Vertical Blur Shader
-// ---------------------------------------------------------------------------
 const TiltShiftVerticalShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -328,9 +322,7 @@ const TiltShiftVerticalShader = {
   `,
 };
 
-// ---------------------------------------------------------------------------
 // Color Grading + Vignette Shader
-// ---------------------------------------------------------------------------
 const ColorGradeVignetteShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -392,9 +384,7 @@ const ColorGradeVignetteShader = {
   `,
 };
 
-// ---------------------------------------------------------------------------
 // PostProcessingPipeline
-// ---------------------------------------------------------------------------
 
 /**
  * Post-processing pipeline for the town diorama renderer.

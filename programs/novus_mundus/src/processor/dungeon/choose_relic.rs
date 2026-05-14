@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -13,7 +13,7 @@ use crate::{
     emit,
     events::{DungeonRelicChosen, DungeonBossFight},
 };
-// Note: Dawn extra relic choice and Relic Hunter (+1 choice) are handled by the backend
+// Note: Dawn extra relic choice and the +1-choice relic (id 19) are handled by the backend
 // providing a 4th relic option. The on-chain code validates against all provided options.
 
 /// Choose a relic after completing a floor
@@ -35,10 +35,10 @@ use crate::{
 /// - relic_option_1: u8 (first relic option offered by backend)
 /// - relic_option_2: u8 (second relic option offered by backend)
 /// - relic_option_3: u8 (third relic option offered by backend)
-/// - relic_option_4: u8 (optional 4th option for Dawn or Relic Hunter)
+/// - relic_option_4: u8 (optional 4th option for Dawn or +1-choice relic id 19)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
@@ -59,11 +59,11 @@ pub fn process(
     require_writable(dungeon_run_account)?;
 
     // 3. Load and validate player using load_checked (kingdom-scoped)
-    let _player = PlayerAccount::load_checked(player_account, game_engine_account.key(), owner.key(), program_id)?;
+    let _player = PlayerAccount::load_checked(player_account, game_engine_account.address(), owner.address(), program_id)?;
 
     // 4. Validate game_authority against GameEngine (kingdom-scoped)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    if game_authority.key() != &game_engine.game_authority {
+    if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
     drop(game_engine);
@@ -78,7 +78,7 @@ pub fn process(
     let relic_option_1 = data[2];
     let relic_option_2 = data[3];
     let relic_option_3 = data[4];
-    // Optional 4th option (for Dawn bonus or Relic Hunter)
+    // Optional 4th option (for Dawn bonus or +1-choice relic id 19)
     let relic_option_4 = data.get(5).copied();
 
     // Validate relic ID (0-19)
@@ -97,7 +97,7 @@ pub fn process(
     }
 
     // 6. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run_data = DungeonRun::load_checked_mut(dungeon_run_account, player_account.key(), program_id)?;
+    let mut run_data = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Validate run is awaiting relic
     let status = DungeonStatus::from_u8(run_data.status)
@@ -108,7 +108,7 @@ pub fn process(
     }
 
     // Verify the run belongs to this player (player_account PDA stored in run_data.player)
-    if &run_data.player != player_account.key() {
+    if &run_data.player != player_account.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -128,7 +128,7 @@ pub fn process(
     run_data.add_relic(relic_id);
 
     emit!(DungeonRelicChosen {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: _player.name,
         dungeon_id: run_data.dungeon_id,
         floor: run_data.current_floor,
@@ -156,7 +156,7 @@ pub fn process(
         run_data.room_type = RoomType::Combat as u8;
 
         emit!(DungeonBossFight {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: _player.name,
             dungeon_id: run_data.dungeon_id,
             floor: run_data.current_floor,

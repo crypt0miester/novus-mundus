@@ -6,9 +6,9 @@
 //! such as reward rates, upgrade costs, and other settings.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -35,8 +35,8 @@ const CONFIG_NAME: u8 = 3;
 /// 2. [writable] Castle account
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -57,7 +57,7 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
-    if dao_authority.key() != &game_engine.authority {
+    if dao_authority.address() != &game_engine.authority {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -119,11 +119,20 @@ pub fn process(
             castle.treasury_level = instruction_data[1];
         }
         CONFIG_NAME => {
-            // Update castle name
-            if instruction_data.len() < 49 {
+            // Update castle name (CastleAccount::name is [u8; 32])
+            const NAME_LEN: usize = 32;
+            if instruction_data.len() < 1 + NAME_LEN {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            castle.name.copy_from_slice(&instruction_data[1..49]);
+            let new_name = &instruction_data[1..1 + NAME_LEN];
+
+            // Validate UTF-8 and non-empty (after stripping null padding)
+            core::str::from_utf8(new_name).map_err(|_| GameError::InvalidParameter)?;
+            if new_name.iter().filter(|&&b| b != 0).count() == 0 {
+                return Err(GameError::InvalidParameter.into());
+            }
+
+            castle.name.copy_from_slice(new_name);
         }
         _ => {
             return Err(ProgramError::InvalidInstructionData);

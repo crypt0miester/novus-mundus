@@ -11,18 +11,14 @@ import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { ArenaSeasonStatus } from '../types/enums';
 
-// ============================================================
 // Arena Leaderboard Entry
-// ============================================================
 
 export interface ArenaLeaderboardEntry {
   player: PublicKey;
   totalPoints: BN;
 }
 
-// ============================================================
 // Arena Season Account Interface
-// ============================================================
 
 export interface ArenaSeasonAccount {
   seasonId: number;
@@ -50,9 +46,7 @@ export interface ArenaSeasonAccount {
 /** ArenaSeasonAccount size in bytes (with repr(C) alignment padding) */
 export const ARENA_SEASON_ACCOUNT_SIZE = 608;
 
-// ============================================================
 // Arena Participant Account Interface
-// ============================================================
 
 export interface ArenaParticipantAccount {
   player: PublicKey;
@@ -73,9 +67,7 @@ export interface ArenaParticipantAccount {
 /** ArenaParticipantAccount size in bytes (with repr(C) alignment padding) */
 export const ARENA_PARTICIPANT_ACCOUNT_SIZE = 536;
 
-// ============================================================
 // Arena Loadout Account Interface
-// ============================================================
 
 export interface ArenaLoadoutAccount {
   player: PublicKey;
@@ -91,9 +83,7 @@ export interface ArenaLoadoutAccount {
 /** ArenaLoadoutAccount size in bytes (with repr(C) alignment padding) */
 export const ARENA_LOADOUT_ACCOUNT_SIZE = 168;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /**
  * Deserialize ArenaSeasonAccount from raw bytes.
@@ -349,9 +339,7 @@ export function deserializeArenaLoadout(data: Uint8Array | Buffer): ArenaLoadout
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse ArenaSeasonAccount from account info */
 export function parseArenaSeason(accountInfo: AccountInfo<Buffer>): ArenaSeasonAccount | null {
@@ -377,9 +365,7 @@ export function parseArenaLoadout(accountInfo: AccountInfo<Buffer>): ArenaLoadou
   return deserializeArenaLoadout(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if season is active */
 export function isSeasonActive(season: ArenaSeasonAccount): boolean {

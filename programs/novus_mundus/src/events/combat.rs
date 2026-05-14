@@ -1,16 +1,16 @@
 /// Combat events - PvP and PvE combat outcomes
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player attacks another player (PvP)
 pub struct PlayerAttacked {
     /// Attacker's player account pubkey (not wallet)
-    pub attacker: Pubkey,
+    pub attacker: Address,
     /// Attacker's name (48 bytes UTF-8)
     pub attacker_name: [u8; 48],
     /// Defender's player account pubkey (not wallet)
-    pub defender: Pubkey,
+    pub defender: Address,
     /// Defender's name (48 bytes UTF-8)
     pub defender_name: [u8; 48],
     /// Damage dealt to defender
@@ -68,11 +68,11 @@ impl Event for PlayerAttacked {
 /// Emitted when a player attacks an encounter (PvE) - fires on each attack
 pub struct EncounterAttacked {
     /// Player account who attacked (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Encounter account pubkey
-    pub encounter: Pubkey,
+    pub encounter: Address,
     /// Damage dealt this attack
     pub damage_dealt: u64,
     /// Encounter's remaining health after attack
@@ -108,7 +108,7 @@ impl Event for EncounterAttacked {
 /// Emitted when an encounter is defeated (killed)
 pub struct EncounterDefeated {
     /// Encounter account pubkey
-    pub encounter: Pubkey,
+    pub encounter: Address,
     /// Encounter type (boss, mob, etc.)
     pub encounter_type: u8,
     /// Encounter level/difficulty
@@ -116,7 +116,7 @@ pub struct EncounterDefeated {
     /// Total attackers who contributed
     pub total_attackers: u8,
     /// Player account who dealt killing blow (not wallet)
-    pub killing_blow_by: Pubkey,
+    pub killing_blow_by: Address,
     /// Killing blow player's name (48 bytes UTF-8)
     pub killing_blow_name: [u8; 48],
     /// Total loot cash generated

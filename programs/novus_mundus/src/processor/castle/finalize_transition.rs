@@ -9,9 +9,9 @@
 //! Sets the new king and grants protection period.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
@@ -25,7 +25,7 @@ use crate::{
         player::NULL_PUBKEY,
     },
     constants::{
-        CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_PROTECTED,
+        CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_VACANT,
     },
     validation::require_owner,
 };
@@ -42,8 +42,8 @@ use crate::{
 /// 4. [writable] Old king registry account (optional, to update)
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -91,19 +91,54 @@ pub fn process(
         return Err(GameError::TransitionNotComplete.into());
     }
 
-    // Verify pending king is set
+    // Two flows:
+    //   (a) transition_new_king != NULL_PUBKEY -> claim by new king
+    //   (b) transition_new_king == NULL_PUBKEY -> castle becomes VACANT
+    //       (used by force_remove_king and similar DAO actions). Requires
+    //       garrison_count == 0 && court_count == 0 (already checked above).
     if castle.transition_new_king == NULL_PUBKEY {
-        return Err(GameError::TransitionNotComplete.into());
+        // VACANT flow - no new king assigned; reset transition state and
+        // mark castle vacant for re-claim via claim_vacant_castle.
+        let old_king = castle.king;
+        castle.king = NULL_PUBKEY;
+        castle.team = NULL_PUBKEY;
+        castle.transition_new_king = NULL_PUBKEY;
+        castle.status = CASTLE_STATUS_VACANT;
+        castle.claimed_at = 0;
+        castle.contest_end_at = 0;
+
+        // Reset transition counters
+        castle.transition_garrison_cleaned = 0;
+        castle.transition_court_cleaned = false;
+        castle.transition_rewards_cleaned = 0;
+
+        // Best-effort: clear castle from old king's registry if provided
+        if accounts.len() > 4 && old_king != NULL_PUBKEY {
+            let old_king_registry = &accounts[4];
+            let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
+            if old_king_registry.address() == &expected_old_pda
+                && unsafe { old_king_registry.owner() } == program_id
+                && old_king_registry.data_len() > 0
+            {
+                let mut old_registry_data = old_king_registry.try_borrow_mut()?;
+                let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
+                old_registry.remove_castle(city_id, castle_id);
+            }
+        }
+
+        // No CastleClaimed event for vacant transition (claim_vacant_castle
+        // will emit when someone takes the throne).
+        return Ok(());
     }
 
     // Verify new king account matches pending king
-    if *new_king_account.key() != castle.transition_new_king {
+    if *new_king_account.address() != castle.transition_new_king {
         return Err(GameError::Unauthorized.into());
     }
 
     // Load new king player
     require_owner(new_king_account, program_id)?;
-    let mut new_king_data = new_king_account.try_borrow_mut_data()?;
+    let mut new_king_data = new_king_account.try_borrow_mut()?;
     let new_king = unsafe { PlayerAccount::load_mut(&mut new_king_data) };
 
     // Store old king for registry update
@@ -112,7 +147,7 @@ pub fn process(
     // Update new king registry using load_checked_mut
     let mut new_registry = KingRegistryAccount::load_checked_mut(
         new_king_registry,
-        new_king_account.key(),
+        new_king_account.address(),
         program_id,
     )?;
 
@@ -130,9 +165,9 @@ pub fn process(
 
         // Verify old king registry PDA matches the previous king
         let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
-        if old_king_registry.key() == &expected_old_pda {
-            if old_king_registry.owner() == program_id && old_king_registry.data_len() > 0 {
-                let mut old_registry_data = old_king_registry.try_borrow_mut_data()?;
+        if old_king_registry.address() == &expected_old_pda {
+            if unsafe { old_king_registry.owner() } == program_id && old_king_registry.data_len() > 0 {
+                let mut old_registry_data = old_king_registry.try_borrow_mut()?;
                 let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
                 old_registry.remove_castle(city_id, castle_id);
             }
@@ -163,9 +198,9 @@ pub fn process(
 
     // Emit event
     emit!(CastleClaimed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        king: *new_king_account.key(),
+        king: *new_king_account.address(),
         king_name,
         team: new_king.team,
         tier: castle.tier,

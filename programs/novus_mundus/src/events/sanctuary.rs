@@ -1,16 +1,16 @@
 /// Sanctuary events - meditation and hero training
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a hero starts meditating
 pub struct MeditationStarted {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// Duration in hours
@@ -40,7 +40,7 @@ impl Event for MeditationStarted {
 /// Emitted when meditation is sped up with gems
 pub struct MeditationSpeedup {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Seconds of meditation time added
@@ -68,11 +68,11 @@ impl Event for MeditationSpeedup {
 /// Emitted when meditation rewards are claimed
 pub struct MeditationClaimed {
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Player's name (48 bytes UTF-8)
     pub player_name: [u8; 48],
     /// Hero NFT mint pubkey
-    pub hero_mint: Pubkey,
+    pub hero_mint: Address,
     /// Hero name (32 bytes UTF-8)
     pub hero_name: [u8; 32],
     /// XP earned from meditation

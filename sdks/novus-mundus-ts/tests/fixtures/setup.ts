@@ -18,7 +18,8 @@ import bs58 from 'bs58';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { createTestSvm, type LiteSVM, FailedTransactionMetadata } from './svm';
+import { createTestSvm, seedProgramDataPda, type LiteSVM, FailedTransactionMetadata } from './svm';
+import { PROGRAM_ID } from '../../src/program';
 
 import {
   createInitGameEngineInstruction,
@@ -37,9 +38,7 @@ import {
   deriveShopItemPda,
 } from '../../src/index';
 
-// ============================================================
 // Configuration
-// ============================================================
 
 export interface TestConfig {
   /** Whether to initialize game infrastructure if not present */
@@ -50,9 +49,7 @@ export const DEFAULT_CONFIG: TestConfig = {
   autoSetup: true,
 };
 
-// ============================================================
 // Test Context
-// ============================================================
 
 export interface TestContext {
   svm: LiteSVM;
@@ -71,9 +68,7 @@ export interface TestContext {
 
 let globalContext: TestContext | null = null;
 
-// ============================================================
 // Test Data
-// ============================================================
 
 /** Cities matching Rust INITIAL_CITIES constants (IDs 0-19) */
 export const CITIES = [
@@ -399,9 +394,7 @@ export const RESEARCH_TEMPLATES = [
   },
 ] as const;
 
-// ============================================================
 // Keypair Management
-// ============================================================
 
 const KEYS_DIR = path.join(__dirname, '../../keys');
 
@@ -425,9 +418,7 @@ function loadOrCreateKeypair(name: string): Keypair {
   return keypair;
 }
 
-// ============================================================
 // Transaction Utilities
-// ============================================================
 
 export async function airdropIfNeeded(
   svm: LiteSVM,
@@ -493,9 +484,7 @@ export async function accountExists(
   return info !== null && info.data.length > 0;
 }
 
-// ============================================================
 // Setup Functions
-// ============================================================
 
 async function setupGameEngine(ctx: TestContext): Promise<void> {
   if (await accountExists(ctx.svm, ctx.gameEngine)) {
@@ -714,9 +703,7 @@ async function setupResearchTemplates(ctx: TestContext): Promise<void> {
   }
 }
 
-// ============================================================
 // Main Setup
-// ============================================================
 
 /** Default kingdom ID for tests */
 export const DEFAULT_KINGDOM_ID = 0;
@@ -730,6 +717,11 @@ export async function setupTestContext(
   const svm = createTestSvm();
   const daoAuthority = loadOrCreateKeypair('dao-authority');
   const treasury = loadOrCreateKeypair('treasury');
+
+  // Seed the program-data PDA so `assert_is_program_authority` accepts
+  // `daoAuthority` as the upgrade authority. Without this, every
+  // init_game_engine call fails with Unauthorized.
+  seedProgramDataPda(svm, PROGRAM_ID, daoAuthority.publicKey);
 
   const [gameEngine] = deriveGameEnginePda(kingdomId);
   const [heroCollection] = deriveHeroCollectionPda();
@@ -793,9 +785,7 @@ export function resetGlobalContext(): void {
   globalContext = null;
 }
 
-// ============================================================
 // Test Lifecycle Helpers
-// ============================================================
 
 export async function beforeAllTests(): Promise<TestContext> {
   // Each test file gets a fresh LiteSVM instance

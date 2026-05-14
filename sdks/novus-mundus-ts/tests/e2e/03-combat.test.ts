@@ -60,9 +60,7 @@ import {
 } from '../fixtures/time';
 import { CITIES } from '../fixtures/setup';
 
-// ============================================================
 // Golden Spiral Helpers (must match Rust logic)
-// ============================================================
 
 const GOLDEN_ANGLE = 2.399963229728653;
 const GRID_PRECISION = 10000;
@@ -82,9 +80,7 @@ function goldenSpiralGridCoords(cityId: number, spawnIndex: number, radiusKm: nu
   };
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 setDefaultTimeout(60_000);
 
 describe('Combat System', () => {
@@ -101,9 +97,7 @@ describe('Combat System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // PvP Combat Tests
-  // ============================================================
 
   describe('PvP Combat', () => {
     it('should execute PvP attack successfully', async () => {
@@ -259,16 +253,15 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // PvE Combat Tests
-  // ============================================================
 
   describe('PvE Combat', () => {
     it('should attack encounter successfully', async () => {
       // Use city 17 (Berlin, lat 52.5°) - high latitude ensures 1 grid cell in longitude ≈ 6.8m (within 10m attack range)
       const cityId = 17;
       const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
-      await factory.hireUnits(player, 0, 50);
+      // 50 NOVI rounds down to 0 units after the hire-rate floor; use 100 NOVI to guarantee ≥1 unit
+      await factory.hireUnits(player, 0, 100);
       await factory.purchaseEquipment(player, 0, 25); // melee weapons
 
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
@@ -332,7 +325,7 @@ describe('Combat System', () => {
 
     it('should require stamina for encounter attack', async () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
-      await factory.hireUnits(player, 0, 50);
+      await factory.hireUnits(player, 0, 100);
 
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerAccount).not.toBeNull();
@@ -406,9 +399,7 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // Loot System Tests
-  // ============================================================
 
   describe('Loot System', () => {
     it('should create loot after killing encounter', async () => {
@@ -582,9 +573,7 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // Combat Calculations Tests
-  // ============================================================
 
   describe('Combat Calculations', () => {
     it('should calculate attack power correctly', async () => {
@@ -638,9 +627,7 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // Casualty Tests
-  // ============================================================
 
   describe('Casualties', () => {
     it('should inflict casualties on loser', async () => {
@@ -689,7 +676,7 @@ describe('Combat System', () => {
       assertBnGreaterThan(defenderBefore!.defensiveUnit3, 0, 'Should have def unit 3');
 
       // Create a strong attacker and move to combat range
-      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay] });
       await factory.hireUnits(attacker, 0, 300);
       await factory.purchaseEquipment(attacker, 0, 100); // melee weapons
       await factory.movePlayerToPlayer(attacker, defender);
@@ -721,15 +708,13 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // Combat Restrictions Tests
-  // ============================================================
 
   describe('Combat Restrictions', () => {
     it('should reject attack while traveling', async () => {
       // Create a player with units in a high-latitude city
       const cityId = 19;
-      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      const player = await factory.createPlayer({ cityId, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay] });
       await factory.hireUnits(player, 0, 100);
       await factory.purchaseEquipment(player, 0, 50);
 
@@ -784,7 +769,7 @@ describe('Combat System', () => {
       const defender = await factory.createPlayer({ cityId: 1, initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       await factory.hireUnits(defender, 0, 50);
 
-      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.Stables] });
+      const attacker = await factory.createPlayer({ cityId: 2, initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market, BuildingType.TransportBay] });
       await factory.hireUnits(attacker, 0, 200);
       await factory.purchaseEquipment(attacker, 0, 50);
 
@@ -865,9 +850,7 @@ describe('Combat System', () => {
     });
   });
 
-  // ============================================================
   // Encounter Spawning Tests
-  // ============================================================
 
   describe('Encounter Spawning', () => {
     it('should spawn encounter in city', async () => {

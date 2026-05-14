@@ -2,13 +2,13 @@
 
 > **A persistent, event-driven world where empires rise, alliances form, and only the strategic survive.**
 
-Novus Mundus is a continuous strategy game built on Solana where players command armies, collect resources, and compete in dynamic events to earn **NOVI** - the game's dual-purpose token that fuels both gameplay and real rewards.
+Novus Mundus is a continuous strategy game built on Solana where players command armies, capture castles, run dungeons, swing forge hammers, and compete in events to earn **NOVI** — the game's dual-purpose token that fuels both gameplay and real rewards.
 
-**Multi-Kingdom System:** Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own theme, leaderboards, and events.
+**Multi-Kingdom System**: Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own theme, leaderboards, events, castles, and dungeons.
 
-**Theme-Flexible Design:** Medieval, cyberpunk, sci-fi, or post-apocalyptic - each kingdom has its own theme. Unit names and visuals change, but strategy stays the same.
+**Theme-Flexible Design**: Medieval, cyberpunk, sci-fi, modern, or post-apocalyptic — five themes are defined in code. Unit names and visuals change per kingdom theme; strategy stays the same.
 
-**Deterministic Gameplay:** No randomness. All mechanics use the golden ratio family for predictable, skill-based outcomes.
+**Deterministic by Design**: Core math is deterministic — golden-ratio multipliers, basis-point arithmetic, no on-chain RNG. A handful of skill/randomness moments (dungeon crits, expedition strikes, forge precision) are intended to be co-signed by the off-chain `game_authority` so outcomes can be verified independently. 
 
 ---
 
@@ -16,37 +16,41 @@ Novus Mundus is a continuous strategy game built on Solana where players command
 
 ### Kingdoms: Fair Starts for Everyone
 
-Novus Mundus uses a **multi-kingdom system** to ensure fair competition:
+Novus Mundus uses a multi-kingdom system to ensure fair competition:
 
-- **New kingdoms launch periodically** - Everyone in a kingdom starts at the same time
-- **Join late? No problem** - Pick a newer kingdom and compete with players at your level
-- **Each kingdom is independent** - Separate leaderboards, events, and rankings
-- **Same wallet, multiple kingdoms** - Play in Genesis (medieval) and Vanguard (cyberpunk) simultaneously
-- **Shared heroes and NOVI** - Your NFT heroes and token work across all kingdoms
+- **New kingdoms launch periodically** — everyone in a kingdom starts together
+- **Join late? Pick a newer kingdom** and compete with players at your level
+- **Each kingdom is independent** — separate leaderboards, events, rankings, castles, arena seasons
+- **Same wallet, multiple kingdoms** — your `UserAccount` is per-wallet; your `PlayerAccount` is per-kingdom
+- **Shared NOVI mint** — the NOVI token is a single shared SPL mint across all kingdoms; the mint authority is kingdom 0's GameEngine PDA
+- **Heroes (MPL Core NFTs)** are also shared across kingdoms — locking a hero in one kingdom does not bind it to that kingdom
 
-**Example Kingdoms:**
-| Kingdom | Theme | Launch |
-|---------|-------|--------|
-| Genesis | Medieval | Day 1 |
-| Vanguard | Cyberpunk | Month 2 |
-| Frontier | Post-Apocalyptic | Month 4 |
+**Themes** (in `src/types.rs`):
+
+| Theme value | Name |
+|---|---|
+| 0 | Medieval |
+| 1 | Cyberpunk |
+| 2 | SciFi |
+| 3 | Modern |
+| 4 | PostApocalyptic |
+
+Each `GameEngine` PDA is created with `kingdom_id`, `kingdom_name`, `kingdom_theme`, and `kingdom_start_time` fields. Cities are batch-initialized per kingdom via `batch_init_cities` (instruction 5).
 
 ### The Persistent World
 
-Unlike traditional games with resets, each kingdom is a **persistent world** where:
-- Your progress within a kingdom never resets
-- Events occur continuously (daily, weekly, seasonal)
-- Alliances and rivalries develop organically over time
-- Strategic decisions compound into long-term advantages
+Each kingdom is a **persistent world**: progress within a kingdom never resets, events run continuously, and strategic decisions compound into long-term advantages.
 
 ### Your Empire
 
-Command your forces across multiple **cities** within your kingdom, each with unique strategic advantages:
-- Deploy **defensive units** to protect your holdings
-- Manage **operative units** to collect resources
-- Launch attacks on rival kingdoms
-- Form alliances through team mechanics
-- Travel between locations to raid or trade
+Command your forces across multiple cities within your kingdom:
+
+- Deploy **defensive units** (3 tiers) to protect your holdings
+- Manage **operative units** (3 tiers) to gather resources
+- Launch **PvP attacks** on rival players within the same city
+- Form alliances through the **team** system (treasury, MOTD, roles, treasury withdrawals)
+- Travel between cities with **intercity travel**, or between grid cells with **intracity travel**
+- Run **dungeons**, fight in the **arena**, defend **castles**, build your **estate**, and craft items at the **forge**
 
 ---
 
@@ -57,165 +61,135 @@ Command your forces across multiple **cities** within your kingdom, each with un
 Novus Mundus uses a two-account economy:
 
 #### Player Account (Locked NOVI)
-**Your Gameplay Fuel** - Powers all in-game actions but cannot be withdrawn
+**Your Gameplay Fuel** — used for in-game actions; cannot be withdrawn directly.
 
-**Sources:**
-| Source | Rate | Notes |
-|--------|------|-------|
-| Time Generation | 1-50 NOVI/5min | Based on subscription tier |
-| SOL Purchases | Market rate | Converted via shop |
-| Deposits | One-way | Reserved to Locked conversion |
+**Sources**:
 
-**Uses:**
-- **Hire units** - Spend NOVI to recruit defensive and operative units
-- **Launch attacks** - Consumes NOVI + produce + weapons to raid enemies
-- **Attack encounters** - Fight spawned PvE enemies for loot and reserved NOVI
-- **Collect resources** - Spend NOVI + produce to generate cash from operative units
-- **Purchase equipment** - Buy weapons, produce, and vehicles with NOVI
+| Source | Notes |
+|---|---|
+| Time generation | Rate per 5 minutes, set per subscription tier in `GameEngine.subscription_tiers` |
+| SOL → NOVI purchases | `shop::purchase_novi` (instruction 300) with optional Pyth/Switchboard oracle pricing |
+| Tier deposits | One-way Reserved → Locked conversion |
+| Starter NOVI | `STARTER_LOCKED_NOVI = 1_000_000` (1M NOVI) minted to every new player on `init_player` |
+| Castle rewards (lower tiers) | Outpost/Keep/Stronghold castles credit locked NOVI |
 
-**CRITICAL: All consumed NOVI is BURNED (destroyed permanently)**
-- Not transferred - literally removed from supply
-- Creates deflationary pressure
-- Every action makes NOVI scarcer
+**Uses** (most paths burn or consume the NOVI):
 
-**Key Rule:** Locked NOVI CANNOT be withdrawn - It exists solely for gameplay
+- **Hire units** — `economy::hire_units` (defensive + operative)
+- **Launch attacks / encounter combat** — `combat::attack_player` / `combat::attack_encounter`
+- **Collect resources** — `economy::collect_resources`
+- **Purchase equipment** — `economy::purchase_equipment` (weapons, produce, vehicles, armor)
+- **Purchase stamina** — `economy::purchase_stamina`
+- **Travel speedups** — `travel::speedup`, `rally::speedup`, `reinforcement::speedup`, `expedition::speedup`, `sanctuary::speedup_meditation`
+- **Estate builds / upgrades** — `estate::build` / `estate::upgrade`
+- **Forge crafting** — `forge::start_craft`
+
+**Locked NOVI cannot be withdrawn** — it exists solely for gameplay. Some operations burn it (deflationary); others move it to escrow inside the program.
 
 #### User Account (Reserved NOVI)
-**Your Real Earnings** - Withdrawable rewards for competitive play
+**Your Real Earnings** — withdrawable after a 7-day vesting period.
 
-**Sources:**
-| Source | Prize Range | Notes |
-|--------|-------------|-------|
-| Daily Events | 5K-50K NOVI | Quick challenges |
-| Weekly Tournaments | 60K-500K NOVI | Competitive rankings |
-| World Events | 250K+ NOVI | Epic battles |
-| Seasonal Championships | 1M+ NOVI | Month-long competitions |
-| Encounter Loot | Varies | PvE rewards (rare+) |
+**Sources**:
 
-**Uses:**
-- Withdraw to wallet (after 7-day vesting)
-- Trade on DEX
-- Deposit to Player Account (becomes locked, one-way)
+| Source | Notes |
+|---|---|
+| Event prizes | `event::claim_prize` |
+| Encounter loot | `loot::claim` for rare+ encounters |
+| Arena rewards | `arena::claim_daily_reward`, `arena::claim_master_reward` |
+| Dungeon leaderboard | `dungeon::claim_leaderboard_prize` |
+| Castle revenue (Fortress/Citadel tiers) | `castle::claim_castle_rewards` |
+| Mint-for-prize | `economy::mint_for_prize` (DAO-controlled allocation) |
+| Subscription purchase change | Some flows write to reserved |
 
-**Key Rule:** Reserved NOVI IS WITHDRAWABLE - This is your real play-to-earn income
+**Uses**:
+
+- **Withdraw to wallet** — `token::withdraw_reserved` after 7-day vesting (`RESERVED_NOVI_VESTING_PERIOD = 604_800`)
+- **Trade on DEX** — Reserved NOVI in your token account is freely transferable once withdrawn
+- **Deposit to Player Account** — `token::reserved_to_locked` (one-way)
 
 ---
 
 ## Core Gameplay
 
-### Unit Types (Theme-Flexible)
+### Unit Types
 
-**Defensive Units** - Protect your empire from attacks
-- **Unit Type 1**: Example: Knights (medieval) / Security Drones (cyberpunk)
-- **Unit Type 2**: Example: Archers (medieval) / Netrunners (cyberpunk)
-- **Unit Type 3**: Example: Footmen (medieval) / Street Samurai (cyberpunk)
+| Slot | Role | Power (combat) |
+|---|---|---|
+| Defensive Unit 1 | Attack + Defend | `DEFENSIVE_UNIT_1_POWER = 10` |
+| Defensive Unit 2 | Attack + Defend | `DEFENSIVE_UNIT_2_POWER = 25` |
+| Defensive Unit 3 | Attack + Defend | `DEFENSIVE_UNIT_3_POWER = 60` |
+| Operative Unit 1 | Economy (mining/data) | N/A — used for collection / expedition |
+| Operative Unit 2 | Economy (trade) | N/A |
+| Operative Unit 3 | Economy (farming/labor) | N/A |
 
-*Hired with Locked NOVI (BURNED on purchase). Require weapons and produce to maintain effectiveness and happiness.*
+Units are hired with locked NOVI. Theme-flexible: visual names change per kingdom theme, mechanics are identical.
 
-**Operative Units** - Generate cash through resource collection
-- **Unit Type 1**: High yield (1.5x multiplier) - Example: Miners / Data Miners
-- **Unit Type 2**: Medium yield (1.3x multiplier) - Example: Merchants / Corporate Traders
-- **Unit Type 3**: Standard yield (1.1x multiplier) - Example: Farmers / Factory Workers
+### Equipment
 
-*Hired with Locked NOVI (BURNED on purchase). Consume NOVI + produce during collection to generate cash.*
-
-**Theme System:** All unit types are generic in code. Visual themes (medieval, cyberpunk, sci-fi, post-apocalyptic) change names and art, but mechanics stay identical.
-
-### Resources & Equipment
-
-**Weapons**
-- Required for unit effectiveness in battle
-- Weapon-to-unit ratio affects damage output
-- Consumed during attacks
-
-**Produce (Food)**
-- Required to maintain unit happiness
-- Units consume produce based on army size
-- Unhappy units may abandon (deterministic rate based on happiness tier)
-
-**Vehicles**
-- Enable "drive-by" attacks (quick raids with golden root bonus)
-- Carry 5 units each for rapid deployment
-- Strategic advantage for hit-and-run tactics
-
-**Cash**
-- In-game currency earned from gameplay
-- **Earned from**: Successful attacks (looting) and resource collection
-- **Used for**: Contributes to networth (leaderboard rankings)
-- **Can be stored in safebox** (75% protected from raids)
-- **Not used to hire units** - Units cost NOVI, not cash
+| Type | Purpose |
+|---|---|
+| **Melee weapons** | Power `10` per weapon (`ARENA_MELEE_WEAPON_POWER`) |
+| **Ranged weapons** | Power `16` per weapon (φ ratio) |
+| **Siege weapons** | Power `26` per weapon (φ² ratio); also consumed for siege damage (`DAMAGE_PER_SIEGE_WEAPON = 500`) |
+| **Armor** | Power `5` per piece |
+| **Produce (food)** | Required to maintain unit happiness |
+| **Vehicles** | Enable drive-by attacks (require 10k+ units) |
+| **Cash** | In-game currency; lootable from raids; up to 75% can be hidden in a vault |
 
 ### Happiness System (Deterministic)
 
-Unit morale is critical for maintaining your army:
+Happiness is calculated from weapon/produce availability and tier-based abandonment rates configured in `GameplayConfig`:
 
-**Happiness Factors:**
-- Weapon availability (defensive units need weapons)
-- Produce availability (all units need food)
-- Calculated per unit type
+| Happiness band | Abandonment | Source |
+|---|---|---|
+| 75-100% (Happy) | `abandon_rate_happy` | Config |
+| 50-75% (Content) | `abandon_rate_content` | Config |
+| 25-50% (Unhappy) | `abandon_rate_unhappy` | Config |
+| 0-25% (Miserable) | `abandon_rate_miserable` | Config |
 
-**Happiness Effects:**
-| Happiness | Abandonment Rate |
-|-----------|------------------|
-| 75-100% (Happy) | Config-based (lowest) |
-| 50-75% (Content) | Config-based |
-| 25-50% (Unhappy) | Config-based |
-| 0-25% (Miserable) | Config-based (highest) |
-
-**Formula:** `abandonment = (total_units x rate_bps) / 10000`
+Formula: `abandonment = (total_units × rate_bps) / 10000`. No dice rolls.
 
 ### Time-of-Day System
 
-The game uses real longitude to calculate local time with 7 periods:
+Local hour is derived from `Clock::unix_timestamp + longitude/15`. Seven periods (see `logic/time_cycle.rs`):
 
-| Period | Hours | Best Activities |
-|--------|-------|-----------------|
-| Deep Night | 00:00-03:00 | Attacking (phi bonus), Mining |
-| Dawn | 03:00-06:00 | Golden Hour - Rare spawns |
+| Period | UTC hours (at longitude 0) | Notable bonuses |
+|---|---|---|
+| Deep Night | 00:00-03:00 | Attacks (φ), Mining |
+| Dawn | 03:00-06:00 | Rare-encounter spawns |
 | Morning | 06:00-09:00 | Balanced |
-| Midday | 09:00-15:00 | Defending, Hiring |
+| Midday | 09:00-15:00 | Defense (φ), Hiring |
 | Afternoon | 15:00-18:00 | Balanced |
-| Dusk | 18:00-21:00 | Golden Hour - Rare spawns |
+| Dusk | 18:00-21:00 | Rare-encounter spawns |
 | Evening | 21:00-00:00 | Research, Stamina regen |
 
-**Golden Ratio Multipliers:**
-- phi (1.618x) for optimal timing
-- golden root (1.272x) for good timing
-- 1/phi (0.618x) for poor timing
+Multipliers come from the golden-ratio family: φ ≈ 1.618, √φ ≈ 1.272, 1/φ ≈ 0.618 (defined as `PHI`, `GOLDEN_ROOT`, `PHI_INVERSE` in `constants.rs`).
 
-### Cities
+### Cities and Travel
 
-Each kingdom has **24 cities** with themed names matching the kingdom's setting:
+Cities are configured per-kingdom via `batch_init_cities` (instruction 5); the canonical list lives in `cli/data/cities.ts` and is passed via instruction data. Each city has `latitude`, `longitude`, `radius_km`, `city_type`, plus on-account terrain anchors (water/peak lines, configurable via `set_terrain` / `append_terrain`).
 
-**City Types:**
-| Type | Bonus | Medieval Example | Cyberpunk Example |
-|------|-------|------------------|-------------------|
-| Capital | Balanced (1.0x) | King's Landing | Neo Tokyo |
-| Resource | Collection (1.272x) | Harvest Vale | Data Farm |
-| Combat | Attack/Defense (1.272x) | Ironhold | War District |
-| Trade | Economy (1.618x) | Merchant's Rest | Black Market |
+| City type | Bonus |
+|---|---|
+| Capital | Balanced (1.0×) |
+| Resource | Collection √φ (1.272×) |
+| Combat | Attack/Defense √φ (1.272×) |
+| Trade | Economy φ (1.618×) |
 
-**City Mechanics:**
-- **Same-city attacks**: Can only attack players in your current city
-- **Travel**: Move between cities (uses NOVI, takes time)
-- **Strategic positioning**: Different cities have different bonuses
-- **Territory Wars**: Events may involve controlling specific cities
+**Travel modes**:
+
+- **Intracity** (`intracity_start` → `intracity_complete`, ~1–5 min): grid cell within the same city, walking speed 5 km/h
+- **Intercity** (`intercity_start` → `intercity_complete`, ~10 min – 2 h): between cities, slower
+- **Teleport** (`intercity_teleport`): instant inter-city travel paid in NOVI, cost ≈ `segments × base_cost` where `segments = ceil(distance_km / 100)`
 
 ### Safebox System
 
-**Protection Mechanism:**
-- Store up to **75% of cash** in a protected vault
-- Safebox cash is **not lootable** during attacks
-- Networth calculation includes safebox (still counts for rankings)
-- Strategic balance: liquidity vs security
+Up to 75% of cash can be hidden in a vault (`vault_transfer` instruction 19). Safebox cash is not lootable during attacks. Networth still counts safebox for leaderboard rankings.
 
-### Encounter System (PvE Content)
+### Encounter System (PvE)
 
-**Spawned Enemies** - Fight AI-controlled encounters for rewards
-
-**Encounter Types:**
 | Rarity | Health | Despawn | Max Attackers | Stamina Cost |
-|--------|--------|---------|---------------|--------------|
+|---|---|---|---|---|
 | Common | 1,000 | 1 hour | 2 | 10 |
 | Uncommon | 5,000 | 2 hours | 3 | 25 |
 | Rare | 25,000 | 4 hours | 4 | 50 |
@@ -223,356 +197,235 @@ Each kingdom has **24 cities** with themed names matching the kingdom's setting:
 | Legendary | 500,000 | 24 hours | 10 | 250 |
 | WorldEvent | 5,000,000 | 7 days | 20 | 500 |
 
-**Rewards (Deterministic):**
-- Cash, weapons, produce based on level thresholds
-- Reserved NOVI for rare+ encounters
-- Fragments and gems (research-gated)
-- Loot distributed based on damage contribution
+Stamina constants are in `ENCOUNTER_STAMINA_COSTS` (`constants.rs:191-198`). Rewards are deterministic based on level + rarity. Loot is claimed via `loot::claim` after the encounter dies.
 
-### Dungeons (PvE Challenge)
+### Dungeon System
 
-Test your heroes against progressively difficult dungeon floors for weekly rewards.
+Dungeons are roguelike PvE runs (the "Catacombs") with floors, rooms, combat, relics, and a weekly leaderboard.
 
-**How It Works:**
-- Select a dungeon and send your heroes
-- Clear floors to progress deeper
-- Higher floors = better rewards
-- Weekly leaderboards track deepest clears
+**Instructions**: `dungeon::enter` → `dungeon::attack` / `attack_multi` / `interact` / `choose_relic` → `flee` or `claim`; checkpointed runs can be `resume`'d for `DUNGEON_RESUME_GEM_COST = 500` gems.
 
-**Dungeon Types:**
-| Dungeon | Difficulty | Specialty |
-|---------|------------|-----------|
-| Crypt | Easy | Entry-level, learn mechanics |
-| Labyrinth | Medium | Balanced challenge |
-| Abyss | Hard | Endgame content |
+**Room types**: Combat, Treasure (2× loot), Rest (heal 20%), Trap (1.5× XP, -10% HP), Camp (apply later-interact buff), Boss.
 
-**Rewards:**
-- Hero fragments for leveling
-- Gems for upgrades
-- Weekly leaderboard prizes (kingdom-scoped)
-- Reserved NOVI for top performers
+**Relics**: 20 relics, each with a synergy tag (Offense/Defense/Crit/Sustain/Darkness/Loot/Boss/Hero/Meta). 2-piece and 3-piece synergies grant additional bonuses; see `RELIC_EFFECTS`, `SYNERGY_2_BONUS_BPS`, `SYNERGY_3_BONUS_BPS` in `constants.rs:408-482`.
+
+**Darkness mechanic**: per-floor damage / crit / defense penalties starting at floors 1 / 4 / 7. See `DARKNESS_*` constants in `constants.rs:489-501`.
+
+**Reward scaling**: `DUNGEON_FLOOR_MULTIPLIERS = [1.0x, 1.2x, 1.44x, ..., 5.16x]` for floors 1-10. Weekly leaderboard (`claim_leaderboard_prize`) mints reserved NOVI for top finishers.
 
 ### Arena (Competitive PvP)
 
-Seasonal PvP competition where players battle for rankings and prizes.
+Seasonal PvP run on a per-kingdom basis. Constants in `constants.rs:290-358`:
 
-**How It Works:**
-- Each kingdom has its own arena seasons
-- Set your battle loadout (heroes + units)
-- Challenge other players in your ranking bracket
-- Climb the leaderboard for better rewards
+- **Season duration**: 7 days (`ARENA_SEASON_DURATION`)
+- **Claim deadline**: 30 days after season end (`ARENA_CLAIM_DEADLINE`)
+- **Daily battle cap**: 10 (`ARENA_MAX_DAILY_BATTLES`)
+- **Per-opponent cap**: 2 battles per day
+- **Starting ELO**: 1000 (`ARENA_STARTING_ELO`)
+- **ELO K-factor**: 32
+- **Daily reward**: requires ≥ 5 battles (`ARENA_MIN_BATTLES_FOR_DAILY_REWARD`)
+- **Master reward prize distribution**: 10-slot leaderboard split `[35%, 25%, 15%, 7.5%, 7.5%, 2%, 2%, 2%, 2%, 2%]` (`ARENA_PRIZE_DISTRIBUTION`)
 
-**Arena Seasons:**
-- Seasons last 1-4 weeks
-- Rankings reset each season
-- Prizes distributed at season end
-- Top players earn Reserved NOVI
+Battles are challenge-based: `arena::challenge_player` requires the `game_authority` signer to validate the match.
 
-**Battle System:**
-- Deterministic combat (no luck)
-- Strategy matters: unit composition, hero selection
-- Daily battle limit encourages smart matchmaking
-- Win streaks provide bonus ranking points
+### Castle System (Territory Control)
 
-### Castle Battles (Territory Control)
+5 castle tiers: Outpost (0.25×), Keep (0.5×), Stronghold (1.0×), Fortress (1.5×), Citadel (2.0×) — see `CASTLE_TIER_MULTIPLIER_BPS`. Max castles per king: 5.
 
-Capture and hold castles to earn passive income and prestige for your team.
+**Status machine**: Vacant → Contest → Protected → Vulnerable → Transitioning. Protection lasts 10 days (`CASTLE_PROTECTION_DURATION = 864_000`).
 
-**Castle System:**
-- Each city has castles that teams can capture
-- Holding a castle generates rewards for your team
-- Appoint court positions (King, General, Treasurer, etc.)
-- Garrison troops to defend against attackers
+**Roles**:
 
-**Capturing Castles:**
-- Attack a castle held by another team
-- Rally with teammates for coordinated assaults
-- Defeat the garrison to claim control
-- Defend against counter-attacks
+| Role | Default daily NOVI | Default daily cash |
+|---|---|---|
+| King | 500,000 | 10,000,000 |
+| Court | 50,000 | 1,000,000 |
+| Member | 5,000 | 500,000 |
 
-**Castle Benefits:**
-| Position | Bonus |
-|----------|-------|
-| King | Highest share of castle income |
-| Court Members | Moderate share + special perks |
-| Garrison Contributors | Share based on contribution |
+(Multiplied by `castle.tier_multiplier_bps`; defaults from `KING_NOVI_PER_DAY`, `KING_CASH_PER_DAY`, etc. in `constants.rs:592-597`.)
 
-**Strategy:**
-- Stronger castles in high-value cities
-- Coordinate with your team for defense schedules
-- Balance garrison strength vs active army size
+**Upgrades**: Fortification, Treasury (cap 20 levels = 200% bonus), Chambers (cap 5 = court slots), Watchtower (cap 15), Armory. See `MAX_*_LEVEL` constants.
 
-### Estates (Personal Property)
+**Garrison**: capacity by king's subscription tier: `[5, 10, 15, 25]` (`GARRISON_CAP_BY_TIER`). 15% of combat loot is the king's cut (`KING_LOOT_CUT_BPS = 1500`).
 
-Build and upgrade your personal estate to generate passive income and unlock bonuses.
+### Estate (Personal Property)
 
-**Estate Features:**
-- Personal property that grows with your character
-- Generates passive resources over time
-- Upgradeable buildings for increased output
-- Safe from raids (unlike active resources)
+Each player has one `EstateAccount` (`estate::create`) with embedded buildings:
 
-**Estate Buildings:**
-| Building | Benefit |
-|----------|---------|
-| Manor | Increases locked NOVI capacity |
-| Barracks | Faster unit training |
-| Warehouse | Higher resource storage |
-| Market | Better shop discounts |
+- **Combat / military**: Mansion, Barracks, Workshop, Vault, Camp, Infirmary, Stables
+- **Production**: Mine, Farm, Forge, Dock
+- **Strategic**: Market, Academy, Arena, Sanctuary, Observatory, Treasury, Citadel
+- **Dungeon**: Catacombs (required for dungeon access)
 
-**Upgrading:**
-- Spend NOVI and resources to upgrade buildings
-- Higher levels = better bonuses
-- Requires minimum player level for each tier
+`estate::build` starts construction; `estate::complete` finalizes after the timer; `estate::upgrade` levels existing buildings; `estate::daily_claim` and `estate::daily_activity` provide passive resource generation tied to a daily mini-game window. `recover_troops` heals abandoned units via Infirmary; `convert_materials` swaps resources.
+
+### Forge System (Staged Tempering)
+
+Crafting flow: `forge::start_craft` (lock materials) → repeated `forge::strike` (skill-based timing window) → `forge::equip` (apply to player) or `forge::abandon_craft` (refund partial). Quality tiers 0-4 (Common → Mythic).
+
+### Expedition System (Mining / Fishing / Farming)
+
+Long-duration resource expeditions: `expedition::start` (lock operatives, pay NOVI) → repeated `strike` (skill-based mini-game; requires `game_authority`) → `claim` (collect yield) or `abort` (early termination, partial refund).
+
+Tiers 0-4 with increasing duration (1/2/4/8/16 hours), rare-find chance (1%/3%/5%/10%/20%), building requirements (Workshop/Dock/Farm level), and NOVI cost (100/500/2,000/8,000/30,000). See `MINING_*`, `FISHING_*`, `FARMING_*` constants in `constants.rs:241-269`.
+
+### Reinforcement System
+
+Teammates can send units to defend each other (`reinforcement::send`). Requires:
+- Same team (`NotOnSameTeam` otherwise)
+- "Military Logistics" research unlocked (`MilitaryLogisticsRequired`)
+- Free reinforcement slot on receiver (`NoFreeReinforcementSlot`)
+
+Max units across all reinforcements: 10,000 (`MAX_REINFORCEMENT_RECEIVE`). Optional hero co-deployment for +20% effectiveness.
+
+Lifecycle: `send` → `process_arrival` (permissionless crank) → optional `relieve` / `recall` → `process_return` (permissionless crank). Recovery cost discount when re-hiring units killed during reinforcement: 50% (`RECOVERY_COST_DISCOUNT_BPS = 5000`).
+
+### Rally System
+
+Coordinated multi-player attacks: `rally::create` → invited members `rally::join` → `rally::execute` (combat resolves against target) → `rally::process_return` for each participant.
+
+Caps per subscription tier (`RallyCaps` in `GameEngine`):
+
+| Tier | Max joined | Max created/day | Max participants |
+|---|---|---|---|
+| Rookie | 1 | 1 | 3 |
+| Expert | 3 | 3 | 5 |
+| Epic | 5 | 5 | 10 |
+| Legendary | 10 | 10 | 20 |
+
+Min participants to execute: 2 (`MIN_RALLY_PARTICIPANTS`). Default recruiting duration: 1 hour (`DEFAULT_RALLY_RECRUITING_DURATION = 3600`).
+
+### Sanctuary (Hero Meditation)
+
+Heroes can be sent to meditate (`sanctuary::start_meditation`) for passive XP and bonuses. Speedup with gems (`sanctuary::speedup_meditation`). Claim XP after duration elapses (`sanctuary::claim_meditation`). Meditation duration is capped by Sanctuary building level.
 
 ### Combat Mechanics
 
-**Attack Power Formula (Deterministic):**
+**Attack power (deterministic, see `logic/combat.rs`)**:
+
 ```
-base_power = sum(defensive_unit_i x tier_weight_i)
+base_power = Σ(defensive_unit_i × power_i)
 weapon_coverage = min(weapons / total_units, 1.0)
-total_bonus = base + research_bps + hero_bps + level_bonus
-total_power = base_power x weapon_coverage x total_bonus / 10000
+total_bonus_bps = 10000 + research_attack_bps + hero_attack_bps + level_bonus
+total_power = base_power × weapon_coverage × total_bonus_bps / 10000
 ```
 
-**Critical Hits (Skill-Based, Not Random):**
-- If `research_crit_chance_bps >= 5000` (50%): Guaranteed crit
-- This is research investment, not luck
+**Critical hits** in PvP: research-driven. If `research_crit_chance_bps >= 5000`, the crit is guaranteed (50% threshold = 100% crit). Crit damage is also research-scaled. This is investment, not luck.
 
-**Drive-By Attacks:**
-- Requires 10,000+ units and vehicles
-- Base bonus: golden root (1.272x)
-- Night bonus stacks: up to phi (1.618x) total
+**Critical hits in dungeons** are intended to be flagged by the off-chain `game_authority` per attack. 
+
+**Drive-by attacks**: require 10,000+ units and vehicles; base bonus `√φ`; night bonus stacks up to full `φ`.
 
 ---
 
 ## Events & Competition
 
-All events and leaderboards are **kingdom-specific** - you compete only with players in your kingdom, ensuring fair matchups regardless of when you started playing.
+All events and leaderboards are **kingdom-scoped** — you compete only with players in your kingdom.
 
-### Daily Challenges (Every 24 Hours)
-Quick, accessible events for all players:
+### Event Cadence
 
-**Example Events:**
-- **Raider's Bounty**: Top 10 attackers win 5,000-25,000 Reserved NOVI
-- **Resource Baron**: Highest resource collector wins 10,000-50,000 Reserved NOVI
-- **Untouchable**: Defend against 5+ attacks, win 3,000-15,000 Reserved NOVI
-
-**Eligibility:**
-- Account age: 7+ days
-- Minimum activity: 5 attacks made
-- Transfer ratio: Received <= 10x sent
-
-### Weekly Tournaments (Every 7 Days)
-Competitive rankings with substantial prizes:
-
-**Example Events:**
-- **King of the Hill**: Maintain #1 rank longest - 100,000+ Reserved NOVI
-- **Team Warfare**: Teams compete by total networth - 500,000+ NOVI prize pool
-- **Blitz Attack**: Most successful attacks in 24hrs - 75,000+ Reserved NOVI
-
-**Eligibility:**
-- Account age: 30+ days
-- Minimum activity: 20 attacks, 5 defenses
-- Transfer ratio: Received <= 3x sent
-
-### World Events (Announced Dynamically)
-Large-scale events that shape the game world:
-
-**Example Events:**
-- **Territory Wars**: Teams battle for location control - Passive NOVI bonuses
-- **Legendary Hunts**: Defeat powerful AI bosses - 250,000+ NOVI jackpots
-- **Alliance Summit**: Cross-team cooperation - Massive community rewards
-
-**Eligibility:**
-- Account age: 60+ days
-- Significant activity required
-- Transfer ratio: Received <= 2x sent
+| Event class | Duration | Min account age | Prize range (illustrative) |
+|---|---|---|---|
+| Daily | 24 hours | 7 days | 5K-50K NOVI |
+| Weekly | 7 days | 30 days | 60K-500K NOVI |
+| Seasonal | ~30 days | 60 days | 1M+ NOVI |
+| World | variable | variable | 250K+ NOVI |
 
 ### Prize Distribution (Top 10)
 
-| Rank | Share |
-|------|-------|
-| 1 | 40% |
-| 2 | 20% |
-| 3 | 13% |
-| 4 | 9% |
-| 5 | 6% |
-| 6 | 4% |
-| 7 | 3% |
-| 8 | 2% |
-| 9 | 2% |
-| 10 | 1% |
+From `PRIZE_DISTRIBUTION` in `constants.rs:160-171`:
+
+| Rank | Share | Rank | Share |
+|---|---:|---|---:|
+| 1 | 35% | 6 | 2% |
+| 2 | 25% | 7 | 2% |
+| 3 | 15% | 8 | 2% |
+| 4 | 7.5% | 9 | 2% |
+| 5 | 7.5% | 10 | 2% |
+
+(Sums to 100%. Same distribution applies to arena master rewards.)
+
+### Anti-Sybil Event Eligibility
+
+Tiered by event value (illustrative thresholds — actual values configured per event):
+
+| Event value | Min account age | Min attacks | Max transfer ratio |
+|---|---|---|---|
+| < 25K NOVI | 7 days | 5 | 10:1 |
+| 25K-100K | 30 days | 20 | 3:1 |
+| 100K+ | 60 days | 50 | 2:1 |
+
+`total_sent` and `total_received` are tracked on every PlayerAccount; the ratio is checked in `logic/eligibility.rs`.
 
 ---
 
 ## Subscription Tiers
 
-Subscriptions boost your NOVI generation rate and unlock faster progression.
+Subscription values live in `GameEngine.subscription_tiers[4]` and are configurable by DAO. The defaults in `MAX_TEAM_MEMBERS_BY_TIER` and `MAX_STAMINA_BY_TIER` (`constants.rs:36, 205-210`) are:
 
-### Free Player (Rookie)
+| Tier | Team size | Max stamina | Notes |
+|---|---:|---:|---|
+| Rookie (Free) | 5 | 100 | Free tier |
+| Expert | 10 | 500 | SOL subscription |
+| Epic | 25 | 1,000 | SOL subscription |
+| Legendary | 50 | 10,000 | SOL subscription |
 
-| Metric | Value |
-|--------|-------|
-| Generation | 1 NOVI/5min |
-| Max Locked NOVI | 3,000 |
-| Max Stamina | 100 |
-| Team Size | 5 |
-
-### Expert Tier
-**Unlock:** SOL subscription
-
-| Metric | Value |
-|--------|-------|
-| Generation | 2 NOVI/5min |
-| Max Locked NOVI | 6,000 |
-| Max Stamina | 500 |
-| Team Size | 10 |
-
-### Epic Tier
-**Unlock:** SOL subscription
-
-| Metric | Value |
-|--------|-------|
-| Generation | 10 NOVI/5min |
-| Max Locked NOVI | 30,000 |
-| Max Stamina | 1,000 |
-| Team Size | 25 |
-
-### Legendary Tier
-**Unlock:** SOL subscription
-
-| Metric | Value |
-|--------|-------|
-| Generation | 50 NOVI/5min |
-| Max Locked NOVI | 150,000 |
-| Max Stamina | 10,000 |
-| Team Size | 50 |
+Generation rate per 5 min, max locked NOVI, daily transfer caps, and tier-specific bonuses are all stored in each `SubscriptionTier` struct on the GameEngine and updated by DAO via `update_game_config`.
 
 ---
 
 ## Research System
 
-30 research nodes across 3 categories:
+30 research nodes across 3 categories (10 each). Costs scale as `NOVI_cost = base × 1.8^level`, time as `time = base × 1.5^level`.
 
-**Battle Research (10 nodes):**
-- Attack Power, Defense Power, Unit Capacity
-- Critical Hit Chance, Critical Hit Damage
-- Rally Capacity, Encounter Success, Loot Bonus
-- Training Speed, Ambush Damage
+**Battle (10)**: Attack Power, Defense Power, Unit Capacity, Crit Chance, Crit Damage, Rally Capacity, Encounter Success, Loot Bonus, Training Speed, Ambush Damage.
+**Economy (10)**: Production Efficiency, Resource Capacity, Market Tax Reduction, Trade Speed, Mining Output, Cash Generation, Construction Speed, Upkeep Reduction, Black Market, Tax Collection.
+**Growth (10)**: Daily Rewards System (`has_daily_rewards`), Mining Operations (`has_mining`), Fishing Industry (`has_fishing`), Loot Magnetism, Reputation Mastery, Stamina Vitality, Lucky Streak, Fragment Discovery, Gem Prospecting, Collection Mastery.
 
-**Economy Research (10 nodes):**
-- Production Efficiency, Resource Capacity
-- Market Tax Reduction, Trade Speed
-- Mining Output, Cash Generation
-- Construction Speed, Upkeep Reduction
-- Black Market Access, Tax Collection
-
-**Growth Research (10 nodes):**
-- Daily Rewards System, Mining Operations
-- Fishing Industry, Loot Magnetism
-- Reputation Mastery, Stamina Vitality
-- Lucky Streak, Fragment Discovery
-- Gem Prospecting, Collection Mastery
-
-**Cost Scaling:**
-```
-NOVI_cost = base_cost x 1.8^level
-Time = base_time x 1.5^level
-```
+Research can be `start`'d, `speed_up`'d (gems), `cancel`'d (partial refund), or `complete`'d. `research::ascend` consumes mastery to unlock higher-tier benefits.
 
 ---
 
-## Hero System
+## Hero System (MPL Core NFTs)
 
-Heroes are NFTs that provide buffs scaling with golden root:
+Heroes are MPL Core (`p-core`) NFTs. Buffs scale with `√φ` per level:
 
-**Buff Formula:**
 ```
-buff_value = base_bps x (golden_root)^level
+buff_value = base_bps × (√φ)^level
 ```
 
-| Level | Multiplier | Example (100 base) |
-|-------|------------|-------------------|
-| 1 | 1.272x | 127 |
-| 2 | 1.618x | 162 |
-| 4 | 2.618x | 262 |
-| 10 | 10.86x | 1,086 |
+| Level | Multiplier | Example (base 100) |
+|---|---|---|
+| 1 | 1.272× | 127 |
+| 2 | 1.618× | 162 |
+| 4 | 2.618× | 262 |
+| 10 | 10.86× | 1,086 |
 
-**Hero Types:**
-- Offensive: Attack, Crit Chance, Encounter Damage
-- Defensive: Defense, Unit Capacity, Rally Capacity
-- Economic: Cash Collection, Produce Generation, Loot Bonus
-- Hybrid: Balanced mix
+**Lifecycle**:
 
-**Leveling Cost:**
-```
-fragment_cost = 10 x 1.5^current_level
-```
+- `hero::create_template` (DAO) — define a hero archetype with base stats, mint cost, supply cap
+- `hero::create_collection` (DAO) — bootstrap the shared MPL Core collection
+- `hero::mint` — player mints from a template (gated by `HeroMintReceipt` per-(player, template))
+- `hero::lock` — bind a hero to a PlayerAccount slot (up to 3 active); buffs apply
+- `hero::unlock` — release a locked hero; buffs removed
+- `hero::level_up` — spend fragments per `fragment_cost = 10 × 1.5^current_level`
+- `hero::assign_defensive` — pick which slot defends
+- `hero::burn` — destroy a hero NFT; refund locked NOVI scaled by tier × level
+- `hero::update_supply_cap` (DAO) — raise the template supply ceiling (cannot decrease)
+
+Heroes can be sent with reinforcements for +20% effectiveness and meditate in Sanctuary for passive XP.
 
 ---
 
 ## Fibonacci Efficiency System
 
-Spending NOVI amounts that are **Fibonacci numbers** grants deterministic efficiency bonuses:
+Spending NOVI amounts that are **Fibonacci numbers** grants a deterministic `√φ` (1.272×) efficiency multiplier:
 
-**Fibonacci Numbers:** 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765...
+**Fibonacci numbers**: 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, …
 
-**Bonus:** golden root (1.272x) efficiency multiplier
+Detection (`logic/fibonacci.rs`): a number `n` is Fibonacci iff `5n² + 4` or `5n² - 4` is a perfect square.
 
-**How it works:** When you spend a Fibonacci amount of NOVI on any action (collecting, attacking, hiring), you get 27.2% more value for the same cost.
-
-**Example:**
-- Collect with 233 NOVI (Fibonacci) - Gets 1.272x bonus
-- Collect with 250 NOVI (not Fibonacci) - No bonus
-
-**Strategy:** Plan your actions around Fibonacci amounts for maximum efficiency.
-
----
-
-## Anti-Bot Security
-
-### Simple, Effective Rules
-
-**Transfer Restrictions:**
-- Same team only (no cross-team transfers)
-- Both accounts must be 7+ days old
-- Tier-based daily limits (see below)
-- Tracked: total_sent and total_received
-
-**Tier-Based Transfer Limits:**
-
-| Tier | Daily Amount | Daily Count | Notes |
-|------|--------------|-------------|-------|
-| Rookie (Free) | 0 | 0 | Transfers disabled |
-| Expert | 1B | 25 | Basic team support |
-| Epic | 25B | 100 | Active team play |
-| Legendary | Unlimited | Unlimited | Full team coordination |
-
-Subscribing unlocks team transfers - free players must earn through gameplay.
-
-**Event Eligibility (Anti-Sybil):**
-
-| Event Value | Account Age | Min Attacks | Max Transfer Ratio |
-|-------------|-------------|-------------|-------------------|
-| < 25K NOVI | 7 days | 5 | 10:1 |
-| 25K-100K NOVI | 30 days | 20 | 3:1 |
-| 100K+ NOVI | 60 days | 50 | 2:1 |
-
-**Why This Works:**
-- Bots farming passive generation get **locked NOVI** - Cannot withdraw - Worthless
-- Players who receive excessive transfers **fail event eligibility** - Cannot win prizes
-- Legitimate players earning through attacks **pass all checks** - Win reserved NOVI
-
-### Governance-Based Security
-
-Using **SPL Governance** for decentralized administration:
-
-**Community Powers:**
-- Flag suspicious accounts (community vote, 60% threshold)
-- Approve event prize distribution (council vote, 3/5 approval)
-- Update game parameters (combined vote)
-- Emergency pause mechanisms
+Applied in `logic/consume.rs` to actions that take a player-chosen NOVI amount (collection, etc.). Plan your spends to land on Fibonacci numbers for free efficiency.
 
 ---
 
@@ -580,127 +433,73 @@ Using **SPL Governance** for decentralized administration:
 
 ### Multi-Layer Discount System
 
-**Layer 1: Base Discounts** (up to 60%)
-- Flash Sales, Daily Deals, Weekly/Seasonal Sales
+**Layer 1 — Base discounts** (up to 60%):
+- Flash Sales (minutes–hours)
+- Daily Deals (24h)
+- Weekly Sales (7 days)
+- Seasonal Sales (event-tied)
+- DAO Promotions (community-voted)
 
-**Layer 2: Bundle Savings** (up to 35%)
-| Bundle | Discount |
-|--------|----------|
-| Starter | 10% |
-| Combat | 15% |
-| Crafter | 20% |
-| Explorer | 25% |
-| Supreme | 35% |
+**Layer 2 — Bundle savings** (up to 35%, exact discount stored per bundle).
 
-**Layer 3: Fibonacci Bonus** (up to 20%)
-- Spending Fibonacci amounts grants efficiency bonus
+**Layer 3 — Fibonacci bonus** (up to 20%, applied when total cost is a Fibonacci number).
 
-**Combined Cap:** 75% maximum discount
+**Combined cap**: configured in `ShopConfig.max_total_discount_bps`. 
 
 ### Milestone Loyalty
 
+Permanent discounts unlocked at spend thresholds (configured in `ShopConfig`):
+
 | Milestone | Permanent Discount |
-|-----------|-------------------|
+|---|---|
 | Bronze | 2% |
 | Silver | 4% |
 | Gold | 6% |
 | Platinum | 8% |
 | Diamond | 10% |
 
+### Payment Methods
+
+- **SOL** (lamports) — via system transfer to treasury
+- **NOVI** — direct from `PlayerAccount.locked_novi`
+- **Approved SPL tokens** — via `AllowedTokenAccount` + Pyth/Switchboard oracle pricing
+- **Gems** — premium currency (earned/purchased)
+
+### NOVI Purchase (`shop::purchase_novi`, instruction 300)
+
+Buy NOVI with SOL:
+- **Oracle-priced**: SOL/USD and NOVI/USD via Pyth or Switchboard, with configurable `novi_market_undercut_bps` discount (e.g. 15% below market)
+- **Fallback**: DAO-set `novi_base_price_lamports` if oracle missing/stale
+- **Bonuses**: package tier bulk discount, subscription tier bonus, consecutive-day purchase streak (up to 7 days)
+- **Slippage protection**: caller specifies `max_lamports`
+
 ---
 
-## NFT Technology (Planned)
+## Anti-Bot Security
 
-Limited-edition NFTs that provide strategic advantages. Visuals and names change per theme, mechanics stay identical.
+### Transfer Restrictions (`economy::transfer_cash`)
 
-### Strike Force (3 variants)
+- Same team only (no cross-team transfers)
+- Both accounts ≥ `min_account_age_for_events` old (default 7 days)
+- Tier-based daily amount + count caps
+- Vault building level ≥ 5 required (with bonuses at 10/15/20)
+- `total_sent` / `total_received` tracked per player
 
-Team-wide attack NFTs that target all enemy team members.
+### Event Eligibility
 
-| Tier | Damage | Bonus |
-|------|--------|-------|
-| Standard | Base | - |
-| Enhanced | +50% | Increased damage |
-| Stealth | +75% | Undetected by defenses |
+See "Anti-Sybil Event Eligibility" above. Tier-gated by account age, min attacks, and transfer ratio.
 
-**Theme Variants:**
-| Theme | Standard | Enhanced | Stealth |
-|-------|----------|----------|---------|
-| Modern | F16 | F22 | B2 Bomber |
-| Medieval | Cavalry Charge | Dragon Riders | Shadow Assassins |
-| Cyberpunk | Drone Swarm | Mech Battalion | Ghost Protocol |
-| Sci-Fi | Fighter Wing | Battlecruiser | Cloaked Fleet |
-| Post-Apocalyptic | War Convoy | Mutant Horde | Rad Stalkers |
+### Why Botting Loses
 
-**Mechanics:**
-- Attack entire enemy team
-- Destroy up to 200,000 units per player
-- 2 uses per NFT
-- Supply: 20 minted/month, 500 max forever
+- Passive farming → locked NOVI → cannot withdraw → worthless
+- Consolidation farming → high `total_received / total_sent` → fails event eligibility → cannot win big prizes
+- Legitimate play → balanced ratios → wins Reserved NOVI
 
-### Fortification
+### Governance
 
-Permanent defensive structure protecting your assets.
-
-**Theme Variants:**
-| Theme | Name |
-|-------|------|
-| Modern | Fortified Bunker |
-| Medieval | Castle Keep |
-| Cyberpunk | Firewall Citadel |
-| Sci-Fi | Shield Generator |
-| Post-Apocalyptic | Vault Shelter |
-
-**Protection:**
-- Protects safebox, produce, and operative units
-- 80% reduction vs Devastation attacks
-- 90% reduction vs Strike Force attacks
-- Permanent (doesn't burn on defense)
-- Supply: 200 minted/month, 1,000 max forever
-
-### Devastation Weapon (2 variants)
-
-Massive single-use weapon that devastates entire enemy teams.
-
-| Tier | Destruction |
-|------|-------------|
-| Standard | 10M units/player |
-| Supreme | 2x destruction |
-
-**Theme Variants:**
-| Theme | Standard | Supreme |
-|-------|----------|---------|
-| Modern | Nuclear Missile | MOAB |
-| Medieval | Plague Catapult | Dragon Fire |
-| Cyberpunk | EMP Bomb | Blackout Virus |
-| Sci-Fi | Ion Cannon | Planet Cracker |
-| Post-Apocalyptic | Dirty Bomb | Mega Nuke |
-
-**Mechanics:**
-- Devastate entire enemy team
-- Single-use (burns after detonation)
-- 48-hour warning period
-- Requires recent hostility with target
-- Supply: 10 minted/month, 100 max forever
-
-### Interception System
-
-Advanced defense system against Strike Force and Devastation attacks.
-
-**Theme Variants:**
-| Theme | Name |
-|-------|------|
-| Modern | Iron Dome |
-| Medieval | Archer Towers |
-| Cyberpunk | Counter-ICE |
-| Sci-Fi | Point Defense Grid |
-| Post-Apocalyptic | Scrap Turrets |
-
-**Defense:**
-- 50% reduction vs Devastation attacks
-- 80% reduction vs Strike Force attacks
-- Burns after defending or attacking
-- Supply: 20 minted/month, 100 max forever
+- `GameEngine.authority` — DAO governance authority (gates all `update_*` instructions, batch city init, etc.)
+- `GameEngine.game_authority` — off-chain backend signer for skill/RNG-influenced instructions (dungeon relic choice, dungeon interact, expedition strike, estate daily activity, arena match)
+- `GameEngine.payment_authority` — backend that co-signs off-chain (fiat) subscription payments
 
 ---
 
@@ -708,141 +507,67 @@ Advanced defense system against Strike Force and Devastation attacks.
 
 ### Solana Smart Contract
 
-**Framework:** Pinocchio (low-level, high-performance)
+- **Framework**: Pinocchio 0.9.2 (no Anchor — all account validation is manual)
+- **External crates**: `p-core` (MPL Core for hero NFTs), `p-pyth` (Pyth price feeds), `switchboard-on-demand`, `alt-name-service` + `tld-house` (ANS / .alldomains player and team names), `libm` (deterministic float math)
+- **Instruction discriminator**: u16 little-endian (2 bytes)
+- **Account size**: PlayerAccount is `PlayerCore` (1056 bytes) + up to 7 extension sections (research, heroes, inventory, rally, team, cosmetics, court) up to a total `MAX_SIZE = 1946 bytes`
+- **PDA seeds**: kingdom-scoped except for the NOVI mint (shared)
 
-**Key Features:**
-- Low transaction costs (~$0.0005 per action)
-- Fast finality (400ms)
-- Persistent state (no resets)
-- SPL Governance integration
-- 50-70% compute savings vs Anchor
+See `TECHNICAL_ARCHITECTURE.md` for full module structure, account layouts, instruction dispatch table, and PDA seed reference.
 
-**Account Structure:**
-| Account | Size | Notes |
-|---------|------|-------|
-| PlayerAccount | ~400 bytes | Game state, locked NOVI |
-| UserAccount | ~120 bytes | Reserved NOVI, stats |
-| ResearchProgress | ~200 bytes | 30 research nodes |
-| HeroAccount | ~80 bytes | Per NFT |
+### Determinism & Float Math
 
-**Deterministic Math:**
-- All calculations use golden ratio family
-- Basis points for all multipliers (10000 = 100%)
-- libm for BPF-compatible float math
-- No randomness anywhere
-
-### Governance
-
-**SPL Governance Realm:**
-- Council: 5 admin members (3/5 approval for critical actions)
-- Community: Token-weighted voting
-- Transparent proposals for all admin actions
-- On-chain prize distribution verification
-
----
-
-## Why Play Novus Mundus?
-
-**Never Reset**
-Your kingdom is permanent. Build your empire without fear of arbitrary resets.
-
-**Constant Earning Opportunities**
-Daily, weekly, and seasonal events mean you always have a path to win reserved NOVI.
-
-**Strategic Depth**
-Happiness mechanics, location strategy, unit composition, timing - skill matters.
-
-**Team Dynamics**
-Form alliances, coordinate attacks, share resources, dominate together.
-
-**Real Play-to-Earn**
-Reserved NOVI is fully withdrawable. Win events, cash out, or reinvest for power.
-
-**Deterministic Gameplay**
-No randomness. Every outcome is predictable based on your investment and timing.
-
-**Accessible Yet Competitive**
-Free players can compete in dailies. Subscribers dominate high-stakes events. Everyone has a path.
+The codebase favors integer basis-point math, but some logic paths still use `f64` via `libm` (combat damage splits, Haversine distance, progression scaling).
 
 ---
 
 ## Getting Started
 
 ### Step 1: Connect Wallet
-- Phantom, Backpack, or any Solana wallet
-- Fund with SOL for transactions
+Phantom, Backpack, or any Solana wallet. Fund with SOL for transactions.
 
 ### Step 2: Choose Your Kingdom
-- Browse available kingdoms and their themes
-- **New player?** Join a recently launched kingdom for fair competition
-- **Veteran?** Play multiple kingdoms with the same wallet
-- Check kingdom age and player count before joining
+Browse available kingdoms by theme and age. New player? Pick a recently launched kingdom for a fair start. Veteran? Run multiple kingdoms with the same wallet.
 
 ### Step 3: Register Your Character
-- Create your player account in the chosen kingdom
-- Receive starting resources
-- 24-hour protection begins
-- Start generating locked NOVI
+- `init_user` (one-time per wallet, instruction 2)
+- `init_player` (per-kingdom, instruction 1) — receive 1M starter locked NOVI; 24-hour new-player protection begins
 
 ### Step 4: Build Your Strategy
-- Hire units with locked NOVI
-- Maintain happiness (feed and arm your troops)
-- Attack diverse opponents
-- Collect resources with operative units
+Hire units, maintain happiness, attack diverse opponents, collect resources, claim a name via `set_player_name` (alt-name-service / .alldomains).
 
 ### Step 5: Join Events
-- Start with daily challenges (7-day eligibility)
-- Progress to weekly tournaments (30-day)
-- Dominate seasonal championships (60-day+)
-- Win reserved NOVI, withdraw to wallet
+Start with daily challenges (7-day eligibility). Progress to weekly tournaments (30-day), seasonal events (60-day+).
 
 ### Step 6: Grow Your Empire
-- Consider subscription for faster progression
-- Join or form a team
-- Invest in research and heroes
-- Accumulate reserved NOVI for real earnings
-- Expand to additional kingdoms when ready
+Subscribe for faster generation. Form/join a team. Invest in research, mint heroes, build estate buildings, run dungeons, claim a castle, fight in arena seasons.
 
 ---
 
 ## Fair Play Commitment
 
-Novus Mundus is designed for **skill-based competition**, not pay-to-win:
-
-- **Fair starts through kingdoms** - New kingdoms launch regularly so everyone can start fresh
-- **Kingdom-scoped competition** - Compete only with players who started when you did
-- Free players can earn through daily challenges and smart gameplay
+- **Multi-kingdom** — new kingdoms launch periodically; everyone can start fresh
+- **Kingdom-scoped competition** — compete only with players who started when you did
+- Free players earn through daily challenges
 - Subscriptions accelerate progression but don't guarantee victories
-- Events reward strategy over wallet size
-- Community governance prevents centralized abuse
-- Transparent on-chain actions ensure fairness
-- Deterministic mechanics mean no luck-based advantages
-
-**Late to the game? Join a new kingdom and compete on equal footing.**
+- Deterministic core mechanics — no in-protocol RNG
+- Transparent on-chain actions and DAO governance
 
 ---
 
 ## Important Notes
 
 ### Price Disclaimer
-All SOL and NOVI prices mentioned in this document are examples and subject to change based on:
-- Market conditions
-- Community governance decisions
-- Economic balancing updates
-- Token supply and demand
+SOL and NOVI prices in this document are examples. Real prices depend on market conditions, DAO governance, economic balancing, and supply/demand.
 
 ### Not Financial Advice
-Novus Mundus is a game. NOVI is a gaming token. This is entertainment, not an investment product. Play responsibly.
+Novus Mundus is a game. NOVI is a gaming token. Entertainment, not investment. Play responsibly.
 
 ### Continuous Evolution
-Game mechanics, events, and features will evolve based on:
-- Community feedback
-- Governance proposals
-- Security considerations
-- Competitive balance
+Mechanics, events, and features evolve based on community feedback, governance proposals, security considerations, and competitive balance.
 
 ---
 
-**Version:** 3.0 (Multi-Kingdom)
-**Framework:** Pinocchio (Solana)
-
+**Version**: 3.1 (Multi-Kingdom, 2026-05-14 docs refresh)
+**Framework**: Pinocchio 0.9.2 (Solana)
+**Program**: `programs/novus_mundus/`

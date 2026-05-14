@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
@@ -14,9 +14,7 @@ use crate::{
     validation::{require_signer, require_writable},
 };
 
-// ============================================================
 // Time Window Constants
-// ============================================================
 
 /// Hours after dawn_timestamp for each window
 const DAWN_END_HOURS: i64 = 3;
@@ -41,9 +39,7 @@ const WINDOW_DAWN: u8 = 0b001;
 const WINDOW_MIDDAY: u8 = 0b010;
 const WINDOW_DUSK: u8 = 0b100;
 
-// ============================================================
 // Building Window Assignments
-// ============================================================
 
 /// Get which window(s) a building's mini-game can be played in
 fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow] {
@@ -63,7 +59,7 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
         BuildingType::Arena => &[TimeWindow::Midday],
 
         // Dusk only
-        BuildingType::Sanctuary => &[TimeWindow::Dusk],
+        BuildingType::MeditationChamber => &[TimeWindow::Dusk],
         BuildingType::Observatory => &[TimeWindow::Dusk],
         BuildingType::Treasury => &[TimeWindow::Dusk],
         BuildingType::Citadel => &[TimeWindow::Dusk],
@@ -72,8 +68,8 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
         BuildingType::Camp => &[TimeWindow::Dawn],                         // Military, like Barracks
         BuildingType::Mine => &[TimeWindow::Dawn, TimeWindow::Midday],     // Like Workshop
         BuildingType::Farm => &[TimeWindow::Dawn, TimeWindow::Midday],     // Morning chores
-        BuildingType::Catacombs => &[TimeWindow::Dusk],                    // Nighttime exploration
-        BuildingType::Stables => &[TimeWindow::Midday],                    // Midday travel prep
+        BuildingType::DungeonEntry => &[TimeWindow::Dusk],                 // Nighttime exploration
+        BuildingType::TransportBay => &[TimeWindow::Midday],               // Midday travel prep
         BuildingType::Infirmary => &[TimeWindow::Dusk],                    // Evening care
 
         // Mansion handled by daily_claim.rs (any time)
@@ -94,9 +90,7 @@ fn expansion_bitflag(building_type: BuildingType) -> u8 {
     if bit < 16 { 0 } else { 1u8 << (bit - 16) }
 }
 
-// ============================================================
 // Daily Activity Processor
-// ============================================================
 
 /// Complete Building Mini-Game
 ///
@@ -130,8 +124,8 @@ fn expansion_bitflag(building_type: BuildingType) -> u8 {
 /// - building_type: u8 (1 byte) - BuildingType enum
 /// - score: u8 (1 byte) - Score 0-100 from mini-game
 pub fn process(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (6 required, 3 optional)
@@ -166,25 +160,25 @@ pub fn process(
     let score = instruction_data[1].min(100); // Cap at 100
 
     // 4. Validate game_authority against GameEngine
-    let game_engine_data = game_engine_account.try_borrow_data()?;
-    let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+    // Validate game_engine account (ownership + PDA + discriminator + bump)
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
-    if game_authority.key() != &game_engine.game_authority {
+    if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
 
     // 5. Load Accounts
-    let mut player_data_ref = player_account.try_borrow_mut_data()?;
+    let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    let mut estate_data_ref = estate_account.try_borrow_mut_data()?;
+    let mut estate_data_ref = estate_account.try_borrow_mut()?;
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
     // 6. Verify ownership
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    if &estate_data.owner != owner.key() {
+    if &estate_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -212,7 +206,7 @@ pub fn process(
         estate_data.arena_damage_bps = 0;
         estate_data.daily_loot_bonus_bps = 0;
         estate_data.market_discount_bps = 0;
-        estate_data.blessed_hero = Pubkey::default();
+        estate_data.blessed_hero = Address::default();
         estate_data.citadel_stance = 0;
         estate_data.camp_discount_bps = 0;
         estate_data.stables_speed_bps = 0;
@@ -267,6 +261,7 @@ pub fn process(
         player_token_account,
         novi_mint,
         research_progress,
+        program_id,
     )?;
 
     // 13. Mark building as completed for this window
@@ -318,12 +313,13 @@ fn grant_building_rewards(
     estate: &mut EstateAccount,
     building_type: BuildingType,
     score: u8,
-    hero_mint: &AccountInfo,
-    player_account: &AccountInfo,
-    game_engine_account: &AccountInfo,
-    player_token_account: Option<&AccountInfo>,
-    novi_mint: Option<&AccountInfo>,
-    research_progress: Option<&AccountInfo>,
+    hero_mint: &AccountView,
+    player_account: &AccountView,
+    game_engine_account: &AccountView,
+    player_token_account: Option<&AccountView>,
+    novi_mint: Option<&AccountView>,
+    research_progress: Option<&AccountView>,
+    program_id: &Address,
 ) -> Result<(), ProgramError> {
     // Score scaling: 0-100 maps to reward range
     // Perfect score (100) = max reward, score 0 = minimum reward
@@ -387,7 +383,7 @@ fn grant_building_rewards(
 
             // Apply to active research if research_progress account provided
             if let Some(research_account) = research_progress {
-                let mut research_data = research_account.try_borrow_mut_data()?;
+                let mut research_data = research_account.try_borrow_mut()?;
                 let research = unsafe { ResearchProgress::load_mut(&mut research_data) };
 
                 // Only reduce if actively researching and owned by this player
@@ -425,25 +421,25 @@ fn grant_building_rewards(
             estate.arena_damage_bps = buff;
         }
 
-        BuildingType::Sanctuary => {
+        BuildingType::MeditationChamber => {
             // Hero blessing: Player selects a hero to bless for the day
             // All locked heroes get +25% effectiveness bonus
-            if hero_mint.key() == &NULL_PUBKEY {
+            if hero_mint.address() == &NULL_PUBKEY {
                 return Err(GameError::MissingRequiredAccount.into());
             }
 
             // NFT-Only System: hero_mint IS the hero's identity
             // Verify hero is locked to this player (in active_heroes)
-            let is_locked = player.active_heroes.iter().any(|&mint| &mint == hero_mint.key());
+            let is_locked = player.active_heroes.iter().any(|&mint| &mint == hero_mint.address());
             if !is_locked {
                 return Err(GameError::Unauthorized.into());
             }
 
             // SECURITY: Verify NFT is actually owned by player's PlayerAccount PDA
             // This prevents passing arbitrary pubkeys that happen to be in active_heroes
-            let asset_data = hero_mint.try_borrow_data()?;
-            let asset = unsafe { p_core::state::AssetV1::load(&asset_data) };
-            if &asset.owner != player_account.key() {
+            let asset_data = hero_mint.try_borrow()?;
+            let asset = p_core::state::AssetV1::from_borsh(&asset_data);
+            if &asset.owner != player_account.address().as_array() {
                 return Err(GameError::Unauthorized.into());
             }
             drop(asset_data);
@@ -454,7 +450,7 @@ fn grant_building_rewards(
 
             // Also store which hero was blessed (for UI/reference)
             // NFT-Only: Store the hero_mint key directly
-            estate.blessed_hero = *hero_mint.key();
+            estate.blessed_hero = *hero_mint.address();
         }
 
         BuildingType::Observatory => {
@@ -476,17 +472,21 @@ fn grant_building_rewards(
                 .ok_or(GameError::MissingRequiredAccount)?;
 
             // SECURITY: Verify token account belongs to the PlayerAccount PDA
-            validate_token_account_owner(token_account, player_account.key())?;
+            validate_token_account_owner(token_account, player_account.address())?;
 
             // Load GameEngine to get bump for PDA signer
-            let game_engine_data = game_engine_account.try_borrow_data()?;
-            let game_engine = unsafe { GameEngine::load(&game_engine_data) };
+            // Validate game_engine account (ownership + PDA + discriminator + bump), then
+            // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
+            {
+                let _ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+            }
+            let game_engine = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
             // Create PDA signer for GameEngine (mint authority)
             let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine.bump];
-            let seeds = pinocchio::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-            let signer = pinocchio::instruction::Signer::from(&seeds);
+            let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+            let signer = pinocchio::cpi::Signer::from(&seeds);
 
             // Mint NOVI tokens to player's token account
             mint_tokens(
@@ -532,13 +532,13 @@ fn grant_building_rewards(
             player.produce = player.produce.saturating_add(produce);
         }
 
-        BuildingType::Catacombs => {
+        BuildingType::DungeonEntry => {
             // Fragments: 1-5 based on score
             let fragments = 1 + (score_multiplier * 4 / 100);
             player.fragments = player.fragments.saturating_add(fragments);
         }
 
-        BuildingType::Stables => {
+        BuildingType::TransportBay => {
             // Travel speed bonus: 5-20% based on score
             // score 0 = 500 bps (5%), score 100 = 2000 bps (20%)
             let buff = 500 + (score_multiplier * 15) as u16;
@@ -583,11 +583,11 @@ fn check_window_completion(estate: &mut EstateAccount, window: TimeWindow) {
         | (1 << BuildingType::Arena as u8)
         | (1 << BuildingType::Mine as u8);
 
-    const DUSK_BUILDINGS: u16 = (1 << BuildingType::Sanctuary as u8)
+    const DUSK_BUILDINGS: u16 = (1 << BuildingType::MeditationChamber as u8)
         | (1 << BuildingType::Observatory as u8)
         | (1 << BuildingType::Treasury as u8)
         | (1 << BuildingType::Citadel as u8)
-        | (1 << BuildingType::Catacombs as u8);
+        | (1 << BuildingType::DungeonEntry as u8);
 
     // Check which buildings the player actually has
     let owned_buildings = get_owned_buildings_mask(estate);

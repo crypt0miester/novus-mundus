@@ -9,9 +9,7 @@ import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
-// ============================================================
 // Event Enums
-// ============================================================
 
 export enum EventStatus {
   Pending = 0,
@@ -27,18 +25,14 @@ export enum EventPrizeType {
   SPLToken = 3,
 }
 
-// ============================================================
 // Event Leaderboard Entry
-// ============================================================
 
 export interface EventLeaderboardEntry {
   player: PublicKey;
   score: BN;
 }
 
-// ============================================================
 // Event Account Interface
-// ============================================================
 
 export interface EventAccount {
   gameEngine: PublicKey;
@@ -65,9 +59,7 @@ export interface EventAccount {
 /** EventAccount size in bytes (1 + 32 + 7pad + 8 + 64+1+7 + 8+8+1+1+6 + 1+7 + 1+7+8+1+7 + 400+1+7 + 1+7+8+8+32 + 4+1+3 = 648) */
 export const EVENT_ACCOUNT_SIZE = 648;
 
-// ============================================================
 // Event Participation Interface
-// ============================================================
 
 export interface EventParticipation {
   gameEngine: PublicKey;
@@ -82,9 +74,7 @@ export interface EventParticipation {
 /** EventParticipation size in bytes (1 + 32 + 7pad + 8 + 32 + 8 + 8 + 8 + 1 + 7 = 112) */
 export const EVENT_PARTICIPATION_SIZE = 112;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize EventAccount from raw bytes */
 export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
@@ -186,9 +176,7 @@ export function deserializeEventParticipation(data: Uint8Array | Buffer): EventP
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse EventAccount from account info */
 export function parseEvent(accountInfo: AccountInfo<Buffer>): EventAccount | null {
@@ -206,9 +194,7 @@ export function parseEventParticipation(accountInfo: AccountInfo<Buffer>): Event
   return deserializeEventParticipation(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Check if event is active */
 export function isEventActive(event: EventAccount): boolean {

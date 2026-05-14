@@ -4,14 +4,11 @@
  * All enum types used throughout the game.
  */
 
-// ============================================================
 // Account Key Discriminator
-// ============================================================
 // Every on-chain account stores this as byte 0 so that a single
 // `onProgramAccountChange` subscription can route raw bytes to
 // the correct deserializer without knowing the PDA seeds.
 // Must match the Rust AccountKey enum in state/mod.rs exactly.
-// ============================================================
 
 export enum AccountKey {
   GameEngine = 1,
@@ -64,9 +61,7 @@ export enum AccountKey {
   SanctuaryMeditation = 48,
 }
 
-// ============================================================
 // Subscription Tiers
-// ============================================================
 
 export enum SubscriptionTier {
   Rookie = 0,
@@ -75,9 +70,7 @@ export enum SubscriptionTier {
   Legendary = 3,
 }
 
-// ============================================================
 // Encounter Types
-// ============================================================
 
 export enum EncounterType {
   Common = 0,
@@ -88,9 +81,7 @@ export enum EncounterType {
   WorldEvent = 5,
 }
 
-// ============================================================
 // City Types
-// ============================================================
 
 export enum CityType {
   Capital = 0,
@@ -99,9 +90,7 @@ export enum CityType {
   Resource = 3,
 }
 
-// ============================================================
 // Rally Status
-// ============================================================
 
 export enum RallyStatus {
   Gathering = 0,
@@ -112,9 +101,7 @@ export enum RallyStatus {
   Cancelled = 5,
 }
 
-// ============================================================
 // Rally Target Type
-// ============================================================
 
 export enum RallyTargetType {
   Player = 0,
@@ -122,9 +109,7 @@ export enum RallyTargetType {
   Castle = 2,
 }
 
-// ============================================================
 // Reinforcement Status
-// ============================================================
 
 export enum ReinforcementStatus {
   Traveling = 0,
@@ -133,9 +118,7 @@ export enum ReinforcementStatus {
   Completed = 3,
 }
 
-// ============================================================
 // Expedition Types
-// ============================================================
 
 export enum ExpeditionType {
   None = 0,
@@ -143,9 +126,7 @@ export enum ExpeditionType {
   Fishing = 2,
 }
 
-// ============================================================
 // Castle Tier
-// ============================================================
 
 export enum CastleTier {
   Outpost = 0,
@@ -155,9 +136,7 @@ export enum CastleTier {
   Citadel = 4,
 }
 
-// ============================================================
 // Castle Status
-// ============================================================
 
 export enum CastleStatus {
   Vacant = 0,
@@ -167,9 +146,7 @@ export enum CastleStatus {
   Transitioning = 4,
 }
 
-// ============================================================
 // Castle Upgrade Type
-// ============================================================
 
 export enum CastleUpgradeType {
   None = 0,
@@ -180,9 +157,7 @@ export enum CastleUpgradeType {
   Armory = 5,
 }
 
-// ============================================================
 // Court Position
-// ============================================================
 
 export enum CourtPosition {
   Advisor = 0,
@@ -192,9 +167,7 @@ export enum CourtPosition {
   Marshal = 4,
 }
 
-// ============================================================
 // Dungeon Room Type
-// ============================================================
 
 export enum DungeonRoomType {
   Combat = 0,
@@ -206,9 +179,7 @@ export enum DungeonRoomType {
   Exit = 6,
 }
 
-// ============================================================
 // Dungeon Run Status
-// ============================================================
 
 export enum DungeonRunStatus {
   Active = 0,
@@ -217,9 +188,7 @@ export enum DungeonRunStatus {
   Fled = 3,
 }
 
-// ============================================================
 // Arena Season Status
-// ============================================================
 
 export enum ArenaSeasonStatus {
   Pending = 0,
@@ -228,9 +197,7 @@ export enum ArenaSeasonStatus {
   Finalized = 3,
 }
 
-// ============================================================
 // Team Member Rank
-// ============================================================
 
 export enum TeamMemberRank {
   Member = 0,
@@ -239,9 +206,7 @@ export enum TeamMemberRank {
   Leader = 3,
 }
 
-// ============================================================
 // Building Types (Estate)
-// ============================================================
 
 export enum BuildingType {
   Mansion = 0,
@@ -253,21 +218,19 @@ export enum BuildingType {
   Market = 6,
   Academy = 7,
   Arena = 8,
-  Sanctuary = 9,
+  MeditationChamber = 9,
   Observatory = 10,
   Treasury = 11,
   Citadel = 12,
   Camp = 13,
   Mine = 14,
-  Catacombs = 15,
+  DungeonEntry = 15,
   Farm = 16,
-  Stables = 17,
+  TransportBay = 17,
   Infirmary = 18,
 }
 
-// ============================================================
 // Equipment Slot / Craftable Equipment
-// ============================================================
 
 export enum EquipmentSlot {
   MeleeWeapon = 0,
@@ -280,9 +243,7 @@ export enum EquipmentSlot {
 export const CraftableEquipment = EquipmentSlot;
 export type CraftableEquipment = EquipmentSlot;
 
-// ============================================================
 // Quality Tier
-// ============================================================
 
 export enum QualityTier {
   Common = 0,
@@ -292,9 +253,7 @@ export enum QualityTier {
   Legendary = 4,
 }
 
-// ============================================================
 // Synergy Tags (Dungeon Relics)
-// ============================================================
 
 export enum SynergyTag {
   Offense = 0,
@@ -309,9 +268,7 @@ export enum SynergyTag {
   None = 255,
 }
 
-// ============================================================
 // Payment Type (Shop)
-// ============================================================
 
 export enum PaymentType {
   Novi = 0,
@@ -321,9 +278,7 @@ export enum PaymentType {
   Token = 4,
 }
 
-// ============================================================
 // Shop Item Type
-// ============================================================
 
 export enum ShopItemType {
   Consumable = 0,
@@ -333,9 +288,7 @@ export enum ShopItemType {
   Currency = 4,
 }
 
-// ============================================================
 // Travel Type
-// ============================================================
 
 export enum TravelType {
   None = 0,

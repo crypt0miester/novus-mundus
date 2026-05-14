@@ -6,11 +6,11 @@
 //! and daily rewards. Creates CourtPositionAccount PDA.
 
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{clock::Clock, Sysvar},
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -18,13 +18,13 @@ use crate::{
     emit,
     error::GameError,
     events::CourtAppointed,
-    validation::{require_empty, require_owner},
+    validation::{require_empty, require_owner, require_pda},
     state::{
         CastleAccount, CourtPositionAccount, PlayerAccount, CourtPosition,
         player::{EXT_COURT, COURT_OFFSET, CourtSection},
     },
     constants::{
-        COURT_SEED, CASTLE_STATUS_CONTEST, CASTLE_STATUS_TRANSITIONING,
+        COURT_SEED, PLAYER_SEED, CASTLE_STATUS_CONTEST, CASTLE_STATUS_TRANSITIONING,
     },
 };
 
@@ -42,8 +42,8 @@ use crate::{
 /// 5. [] System program
 
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
@@ -75,21 +75,35 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // Load king player
+    // Load king player owner
     require_owner(king_account, program_id)?;
-    let king_data = king_account.try_borrow_data()?;
-    let king = unsafe { PlayerAccount::load(&king_data) };
 
-    if &king.owner != king_wallet.key() {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    // Load castle
+    // Load castle first to access its kingdom (game_engine) for PDA derivation
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
-    if castle.king != *king_account.key() {
+    if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
+    }
+
+    // Re-derive king PlayerAccount PDA against (castle.game_engine,
+    // king_wallet) and require match. Without this, an attacker could pass a
+    // forged king_account whose data is set up to spoof identity. Pairing with
+    // the existing castle.king == king_account.address() check, this guarantees the
+    // signer truly owns the PlayerAccount registered as king.
+    require_pda(
+        king_account,
+        &[PLAYER_SEED, castle.game_engine.as_ref(), king_wallet.address().as_ref()],
+        program_id,
+    )?;
+
+    {
+        let king_data = king_account.try_borrow()?;
+        let king = unsafe { PlayerAccount::load(&king_data) };
+
+        if &king.owner != king_wallet.address() {
+            return Err(GameError::Unauthorized.into());
+        }
     }
 
     // Verify castle state allows court appointments
@@ -112,8 +126,8 @@ pub fn process(
     }
 
     // Verify court position PDA
-    let (expected_court_pda, court_bump) = CourtPositionAccount::derive_pda(castle_account.key(), position_type);
-    if court_position_account.key() != &expected_court_pda {
+    let (expected_court_pda, court_bump) = CourtPositionAccount::derive_pda(castle_account.address(), position_type);
+    if court_position_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
@@ -122,7 +136,7 @@ pub fn process(
 
     // Load appointee
     require_owner(appointee_account, program_id)?;
-    let mut appointee_data = appointee_account.try_borrow_mut_data()?;
+    let mut appointee_data = appointee_account.try_borrow_mut()?;
     let appointee = unsafe { PlayerAccount::load_mut(&mut appointee_data) };
 
     // Verify appointee is on king's team
@@ -131,7 +145,7 @@ pub fn process(
     }
 
     // Verify appointee is not the king
-    if appointee_account.key() == king_account.key() {
+    if appointee_account.address() == king_account.address() {
         return Err(GameError::KingCannotHoldCourt.into());
     }
 
@@ -140,18 +154,17 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Create court position account
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(CourtPositionAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(CourtPositionAccount::LEN);
 
     let position_byte = [position_type];
     let bump_seed = [court_bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         COURT_SEED,
-        castle_account.key().as_ref(),
+        castle_account.address(),
         &position_byte,
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: king_wallet,
@@ -162,14 +175,14 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // Initialize court position
-    let mut court_data = court_position_account.try_borrow_mut_data()?;
+    let mut court_data = court_position_account.try_borrow_mut()?;
     let court = unsafe { CourtPositionAccount::load_mut(&mut court_data) };
 
     court.account_key = crate::state::AccountKey::CourtPosition as u8;
-    court.castle = *castle_account.key();
+    court.castle = *castle_account.address();
     court.position_type = position_type;
     court.bump = court_bump;
-    court.holder = *appointee_account.key();
+    court.holder = *appointee_account.address();
     court.appointed_at = now;
 
     // Copy appointee name and extensions before modifying data
@@ -182,7 +195,7 @@ pub fn process(
     if appointee_extensions & EXT_COURT != 0 && appointee_data_len >= COURT_OFFSET + CourtSection::LEN {
         let court_ptr = appointee_data[COURT_OFFSET..].as_mut_ptr() as *mut CourtSection;
         let court_section = unsafe { &mut *court_ptr };
-        court_section.set_position(*castle_account.key(), position_type);
+        court_section.set_position(*castle_account.address(), position_type);
     }
 
     // Update castle court count
@@ -190,12 +203,12 @@ pub fn process(
 
     // Emit event
     emit!(CourtAppointed {
-        castle: *castle_account.key(),
+        castle: *castle_account.address(),
         castle_name: castle.name,
-        appointee: *appointee_account.key(),
+        appointee: *appointee_account.address(),
         appointee_name,
         position_type,
-        appointed_by: *king_account.key(),
+        appointed_by: *king_account.address(),
         timestamp: now,
     });
 

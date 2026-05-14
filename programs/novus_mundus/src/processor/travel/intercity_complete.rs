@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
 };
@@ -44,8 +44,8 @@ use crate::{
 ///
 /// Total: 5 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (base accounts required)
@@ -72,7 +72,7 @@ pub fn process(
 
     let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
-    if &player_data.owner != owner.key() {
+    if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -117,7 +117,7 @@ pub fn process(
 
     // Emit XP gained event
     emit!(XpGained {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
         amount: xp_amount,
         source: 3, // 3=travel
@@ -128,7 +128,7 @@ pub fn process(
     // Emit level up event if player leveled
     if levels_gained > 0 {
         emit!(PlayerLeveledUp {
-            player: *player_account.key(),
+            player: *player_account.address(),
             player_name: player_data.name,
             old_level: old_level.into(),
             new_level: new_level.into(),
@@ -149,7 +149,7 @@ pub fn process(
     let dest_grid_lat;
     let dest_grid_long;
     {
-        let mut location_data = destination_location_account.try_borrow_mut_data()?;
+        let mut location_data = destination_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         // Verify location is in the destination city
@@ -158,7 +158,7 @@ pub fn process(
         }
 
         // Verify player owns this cell (was reserved at start)
-        if !location.is_occupied_by(player_account.key()) {
+        if !location.is_occupied_by(player_account.address()) {
             return Err(GameError::NotCellOccupant.into());
         }
 
@@ -218,14 +218,14 @@ pub fn process(
                 let hero_template_info = &hero_accounts[hero_idx + 1];
 
                 // Verify NFT matches the locked hero mint
-                if hero_nft_info.key() == &player_data.active_heroes[slot] {
+                if hero_nft_info.address() == &player_data.active_heroes[slot] {
                     // Parse hero data from NFT
-                    let nft_data = hero_nft_info.try_borrow_data()?;
+                    let nft_data = hero_nft_info.try_borrow()?;
                     if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
                         drop(nft_data);
 
                         // Load template for tier calculation
-                        let template_data = hero_template_info.try_borrow_data()?;
+                        let template_data = hero_template_info.try_borrow()?;
                         let template = unsafe { HeroTemplate::load(&template_data) };
 
                         // Verify template matches hero
@@ -267,9 +267,9 @@ pub fn process(
     // 14. Emit Event
 
     emit!(IntercityTravelCompleted {
-        player: *player_account.key(),
+        player: *player_account.address(),
         player_name: player_data.name,
-        city: *destination_city_account.key(),
+        city: *destination_city_account.address(),
         timestamp: now,
     });
 

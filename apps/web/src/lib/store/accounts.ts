@@ -46,9 +46,7 @@ import type {
   PlayerPurchaseAccount,
 } from "novus-mundus-sdk";
 
-// ============================================================
 // Account Store Types
-// ============================================================
 
 interface AccountEntry<T> {
   pubkey: PublicKey;
@@ -184,9 +182,7 @@ interface AccountsState {
   reset: () => void;
 }
 
-// ============================================================
 // Helpers
-// ============================================================
 
 function upsertMap<T>(map: Map<string, AccountEntry<T>>, pubkey: PublicKey, account: T): Map<string, AccountEntry<T>> {
   const next = new Map(map);
@@ -200,9 +196,7 @@ function removeFromMap<T>(map: Map<string, T>, key: string): Map<string, T> {
   return next;
 }
 
-// ============================================================
 // Store
-// ============================================================
 
 const initialState = {
   player: null,

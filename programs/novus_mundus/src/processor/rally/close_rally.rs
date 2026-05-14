@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
 };
 
@@ -33,8 +33,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -51,11 +51,11 @@ pub fn process(
 
     // 3. Load Rally and validate
     require_owner(rally_account, program_id)?;
-    let rally_data_ref = rally_account.try_borrow_data()?;
+    let rally_data_ref = rally_account.try_borrow()?;
     let rally = unsafe { RallyAccount::load(&rally_data_ref) };
 
     // Validate leader_owner matches rally creator (rent recipient)
-    if &rally.creator != leader_owner.key() {
+    if &rally.creator != leader_owner.address() {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -72,7 +72,7 @@ pub fn process(
     }
 
     // Store rally info for event
-    let rally_key = *rally_account.key();
+    let rally_key = *rally_account.address();
     let rally_id = rally.id;
     let leader = rally.creator;
 

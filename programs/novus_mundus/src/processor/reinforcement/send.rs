@@ -1,8 +1,8 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    AccountView,
+    error::ProgramError,
+    Address,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -57,8 +57,8 @@ use crate::{
 /// - hero_slot: u8 (1 byte) - 0-2 = send hero from that slot, 255 = no hero
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for hero)
@@ -86,7 +86,7 @@ pub fn process(
     require_owner(sender_player, program_id)?;
     require_owner(destination_player, program_id)?;
 
-    if system_program.key() != &pinocchio_system::ID {
+    if system_program.address() != &pinocchio_system::ID {
         return Err(ProgramError::IncorrectProgramId);
     }
 
@@ -147,11 +147,11 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 5. Load Sender Player
-    let mut sender_data_ref = sender_player.try_borrow_mut_data()?;
+    let mut sender_data_ref = sender_player.try_borrow_mut()?;
     let sender = unsafe { PlayerAccount::load_mut(&mut sender_data_ref) };
 
     // Verify sender ownership
-    if &sender.owner != sender_owner.key() {
+    if &sender.owner != sender_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -161,7 +161,7 @@ pub fn process(
     }
 
     // 6. Load Destination Player
-    let mut dest_data_ref = destination_player.try_borrow_mut_data()?;
+    let mut dest_data_ref = destination_player.try_borrow_mut()?;
     let destination = unsafe { PlayerAccount::load_mut(&mut dest_data_ref) };
 
     // 7. Validate Same Team
@@ -173,18 +173,18 @@ pub fn process(
     }
 
     // Verify team account matches
-    if team_account.key() != &sender.team {
+    if team_account.address() != &sender.team {
         return Err(GameError::InvalidTeam.into());
     }
 
     // 7a. Load team and check disbanded (kingdom-scoped)
-    let team = TeamAccount::load_checked(team_account, game_engine.key(), team_id, program_id)?;
+    let team = TeamAccount::load_checked(team_account, game_engine.address(), team_id, program_id)?;
     if team.is_disbanded() {
         return Err(GameError::TeamDisbanded.into());
     }
 
     // Cannot reinforce self
-    if sender_owner.key() == &destination.owner {
+    if sender_owner.address() == &destination.owner {
         return Err(GameError::CannotTransferToSelf.into());
     }
 
@@ -232,7 +232,7 @@ pub fn process(
             let hero_key = sender.active_heroes[hero_slot_idx];
 
             // Verify hero is assigned
-            if hero_key == Pubkey::default() {
+            if hero_key == Address::default() {
                 return Err(GameError::HeroNotInSlot.into());
             }
 
@@ -245,12 +245,12 @@ pub fn process(
             let nft_account = hero_nft.ok_or(ProgramError::NotEnoughAccountKeys)?;
 
             // Verify NFT account matches the hero key in active_heroes
-            if nft_account.key() != &hero_key {
+            if nft_account.address() != &hero_key {
                 return Err(GameError::HeroMismatch.into());
             }
 
             // Parse buffs directly from the NFT
-            let nft_data = nft_account.try_borrow_data()?;
+            let nft_data = nft_account.try_borrow()?;
             let mut buffs = [ParsedBuff::default(); 4];
             let buff_count = parse_nft_buffs(&nft_data, &mut buffs);
 
@@ -271,10 +271,23 @@ pub fn process(
             (hero_key, defense_bps, weapon_eff_bps, armor_eff_bps)
         } else {
             // No hero
-            (Pubkey::default(), 0, 0, 0)
+            (Address::default(), 0, 0, 0)
         };
 
     // 12. Load City Data for Travel Calculation
+    // H-03: Verify city accounts are owned by this program and match expected PDAs.
+    require_owner(sender_city, program_id)?;
+    require_owner(destination_city, program_id)?;
+    let (expected_sender_city_pda, _) =
+        CityAccount::derive_pda(game_engine.address(), sender.current_city);
+    if sender_city.address() != &expected_sender_city_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    let (expected_dest_city_pda, _) =
+        CityAccount::derive_pda(game_engine.address(), destination.current_city);
+    if destination_city.address() != &expected_dest_city_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
     let sender_city_data = unsafe { CityAccount::load(sender_city)? };
     let dest_city_data = unsafe { CityAccount::load(destination_city)? };
 
@@ -294,7 +307,7 @@ pub fn process(
     let receiver_name = destination.name;
 
     // 13. Calculate Travel Time
-    let game_engine_data_ref = game_engine.try_borrow_data()?;
+    let game_engine_data_ref = game_engine.try_borrow()?;
     let game_engine_state = unsafe { GameEngine::load(&game_engine_data_ref) };
 
     let travel_duration = if sender_city_id == dest_city_id {
@@ -317,17 +330,17 @@ pub fn process(
 
     // 14. Verify and Create ReinforcementAccount PDA (kingdom-scoped)
     let (expected_pda, bump) = ReinforcementAccount::derive_player_pda(
-        game_engine.key(),
-        sender_owner.key(),
+        game_engine.address(),
+        sender_owner.address(),
         &dest_owner,
     );
 
-    if reinforcement_account.key() != &expected_pda {
+    if reinforcement_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Check if already exists
-    if !reinforcement_account.data_is_empty() {
+    if !reinforcement_account.is_data_empty() {
         return Err(GameError::ReinforcementAlreadyExists.into());
     }
 
@@ -341,7 +354,7 @@ pub fn process(
 
     // Lock hero if provided (clear from active slot)
     if hero_slot < 3 {
-        sender.active_heroes[hero_slot as usize] = Pubkey::default();
+        sender.active_heroes[hero_slot as usize] = Address::default();
     }
 
     // Drop borrows before CPI
@@ -350,18 +363,17 @@ pub fn process(
     drop(game_engine_data_ref);
 
     // 16. Create Reinforcement Account
-    let rent = Rent::get()?;
-    let lamports = rent.minimum_balance(ReinforcementAccount::LEN);
+    let lamports = crate::utils::rent_exempt_const(ReinforcementAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = pinocchio::seeds!(
+    let seeds = crate::seeds!(
         REINFORCEMENT_SEED,
-        game_engine.key().as_ref(),
-        sender_owner.key().as_ref(),
+        game_engine.address(),
+        sender_owner.address(),
         dest_owner.as_ref(),
         &bump_seed
     );
-    let signer = pinocchio::instruction::Signer::from(&seeds);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
         from: sender_owner,
@@ -372,15 +384,15 @@ pub fn process(
     }.invoke_signed(&[signer])?;
 
     // 17. Initialize Reinforcement Account
-    let mut reinf_data_ref = reinforcement_account.try_borrow_mut_data()?;
+    let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;
     let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
 
     // Kingdom reference
     reinf.account_key = crate::state::AccountKey::Reinforcement as u8;
-    reinf.game_engine = *game_engine.key();
+    reinf.game_engine = *game_engine.address();
 
     // Identity
-    reinf.sender = *sender_owner.key();
+    reinf.sender = *sender_owner.address();
     reinf.destination = dest_owner;
 
     // Type & Location
@@ -429,7 +441,7 @@ pub fn process(
 
     // Emit event
     emit!(ReinforcementSent {
-        sender: *sender_owner.key(),
+        sender: *sender_owner.address(),
         sender_name,
         receiver: dest_owner,
         receiver_name,

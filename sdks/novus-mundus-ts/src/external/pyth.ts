@@ -7,9 +7,7 @@
 import { PublicKey } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
 
-// ============================================================
 // Program IDs
-// ============================================================
 
 /** Pyth Oracle Program ID (Mainnet) */
 export const PYTH_ORACLE_PROGRAM_ID = new PublicKey(
@@ -21,9 +19,7 @@ export const PYTH_ORACLE_PROGRAM_ID_DEVNET = new PublicKey(
   'gSbePebfvPy7tRqimPoVecS2UsBvYv46ynrzWocc92s'
 );
 
-// ============================================================
 // Well-Known Price Feed IDs (Mainnet)
-// ============================================================
 
 /** SOL/USD price feed */
 export const PYTH_SOL_USD_FEED = new PublicKey(
@@ -50,9 +46,7 @@ export const PYTH_ETH_USD_FEED = new PublicKey(
   'JBu1AL4obBcCMqKBBxhpWCNUt136ijcuMZLFvTP7iWdB'
 );
 
-// ============================================================
 // Price Data Types
-// ============================================================
 
 /** Pyth price data structure */
 export interface PythPrice {
@@ -80,9 +74,7 @@ export interface PythPriceData extends PythPrice {
   maxNumPublishers: number;
 }
 
-// ============================================================
 // Price Parsing Functions
-// ============================================================
 
 /**
  * Parse Pyth price account data.
@@ -172,9 +164,7 @@ export function decimalToPythPrice(decimalPrice: number, expo: number = -8): big
   return BigInt(Math.round(decimalPrice * Math.pow(10, -expo)));
 }
 
-// ============================================================
 // Price Validation Functions
-// ============================================================
 
 /**
  * Check if a price is stale based on slot age.
@@ -245,9 +235,7 @@ export function validatePythPrice(
   return { valid: true };
 }
 
-// ============================================================
 // Fetch Functions
-// ============================================================
 
 /**
  * Fetch and parse Pyth price data from the network.

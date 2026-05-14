@@ -1,16 +1,16 @@
 /// Team events - team creation, membership, treasury, leadership
 
-use pinocchio::pubkey::Pubkey;
+use pinocchio::Address;
 use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new team is created
 pub struct TeamCreated {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Founder's player account pubkey (not wallet)
-    pub founder: Pubkey,
+    pub founder: Address,
     /// NOVI burned to create team
     pub novi_burned: u64,
     /// Unix timestamp
@@ -34,11 +34,11 @@ impl Event for TeamCreated {
 /// Emitted when a player joins a team
 pub struct TeamJoined {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// New member count
     pub member_count: u16,
     /// Unix timestamp
@@ -62,11 +62,11 @@ impl Event for TeamJoined {
 /// Emitted when a player leaves a team
 pub struct TeamLeft {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account pubkey (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Remaining member count
     pub member_count: u16,
     /// Unix timestamp
@@ -90,13 +90,13 @@ impl Event for TeamLeft {
 /// Emitted when a member is kicked from a team
 pub struct MemberKicked {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Member's player account who was kicked (not wallet)
-    pub kicked: Pubkey,
+    pub kicked: Address,
     /// Player account who performed the kick (not wallet)
-    pub kicked_by: Pubkey,
+    pub kicked_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -118,13 +118,13 @@ impl Event for MemberKicked {
 /// Emitted when team leadership is transferred
 pub struct LeadershipTransferred {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Previous leader's player account (not wallet)
-    pub old_leader: Pubkey,
+    pub old_leader: Address,
     /// New leader's player account (not wallet)
-    pub new_leader: Pubkey,
+    pub new_leader: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -146,11 +146,11 @@ impl Event for LeadershipTransferred {
 /// Emitted when a team is disbanded
 pub struct TeamDisbanded {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Leader's player account who disbanded (not wallet)
-    pub leader: Pubkey,
+    pub leader: Address,
     /// Treasury amount distributed
     pub treasury_distributed: u64,
     /// Unix timestamp
@@ -174,11 +174,11 @@ impl Event for TeamDisbanded {
 /// Emitted when cash is deposited to team treasury
 pub struct TreasuryDeposit {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who deposited (not wallet)
-    pub depositor: Pubkey,
+    pub depositor: Address,
     /// Amount deposited
     pub amount: u64,
     /// New treasury balance
@@ -205,11 +205,11 @@ impl Event for TreasuryDeposit {
 /// Emitted when cash is withdrawn from team treasury
 pub struct TreasuryWithdraw {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who withdrew (not wallet)
-    pub withdrawer: Pubkey,
+    pub withdrawer: Address,
     /// Amount withdrawn
     pub amount: u64,
     /// New treasury balance
@@ -236,17 +236,17 @@ impl Event for TreasuryWithdraw {
 /// Emitted when a member's rank changes (promote/demote)
 pub struct MemberRankChanged {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Member's player account whose rank changed (not wallet)
-    pub member: Pubkey,
+    pub member: Address,
     /// Old rank
     pub old_rank: u8,
     /// New rank
     pub new_rank: u8,
     /// Player account who changed the rank (not wallet)
-    pub changed_by: Pubkey,
+    pub changed_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -270,13 +270,13 @@ impl Event for MemberRankChanged {
 /// Emitted when an invite is sent to a player
 pub struct InviteSent {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account being invited (not wallet)
-    pub invitee: Pubkey,
+    pub invitee: Address,
     /// Player account who sent the invite (not wallet)
-    pub inviter: Pubkey,
+    pub inviter: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -298,11 +298,11 @@ impl Event for InviteSent {
 /// Emitted when a player accepts an invite
 pub struct InviteAccepted {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who accepted (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// New member count
     pub member_count: u16,
     /// Unix timestamp
@@ -326,11 +326,11 @@ impl Event for InviteAccepted {
 /// Emitted when a player declines an invite
 pub struct InviteDeclined {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who declined (not wallet)
-    pub player: Pubkey,
+    pub player: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -351,13 +351,13 @@ impl Event for InviteDeclined {
 /// Emitted when an invite is cancelled by the team
 pub struct InviteCancelled {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account whose invite was cancelled (not wallet)
-    pub invitee: Pubkey,
+    pub invitee: Address,
     /// Player account who cancelled the invite (not wallet)
-    pub cancelled_by: Pubkey,
+    pub cancelled_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -379,11 +379,11 @@ impl Event for InviteCancelled {
 /// Emitted when MOTD is updated
 pub struct MotdUpdated {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who updated (not wallet)
-    pub updated_by: Pubkey,
+    pub updated_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -404,11 +404,11 @@ impl Event for MotdUpdated {
 /// Emitted when team settings are updated
 pub struct TeamSettingsUpdated {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who updated (not wallet)
-    pub updated_by: Pubkey,
+    pub updated_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -429,11 +429,11 @@ impl Event for TeamSettingsUpdated {
 /// Emitted when treasury settings are updated
 pub struct TreasurySettingsUpdated {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who updated (not wallet)
-    pub updated_by: Pubkey,
+    pub updated_by: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -454,11 +454,11 @@ impl Event for TreasurySettingsUpdated {
 /// Emitted when a treasury withdrawal is requested
 pub struct TreasuryWithdrawRequested {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who requested (not wallet)
-    pub requester: Pubkey,
+    pub requester: Address,
     /// Amount requested
     pub amount: u64,
     /// Unix timestamp
@@ -482,13 +482,13 @@ impl Event for TreasuryWithdrawRequested {
 /// Emitted when a treasury withdrawal request is approved
 pub struct TreasuryRequestApproved {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who approved (not wallet)
-    pub approver: Pubkey,
+    pub approver: Address,
     /// Original requester's player account (not wallet)
-    pub requester: Pubkey,
+    pub requester: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -510,13 +510,13 @@ impl Event for TreasuryRequestApproved {
 /// Emitted when a treasury withdrawal request is rejected
 pub struct TreasuryRequestRejected {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who rejected (not wallet)
-    pub rejector: Pubkey,
+    pub rejector: Address,
     /// Original requester's player account (not wallet)
-    pub requester: Pubkey,
+    pub requester: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -538,13 +538,13 @@ impl Event for TreasuryRequestRejected {
 /// Emitted when a treasury withdrawal request is executed
 pub struct TreasuryRequestExecuted {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Player account who executed (not wallet)
-    pub executor: Pubkey,
+    pub executor: Address,
     /// Original requester's player account (not wallet)
-    pub requester: Pubkey,
+    pub requester: Address,
     /// Amount withdrawn
     pub amount: u64,
     /// New treasury balance
@@ -572,11 +572,11 @@ impl Event for TreasuryRequestExecuted {
 /// Emitted when a treasury withdrawal request is cancelled
 pub struct TreasuryRequestCancelled {
     /// Team account pubkey
-    pub team: Pubkey,
+    pub team: Address,
     /// Team name (32 bytes UTF-8)
     pub team_name: [u8; 32],
     /// Original requester's player account who cancelled (not wallet)
-    pub requester: Pubkey,
+    pub requester: Address,
     /// Unix timestamp
     pub timestamp: i64,
 }

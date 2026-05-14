@@ -1,7 +1,7 @@
 use pinocchio::{
-    pubkey::Pubkey,
-    account_info::AccountInfo,
-    program_error::ProgramError,
+    Address,
+    AccountView,
+    error::ProgramError,
     sysvars::{Sysvar, rent::Rent},
     ProgramResult,
 };
@@ -12,11 +12,9 @@ use crate::constants::{PLAYER_SEED, USER_SEED};
 pub use super::inventory::InventoryItem;
 
 // Null pubkey constant for representing None
-pub const NULL_PUBKEY: Pubkey = [0u8; 32];
+pub const NULL_PUBKEY: Address = Address::new_from_array([0u8; 32]);
 
-// ============================================================
 // EXTENSION FLAGS
-// ============================================================
 pub const EXT_RESEARCH: u32   = 1 << 0;  // 0x0001 - Research buffs & unlocks
 pub const EXT_HEROES: u32     = 1 << 1;  // 0x0002 - Hero slots & buffs
 pub const EXT_INVENTORY: u32  = 1 << 2;  // 0x0004 - Inventory + Shop state
@@ -25,9 +23,7 @@ pub const EXT_TEAM: u32       = 1 << 4;  // 0x0010 - Team membership
 pub const EXT_COSMETICS: u32  = 1 << 5;  // 0x0020 - Equipped cosmetics
 pub const EXT_COURT: u32      = 1 << 6;  // 0x0040 - Castle court membership
 
-// ============================================================
 // SECTION SIZES & OFFSETS
-// ============================================================
 // NOTE: These values are verified by compile-time assertions at the end of this file.
 // If a struct changes, the build will fail until these constants are updated.
 pub const CORE_SIZE: usize = 1056;      // PlayerCore size (verified by static assertion) - includes account_key + game_engine (32 bytes) + reinforcement aggregates (72 bytes)
@@ -50,9 +46,7 @@ pub const COSMETICS_OFFSET: usize = TEAM_OFFSET + TEAM_SIZE;            // 1818
 pub const COURT_OFFSET: usize = COSMETICS_OFFSET + COSMETICS_SIZE;      // 1898
 pub const MAX_SIZE: usize = COURT_OFFSET + COURT_SIZE;                  // 1946
 
-// ============================================================
 // PLAYER CORE - Always present
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PlayerCore {
@@ -60,10 +54,10 @@ pub struct PlayerCore {
     pub account_key: u8,
 
     // Kingdom Reference (32 bytes)
-    pub game_engine: Pubkey,                // 32 - Which kingdom this player belongs to
+    pub game_engine: Address,                // 32 - Which kingdom this player belongs to
 
     // Identity (48 bytes)
-    pub owner: Pubkey,                      // 32
+    pub owner: Address,                      // 32
     pub created_at: i64,                    // 8
     pub bump: u8,                           // 1
     pub version: u8,                        // 1 - For migrations
@@ -162,11 +156,9 @@ pub struct PlayerCore {
     // Loot Counter (8 bytes)
     pub loot_counter: u64,
 
-    // ============================================================
     // INLINE SECTION FIELDS (for backward compatibility)
     // These are duplicated from sections for direct access.
     // When sections unlock, they should be synced.
-    // ============================================================
 
     // Research buffs (24 bytes) - mirrored from ResearchSection
     pub research_attack_bps: u16,
@@ -195,7 +187,7 @@ pub struct PlayerCore {
     pub last_daily_claim: i64,
 
     // Hero system (104 bytes) - mirrored from HeroesSection
-    pub active_heroes: [Pubkey; 3],     // 96 bytes
+    pub active_heroes: [Address; 3],     // 96 bytes
     pub defensive_hero_slot: u8,        // 1 byte
     pub meditating_hero_slot: u8,       // 1 byte (0-2 = slot, 255 = none)
     pub _padding_hero: [u8; 2],         // 2 bytes (reduced from 6 - used 4 for capacity buffs)
@@ -225,7 +217,7 @@ pub struct PlayerCore {
     pub slot_location_bonus: [u16; 3],      // Location bonus bps per active hero slot
 
     // Team (40 bytes) - team reference and slot index
-    pub team: Pubkey,                   // 32 bytes - NULL_PUBKEY if no team
+    pub team: Address,                   // 32 bytes - NULL_PUBKEY if no team
     pub team_slot_index: u16,           // 2 bytes - slot index in team (0 = leader slot)
     pub _padding_team: [u8; 6],         // 6 bytes for alignment
 
@@ -239,9 +231,7 @@ pub struct PlayerCore {
     pub rally_caps: PlayerRallyCaps,    // 8 bytes
     pub rally_stats: RallyStats,        // 72 bytes
 
-    // ============================================================
     // INVENTORY FIELDS (mirrored from InventorySection)
-    // ============================================================
 
     // Consumables (22 bytes)
     pub stamina_potions: u16,
@@ -300,9 +290,7 @@ pub struct PlayerCore {
     pub _padding_reinforcement: [u8; 1],
 }
 
-// ============================================================
 // RALLY STATS (Legacy structs for backward compatibility)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct RallyStats {
@@ -360,7 +348,7 @@ impl PlayerCore {
     pub const LEN: usize = core::mem::size_of::<Self>();
 
     /// Initialize with default values
-    pub fn init(game_engine: Pubkey, owner: Pubkey, created_at: i64, bump: u8) -> Self {
+    pub fn init(game_engine: Address, owner: Address, created_at: i64, bump: u8) -> Self {
         Self {
             account_key: crate::state::AccountKey::Player as u8,
             game_engine,
@@ -583,8 +571,8 @@ impl PlayerCore {
     /// - 100 Locked NOVI
     /// - New player protection (duration from GameEngine config)
     pub fn init_with_city(
-        game_engine: Pubkey,
-        owner: Pubkey,
+        game_engine: Address,
+        owner: Address,
         created_at: i64,
         bump: u8,
         city_id: u16,
@@ -812,9 +800,7 @@ impl PlayerCore {
     }
 }
 
-// ============================================================
 // RESEARCH SECTION (+96 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ResearchSection {
@@ -890,14 +876,12 @@ impl ResearchSection {
     }
 }
 
-// ============================================================
 // HEROES SECTION (+130 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct HeroesSection {
     // Active Heroes (96 bytes)
-    pub active_heroes: [Pubkey; 3],
+    pub active_heroes: [Address; 3],
 
     // Config (8 bytes)
     pub defensive_hero_slot: u8,
@@ -940,9 +924,7 @@ impl HeroesSection {
     }
 }
 
-// ============================================================
 // INVENTORY SECTION (+400 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct InventorySection {
@@ -1067,9 +1049,7 @@ impl InventorySection {
     }
 }
 
-// ============================================================
 // RALLY SECTION (+80 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct RallySection {
@@ -1119,14 +1099,12 @@ impl RallySection {
     }
 }
 
-// ============================================================
 // TEAM SECTION (+40 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TeamSection {
     // Team Reference (32 bytes)
-    pub team: Pubkey,               // Team account pubkey (NULL_PUBKEY if no team)
+    pub team: Address,               // Team account pubkey (NULL_PUBKEY if no team)
 
     // Reserved (8 bytes)
     pub _reserved: [u8; 8],
@@ -1149,9 +1127,7 @@ impl TeamSection {
     }
 }
 
-// ============================================================
 // COSMETICS SECTION (+80 bytes)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CosmeticsSection {
@@ -1199,16 +1175,14 @@ impl CosmeticsSection {
     }
 }
 
-// ============================================================
 // COURT SECTION (48 bytes) - Castle court membership
-// ============================================================
 
 /// Tracks player's court position in a castle with buffs
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CourtSection {
     /// Castle where player holds court position (NULL_PUBKEY if none)
-    pub castle: Pubkey,                // 32 bytes
+    pub castle: Address,                // 32 bytes
     /// Position type (0=Chancellor, 1=Marshal, 2=Steward, 3=Sentinel)
     pub position_type: u8,             // 1 byte
     /// Padding for alignment
@@ -1244,7 +1218,7 @@ impl CourtSection {
     }
 
     /// Set player's court position
-    pub fn set_position(&mut self, castle: Pubkey, position_type: u8) {
+    pub fn set_position(&mut self, castle: Address, position_type: u8) {
         self.castle = castle;
         self.position_type = position_type;
         // Buffs are set based on position type by the appointing processor
@@ -1261,9 +1235,7 @@ impl CourtSection {
     }
 }
 
-// ============================================================
 // HELPER FUNCTIONS
-// ============================================================
 
 /// Calculate required account size for given extensions
 pub fn size_for_extensions(ext: u32) -> usize {
@@ -1297,8 +1269,8 @@ pub fn size_for_extensions(ext: u32) -> usize {
 
 /// Resize account and transfer lamports for additional rent
 pub fn resize_player_account(
-    account: &AccountInfo,
-    payer: &AccountInfo,
+    account: &AccountView,
+    payer: &AccountView,
     new_size: usize,
 ) -> Result<(), ProgramError> {
     let current_size = account.data_len();
@@ -1309,7 +1281,7 @@ pub fn resize_player_account(
     // Calculate additional rent needed
     let rent = Rent::get()?;
     let current_lamports = account.lamports();
-    let required_lamports = rent.minimum_balance(new_size);
+    let required_lamports = rent.try_minimum_balance(new_size)?;
     let lamports_needed = required_lamports.saturating_sub(current_lamports);
 
     // Transfer lamports from payer via system program CPI
@@ -1330,8 +1302,8 @@ pub fn resize_player_account(
 /// Ensure extension is unlocked, resizing account if necessary
 /// Returns true if resize occurred
 pub fn ensure_extension(
-    account: &AccountInfo,
-    payer: &AccountInfo,
+    account: &AccountView,
+    payer: &AccountView,
     data: &mut [u8],
     extension: u32,
 ) -> Result<bool, ProgramError> {
@@ -1385,9 +1357,7 @@ pub fn ensure_extension(
     Ok(true)
 }
 
-// ============================================================
 // EXTENSION UNLOCK JOURNEY
-// ============================================================
 
 /// Get the prerequisite extension for a given extension
 /// Returns None if no prerequisite (EXT_RESEARCH is the first unlock)
@@ -1440,13 +1410,13 @@ pub fn can_unlock_extension(player: &PlayerCore, ext: u32) -> bool {
 /// IMPORTANT: The caller must NOT hold any active borrows on `account` when calling this.
 /// This function manages its own borrows to avoid conflicts with resize.
 pub fn unlock_extension_if_eligible(
-    account: &AccountInfo,
-    payer: &AccountInfo,
+    account: &AccountView,
+    payer: &AccountView,
     ext: u32,
 ) -> Result<bool, ProgramError> {
     // 1. Check current state (scoped borrow)
     let new_extensions = {
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
         let player = unsafe { PlayerCore::load(&data) };
 
         // Already unlocked?
@@ -1468,7 +1438,7 @@ pub fn unlock_extension_if_eligible(
 
     // 3. Re-borrow and update extensions flag
     {
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
         let player = unsafe { PlayerCore::load_mut(&mut data) };
         player.extensions = new_extensions;
     }
@@ -1485,9 +1455,7 @@ pub fn require_extension(player: &PlayerCore, ext: u32) -> Result<(), ProgramErr
     }
 }
 
-// ============================================================
 // PLAYER ACCOUNT (Type alias for PlayerCore)
-// ============================================================
 
 /// PlayerAccount is a type alias for PlayerCore.
 /// All fields are directly accessible on PlayerAccount.
@@ -1507,24 +1475,25 @@ impl PlayerCore {
     /// Load and verify a PlayerAccount immutably.
     /// Checks: program ownership, PDA derivation, owner field, bump field.
     pub fn load_checked<'a>(
-        account: &'a AccountInfo,
-        game_engine: &Pubkey,
-        expected_owner: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        game_engine: &Address,
+        expected_owner: &Address,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
         // 1. Check account is owned by program
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        // 3. Load data
-        let data = account.try_borrow_data()?;
+        // 3. Load data + discriminator check
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -1549,24 +1518,25 @@ impl PlayerCore {
     /// Load and verify a PlayerAccount mutably.
     /// Checks: program ownership, PDA derivation, owner field, bump field.
     pub fn load_checked_mut<'a>(
-        account: &'a AccountInfo,
-        game_engine: &Pubkey,
-        expected_owner: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        game_engine: &Address,
+        expected_owner: &Address,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
         // 1. Check account is owned by program
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        // 3. Load data
-        let mut data = account.try_borrow_mut_data()?;
+        // 3. Load data + discriminator check
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -1591,20 +1561,21 @@ impl PlayerCore {
     /// Load a player by verifying against its stored game_engine and owner
     /// Use when you have the account but not the game_engine upfront
     pub fn load_checked_by_key<'a>(
-        account: &'a AccountInfo,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored game_engine and owner
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
@@ -1617,20 +1588,21 @@ impl PlayerCore {
 
     /// Load a player mutably by verifying against its stored game_engine and owner
     pub fn load_checked_mut_by_key<'a>(
-        account: &'a AccountInfo,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored game_engine and owner
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
@@ -1642,7 +1614,7 @@ impl PlayerCore {
     }
 
     /// Check if owner matches
-    pub fn is_owner(&self, owner: &Pubkey) -> bool {
+    pub fn is_owner(&self, owner: &Address) -> bool {
         &self.owner == owner
     }
 
@@ -1877,9 +1849,7 @@ impl PlayerCore {
         self.travel_type != 0
     }
 
-    // ============================================================
     // MEDITATION METHODS
-    // ============================================================
 
     /// Check if a hero is currently meditating
     #[inline]
@@ -1894,7 +1864,7 @@ impl PlayerCore {
     }
 
     /// Get the pubkey of the meditating hero (if any)
-    pub fn get_meditating_hero(&self) -> Option<&Pubkey> {
+    pub fn get_meditating_hero(&self) -> Option<&Address> {
         if self.meditating_hero_slot < 3 && self.meditation_started_at > 0 {
             Some(&self.active_heroes[self.meditating_hero_slot as usize])
         } else {
@@ -1934,42 +1904,40 @@ impl PlayerCore {
 
     /// Derive the PDA for a player account
     /// Seeds: ["player", game_engine, owner]
-    pub fn derive_pda(game_engine: &Pubkey, owner: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(game_engine: &Address, owner: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[PLAYER_SEED, game_engine.as_ref(), owner.as_ref()],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Pubkey, owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(game_engine: &Address, owner: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[PLAYER_SEED, game_engine.as_ref(), owner.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     /// Validate player account PDA using stored bump
     pub fn validate_pda(
-        account: &AccountInfo,
+        account: &AccountView,
         player_data: &PlayerAccount,
     ) -> ProgramResult {
         let expected_address = Self::create_pda(&player_data.game_engine, &player_data.owner, player_data.bump)?;
-        if account.key() != &expected_address {
+        if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())
     }
 
     /// Check if player belongs to a specific kingdom
-    pub fn is_in_kingdom(&self, game_engine: &Pubkey) -> bool {
+    pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine
     }
 
-    // ============================================================
     // NAME METHODS
-    // ============================================================
 
     /// Get the player's display name as a byte slice
     #[inline]
@@ -2043,17 +2011,15 @@ impl PlayerCore {
     }
 }
 
-// ============================================================
 // USER ACCOUNT (Unchanged)
-// ============================================================
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct UserAccount {
     /// Account discriminator (AccountKey::User)
     pub account_key: u8,
 
-    pub owner: Pubkey,
-    pub player: Pubkey,
+    pub owner: Address,
+    pub player: Address,
     pub bump: u8,
     pub _padding1: [u8; 7],
 
@@ -2090,20 +2056,21 @@ impl UserAccount {
 
     /// Load and verify a UserAccount immutably.
     pub fn load_checked<'a>(
-        account: &'a AccountInfo,
-        expected_owner: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        expected_owner: &Address,
+        program_id: &Address,
     ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(expected_owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let data = account.try_borrow_data()?;
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::User)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
@@ -2119,20 +2086,21 @@ impl UserAccount {
 
     /// Load and verify a UserAccount mutably.
     pub fn load_checked_mut<'a>(
-        account: &'a AccountInfo,
-        expected_owner: &Pubkey,
-        program_id: &Pubkey,
+        account: &'a AccountView,
+        expected_owner: &Address,
+        program_id: &Address,
     ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if account.owner() != program_id {
+        if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
 
         let (expected_pda, bump) = Self::derive_pda(expected_owner);
-        if account.key() != &expected_pda {
+        if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
         }
 
-        let mut data = account.try_borrow_mut_data()?;
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::User)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
@@ -2146,7 +2114,7 @@ impl UserAccount {
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }
 
-    pub fn init(owner: Pubkey, player: Pubkey, bump: u8) -> Self {
+    pub fn init(owner: Address, player: Address, bump: u8) -> Self {
         Self {
             account_key: crate::state::AccountKey::User as u8,
             owner,
@@ -2166,27 +2134,27 @@ impl UserAccount {
         }
     }
 
-    pub fn derive_pda(owner: &Pubkey) -> (Pubkey, u8) {
-        pinocchio::pubkey::find_program_address(
+    pub fn derive_pda(owner: &Address) -> (Address, u8) {
+        pinocchio::Address::find_program_address(
             &[USER_SEED, owner.as_ref()],
             &crate::ID,
         )
     }
 
-    pub fn create_pda(owner: &Pubkey, bump: u8) -> Result<Pubkey, ProgramError> {
+    pub fn create_pda(owner: &Address, bump: u8) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
-        pinocchio::pubkey::create_program_address(
+        pinocchio::Address::create_program_address(
             &[USER_SEED, owner.as_ref(), &bump_seed],
             &crate::ID,
-        )
+        ).map_err(|e| e.into())
     }
 
     pub fn validate_pda(
-        account: &AccountInfo,
+        account: &AccountView,
         user_data: &UserAccount,
     ) -> ProgramResult {
         let expected_address = Self::create_pda(&user_data.owner, user_data.bump)?;
-        if account.key() != &expected_address {
+        if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(())

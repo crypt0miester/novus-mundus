@@ -63,9 +63,7 @@ import { log } from '../utils/logger';
 
 setDefaultTimeout(120_000);
 
-// ============================================================
 // Helper: Mint hero and return the keypair
-// ============================================================
 
 async function mintHero(
   ctx: TestContext,
@@ -93,11 +91,9 @@ async function mintHero(
   return { heroMint: heroMintKeypair.publicKey, templateId };
 }
 
-// ============================================================
 // Helper: Create a player with full extension chain for hero lock
 // Requires: EXT_RESEARCH → EXT_INVENTORY → EXT_TEAM → EXT_RALLY
 // Plus Sanctuary building for lock gate
-// ============================================================
 
 let heroReadyCounter = 0;
 
@@ -114,7 +110,7 @@ async function createHeroReadyPlayer(
   const player = await factory.createPlayer({
     initialize: true,
     createEstate: true,
-    buildings: [BuildingType.Sanctuary, BuildingType.Market, BuildingType.Barracks],
+    buildings: [BuildingType.MeditationChamber, BuildingType.Market, BuildingType.Barracks],
   });
 
   // 1b. Buy second plot + build Citadel (for rally creation → EXT_RALLY)
@@ -167,9 +163,7 @@ async function createHeroReadyPlayer(
   return player;
 }
 
-// ============================================================
 // Test Suite
-// ============================================================
 
 describe('Hero System', () => {
   let ctx: TestContext;
@@ -187,9 +181,7 @@ describe('Hero System', () => {
     factory.clear();
   });
 
-  // ============================================================
   // Hero Minting Tests
-  // ============================================================
 
   describe('Hero Minting', () => {
     it('should mint a new hero', async () => {
@@ -355,9 +347,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Level Up Tests
-  // ============================================================
 
   describe('Hero Level Up', () => {
     it('should level up hero with fragments', async () => {
@@ -544,9 +534,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Lock/Unlock Tests
-  // ============================================================
 
   describe('Hero Lock/Unlock', () => {
     it('should lock hero for expedition', async () => {
@@ -683,9 +671,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Assignment Tests
-  // ============================================================
 
   describe('Hero Assignment', () => {
     it('should assign hero for defense', async () => {
@@ -797,9 +783,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Stats Tests
-  // ============================================================
 
   describe('Hero Stats', () => {
     it('should have correct base stats from template', async () => {
@@ -871,9 +855,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Equipment Tests
-  // ============================================================
 
   describe('Hero Equipment', () => {
     it('should lock hero for equipment readiness', async () => {
@@ -976,9 +958,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Collection Tests
-  // ============================================================
 
   describe('Hero Collection', () => {
     it('should reject duplicate collection creation', async () => {
@@ -1011,9 +991,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero XP Tests
-  // ============================================================
 
   describe('Hero Experience', () => {
     it('should gain XP from locking hero', async () => {
@@ -1110,9 +1088,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Rarity Tests
-  // ============================================================
 
   describe('Hero Rarity', () => {
     it('should mint heroes with rarity from template', async () => {
@@ -1154,9 +1130,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Burn Tests
-  // ============================================================
 
   describe('Hero Burn', () => {
     it('should burn hero and receive locked NOVI', async () => {
@@ -1286,9 +1260,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Supply Cap Update Tests
-  // ============================================================
 
   describe('Supply Cap Update', () => {
     it('should increase supply cap (DAO)', async () => {
@@ -1346,9 +1318,7 @@ describe('Hero System', () => {
     });
   });
 
-  // ============================================================
   // Hero Trading Tests
-  // ============================================================
 
   describe('Hero Trading', () => {
     it('should mint hero to wallet', async () => {

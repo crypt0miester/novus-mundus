@@ -14,9 +14,7 @@ import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { BuildingType } from '../types/enums';
 
-// ============================================================
 // Building Status (local enum matching Rust)
-// ============================================================
 
 export enum BuildingStatus {
   Empty = 0,
@@ -25,9 +23,7 @@ export enum BuildingStatus {
   Upgrading = 3,
 }
 
-// ============================================================
 // Building Slot Interface
-// ============================================================
 
 export interface BuildingSlot {
   buildingType: number;
@@ -40,9 +36,7 @@ export interface BuildingSlot {
   totalNoviInvested: BN;
 }
 
-// ============================================================
 // Estate Account Interface
-// ============================================================
 
 export interface EstateAccount {
   // Identity
@@ -131,9 +125,7 @@ export const BUILDING_SLOT_SIZE = 40;
 /** EstateAccount header size (before buildings array) */
 export const ESTATE_HEADER_SIZE = 192;
 
-// ============================================================
 // Deserialization
-// ============================================================
 
 /** Deserialize a single BuildingSlot from the reader (40 bytes) */
 export function deserializeBuildingSlot(reader: BufferReader): BuildingSlot {
@@ -332,9 +324,7 @@ export function deserializeEstate(data: Uint8Array | Buffer): EstateAccount {
   };
 }
 
-// ============================================================
 // Parse Functions
-// ============================================================
 
 /** Parse EstateAccount from account info */
 export function parseEstate(accountInfo: AccountInfo<Buffer>): EstateAccount | null {
@@ -344,9 +334,7 @@ export function parseEstate(accountInfo: AccountInfo<Buffer>): EstateAccount | n
   return deserializeEstate(accountInfo.data);
 }
 
-// ============================================================
 // Helper Functions
-// ============================================================
 
 /** Find a building by type in the estate */
 export function findBuilding(estate: EstateAccount, buildingType: BuildingType): BuildingSlot | null {

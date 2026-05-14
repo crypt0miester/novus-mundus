@@ -1,7 +1,7 @@
 use pinocchio::{
-    account_info::AccountInfo,
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    AccountView,
+    error::ProgramError,
+    Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
 };
@@ -58,8 +58,8 @@ use crate::{
 /// # Instruction Data
 /// None
 pub fn process(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
@@ -104,26 +104,26 @@ pub fn process(
     require_key_match(token_program, &pinocchio_token::ID)?;
 
     // SECURITY: Verify token account belongs to the winner's PlayerAccount PDA
-    validate_token_account_owner(winner_novi_ata, winner_account.key())?;
+    validate_token_account_owner(winner_novi_ata, winner_account.address())?;
 
     // 3. Load Accounts
 
-    let mut winner_data_ref = winner_account.try_borrow_mut_data()?;
+    let mut winner_data_ref = winner_account.try_borrow_mut()?;
     let winner_data = unsafe { PlayerAccount::load_mut(&mut winner_data_ref) };
 
-    let mut event_data_ref = event_account.try_borrow_mut_data()?;
+    let mut event_data_ref = event_account.try_borrow_mut()?;
     let event_data = unsafe { EventAccount::load_mut(&mut event_data_ref) };
 
-    let mut participation_data_ref = participation_account.try_borrow_mut_data()?;
+    let mut participation_data_ref = participation_account.try_borrow_mut()?;
     let participation_data = unsafe { EventParticipation::load_mut(&mut participation_data_ref) };
 
     // Verify ownership
-    if &winner_data.owner != winner_owner.key() {
+    if &winner_data.owner != winner_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // Verify participation matches
-    if &participation_data.player != winner_owner.key() {
+    if &participation_data.player != winner_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -173,7 +173,7 @@ pub fn process(
     }
 
     // 6. Find Winner's Rank
-    let rank = event_data.find_rank(winner_owner.key())
+    let rank = event_data.find_rank(winner_owner.address())
         .ok_or(GameError::NotEventWinner)?;
 
     // Rank is 0-indexed, leaderboard is 0-9 for top 10
@@ -214,7 +214,7 @@ pub fn process(
     match prize_type {
         PrizeType::LockedNovi => {
             // Load GameEngine for mint authority
-            let game_engine_data_ref = game_engine.try_borrow_data()?;
+            let game_engine_data_ref = game_engine.try_borrow()?;
             let game_engine_data = unsafe {
                 crate::state::GameEngine::load(&game_engine_data_ref)
             };
@@ -222,8 +222,8 @@ pub fn process(
             // Create PDA signer for GameEngine (mint authority)
             let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine_data.bump];
-            let seeds = pinocchio::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
-            let signer = pinocchio::instruction::Signer::from(&seeds);
+            let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+            let signer = pinocchio::cpi::Signer::from(&seeds);
 
             // Mint NOVI tokens to winner's token account
             crate::helpers::mint_tokens(
@@ -253,13 +253,26 @@ pub fn process(
             require_writable(vault)?;
             require_writable(recipient)?;
 
-            // CPI transfer from event vault to winner
+            // The event vault SPL token account is owned by the
+            // EventAccount PDA (the program). The transfer authority must be the
+            // EventAccount PDA, not the vault token account itself. Sign with
+            // EVENT_SEED + game_engine + event_id + bump.
+            let event_id_bytes = event_data.id.to_le_bytes();
+            let event_bump_seed = [event_data.bump];
+            let event_seeds = crate::seeds!(
+                crate::constants::EVENT_SEED,
+                event_data.game_engine.as_ref(),
+                &event_id_bytes,
+                &event_bump_seed
+            );
+            let event_signer = pinocchio::cpi::Signer::from(&event_seeds);
+
             crate::helpers::transfer_tokens(
                 vault,
                 recipient,
-                vault, // vault is authority (event PDA)
+                event_account,  // EventAccount PDA is the vault's authority
                 prize_share,
-                &[], // No seeds needed if vault is signer
+                &[event_signer],
             )?;
         },
     }
@@ -276,9 +289,9 @@ pub fn process(
     // 11. Close Participation Account (Rent Refund)
 
     // Save values for event before dropping borrows
-    let event_player = *winner_account.key();
+    let event_player = *winner_account.address();
     let event_player_name = winner_data.name;
-    let event_event = *event_account.key();
+    let event_event = *event_account.address();
     let event_rank = rank as u16;
     let event_prize = prize_share;
 

@@ -15,9 +15,7 @@ import { formatEventMessage } from "@/lib/events/format";
 import { parseTransactionError, parseEventsFromLogs } from "@/lib/sdk";
 import type { NovusMundusEvent } from "@/lib/sdk";
 
-// ============================================================
 // Pending TX Registry (WebSocket-based confirmation)
-// ============================================================
 
 const pendingTxs = new Map<string, {
   resolve: (logs: string[]) => void;
@@ -59,15 +57,11 @@ function waitForTxViaLogSub(signature: string, timeoutMs: number): Promise<strin
   });
 }
 
-// ============================================================
 // Side channel: mutationFn stores events here for onSuccess
-// ============================================================
 
 const recentTxEvents = new Map<string, NovusMundusEvent[]>();
 
-// ============================================================
 // Hook
-// ============================================================
 
 interface TransactOptions {
   /** Instructions to build into a legacy Transaction (mutual exclusive with versionedTx). */

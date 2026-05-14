@@ -5,9 +5,7 @@ use crate::constants::{
     DAMAGE_PER_SIEGE_WEAPON, SIEGE_CAPTURE_RATE_BPS,
 };
 
-// ============================================================
 // Weapon Set - Tracks melee, ranged, siege weapons
-// ============================================================
 
 /// A set of weapons (melee, ranged, siege)
 /// Used for tracking weapon commitment, drops, loot, and returns
@@ -43,9 +41,7 @@ impl WeaponSet {
 
 }
 
-// ============================================================
 // Combat Weapon Result - Outcome of weapon combat resolution
-// ============================================================
 
 /// Result of weapon combat resolution
 #[derive(Copy, Clone, Default, Debug)]
@@ -60,9 +56,7 @@ pub struct CombatWeaponResult {
     pub attacker_won: bool,
 }
 
-// ============================================================
 // Combat Weapon Resolution Functions
-// ============================================================
 
 /// Resolve weapon outcomes from combat
 ///
@@ -148,9 +142,7 @@ pub fn resolve_weapon_combat(
     };
 
     if attacker_won {
-        // ============================================================
         // ATTACKER WON
-        // ============================================================
 
         // Attacker loots from defender
         let looted_from_defender = if defender_troops > 0 {
@@ -194,9 +186,7 @@ pub fn resolve_weapon_combat(
             attacker_won: true,
         }
     } else {
-        // ============================================================
         // DEFENDER WON (Attacker repelled)
-        // ============================================================
 
         // Defender loots from dead attackers (60%)
         let looted_from_attacker = attacker_dropped.apply_rate_bps(WEAPON_LOOT_RATE_BPS);
