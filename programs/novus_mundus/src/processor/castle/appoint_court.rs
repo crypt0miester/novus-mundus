@@ -140,7 +140,7 @@ pub fn process(
     let appointee = unsafe { PlayerAccount::load_mut(&mut appointee_data) };
 
     // Verify appointee is on king's team
-    if appointee.team != castle.team {
+    if appointee.team_address() != castle.team {
         return Err(GameError::NotOnKingsTeam.into());
     }
 

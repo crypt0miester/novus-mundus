@@ -162,7 +162,9 @@ pub fn process(
     drop(participant_data_ref);
     let mut creator_data = creator_player.try_borrow_mut()?;
     let creator = unsafe { PlayerAccount::load_mut(&mut creator_data) };
-    creator.rally_stats.current_rallies_joined = creator.rally_stats.current_rallies_joined.saturating_sub(1);
+    if let Some(rs) = creator.rally_stats_mut() {
+        rs.current_rallies_joined = rs.current_rallies_joined.saturating_sub(1);
+    }
     drop(creator_data);
 
     // Emit RallyCancelled event

@@ -1367,11 +1367,11 @@ export function createUpdateCastleConfigInstruction(
       break;
     }
     case 3: {
-      // name: config_type (u8) + 48 bytes (padded)
-      const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 48);
-      const namePadded = Buffer.alloc(48);
+      // name: config_type (u8) + 32 bytes (zero-padded; matches CastleAccount.name)
+      const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+      const namePadded = Buffer.alloc(32);
       nameBytes.copy(namePadded);
-      const writer = new BufferWriter(49);
+      const writer = new BufferWriter(33);
       writer.writeU8(3);
       writer.writeBytes(namePadded);
       paramData = writer.toBuffer();

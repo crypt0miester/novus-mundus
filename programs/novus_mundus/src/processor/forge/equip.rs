@@ -127,8 +127,8 @@ pub fn process(
     }
 
     // 8. Recalculate and update PlayerAccount bonuses
-    player.equipped_weapon_bonus_bps = crafted.calculate_weapon_bonus_bps();
-    player.equipped_armor_bonus_bps = crafted.calculate_armor_bonus_bps();
+    player.set_equipped_weapon_bonus_bps(crafted.calculate_weapon_bonus_bps());
+    player.set_equipped_armor_bonus_bps(crafted.calculate_armor_bonus_bps());
 
     // 9. Emit event
     let clock = Clock::get()?;

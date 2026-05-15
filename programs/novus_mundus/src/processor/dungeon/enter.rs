@@ -133,7 +133,7 @@ pub fn process(
     }
 
     // Check player not in rally
-    if player.rally_stats.current_rallies_joined > 0 {
+    if player.rally_stats().current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
 

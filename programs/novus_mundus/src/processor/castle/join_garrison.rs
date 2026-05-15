@@ -113,7 +113,7 @@ pub fn process(
     }
 
     // Verify player is on king's team
-    if player.team != castle.team {
+    if player.team_address() != castle.team {
         return Err(GameError::NotOnKingsTeam.into());
     }
 
@@ -167,12 +167,12 @@ pub fn process(
         let p_core_program = &accounts[8];
 
         // Verify hero exists in slot
-        if player.active_heroes[hero_slot as usize] == NULL_PUBKEY {
+        if player.active_hero_at(hero_slot as usize) == NULL_PUBKEY {
             return Err(GameError::HeroNotInSlot.into());
         }
 
         // Verify hero mint matches slot
-        if hero_mint.address() != &player.active_heroes[hero_slot as usize] {
+        if hero_mint.address() != &player.active_hero_at(hero_slot as usize) {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -214,20 +214,20 @@ pub fn process(
                 return Err(GameError::InvalidParameter.into());
             }
 
-            let location_bonus_bps = player.slot_location_bonus[hero_slot as usize];
+            let location_bonus_bps = player.slot_location_bonus_at(hero_slot as usize);
             subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
-            player.slot_location_bonus[hero_slot as usize] = 0;
+            player.set_slot_location_bonus_at(hero_slot as usize, 0);
         }
 
         // Clear hero from player's active_heroes
-        player.active_heroes[hero_slot as usize] = NULL_PUBKEY;
+        player.set_active_hero_at(hero_slot as usize, NULL_PUBKEY);
 
         // Reset defensive hero slot if this was the defensive hero
-        if player.defensive_hero_slot == hero_slot {
-            player.defensive_hero_slot = 0;
+        if player.defensive_hero_slot() == hero_slot {
+            player.set_defensive_hero_slot(0);
             for i in 0..3 {
-                if player.active_heroes[i] != NULL_PUBKEY {
-                    player.defensive_hero_slot = i as u8;
+                if player.active_hero_at(i as usize) != NULL_PUBKEY {
+                    player.set_defensive_hero_slot(i as u8);
                     break;
                 }
             }

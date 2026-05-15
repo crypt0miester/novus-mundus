@@ -128,7 +128,7 @@ pub fn process(
     // 6a. Validate collection type is unlocked
     match collection_type {
         CollectionType::Mining => {
-            if !player_data.has_mining {
+            if !player_data.has_mining() {
                 return Err(GameError::FeatureLocked.into());
             }
             // Mining requires Mine building (split from Workshop)
@@ -136,7 +136,7 @@ pub fn process(
             require_mine(estate, 1)?;
         },
         CollectionType::Fishing => {
-            if !player_data.has_fishing {
+            if !player_data.has_fishing() {
                 return Err(GameError::FeatureLocked.into());
             }
             // Fishing requires Dock building (minimum level 1)
@@ -432,16 +432,16 @@ pub fn process(
     let total_resources_collected = match collection_type {
         CollectionType::Cash => {
             // Apply research buff for cash generation
-            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+            let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
+                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
             };
 
             // Apply hero economy buff (multiplicative)
-            if player_data.hero_economy_bps > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_economy_bps as u64;
+            if player_data.hero_economy_bps() > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_economy_bps() as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
@@ -452,16 +452,16 @@ pub fn process(
         },
         CollectionType::Mining => {
             // Apply research buff for mining output
-            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+            let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
+                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
             };
 
             // Apply hero collection rate buff (gems + fragments)
-            if player_data.hero_collection_rate_bps > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+            if player_data.hero_collection_rate_bps() > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
@@ -479,10 +479,10 @@ pub fn process(
 
             // Deterministic fragment bonus (always award 2 fragments if unlocked)
             // Hero collection_rate_bps also boosts fragment drops
-            if player_data.has_fragment_drops {
+            if player_data.has_fragment_drops() {
                 let mut fragments = 2u64; // Deterministic: midpoint of old 1-3 range
-                if player_data.hero_collection_rate_bps > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                if player_data.hero_collection_rate_bps() > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data.fragments
@@ -493,16 +493,16 @@ pub fn process(
         },
         CollectionType::Fishing => {
             // Apply research buff for fishing output
-            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+            let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
+                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
             };
 
             // Apply hero produce generation buff (multiplicative)
-            if player_data.hero_produce_generation_bps > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps as u64;
+            if player_data.hero_produce_generation_bps() > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
@@ -520,10 +520,10 @@ pub fn process(
 
             // Deterministic fragment bonus (always award 1 fragment if unlocked)
             // Hero collection_rate_bps also boosts fragment drops
-            if player_data.has_fragment_drops {
+            if player_data.has_fragment_drops() {
                 let mut fragments = 1u64; // Deterministic: lower end of old 1-2 range (fishing less efficient)
-                if player_data.hero_collection_rate_bps > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                if player_data.hero_collection_rate_bps() > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data.fragments
@@ -534,16 +534,16 @@ pub fn process(
         },
         CollectionType::Farming => {
             // Apply research buff for farming output
-            let mut buffed_output = if player_data.research_collection_bonus_bps > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+            let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
+                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
             };
 
             // Apply hero produce generation buff (multiplicative)
-            if player_data.hero_produce_generation_bps > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps as u64;
+            if player_data.hero_produce_generation_bps() > 0 {
+                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
@@ -560,10 +560,10 @@ pub fn process(
                 .ok_or(GameError::MathOverflow)?;
 
             // Deterministic fragment bonus (always award 1 fragment if unlocked)
-            if player_data.has_fragment_drops {
+            if player_data.has_fragment_drops() {
                 let mut fragments = 1u64;
-                if player_data.hero_collection_rate_bps > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+                if player_data.hero_collection_rate_bps() > 0 {
+                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data.fragments
@@ -676,15 +676,15 @@ pub fn process(
             // the intermediate event-scoring counter saturates if a single
             // mining session ever collects more than u32::MAX resources.
             let gems = total_resources_collected.min(u32::MAX as u64) as u32;
-            let frags = if player_data.has_fragment_drops { 2u16 } else { 0 };
+            let frags = if player_data.has_fragment_drops() { 2u16 } else { 0 };
             (gems, frags)
         },
         CollectionType::Fishing => {
-            let frags = if player_data.has_fragment_drops { 1u16 } else { 0 };
+            let frags = if player_data.has_fragment_drops() { 1u16 } else { 0 };
             (0, frags)
         },
         CollectionType::Farming => {
-            let frags = if player_data.has_fragment_drops { 1u16 } else { 0 };
+            let frags = if player_data.has_fragment_drops() { 1u16 } else { 0 };
             (0, frags)
         },
         CollectionType::Cash => (0, 0),

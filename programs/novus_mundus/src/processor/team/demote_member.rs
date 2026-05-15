@@ -92,7 +92,7 @@ pub fn process(
 
     // 5. Validate Demoter is in Team
 
-    if demoter.team == NULL_PUBKEY || &demoter.team != team_account.address() {
+    if demoter.team_address() == NULL_PUBKEY || &demoter.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

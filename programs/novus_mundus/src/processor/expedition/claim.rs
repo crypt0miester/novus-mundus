@@ -224,8 +224,8 @@ pub fn process(
     let time_adjusted = apply_time_multiplier(base_yield, time_of_day, activity_type);
 
     // 11. Apply research collection bonus
-    let research_adjusted = if player_data.research_collection_bonus_bps > 0 {
-        let multiplier = 10000u64 + player_data.research_collection_bonus_bps as u64;
+    let research_adjusted = if player_data.research_collection_bonus_bps() > 0 {
+        let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
         time_adjusted.saturating_mul(multiplier) / 10000
     } else {
         time_adjusted
@@ -234,16 +234,16 @@ pub fn process(
     // 12. Apply hero buffs
     let hero_adjusted = if expedition_type == EXPEDITION_MINING {
         // Mining uses hero_collection_rate_bps
-        if player_data.hero_collection_rate_bps > 0 {
-            let multiplier = 10000u64 + player_data.hero_collection_rate_bps as u64;
+        if player_data.hero_collection_rate_bps() > 0 {
+            let multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
             research_adjusted.saturating_mul(multiplier) / 10000
         } else {
             research_adjusted
         }
     } else {
         // Fishing uses hero_produce_generation_bps
-        if player_data.hero_produce_generation_bps > 0 {
-            let multiplier = 10000u64 + player_data.hero_produce_generation_bps as u64;
+        if player_data.hero_produce_generation_bps() > 0 {
+            let multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
             research_adjusted.saturating_mul(multiplier) / 10000
         } else {
             research_adjusted

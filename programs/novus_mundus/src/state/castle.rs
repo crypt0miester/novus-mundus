@@ -375,7 +375,7 @@ impl CastleAccount {
         core::str::from_utf8(&self.name[..end]).unwrap_or("")
     }
 
-    // ========== Upgrade Bonus Calculations ==========
+    // Upgrade Bonus Calculations
     // Using u32 for uncapped stats to avoid overflow (255 * 500 = 127,500 > u16::MAX)
 
     /// Calculate fortification defense bonus in basis points

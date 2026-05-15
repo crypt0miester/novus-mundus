@@ -72,15 +72,15 @@ pub fn process(
     require_extension(player, EXT_HEROES)?;
 
     // 7. SAFETY: Verify slot is occupied
-    if player.active_heroes[slot_index as usize] == NULL_PUBKEY {
+    if player.active_hero_at(slot_index as usize) == NULL_PUBKEY {
         return Err(GameError::InvalidParameter.into());
     }
 
     // 8. Update defensive hero slot
-    player.defensive_hero_slot = slot_index;
+    player.set_defensive_hero_slot(slot_index);
 
     // 9. Emit HeroAssignedDefensive event
-    let hero_mint = player.active_heroes[slot_index as usize];
+    let hero_mint = player.active_hero_at(slot_index as usize);
     let clock = Clock::get()?;
     emit!(HeroAssignedDefensive {
         hero_mint,

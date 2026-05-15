@@ -213,7 +213,7 @@ pub fn process(
         estate_data.infirmary_recovery_daily_bps = 0;
         estate_data.expansion_daily = 0;
         // Reset daily buffs (player)
-        player_data.blessed_hero_bonus_bps = 0;
+        player_data.set_blessed_hero_bonus_bps(0);
     }
 
     // 9. Determine current window
@@ -336,7 +336,7 @@ fn grant_building_rewards(
         BuildingType::Workshop => {
             // Materials: 10-65 common materials based on score
             let materials = 10 + (score_multiplier * 55 / 100);
-            player.common_materials = player.common_materials.saturating_add(materials);
+            player.set_common_materials(player.common_materials().saturating_add(materials));
         }
 
         BuildingType::Dock => {
@@ -348,7 +348,7 @@ fn grant_building_rewards(
         BuildingType::Vault => {
             // Materials: 50-200 common materials based on score
             let materials = 50 + (score_multiplier * 150 / 100);
-            player.common_materials = player.common_materials.saturating_add(materials);
+            player.set_common_materials(player.common_materials().saturating_add(materials));
         }
 
         BuildingType::Forge => {
@@ -430,7 +430,7 @@ fn grant_building_rewards(
 
             // NFT-Only System: hero_mint IS the hero's identity
             // Verify hero is locked to this player (in active_heroes)
-            let is_locked = player.active_heroes.iter().any(|&mint| &mint == hero_mint.address());
+            let is_locked = player.active_heroes_arr().iter().any(|&mint| &mint == hero_mint.address());
             if !is_locked {
                 return Err(GameError::Unauthorized.into());
             }
@@ -446,7 +446,7 @@ fn grant_building_rewards(
 
             // Grant +25% hero effectiveness bonus for the day
             // This applies as a multiplier to all hero buffs in combat
-            player.blessed_hero_bonus_bps = 2500; // +25%
+            player.set_blessed_hero_bonus_bps(2500); // +25%
 
             // Also store which hero was blessed (for UI/reference)
             // NFT-Only: Store the hero_mint key directly

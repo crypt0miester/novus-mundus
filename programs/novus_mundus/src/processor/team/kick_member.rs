@@ -106,7 +106,7 @@ pub fn process(
     }
 
     // Kicker in the team?
-    if kicker.team == NULL_PUBKEY || &kicker.team != team_account.address() {
+    if kicker.team_address() == NULL_PUBKEY || &kicker.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -136,7 +136,7 @@ pub fn process(
     }
 
     // Kicked player in the team?
-    if kicked.team == NULL_PUBKEY || &kicked.team != team_account.address() {
+    if kicked.team_address() == NULL_PUBKEY || &kicked.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -185,8 +185,8 @@ pub fn process(
 
     // 10. Update Kicked Player Account
 
-    kicked.team = NULL_PUBKEY;
-    kicked.team_slot_index = 0;
+    kicked.set_team_address(NULL_PUBKEY);
+    kicked.set_team_slot_index(0);
 
     // 11. Emit Event
 

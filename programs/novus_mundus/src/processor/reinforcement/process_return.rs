@@ -123,8 +123,8 @@ pub fn process(
     if return_hero != Address::default() {
         // Find first empty hero slot
         for i in 0..3 {
-            if sender.active_heroes[i] == Address::default() {
-                sender.active_heroes[i] = return_hero;
+            if sender.active_hero_at(i as usize) == Address::default() {
+                sender.set_active_hero_at(i as usize, return_hero);
                 break;
             }
         }

@@ -69,7 +69,7 @@ pub fn process(
     }
 
     // Verify same kingdom (if player still in team)
-    if player.team != crate::state::NULL_PUBKEY && player.game_engine != team.game_engine {
+    if player.team_address() != crate::state::NULL_PUBKEY && player.game_engine != team.game_engine {
         return Err(GameError::KingdomMismatch.into());
     }
 

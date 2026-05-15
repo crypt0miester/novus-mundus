@@ -154,8 +154,8 @@ pub fn process(
     };
 
     // 10. Grant rewards
-    player_data.common_materials = player_data.common_materials
-        .saturating_add(final_materials);
+    player_data.set_common_materials(player_data.common_materials()
+        .saturating_add(final_materials));
     player_data.locked_novi = player_data.locked_novi
         .saturating_add(final_novi);
     player_data.current_xp = player_data.current_xp
@@ -187,20 +187,20 @@ fn grant_milestone_rewards(player: &mut PlayerAccount, streak: u16) {
     match streak {
         7 => {
             player.locked_novi = player.locked_novi.saturating_add(500);
-            player.uncommon_materials = player.uncommon_materials.saturating_add(100);
+            player.set_uncommon_materials(player.uncommon_materials().saturating_add(100));
         }
         14 => {
             player.locked_novi = player.locked_novi.saturating_add(1_000);
-            player.rare_materials = player.rare_materials.saturating_add(50);
+            player.set_rare_materials(player.rare_materials().saturating_add(50));
         }
         30 => {
             player.locked_novi = player.locked_novi.saturating_add(5_000);
-            player.epic_materials = player.epic_materials.saturating_add(25);
+            player.set_epic_materials(player.epic_materials().saturating_add(25));
             // Title: "Dedicated" - would be stored in a separate system
         }
         60 => {
             player.locked_novi = player.locked_novi.saturating_add(15_000);
-            player.legendary_materials = player.legendary_materials.saturating_add(10);
+            player.set_legendary_materials(player.legendary_materials().saturating_add(10));
             // Cosmetic unlock - would be stored in inventory
         }
         90 => {

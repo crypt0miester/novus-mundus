@@ -181,11 +181,11 @@ pub fn process(
 
     // 7b. Validate Same Team
     // Player must be on the same team as the rally
-    if player.team == NULL_PUBKEY {
+    if player.team_address() == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
     }
 
-    if player.team != rally_team {
+    if player.team_address() != rally_team {
         return Err(GameError::NotSameTeam.into());
     }
 
@@ -263,13 +263,13 @@ pub fn process(
     let already_arrived = travel_duration == 0; // Only if exactly at rally point
 
     // Snapshot player buffs
-    let research_attack_bps = player.research_attack_bps;
-    let research_crit_chance_bps = player.research_crit_chance_bps;
-    let research_crit_damage_bps = player.research_crit_damage_bps;
-    let hero_attack_bps = player.hero_attack_bps;
-    let hero_weapon_efficiency_bps = player.hero_weapon_efficiency_bps;
-    let hero_crit_chance_bps = player.hero_crit_chance_bps;
-    let equipped_weapon_bonus_bps = player.equipped_weapon_bonus_bps;
+    let research_attack_bps = player.research_attack_bps();
+    let research_crit_chance_bps = player.research_crit_chance_bps();
+    let research_crit_damage_bps = player.research_crit_damage_bps();
+    let hero_attack_bps = player.hero_attack_bps();
+    let hero_weapon_efficiency_bps = player.hero_weapon_efficiency_bps();
+    let hero_crit_chance_bps = player.hero_crit_chance_bps();
+    let equipped_weapon_bonus_bps = player.equipped_weapon_bonus_bps();
 
     // 9a. Hero commitment (optional)
     let mut committed_hero = NULL_PUBKEY;
@@ -283,7 +283,7 @@ pub fn process(
         let slot = hero_slot_index as usize;
 
         // Verify hero is locked in this slot
-        if player.active_heroes[slot] == NULL_PUBKEY {
+        if player.active_hero_at(slot as usize) == NULL_PUBKEY {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -295,7 +295,7 @@ pub fn process(
         let hero_template = &accounts[9];
 
         // Verify mint matches player slot
-        if player.active_heroes[slot] != *hero_mint.address() {
+        if player.active_hero_at(slot as usize) != *hero_mint.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -316,15 +316,15 @@ pub fn process(
         hero_power_contribution = calculate_weighted_power_for_level(parsed_hero.level, template) as u64;
 
         // Subtract hero buffs from player (using stored location bonus)
-        let location_bonus = player.slot_location_bonus[slot];
+        let location_bonus = player.slot_location_bonus_at(slot as usize);
         subtract_hero_buffs_from_player_with_location(&mut player, parsed_hero.level, template, location_bonus);
 
         drop(template_data);
 
         // Clear player slot and location bonus
         committed_hero = *hero_mint.address();
-        player.active_heroes[slot] = NULL_PUBKEY;
-        player.slot_location_bonus[slot] = 0;
+        player.set_active_hero_at(slot as usize, NULL_PUBKEY);
+        player.set_slot_location_bonus_at(slot as usize, 0);
     }
 
     // 10. Deduct units and weapons from player
@@ -336,8 +336,9 @@ pub fn process(
     player.siege_weapons = player.siege_weapons.saturating_sub(siege);
 
     // Update rally stats
-    player.rally_stats.current_rallies_joined =
-        player.rally_stats.current_rallies_joined.saturating_add(1);
+    if let Some(rs) = player.rally_stats_mut() {
+        rs.current_rallies_joined = rs.current_rallies_joined.saturating_add(1);
+    }
 
     // Update networth
     player.networth = calculate_networth(&*player, &game_engine_data.economic_config)?;

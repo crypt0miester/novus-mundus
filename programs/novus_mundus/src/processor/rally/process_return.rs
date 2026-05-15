@@ -281,16 +281,15 @@ pub fn process(
                 .saturating_add(participant.loot_produce)
                 .saturating_add(participant.loot_vehicles);
 
-            player.rally_stats.total_rallies_won =
-                player.rally_stats.total_rallies_won.saturating_add(1);
-            player.rally_stats.total_rally_loot_earned = player
-                .rally_stats
-                .total_rally_loot_earned
-                .saturating_add(loot_received);
+            if let Some(rs) = player.rally_stats_mut() {
+                rs.total_rallies_won = rs.total_rallies_won.saturating_add(1);
+                rs.total_rally_loot_earned = rs.total_rally_loot_earned.saturating_add(loot_received);
+            }
         } else {
             loot_received = 0;
-            player.rally_stats.total_rallies_lost =
-                player.rally_stats.total_rallies_lost.saturating_add(1);
+            if let Some(rs) = player.rally_stats_mut() {
+                rs.total_rallies_lost = rs.total_rallies_lost.saturating_add(1);
+            }
         }
     } else {
         // === LATE JOINER / EARLY LEAVER RETURN ===
@@ -376,7 +375,7 @@ pub fn process(
         // Find empty slot on player
         let mut empty_slot: Option<usize> = None;
         for i in 0..3 {
-            if player.active_heroes[i] == NULL_PUBKEY {
+            if player.active_hero_at(i as usize) == NULL_PUBKEY {
                 empty_slot = Some(i);
                 break;
             }
@@ -394,8 +393,8 @@ pub fn process(
 
             add_hero_buffs_to_player_with_location(&mut player, parsed_hero.level, template, location_bonus_bps);
 
-            player.active_heroes[slot] = committed_hero_key;
-            player.slot_location_bonus[slot] = location_bonus_bps;
+            player.set_active_hero_at(slot as usize, committed_hero_key);
+            player.set_slot_location_bonus_at(slot as usize, location_bonus_bps);
         } else {
             // All slots full (player locked new heroes while this one was committed)
             // Transfer the NFT directly to the participant's wallet instead
@@ -410,8 +409,9 @@ pub fn process(
     rally.returned_count = rally.returned_count.saturating_add(1);
     // Skip decrement for leader of cancelled rallies — already decremented in cancel.rs
     if !(rally_status == RallyStatus::Cancelled as u8 && participant.is_leader) {
-        player.rally_stats.current_rallies_joined =
-            player.rally_stats.current_rallies_joined.saturating_sub(1);
+        if let Some(rs) = player.rally_stats_mut() {
+            rs.current_rallies_joined = rs.current_rallies_joined.saturating_sub(1);
+        }
     }
 
     // Check if rally is complete (all participants returned)

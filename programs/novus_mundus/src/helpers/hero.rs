@@ -105,24 +105,24 @@ pub fn subtract_hero_buffs_from_player_with_location(
 /// Clear all hero buff fields on player (used before recalculation)
 #[inline]
 pub fn clear_hero_buffs(player: &mut PlayerAccount) {
-    player.hero_attack_bps = 0;
-    player.hero_defense_bps = 0;
-    player.hero_economy_bps = 0;
-    player.hero_xp_gain_bps = 0;
-    player.hero_training_cost_reduction_bps = 0;
-    player.hero_rally_capacity_bps = 0;
-    player.hero_crit_chance_bps = 0;
-    player.hero_synchrony_bonus_bps = 0;
-    player.hero_weapon_efficiency_bps = 0;
-    player.hero_stamina_regen_bps = 0;
-    player.hero_produce_generation_bps = 0;
-    player.hero_encounter_damage_bps = 0;
-    player.hero_loot_bonus_bps = 0;
-    player.hero_armor_efficiency_bps = 0;
-    player.hero_resource_capacity_bps = 0;
-    player.hero_unit_capacity_bps = 0;
-    // Also clear location bonuses
-    player.slot_location_bonus = [0; 3];
+    let Some(heroes) = player.heroes_mut() else { return; };
+    heroes.hero_attack_bps = 0;
+    heroes.hero_defense_bps = 0;
+    heroes.hero_economy_bps = 0;
+    heroes.hero_xp_gain_bps = 0;
+    heroes.hero_training_cost_reduction_bps = 0;
+    heroes.hero_rally_capacity_bps = 0;
+    heroes.hero_crit_chance_bps = 0;
+    heroes.hero_synchrony_bonus_bps = 0;
+    heroes.hero_weapon_efficiency_bps = 0;
+    heroes.hero_stamina_regen_bps = 0;
+    heroes.hero_produce_generation_bps = 0;
+    heroes.hero_encounter_damage_bps = 0;
+    heroes.hero_loot_bonus_bps = 0;
+    heroes.hero_armor_efficiency_bps = 0;
+    heroes.hero_resource_capacity_bps = 0;
+    heroes.hero_unit_capacity_bps = 0;
+    heroes.slot_location_bonus = [0; 3];
 }
 
 /// Add buff deltas from level-up to player's cached totals
@@ -154,23 +154,24 @@ pub fn add_buff_delta_to_player(
 /// Internal: Apply a single buff value to the appropriate player stat
 #[inline]
 fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, add: bool) {
+    let Some(heroes) = player.heroes_mut() else { return; };
     let target = match stat {
-        BuffStat::AttackPower => &mut player.hero_attack_bps,
-        BuffStat::DefensePower => &mut player.hero_defense_bps,
-        BuffStat::CashCollectionRate => &mut player.hero_economy_bps,
-        BuffStat::XpGain => &mut player.hero_xp_gain_bps,
-        BuffStat::TrainingCostReduction => &mut player.hero_training_cost_reduction_bps,
-        BuffStat::RallyCapacity => &mut player.hero_rally_capacity_bps,
-        BuffStat::CriticalHitChance => &mut player.hero_crit_chance_bps,
-        BuffStat::SynchronyBonus => &mut player.hero_synchrony_bonus_bps,
-        BuffStat::WeaponEfficiency => &mut player.hero_weapon_efficiency_bps,
-        BuffStat::StaminaRegen => &mut player.hero_stamina_regen_bps,
-        BuffStat::ProduceGeneration => &mut player.hero_produce_generation_bps,
-        BuffStat::EncounterDamage => &mut player.hero_encounter_damage_bps,
-        BuffStat::LootBonus => &mut player.hero_loot_bonus_bps,
-        BuffStat::ArmorEfficiency => &mut player.hero_armor_efficiency_bps,
-        BuffStat::ResourceCapacity => &mut player.hero_resource_capacity_bps,
-        BuffStat::UnitCapacity => &mut player.hero_unit_capacity_bps,
+        BuffStat::AttackPower => &mut heroes.hero_attack_bps,
+        BuffStat::DefensePower => &mut heroes.hero_defense_bps,
+        BuffStat::CashCollectionRate => &mut heroes.hero_economy_bps,
+        BuffStat::XpGain => &mut heroes.hero_xp_gain_bps,
+        BuffStat::TrainingCostReduction => &mut heroes.hero_training_cost_reduction_bps,
+        BuffStat::RallyCapacity => &mut heroes.hero_rally_capacity_bps,
+        BuffStat::CriticalHitChance => &mut heroes.hero_crit_chance_bps,
+        BuffStat::SynchronyBonus => &mut heroes.hero_synchrony_bonus_bps,
+        BuffStat::WeaponEfficiency => &mut heroes.hero_weapon_efficiency_bps,
+        BuffStat::StaminaRegen => &mut heroes.hero_stamina_regen_bps,
+        BuffStat::ProduceGeneration => &mut heroes.hero_produce_generation_bps,
+        BuffStat::EncounterDamage => &mut heroes.hero_encounter_damage_bps,
+        BuffStat::LootBonus => &mut heroes.hero_loot_bonus_bps,
+        BuffStat::ArmorEfficiency => &mut heroes.hero_armor_efficiency_bps,
+        BuffStat::ResourceCapacity => &mut heroes.hero_resource_capacity_bps,
+        BuffStat::UnitCapacity => &mut heroes.hero_unit_capacity_bps,
         // Expedition-specific buffs - not cached on player, applied at expedition time
         BuffStat::MiningAffinity | BuffStat::FishingAffinity => return,
         BuffStat::None => return,

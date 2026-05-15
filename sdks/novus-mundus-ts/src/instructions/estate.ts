@@ -261,6 +261,7 @@ export function createBuyPlotInstruction(
     { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_BUY_PLOT);

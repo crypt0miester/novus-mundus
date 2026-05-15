@@ -78,24 +78,24 @@ pub struct ArenaSeasonAccount {
     /// Account discriminator (AccountKey::ArenaSeason)
     pub account_key: u8,
 
-    // ===== Kingdom & Identity (70 bytes) =====
+    // Kingdom & Identity (70 bytes)
     pub game_engine: Address,                     // 32 - Kingdom this season belongs to
     pub season_id: u32,                          // 4 - Incrementing season number
     pub city_id: u16,                            // 2 - City this arena belongs to (0 = kingdom-wide)
     pub authority: Address,                       // 32 - Who can finalize/admin
 
-    // ===== Timing (25 bytes) =====
+    // Timing (25 bytes)
     pub start_time: i64,                         // 8 - Unix timestamp
     pub end_time: i64,                           // 8 - start_time + 7 days
     pub claim_deadline: i64,                     // 8 - end_time + 30 days
     pub status: u8,                              // 1 - ArenaStatus enum
 
-    // ===== Leaderboard - Top 10 Only (411 bytes) =====
+    // Leaderboard - Top 10 Only (411 bytes)
     pub leaderboard: [ArenaLeaderboardEntry; 10], // 400 (10 x 40)
     pub leaderboard_count: u8,                   // 1
     pub leaderboard_claimed: [bool; 10],         // 10 - Track who claimed master reward
 
-    // ===== Prize Pool (52 bytes) =====
+    // Prize Pool (52 bytes)
     pub master_prize_pool: u64,                  // 8 - Total NOVI for top 10
     pub daily_prize_pool: u64,                   // 8 - Total NOVI for daily rewards
     pub daily_distribution_cap: u64,             // 8 - Max distributed per day
@@ -104,7 +104,7 @@ pub struct ArenaSeasonAccount {
     pub _padding1: [u8; 4],                      // 4 - Alignment padding
     pub prize_remaining: u64,                    // 8 - Unclaimed prizes
 
-    // ===== Thresholds (26 bytes) =====
+    // Thresholds (26 bytes)
     pub min_level_required: u8,                  // 1 - Minimum player level to join
     pub _padding2: [u8; 7],                      // 7 - Alignment padding
     pub min_points_for_leaderboard: u64,         // 8 - Prevents sybil attacks (default: 500)
@@ -320,33 +320,33 @@ pub struct ArenaParticipantAccount {
     /// Account discriminator (AccountKey::ArenaParticipant)
     pub account_key: u8,
 
-    // ===== Identity (68 bytes) =====
+    // Identity (68 bytes)
     pub game_engine: Address,                     // 32 - Kingdom reference
     pub player: Address,                          // 32
     pub season_id: u32,                          // 4
 
-    // ===== Daily Battle Tracking - Rolling Window (401 bytes) =====
+    // Daily Battle Tracking - Rolling Window (401 bytes)
     pub battle_timestamps: [i64; 10],            // 80 - Circular buffer of last 10 battle times
     pub battle_opponents: [Address; 10],          // 320 - Who we fought (for diversity + cooldown checks)
     pub battle_index: u8,                        // 1 - Current index in circular buffer
 
-    // ===== Matchmaking (12 bytes) =====
+    // Matchmaking (12 bytes)
     pub last_match_id: u64,                      // 8 - Prevents match replay attacks
     pub daily_reward_claimed_day: u32,           // 4 - Which day was last claim
 
-    // ===== Skill Rating (4 bytes) =====
+    // Skill Rating (4 bytes)
     pub elo_rating: u32,                         // 4 - Starts at 1000
 
-    // ===== Season Statistics (16 bytes) =====
+    // Season Statistics (16 bytes)
     pub total_points: u64,                       // 8 - Can never go below 0
     pub wins: u32,                               // 4 - Season cumulative wins
     pub losses: u32,                             // 4 - Season cumulative losses
 
-    // ===== Claim Tracking (2 bytes) =====
+    // Claim Tracking (2 bytes)
     pub master_reward_claimed: bool,             // 1
     pub bump: u8,                                // 1 - PDA bump
 
-    // ===== Reserved (17 bytes) =====
+    // Reserved (17 bytes)
     pub _reserved: [u8; 17],
 }
 
@@ -515,24 +515,24 @@ pub struct ArenaLoadoutAccount {
     /// Account discriminator (AccountKey::ArenaLoadout)
     pub account_key: u8,
 
-    // ===== Identity (65 bytes) =====
+    // Identity (65 bytes)
     pub game_engine: Address,                     // 32 - Kingdom reference
     pub player: Address,                          // 32
     pub bump: u8,                                // 1
 
-    // ===== Hero Selection (32 bytes) =====
+    // Hero Selection (32 bytes)
     pub arena_hero: Address,                      // 32 - Hero mint for arena (default = use active heroes)
 
-    // ===== Unit Loadout (24 bytes) =====
+    // Unit Loadout (24 bytes)
     pub defensive_units: [u64; 3],               // 24 - Tier 1, 2, 3 defensive units
 
-    // ===== Equipment Loadout (32 bytes) =====
+    // Equipment Loadout (32 bytes)
     pub melee_weapons: u64,                      // 8
     pub ranged_weapons: u64,                     // 8
     pub siege_weapons: u64,                      // 8
     pub armor_pieces: u64,                       // 8
 
-    // ===== Reserved (7 bytes) =====
+    // Reserved (7 bytes)
     pub _reserved: [u8; 7],
 }
 

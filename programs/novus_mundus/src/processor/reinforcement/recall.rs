@@ -103,22 +103,18 @@ pub fn process(
         let return_ranged = reinf.ranged_weapons.saturating_mul(weapon_survival_bps) / 10000;
         let return_siege = reinf.siege_weapons.saturating_mul(weapon_survival_bps) / 10000;
 
-        // Subtract from destination aggregates
-        dest.reinforcement_def_1 = dest.reinforcement_def_1.saturating_sub(return_def_1);
-        dest.reinforcement_def_2 = dest.reinforcement_def_2.saturating_sub(return_def_2);
-        dest.reinforcement_def_3 = dest.reinforcement_def_3.saturating_sub(return_def_3);
-        dest.reinforcement_melee = dest.reinforcement_melee.saturating_sub(return_melee);
-        dest.reinforcement_ranged = dest.reinforcement_ranged.saturating_sub(return_ranged);
-        dest.reinforcement_siege = dest.reinforcement_siege.saturating_sub(return_siege);
-
-        // Subtract original amounts from original totals
-        dest.reinforcement_original_units = dest.reinforcement_original_units
-            .saturating_sub(reinf.total_units());
-        dest.reinforcement_original_weapons = dest.reinforcement_original_weapons
-            .saturating_sub(reinf.total_weapons());
-
-        // Decrement source count
-        dest.reinforcement_source_count = dest.reinforcement_source_count.saturating_sub(1);
+        // Subtract from destination aggregates (single team-section borrow).
+        if let Some(t) = dest.team_section_mut() {
+            t.reinforcement_def_1 = t.reinforcement_def_1.saturating_sub(return_def_1);
+            t.reinforcement_def_2 = t.reinforcement_def_2.saturating_sub(return_def_2);
+            t.reinforcement_def_3 = t.reinforcement_def_3.saturating_sub(return_def_3);
+            t.reinforcement_melee = t.reinforcement_melee.saturating_sub(return_melee);
+            t.reinforcement_ranged = t.reinforcement_ranged.saturating_sub(return_ranged);
+            t.reinforcement_siege = t.reinforcement_siege.saturating_sub(return_siege);
+            t.reinforcement_original_units = t.reinforcement_original_units.saturating_sub(reinf.total_units());
+            t.reinforcement_original_weapons = t.reinforcement_original_weapons.saturating_sub(reinf.total_weapons());
+            t.reinforcement_source_count = t.reinforcement_source_count.saturating_sub(1);
+        }
 
         // Store wounded counts BEFORE overwriting originals
         // These will be added to the sender's estate during process_return

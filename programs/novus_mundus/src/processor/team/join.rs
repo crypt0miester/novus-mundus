@@ -105,7 +105,7 @@ pub fn process(
     }
 
     // Already in a team?
-    if player.team != NULL_PUBKEY {
+    if player.team_address() != NULL_PUBKEY {
         return Err(GameError::AlreadyInTeam.into());
     }
 
@@ -178,8 +178,8 @@ pub fn process(
 
     // 10. Update Player Account
 
-    player.team = *team_account.address();
-    player.team_slot_index = slot_index;
+    player.set_team_address(*team_account.address());
+    player.set_team_slot_index(slot_index);
 
     // 11. Emit Event
 

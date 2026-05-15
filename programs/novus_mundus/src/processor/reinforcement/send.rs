@@ -165,15 +165,15 @@ pub fn process(
     let destination = unsafe { PlayerAccount::load_mut(&mut dest_data_ref) };
 
     // 7. Validate Same Team
-    if sender.team == NULL_PUBKEY || destination.team == NULL_PUBKEY {
+    if sender.team_address() == NULL_PUBKEY || destination.team_address() == NULL_PUBKEY {
         return Err(GameError::NotOnSameTeam.into());
     }
-    if sender.team != destination.team {
+    if sender.team_address() != destination.team_address() {
         return Err(GameError::NotOnSameTeam.into());
     }
 
     // Verify team account matches
-    if team_account.address() != &sender.team {
+    if team_account.address() != &sender.team_address() {
         return Err(GameError::InvalidTeam.into());
     }
 
@@ -214,8 +214,8 @@ pub fn process(
     // Current total + new reinforcements must not exceed capacity
     let current_reinforcement_total = destination.total_reinforcement_units();
     let base_capacity = MAX_REINFORCEMENT_RECEIVE;
-    let boosted_capacity = if destination.hero_unit_capacity_bps > 0 {
-        let multiplier = 10000u64 + destination.hero_unit_capacity_bps as u64;
+    let boosted_capacity = if destination.hero_unit_capacity_bps() > 0 {
+        let multiplier = 10000u64 + destination.hero_unit_capacity_bps() as u64;
         base_capacity.saturating_mul(multiplier) / 10000
     } else {
         base_capacity
@@ -229,7 +229,7 @@ pub fn process(
     let (hero_pubkey, hero_defense_bps, hero_weapon_eff_bps, hero_armor_eff_bps) =
         if hero_slot < 3 {
             let hero_slot_idx = hero_slot as usize;
-            let hero_key = sender.active_heroes[hero_slot_idx];
+            let hero_key = sender.active_hero_at(hero_slot_idx as usize);
 
             // Verify hero is assigned
             if hero_key == Address::default() {
@@ -237,7 +237,7 @@ pub fn process(
             }
 
             // Verify hero is not already in meditation
-            if sender.meditating_hero_slot == hero_slot {
+            if sender.meditating_hero_slot() == hero_slot {
                 return Err(GameError::HeroAlreadyMeditating.into());
             }
 
@@ -354,7 +354,7 @@ pub fn process(
 
     // Lock hero if provided (clear from active slot)
     if hero_slot < 3 {
-        sender.active_heroes[hero_slot as usize] = Address::default();
+        sender.set_active_hero_at(hero_slot as usize, Address::default());
     }
 
     // Drop borrows before CPI

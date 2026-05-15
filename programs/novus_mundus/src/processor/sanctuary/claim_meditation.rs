@@ -106,8 +106,8 @@ pub fn process(
     }
 
     // 6. Get the meditating hero's mint from the slot
-    let hero_slot = player.meditating_hero_slot;
-    let meditating_hero_mint = player.active_heroes[hero_slot as usize];
+    let hero_slot = player.meditating_hero_slot();
+    let meditating_hero_mint = player.active_hero_at(hero_slot as usize);
 
     // 7. Verify the passed hero_mint matches the meditating hero
     if hero_mint.address() != &meditating_hero_mint {
@@ -130,7 +130,7 @@ pub fn process(
 
     // 9. Calculate elapsed time and XP earned
     let max_duration = sanctuary_meditation_max_seconds(sanctuary_level);
-    let elapsed = now.saturating_sub(player.meditation_started_at);
+    let elapsed = now.saturating_sub(player.meditation_started_at());
     let capped_elapsed = elapsed.min(max_duration);
 
     let xp_earned = sanctuary_meditation_total_xp(sanctuary_level, capped_elapsed);
@@ -215,8 +215,8 @@ pub fn process(
     drop(estate_data);
 
     // 18. Clear meditation state on player
-    player.meditating_hero_slot = 255;
-    player.meditation_started_at = 0;
+    player.set_meditating_hero_slot(255);
+    player.set_meditation_started_at(0);
 
     // Save player name for event emission
     let player_name = player.name;

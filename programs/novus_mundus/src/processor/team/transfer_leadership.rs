@@ -102,14 +102,14 @@ pub fn process(
     }
 
     // Current leader in the team?
-    if current_leader.team == NULL_PUBKEY || &current_leader.team != team_account.address() {
+    if current_leader.team_address() == NULL_PUBKEY || &current_leader.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Validate New Leader
 
     // New leader must be in the team
-    if new_leader.team == NULL_PUBKEY || &new_leader.team != team_account.address() {
+    if new_leader.team_address() == NULL_PUBKEY || &new_leader.team_address() != team_account.address() {
         return Err(GameError::NewLeaderNotMember.into());
     }
 

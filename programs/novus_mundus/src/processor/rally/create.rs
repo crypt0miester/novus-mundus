@@ -200,12 +200,12 @@ pub fn process(
 
     // 6c. Validate Team Membership
     // Creator must be on a team to create a rally
-    if creator.team == NULL_PUBKEY {
+    if creator.team_address() == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
     }
 
     // Verify team account matches player's team
-    if team_account.address() != &creator.team {
+    if team_account.address() != &creator.team_address() {
         return Err(GameError::InvalidTeam.into());
     }
 
@@ -216,7 +216,7 @@ pub fn process(
     }
 
     // Store team pubkey for rally
-    let rally_team = creator.team;
+    let rally_team = creator.team_address();
 
     // 6b. HARD GATE: Require Citadel to create rallies
     // Creating a rally requires Citadel (Estate Level 12+)
@@ -252,8 +252,8 @@ pub fn process(
     let base_max = rally_caps.max_rally_size as u32;
 
     // Apply hero rally capacity buff
-    let hero_adjusted = if creator.hero_rally_capacity_bps > 0 {
-        let multiplier = 10000u32 + creator.hero_rally_capacity_bps as u32;
+    let hero_adjusted = if creator.hero_rally_capacity_bps() > 0 {
+        let multiplier = 10000u32 + creator.hero_rally_capacity_bps() as u32;
         (base_max * multiplier) / 10000
     } else {
         base_max
@@ -296,23 +296,14 @@ pub fn process(
     let leader_arrives_at = now + leader_travel_duration as i64;
     let leader_already_arrived = leader_travel_duration == 0;
 
-    // Store leader buffs (to be copied to RallyAccount)
-    let leader_research_attack_bps = creator.research_attack_bps;
-    let leader_research_crit_chance_bps = creator.research_crit_chance_bps;
-    let leader_research_crit_damage_bps = creator.research_crit_damage_bps;
-    let leader_hero_attack_bps = creator.hero_attack_bps;
-    let leader_hero_weapon_efficiency_bps = creator.hero_weapon_efficiency_bps;
-    let leader_hero_crit_chance_bps = creator.hero_crit_chance_bps;
-    let leader_equipped_weapon_bonus_bps = creator.equipped_weapon_bonus_bps;
-
-    // Snapshot participant buffs
-    let participant_research_attack_bps = creator.research_attack_bps;
-    let participant_research_crit_chance_bps = creator.research_crit_chance_bps;
-    let participant_research_crit_damage_bps = creator.research_crit_damage_bps;
-    let participant_hero_attack_bps = creator.hero_attack_bps;
-    let participant_hero_weapon_efficiency_bps = creator.hero_weapon_efficiency_bps;
-    let participant_hero_crit_chance_bps = creator.hero_crit_chance_bps;
-    let participant_equipped_weapon_bonus_bps = creator.equipped_weapon_bonus_bps;
+    // Snapshot buffs once — creator is both leader and (initially) sole participant.
+    let leader_research_attack_bps = creator.research_attack_bps();
+    let leader_research_crit_chance_bps = creator.research_crit_chance_bps();
+    let leader_research_crit_damage_bps = creator.research_crit_damage_bps();
+    let leader_hero_attack_bps = creator.hero_attack_bps();
+    let leader_hero_weapon_efficiency_bps = creator.hero_weapon_efficiency_bps();
+    let leader_hero_crit_chance_bps = creator.hero_crit_chance_bps();
+    let leader_equipped_weapon_bonus_bps = creator.equipped_weapon_bonus_bps();
 
     // 10a. Hero commitment (optional)
     let mut committed_hero = NULL_PUBKEY;
@@ -326,7 +317,7 @@ pub fn process(
         let slot = hero_slot_index as usize;
 
         // Verify hero is locked in this slot
-        if creator.active_heroes[slot] == NULL_PUBKEY {
+        if creator.active_hero_at(slot as usize) == NULL_PUBKEY {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -338,7 +329,7 @@ pub fn process(
         let hero_template = &accounts[10];
 
         // Verify mint matches player slot
-        if creator.active_heroes[slot] != *hero_mint.address() {
+        if creator.active_hero_at(slot as usize) != *hero_mint.address() {
             return Err(GameError::InvalidParameter.into());
         }
 
@@ -359,15 +350,15 @@ pub fn process(
         hero_power_contribution = calculate_weighted_power_for_level(parsed_hero.level, template) as u64;
 
         // Subtract hero buffs from player (using stored location bonus)
-        let location_bonus = creator.slot_location_bonus[slot];
+        let location_bonus = creator.slot_location_bonus_at(slot as usize);
         subtract_hero_buffs_from_player_with_location(&mut creator, parsed_hero.level, template, location_bonus);
 
         drop(template_data);
 
         // Clear player slot and location bonus
         committed_hero = *hero_mint.address();
-        creator.active_heroes[slot] = NULL_PUBKEY;
-        creator.slot_location_bonus[slot] = 0;
+        creator.set_active_hero_at(slot as usize, NULL_PUBKEY);
+        creator.set_slot_location_bonus_at(slot as usize, 0);
     }
 
     // 10. Deduct units and weapons from player
@@ -379,10 +370,10 @@ pub fn process(
     creator.siege_weapons = creator.siege_weapons.saturating_sub(siege);
 
     // Update rally stats
-    creator.rally_stats.current_rallies_joined =
-        creator.rally_stats.current_rallies_joined.saturating_add(1);
-    creator.rally_stats.total_rallies_created =
-        creator.rally_stats.total_rallies_created.saturating_add(1);
+    if let Some(rs) = creator.rally_stats_mut() {
+        rs.current_rallies_joined = rs.current_rallies_joined.saturating_add(1);
+        rs.total_rallies_created = rs.total_rallies_created.saturating_add(1);
+    }
 
     // Update networth
     creator.networth = calculate_networth(&*creator, &game_engine_data.economic_config)?;
@@ -542,13 +533,13 @@ pub fn process(
         ranged_weapons_committed: ranged,
         siege_weapons_committed: siege,
 
-        research_attack_bps: participant_research_attack_bps,
-        research_crit_chance_bps: participant_research_crit_chance_bps,
-        research_crit_damage_bps: participant_research_crit_damage_bps,
-        hero_attack_bps: participant_hero_attack_bps,
-        hero_weapon_efficiency_bps: participant_hero_weapon_efficiency_bps,
-        hero_crit_chance_bps: participant_hero_crit_chance_bps,
-        equipped_weapon_bonus_bps: participant_equipped_weapon_bonus_bps,
+        research_attack_bps: leader_research_attack_bps,
+        research_crit_chance_bps: leader_research_crit_chance_bps,
+        research_crit_damage_bps: leader_research_crit_damage_bps,
+        hero_attack_bps: leader_hero_attack_bps,
+        hero_weapon_efficiency_bps: leader_hero_weapon_efficiency_bps,
+        hero_crit_chance_bps: leader_hero_crit_chance_bps,
+        equipped_weapon_bonus_bps: leader_equipped_weapon_bonus_bps,
         _padding2: [0; 2],
 
         hero: committed_hero,

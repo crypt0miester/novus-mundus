@@ -176,7 +176,7 @@ pub fn process(
 
     // Update castle state - directly to PROTECTED with protection period starting now
     castle.king = castle.transition_new_king;
-    castle.team = new_king.team;
+    castle.team = new_king.team_address();
     castle.transition_new_king = NULL_PUBKEY;
     castle.status = CASTLE_STATUS_PROTECTED;
     castle.claimed_at = now;
@@ -202,7 +202,7 @@ pub fn process(
         castle_name: castle.name,
         king: *new_king_account.address(),
         king_name,
-        team: new_king.team,
+        team: new_king.team_address(),
         tier: castle.tier,
         timestamp: now,
     });

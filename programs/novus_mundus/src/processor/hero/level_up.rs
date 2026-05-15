@@ -119,7 +119,7 @@ pub fn process(
 
     // 8. SAFETY: Verify hero ownership
     // Hero must be either in player's wallet or locked in player's active_heroes
-    let is_locked = player.active_heroes.iter().any(|&mint| mint == *hero_mint.address());
+    let is_locked = player.active_heroes_arr().iter().any(|&mint| mint == *hero_mint.address());
 
     // If not locked, verify NFT is owned by the signer
     if !is_locked {

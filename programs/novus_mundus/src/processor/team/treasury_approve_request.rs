@@ -103,7 +103,7 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if approver.team == NULL_PUBKEY || &approver.team != team_account.address() {
+    if approver.team_address() == NULL_PUBKEY || &approver.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -174,13 +174,13 @@ pub fn process(
         let requester = unsafe { PlayerAccount::load(&requester_data) };
 
         // Verify requester is still in team
-        if requester.team != *team_account.address() {
+        if requester.team_address() != *team_account.address() {
             drop(requester_data);
             close_account(request_account, requester_refund)?;
             return Err(GameError::NotTeamMember.into());
         }
 
-        requester_slot_index = requester.team_slot_index;
+        requester_slot_index = requester.team_slot_index();
     }
 
     // Load requester's slot to get their CURRENT rank, then enforce

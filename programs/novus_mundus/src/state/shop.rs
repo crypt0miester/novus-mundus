@@ -61,7 +61,7 @@ pub struct ShopConfigAccount {
     // State (8 bytes)
     pub next_flash_sale_id: u64,         // Incrementing ID for flash sales
 
-    // ===== SOL Oracle Configuration (68 bytes) =====
+    // SOL Oracle Configuration (68 bytes)
     // Used for token payments: convert token USD price to SOL amount
     pub sol_pyth_feed: Address,           // Pyth SOL/USD price feed (32 bytes)
     pub sol_switchboard_feed: Address,    // Switchboard SOL/USD feed (32 bytes)
@@ -852,20 +852,20 @@ impl BundleTier {
 pub struct AllowedTokenAccount {
     /// Account discriminator (AccountKey::AllowedToken)
     pub account_key: u8,
-    // ===== Token Identity (32 bytes) =====
+    // Token Identity (32 bytes)
     pub mint: Address,
 
-    // ===== Dual Oracle Configuration (64 bytes) =====
+    // Dual Oracle Configuration (64 bytes)
     pub pyth_feed: Address,                 // Pyth TOKEN/USD price account
     pub switchboard_feed: Address,          // Switchboard TOKEN/USD quote account
 
-    // ===== Pricing Parameters (8 bytes) =====
+    // Pricing Parameters (8 bytes)
     pub max_staleness_slots: u16,          // Max age in SLOTS before rejection
     pub confidence_threshold_bps: u16,     // Max confidence interval (Pyth only)
     pub discount_bps: u16,                 // Discount for using this token
     pub _padding: [u8; 2],
 
-    // ===== Reserved + Bump (16 bytes) =====
+    // Reserved + Bump (16 bytes)
     pub _reserved: [u8; 15],
     pub bump: u8,
 }

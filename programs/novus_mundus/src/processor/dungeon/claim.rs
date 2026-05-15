@@ -119,7 +119,8 @@ pub fn process(
     player.current_xp = player.current_xp.saturating_add(xp);
     player.locked_novi = player.locked_novi.saturating_add(novi);
     player.gems = player.gems.saturating_add(gems);
-    player.common_materials = player.common_materials.saturating_add(materials as u64);
+    let new_mat = player.common_materials().saturating_add(materials as u64);
+    player.set_common_materials(new_mat);
 
     // Store values before dropping borrow
     let player_name = player.name;

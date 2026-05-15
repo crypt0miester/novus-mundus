@@ -134,7 +134,7 @@ pub fn process(
     }
 
     // 5b. Validate player not in active rally (can't risk losing units before rally executes)
-    if player_data.rally_stats.current_rallies_joined > 0 {
+    if player_data.rally_stats().current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
 
@@ -206,11 +206,11 @@ pub fn process(
     let gameplay_config = &game_engine_data.gameplay_config;
 
     // Apply blessed hero bonus (+25% to hero attack if active)
-    let boosted_hero_attack = if player_data.blessed_hero_bonus_bps > 0 {
-        apply_bp_bonus(player_data.hero_attack_bps as u64, player_data.blessed_hero_bonus_bps)
-            .unwrap_or(player_data.hero_attack_bps as u64) as u16
+    let boosted_hero_attack = if player_data.blessed_hero_bonus_bps() > 0 {
+        apply_bp_bonus(player_data.hero_attack_bps() as u64, player_data.blessed_hero_bonus_bps())
+            .unwrap_or(player_data.hero_attack_bps() as u64) as u16
     } else {
-        player_data.hero_attack_bps
+        player_data.hero_attack_bps()
     };
 
     // Apply research buffs and hero buffs for attacking encounters
@@ -219,13 +219,13 @@ pub fn process(
         player_data.total_weapons(),
         false, // drive_by disabled
         gameplay_config,
-        player_data.research_attack_bps,
-        player_data.research_crit_chance_bps,
-        player_data.research_crit_damage_bps,
+        player_data.research_attack_bps(),
+        player_data.research_crit_chance_bps(),
+        player_data.research_crit_damage_bps(),
         boosted_hero_attack,
-        player_data.hero_weapon_efficiency_bps,
-        player_data.hero_crit_chance_bps,
-        player_data.equipped_weapon_bonus_bps,
+        player_data.hero_weapon_efficiency_bps(),
+        player_data.hero_crit_chance_bps(),
+        player_data.equipped_weapon_bonus_bps(),
     );
 
     // 13a. Apply Time-of-Day Bonus to Attack (DETERMINISTIC)
@@ -235,8 +235,8 @@ pub fn process(
 
     // 13b. Apply Hero EncounterDamage bonus (PvE-specific multiplier, no u128!)
     // Formula: damage × (10000 + hero_encounter_damage_bps) / 10000
-    let hero_damage = if player_data.hero_encounter_damage_bps > 0 {
-        apply_bp_bonus(time_damage, player_data.hero_encounter_damage_bps)
+    let hero_damage = if player_data.hero_encounter_damage_bps() > 0 {
+        apply_bp_bonus(time_damage, player_data.hero_encounter_damage_bps())
             .unwrap_or(time_damage)
     } else {
         time_damage
@@ -258,10 +258,10 @@ pub fn process(
 
     // 13a. Apply encounter defense (NEW - damage reduction)
     // Defense is reduced by research encounter success buff
-    let effective_defense = if player_data.research_encounter_success_bps > 0 {
+    let effective_defense = if player_data.research_encounter_success_bps() > 0 {
         // Reduce defense by research buff (e.g., 2000 bps = 20% defense reduction)
         let defense_reduction = ((encounter_data.defense as u64)
-            .saturating_mul(player_data.research_encounter_success_bps as u64)
+            .saturating_mul(player_data.research_encounter_success_bps() as u64)
             / 10000) as u32;
         encounter_data.defense.saturating_sub(defense_reduction)
     } else {
@@ -424,8 +424,8 @@ pub fn process(
         );
 
         // Apply hero loot bonus (multiplicative) - boosts all loot quantities
-        if player_data.hero_loot_bonus_bps > 0 {
-            let multiplier = 10000u64 + player_data.hero_loot_bonus_bps as u64;
+        if player_data.hero_loot_bonus_bps() > 0 {
+            let multiplier = 10000u64 + player_data.hero_loot_bonus_bps() as u64;
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -434,8 +434,8 @@ pub fn process(
         }
 
         // Apply hero synchrony bonus (multiplicative) - additional loot boost
-        if player_data.hero_synchrony_bonus_bps > 0 {
-            let multiplier = 10000u64 + player_data.hero_synchrony_bonus_bps as u64;
+        if player_data.hero_synchrony_bonus_bps() > 0 {
+            let multiplier = 10000u64 + player_data.hero_synchrony_bonus_bps() as u64;
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -504,45 +504,45 @@ pub fn process(
             let loot_time_mult = get_time_multiplier(time_of_day, ActivityType::LootDrop);
 
             // Check if player has fragment/gem drops unlocked via research
-            if player_data.has_fragment_drops {
+            if player_data.has_fragment_drops() {
                 // Check for ResearchProgress to get drop rate bonus
                 let fragment_bonus_bps = 0u16; // Would need ResearchProgress account for actual bonus
                 if should_award_fragments(
                     encounter_data.level,
                     encounter_data.rarity,
-                    player_data.has_fragment_drops,
+                    player_data.has_fragment_drops(),
                     fragment_bonus_bps,
                 ) {
                     fragments = calculate_fragment_amount(
                         encounter_data.level,
                         encounter_data.rarity,
-                        player_data.research_synchrony_bonus_bps,
+                        player_data.research_synchrony_bonus_bps(),
                         loot_time_mult,
                     );
                 }
             }
 
-            if player_data.has_gem_drops {
+            if player_data.has_gem_drops() {
                 // Check for ResearchProgress to get drop rate bonus
                 let gem_bonus_bps = 0u16; // Would need ResearchProgress account for actual bonus
                 if should_award_gems(
                     encounter_data.level,
                     encounter_data.rarity,
-                    player_data.has_gem_drops,
+                    player_data.has_gem_drops(),
                     gem_bonus_bps,
                 ) {
                     gems = calculate_gem_amount(
                         encounter_data.level,
                         encounter_data.rarity,
-                        player_data.research_synchrony_bonus_bps,
+                        player_data.research_synchrony_bonus_bps(),
                         loot_time_mult,
                     );
                 }
             }
 
             // Apply loot magnetism research buff (increases all loot)
-            if player_data.research_loot_magnetism_bps > 0 {
-                let multiplier = 10000u64 + player_data.research_loot_magnetism_bps as u64;
+            if player_data.research_loot_magnetism_bps() > 0 {
+                let multiplier = 10000u64 + player_data.research_loot_magnetism_bps() as u64;
                 fragments = fragments.saturating_mul(multiplier) / 10000;
                 gems = gems.saturating_mul(multiplier) / 10000;
             }

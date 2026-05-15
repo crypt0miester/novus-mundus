@@ -100,35 +100,35 @@ pub fn process(
     match from_tier {
         0 => {
             // Common → Uncommon
-            if player.common_materials < input_amount {
+            if player.common_materials() < input_amount {
                 return Err(GameError::InsufficientMaterials.into());
             }
-            player.common_materials = player.common_materials.saturating_sub(input_amount);
-            player.uncommon_materials = player.uncommon_materials.saturating_add(output_amount);
+            player.set_common_materials(player.common_materials().saturating_sub(input_amount));
+            player.set_uncommon_materials(player.uncommon_materials().saturating_add(output_amount));
         }
         1 => {
             // Uncommon → Rare
-            if player.uncommon_materials < input_amount {
+            if player.uncommon_materials() < input_amount {
                 return Err(GameError::InsufficientMaterials.into());
             }
-            player.uncommon_materials = player.uncommon_materials.saturating_sub(input_amount);
-            player.rare_materials = player.rare_materials.saturating_add(output_amount);
+            player.set_uncommon_materials(player.uncommon_materials().saturating_sub(input_amount));
+            player.set_rare_materials(player.rare_materials().saturating_add(output_amount));
         }
         2 => {
             // Rare → Epic
-            if player.rare_materials < input_amount {
+            if player.rare_materials() < input_amount {
                 return Err(GameError::InsufficientMaterials.into());
             }
-            player.rare_materials = player.rare_materials.saturating_sub(input_amount);
-            player.epic_materials = player.epic_materials.saturating_add(output_amount);
+            player.set_rare_materials(player.rare_materials().saturating_sub(input_amount));
+            player.set_epic_materials(player.epic_materials().saturating_add(output_amount));
         }
         3 => {
             // Epic → Legendary
-            if player.epic_materials < input_amount {
+            if player.epic_materials() < input_amount {
                 return Err(GameError::InsufficientMaterials.into());
             }
-            player.epic_materials = player.epic_materials.saturating_sub(input_amount);
-            player.legendary_materials = player.legendary_materials.saturating_add(output_amount);
+            player.set_epic_materials(player.epic_materials().saturating_sub(input_amount));
+            player.set_legendary_materials(player.legendary_materials().saturating_add(output_amount));
         }
         _ => return Err(GameError::InvalidParameter.into()),
     }

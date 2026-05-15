@@ -2,13 +2,13 @@ use pinocchio::{
     AccountView,
     error::ProgramError,
     Address,
-    sysvars::{clock::Clock, Sysvar},
+    sysvars::{clock::Clock, rent::Rent, Sysvar},
     ProgramResult,
 };
 
 use crate::{
     error::GameError,
-    state::{EstateAccount, PlayerAccount},
+    state::{EstateAccount, PlayerAccount, SLOTS_PER_PLOT},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_owner},
@@ -34,6 +34,7 @@ use crate::{
 /// - [writable] player_token_account: Player's locked NOVI token account
 /// - [writable] novi_mint: NOVI token mint
 /// - [] token_program: SPL Token program
+/// - [] system_program: System program (for rent transfer on estate resize)
 ///
 /// # Instruction Data
 /// None
@@ -50,6 +51,7 @@ pub fn process(
         player_token_account,
         novi_mint,
         _token_program,
+        _system_program,
     ] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -105,6 +107,32 @@ pub fn process(
         cost,
         &[player_signer],
     )?;
+
+    // 7b. Grow the estate account to fit the new plot's 4 building slots.
+    //
+    //     This MUST happen before incrementing plots_owned. Otherwise, code paths
+    //     bounded by `max_slots() = plots_owned * 4` (e.g. find_empty_slot,
+    //     recalculate_estate_level, daily activity scans) would attempt to index
+    //     into building slots whose bytes are not yet allocated on the account
+    //     — undefined behavior.
+    let new_slot_count = (plot_index as usize).saturating_add(1) * SLOTS_PER_PLOT;
+    let new_size = EstateAccount::size_for_slots(new_slot_count);
+
+    let rent = Rent::get()?;
+    let required_lamports = rent.try_minimum_balance(new_size)?;
+    let current_lamports = estate_account.lamports();
+    let lamports_needed = required_lamports.saturating_sub(current_lamports);
+    if lamports_needed > 0 {
+        pinocchio_system::instructions::Transfer {
+            from: owner,
+            to: estate_account,
+            lamports: lamports_needed,
+        }
+        .invoke()?;
+    }
+    estate_account.resize(new_size)?;
+    // Newly allocated bytes are zero-filled by the runtime, which equals
+    // BuildingSlot::EMPTY — no explicit slot init needed.
 
     // 8. Phase 2: Update state after successful CPI (mutable borrow)
     let mut player_data_ref = player_account.try_borrow_mut()?;

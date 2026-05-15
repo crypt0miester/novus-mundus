@@ -85,12 +85,12 @@ pub fn process(
     // 5. Validate Player Can Leave
 
     // Not in a team?
-    if player.team == NULL_PUBKEY {
+    if player.team_address() == NULL_PUBKEY {
         return Err(GameError::NotInTeam.into());
     }
 
     // Verify player is in THIS team
-    if &player.team != team_account.address() {
+    if &player.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -136,8 +136,8 @@ pub fn process(
 
     // 9. Update Player Account
 
-    player.team = NULL_PUBKEY;
-    player.team_slot_index = 0;
+    player.set_team_address(NULL_PUBKEY);
+    player.set_team_slot_index(0);
 
     // 10. Emit Event
 

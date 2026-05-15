@@ -158,7 +158,7 @@ pub fn process(
 
     let novi_cost = if expedition_type == EXPEDITION_MINING {
         // Mining requires has_mining and Workshop level
-        if !player_data.has_mining {
+        if !player_data.has_mining() {
             return Err(GameError::MiningNotUnlocked.into());
         }
 
@@ -169,7 +169,7 @@ pub fn process(
         MINING_NOVI_COST.get(tier as usize).copied().unwrap_or(30_000)
     } else {
         // Fishing requires has_fishing and Dock building level
-        if !player_data.has_fishing {
+        if !player_data.has_fishing() {
             return Err(GameError::FishingNotUnlocked.into());
         }
 
@@ -299,8 +299,8 @@ pub fn process(
 
             // Clear the active_heroes slot since hero is now on expedition
             for i in 0..3 {
-                if player_data.active_heroes[i] == *hero_mint.address() {
-                    player_data.active_heroes[i] = NULL_PUBKEY;
+                if player_data.active_hero_at(i as usize) == *hero_mint.address() {
+                    player_data.set_active_hero_at(i as usize, NULL_PUBKEY);
                     break;
                 }
             }

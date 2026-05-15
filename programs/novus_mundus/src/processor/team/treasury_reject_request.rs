@@ -89,7 +89,7 @@ pub fn process(
 
     // 5. Validate Rejecter is in Team
 
-    if rejecter.team == NULL_PUBKEY || &rejecter.team != team_account.address() {
+    if rejecter.team_address() == NULL_PUBKEY || &rejecter.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

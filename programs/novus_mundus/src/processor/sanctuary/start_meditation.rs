@@ -41,7 +41,7 @@ use crate::{
 ///
 /// # State Changes
 /// - Sets player.meditating_hero_slot to the hero's slot index
-/// - Sets player.meditation_started_at to current timestamp
+/// - Sets player.meditation_started_at() to current timestamp
 ///
 /// # Accounts
 /// - [signer] owner: Player's wallet
@@ -97,7 +97,7 @@ pub fn process(
     }
 
     // 7. Verify hero exists in the specified slot
-    let slot_hero_mint = player.active_heroes[hero_slot as usize];
+    let slot_hero_mint = player.active_hero_at(hero_slot as usize);
     if slot_hero_mint == NULL_PUBKEY {
         return Err(GameError::HeroNotInSlot.into());
     }
@@ -163,8 +163,8 @@ pub fn process(
     }
 
     // 12. Start meditation
-    player.meditating_hero_slot = hero_slot;
-    player.meditation_started_at = now;
+    player.set_meditating_hero_slot(hero_slot);
+    player.set_meditation_started_at(now);
 
     // 13. Calculate completion time
     let max_duration = sanctuary_meditation_max_seconds(sanctuary_level);

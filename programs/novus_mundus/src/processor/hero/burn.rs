@@ -76,7 +76,7 @@ pub fn process(
     }
 
     // 5. Verify hero is NOT in any active slot (cannot burn locked heroes)
-    for slot in player.active_heroes.iter() {
+    for slot in player.active_heroes_arr().iter() {
         if slot == hero_asset.address() {
             return Err(GameError::HeroIsLocked.into());
         }

@@ -78,7 +78,7 @@ pub fn process(
     }
 
     // 8. Calculate remaining meditation time
-    let elapsed = now.saturating_sub(player.meditation_started_at);
+    let elapsed = now.saturating_sub(player.meditation_started_at());
     if elapsed <= 0 {
         return Err(GameError::InvalidParameter.into());
     }
@@ -118,8 +118,8 @@ pub fn process(
 
     // 11. Apply speedup by moving meditation_started_at backwards
     let seconds_to_add = (minutes_to_add * 60) as i64;
-    player.meditation_started_at = player.meditation_started_at
-        .saturating_sub(seconds_to_add);
+    player.set_meditation_started_at(player.meditation_started_at()
+        .saturating_sub(seconds_to_add));
 
     // 12. Emit event
     emit!(MeditationSpeedup {

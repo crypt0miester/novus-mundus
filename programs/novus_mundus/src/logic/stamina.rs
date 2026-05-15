@@ -60,8 +60,8 @@ pub fn regenerate_stamina(
 
     // Apply hero stamina regen buff (multiplicative)
     // Formula: stamina × (10000 + hero_stamina_regen_bps) / 10000
-    let stamina_to_gain = if player.hero_stamina_regen_bps > 0 {
-        let hero_multiplier = 10000u64 + player.hero_stamina_regen_bps as u64;
+    let stamina_to_gain = if player.hero_stamina_regen_bps() > 0 {
+        let hero_multiplier = 10000u64 + player.hero_stamina_regen_bps() as u64;
         time_stamina.saturating_mul(hero_multiplier) / 10000
     } else {
         time_stamina

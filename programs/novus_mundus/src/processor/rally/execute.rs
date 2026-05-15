@@ -316,13 +316,13 @@ pub fn process(
                     defender_equipped_weapons.total(),
                     false, // not drive-by
                     gameplay_config,
-                    target_player.research_attack_bps,
-                    target_player.research_crit_chance_bps,
-                    target_player.research_crit_damage_bps,
-                    target_player.hero_attack_bps,
-                    target_player.hero_weapon_efficiency_bps,
-                    target_player.hero_crit_chance_bps,
-                    target_player.equipped_weapon_bonus_bps,
+                    target_player.research_attack_bps(),
+                    target_player.research_crit_chance_bps(),
+                    target_player.research_crit_damage_bps(),
+                    target_player.hero_attack_bps(),
+                    target_player.hero_weapon_efficiency_bps(),
+                    target_player.hero_crit_chance_bps(),
+                    target_player.equipped_weapon_bonus_bps(),
                 )
             } else if has_operatives {
                 // Operatives defend at 50% effectiveness
@@ -350,8 +350,8 @@ pub fn process(
                 target_player.armor_pieces,
                 total_damage as f64,
                 gameplay_config,
-                target_player.hero_armor_efficiency_bps,
-                target_player.equipped_armor_bonus_bps,
+                target_player.hero_armor_efficiency_bps(),
+                target_player.equipped_armor_bonus_bps(),
             );
 
             let defender_casualties = target_player.defensive_unit_1

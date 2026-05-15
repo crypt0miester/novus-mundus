@@ -1,3 +1,4 @@
+pub mod common;
 pub mod initialize_config;
 pub mod create_item;
 pub mod create_bundle;

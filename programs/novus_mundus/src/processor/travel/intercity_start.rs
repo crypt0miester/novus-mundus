@@ -122,7 +122,7 @@ pub fn process(
     }
 
     // 6a. Validate Not In Active Rally (must leave/complete rally first)
-    if player_data.rally_stats.current_rallies_joined > 0 {
+    if player_data.rally_stats().current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
 

@@ -86,11 +86,11 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if player.team == NULL_PUBKEY {
+    if player.team_address() == NULL_PUBKEY {
         return Err(GameError::NotInTeam.into());
     }
 
-    if &player.team != team_account.address() {
+    if &player.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

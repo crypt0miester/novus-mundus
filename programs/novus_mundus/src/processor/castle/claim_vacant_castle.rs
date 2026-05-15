@@ -82,7 +82,7 @@ pub fn process(
     }
 
     // Verify player is on a team (required to rule a castle)
-    if player.team == NULL_PUBKEY {
+    if player.team_address() == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
     }
 
@@ -196,7 +196,7 @@ pub fn process(
 
     // Update castle ownership
     castle.king = *player_account.address();
-    castle.team = player.team;
+    castle.team = player.team_address();
     castle.claimed_at = now;
     castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
     castle.status = CASTLE_STATUS_CONTEST;
@@ -222,7 +222,7 @@ pub fn process(
         castle_name: castle.name,
         king: *player_account.address(),
         king_name: player_name,
-        team: player.team,
+        team: player.team_address(),
         tier: castle.tier,
         timestamp: now,
     });

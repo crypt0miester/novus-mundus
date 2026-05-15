@@ -99,14 +99,14 @@ pub fn process(
     // Apply to appropriate buff field based on buff_type
     match template.buff_type {
         // Battle buffs (stored in PlayerAccount)
-        0 => player.research_attack_bps = total_buff,
-        1 => player.research_defense_bps = total_buff,
+        0 => player.set_research_attack_bps(total_buff),
+        1 => player.set_research_defense_bps(total_buff),
         2 => {}, // Unit capacity - handled in unit hiring
-        3 => player.research_crit_chance_bps = total_buff,
-        4 => player.research_crit_damage_bps = total_buff,
+        3 => player.set_research_crit_chance_bps(total_buff),
+        4 => player.set_research_crit_damage_bps(total_buff),
         5 => {}, // Rally capacity - handled in rally creation
-        6 => player.research_encounter_success_bps = total_buff,
-        7 => player.research_loot_bonus_bps = total_buff,
+        6 => player.set_research_encounter_success_bps(total_buff),
+        7 => player.set_research_loot_bonus_bps(total_buff),
         8 => {}, // Unit training speed - handled in unit hiring
         9 => {}, // Ambush damage - handled in combat
 
@@ -126,14 +126,14 @@ pub fn process(
         20 => {
             // Daily Rewards System - unlocks feature
             if new_level == 1 {
-                player.has_daily_rewards = true;
+                player.set_has_daily_rewards(true);
             }
-            player.research_daily_reward_bps = total_buff;
+            player.set_research_daily_reward_bps(total_buff);
         },
         21 => {
             // Mining Operations - unlocks feature
             if new_level == 1 {
-                player.has_mining = true;
+                player.set_has_mining(true);
             }
             // Mining efficiency - take max of this and buff_type 14 to prevent overwrites
             progress.mining_output_bps = progress.mining_output_bps.max(total_buff);
@@ -141,29 +141,29 @@ pub fn process(
         22 => {
             // Fishing Industry - unlocks feature
             if new_level == 1 {
-                player.has_fishing = true;
+                player.set_has_fishing(true);
             }
             progress.fishing_efficiency_bps = total_buff;
         },
-        23 => player.research_loot_magnetism_bps = total_buff,
-        24 => player.research_reputation_bonus_bps = total_buff,
-        25 => player.research_stamina_bonus_bps = total_buff,
-        26 => player.research_synchrony_bonus_bps = total_buff,
+        23 => player.set_research_loot_magnetism_bps(total_buff),
+        24 => player.set_research_reputation_bonus_bps(total_buff),
+        25 => player.set_research_stamina_bonus_bps(total_buff),
+        26 => player.set_research_synchrony_bonus_bps(total_buff),
         27 => {
             // Fragment Discovery - unlocks feature
             if new_level == 1 {
-                player.has_fragment_drops = true;
+                player.set_has_fragment_drops(true);
             }
             progress.fragment_drop_rate_bps = total_buff;
         },
         28 => {
             // Gem Prospecting - unlocks feature
             if new_level == 1 {
-                player.has_gem_drops = true;
+                player.set_has_gem_drops(true);
             }
             progress.gem_drop_rate_bps = total_buff;
         },
-        29 => player.research_collection_bonus_bps = total_buff,
+        29 => player.set_research_collection_bonus_bps(total_buff),
 
         _ => {} // Unknown buff type
     }
@@ -176,7 +176,7 @@ pub fn process(
 
     // 10. Increment buff cache version
     progress.buff_cache_version = progress.buff_cache_version.wrapping_add(1);
-    player.research_buff_version = player.research_buff_version.wrapping_add(1);
+    player.set_research_buff_version(player.research_buff_version().wrapping_add(1));
 
     // 11. Update total NOVI spent (already done in start_research)
 

@@ -223,6 +223,10 @@ pub fn process_attacks(
     // Get hero specialization for bonuses
     let hero_spec = run.get_specialization();
 
+    // Hoist section-gated reads out of the per-attack loop.
+    let player_hero_attack_bps = player.hero_attack_bps();
+    let player_research_defense_bps = player.research_defense_bps();
+
     // Track actual attacks used to determine if prediction was accurate
     let mut attacks_used: u8 = 0;
 
@@ -244,7 +248,7 @@ pub fn process_attacks(
         let base_damage = calculate_dungeon_damage(
             &run,
             base_unit_power,
-            player.hero_attack_bps,
+            player_hero_attack_bps,
             weapon_power,
             run.is_boss,
         );
@@ -377,7 +381,7 @@ pub fn process_attacks(
                         }
                         0 // No defense
                     } else {
-                        player.research_defense_bps
+                        player_research_defense_bps
                     };
 
                     let base_damage_taken = calculate_damage_taken(
@@ -405,7 +409,7 @@ pub fn process_attacks(
                 let base_damage_taken = calculate_damage_taken(
                     &run,
                     enemy_damage,
-                    player.research_defense_bps,
+                    player_research_defense_bps,
                 );
                 // Apply Guardian survival bonus (+25% damage reduction)
                 let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);

@@ -15,7 +15,7 @@ pub struct TeamAccount {
     /// Account discriminator (AccountKey::Team)
     pub account_key: u8,
 
-    // === KINGDOM & IDENTITY (80 bytes) ===
+    // KINGDOM & IDENTITY (80 bytes)
     pub game_engine: Address,        // 32 - Kingdom this team belongs to
     pub id: u64,                    // 8 - Unique team ID (for PDA derivation)
     pub leader: Address,             // 32 - Team leader's player account pubkey
@@ -23,35 +23,35 @@ pub struct TeamAccount {
     pub disbanded: bool,            // 1 - True if team has been disbanded
     pub _padding0: [u8; 6],         // 6 - Alignment to 8 bytes
 
-    // === NAME (40 bytes) ===
+    // NAME (40 bytes)
     pub name: [u8; 32],             // 32 - Team name (UTF-8)
     pub name_len: u8,               // 1 - Actual name length
     pub _padding1: [u8; 7],         // 7 - Alignment to 8 bytes
 
-    // === MEMBERSHIP (8 bytes) ===
+    // MEMBERSHIP (8 bytes)
     pub member_count: u16,          // 2 - Current member count
     pub max_members: u16,           // 2 - Max members (tier-based, can be upgraded)
     pub _padding2: [u8; 4],         // 4 - Alignment to 8 bytes
 
-    // === TIMESTAMPS (16 bytes) ===
+    // TIMESTAMPS (16 bytes)
     pub created_at: i64,            // 8 - Team creation timestamp
     pub last_activity: i64,         // 8 - Last activity (for inactive team cleanup)
 
-    // === TREASURY (8 bytes) ===
+    // TREASURY (8 bytes)
     pub treasury: u64,              // 8 - Current treasury balance
 
-    // === SETTINGS & PERMISSIONS (8 bytes) ===
+    // SETTINGS & PERMISSIONS (8 bytes)
     pub settings: u8,               // 1 - Bitfield: public, auto_accept, etc.
     pub min_level_to_join: u8,      // 1 - Minimum player level to join
     pub role_permissions: [u8; 5],  // 5 - Permission bitfield per rank (index = rank 0-4)
     pub _padding3: u8,              // 1 - Alignment to 8 bytes
 
-    // === MOTD (40 bytes) ===
+    // MOTD (40 bytes)
     pub motd: [u8; 32],             // 32 - Message of the day (reduced for alignment)
     pub motd_len: u8,               // 1 - MOTD length
     pub _padding4: [u8; 7],         // 7 - Alignment to 8 bytes
 
-    // === TREASURY SECURITY (72 bytes) ===
+    // TREASURY SECURITY (72 bytes)
     // Index 0=Rank1, 1=Rank2, 2=Rank3, 3=Rank4. Rank 0 (leader) always has unlimited access.
     pub treasury_instant_limit: [u64; 4],  // 32 - Max per-tx instant withdrawal per rank
     pub treasury_daily_cap: [u64; 4],      // 32 - Max daily instant withdrawal per rank
@@ -121,7 +121,7 @@ impl TeamAccount {
         self.rank_has_permission(actor_rank, Self::PERM_PROMOTE) && actor_rank < target_rank
     }
 
-    // === Treasury Security Methods ===
+    // Treasury Security Methods
 
     /// Get instant withdrawal limit for a rank
     /// Rank 0 (leader) = unlimited, Ranks 1-4 use configurable array
@@ -431,20 +431,20 @@ pub struct TeamMemberSlot {
     /// Account discriminator (AccountKey::TeamMemberSlot)
     pub account_key: u8,
 
-    // === REFERENCES (64 bytes) ===
+    // REFERENCES (64 bytes)
     pub team: Address,               // 32 - Team account pubkey
     pub player: Address,             // 32 - Player account pubkey (not wallet!)
 
-    // === TIMESTAMPS (8 bytes) ===
+    // TIMESTAMPS (8 bytes)
     pub joined_at: i64,             // 8 - When member joined
 
-    // === METADATA (8 bytes) ===
+    // METADATA (8 bytes)
     pub slot_index: u16,            // 2 - Slot index (0 to max_members-1)
     pub bump: u8,                   // 1 - PDA bump seed
     pub rank: u8,                   // 1 - Rank level (0=highest to 4=lowest)
     pub _reserved: [u8; 4],         // 4 - Future use
 
-    // === TREASURY TRACKING (16 bytes) ===
+    // TREASURY TRACKING (16 bytes)
     pub treasury_withdrawn_today: u64,  // 8 - Amount withdrawn via instant today
     pub last_treasury_day: u16,         // 2 - Day number (unix_ts / 86400) for reset
     pub _treasury_padding: [u8; 6],     // 6 - Alignment to 8 bytes
@@ -569,7 +569,7 @@ impl TeamMemberSlot {
         self.rank < other_rank
     }
 
-    // === Treasury Tracking Methods ===
+    // Treasury Tracking Methods
 
     /// Seconds per day for day calculation
     const SECONDS_PER_DAY: i64 = 86400;
@@ -618,18 +618,18 @@ pub struct TeamInviteAccount {
     /// Account discriminator (AccountKey::TeamInvite)
     pub account_key: u8,
 
-    // === IDENTITY (72 bytes - aligned to 8) ===
+    // IDENTITY (72 bytes - aligned to 8)
     pub team: Address,               // 32 - Team account pubkey
     pub invitee: Address,            // 32 - Invitee's player account pubkey
     pub bump: u8,                   // 1 - PDA bump seed
     pub _padding0: [u8; 7],         // 7 - Alignment to 8 bytes
 
-    // === INVITE INFO (48 bytes) ===
+    // INVITE INFO (48 bytes)
     pub inviter: Address,            // 32 - Who sent the invite (for UI display)
     pub created_at: i64,            // 8 - When invite was created
     pub expires_at: i64,            // 8 - When invite expires (0 = never)
 
-    // === RESERVED (8 bytes) ===
+    // RESERVED (8 bytes)
     pub _reserved: [u8; 8],         // 8 - Future use (aligned)
 }
 
@@ -763,16 +763,16 @@ pub struct TreasuryRequest {
     /// Account discriminator (AccountKey::TreasuryRequest)
     pub account_key: u8,
 
-    // === IDENTITY (64 bytes) ===
+    // IDENTITY (64 bytes)
     pub team: Address,               // 32 - Team account pubkey
     pub requester: Address,          // 32 - Requester's player account pubkey
 
-    // === REQUEST DATA (24 bytes) ===
+    // REQUEST DATA (24 bytes)
     pub amount: u64,                // 8 - Amount requested
     pub created_at: i64,            // 8 - When request was created
     pub executable_at: i64,         // 8 - When request becomes executable (created_at + cooldown)
 
-    // === METADATA (16 bytes) ===
+    // METADATA (16 bytes)
     pub bump: u8,                   // 1 - PDA bump seed
     pub _reserved: [u8; 15],        // 15 - Future use + alignment
 }

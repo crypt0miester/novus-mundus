@@ -82,7 +82,7 @@ pub fn process(
         require_extension(player, EXT_HEROES)?;
 
         // Verify slot is OCCUPIED
-        let locked_mint = player.active_heroes[slot_index as usize];
+        let locked_mint = player.active_hero_at(slot_index as usize);
         if locked_mint == NULL_PUBKEY {
             return Err(GameError::InvalidParameter.into());
         }
@@ -126,14 +126,14 @@ pub fn process(
     let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    player.active_heroes[slot_index as usize] = NULL_PUBKEY;
+    player.set_active_hero_at(slot_index as usize, NULL_PUBKEY);
 
     // 9. IF unlocking defensive hero: Reset defensive_hero_slot
-    if player.defensive_hero_slot == slot_index {
-        player.defensive_hero_slot = 0;
+    if player.defensive_hero_slot() == slot_index {
+        player.set_defensive_hero_slot(0);
         for i in 0..3 {
-            if player.active_heroes[i] != NULL_PUBKEY {
-                player.defensive_hero_slot = i as u8;
+            if player.active_hero_at(i as usize) != NULL_PUBKEY {
+                player.set_defensive_hero_slot(i as u8);
                 break;
             }
         }
@@ -151,7 +151,7 @@ pub fn process(
 
     if &estate.blessed_hero == hero_mint.address() {
         estate.blessed_hero = Address::default();
-        player.blessed_hero_bonus_bps = 0;
+        player.set_blessed_hero_bonus_bps(0);
     }
 
     drop(estate_data_ref);
@@ -183,12 +183,12 @@ pub fn process(
     }
 
     // 12. Location Synergy: Get stored location bonus and subtract with same bonus
-    let location_bonus_bps = player.slot_location_bonus[slot_index as usize];
+    let location_bonus_bps = player.slot_location_bonus_at(slot_index as usize);
 
     subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
 
     // Clear location bonus for this slot
-    player.slot_location_bonus[slot_index as usize] = 0;
+    player.set_slot_location_bonus_at(slot_index as usize, 0);
 
     let hero_name = template.name;
     let player_name = player.name;

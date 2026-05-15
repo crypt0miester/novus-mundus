@@ -92,7 +92,7 @@ pub fn process(
 
     // 5. Validate Promoter is in Team
 
-    if promoter.team == NULL_PUBKEY || &promoter.team != team_account.address() {
+    if promoter.team_address() == NULL_PUBKEY || &promoter.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

@@ -46,8 +46,8 @@ pub fn grant_xp_with_time_bonus(
 
     // Apply hero XP gain buff (multiplicative)
     // Formula: xp × (10000 + hero_xp_gain_bps) / 10000
-    let xp_amount = if player.hero_xp_gain_bps > 0 {
-        let hero_multiplier = 10000u64 + player.hero_xp_gain_bps as u64;
+    let xp_amount = if player.hero_xp_gain_bps() > 0 {
+        let hero_multiplier = 10000u64 + player.hero_xp_gain_bps() as u64;
         time_xp.saturating_mul(hero_multiplier) / 10000
     } else {
         time_xp

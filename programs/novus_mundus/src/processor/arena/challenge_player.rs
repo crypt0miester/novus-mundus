@@ -362,26 +362,26 @@ fn calculate_arena_power(
     let base_power = unit_power.saturating_add(equipment_power);
 
     // Research buffs (from PlayerCore)
-    let research_bonus_bps = player.research_attack_bps as u64
-        + player.research_defense_bps as u64;
+    let research_bonus_bps = player.research_attack_bps() as u64
+        + player.research_defense_bps() as u64;
 
     // Hero buffs (cached on PlayerCore from active heroes)
-    let hero_bonus_bps = player.hero_attack_bps as u64
-        + player.hero_defense_bps as u64
-        + player.hero_weapon_efficiency_bps as u64
-        + player.hero_armor_efficiency_bps as u64;
+    let hero_bonus_bps = player.hero_attack_bps() as u64
+        + player.hero_defense_bps() as u64
+        + player.hero_weapon_efficiency_bps() as u64
+        + player.hero_armor_efficiency_bps() as u64;
 
     // Location synergy (heroes at home city get bonus)
-    let location_bonus_bps = player.slot_location_bonus[0] as u64
-        + player.slot_location_bonus[1] as u64
-        + player.slot_location_bonus[2] as u64;
+    let location_bonus_bps = player.slot_location_bonus_at(0 as usize) as u64
+        + player.slot_location_bonus_at(1 as usize) as u64
+        + player.slot_location_bonus_at(2 as usize) as u64;
 
     // Blessed hero bonus (from Sanctuary meditation)
-    let blessed_bonus_bps = player.blessed_hero_bonus_bps as u64;
+    let blessed_bonus_bps = player.blessed_hero_bonus_bps() as u64;
 
     // Equipped item bonuses (from Forge crafted equipment)
-    let equipped_bonus_bps = player.equipped_weapon_bonus_bps as u64
-        + player.equipped_armor_bonus_bps as u64;
+    let equipped_bonus_bps = player.equipped_weapon_bonus_bps() as u64
+        + player.equipped_armor_bonus_bps() as u64;
 
     // Arena-specific hero bonus (if loadout specifies a hero)
     // Heroes are Metaplex Core NFTs - parse buff data from NFT attributes

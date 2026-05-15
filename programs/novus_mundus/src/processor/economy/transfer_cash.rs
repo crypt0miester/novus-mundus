@@ -135,16 +135,16 @@ pub fn process(
 
     // 8. Validate Same Team
 
-    if sender_player.team == NULL_PUBKEY || receiver_player.team == NULL_PUBKEY {
+    if sender_player.team_address() == NULL_PUBKEY || receiver_player.team_address() == NULL_PUBKEY {
         return Err(GameError::NotOnTeam.into());
     }
 
-    if sender_player.team != receiver_player.team {
+    if sender_player.team_address() != receiver_player.team_address() {
         return Err(GameError::NotSameTeam.into());
     }
 
     // Verify team account matches
-    if team_account.address() != &sender_player.team {
+    if team_account.address() != &sender_player.team_address() {
         return Err(GameError::InvalidTeam.into());
     }
 
@@ -184,7 +184,7 @@ pub fn process(
 
     const SECONDS_PER_DAY: i64 = 86400;
     let current_day = now / SECONDS_PER_DAY;
-    let last_reset_day = sender_player.last_transfer_reset / SECONDS_PER_DAY;
+    let last_reset_day = sender_player.last_transfer_reset() / SECONDS_PER_DAY;
 
     // NOTE (cosmetic): Before the player's first-ever transfer,
     // `last_transfer_reset` is 0, so `last_reset_day` is 0 and this branch
@@ -194,9 +194,9 @@ pub fn process(
     // `last_transfer_reset = now` assignment below stabilizes the state from
     // the first transfer onward. Left intentional to avoid a special-case.
     if current_day > last_reset_day {
-        sender_player.daily_transferred = 0;
-        sender_player.daily_transfer_count = 0;
-        sender_player.last_transfer_reset = now;
+        sender_player.set_daily_transferred(0);
+        sender_player.set_daily_transfer_count(0);
+        sender_player.set_last_transfer_reset(now);
     }
 
     // 12. Validate Transfer Limits
@@ -214,13 +214,13 @@ pub fn process(
     };
 
     // Check daily amount limit
-    let new_daily_total = sender_player.daily_transferred.saturating_add(amount);
+    let new_daily_total = sender_player.daily_transferred().saturating_add(amount);
     if new_daily_total > daily_transfer_limit {
         return Err(GameError::DailyTransferLimitExceeded.into());
     }
 
     // Check daily count limit
-    if sender_player.daily_transfer_count >= tier.max_daily_transfer_count as u16 {
+    if sender_player.daily_transfer_count() >= tier.max_daily_transfer_count as u16 {
         return Err(GameError::DailyTransferCountExceeded.into());
     }
 
@@ -241,8 +241,9 @@ pub fn process(
     // 15. Update Transfer Tracking
 
     // Daily limits
-    sender_player.daily_transferred = new_daily_total;
-    sender_player.daily_transfer_count = sender_player.daily_transfer_count.saturating_add(1);
+    sender_player.set_daily_transferred(new_daily_total);
+    let new_count = sender_player.daily_transfer_count().saturating_add(1);
+    sender_player.set_daily_transfer_count(new_count);
 
     // Lifetime tracking (for event eligibility anti-Sybil)
     sender_player.total_sent = sender_player.total_sent.saturating_add(amount);

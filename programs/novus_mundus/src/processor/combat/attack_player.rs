@@ -162,7 +162,7 @@ pub fn process(
 
     // 5c. Validate attacker not in active rally (can't risk losing units before rally executes)
     // Note: Defender NOT blocked - being attacked shouldn't prevent self-defense
-    if attacker_data.rally_stats.current_rallies_joined > 0 {
+    if attacker_data.rally_stats().current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
 
@@ -258,13 +258,13 @@ pub fn process(
         attacker_data.total_weapons(),
         drive_by,
         gameplay_config,
-        attacker_data.research_attack_bps,
-        attacker_data.research_crit_chance_bps,
-        attacker_data.research_crit_damage_bps,
-        attacker_data.hero_attack_bps,
-        attacker_data.hero_weapon_efficiency_bps,
-        attacker_data.hero_crit_chance_bps,
-        attacker_data.equipped_weapon_bonus_bps,
+        attacker_data.research_attack_bps(),
+        attacker_data.research_crit_chance_bps(),
+        attacker_data.research_crit_damage_bps(),
+        attacker_data.hero_attack_bps(),
+        attacker_data.hero_weapon_efficiency_bps(),
+        attacker_data.hero_crit_chance_bps(),
+        attacker_data.equipped_weapon_bonus_bps(),
     );
 
     // 9a. Apply Time-of-Day Bonus to Attack (DETERMINISTIC)
@@ -314,23 +314,23 @@ pub fn process(
     // Defenders never get drive-by bonus, but do get defense research buffs and hero buffs
     // Include reinforcement weapons and use best hero buffs (max of own and reinforcement)
     let defender_total_weapons = defender_data.total_weapons_with_reinforcements();
-    let defender_hero_defense_bps = defender_data.hero_defense_bps
-        .max(defender_data.reinforcement_hero_defense_bps);
-    let defender_hero_weapon_eff_bps = defender_data.hero_weapon_efficiency_bps
-        .max(defender_data.reinforcement_hero_weapon_eff_bps);
+    let defender_hero_defense_bps = defender_data.hero_defense_bps()
+        .max(defender_data.reinforcement_hero_defense_bps());
+    let defender_hero_weapon_eff_bps = defender_data.hero_weapon_efficiency_bps()
+        .max(defender_data.reinforcement_hero_weapon_eff_bps());
 
     let base_defender_damage = calculate_damage_output(
         defender_defensive_total,
         defender_total_weapons,
         false,
         gameplay_config,
-        defender_data.research_defense_bps,
+        defender_data.research_defense_bps(),
         0,  // Defenders don't get crit chance on defense
         0,  // Defenders don't get crit damage on defense
         defender_hero_defense_bps,
         defender_hero_weapon_eff_bps,
         0,  // Defenders don't get hero crit chance on defense
-        defender_data.equipped_weapon_bonus_bps,
+        defender_data.equipped_weapon_bonus_bps(),
     );
 
     // 10a. Apply Time-of-Day Bonus to Defense (DETERMINISTIC)
@@ -350,8 +350,8 @@ pub fn process(
     // 11. Inflict damage on defender's defensive units (PURE LOGIC)
     // Defender's armor reduces incoming damage (boosted by hero armor efficiency + equipped armor)
     // Use best armor efficiency from own hero or reinforcement heroes
-    let defender_hero_armor_eff_bps = defender_data.hero_armor_efficiency_bps
-        .max(defender_data.reinforcement_hero_armor_eff_bps);
+    let defender_hero_armor_eff_bps = defender_data.hero_armor_efficiency_bps()
+        .max(defender_data.reinforcement_hero_armor_eff_bps());
 
     // Capture originals for wounded tracking
     let orig_defender_own_def_1 = defender_data.defensive_unit_1;
@@ -362,9 +362,9 @@ pub fn process(
     let orig_attacker_def_3 = attacker_data.defensive_unit_3;
 
     // Calculate total combined units for damage distribution
-    let combined_def_1 = defender_data.defensive_unit_1.saturating_add(defender_data.reinforcement_def_1);
-    let combined_def_2 = defender_data.defensive_unit_2.saturating_add(defender_data.reinforcement_def_2);
-    let combined_def_3 = defender_data.defensive_unit_3.saturating_add(defender_data.reinforcement_def_3);
+    let combined_def_1 = defender_data.defensive_unit_1.saturating_add(defender_data.reinforcement_def_1());
+    let combined_def_2 = defender_data.defensive_unit_2.saturating_add(defender_data.reinforcement_def_2());
+    let combined_def_3 = defender_data.defensive_unit_3.saturating_add(defender_data.reinforcement_def_3());
 
     let (remaining_1, remaining_2, remaining_3) = inflict_damage(
         combined_def_1,
@@ -374,7 +374,7 @@ pub fn process(
         attacker_damage as f64,
         gameplay_config,
         defender_hero_armor_eff_bps,
-        defender_data.equipped_armor_bonus_bps,
+        defender_data.equipped_armor_bonus_bps(),
     );
 
     // 11a. Infirmary recovery for defender (reduce unit losses)
@@ -429,9 +429,9 @@ pub fn process(
     defender_data.defensive_unit_3 = def_unit_3;
 
     // Update reinforcement aggregates
-    defender_data.reinforcement_def_1 = reinf_unit_1;
-    defender_data.reinforcement_def_2 = reinf_unit_2;
-    defender_data.reinforcement_def_3 = reinf_unit_3;
+    defender_data.set_reinforcement_def_1(reinf_unit_1);
+    defender_data.set_reinforcement_def_2(reinf_unit_2);
+    defender_data.set_reinforcement_def_3(reinf_unit_3);
 
     // 11b. Operative attrition — if entire garrison is wiped, operatives are unprotected
     // and take the same damage. Only triggers when ALL defensive units (own + reinforcement) = 0.
@@ -451,7 +451,7 @@ pub fn process(
             attacker_damage as f64,
             gameplay_config,
             defender_hero_armor_eff_bps,
-            defender_data.equipped_armor_bonus_bps,
+            defender_data.equipped_armor_bonus_bps(),
         );
 
         // Infirmary recovery for operative losses
@@ -488,8 +488,8 @@ pub fn process(
         attacker_data.armor_pieces,
         defender_damage as f64,
         gameplay_config,
-        attacker_data.hero_armor_efficiency_bps,
-        attacker_data.equipped_armor_bonus_bps,
+        attacker_data.hero_armor_efficiency_bps(),
+        attacker_data.equipped_armor_bonus_bps(),
     );
 
     // 12a. Infirmary recovery for attacker (reduce unit losses)
@@ -574,9 +574,9 @@ pub fn process(
     );
 
     // Defender's combined weapons (own + reinforcement, equipped by combined defensive units)
-    let combined_melee = defender_data.melee_weapons.saturating_add(defender_data.reinforcement_melee);
-    let combined_ranged = defender_data.ranged_weapons.saturating_add(defender_data.reinforcement_ranged);
-    let combined_siege = defender_data.siege_weapons.saturating_add(defender_data.reinforcement_siege);
+    let combined_melee = defender_data.melee_weapons.saturating_add(defender_data.reinforcement_melee());
+    let combined_ranged = defender_data.ranged_weapons.saturating_add(defender_data.reinforcement_ranged());
+    let combined_siege = defender_data.siege_weapons.saturating_add(defender_data.reinforcement_siege());
 
     let defender_equipped_weapons = WeaponSet::new(
         combined_melee.min(defender_defensive_total),
@@ -619,14 +619,14 @@ pub fn process(
         let mut loot_bps = gameplay_config.pvp_loot_percentage_base as u64;
 
         // Apply research loot bonus (multiplicative)
-        if attacker_data.research_loot_bonus_bps > 0 {
-            let multiplier = 10000u64 + attacker_data.research_loot_bonus_bps as u64;
+        if attacker_data.research_loot_bonus_bps() > 0 {
+            let multiplier = 10000u64 + attacker_data.research_loot_bonus_bps() as u64;
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
 
         // Apply hero loot bonus (multiplicative)
-        if attacker_data.hero_loot_bonus_bps > 0 {
-            let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps as u64;
+        if attacker_data.hero_loot_bonus_bps() > 0 {
+            let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps() as u64;
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
         
@@ -679,13 +679,13 @@ pub fn process(
         };
 
         // Reinforcement weapons (die proportionally, not lootable)
-        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee, defender_casualty_bps).unwrap_or(0);
-        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged, defender_casualty_bps).unwrap_or(0);
-        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege, defender_casualty_bps).unwrap_or(0);
+        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee(), defender_casualty_bps).unwrap_or(0);
+        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged(), defender_casualty_bps).unwrap_or(0);
+        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege(), defender_casualty_bps).unwrap_or(0);
 
-        defender_data.reinforcement_melee = defender_data.reinforcement_melee.saturating_sub(reinf_melee_lost);
-        defender_data.reinforcement_ranged = defender_data.reinforcement_ranged.saturating_sub(reinf_ranged_lost);
-        defender_data.reinforcement_siege = defender_data.reinforcement_siege.saturating_sub(reinf_siege_lost);
+        defender_data.set_reinforcement_melee(defender_data.reinforcement_melee().saturating_sub(reinf_melee_lost));
+        defender_data.set_reinforcement_ranged(defender_data.reinforcement_ranged().saturating_sub(reinf_ranged_lost));
+        defender_data.set_reinforcement_siege(defender_data.reinforcement_siege().saturating_sub(reinf_siege_lost));
 
         // Deduct looted weapons from defender's OWN weapons (not reinforcement)
         // Note: looted may exceed casualty losses due to armory raid
@@ -745,13 +745,13 @@ pub fn process(
         defender_data.siege_weapons = defender_data.siege_weapons.saturating_sub(own_siege_lost);
 
         // Apply weapon losses to reinforcement weapons (die proportionally)
-        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee, defender_casualty_bps).unwrap_or(0);
-        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged, defender_casualty_bps).unwrap_or(0);
-        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege, defender_casualty_bps).unwrap_or(0);
+        let reinf_melee_lost = apply_bp(defender_data.reinforcement_melee(), defender_casualty_bps).unwrap_or(0);
+        let reinf_ranged_lost = apply_bp(defender_data.reinforcement_ranged(), defender_casualty_bps).unwrap_or(0);
+        let reinf_siege_lost = apply_bp(defender_data.reinforcement_siege(), defender_casualty_bps).unwrap_or(0);
 
-        defender_data.reinforcement_melee = defender_data.reinforcement_melee.saturating_sub(reinf_melee_lost);
-        defender_data.reinforcement_ranged = defender_data.reinforcement_ranged.saturating_sub(reinf_ranged_lost);
-        defender_data.reinforcement_siege = defender_data.reinforcement_siege.saturating_sub(reinf_siege_lost);
+        defender_data.set_reinforcement_melee(defender_data.reinforcement_melee().saturating_sub(reinf_melee_lost));
+        defender_data.set_reinforcement_ranged(defender_data.reinforcement_ranged().saturating_sub(reinf_ranged_lost));
+        defender_data.set_reinforcement_siege(defender_data.reinforcement_siege().saturating_sub(reinf_siege_lost));
 
         // Defender gains looted weapons from dead attackers (goes to own inventory)
         defender_data.melee_weapons = defender_data.melee_weapons.saturating_add(defender_looted.melee);

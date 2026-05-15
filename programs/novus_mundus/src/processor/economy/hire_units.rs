@@ -140,8 +140,8 @@ pub fn process(
         let adjusted_unit_cost = apply_bp(base_unit_cost, economic_config.cost_multiplier as u64)
             .ok_or(GameError::MathOverflow)?;
 
-        let power_cost = if player_data.hero_training_cost_reduction_bps > 0 {
-            let discount = player_data.hero_training_cost_reduction_bps.min(9000) as u64;
+        let power_cost = if player_data.hero_training_cost_reduction_bps() > 0 {
+            let discount = player_data.hero_training_cost_reduction_bps().min(9000) as u64;
             let cost_ratio = 10000u64.saturating_sub(discount);
             adjusted_unit_cost.saturating_mul(cost_ratio) / 10000
         } else {

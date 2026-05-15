@@ -89,7 +89,7 @@ pub fn process(
 
         // Check max locked heroes limit for Sanctuary level
         let current_locked_count = player
-            .active_heroes
+            .active_heroes_arr()
             .iter()
             .filter(|h| *h != &NULL_PUBKEY)
             .count() as u8;
@@ -98,7 +98,7 @@ pub fn process(
         }
 
         // Verify slot is EMPTY
-        if player.active_heroes[slot_index as usize] != NULL_PUBKEY {
+        if player.active_hero_at(slot_index as usize) != NULL_PUBKEY {
             return Err(GameError::InvalidParameter.into());
         }
     } // player_data dropped
@@ -129,7 +129,7 @@ pub fn process(
     let mut player_data = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
 
-    player.active_heroes[slot_index as usize] = *hero_mint.address();
+    player.set_active_hero_at(slot_index as usize, *hero_mint.address());
 
     // 10. Parse hero data from NFT and add buffs
     let nft_data = hero_mint.try_borrow()?;
@@ -170,7 +170,7 @@ pub fn process(
         0
     };
 
-    player.slot_location_bonus[slot_index as usize] = location_bonus_bps;
+    player.set_slot_location_bonus_at(slot_index as usize, location_bonus_bps);
 
     // Add buffs using helper with location bonus applied
     add_hero_buffs_to_player_with_location(player, parsed_hero.level, template, location_bonus_bps);

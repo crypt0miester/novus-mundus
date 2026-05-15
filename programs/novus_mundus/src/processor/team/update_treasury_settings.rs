@@ -105,7 +105,7 @@ pub fn process(
 
     // 5. Validate Leader is in Team
 
-    if leader.team == NULL_PUBKEY || &leader.team != team_account.address() {
+    if leader.team_address() == NULL_PUBKEY || &leader.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

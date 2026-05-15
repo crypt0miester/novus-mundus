@@ -100,7 +100,7 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if member.team == NULL_PUBKEY || &member.team != team_account.address() {
+    if member.team_address() == NULL_PUBKEY || &member.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 

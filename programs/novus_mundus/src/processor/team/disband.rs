@@ -81,7 +81,7 @@ pub fn process(
     // 5. Validate Leader Authority
 
     // Leader in the team?
-    if leader.team == NULL_PUBKEY || &leader.team != team_account.address() {
+    if leader.team_address() == NULL_PUBKEY || &leader.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -121,7 +121,7 @@ pub fn process(
 
     // 8. Update Leader Account
 
-    leader.team = NULL_PUBKEY;
+    leader.set_team_address(NULL_PUBKEY);
 
     // 9. Emit Event
 

@@ -142,7 +142,7 @@ pub fn process(
         // Find empty slot in active_heroes
         let mut target_slot: Option<usize> = None;
         for i in 0..3 {
-            if player.active_heroes[i] == NULL_PUBKEY {
+            if player.active_hero_at(i as usize) == NULL_PUBKEY {
                 target_slot = Some(i);
                 break;
             }
@@ -160,7 +160,7 @@ pub fn process(
 
         if let Some(slot) = target_slot {
             // Slot available: transfer to player PDA (re-lock)
-            player.active_heroes[slot] = hero_mint_key;
+            player.set_active_hero_at(slot as usize, hero_mint_key);
 
             // Re-add hero buffs
             let nft_data = hero_mint.try_borrow()?;
@@ -178,7 +178,7 @@ pub fn process(
                 let template = unsafe { HeroTemplate::load(&template_data) };
                 let at_home = is_hero_at_home(parsed_hero.origin_city, player.current_city);
                 let location_bonus = if at_home { location_bonus_for_tier(crate::state::tier_from_mint_cost(template.mint_cost_sol)) } else { 0 };
-                player.slot_location_bonus[slot] = location_bonus;
+                player.set_slot_location_bonus_at(slot as usize, location_bonus);
                 add_hero_buffs_to_player_with_location(player, parsed_hero.level, template, location_bonus);
                 drop(template_data);
             }

@@ -80,36 +80,32 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 9. Update Destination Aggregates
-    // Add units
-    dest.reinforcement_def_1 = dest.reinforcement_def_1.saturating_add(reinf.units_def_1);
-    dest.reinforcement_def_2 = dest.reinforcement_def_2.saturating_add(reinf.units_def_2);
-    dest.reinforcement_def_3 = dest.reinforcement_def_3.saturating_add(reinf.units_def_3);
+    // 9. Update destination team-section aggregates in one borrow.
+    if let Some(t) = dest.team_section_mut() {
+        t.reinforcement_def_1 = t.reinforcement_def_1.saturating_add(reinf.units_def_1);
+        t.reinforcement_def_2 = t.reinforcement_def_2.saturating_add(reinf.units_def_2);
+        t.reinforcement_def_3 = t.reinforcement_def_3.saturating_add(reinf.units_def_3);
 
-    // Add weapons
-    dest.reinforcement_melee = dest.reinforcement_melee.saturating_add(reinf.melee_weapons);
-    dest.reinforcement_ranged = dest.reinforcement_ranged.saturating_add(reinf.ranged_weapons);
-    dest.reinforcement_siege = dest.reinforcement_siege.saturating_add(reinf.siege_weapons);
+        t.reinforcement_melee = t.reinforcement_melee.saturating_add(reinf.melee_weapons);
+        t.reinforcement_ranged = t.reinforcement_ranged.saturating_add(reinf.ranged_weapons);
+        t.reinforcement_siege = t.reinforcement_siege.saturating_add(reinf.siege_weapons);
 
-    // Track original totals for survival ratio calculation
-    dest.reinforcement_original_units = dest.reinforcement_original_units
-        .saturating_add(reinf.total_units());
-    dest.reinforcement_original_weapons = dest.reinforcement_original_weapons
-        .saturating_add(reinf.total_weapons());
+        t.reinforcement_original_units = t.reinforcement_original_units.saturating_add(reinf.total_units());
+        t.reinforcement_original_weapons = t.reinforcement_original_weapons.saturating_add(reinf.total_weapons());
 
-    // Update hero buffs (use MAX, not sum - best hero wins)
-    if reinf.hero_defense_bps > dest.reinforcement_hero_defense_bps {
-        dest.reinforcement_hero_defense_bps = reinf.hero_defense_bps;
+        // Best-hero-wins for buffs (MAX, not sum).
+        if reinf.hero_defense_bps > t.reinforcement_hero_defense_bps {
+            t.reinforcement_hero_defense_bps = reinf.hero_defense_bps;
+        }
+        if reinf.hero_weapon_eff_bps > t.reinforcement_hero_weapon_eff_bps {
+            t.reinforcement_hero_weapon_eff_bps = reinf.hero_weapon_eff_bps;
+        }
+        if reinf.hero_armor_eff_bps > t.reinforcement_hero_armor_eff_bps {
+            t.reinforcement_hero_armor_eff_bps = reinf.hero_armor_eff_bps;
+        }
+
+        t.reinforcement_source_count = t.reinforcement_source_count.saturating_add(1);
     }
-    if reinf.hero_weapon_eff_bps > dest.reinforcement_hero_weapon_eff_bps {
-        dest.reinforcement_hero_weapon_eff_bps = reinf.hero_weapon_eff_bps;
-    }
-    if reinf.hero_armor_eff_bps > dest.reinforcement_hero_armor_eff_bps {
-        dest.reinforcement_hero_armor_eff_bps = reinf.hero_armor_eff_bps;
-    }
-
-    // Increment source count
-    dest.reinforcement_source_count = dest.reinforcement_source_count.saturating_add(1);
 
     // 10. Mark Reinforcement as Active
     reinf.status = ReinforcementStatus::Active as u8;

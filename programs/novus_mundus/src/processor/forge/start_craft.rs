@@ -155,20 +155,14 @@ pub fn process(
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        // 10. Check player has enough materials
-        if player.common_materials < common_cost {
-            return Err(GameError::InsufficientMaterials.into());
-        }
-        if player.uncommon_materials < uncommon_cost {
-            return Err(GameError::InsufficientMaterials.into());
-        }
-        if player.rare_materials < rare_cost {
-            return Err(GameError::InsufficientMaterials.into());
-        }
-        if player.epic_materials < epic_cost {
-            return Err(GameError::InsufficientMaterials.into());
-        }
-        if player.legendary_materials < legendary_cost {
+        // 10. Check player has enough materials (single inventory borrow vs. 5 shim calls)
+        let inv = player.inventory().ok_or(GameError::InsufficientMaterials)?;
+        if inv.common_materials < common_cost
+            || inv.uncommon_materials < uncommon_cost
+            || inv.rare_materials < rare_cost
+            || inv.epic_materials < epic_cost
+            || inv.legendary_materials < legendary_cost
+        {
             return Err(GameError::InsufficientMaterials.into());
         }
 
@@ -192,12 +186,14 @@ pub fn process(
     let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    // 11. Deduct materials from player
-    player.common_materials = player.common_materials.saturating_sub(common_cost);
-    player.uncommon_materials = player.uncommon_materials.saturating_sub(uncommon_cost);
-    player.rare_materials = player.rare_materials.saturating_sub(rare_cost);
-    player.epic_materials = player.epic_materials.saturating_sub(epic_cost);
-    player.legendary_materials = player.legendary_materials.saturating_sub(legendary_cost);
+    // 11. Deduct materials from player (single inventory borrow)
+    if let Some(inv) = player.inventory_mut() {
+        inv.common_materials = inv.common_materials.saturating_sub(common_cost);
+        inv.uncommon_materials = inv.uncommon_materials.saturating_sub(uncommon_cost);
+        inv.rare_materials = inv.rare_materials.saturating_sub(rare_cost);
+        inv.epic_materials = inv.epic_materials.saturating_sub(epic_cost);
+        inv.legendary_materials = inv.legendary_materials.saturating_sub(legendary_cost);
+    }
 
     // Update soft balance tracker
     player.locked_novi = player.locked_novi.saturating_sub(novi_cost);

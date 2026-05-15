@@ -114,7 +114,7 @@ pub fn process(
     }
 
     // Inviter in the team?
-    if inviter.team == NULL_PUBKEY || &inviter.team != team_account.address() {
+    if inviter.team_address() == NULL_PUBKEY || &inviter.team_address() != team_account.address() {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -144,7 +144,7 @@ pub fn process(
     // 6. Validate Invitee Can Be Invited
 
     // Already in a team?
-    if invitee.team != NULL_PUBKEY {
+    if invitee.team_address() != NULL_PUBKEY {
         return Err(GameError::AlreadyInTeam.into());
     }
 

@@ -196,7 +196,7 @@ pub fn process(
     // 13. Location Synergy: Recalculate hero buffs for new city
     // Only if player has locked heroes and hero accounts were provided
 
-    let has_locked_heroes = player_data.active_heroes.iter().any(|h| *h != NULL_PUBKEY);
+    let has_locked_heroes = player_data.active_heroes_arr().iter().any(|h| *h != NULL_PUBKEY);
 
     if has_locked_heroes && accounts.len() > 5 {
         // Clear all existing hero buffs before recalculating
@@ -208,7 +208,7 @@ pub fn process(
         let mut hero_idx = 0;
 
         for slot in 0..3 {
-            if player_data.active_heroes[slot] == NULL_PUBKEY {
+            if player_data.active_hero_at(slot as usize) == NULL_PUBKEY {
                 continue;
             }
 
@@ -218,7 +218,7 @@ pub fn process(
                 let hero_template_info = &hero_accounts[hero_idx + 1];
 
                 // Verify NFT matches the locked hero mint
-                if hero_nft_info.address() == &player_data.active_heroes[slot] {
+                if hero_nft_info.address() == &player_data.active_hero_at(slot as usize) {
                     // Parse hero data from NFT
                     let nft_data = hero_nft_info.try_borrow()?;
                     if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
@@ -242,7 +242,7 @@ pub fn process(
                             };
 
                             // Store location bonus for this slot
-                            player_data.slot_location_bonus[slot] = location_bonus_bps;
+                            player_data.set_slot_location_bonus_at(slot as usize, location_bonus_bps);
 
                             // Add buffs with location bonus
                             add_hero_buffs_to_player_with_location(

@@ -72,14 +72,14 @@ pub fn process(
     // 5. Check if Daily Rewards are Unlocked (Research System)
 
     // Check if player has unlocked daily rewards through research
-    if !player_data.has_daily_rewards {
+    if !player_data.has_daily_rewards() {
         return Err(GameError::FeatureLocked.into());
     }
 
     // 6. Check Cooldown (Using Research field)
 
     // Now using last_daily_claim field from research system
-    let time_since_last_claim = now - player_data.last_daily_claim;
+    let time_since_last_claim = now - player_data.last_daily_claim();
     let cooldown = game_engine_data.gameplay_config.daily_reward_cooldown;
 
     if time_since_last_claim < cooldown {
@@ -102,12 +102,12 @@ pub fn process(
 
     // Apply research daily reward multiplier (basis points, no u128!)
     // e.g., 35000 bps = 3.5x multiplier (level 7 Daily Rewards research)
-    if player_data.research_daily_reward_bps > 0 {
-        rewards.cash = apply_bp_bonus(rewards.cash, player_data.research_daily_reward_bps)
+    if player_data.research_daily_reward_bps() > 0 {
+        rewards.cash = apply_bp_bonus(rewards.cash, player_data.research_daily_reward_bps())
             .unwrap_or(rewards.cash);
-        rewards.produce = apply_bp_bonus(rewards.produce, player_data.research_daily_reward_bps)
+        rewards.produce = apply_bp_bonus(rewards.produce, player_data.research_daily_reward_bps())
             .unwrap_or(rewards.produce);
-        rewards.xp = apply_bp_bonus(rewards.xp, player_data.research_daily_reward_bps)
+        rewards.xp = apply_bp_bonus(rewards.xp, player_data.research_daily_reward_bps())
             .unwrap_or(rewards.xp);
     }
 
@@ -150,7 +150,7 @@ pub fn process(
     // 10. Update Claim Timestamp
 
     // Update the research system's daily claim timestamp
-    player_data.last_daily_claim = now;
+    player_data.set_last_daily_claim(now);
 
     // 11. Emit Event
 
