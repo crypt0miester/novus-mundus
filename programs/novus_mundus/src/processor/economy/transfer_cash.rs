@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -13,6 +12,7 @@ use crate::{
     emit,
     events::CashTransferred,
     validation::require_owner,
+    utils::read_u64,
 };
 
 /// Transfer cash between team members
@@ -65,11 +65,8 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if data.len() < 16 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
-    let team_id = u64::from_le_bytes(data[8..16].try_into().unwrap());
+    let amount = read_u64(data, 0, "transfer_cash.amount")?;
+    let team_id = read_u64(data, 8, "transfer_cash.team_id")?;
 
     if amount == 0 {
         return Err(GameError::InvalidAmount.into());
@@ -77,16 +74,14 @@ pub fn process(
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         sender,
         sender_player_account,
         receiver_player_account,
         team_account,
         game_engine_account,
         estate_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // Reject self-transfers — would let a player launder their own funds and bypass anti-Sybil
     // tracking (total_sent / total_received) by funneling cash through themselves.

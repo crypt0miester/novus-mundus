@@ -1,13 +1,12 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
     ProgramResult,
 };
 
 use crate::{
-    error::GameError, helpers::validate_token_account_owner, logic::safe_math::apply_bp, state::{GameEngine, UserAccount}, validation::require_owner
+    error::GameError, helpers::validate_token_account_owner, logic::safe_math::apply_bp, state::{GameEngine, UserAccount}, utils::{read_u64, read_u8}, validation::require_owner
 };
 
 /// Mint NOVI tokens for prizes (DAO only)
@@ -64,29 +63,27 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         dao_authority,
         recipient_user,
         game_engine_account,
         user_token_account,
         novi_mint,
         _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
+
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "mint_for_prize.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 2. Parse Instruction Data
 
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let amount = read_u64(instruction_data, 0, "mint_for_prize.amount")?;
 
-    let amount = u64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-    ]);
-
-    let purpose = instruction_data[8];
+    let purpose = read_u8(instruction_data, 8, "mint_for_prize.purpose")?;
 
     // Validate purpose is within range
     if purpose > 6 {
@@ -113,7 +110,7 @@ pub fn process(
 
     let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
 
-    // SECURITY: Verify token account belongs to the UserAccount PDA
+    // Verify token account belongs to the UserAccount PDA
     validate_token_account_owner(user_token_account, recipient_user.address())?;
 
     // 4. Load Recipient User Account

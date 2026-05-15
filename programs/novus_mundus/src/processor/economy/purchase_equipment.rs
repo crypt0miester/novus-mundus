@@ -21,6 +21,7 @@ use crate::{
         event_scoring::update_event_score,
         estate::{market_discount_bps, load_estate_for_player, require_market},
     },
+    utils::{read_u8, read_u64},
     validation::require_signer,
     emit,
     events::EquipmentPurchased,
@@ -88,12 +89,16 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // estate_account is required, event accounts are optional
-    let (player, owner, game_engine, estate_account, event_participation, event) = if accounts.len() >= 6 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], Some(&accounts[4]), Some(&accounts[5]))
-    } else if accounts.len() >= 4 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], None, None)
+    crate::extract_accounts!(accounts, [
+        player,
+        owner,
+        game_engine,
+        estate_account,
+    ]);
+    let (event_participation, event) = if accounts.len() >= 6 {
+        (Some(&accounts[4]), Some(&accounts[5]))
     } else {
-        return Err(ProgramError::NotEnoughAccountKeys);
+        (None, None)
     };
 
     // 2. Validate signer
@@ -104,12 +109,9 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let equipment_type = EquipmentType::try_from(data[0])?;
-    let quantity = u64::from_le_bytes([
-        data[1], data[2], data[3], data[4],
-        data[5], data[6], data[7], data[8],
-    ]);
-    let pay_with_cash = data[9] != 0;
+    let equipment_type = EquipmentType::try_from(read_u8(data, 0, "equipment_type")?)?;
+    let quantity = read_u64(data, 1, "quantity")?;
+    let pay_with_cash = read_u8(data, 9, "pay_with_cash")? != 0;
 
     // Validate quantity
     if quantity == 0 {

@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -13,6 +12,7 @@ use crate::{
     state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
     constants::DUNGEON_RUN_SEED,
     helpers::estate::{load_estate_for_player, has_building_at_level},
+    utils::{read_u8, read_u16},
     validation::{require_signer, require_writable},
     emit,
     events::DungeonEntered,
@@ -47,18 +47,17 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let dungeon_template_account = &accounts[2];
-    let dungeon_run_account = &accounts[3];
-    let estate_account = &accounts[4];
-    let hero_mint = &accounts[5];
-    let hero_collection = &accounts[6];
-    let system_program = &accounts[7];
-    let p_core_program = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        dungeon_template_account,
+        dungeon_run_account,
+        estate_account,
+        hero_mint,
+        hero_collection,
+        system_program,
+        p_core_program,
+    ]);
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -67,13 +66,9 @@ pub fn process(
     require_writable(hero_mint)?;
 
     // 3. Parse instruction data
-    if data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let dungeon_id = u16::from_le_bytes([data[0], data[1]]);
-    let first_room_type = data[2];
-    let hero_specialization = data[3];
+    let dungeon_id = read_u16(data, 0, "dungeon_id")?;
+    let first_room_type = read_u8(data, 2, "first_room_type")?;
+    let hero_specialization = read_u8(data, 3, "hero_specialization")?;
 
     // Validate room type
     let room_type = RoomType::from_u8(first_room_type)

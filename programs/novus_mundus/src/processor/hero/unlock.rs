@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
@@ -14,6 +13,7 @@ use crate::{
         subtract_hero_buffs_from_player_with_location,
         parse_hero_nft,
     },
+    utils::read_u8,
     validation::{
         require_signer,
         require_writable,
@@ -47,9 +47,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [owner, player_account, hero_mint, hero_template, hero_collection, system_program, p_core_program, estate_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, hero_collection, system_program, p_core_program, estate_account]);
 
     // 2. Validate accounts
     require_signer(owner)?;
@@ -57,11 +55,7 @@ pub fn process(
     require_writable(hero_mint)?;
 
     // 3. Parse instruction data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let slot_index = instruction_data[0];
+    let slot_index = read_u8(instruction_data, 0, "unlock.slot_index")?;
 
     // 4. Bounds check slot index
     if slot_index >= 3 {

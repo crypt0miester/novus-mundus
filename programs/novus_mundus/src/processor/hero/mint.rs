@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
@@ -11,6 +10,7 @@ use crate::{
     state::{PlayerAccount, HeroTemplate, GameEngine, EstateAccount, calculate_mint_bonus},
     constants::{HERO_TEMPLATE_SEED, HERO_MINT_RECEIPT_SEED, ESTATE_SEED, PLAYER_SEED},
     helpers::{HeroNftContext, HeroNftBuffers, build_hero_nft_attributes, estate::get_sanctuary_level},
+    utils::read_u16,
     validation::{
         require_signer,
         require_writable,
@@ -60,7 +60,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         minter,
         player_account,
         hero_template,
@@ -73,9 +73,7 @@ pub fn process(
         p_core_program,
         mint_receipt,
         estate_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate accounts
     require_signer(minter)?;
@@ -87,11 +85,7 @@ pub fn process(
     require_writable(mint_receipt)?;
 
     // 3. Parse instruction data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let template_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let template_id = read_u16(instruction_data, 0, "mint.template_id")?;
 
     // 4. Load template
     let template_data = hero_template.try_borrow()?;

@@ -15,6 +15,7 @@ use crate::{
     types::UnitType,
     emit,
     events::estate::TroopsRecovered,
+    utils::read_u64,
 };
 
 /// Recover wounded troops from the Infirmary
@@ -38,14 +39,12 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         player_account,
         estate_account,
         game_engine_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
     if instruction_data.len() < 10 {
@@ -53,10 +52,7 @@ pub fn process(
     }
 
     let unit_type = UnitType::try_from(instruction_data[0])?;
-    let amount = u64::from_le_bytes([
-        instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5],
-        instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9],
-    ]);
+    let amount = read_u64(instruction_data, 2, "recover_troops.amount")?;
 
     if amount == 0 {
         return Err(GameError::InvalidParameter.into());

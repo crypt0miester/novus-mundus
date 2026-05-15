@@ -10,7 +10,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -27,6 +26,7 @@ use crate::{
     constants::{
         CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_VACANT,
     },
+    utils::read_u16,
     validation::require_owner,
 };
 
@@ -47,22 +47,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let _caller = &accounts[0];
-    let castle_account = &accounts[1];
-    let new_king_account = &accounts[2];
-    let new_king_registry = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        _caller,
+        castle_account,
+        new_king_account,
+        new_king_registry,
+    ]);
 
     // Parse instruction data
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let city_id = read_u16(instruction_data, 0, "city_id")?;
+    let castle_id = read_u16(instruction_data, 2, "castle_id")?;
 
     // Get current timestamp
     let clock = Clock::get()?;

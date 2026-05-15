@@ -55,7 +55,18 @@ export {
   deriveTreasuryRequestPda,
   deriveHeroMintReceiptPda,
   deriveRallyParticipantPda,
+  deriveEventPda,
+  deriveEventParticipationPda,
 } from "novus-mundus-sdk";
+
+// Event state parsers, helpers, types & enums
+export { parseEvent, parseEventParticipation, deserializeEvent, deserializeEventParticipation } from "novus-mundus-sdk";
+export { isEventActive, isEventFinalized, getEventLeaderboard, findPlayerRank } from "novus-mundus-sdk";
+export { EventStatus, EventPrizeType, EVENT_ACCOUNT_SIZE, EVENT_PARTICIPATION_SIZE } from "novus-mundus-sdk";
+export type { EventAccount, EventParticipation, EventLeaderboardEntry } from "novus-mundus-sdk";
+
+// Token ATA helpers (for SPLToken prize claims)
+export { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from "novus-mundus-sdk";
 
 // Calculators
 export { toGrid } from "novus-mundus-sdk";
@@ -67,6 +78,10 @@ export { hasTeam } from "novus-mundus-sdk";
 
 // State parsers & helpers
 export { parseCastle, parseRally, parseDungeonRun, parseEstate } from "novus-mundus-sdk";
+export { parseCourtPosition, parseGarrisonContribution, parseReinforcement } from "novus-mundus-sdk";
+export { parseTreasuryRequest, parseTeamInvite } from "novus-mundus-sdk";
+export type { CourtPositionAccount, GarrisonContributionAccount, ReinforcementAccount, RallyAccount } from "novus-mundus-sdk";
+export type { TreasuryRequest, TeamInviteAccount } from "novus-mundus-sdk";
 export { parseResearchTemplate, parseResearchProgress, deserializeResearchTemplate, deserializeResearchProgress } from "novus-mundus-sdk";
 export { isResearching, isResearchComplete, getResearchLevel, isResearchAscended, checkResearchPrerequisites } from "novus-mundus-sdk";
 export type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
@@ -513,6 +528,14 @@ import { createRemovePlayerNameInstruction as _removeName } from "novus-mundus-s
 export const createSetPlayerNameInstruction = _setName as unknown as FlexIxBuilder;
 export const createUpdatePlayerNameInstruction = _updateName as unknown as FlexIxBuilder;
 export const createRemovePlayerNameInstruction = _removeName as unknown as FlexIxBuilder;
+
+// Event
+import { createJoinEventInstruction as _joinEvent } from "novus-mundus-sdk";
+import { createFinalizeEventInstruction as _finalizeEvent } from "novus-mundus-sdk";
+import { createClaimPrizeInstruction as _claimPrize } from "novus-mundus-sdk";
+export const createJoinEventInstruction = _joinEvent as unknown as FlexIxBuilder;
+export const createFinalizeEventInstruction = _finalizeEvent as unknown as FlexIxBuilder;
+export const createClaimPrizeInstruction = _claimPrize as unknown as FlexIxBuilder;
 
 // Name — Team
 import { createSetTeamNameInstruction as _setTeamName } from "novus-mundus-sdk";

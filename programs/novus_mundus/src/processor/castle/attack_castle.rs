@@ -12,7 +12,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -38,6 +37,7 @@ use crate::{
         safe_math::calculate_share,
         combat::{WeaponSet, resolve_weapon_combat},
     },
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner},
 };
 
@@ -59,15 +59,12 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let attacker_wallet = &accounts[0];
-    let attacker_player = &accounts[1];
-    let castle_account = &accounts[2];
-    let game_engine_account = &accounts[3];
-    let garrison_accounts = &accounts[4..];
+    crate::extract_accounts!(accounts, [
+        attacker_wallet,
+        attacker_player,
+        castle_account,
+        game_engine_account,
+    ], rest = garrison_accounts);
 
     // Validate accounts
     require_signer(attacker_wallet)?;
@@ -76,11 +73,7 @@ pub fn process(
     require_owner(attacker_player, program_id)?;
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 1 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let drive_by = instruction_data[0] != 0;
+    let drive_by = read_u8(instruction_data, 0, "drive_by")? != 0;
 
     // Get current timestamp
     let clock = Clock::get()?;

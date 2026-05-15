@@ -30,6 +30,7 @@ use crate::{
     state::{PlayerAccount, DungeonLeaderboard, GameEngine},
     validation::{require_signer, require_writable, require_owner, require_key_match, require_data_len},
     helpers::{mint_tokens, validate_token_account_owner},
+    utils::read_u16,
     emit,
     events::DungeonLeaderboardPrizeClaimed,
 };
@@ -50,7 +51,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         player_account,
         leaderboard_account,
@@ -58,9 +59,7 @@ pub fn process(
         novi_mint,
         game_engine,
         token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate signer and writables
     require_signer(owner)?;
@@ -68,18 +67,20 @@ pub fn process(
     require_writable(leaderboard_account)?;
     require_writable(player_novi_ata)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "claim_leaderboard_prize.novi_mint",
+        GameError::InvalidMint,
+    );
     require_key_match(token_program, &pinocchio_token::ID)?;
 
-    // SECURITY: Verify token account belongs to the PlayerAccount PDA
+    // Verify token account belongs to the PlayerAccount PDA
     validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Parse instruction data
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let dungeon_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let week_number = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let dungeon_id = read_u16(instruction_data, 0, "claim_leaderboard_prize.dungeon_id")?;
+    let week_number = read_u16(instruction_data, 2, "claim_leaderboard_prize.week_number")?;
 
     // 4. Load clock
     let clock = Clock::get()?;

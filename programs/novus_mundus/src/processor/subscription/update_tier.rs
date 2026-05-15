@@ -7,6 +7,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{GameEngine, SubscriptionTier},
+    utils::read_u8,
     validation::{
         require_signer,
         require_writable,
@@ -33,9 +34,7 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    let [game_engine, authority] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [game_engine, authority]);
 
     // 2. Validate accounts
     require_signer(authority)?;
@@ -61,7 +60,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let tier_index = data[0];
+    let tier_index = read_u8(data, 0, "update_tier.tier_index")?;
 
     // Validate tier index
     if tier_index > 3 {

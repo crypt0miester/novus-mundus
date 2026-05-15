@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::PlayerAccount,
     validation::{require_signer, require_writable, require_owner},
+    utils::read_u8,
     emit,
     events::MeditationSpeedup,
 };
@@ -41,9 +41,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -51,11 +49,7 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let speedup_tier = instruction_data[0];
+    let speedup_tier = read_u8(instruction_data, 0, "speedup_meditation.speedup_tier")?;
     if speedup_tier < 1 || speedup_tier > 2 {
         return Err(GameError::InvalidParameter.into());
     }

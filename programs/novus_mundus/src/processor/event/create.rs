@@ -10,6 +10,7 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match},
     emit,
     events::KingdomEventCreated,
+    utils::{read_u8, read_u64, read_i64},
 };
 
 /// Create a new event (DAO only)
@@ -45,15 +46,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         event_account,
         dao_authority,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -69,8 +68,8 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let event_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let name_len = instruction_data[8] as usize;
+    let event_id = read_u64(instruction_data, 0, "event_create.event_id")?;
+    let name_len = read_u8(instruction_data, 8, "event_create.name_len")? as usize;
 
     if name_len < MIN_EVENT_NAME_LENGTH || name_len > MAX_EVENT_NAME_LENGTH {
         return Err(GameError::EventNameTooLong.into());
@@ -83,14 +82,14 @@ pub fn process(
     let name_bytes = &instruction_data[9..9 + name_len];
     let offset = 9 + name_len;
 
-    let start_time = i64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
-    let end_time = i64::from_le_bytes(instruction_data[offset + 8..offset + 16].try_into().unwrap());
-    let event_type = instruction_data[offset + 16];
-    let min_level = instruction_data[offset + 17];
-    let min_reputation = u64::from_le_bytes(instruction_data[offset + 18..offset + 26].try_into().unwrap());
-    let required_subscription_tier = instruction_data[offset + 26];
-    let prize_type = instruction_data[offset + 27];
-    let prize_amount = u64::from_le_bytes(instruction_data[offset + 28..offset + 36].try_into().unwrap());
+    let start_time = read_i64(instruction_data, offset, "event_create.start_time")?;
+    let end_time = read_i64(instruction_data, offset + 8, "event_create.end_time")?;
+    let event_type = read_u8(instruction_data, offset + 16, "event_create.event_type")?;
+    let min_level = read_u8(instruction_data, offset + 17, "event_create.min_level")?;
+    let min_reputation = read_u64(instruction_data, offset + 18, "event_create.min_reputation")?;
+    let required_subscription_tier = read_u8(instruction_data, offset + 26, "event_create.required_subscription_tier")?;
+    let prize_type = read_u8(instruction_data, offset + 27, "event_create.prize_type")?;
+    let prize_amount = read_u64(instruction_data, offset + 28, "event_create.prize_amount")?;
     let mut prize_token_mint_bytes = [0u8; 32];
     prize_token_mint_bytes.copy_from_slice(&instruction_data[offset + 36..offset + 68]);
     let prize_token_mint = Address::from(prize_token_mint_bytes);

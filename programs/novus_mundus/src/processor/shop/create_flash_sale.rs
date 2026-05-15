@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -11,6 +10,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
 };
 
 /// Create a flash sale (DAO only)
@@ -40,16 +40,14 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         shop_config_account,
         flash_sale_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -63,16 +61,12 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // item_id(4) + is_bundle(1) + discount_bps(2) + starts_at(8) + duration(4) + stock(8) = 27
-    if instruction_data.len() < 27 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let item_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let is_bundle = instruction_data[4] != 0;
-    let discount_bps = u16::from_le_bytes(instruction_data[5..7].try_into().unwrap());
-    let starts_at = i64::from_le_bytes(instruction_data[7..15].try_into().unwrap());
-    let duration_secs = u32::from_le_bytes(instruction_data[15..19].try_into().unwrap());
-    let max_stock = u64::from_le_bytes(instruction_data[19..27].try_into().unwrap());
+    let item_id = read_u32(instruction_data, 0, "item_id")?;
+    let is_bundle = read_u8(instruction_data, 4, "is_bundle")? != 0;
+    let discount_bps = read_u16(instruction_data, 5, "discount_bps")?;
+    let starts_at = read_i64(instruction_data, 7, "starts_at")?;
+    let duration_secs = read_u32(instruction_data, 15, "duration_secs")?;
+    let max_stock = read_u64(instruction_data, 19, "max_stock")?;
 
     // 4. Validate Data
 

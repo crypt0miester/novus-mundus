@@ -1,5 +1,5 @@
 use pinocchio::{
-    ProgramResult, AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
+    ProgramResult, AccountView, Address, sysvars::{Sysvar, clock::Clock}
 };
 use pinocchio_system::instructions::CreateAccount;
 
@@ -36,16 +36,14 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         player_account,
         event_account,
         event_participation_account,
         player_owner,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 

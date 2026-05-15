@@ -12,7 +12,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -22,6 +21,7 @@ use crate::{
     constants::EXPEDITION_SEED,
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount},
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::ExpeditionSpeedup,
@@ -52,13 +52,11 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 3 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let expedition_account = &accounts[2];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        expedition_account,
+    ]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -68,11 +66,7 @@ pub fn process(
     require_owner(expedition_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let speedup_tier = instruction_data[0];
+    let speedup_tier = read_u8(instruction_data, 0, "speedup_tier")?;
     if speedup_tier < 1 || speedup_tier > 2 {
         return Err(GameError::InvalidParameter.into());
     }

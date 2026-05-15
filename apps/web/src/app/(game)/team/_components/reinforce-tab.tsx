@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { GoldNumber } from "@/components/shared/GoldNumber";
@@ -12,6 +13,7 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { DomainName } from "@/components/shared/DomainName";
 import {
   derivePlayerPda,
   deriveReinforcementPda,
@@ -20,14 +22,25 @@ import {
   createProcessArrivalInstruction,
   createRelieveReinforcementInstruction,
   createReinforcementSpeedupInstruction,
+  parsePlayer,
   isTraveling,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
   getTotalDefensiveUnits,
+  type ReinforcementAccount,
 } from "@/lib/sdk";
 
-const REINFORCEMENT_STATUS = ["Traveling", "Active", "Returning", "Completed"];
+const REINFORCEMENT_STATUS_LABEL = ["Traveling", "Active", "Returning", "Completed"];
+
+// In-flight reinforcement enriched with resolved owner wallets.
+interface ReinforcementRow {
+  pubkey: PublicKey;
+  account: ReinforcementAccount;
+  direction: "sent" | "received";
+  senderWallet: PublicKey | null;
+  destinationWallet: PublicKey | null;
+}
 
 export function ReinforceTab() {
   const { data: playerData } = usePlayer();
@@ -36,6 +49,7 @@ export function ReinforceTab() {
   const ge = geData?.account;
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const transact = useTransact();
 
   const nowSec = Math.floor(Date.now() / 1000);
@@ -46,6 +60,64 @@ export function ReinforceTab() {
 
   const [targetAddress, setTargetAddress] = useState("");
   const [units, setUnits] = useState(10);
+
+  // In-flight reinforcements — fetched both directions (sent + received).
+  // The store only keeps a single reinforcement singleton, so the list of all
+  // active/in-flight reinforcements is queried directly via the SDK client.
+  const [reinforcements, setReinforcements] = useState<ReinforcementRow[]>([]);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setReinforcements([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const ge = client.gameEngine;
+      const [myPlayerPda] = derivePlayerPda(ge, publicKey);
+      const [sent, received] = await Promise.all([
+        client.fetchReinforcementsSent(myPlayerPda),
+        client.fetchReinforcementsReceived(myPlayerPda),
+      ]);
+      const rows: { pubkey: PublicKey; account: ReinforcementAccount; direction: "sent" | "received" }[] = [
+        ...sent.map((r) => ({ ...r, direction: "sent" as const })),
+        ...received.map((r) => ({ ...r, direction: "received" as const })),
+      ].filter((r) => r.account.status !== 3); // exclude Completed
+
+      // Resolve sender/destination player PDAs → owner wallets.
+      const pdaSet = new Set<string>();
+      for (const r of rows) {
+        pdaSet.add(r.account.sender.toBase58());
+        pdaSet.add(r.account.destination.toBase58());
+      }
+      const pdaList = Array.from(pdaSet).map((s) => new PublicKey(s));
+      const walletMap = new Map<string, PublicKey>();
+      if (pdaList.length > 0) {
+        const infos = await connection.getMultipleAccountsInfo(pdaList);
+        for (let i = 0; i < infos.length; i++) {
+          const info = infos[i];
+          if (!info) continue;
+          const parsed = parsePlayer(info);
+          if (parsed) walletMap.set(pdaList[i].toBase58(), parsed.owner);
+        }
+      }
+      if (cancelled) return;
+      setReinforcements(
+        rows.map((r) => ({
+          pubkey: r.pubkey,
+          account: r.account,
+          direction: r.direction,
+          senderWallet: walletMap.get(r.account.sender.toBase58()) ?? null,
+          destinationWallet: walletMap.get(r.account.destination.toBase58()) ?? null,
+        })),
+      );
+    })().catch(() => {
+      if (!cancelled) setReinforcements([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey?.toBase58(), client, connection, transact.isPending]);
 
   const isValidAddress = useMemo(() => {
     if (!targetAddress.trim()) return false;
@@ -82,18 +154,17 @@ export function ReinforceTab() {
     }).then((r) => r.signature);
   };
 
-  const handleRecall = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !targetAddress) throw new Error("Missing data");
+  // Recall a reinforcement the player sent.
+  const handleRecall = async (row: ReinforcementRow, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    if (!row.destinationWallet) throw new Error("Destination wallet unresolved");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const targetPubkey = new PublicKey(targetAddress);
-    const [receiverPda] = derivePlayerPda(ge, targetPubkey);
-    const [reinforcementPda] = deriveReinforcementPda(ge, playerPda, receiverPda);
     const ix = createRecallReinforcementInstruction({
-      player: playerPda,
-      reinforcement: reinforcementPda,
+      sender: publicKey,
       gameEngine: ge,
-      owner: publicKey,
+      destinationOwner: row.destinationWallet,
+      senderCityId: row.account.senderCity ?? 0,
+      destinationCityId: row.account.destinationCity ?? 0,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -103,14 +174,20 @@ export function ReinforceTab() {
     }).then((r) => r.signature);
   };
 
-  const handleReinforcementSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !targetAddress) throw new Error("Missing data");
+  // Speed up the travel of a chosen reinforcement (sender pays gems).
+  const handleReinforcementSpeedup = async (
+    row: ReinforcementRow,
+    tier: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    if (!row.destinationWallet) throw new Error("Destination wallet unresolved");
     const geKey = client.gameEngine;
     const ix = createReinforcementSpeedupInstruction(
       {
         sender: publicKey,
         gameEngine: geKey,
-        destinationOwner: new PublicKey(targetAddress),
+        destinationOwner: row.destinationWallet,
       },
       { speedupTier: tier as 1 | 2 },
     );
@@ -122,16 +199,11 @@ export function ReinforceTab() {
     }).then((r) => r.signature);
   };
 
-  const handleProcessArrival = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !targetAddress) throw new Error("Missing data");
-    const ge = client.gameEngine;
-    const targetPubkey = new PublicKey(targetAddress);
-    const [senderPda] = derivePlayerPda(ge, publicKey);
-    const [receiverPda] = derivePlayerPda(ge, targetPubkey);
-    const [reinforcementPda] = deriveReinforcementPda(ge, publicKey, targetPubkey);
+  // Permissionless: process arrival of a traveling reinforcement.
+  const handleProcessArrival = async (row: ReinforcementRow, reportPhase: (p: TxPhase) => void) => {
     const ix = createProcessArrivalInstruction({
-      reinforcement: reinforcementPda,
-      destinationPlayer: receiverPda,
+      reinforcement: row.pubkey,
+      destinationPlayer: row.account.destination,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -141,16 +213,17 @@ export function ReinforceTab() {
     }).then((r) => r.signature);
   };
 
-  const handleRelieve = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !targetAddress) throw new Error("Missing data");
+  // Destination relieves a reinforcement (sends it back home).
+  const handleRelieve = async (row: ReinforcementRow, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    if (!row.senderWallet) throw new Error("Sender wallet unresolved");
     const ge = client.gameEngine;
-    const senderPubkey = new PublicKey(targetAddress);
     const ix = createRelieveReinforcementInstruction({
       destinationOwner: publicKey,
       gameEngine: ge,
-      senderOwner: senderPubkey,
-      senderCityId: 0,
-      destinationCityId: player?.currentCity ?? 0,
+      senderOwner: row.senderWallet,
+      senderCityId: row.account.senderCity ?? 0,
+      destinationCityId: row.account.destinationCity ?? 0,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -235,37 +308,104 @@ export function ReinforceTab() {
             <TxButton onClick={handleSend} disabled={!isValidAddress || units > totalDefensive || traveling}>
               Send {units} Units
             </TxButton>
-            <TxButton onClick={handleRecall} variant="secondary" disabled={!isValidAddress}>
-              Recall
-            </TxButton>
-            <TxButton onClick={handleProcessArrival} variant="secondary" disabled={!isValidAddress}>
-              Process Arrival
-            </TxButton>
-            <TxButton onClick={handleRelieve} variant="secondary" disabled={!isValidAddress}>
-              Relieve
-            </TxButton>
           </div>
         </div>
       </div>
 
-      {/* Speedup Active Reinforcement */}
-      {targetAddress && (
-        <div className="card">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Speed Up Travel
-          </h3>
-          <p className="mb-3 text-xs text-text-secondary">
-            Speed up reinforcements traveling to or from this player.
-          </p>
-          <SpeedupPanel
-            visible={!!targetAddress}
-            remainingSeconds={3600}
-            onSpeedup={handleReinforcementSpeedup}
-            gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-            gemBalance={player?.gems?.toNumber?.()}
-          />
-        </div>
-      )}
+      {/* In-Flight Reinforcements */}
+      <div className="card">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+          In-Flight Reinforcements
+        </h3>
+        {reinforcements.length === 0 ? (
+          <p className="text-sm text-text-muted">No active or in-flight reinforcements.</p>
+        ) : (
+          <div className="space-y-3">
+            {reinforcements.map((row) => {
+              const status = row.account.status ?? 0;
+              const totalUnits =
+                (row.account.unitsDef1?.toNumber?.() ?? 0) +
+                (row.account.unitsDef2?.toNumber?.() ?? 0) +
+                (row.account.unitsDef3?.toNumber?.() ?? 0);
+              const counterparty =
+                row.direction === "sent" ? row.account.destination : row.account.sender;
+              const arrivesAt = row.account.arrivesAt?.toNumber?.() ?? 0;
+              const gemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
+              const remaining = Math.max(0, arrivesAt - Math.floor(Date.now() / 1000));
+              return (
+                <div
+                  key={row.pubkey.toBase58()}
+                  className="rounded-lg border border-zinc-800 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                          row.direction === "sent"
+                            ? "bg-amber-900/40 text-text-gold"
+                            : "bg-zinc-800 text-text-muted"
+                        }`}
+                      >
+                        {row.direction}
+                      </span>
+                      <span className="font-mono text-sm text-text-primary">
+                        <DomainName pubkey={counterparty} chars={4} />
+                      </span>
+                      <span className="text-xs text-text-muted">{totalUnits} units</span>
+                    </div>
+                    <span className="text-xs text-text-secondary">
+                      {REINFORCEMENT_STATUS_LABEL[status] ?? `Status ${status}`}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    {status === 0 && arrivesAt > 0 && (
+                      <GoldCountdown endsAt={arrivesAt} format="compact" size="sm" label="Arrives" />
+                    )}
+                    {/* Process arrival is permissionless once travel completes */}
+                    {status === 0 && (
+                      <TxButton
+                        onClick={(rp) => handleProcessArrival(row, rp)}
+                        variant="secondary"
+                      >
+                        Process Arrival
+                      </TxButton>
+                    )}
+                    {/* Recall — only the sender can recall their own reinforcement */}
+                    {row.direction === "sent" && (status === 0 || status === 1) && (
+                      <TxButton
+                        onClick={(rp) => handleRecall(row, rp)}
+                        variant="secondary"
+                      >
+                        Recall
+                      </TxButton>
+                    )}
+                    {/* Relieve — only the destination can send a reinforcement back */}
+                    {row.direction === "received" && status === 1 && (
+                      <TxButton
+                        onClick={(rp) => handleRelieve(row, rp)}
+                        variant="secondary"
+                      >
+                        Relieve
+                      </TxButton>
+                    )}
+                  </div>
+                  {/* Speedup — sender speeds up an in-flight reinforcement */}
+                  {row.direction === "sent" && status === 0 && remaining > 0 && (
+                    <SpeedupPanel
+                      visible={remaining > 0}
+                      remainingSeconds={remaining}
+                      onSpeedup={(tier, rp) => handleReinforcementSpeedup(row, tier, rp)}
+                      gemsPerMinute={gemsPerMinute}
+                      gemBalance={player?.gems?.toNumber?.()}
+                      className="mt-3"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

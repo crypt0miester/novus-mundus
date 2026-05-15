@@ -14,7 +14,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -25,6 +24,7 @@ use crate::{
     state::{ArenaSeasonAccount, CityAccount},
     validation::{require_owner, require_writable, require_data_len},
     helpers::close_account,
+    utils::{read_u32, read_u16},
 };
 
 /// Minimum seasons behind before auto-close is allowed
@@ -40,13 +40,11 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         arena_season,
         city_account,
         season_authority,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_writable(arena_season)?;
@@ -55,16 +53,9 @@ pub fn process(
     require_owner(city_account, program_id)?;
 
     // 3. Parse Instruction Data (6 bytes minimum)
-    if instruction_data.len() < 6 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let season_id = read_u32(instruction_data, 0, "close_season.season_id")?;
 
-    let season_id = u32::from_le_bytes([
-        instruction_data[0], instruction_data[1],
-        instruction_data[2], instruction_data[3],
-    ]);
-
-    let city_id = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
+    let city_id = read_u16(instruction_data, 4, "close_season.city_id")?;
 
     // 4. Load Clock
     let clock = Clock::get()?;

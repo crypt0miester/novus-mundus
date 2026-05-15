@@ -15,6 +15,7 @@ use crate::{
         require_key_match,
     },
     constants::RESEARCH_TEMPLATE_SEED,
+    utils::{read_u8, read_u16, read_u32, read_u64},
 };
 
 /// Initialize a research template (DAO only)
@@ -45,9 +46,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [dao_authority, research_template, game_engine, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [dao_authority, research_template, game_engine, system_program]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;
@@ -67,42 +66,22 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let research_type = instruction_data[0];
-    let category = instruction_data[1];
-    let max_level = instruction_data[2];
+    let research_type = read_u8(instruction_data, 0, "initialize_template.research_type")?;
+    let category = read_u8(instruction_data, 1, "initialize_template.category")?;
+    let max_level = read_u8(instruction_data, 2, "initialize_template.max_level")?;
 
-    let base_time_seconds = u32::from_le_bytes([
-        instruction_data[3],
-        instruction_data[4],
-        instruction_data[5],
-        instruction_data[6],
-    ]);
+    let base_time_seconds = read_u32(instruction_data, 3, "initialize_template.base_time_seconds")?;
 
-    let base_novi_cost = u64::from_le_bytes([
-        instruction_data[7],
-        instruction_data[8],
-        instruction_data[9],
-        instruction_data[10],
-        instruction_data[11],
-        instruction_data[12],
-        instruction_data[13],
-        instruction_data[14],
-    ]);
+    let base_novi_cost = read_u64(instruction_data, 7, "initialize_template.base_novi_cost")?;
 
-    let buff_type = instruction_data[15];
+    let buff_type = read_u8(instruction_data, 15, "initialize_template.buff_type")?;
 
-    let buff_per_level_bps = u16::from_le_bytes([
-        instruction_data[16],
-        instruction_data[17],
-    ]);
+    let buff_per_level_bps = read_u16(instruction_data, 16, "initialize_template.buff_per_level_bps")?;
 
-    let prerequisite_research = instruction_data[18];
-    let prerequisite_level = instruction_data[19];
+    let prerequisite_research = read_u8(instruction_data, 18, "initialize_template.prerequisite_research")?;
+    let prerequisite_level = read_u8(instruction_data, 19, "initialize_template.prerequisite_level")?;
 
-    let gem_cost_per_minute = u16::from_le_bytes([
-        instruction_data[20],
-        instruction_data[21],
-    ]);
+    let gem_cost_per_minute = read_u16(instruction_data, 20, "initialize_template.gem_cost_per_minute")?;
 
     // 5. Validate research type
     if research_type >= 30 {

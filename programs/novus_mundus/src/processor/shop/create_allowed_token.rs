@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -11,6 +10,7 @@ use crate::{
     state::{GameEngine, AllowedTokenAccount},
     validation::{require_signer, require_writable, require_key_match},
     helpers::{consume_optional_feed_slot, OracleType, ZERO_PUBKEY},
+    token_helpers::create_associated_token_account,
     utils::{read_bytes32, read_u16},
 };
 
@@ -19,12 +19,16 @@ use crate::{
 /// Whitelists a token for payment in the shop system.
 /// Stores both Pyth and Switchboard oracle feeds for redundancy.
 ///
-/// # Accounts (base — 5)
-/// - [signer, writable] authority: DAO authority (game_engine.authority), pays for account
+/// # Accounts (base — 9)
+/// - [signer, writable] authority: DAO authority (game_engine.authority), pays for accounts
 /// - [] game_engine: GameEngine account
 /// - [writable] allowed_token: AllowedTokenAccount PDA to create
 /// - [] token_mint: The SPL token mint being allowed
 /// - [] system_program: System program
+/// - [] treasury_wallet: Treasury wallet (must equal game_engine.treasury_wallet)
+/// - [writable] treasury_token_account: Treasury's ATA for token_mint (created if missing)
+/// - [] token_program: SPL Token program
+/// - [] associated_token_program: Associated Token program
 ///
 /// # Accounts (conditional, appended in this order)
 /// - [] pyth_feed_account: Required iff `pyth_feed` in instruction data is non-zero.
@@ -47,23 +51,28 @@ pub fn process(
     accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts (5 required + 0–2 optional feed-validation slots)
+    // 1. Parse Accounts (9 required + 0–2 optional feed-validation slots)
 
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-    let authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let allowed_token_account = &accounts[2];
-    let token_mint = &accounts[3];
-    let system_program = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        authority,
+        game_engine_account,
+        allowed_token_account,
+        token_mint,
+        system_program,
+        treasury_wallet,
+        treasury_token_account,
+        token_program,
+        _associated_token_program,
+    ]);
 
     // 2. Validate Accounts
 
     require_signer(authority)?;
     require_writable(authority)?;
     require_writable(allowed_token_account)?;
+    require_writable(treasury_token_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
+    require_key_match(token_program, &pinocchio_token::ID)?;
 
     // 3. Verify DAO Authority
 
@@ -73,6 +82,15 @@ pub fn process(
     if authority.address() != &game_engine.authority {
         return Err(GameError::DaoRequired.into());
     }
+
+    // Treasury wallet must match GameEngine config — it is the authority of the
+    // treasury ATA provisioned below, which process_token_payment_flow pins.
+    crate::require_keys_eq!(
+        treasury_wallet.address().as_array(),
+        game_engine.treasury_wallet.as_array(),
+        "create_allowed_token.treasury_wallet",
+        GameError::InvalidAccount,
+    );
 
     // 4. Verify token_mint is a valid SPL mint (82 bytes)
 
@@ -112,9 +130,24 @@ pub fn process(
 
     // Walk the variable-length tail of feed accounts (pyth then switchboard,
     // a zero pubkey consumes no slot).
-    let mut feed_slot = 5usize;
+    let mut feed_slot = 9usize;
     feed_slot = consume_optional_feed_slot(accounts, feed_slot, pyth_feed.as_array(), OracleType::Pyth)?;
     let _ = consume_optional_feed_slot(accounts, feed_slot, switchboard_feed.as_array(), OracleType::Switchboard)?;
+
+    // 6b. Provision the treasury's ATA for this token (create if missing).
+    // process_token_payment_flow pins treasury_token_ata to
+    // game_engine.treasury_wallet, so this ATA must exist before any purchase
+    // settled in this token can succeed.
+    if treasury_token_account.data_len() == 0 {
+        create_associated_token_account(
+            authority,                 // Payer (DAO authority; signer + writable)
+            treasury_token_account,    // ATA to create
+            treasury_wallet,           // Wallet that owns the ATA
+            token_mint,                // SPL token mint
+            system_program,
+            token_program,
+        )?;
+    }
 
     // 7. Create AllowedToken Account
 

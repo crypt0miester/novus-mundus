@@ -4,6 +4,21 @@
 
 The Expedition system handles mining and fishing expeditions where players send operatives to gather resources over time. Expeditions are temporary activities that lock resources and optionally include hero NFTs for bonus yields.
 
+```mermaid
+stateDiagram-v2
+    [*] --> NonExistent
+
+    NonExistent --> Active : "start_expedition<br/>(operatives locked, NOVI burned, account created)"
+
+    Active --> Complete : "time elapsed<br/>(now >= end_time)"
+    Active --> NonExistent : "abort_expedition<br/>(ops returned, NOVI lost, account closed)"
+
+    Complete --> NonExistent : "claim_expedition<br/>(rewards granted, ops returned, account closed)"
+
+    Active --> Active : "strike_expedition<br/>(score += strike_score, strikes++)"
+    Active --> Active : "speedup_expedition<br/>(start_time shifted back)"
+```
+
 ---
 
 ## 1. Expedition Lifecycle
@@ -16,7 +31,7 @@ The Expedition system handles mining and fishing expeditions where players send 
 | `Active` | Expedition in progress, operatives locked |
 | `Complete` | Duration elapsed, ready to claim |
 
-### State Diagram
+### State Diagram (ASCII reference)
 
 ```
 ┌────────────────┐  start_expedition  ┌────────────────┐
@@ -43,8 +58,8 @@ Guards:
   - Player not traveling
   - Has required research (has_mining OR has_fishing)
   - Has required building level:
-    - Mining: Workshop at MINING_WORKSHOP_REQ[tier]
-    - Fishing: Dock at FISHING_DOCK_REQ[tier]
+    - Mining: Mine at MINING_WORKSHOP_REQ[tier]   (BuildingType::Mine = 14)
+    - Fishing: Dock at FISHING_DOCK_REQ[tier]     (BuildingType::Dock = 4)
   - tier <= EXPEDITION_MAX_TIER (4)
   - Sufficient locked NOVI for cost
   - At least 1 operative committed
@@ -102,6 +117,18 @@ Actions:
 
 ## 2. Strike System (Phase 2)
 
+```mermaid
+stateDiagram-v2
+    [*] --> NotReady
+
+    NotReady --> WindowOpen : "now >= next_strike_time<br/>(strikes < max_strikes)"
+    WindowOpen --> NotReady : "strike_expedition() called<br/>(score recorded, strikes++)"
+    WindowOpen --> WindowClosed : "now > window_closes<br/>(no strike performed)"
+    WindowClosed --> NotReady : "window advances<br/>(strikes implicitly missed)"
+    NotReady --> LimitReached : "strikes == max_strikes"
+    LimitReached --> [*] : "expedition ends"
+```
+
 ### States
 
 | State | Description |
@@ -111,7 +138,7 @@ Actions:
 | `WindowClosed` | Missed the window |
 | `LimitReached` | Max strikes already performed |
 
-### State Diagram
+### State Diagram (ASCII reference)
 
 ```
                      ┌──────────────────────────────────────────┐
@@ -199,21 +226,34 @@ Actions:
 
 ## 4. Speedup Expedition
 
+```mermaid
+graph TD
+    S["speedup_expedition(tier)"] --> V{"Expedition active?<br/>now < end_time?"}
+    V -->|"No"| ERR["Rejected"]
+    V -->|"Yes"| T{"speedup_tier?"}
+    T -->|"1"| T1["50% of remaining<br/>100 gems/min × 1×"]
+    T -->|"2"| T2["75% of remaining<br/>100 gems/min × 2×"]
+    T1 & T2 --> APPLY["expedition.start_time -= seconds_to_reduce<br/>(end_time moves closer)"]
+```
+
 ### Effect
 
 ```
 Trigger: speedup_expedition
 Guards:
-  - Expedition exists and not complete
+  - Expedition exists and not complete (now < end_time)
   - Remaining time > 0
-  - Sufficient gems for cost
+  - player.gems >= gem_cost
   - Valid speedup_tier (1 or 2)
 Actions:
-  - Tier 1: 50% time reduction, 1× gem cost
-  - Tier 2: 75% time reduction, 2× gem cost
-  - gem_cost = minutes_to_reduce × GEMS_PER_MINUTE × tier_multiplier
-  - Deduct gems from player
-  - Adjust start_time backward (makes end_time closer)
+  - Tier 1: reduces remaining time by 50%, cost_multiplier = 1×
+  - Tier 2: reduces remaining time by 75%, cost_multiplier = 2×
+  - seconds_to_reduce = remaining_seconds × time_reduction_bps / 10000
+  - minutes_to_reduce = ceil(seconds_to_reduce / 60)  (min 1)
+  - gem_cost = minutes_to_reduce × 100 gems/min × cost_multiplier
+    (EXPEDITION_SPEEDUP_GEMS_PER_MINUTE = 100)
+  - player.gems -= gem_cost
+  - expedition.start_time -= seconds_to_reduce  (moves end_time closer)
   - Emit ExpeditionSpeedup
 ```
 
@@ -223,23 +263,29 @@ Actions:
 
 ### Mining Expedition
 
-| Tier | Name | Workshop Req | Duration | NOVI Cost | Gems/Op/Hour |
-|------|------|--------------|----------|-----------|--------------|
-| 0 | Surface | 1 | Variable | Variable | Rate from config |
-| 1 | Shallow | 5 | Variable | Variable | Rate from config |
-| 2 | Deep | 10 | Variable | Variable | Rate from config |
-| 3 | Volcanic | 15 | Variable | Variable | Rate from config |
-| 4 | Abyssal | 20 | Variable | Variable | Rate from config |
+| Tier | Name | Mine Lv Req | Duration | NOVI Cost | Rare Chance | Fragments |
+|------|------|-------------|----------|-----------|-------------|-----------|
+| 0 | Surface | 1 | 1h | 100 | 1% (100 bps) | 1 |
+| 1 | Shallow | 5 | 2h | 500 | 3% (300 bps) | 3 |
+| 2 | Deep | 10 | 4h | 2,000 | 5% (500 bps) | 8 |
+| 3 | Volcanic | 15 | 8h | 8,000 | 10% (1000 bps) | 20 |
+| 4 | Abyssal | 20 | 16h | 30,000 | 20% (2000 bps) | 50 |
+
+Gem yield rate per operative per hour is loaded from `GameEngine.economic_config.mining_gems_per_op_hour[tier]` (kingdom-configurable).
 
 ### Fishing Expedition
 
-| Tier | Name | Dock Req | Duration | NOVI Cost | Produce/Op/Hour |
-|------|------|----------|----------|-----------|-----------------|
-| 0 | Shore | 1 | Variable | Variable | Rate from config |
-| 1 | River | 5 | Variable | Variable | Rate from config |
-| 2 | Lake | 10 | Variable | Variable | Rate from config |
-| 3 | DeepSea | 15 | Variable | Variable | Rate from config |
-| 4 | Abyss | 20 | Variable | Variable | Rate from config |
+| Tier | Name | Dock Lv Req | Duration | NOVI Cost | Rare Chance | Fragments |
+|------|------|-------------|----------|-----------|-------------|-----------|
+| 0 | Shore | 1 | 1h | 100 | 1% (100 bps) | 1 |
+| 1 | River | 5 | 2h | 500 | 3% (300 bps) | 2 |
+| 2 | Lake | 10 | 4h | 2,000 | 5% (500 bps) | 5 |
+| 3 | DeepSea | 15 | 8h | 8,000 | 10% (1000 bps) | 12 |
+| 4 | Abyss | 20 | 16h | 30,000 | 20% (2000 bps) | 30 |
+
+Produce yield rate per operative per hour is loaded from `GameEngine.economic_config.fishing_produce_per_op_hour[tier]` (kingdom-configurable).
+
+> **Note:** The building gate for mining is the **Mine** building (`BuildingType::Mine = 14`), not the Workshop. The gate for fishing is the **Dock** (`BuildingType::Dock = 4`).
 
 ---
 
@@ -255,7 +301,21 @@ Actions:
 
 ## 7. Hero Integration
 
-### Hero Escrow Flow
+```mermaid
+sequenceDiagram
+    participant Wallet as "Owner Wallet"
+    participant Program
+    participant ExpPDA as "ExpeditionAccount (PDA)"
+
+    Wallet->>Program: start_expedition (with hero)
+    Program->>ExpPDA: TransferV1 hero to PDA (escrow)
+    Note over ExpPDA: Hero locked — bonuses applied at claim time
+
+    Wallet->>Program: claim / abort
+    Program->>Wallet: TransferV1 hero back to owner (PDA signs)
+```
+
+### Hero Escrow Flow (ASCII reference)
 ```
 ┌──────────┐  start w/hero  ┌──────────────┐  claim/abort  ┌──────────┐
 │  Owner   │ ─────────────> │ ExpeditionPDA │ ────────────> │  Owner   │
@@ -272,22 +332,24 @@ Actions:
 
 ## 8. Account Structure
 
-### ExpeditionAccount (104 bytes)
+### ExpeditionAccount (112 bytes)
 ```rust
 pub struct ExpeditionAccount {
-    pub player: Pubkey,              // 32 - Owner
-    pub hero_mint: Pubkey,           // 32 - Escrowed hero (NULL if none)
-    pub expedition_type: u8,         // 1 - Mining(1) or Fishing(2)
-    pub tier: u8,                    // 1 - 0-4
-    pub strikes: u8,                 // 1 - Strikes performed
-    pub bump: u8,                    // 1 - PDA bump
-    pub score: u16,                  // 2 - Accumulated strike score
-    pub city_id: u16,                // 2 - Expedition location
-    pub start_time: i64,             // 8 - When started
-    pub operative_unit_1: u64,       // 8 - Tier 1 ops locked
-    pub operative_unit_2: u64,       // 8 - Tier 2 ops locked
-    pub operative_unit_3: u64,       // 8 - Tier 3 ops locked
+    pub account_key: u8,             // 1  - AccountKey::Expedition = 33
+    pub player: Address,             // 32 - Owner wallet pubkey
+    pub hero_mint: Address,          // 32 - Escrowed hero (NULL_PUBKEY if none)
+    pub expedition_type: u8,         // 1  - Mining(1) or Fishing(2)
+    pub tier: u8,                    // 1  - 0-4
+    pub strikes: u8,                 // 1  - Strikes performed
+    pub bump: u8,                    // 1  - PDA bump
+    pub score: u16,                  // 2  - Accumulated strike score
+    pub city_id: u16,                // 2  - Expedition location (origin bonus check)
+    pub start_time: i64,             // 8  - When started
+    pub operative_unit_1: u64,       // 8  - Tier 1 ops locked
+    pub operative_unit_2: u64,       // 8  - Tier 2 ops locked
+    pub operative_unit_3: u64,       // 8  - Tier 3 ops locked
 }
+// compile-time assert: size == 112
 ```
 
 ### PDA Derivation
@@ -308,5 +370,5 @@ Seeds: [EXPEDITION_SEED, player_pubkey]
 6. score <= strikes × 100
 7. Operatives locked are returned on claim or abort
 8. Hero (if escrowed) is returned on claim or abort
-9. NOVI cost is only refunded on claim (burnt on abort)
+9. NOVI cost is NOT refunded on abort — it is burned as a penalty; only operatives/hero are returned
 ```

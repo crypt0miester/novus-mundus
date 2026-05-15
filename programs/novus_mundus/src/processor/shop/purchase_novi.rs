@@ -56,19 +56,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let buyer = &accounts[0];
-    let user_account = &accounts[1];
-    let player_account = &accounts[2];
-    let game_engine_account = &accounts[3];
-    let treasury = &accounts[4];
-    let novi_mint = &accounts[5];
-    let reserved_token_account = &accounts[6];
-    let token_program = &accounts[7];
-    let system_program = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        buyer,
+        user_account,
+        player_account,
+        game_engine_account,
+        treasury,
+        novi_mint,
+        reserved_token_account,
+        token_program,
+        system_program,
+    ]);
 
     // 2. Validate Accounts
     require_signer(buyer)?;

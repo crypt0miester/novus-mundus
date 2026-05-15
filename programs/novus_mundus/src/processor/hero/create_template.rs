@@ -9,6 +9,7 @@ use pinocchio_system::instructions::CreateAccount;
 use crate::{
     error::GameError,
     state::{GameEngine, HeroTemplate, BuffConfig},
+    utils::{read_u8, read_u16, read_u32, read_u64},
     validation::{
         require_signer,
         require_writable,
@@ -48,9 +49,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [dao_authority, hero_template, game_engine, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [dao_authority, hero_template, game_engine, system_program]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;
@@ -71,44 +70,24 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let template_id = u16::from_le_bytes([
-        instruction_data[0],
-        instruction_data[1],
-    ]);
+    let template_id = read_u16(instruction_data, 0, "create_template.template_id")?;
 
     let mut name = [0u8; 32];
     name.copy_from_slice(&instruction_data[2..34]);
 
-    let hero_type = instruction_data[34];
-    let category = instruction_data[35];
+    let hero_type = read_u8(instruction_data, 34, "create_template.hero_type")?;
+    let category = read_u8(instruction_data, 35, "create_template.category")?;
 
-    let mint_cost_sol = u64::from_le_bytes([
-        instruction_data[36],
-        instruction_data[37],
-        instruction_data[38],
-        instruction_data[39],
-        instruction_data[40],
-        instruction_data[41],
-        instruction_data[42],
-        instruction_data[43],
-    ]);
+    let mint_cost_sol = read_u64(instruction_data, 36, "create_template.mint_cost_sol")?;
 
-    let supply_cap = u32::from_le_bytes([
-        instruction_data[44],
-        instruction_data[45],
-        instruction_data[46],
-        instruction_data[47],
-    ]);
+    let supply_cap = read_u32(instruction_data, 44, "create_template.supply_cap")?;
 
-    let enabled = instruction_data[48] != 0;
-    let event_exclusive = instruction_data[49] != 0;
-    let required_player_level = instruction_data[50];
+    let enabled = read_u8(instruction_data, 48, "create_template.enabled")? != 0;
+    let event_exclusive = read_u8(instruction_data, 49, "create_template.event_exclusive")? != 0;
+    let required_player_level = read_u8(instruction_data, 50, "create_template.required_player_level")?;
 
     // Parse meditation_city_id (0 = any city, else specific city required for meditation)
-    let meditation_city_id = u16::from_le_bytes([
-        instruction_data[51],
-        instruction_data[52],
-    ]);
+    let meditation_city_id = read_u16(instruction_data, 51, "create_template.meditation_city_id")?;
 
     // Parse buffs (4 × 5 bytes = 20 bytes) - Deterministic System
     // Each buff has: stat (u8), base_bps (u16), _reserved (2 bytes)
@@ -116,12 +95,12 @@ pub fn process(
     for i in 0..4 {
         let offset = 53 + (i * 5);
         buffs[i] = BuffConfig {
-            stat: instruction_data[offset],
-            base_bps: u16::from_le_bytes([
-                instruction_data[offset + 1],
-                instruction_data[offset + 2],
-            ]),
-            _reserved: [instruction_data[offset + 3], instruction_data[offset + 4]],
+            stat: read_u8(instruction_data, offset, "create_template.buff_stat")?,
+            base_bps: read_u16(instruction_data, offset + 1, "create_template.buff_base_bps")?,
+            _reserved: [
+                read_u8(instruction_data, offset + 3, "create_template.buff_reserved")?,
+                read_u8(instruction_data, offset + 4, "create_template.buff_reserved")?,
+            ],
         };
     }
     // Note: No buff_ranges parsing - hero buffs scale deterministically using √φ

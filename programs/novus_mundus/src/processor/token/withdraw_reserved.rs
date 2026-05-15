@@ -12,6 +12,8 @@ use crate::{
     events::NoviWithdrawn,
     state::UserAccount,
     constants::{USER_SEED, RESERVED_NOVI_VESTING_PERIOD},
+    token_helpers::create_associated_token_account,
+    utils::read_u64,
     validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
@@ -33,12 +35,16 @@ use crate::{
 ///
 /// # Accounts
 /// - [writable] user: UserAccount PDA
-/// - [signer] owner: Wallet that owns the UserAccount PDA
+/// - [signer, writable] owner: Wallet that owns the UserAccount PDA
+///   (must be writable to fund the wallet ATA when it is created)
 /// - [writable] reserved_token_account: Token account OWNED BY UserAccount PDA
-/// - [writable] user_wallet_token_account: User's wallet token account (ATA)
+/// - [writable] user_wallet_token_account: User's wallet NOVI ATA
+///   (created automatically if it does not yet exist)
 /// - [] game_engine: GameEngine PDA
 /// - [] novi_mint: NOVI token mint
 /// - [] token_program: SPL Token program
+/// - [] system_program: System program
+/// - [] associated_token_program: Associated Token program
 ///
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Amount of Reserved Novi to withdraw
@@ -46,9 +52,10 @@ use crate::{
 /// # Flow
 /// 1. Validate user has enough Reserved Novi
 /// 2. Validate 7-day vesting period has passed
-/// 3. Transfer tokens: UserAccount PDA → User wallet
-/// 4. Update cached balance in UserAccount
-/// 5. Update last_withdrawal timestamp
+/// 3. Create the user's wallet NOVI ATA if it does not exist
+/// 4. Transfer tokens: UserAccount PDA → User wallet
+/// 5. Update cached balance in UserAccount
+/// 6. Update last_withdrawal timestamp
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -56,23 +63,31 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         user,
         owner,
         reserved_token_account,
         user_wallet_token_account,
         _game_engine,
-        _novi_mint,
-        _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+        novi_mint,
+        token_program,
+        system_program,
+        _associated_token_program,
+    ]);
 
     // 2. Validate Accounts
 
     require_signer(owner)?;
     require_writable(user)?;
+    require_writable(reserved_token_account)?;
+    require_writable(user_wallet_token_account)?;
     require_owner(user, program_id)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "withdraw_reserved.novi_mint",
+        GameError::InvalidMint,
+    );
 
     let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
@@ -82,10 +97,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let amount = u64::from_le_bytes([
-        data[0], data[1], data[2], data[3],
-        data[4], data[5], data[6], data[7],
-    ]);
+    let amount = read_u64(data, 0, "withdraw_reserved.amount")?;
 
     if amount == 0 {
         return Err(GameError::InvalidParameter.into());
@@ -120,7 +132,19 @@ pub fn process(
         }
     } // user_data_ref dropped before CPI so the runtime can access the account
 
-    // 7. Transfer Tokens (Reserved → Wallet)
+    // 7. Ensure the destination wallet ATA exists (create if missing).
+    if user_wallet_token_account.data_len() == 0 {
+        create_associated_token_account(
+            owner,                       // Payer (pays rent; must sign + be writable)
+            user_wallet_token_account,   // ATA to create
+            owner,                       // Wallet that owns the ATA
+            novi_mint,                   // NOVI mint
+            system_program,
+            token_program,
+        )?;
+    }
+
+    // 8. Transfer Tokens (Reserved → Wallet)
 
     // CRITICAL: Reserved token account is OWNED BY UserAccount PDA
     // So we need UserAccount PDA to sign the transfer
@@ -136,7 +160,7 @@ pub fn process(
         &[user_signer],              // UserAccount PDA signs
     )?;
 
-    // 8. Update Cached Balance and Timestamp (re-borrow after CPI)
+    // 9. Update Cached Balance and Timestamp (re-borrow after CPI)
 
     let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
@@ -147,7 +171,7 @@ pub fn process(
 
     user_data.last_withdrawal = now;
 
-    // 9. Emit Event
+    // 10. Emit Event
     // Note: This is a user-level operation, player account not passed in
     emit!(NoviWithdrawn {
         player: *user.address(), // Using UserAccount PDA instead

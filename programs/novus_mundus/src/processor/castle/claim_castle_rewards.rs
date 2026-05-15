@@ -67,11 +67,13 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
-    let player_wallet = &accounts[0];
-    let player_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let reward_account = &accounts[3];
-    let _system_program = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        player_wallet,
+        player_account,
+        castle_account,
+        reward_account,
+        _system_program,
+    ]);
     // accounts[5] is optional court position account
     let game_engine_account = &accounts[6];
     let novi_mint = &accounts[7];
@@ -238,6 +240,12 @@ pub fn process(
 
     // Mint NOVI tokens based on tier
     if novi_reward > 0 {
+        crate::require_keys_eq!(
+            novi_mint.address().as_array(),
+            &crate::constants::NOVI_MINT_ADDRESS,
+            "claim_castle_rewards.novi_mint",
+            GameError::InvalidMint,
+        );
         if is_high_tier {
             // Fortress/Citadel: Mint to reserved (unlocked, withdrawable)
             if accounts.len() < 12 {
@@ -255,8 +263,7 @@ pub fn process(
                 return Err(GameError::Unauthorized.into());
             }
 
-            // SECURITY: Verify reserved token account belongs to the UserAccount PDA
-            // (drop the borrow first so validate_token_account_owner can re-borrow)
+            // Verify reserved token account belongs to the UserAccount PDA
             drop(user_data);
             validate_token_account_owner(reserved_token_account, user_account.address())?;
             // Re-acquire user borrow for the post-mint balance update below
@@ -276,7 +283,7 @@ pub fn process(
             user.reserved_novi = user.reserved_novi.saturating_add(novi_reward);
         } else {
             // Lower tiers: Mint to locked (not withdrawable)
-            // SECURITY: Verify locked token account belongs to the PlayerAccount PDA
+            // Verify locked token account belongs to the PlayerAccount PDA
             validate_token_account_owner(locked_token_account, player_account.address())?;
             // Mint tokens to locked token account (owned by PlayerAccount PDA)
             mint_tokens(

@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopItemAccount, ShopCategory},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
 };
 
 /// Create a shop item (DAO only)
@@ -45,15 +45,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         shop_item_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -67,45 +65,41 @@ pub fn process(
 
     // Minimum required: item_id(4) + item_type(2) + category(1) + rarity(1) +
     //                   qty(2) + stats(2) + sol(8) = 20 bytes
-    if instruction_data.len() < 20 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let item_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let item_type = u16::from_le_bytes(instruction_data[4..6].try_into().unwrap());
-    let category = instruction_data[6];
-    let rarity = instruction_data[7];
-    let quantity_per_purchase = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let base_stats_bps = u16::from_le_bytes(instruction_data[10..12].try_into().unwrap());
-    let price_sol_lamports = u64::from_le_bytes(instruction_data[12..20].try_into().unwrap());
+    let item_id = read_u32(instruction_data, 0, "item_id")?;
+    let item_type = read_u16(instruction_data, 4, "item_type")?;
+    let category = read_u8(instruction_data, 6, "category")?;
+    let rarity = read_u8(instruction_data, 7, "rarity")?;
+    let quantity_per_purchase = read_u16(instruction_data, 8, "quantity_per_purchase")?;
+    let base_stats_bps = read_u16(instruction_data, 10, "base_stats_bps")?;
+    let price_sol_lamports = read_u64(instruction_data, 12, "price_sol_lamports")?;
 
     // Optional fields with defaults
     let available_from = if instruction_data.len() >= 28 {
-        i64::from_le_bytes(instruction_data[20..28].try_into().unwrap())
+        read_i64(instruction_data, 20, "available_from")?
     } else { 0 };
 
     let available_until = if instruction_data.len() >= 36 {
-        i64::from_le_bytes(instruction_data[28..36].try_into().unwrap())
+        read_i64(instruction_data, 28, "available_until")?
     } else { 0 };
 
     let max_global_stock = if instruction_data.len() >= 44 {
-        u64::from_le_bytes(instruction_data[36..44].try_into().unwrap())
+        read_u64(instruction_data, 36, "max_global_stock")?
     } else { 0 };
 
     let max_per_player = if instruction_data.len() >= 48 {
-        u32::from_le_bytes(instruction_data[44..48].try_into().unwrap())
+        read_u32(instruction_data, 44, "max_per_player")?
     } else { 0 };
 
     let max_per_day = if instruction_data.len() >= 50 {
-        u16::from_le_bytes(instruction_data[48..50].try_into().unwrap())
+        read_u16(instruction_data, 48, "max_per_day")?
     } else { 0 };
 
     let is_active = if instruction_data.len() >= 51 {
-        instruction_data[50] != 0
+        read_u8(instruction_data, 50, "is_active")? != 0
     } else { true };
 
     let is_featured = if instruction_data.len() >= 52 {
-        instruction_data[51] != 0
+        read_u8(instruction_data, 51, "is_featured")? != 0
     } else { false };
 
     // 4. Validate Data

@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, WeeklySaleAccount, WeeklySaleTheme},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u64, read_i64},
 };
 
 /// Create a weekly sale (DAO only)
@@ -39,15 +39,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         weekly_sale_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -60,24 +58,20 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // week(8) + theme(1) + bonus_type(1) + bonus_value(2) + cats(8) + starts(8) + duration(1) = 29
-    if instruction_data.len() < 29 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let week_number = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let theme = instruction_data[8];
-    let bonus_type = instruction_data[9];
-    let bonus_value_bps = u16::from_le_bytes(instruction_data[10..12].try_into().unwrap());
+    let week_number = read_u64(instruction_data, 0, "week_number")?;
+    let theme = read_u8(instruction_data, 8, "theme")?;
+    let bonus_type = read_u8(instruction_data, 9, "bonus_type")?;
+    let bonus_value_bps = read_u16(instruction_data, 10, "bonus_value_bps")?;
 
     let category_discounts: [u16; 4] = [
-        u16::from_le_bytes(instruction_data[12..14].try_into().unwrap()),
-        u16::from_le_bytes(instruction_data[14..16].try_into().unwrap()),
-        u16::from_le_bytes(instruction_data[16..18].try_into().unwrap()),
-        u16::from_le_bytes(instruction_data[18..20].try_into().unwrap()),
+        read_u16(instruction_data, 12, "category_discount_0")?,
+        read_u16(instruction_data, 14, "category_discount_1")?,
+        read_u16(instruction_data, 16, "category_discount_2")?,
+        read_u16(instruction_data, 18, "category_discount_3")?,
     ];
 
-    let starts_at = i64::from_le_bytes(instruction_data[20..28].try_into().unwrap());
-    let duration_days = instruction_data[28];
+    let starts_at = read_i64(instruction_data, 20, "starts_at")?;
+    let duration_days = read_u8(instruction_data, 28, "duration_days")?;
 
     // 4. Validate Data
 

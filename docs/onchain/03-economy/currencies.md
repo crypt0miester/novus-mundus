@@ -1,374 +1,232 @@
 # Currencies
 
-> Understanding the multiple currency types in Novus Mundus and their purposes.
+> The dual-token model that separates gameplay fuel from market-tradeable value.
 
-## Currency Overview
+## Overview
 
-Novus Mundus uses a multi-currency economy designed to create distinct value propositions and prevent single-resource dominance:
-
-```mermaid
-graph TB
-    subgraph "Hard Currencies"
-        NOVI[NOVI Token<br/>Primary Currency]
-        GEMS[Gems<br/>Premium Currency]
-    end
-
-    subgraph "Soft Currencies"
-        CASH[Cash<br/>General Purpose]
-        FRAG[Fragments<br/>Crafting Material]
-        PROD[Produce<br/>Consumable Resource]
-    end
-
-    subgraph "Special"
-        XP[Experience<br/>Non-transferable]
-        MASTERY[Mastery Points<br/>Research Prestige]
-    end
-```
-
-## NOVI Token
-
-**Type:** SPL Token (on-chain)
-**Primary Use:** Core game actions, staking value
-
-NOVI is the blockchain-native currency that bridges real value with in-game economy.
-
-### NOVI States
-
-```mermaid
-stateDiagram-v2
-    [*] --> Wallet: Player owns
-    Wallet --> Locked: deposit (instruction 10)
-    Locked --> Reserved: convert
-    Reserved --> Wallet: withdraw (instruction 16)
-    Locked --> Burned: spend on actions
-```
-
-| State | Location | Can Spend | Can Withdraw |
-|-------|----------|-----------|--------------|
-| Wallet | Player's SPL Token Account | No | Yes (external) |
-| Locked | PlayerAccount.locked_novi | Yes | No |
-| Reserved | PlayerAccount.reserved_novi | No | Yes |
-
-### NOVI Uses
-
-| Action | NOVI Cost | Notes |
-|--------|-----------|-------|
-| **Hire Units** | 100 - 2,000 | Primary unit currency |
-| Start Expedition | 5,000 - 30,000 | Based on tier |
-| Research | 1,000 - 50,000 | Based on category |
-| Building Upgrade | 5,000 - 100,000 | Based on level |
-| Rally Creation | 10,000 | Refunded if cancelled |
-
-### NOVI Flow
-
-```mermaid
-graph LR
-    subgraph "Inflow"
-        BUY[Purchase] --> WALLET
-        EARN[Event Prizes] --> LOCKED
-        RAID[Rally Loot] --> LOCKED
-    end
-
-    subgraph "Player"
-        WALLET[Wallet]
-        LOCKED[Locked]
-        RESERVED[Reserved]
-    end
-
-    subgraph "Outflow"
-        LOCKED --> ACTIONS[Game Actions]
-        ACTIONS --> BURN[Burned]
-        RESERVED --> WITHDRAW[Withdraw]
-    end
-
-    WALLET -->|deposit| LOCKED
-    LOCKED -->|convert| RESERVED
-```
-
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - `locked_novi`, `reserved_novi`
-
----
-
-## Gems
-
-**Type:** In-game currency (off-chain tracking in PlayerAccount)
-**Primary Use:** Premium actions, speedups, convenience
-
-Gems are the premium currency earned through gameplay or purchased.
-
-### Gem Sources
-
-| Source | Amount | Frequency |
-|--------|--------|-----------|
-| Daily Login | 100-500 | Daily |
-| Mining Expeditions | 10-100 | Per expedition |
-| Event Prizes | 500-5,000 | Per event |
-| Shop Purchase | Variable | On demand |
-| Encounter Loot | 5-50 | Per kill |
-
-### Gem Uses
-
-| Action | Gem Cost | Effect |
-|--------|----------|--------|
-| Teleport | 500 | Instant intercity travel |
-| Expedition Speedup (T1) | ~100/min | 50% time reduction |
-| Expedition Speedup (T2) | ~200/min | 75% time reduction |
-| Rally Speedup | Variable | Based on remaining time |
-| Stamina Refill | 100 | Restore action points |
-| Research Speedup | Variable | Based on remaining time |
-
-### Gem Economy Design
-
-Gems serve as a **time-value exchange**:
-- Players with time earn gems through expeditions
-- Players without time spend gems to accelerate
-- Creates natural exchange value
+Novus Mundus uses a **dual-token architecture** built on a single SPL token mint (NOVI). The distinction is not in the token itself but in *which Program Derived Account owns the token account*. Locked NOVI fuels gameplay and cannot be withdrawn; Reserved NOVI is earned as prizes and rewards and can be withdrawn to a wallet after a 7-day vesting period.
 
 ```mermaid
 graph TB
-    subgraph "Gem Cycle"
-        A[Play Time] -->|expeditions| B[Earn Gems]
-        B -->|speedups| C[Save Time]
-        C -->|more expeditions| A
+    subgraph "Single NOVI Mint"
+        MINT[NOVI Mint PDA<br/>seeds: novi_mint_seed<br/>authority: GameEngine PDA]
     end
 
-    subgraph "Premium Path"
-        D[Real Money] --> E[Buy Gems]
-        E --> C
+    subgraph "Locked NOVI — Gameplay Fuel"
+        LTA[Player Token Account<br/>owner = PlayerAccount PDA]
+        PA[PlayerAccount.locked_novi<br/>cached balance]
+        LTA <-.->|in sync| PA
     end
+
+    subgraph "Reserved NOVI — Withdrawable Earnings"
+        RTA[User Token Account<br/>owner = UserAccount PDA]
+        UA[UserAccount.reserved_novi<br/>cached balance]
+        RTA <-.->|in sync| UA
+    end
+
+    subgraph "Wallet"
+        WAL[Wallet ATA<br/>owner = wallet keypair]
+    end
+
+    MINT -->|mint: update_locked_novi 10| LTA
+    MINT -->|"mint: mint_for_prize 14 / purchase_novi 300"| RTA
+    LTA -->|"burn: hire_units 11 / collect_resources 12 / purchase_equipment 13 / purchase_stamina 17"| MINT
+    RTA -->|SPL transfer: reserved_to_locked 15| LTA
+    RTA -->|SPL transfer: withdraw_reserved 16| WAL
 ```
 
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - `gems`
-
----
-
-## Cash
-
-**Type:** In-game soft currency
-**Primary Use:** Basic transactions, equipment, transfers
-
-Cash is the most common currency, freely earned and spent on everyday activities.
-
-### Cash Sources
-
-| Source | Amount | Notes |
-|--------|--------|-------|
-| Resource Collection | 100-1,000 | Location dependent |
-| Combat Victory | 50-500 | Based on opponent |
-| Daily Rewards | 500-2,000 | Streak bonus |
-| Selling Items | Variable | Market prices |
-
-### Cash Uses
-
-| Action | Cash Cost | Notes |
-|--------|-----------|-------|
-| Basic Equipment | 200-1,000 | Weapons, armor |
-| Transfer to Player | Any | Instruction 18 |
-| Shop Purchases | Variable | Some shop items |
-| Building Materials | Variable | Construction costs |
-
-**Note:** Unit hiring uses **locked NOVI**, not cash.
-
-### Cash Flow Pattern
+## NOVI Token Flows at a Glance
 
 ```mermaid
-graph LR
-    COLLECT[Collect Resources] --> CASH[Cash Balance]
-    COMBAT[Win Combat] --> CASH
-    CASH --> EQUIP[Buy Equipment]
-    CASH --> TRANSFER[Send to Friend]
-    CASH --> SHOP[Shop Purchases]
+flowchart LR
+    subgraph MINT_SRCS["Mint Sources"]
+        GEN["update_locked_novi (10)<br/>Subscription generation"]
+        PRIZE["mint_for_prize (14)<br/>DAO prize"]
+        BUY["purchase_novi (300)<br/>SOL → NOVI"]
+    end
+
+    subgraph POOLS["Token Pools"]
+        LOCKED["Locked NOVI<br/>PlayerAccount PDA"]
+        RESERVED["Reserved NOVI<br/>UserAccount PDA"]
+    end
+
+    subgraph SINKS["Sinks"]
+        BURN["Token Burn"]
+        WALLET["Wallet ATA"]
+    end
+
+    GEN -->|mint| LOCKED
+    PRIZE -->|mint| RESERVED
+    BUY -->|mint| RESERVED
+    RESERVED -->|"reserved_to_locked (15)<br/>SPL transfer"| LOCKED
+    LOCKED -->|"hire_units (11)"| BURN
+    LOCKED -->|"collect_resources (12)"| BURN
+    LOCKED -->|"purchase_equipment (13)"| BURN
+    LOCKED -->|"purchase_stamina (17)"| BURN
+    RESERVED -->|"withdraw_reserved (16)<br/>7-day vesting"| WALLET
 ```
 
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - `cash`
+## Currency Types
 
----
+### Locked NOVI
 
-## Fragments
+| Property | Detail |
+|----------|--------|
+| Cached field | `PlayerAccount.locked_novi: u64` |
+| Token account owner | `PlayerAccount` PDA |
+| PDA seeds | `[b"player", game_engine, owner_wallet]` |
+| Non-withdrawable | Token account is PDA-owned; no instruction transfers it to the wallet |
+| Minted by | `update_locked_novi` (10) |
+| Transferred in by | `reserved_to_locked` (15) — SPL transfer from reserved, not a mint |
+| Burned by | `hire_units` (11), `collect_resources` (12), `purchase_equipment` (13), `purchase_stamina` (17) |
+| Generation interval | 300 seconds (5 minutes) |
+| Generation rate | `SubscriptionTier.generation_multiplier` NOVI per interval |
+| Cap | `SubscriptionTier.max_locked_novi` × Vault building bonus multiplier |
+| Starter grant | 1,000,000 NOVI on player init (`STARTER_LOCKED_NOVI`) |
 
-**Type:** Crafting material
-**Primary Use:** Equipment forging, special items
+**Vault building cap bonus** (applied multiplicatively on top of tier base cap):
 
-Fragments are the backbone of the crafting economy.
+| Vault Level | Cap Bonus |
+|-------------|-----------|
+| 1-4 | +0% |
+| 5-9 | +50% |
+| 10-14 | +100% |
+| 15-19 | +150% |
+| 20+ | +200% |
 
-### Fragment Sources
+Cap formula:
+```
+effective_cap = base_cap × (10000 + vault_bonus_bps) / 10000
+```
 
-| Source | Amount | Notes |
-|--------|--------|-------|
-| Mining Expeditions | 5-50 | Secondary reward |
-| Fishing Expeditions | 5-30 | Secondary reward |
-| Encounter Loot | 10-100 | Based on tier |
-| Building Daily | 20-100 | Observatory bonus |
-| Dismantling | Variable | Equipment salvage |
+**Default subscription generation rates:**
 
-### Fragment Uses
+| Tier | Name | NOVI / 5 min | Base Max Cap |
+|------|------|--------------|--------------|
+| 0 | Rookie | 50 | 3,000 |
+| 1 | Expert | 100 | 6,000 |
+| 2 | Epic | 500 | 30,000 |
+| 3 | Legendary | 2,500 | 150,000 |
 
-| Action | Fragment Cost | Result |
-|--------|---------------|--------|
-| Basic Craft | 100 | Common equipment |
-| Quality Craft | 500 | Uncommon equipment |
-| Masterwork | 2,000 | Rare equipment |
-| Special Items | 5,000+ | Legendary tier |
+> **Note:** Default values from `GameEngine.subscription_tiers` — all DAO-adjustable. The program stores amounts with 1 raw decimal (multiply by 10 internally for precision); values above are the human-readable display amounts.
 
-### Fragment Economy
+When `locked_novi >= effective_cap`, the timestamp advances immediately and no tokens are generated — the "banking time" exploit is closed.
 
 ```mermaid
-graph TB
-    subgraph "Generation"
-        MINE[Mining] --> FRAG[Fragments]
-        FISH[Fishing] --> FRAG
-        ENCOUNTER[Encounters] --> FRAG
-    end
-
-    subgraph "Consumption"
-        FRAG --> FORGE[Forge Crafting]
-        FORGE --> EQUIP[Equipment]
-        EQUIP --> DISMANTLE[Dismantle]
-        DISMANTLE -->|50% return| FRAG
-    end
+flowchart TD
+    CALL["update_locked_novi called"] --> INTERVAL{"now - last_updated >= 300s?"}
+    INTERVAL -->|No| NOOP["return Ok — no-op"]
+    INTERVAL -->|Yes| CALC["intervals = elapsed / 300<br/>tokens = intervals × generation_rate"]
+    CALC --> CAP{"locked_novi >= effective_cap?"}
+    CAP -->|Yes| TIMESTAMP["Update timestamp only<br/>No mint — prevents time banking"]
+    CAP -->|No| MINT["mint min(tokens, cap - locked_novi)<br/>Update locked_novi + timestamp"]
 ```
 
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - `fragments`
+### Reserved NOVI
+
+| Property | Detail |
+|----------|--------|
+| Cached field | `UserAccount.reserved_novi: u64` |
+| Token account owner | `UserAccount` PDA |
+| PDA seeds | `[b"user", owner_wallet]` |
+| Withdrawable | Yes — after 7-day vesting: `RESERVED_NOVI_VESTING_PERIOD = 604_800` seconds |
+| Minted by | `mint_for_prize` (14) — DAO; `purchase_novi` (300) — player buys with SOL |
+| Converted to locked by | `reserved_to_locked` (15) — one-way, permanent SPL transfer |
+| Withdrawn to wallet by | `withdraw_reserved` (16) — SPL transfer after vesting |
+| Vesting clock | `UserAccount.reserved_novi_earned_at` — reset on every mint |
+
+> **CRITICAL:** `reserved_novi` is a field on `UserAccount`, not `PlayerAccount`. The `UserAccount` PDA is keyed by `[b"user", owner_wallet]`. Previous documentation that placed `reserved_novi` on `PlayerAccount` is wrong.
+
+The vesting guard in `withdraw_reserved`:
+```
+now - user.reserved_novi_earned_at >= RESERVED_NOVI_VESTING_PERIOD (604800 s = 7 days)
+```
+
+`purchase_novi` resets `reserved_novi_earned_at` to `now` on every purchase, ensuring fresh-minted tokens are always subject to the full 7-day window.
+
+### Cash
+
+| Property | Detail |
+|----------|--------|
+| Fields | `PlayerAccount.cash_on_hand: u64`, `PlayerAccount.cash_in_vault: u64` |
+| Token | Off-chain integer — no SPL token, program-internal only |
+| Source | `collect_resources` (12) collection type = Cash |
+| Transfer | `transfer_cash` (18): Expert+ subscription, same team; tier-based daily limits |
+| Vault | `vault_transfer` (19): moves between `cash_on_hand` ↔ `cash_in_vault` |
+| Vault protection cap | 75% of total cash (`gameplay_config.safebox_protection_percent = 7500` bps); 25% minimum stays on hand (lootable) |
+| Networth contribution | Yes — both `cash_on_hand` and `cash_in_vault` count |
+
+### Gems
+
+| Property | Detail |
+|----------|--------|
+| Field | `PlayerAccount.gems: u64` |
+| Source | `collect_resources` (12) collection type = Mining |
+| Sink | Expedition and research speedups |
+| Networth | No |
+
+### Produce
+
+| Property | Detail |
+|----------|--------|
+| Field | `PlayerAccount.produce: u64` |
+| Source | `collect_resources` (12) collection type = Fishing or Farming |
+| Sink | Consumed per `collect_resources` call based on operative units |
+| Networth | Yes — via `economic_config.produce_value` |
+
+### Stamina
+
+| Property | Detail |
+|----------|--------|
+| Fields | `PlayerAccount.encounter_stamina: u64`, `PlayerAccount.max_encounter_stamina: u64` |
+| Regeneration | 1 stamina per 300 seconds (`STAMINA_REGEN_INTERVAL`), modified by time-of-day |
+| Time multiplier | DeepNight = φ (1.618×), Dawn = √φ (1.272×), Midday = 1/φ (0.618×), Afternoon = 1/φ (0.618×), others = 1.0× |
+| Purchase | `purchase_stamina` (17): burns locked NOVI at `stamina_cost × cost_multiplier / 10000` per unit |
+| Consumed by | `attack_encounter` — cost varies by rarity |
+
+**Max stamina by subscription tier:**
+
+| Tier | Max Stamina |
+|------|-------------|
+| 0 Rookie | 100 |
+| 1 Expert | 500 |
+| 2 Epic | 1,000 |
+| 3 Legendary | 10,000 |
+
+**Stamina cost to attack encounters:**
+
+| Rarity | Cost |
+|--------|------|
+| Common | 10 |
+| Uncommon | 25 |
+| Rare | 50 |
+| Epic | 100 |
+| Legendary | 250 |
+| WorldEvent | 500 |
+
+## Instruction Reference
+
+| ID | Instruction | Token Operation | Notes |
+|----|-------------|-----------------|-------|
+| 10 | `update_locked_novi` | Mint → locked token account | 5-min interval; GameEngine PDA signs |
+| 11 | `hire_units` | Burn locked NOVI | PlayerAccount PDA signs burn |
+| 12 | `collect_resources` | Burn locked NOVI; credit cash/gems/produce | PlayerAccount PDA signs burn |
+| 13 | `purchase_equipment` | Burn locked NOVI | PlayerAccount PDA signs burn |
+| 14 | `mint_for_prize` | Mint → reserved token account | DAO authority only |
+| 15 | `reserved_to_locked` | SPL transfer reserved → locked | UserAccount PDA signs; one-way |
+| 16 | `withdraw_reserved` | SPL transfer reserved → wallet | 7-day vesting required; UserAccount PDA signs |
+| 17 | `purchase_stamina` | Burn locked NOVI | PlayerAccount PDA signs burn |
+| 18 | `transfer_cash` | Move `cash_on_hand` P2P | Expert+ sub; same team; daily limits |
+| 19 | `vault_transfer` | `cash_on_hand` ↔ `cash_in_vault` | Requires Vault building |
+| 300 | `purchase_novi` | Mint → reserved token account | SOL payment; oracle or fallback pricing |
+
+[Source: processor/economy/](../../../programs/novus_mundus/src/processor/economy/)
+[Source: processor/token/](../../../programs/novus_mundus/src/processor/token/)
+[Source: processor/shop/purchase_novi.rs](../../../programs/novus_mundus/src/processor/shop/purchase_novi.rs)
+[Source: constants.rs](../../../programs/novus_mundus/src/constants.rs)
+[Source: state/game_engine.rs](../../../programs/novus_mundus/src/state/game_engine.rs)
+[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs)
 
 ---
 
-## Produce
-
-**Type:** Consumable resource
-**Primary Use:** Unit sustenance, trading
-
-Produce represents food and supplies for maintaining armies.
-
-### Produce Sources
-
-| Source | Amount | Notes |
-|--------|--------|-------|
-| Fishing Expeditions | 15-100 | Primary reward |
-| Farm Collection | 50-200 | Location based |
-| Daily Claim | 100-500 | Estate bonus |
-
-### Produce Uses
-
-| Action | Produce Cost | Notes |
-|--------|--------------|-------|
-| Rally Sustenance | 10/unit/hour | March duration |
-| Unit Maintenance | 1/unit/day | Optional upkeep |
-| Trading | Variable | Player economy |
-
-### Produce Balance
-
-Produce creates a natural **army size limiter**:
-- Large armies consume more produce
-- Long rallies require significant stockpiles
-- Encourages efficient unit deployment
-
-```mermaid
-graph LR
-    FISH[Fishing] --> PROD[Produce]
-    FARM[Farming] --> PROD
-    PROD --> RALLY[Rally Supply]
-    PROD --> MAINTAIN[Unit Upkeep]
-```
-
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - `produce`
-
----
-
-## Experience & Mastery
-
-### Experience (XP)
-
-**Type:** Non-transferable progression metric
-**Primary Use:** Player leveling
-
-| Action | XP Gain |
-|--------|---------|
-| Complete Research | 100-1,000 |
-| Win Combat | 50-500 |
-| Complete Expedition | 25-200 |
-| Finish Building | 200-2,000 |
-| Travel | 10-50 |
-
-XP drives player level which unlocks:
-- UI features
-- Leaderboard eligibility
-- Certain content gates
-
-### Mastery Points
-
-**Type:** Research prestige currency
-**Primary Use:** Ascension benefits
-
-Earned through research completion and ascension resets:
-
-```mermaid
-graph TB
-    A[Complete Research] --> B[Gain Mastery]
-    B --> C{Ascend?}
-    C -->|Yes| D[Reset Progress]
-    D --> E[Permanent Bonus]
-    E --> F[Start Fresh]
-    F --> A
-    C -->|No| A
-```
-
-[Source: state/research.rs](../../../programs/novus_mundus/src/state/research.rs) - `mastery_points`
-
----
-
-## Currency Relationships
-
-```mermaid
-graph TB
-    subgraph "Earning"
-        TIME[Play Time] --> GEMS & CASH & FRAG & PROD
-        MONEY[Real Money] --> GEMS & NOVI
-    end
-
-    subgraph "Converting"
-        GEMS -->|speedup| TIME
-        NOVI -->|actions| POWER
-        CASH -->|equipment| POWER
-        FRAG -->|craft| EQUIP
-    end
-
-    subgraph "Outcome"
-        POWER[Military Power]
-        EQUIP[Equipment]
-        TIME
-    end
-```
-
-## Client Integration
-
-### Displaying Balances
-
-```javascript
-// All currencies from PlayerAccount
-const currencies = {
-  novi: {
-    locked: player.locked_novi,
-    reserved: player.reserved_novi,
-    // Wallet balance from SPL token account
-    wallet: await getTokenBalance(wallet, noviMint)
-  },
-  gems: player.gems,
-  cash: player.cash,
-  fragments: player.fragments,
-  produce: player.produce
-};
-```
-
-### Formatting
-
-| Currency | Format | Example |
-|----------|--------|---------|
-| NOVI | 2 decimals | 1,234.56 NOVI |
-| Gems | Integer with icon | 💎 5,000 |
-| Cash | Integer with $ | $12,345 |
-| Fragments | Integer | 🔷 890 |
-| Produce | Integer | 🌾 2,500 |
-
----
-
-Next: [Resource Flow](./resource-flow.md) - Sources, sinks, and circulation
+Next: [Resource Flow](./resource-flow.md)

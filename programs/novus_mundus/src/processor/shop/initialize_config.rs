@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
 };
 use pinocchio_system::instructions::CreateAccount;
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopConfigAccount},
     validation::{require_signer, require_writable, require_key_match},
+    utils::read_u16,
 };
 
 /// Initialize shop configuration (DAO only)
@@ -36,15 +36,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         shop_config_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -80,10 +78,10 @@ pub fn process(
     let mut max_total_discount_bps: u16 = 7500;     // 75%
 
     if instruction_data.len() >= 8 {
-        let parsed_base = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-        let parsed_bundle = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-        let parsed_fib = u16::from_le_bytes([instruction_data[4], instruction_data[5]]);
-        let parsed_total = u16::from_le_bytes([instruction_data[6], instruction_data[7]]);
+        let parsed_base = read_u16(instruction_data, 0, "max_base_discount_bps")?;
+        let parsed_bundle = read_u16(instruction_data, 2, "max_bundle_discount_bps")?;
+        let parsed_fib = read_u16(instruction_data, 4, "max_fib_discount_bps")?;
+        let parsed_total = read_u16(instruction_data, 6, "max_total_discount_bps")?;
 
         if parsed_base > 0 { max_base_discount_bps = parsed_base; }
         if parsed_bundle > 0 { max_bundle_discount_bps = parsed_bundle; }

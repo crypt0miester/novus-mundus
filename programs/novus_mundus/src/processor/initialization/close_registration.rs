@@ -8,7 +8,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -35,9 +34,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [caller, game_engine_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [caller, game_engine_account]);
 
     // 2. Load game engine mutably
     let mut game_engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;

@@ -456,9 +456,14 @@ pub const TOKEN_PAYMENT_ACCOUNTS: usize = 7;
 ///
 /// `token_accounts` must be `TOKEN_PAYMENT_ACCOUNTS` (7) entries — see the
 /// constant's docstring for the slot order.
+///
+/// `treasury_wallet` is the DAO-configured treasury (`game_engine.treasury_wallet`);
+/// the `treasury_token_ata` slot is pinned to it so a buyer cannot redirect
+/// payment to a token account they control.
 pub fn process_token_payment_flow(
     token_accounts: &[AccountView],
     game_engine_key: &Address,
+    treasury_wallet: &Address,
     program_id: &Address,
     shop_config: &ShopConfigAccount,
     buyer: &AccountView,
@@ -487,6 +492,12 @@ pub fn process_token_payment_flow(
     if !buyer_token_ata.is_writable() || !treasury_token_ata.is_writable() {
         return Err(ProgramError::InvalidAccountData);
     }
+
+    // Pin the payment destination: the treasury token account's authority
+    // must be the DAO-configured treasury wallet. Without this a buyer can
+    // pass a token account they control as `treasury_token_ata` and pay
+    // themselves while the purchase still completes — a free purchase.
+    validate_token_account_owner(treasury_token_ata, treasury_wallet)?;
 
     let allowed_token = AllowedTokenAccount::load_checked(
         allowed_token_account,

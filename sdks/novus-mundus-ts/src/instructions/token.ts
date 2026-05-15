@@ -9,6 +9,7 @@
 import {
   PublicKey,
   TransactionInstruction,
+  SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
@@ -18,7 +19,7 @@ import {
   derivePlayerPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Reserved to Locked
 
@@ -119,14 +120,16 @@ export interface WithdrawReservedParams {
  * - User wallet token account: OWNED BY user wallet (standard ATA)
  * - UserAccount PDA signs the transfer
  *
- * # Accounts (7 total)
+ * # Accounts (9 total)
  * 1. user (writable) - UserAccount PDA
- * 2. owner (signer) - Wallet that owns the UserAccount PDA
+ * 2. owner (signer, writable) - Wallet that owns the UserAccount PDA
  * 3. reserved_token_account (writable) - Token account OWNED BY UserAccount PDA
- * 4. user_wallet_token_account (writable) - User's wallet token account (ATA)
+ * 4. user_wallet_token_account (writable) - User's wallet NOVI ATA (created if missing)
  * 5. game_engine - GameEngine PDA
  * 6. novi_mint - NOVI token mint
  * 7. token_program - SPL Token program
+ * 8. system_program - System program
+ * 9. associated_token_program - Associated Token program
  */
 export function createWithdrawReservedInstruction(
   accounts: WithdrawReservedAccounts,
@@ -142,12 +145,14 @@ export function createWithdrawReservedInstruction(
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: reservedTokenAccount, isSigner: false, isWritable: true },
     { pubkey: userWalletTokenAccount, isSigner: false, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: noviMint, isSigner: false, isWritable: false },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: amount (u64)

@@ -23,6 +23,11 @@ ROOT_DIR="$SDK_DIR/../.."
 NOVUS_MUNDUS_SO="$ROOT_DIR/target/deploy/novus_mundus.so"
 BIN_DIR="$SDK_DIR/programs/.bin"
 
+# DAO authority keypair — set as the program's upgrade authority so that
+# `novus init` (which requires the signer to be the program upgrade
+# authority) can initialize the GameEngine.
+DAO_AUTHORITY="$SDK_DIR/keys/dao-authority.json"
+
 # Program IDs
 NOVUS_MUNDUS_PROGRAM_ID="J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V"
 MPL_CORE_PROGRAM_ID="CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
@@ -100,8 +105,12 @@ CMD="solana-test-validator"
 CMD="$CMD --ledger $LEDGER_DIR"
 CMD="$CMD --reset"
 
-# Load programs
-CMD="$CMD --bpf-program $NOVUS_MUNDUS_PROGRAM_ID $NOVUS_MUNDUS_SO"
+# Load programs.
+# Novus Mundus is loaded as UPGRADEABLE with the DAO keypair as upgrade
+# authority — `init_game_engine` calls assert_is_program_authority(), which
+# rejects any signer that is not the program's upgrade authority. A plain
+# --bpf-program load leaves the authority null, so init fails with 6001.
+CMD="$CMD --upgradeable-program $NOVUS_MUNDUS_PROGRAM_ID $NOVUS_MUNDUS_SO $DAO_AUTHORITY"
 CMD="$CMD --bpf-program $MPL_CORE_PROGRAM_ID $BIN_DIR/mpl_core.so"
 CMD="$CMD --bpf-program $TLD_HOUSE_PROGRAM_ID $BIN_DIR/tld_house.so"
 CMD="$CMD --bpf-program $ALT_NAME_SERVICE_PROGRAM_ID $BIN_DIR/alt_name_service.so"

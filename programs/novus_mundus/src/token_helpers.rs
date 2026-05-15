@@ -7,14 +7,14 @@ use pinocchio::{
     AccountView,
     ProgramResult,
 };
-use pinocchio_associated_token_account::instructions::CreateIdempotent;
+use pinocchio_associated_token_account::instructions::Create;
 
-/// Get or create an associated token account
+/// Create an associated token account
 ///
-/// Uses CreateIdempotent which:
-/// - Creates the ATA if it doesn't exist
-/// - Returns success if it already exists with correct owner
-/// - Returns error if it exists with wrong owner
+/// Uses the non-idempotent `Create` instruction, which:
+/// - Creates the ATA, deriving and verifying the canonical ATA address
+/// - Returns an error if an account already exists at that address
+///   (e.g. a front-run creation) — callers must treat this as fatal
 ///
 /// # Arguments
 /// * `funding_account` - Payer for account creation (must be signer)
@@ -25,8 +25,8 @@ use pinocchio_associated_token_account::instructions::CreateIdempotent;
 /// * `token_program` - SPL Token program
 ///
 /// # Returns
-/// Ok(()) on success (account created or already exists)
-pub fn get_or_create_associated_token_account<'a>(
+/// Ok(()) once the ATA has been created
+pub fn create_associated_token_account<'a>(
     funding_account: &'a AccountView,
     account: &'a AccountView,
     wallet: &'a AccountView,
@@ -34,7 +34,7 @@ pub fn get_or_create_associated_token_account<'a>(
     system_program: &'a AccountView,
     token_program: &'a AccountView,
 ) -> ProgramResult {
-    let create_ix = CreateIdempotent {
+    let create_ix = Create {
         funding_account,
         account,
         wallet,

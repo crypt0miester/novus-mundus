@@ -1,8 +1,23 @@
-# Forge System State Machine
+# Forge State Machine
 
 ## Overview
 
-The Forge system enables crafting of quality equipment using the **Staged Tempering** mechanic. Players must time their "strikes" within precise windows across multiple stages to successfully craft higher-tier items. This creates a skill-based, deterministic crafting experience.
+The Forge system uses **Staged Tempering** — a skill-based crafting mechanic where the player must call `strike` within a precise time window for each tempering stage. Missing any window fails the entire craft with no refund. The final strike auto-completes the craft — there is no separate completion instruction.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> WaitingForWindow : "start_craft<br/>(NOVI + materials burned)"
+
+    WaitingForWindow --> WindowOpen : "now >= window_opens_at"
+
+    WindowOpen --> WaitingForWindow : "strike() — stage N complete<br/>(stages_completed < stages_required - 1)"
+    WindowOpen --> Idle : "strike() — final stage<br/>(item added to inventory, mastery XP granted)"
+    WindowOpen --> Idle : "now > window_closes_at<br/>(detected on next strike)<br/>CraftWindowMissed — all materials lost"
+
+    Idle --> Idle : "abandon_craft<br/>(no refund, failed_crafts++)"
+```
 
 ---
 
@@ -12,279 +27,249 @@ The Forge system enables crafting of quality equipment using the **Staged Temper
 
 | State | Description |
 |-------|-------------|
-| `Idle` | No active craft |
-| `WaitingForWindow` | Stage scheduled, window not yet open |
-| `WindowOpen` | Player can strike |
-| `StageComplete` | Stage successful, next stage scheduled |
-| `Completed` | All stages done, item created |
-| `Failed` | Window missed, craft failed |
+| `Idle` | No active craft (`active_craft_equipment == 255`) |
+| `WaitingForWindow` | Craft started, waiting for next stage window to open |
+| `WindowOpen` | Player can call `strike` right now |
+| `Failed` | Window was missed; craft cleared on next `strike` call |
 
-### State Diagram
+### State Diagram (ASCII reference)
 
 ```
-┌────────────────┐  start_craft    ┌────────────────┐
-│                │ ──────────────> │                │
-│      Idle      │                 │WaitingForWindow│
-│                │                 │                │
-└────────────────┘                 └───────┬────────┘
-       ▲                                   │
-       │                                   │ window_opens_at elapsed
-       │                                   ▼
-       │                           ┌────────────────┐
-       │                           │                │
-       │ abandon_craft             │  WindowOpen    │◄─────────────┐
-       │                           │                │              │
-       │                           └───────┬────────┘              │
-       │                                   │                       │
-       │              ┌────────────────────┼────────────────┐      │
-       │              │ strike             │ window_closes  │      │
-       │              ▼                    ▼                │      │
-       │      ┌─────────────┐      ┌─────────────┐         │      │
-       │      │             │      │             │         │      │
-       │      │StageComplete│      │   Failed    │─────────┤      │
-       │      │             │      │             │         │      │
-       │      └──────┬──────┘      └─────────────┘         │      │
-       │             │                                      │      │
-       │             │ more stages?                         │      │
-       │             ├─── yes ──────────────────────────────┘      │
-       │             │                                             │
-       │             │ no (all stages done)                        │
-       │             ▼                                             │
-       │      ┌─────────────┐                                      │
-       │      │             │                                      │
-       └──────│  Completed  │                                      │
-              │             │                                      │
-              └─────────────┘                                      │
+┌──────────┐  start_craft    ┌──────────────────┐
+│          │ ──────────────> │                  │
+│   Idle   │                 │  WaitingForWindow│
+│          │                 │  (stage 1 queued)│
+└──────────┘                 └────────┬─────────┘
+     ▲                                │ now >= window_opens_at
+     │                                ▼
+     │                       ┌──────────────────┐
+     │  all stages done       │                  │
+     │ <──────────────────── │   WindowOpen     │
+     │  (auto-complete)       │                  │
+     │                        └─────┬────────────┘
+     │                              │ strike called within window
+     │                              │ stages_completed < stages_required
+     │                              ▼
+     │                       ┌──────────────────┐
+     │                       │  WaitingForWindow│
+     │                       │  (next stage)    │
+     │                       └──────────────────┘
+     │
+     │   abandon_craft                window_closes_at passed
+     └── <─────────────────────────── (detected on next strike call)
+         (materials lost)              → Failed → cleared
 ```
 
 ### Transitions
 
 #### `Idle` → `WaitingForWindow`
 ```
-Trigger: start_craft
+Trigger: start_craft(equipment_type, quality_tier)
 Guards:
-  - Player has Forge building active
-  - Forge level >= tier.required_forge_level()
-  - Forge mastery >= tier.required_mastery_level()
-  - Sufficient materials for tier
-  - Sufficient locked NOVI for tier
-  - No active craft in progress
+  - active_craft_equipment == 255 (no craft in progress)
+  - Forge building exists and is active, level >= quality_tier.required_forge_level()
+    - Refined: Lv 1, Superior: Lv 5, Elite: Lv 8, Masterwork: Lv 12
+    - Legendary: Lv 16, Mythic: Lv 18, Divine: Lv 20
+  - quality_tier != Common (0)
+  - player.locked_novi >= quality_tier.novi_cost()
+  - player.inventory >= quality_tier.material_cost()
 Actions:
-  - Deduct materials (varies by tier)
-  - Deduct NOVI cost
-  - Set active_craft_equipment = equipment_type
-  - Set target_tier = quality_tier
-  - Set stages_required = tier.stages_required()
-  - Set current_stage = 1
-  - Set stages_completed = 0
-  - Calculate window_opens_at = now + stage_interval
-  - Calculate window_closes_at = window_opens_at + window_duration
-  - Set craft_started_at = now
+  - Burn NOVI from player token account
+  - Deduct materials from player inventory
+  - crafted.active_craft_equipment = equipment_type
+  - crafted.target_tier = quality_tier
+  - crafted.stages_required = calculate_stages_required(quality_tier, forge_level)
+  - crafted.current_stage = 1
+  - crafted.stages_completed = 0
+  - crafted.window_opens_at  = now + stage_interval_secs(quality_tier)
+  - crafted.window_closes_at = window_opens_at + calculate_window_duration(quality_tier, forge_level)
+  - crafted.craft_started_at = now
+  - crafted.precision_score = 0
+  - crafted.total_novi_spent += novi_cost
   - Emit CraftStarted
 ```
 
-#### `WaitingForWindow` → `WindowOpen`
+#### `WaitingForWindow` → `WindowOpen` (Automatic)
 ```
 Trigger: Time passage
 Guards:
   - now >= window_opens_at
   - now <= window_closes_at
 Actions:
-  - Window is open for striking
-  - No state field change (computed)
+  - Strike window becomes available (no state change needed)
 ```
 
-#### `WindowOpen` → `StageComplete`
+#### `WindowOpen` → `WaitingForWindow` (stage success, more stages remain)
 ```
-Trigger: strike
+Trigger: strike()
 Guards:
-  - Active craft in progress
-  - Window is open (window_opens_at <= now <= window_closes_at)
-  - Game authority co-signs (validates timing)
+  - active_craft_equipment != 255
+  - now >= window_opens_at AND now <= window_closes_at
+  - stages_completed < stages_required - 1
 Actions:
-  - Calculate precision score (how centered in window)
-  - Accumulate precision_score
-  - Increment stages_completed
-  - Increment current_stage
-  - Award mastery XP
-  - If current_stage <= stages_required:
-    - Schedule next window
-  - Emit StageStruck
+  - precision = calculate_precision(now)    // 0-10000
+  - precision_score += precision
+  - stages_completed++
+  - current_stage++
+  - window_opens_at  = now + stage_interval_secs(quality_tier)
+  - window_closes_at = window_opens_at + calculate_window_duration(quality_tier, forge_level)
+  - Emit CraftStrike
 ```
 
-#### `StageComplete` → `WaitingForWindow`
+#### `WindowOpen` → `Idle` (final stage — auto-complete)
 ```
-Trigger: Automatic (if more stages remain)
+Trigger: strike()
 Guards:
-  - current_stage <= stages_required
+  - active_craft_equipment != 255
+  - now within window
+  - stages_completed >= stages_required - 1  (this is the last stage)
 Actions:
-  - Calculate next window_opens_at
-  - Calculate next window_closes_at
-```
-
-#### `StageComplete` → `Completed`
-```
-Trigger: Automatic (all stages done)
-Guards:
-  - stages_completed >= stages_required
-Actions:
-  - Add crafted item to quality_counts
-  - Increment total_crafts
-  - Increment successful_crafts
-  - Increase Forge mastery
-  - Clear craft state
+  - precision_score += precision
+  - stages_completed++
+  - Add 1 to quality_counts[equipment_type].counts[quality_tier]
+  - successful_crafts++
+  - total_crafts++
+  - clear_craft()                            // reset all active craft fields
+  - Grant Forge mastery XP to BuildingSlot  // see Mastery XP section
   - Emit CraftCompleted
 ```
 
-#### `WindowOpen` → `Failed`
+#### `WindowOpen` (or any) → `Idle` (window missed — detected on next strike)
 ```
-Trigger: Time passage (window missed)
+Trigger: strike() called after window_closes_at
 Guards:
+  - active_craft_equipment != 255
   - now > window_closes_at
-  - Window not struck
 Actions:
-  - Materials are LOST
-  - Increment total_crafts
-  - Increment failed_crafts
-  - Award partial mastery XP (for completed stages)
-  - Clear craft state
-  - Emit CraftFailed
+  - failed_crafts++
+  - total_crafts++
+  - clear_craft()
+  - Return Err(CraftWindowMissed)
 ```
 
-#### Any → `Idle`
+#### Any → `Idle` (abandon)
 ```
-Trigger: abandon_craft
+Trigger: abandon_craft()
 Guards:
-  - Active craft in progress
+  - active_craft_equipment != 255
 Actions:
-  - Materials are LOST (no refund)
-  - Clear craft state
+  - failed_crafts++
+  - total_crafts++
+  - clear_craft()
   - Emit CraftAbandoned
+  (NO refund of NOVI or materials)
 ```
 
 ---
 
-## 2. Quality Tiers
+## 2. Stage Parameters
 
-### Tier Requirements
+### Stages Required (base values, Forge Lv 0)
 
-| Tier | Forge Lvl | Mastery | Stages | Window | NOVI Cost |
-|------|-----------|---------|--------|--------|-----------|
-| Refined | 1 | 1 | 1 | 1 hour | 1,000 |
-| Superior | 5 | 5 | 2 | 30 min | 2,618 |
-| Elite | 8 | 15 | 3 | 15 min | 6,854 |
-| Masterwork | 12 | 30 | 5 | 5 min | 17,944 |
-| Legendary | 16 | 50 | 8 | 2 min | 46,979 |
-| Mythic | 18 | 75 | 11 | 1.5 min | 122,991 |
-| Divine | 20 | 100 | 13 | 1 min | 322,069 |
+| Tier | Base Stages | Forge Lv 5 | Forge Lv 10 | Forge Lv 20 |
+|------|-------------|------------|-------------|-------------|
+| Refined (1) | 1 | 1 | 1 | 1 |
+| Superior (2) | 2 | 1 | 1 | 1 |
+| Elite (3) | 3 | 2 | 2 | 1 |
+| Masterwork (4) | 5 | 4 | 3 | 1 |
+| Legendary (5) | 8 | 7 | 6 | 4 |
+| Mythic (6) | 11 | 10 | 9 | 7 |
+| Divine (7) | 13 | 12 | 11 | 9 |
 
-### Stage Intervals
+Formula: `max(1, base_stages - forge_level / 5)`
 
-| Tier | Interval | Description |
-|------|----------|-------------|
-| Refined | 60s | Relaxed pace |
-| Superior | 50s | Comfortable |
-| Elite | 40s | Focused |
-| Masterwork | 30s | Demanding |
-| Legendary | 25s | Intense |
-| Mythic | 20s | Expert |
-| Divine | 15s | Mastery required |
+### Window Duration (`base + base × forge_level × 5 / 100`, cap +100%)
 
----
+| Tier | Base Window | Forge Lv 10 (+50%) | Forge Lv 20 (+100%) |
+|------|------------|-------------------|---------------------|
+| Refined | 3600s (1h) | 5400s | 7200s |
+| Superior | 1800s | 2700s | 3600s |
+| Elite | 900s | 1350s | 1800s |
+| Masterwork | 300s | 450s | 600s |
+| Legendary | 120s | 180s | 240s |
+| Mythic | 90s | 135s | 180s |
+| Divine | 60s | 90s | 120s |
 
-## 3. Material Requirements
+### Stage Intervals (fixed, not affected by Forge level)
 
-### Per-Tier Material Cost
-
-| Tier | Common | Uncommon | Rare | Epic | Legendary |
-|------|--------|----------|------|------|-----------|
-| Refined | 50 | - | - | - | - |
-| Superior | 100 | 25 | - | - | - |
-| Elite | - | 100 | 25 | - | - |
-| Masterwork | - | - | 100 | 25 | - |
-| Legendary | - | - | - | 100 | 25 |
-| Mythic | - | - | - | - | 200 |
-| Divine | - | - | - | - | 400 |
+| Tier | Interval Between Stages |
+|------|------------------------|
+| Refined | 60s |
+| Superior | 50s |
+| Elite | 40s |
+| Masterwork | 30s |
+| Legendary | 25s |
+| Mythic | 20s |
+| Divine | 15s |
 
 ---
 
-## 4. Precision System
+## 3. Precision Scoring
 
-### Precision Score Calculation
+```mermaid
+graph LR
+    STRIKE["strike() called<br/>(window open)"] --> CENTER["window_center = opens + duration/2"]
+    CENTER --> DIST["distance = abs(now - center)"]
+    DIST --> PREC["precision = 10000 - (distance × 10000 / max_distance)"]
+    PREC --> ACCUM["precision_score += precision"]
+    ACCUM --> DONE{"Final stage?"}
+    DONE -->|"Yes"| AVG["avg = precision_score / stages_completed<br/>mastery XP += avg / 100"]
+    DONE -->|"No"| NEXT["Next window scheduled"]
 ```
-window_center = (window_opens_at + window_closes_at) / 2
-distance_from_center = |now - window_center|
-max_distance = window_duration / 2
 
-precision = 10000 × (1 - distance_from_center / max_distance)
+Each strike records:
+```rust
+let window_center = window_opens_at + (window_duration / 2);
+let distance_from_center = (now - window_center).abs();
+let max_distance = window_duration / 2;
+let precision = 10000 - (distance_from_center × 10000 / max_distance);
+precision_score += precision.max(0);
 ```
 
-### Precision Effects
-- **Perfect (9000+)**: Bonus mastery XP
-- **Good (7000-8999)**: Standard completion
-- **Fair (5000-6999)**: Reduced mastery XP
-- **Poor (0-4999)**: Minimal mastery XP
+Average precision at completion:
+```rust
+let avg_precision = precision_score / stages_completed;
+```
 
-### Average Precision Score
-```
-average_precision = total_precision / stages_completed
-```
+Used for mastery XP bonus: `+avg_precision / 100` XP.
 
 ---
 
-## 5. Equipment System
+## 4. Equip State
 
-### Craftable Equipment Types
+After successful crafting, items sit in `quality_counts`. The `equip` instruction sets the active tier for a given slot:
 
-| Type | Effect | Applies To |
-|------|--------|------------|
-| Melee Weapons | Attack damage bonus | Close combat |
-| Ranged Weapons | Attack damage bonus | Ranged combat |
-| Siege Weapons | Attack damage bonus | Siege combat |
-| Armor | Damage reduction | Defense |
-
-### Tier Bonuses (when equipped)
-
-| Tier | Bonus |
-|------|-------|
-| Refined | +2.5% |
-| Superior | +5% |
-| Elite | +10% |
-| Masterwork | +15% |
-| Legendary | +25% |
-| Mythic | +40% |
-| Divine | +60% |
-
-### Equipping
 ```
-Trigger: equip_item
+Trigger: equip(equipment_type, quality_tier)
 Guards:
-  - Has crafted item of type and tier
-  - Item count > 0
+  - quality_tier in [0, 7]
+  - if quality_tier > 0: crafted.has_crafted_item(equipment_type, quality_tier) == true
 Actions:
-  - Set active_{type}_tier = tier
-  - Update player.equipped_weapon_bonus_bps (sum of weapons)
-  - Update player.equipped_armor_bonus_bps
+  - active_[melee/ranged/siege/armor]_tier = quality_tier
+  - player.equipped_weapon_bonus_bps = sum of tier_to_bonus_bps() for all 3 weapon slots
+  - player.equipped_armor_bonus_bps = tier_to_bonus_bps(active_armor_tier)
   - Emit ItemEquipped
 ```
 
+Passing `quality_tier = 0` unequips the slot (bonus drops to 0).
+
 ---
 
-## 6. Account Structure
+## 5. Account Structure
 
-### CraftedEquipmentAccount (196 bytes)
+### CraftedEquipmentAccount
+
 ```rust
+#[repr(C)]
 pub struct CraftedEquipmentAccount {
-    pub owner: Pubkey,
+    pub owner: Address,                   // 32
 
-    // Quality counts per type (4 × 32 bytes)
-    pub melee_weapons: QualityCounts,    // [u32; 8]
-    pub ranged_weapons: QualityCounts,
-    pub siege_weapons: QualityCounts,
-    pub armor: QualityCounts,
+    pub melee_weapons: QualityCounts,     // 32 — [u32; 8] counts per tier
+    pub ranged_weapons: QualityCounts,    // 32
+    pub siege_weapons: QualityCounts,     // 32
+    pub armor: QualityCounts,             // 32
 
-    // Active craft state (40 bytes)
-    pub active_craft_equipment: u8,      // 255 = none
+    pub active_craft_equipment: u8,       // 255 = idle
     pub target_tier: u8,
     pub stages_required: u8,
     pub current_stage: u8,
@@ -294,55 +279,54 @@ pub struct CraftedEquipmentAccount {
     pub craft_started_at: i64,
     pub precision_score: u16,
 
-    // Stats (20 bytes)
     pub total_crafts: u32,
     pub successful_crafts: u32,
     pub failed_crafts: u32,
     pub total_novi_spent: u64,
 
-    // Equipped tiers (4 bytes)
     pub active_melee_tier: u8,
     pub active_ranged_tier: u8,
     pub active_siege_tier: u8,
     pub active_armor_tier: u8,
 
     pub bump: u8,
+    pub _padding: [u8; 3],
 }
+// Seeds: ["crafted_equipment", owner_wallet]
+// AccountKey::ForgeSession = 46
 ```
 
-### QualityCounts (32 bytes)
-```rust
-pub struct QualityCounts {
-    pub counts: [u32; 8],  // Count at each quality tier
-}
+[Source: state/estate.rs](../../programs/novus_mundus/src/state/estate.rs)
+
+---
+
+## 6. Mastery XP Formula
+
+```
+base_xp    = tier_base_mastery_xp[quality_tier]
+             (Refined=10, Superior=25, Elite=50, Masterwork=100,
+              Legendary=200, Mythic=400, Divine=800)
+prec_bonus = avg_precision / 100
+raw_xp     = base_xp + prec_bonus
+final_xp   = apply_bp_bonus(raw_xp, estate.mastery_bonus_bps)  // daily mini-game bonus
+
+Forge.mastery_xp += final_xp
+while mastery_xp >= 100 × (mastery_level+1)² and mastery_level < 100:
+    mastery_xp -= threshold
+    mastery_level++
 ```
 
 ---
 
-## 7. Building Integration
-
-### Forge Building Requirements
-- **Unlock**: Estate Level 16
-- **Initial Craft Tier**: Refined (Forge Level 1)
-- **Per-Level Buff**: +1.5% craft success rate
-
-### Forge Mastery
-- Separate from building level
-- Increases from successful crafts
-- Gates access to higher tiers
-
----
-
-## 8. Invariants
+## 7. Invariants
 
 ```
-1. Only one active craft per player
-2. Window cannot be struck twice
-3. Materials consumed at start (not recoverable)
-4. stages_completed <= stages_required
-5. current_stage = stages_completed + 1 (during craft)
-6. Equipped tier must have count > 0 in quality_counts
-7. Window duration decreases with tier
-8. Stage interval decreases with tier
-9. active_craft_equipment == 255 when idle
+1. At most one craft active at a time (active_craft_equipment == 255 when idle)
+2. stages_completed <= stages_required at all times
+3. window_closes_at > window_opens_at for all active windows
+4. NOVI and materials are burned on start_craft — no recovery
+5. quality_counts[tier].counts[0] (Common) is always 0 (cannot craft Common)
+6. active_*_tier in [0, 7]; 0 = unequipped
+7. has_crafted_item(type, tier) must return true before equip(type, tier>0)
+8. CraftWindowMissed clears craft state — next start_craft can proceed
 ```

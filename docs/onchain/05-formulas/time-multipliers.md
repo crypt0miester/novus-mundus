@@ -1,445 +1,217 @@
 # Time Multipliers
 
-> Time-of-day bonuses and duration calculations across game systems.
+> The 7-period day cycle and golden-ratio activity multipliers that modulate every gameplay action.
 
 ## Overview
 
-Novus Mundus uses **time-of-day multipliers** to add strategic depth. Activities yield different results depending on when they're performed, based on the **local time** at the player's current location.
+Novus Mundus uses a **location-aware, deterministic day cycle** divided into 7 periods. Every economically or militarily significant action is modified by a multiplier drawn from the golden ratio family. The same timestamp and longitude always produce the same result — no hidden randomness.
 
 ```mermaid
 graph LR
-    subgraph "Time of Day"
-        MORN[Morning<br/>6:00-12:00]
-        AFT[Afternoon<br/>12:00-18:00]
-        EVE[Evening<br/>18:00-22:00]
-        NIGHT[Night<br/>22:00-6:00]
+    subgraph "Input"
+        TS[Unix Timestamp]
+        LON[Longitude -180 to +180]
     end
-
-    subgraph "Activities"
-        TRAVEL[Travel]
-        MINING[Mining]
-        FISHING[Fishing]
-        COMBAT[Combat]
+    subgraph "Normalization"
+        POS["cycle_position = ts mod 86400"]
+        GLOBAL["global_time = (cycle_position × 1000) / 86400"]
+        OFFSET["longitude_offset = ((lon + 180) / 360) × 1000"]
+        LOCAL["local_time = (global_time + longitude_offset) mod 1000"]
     end
+    subgraph "Period Lookup"
+        PERIOD[TimeOfDay enum<br/>0..=124 DeepNight<br/>125..=249 Dawn<br/>250..=374 Morning<br/>375..=624 Midday<br/>625..=749 Afternoon<br/>750..=874 Dusk<br/>875..=999 Evening]
+    end
+    subgraph "Multiplier"
+        TABLE["get_time_multiplier(period, activity)"]
+        PHI_FAM[φ family: 2.618 / 1.618 / 1.272 / 1.0 / 0.618 / 0.382 / 0.236]
+    end
+    TS --> POS --> GLOBAL --> LOCAL
+    LON --> OFFSET --> LOCAL
+    LOCAL --> PERIOD --> TABLE --> PHI_FAM
 ```
 
-## Local Time Calculation
+## Golden Ratio Constants
 
-Time-of-day is calculated based on the player's **longitude**:
+All multipliers are exact values from `constants.rs`:
 
-```rust
-fn get_time_of_day(unix_timestamp: i64, longitude: f64) -> TimeOfDay {
-    // Convert longitude to timezone offset (15° per hour)
-    let timezone_offset_hours = longitude / 15.0;
-    let offset_seconds = (timezone_offset_hours * 3600.0) as i64;
+| Constant | Value | Symbol | Used For |
+|----------|-------|--------|----------|
+| `PHI` | 1.618033988749895 | φ | Strong bonus |
+| `GOLDEN_ROOT` | 1.2720196495140689 | √φ | Moderate bonus |
+| `PHI_SQUARED` | 2.618033988749895 | φ² | Legendary tier / golden hour |
+| `PHI_INVERSE` | 0.6180339887498949 | 1/φ | Strong penalty |
+| `PHI_SQUARED_INVERSE` | 0.3819660112501051 | 1/φ² | Epic day spawn penalty |
+| `PHI_CUBED_INVERSE` | 0.2360679774997897 | 1/φ³ | Legendary day spawn penalty |
 
-    // Get local time
-    let local_timestamp = unix_timestamp + offset_seconds;
-    let local_hour = ((local_timestamp % 86400) / 3600) as u8;
+Key relationships: (√φ)² = φ, φ × (1/φ) = 1, φ² = φ + 1.
 
-    match local_hour {
-        6..=11 => TimeOfDay::Morning,
-        12..=17 => TimeOfDay::Afternoon,
-        18..=21 => TimeOfDay::Evening,
-        _ => TimeOfDay::Night, // 22-5
-    }
-}
+[Source: constants.rs](../../../programs/novus_mundus/src/constants.rs)
+
+## Time Period Definitions
+
+Implemented in `get_time_of_day` (`time_cycle.rs`):
+
+| Period | Enum Value | local_time Range | Clock Equivalent |
+|--------|-----------|-----------------|------------------|
+| `DeepNight` | 0 | 0–124 | 00:00–03:00 |
+| `Dawn` | 1 | 125–249 | 03:00–06:00 (Golden Hour) |
+| `Morning` | 2 | 250–374 | 06:00–09:00 |
+| `Midday` | 3 | 375–624 | 09:00–15:00 (longest period) |
+| `Afternoon` | 4 | 625–749 | 15:00–18:00 |
+| `Dusk` | 5 | 750–874 | 18:00–21:00 (Golden Hour) |
+| `Evening` | 6 | 875–999 | 21:00–00:00 |
+
+**Midday** spans 250 units (6 hours) — twice the length of other periods.
+
+**Dawn and Dusk** are the golden hours. They trigger `is_golden_hour()` which affects encounter spawn weights and XP calculations.
+
+```mermaid
+graph LR
+    DN["DeepNight<br/>0-124<br/>3 hrs"] --> DW["Dawn<br/>125-249<br/>3 hrs<br/>Golden Hour"]
+    DW --> MO["Morning<br/>250-374<br/>3 hrs"]
+    MO --> MD["Midday<br/>375-624<br/>6 hrs<br/>Longest"]
+    MD --> AF["Afternoon<br/>625-749<br/>3 hrs"]
+    AF --> DU["Dusk<br/>750-874<br/>3 hrs<br/>Golden Hour"]
+    DU --> EV["Evening<br/>875-999<br/>3 hrs"]
+    EV -.->|wraps| DN
 ```
 
-**Key Points:**
-- Uses **real-world longitude** from city/location coordinates
-- Provides **deterministic** results (same timestamp + location = same result)
-- No randomness - purely strategic decision
-
----
-
-## TimeOfDay Enum
+## Activity Type Definitions
 
 ```rust
-#[repr(u8)]
-pub enum TimeOfDay {
-    Morning = 0,   // 6:00 - 11:59
-    Afternoon = 1, // 12:00 - 17:59
-    Evening = 2,   // 18:00 - 21:59
-    Night = 3,     // 22:00 - 5:59
-}
-```
-
----
-
-## Activity Multipliers
-
-### Activity Types
-
-```rust
-#[repr(u8)]
 pub enum ActivityType {
-    Traveling = 0,
-    Mining = 1,
-    Fishing = 2,
-    Combat = 3,
-    Research = 4,
-    Construction = 5,
-    Collection = 6,
+    Hiring        = 0,   // Hire units
+    Purchasing    = 1,   // Buy equipment
+    Collecting    = 2,   // Cash collection
+    Mining        = 3,   // Gem mining
+    Fishing       = 4,   // Fishing / Farming
+    Attacking     = 5,   // Offensive combat
+    Defending     = 6,   // Defensive combat
+    Traveling     = 7,   // Intercity travel
+    Consuming     = 11,  // NOVI → Power conversion
+    Researching   = 12,  // Research speed
+    XPGain        = 13,  // XP earning
+    StaminaRegen  = 14,  // Stamina regeneration
+    LootDrop      = 15,  // Loot quality
 }
 ```
 
-### Multiplier Table
+Discriminants 8, 9, 10 are unused.
 
-| Activity | Morning | Afternoon | Evening | Night |
-|----------|---------|-----------|---------|-------|
-| **Traveling** | 1.1x | 1.0x | 0.9x | 0.8x |
-| **Mining** | 1.0x | 1.1x | 1.0x | 1.2x |
-| **Fishing** | 1.2x | 1.0x | 0.9x | 0.8x |
-| **Combat** | 1.0x | 1.0x | 1.1x | 1.2x |
-| **Research** | 1.1x | 1.0x | 0.9x | 0.9x |
-| **Construction** | 1.0x | 1.1x | 1.0x | 0.9x |
-| **Collection** | 1.1x | 1.0x | 1.1x | 0.8x |
+## Full Multiplier Table
 
-### Multiplier Implementation
+`get_time_multiplier(time, activity)` — exact return values from code:
+
+| Activity | DeepNight | Dawn | Morning | Midday | Afternoon | Dusk | Evening |
+|----------|:---------:|:----:|:-------:|:------:|:---------:|:----:|:-------:|
+| **Hiring** (0) | 1/φ | 1.0 | √φ | φ | √φ | 1.0 | 1/φ |
+| **Purchasing** (1) | 1/φ | 1.0 | √φ | φ | √φ | 1.0 | 1/φ |
+| **Collecting** (2) | 1/φ | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1/φ |
+| **Mining** (3) | φ | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Fishing** (4) | 1.0 | φ | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Attacking** (5) | φ | √φ | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Defending** (6) | 1/φ | 1.0 | √φ | φ | √φ | 1.0 | 1.0 |
+| **Traveling** (7) | φ | √φ | 1/φ | 1.0 | 1/φ | 1.0 | 1.0 |
+| **Consuming** (11) | 1/φ | √φ | 1.0 | 1.0 | 1.0 | 1.0 | 1/φ |
+| **Researching** (12) | φ | √φ | √φ | 1/φ | 1/φ | 1.0 | 1.0 |
+| **XPGain** (13) | √φ | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | √φ |
+| **StaminaRegen** (14) | φ | √φ | 1.0 | 1/φ | 1/φ | 1.0 | 1.0 |
+| **LootDrop** (15) | √φ | 1.0 | φ | 1.0 | 1.0 | 1.0 | √φ |
+
+Decimal equivalents for quick reference: φ = 1.618, √φ = 1.272, 1/φ = 0.618.
+
+> **Note (Collecting at Dawn):** A test comment in `time_cycle.rs` (line 419) states that `Collecting` at `Dawn` should yield φ² (2.618×). The implementation does not implement this — `Dawn` hits the wildcard arm returning `1.0`. The table shows actual code behavior. The test assertion on line 421 would fail at runtime; this is a planned feature not yet coded.
+
+> **Note (Researching Morning comment):** Code comment says `"1.0x - Normal study"` for Morning, but the implementation returns `GOLDEN_ROOT` (√φ = 1.272). Actual code value is shown in the table.
+
+> **Note (LootDrop Morning comment):** Code comment says `"1.0x - Normal drops"` for Morning, but the implementation returns `PHI` (φ = 1.618). Actual code value is shown in the table.
+
+[Source: logic/time_cycle.rs](../../../programs/novus_mundus/src/logic/time_cycle.rs)
+
+## Best Times by Activity
+
+```mermaid
+graph TD
+    subgraph "Peak DeepNight"
+        DN_MINE["Mining × φ"]
+        DN_ATK["Attacking × φ"]
+        DN_RES["Researching × φ"]
+        DN_STAM["StaminaRegen × φ"]
+        DN_TRAV["Traveling × φ"]
+    end
+    subgraph "Peak Dawn"
+        DW_FISH["Fishing × φ"]
+    end
+    subgraph "Peak Morning"
+        MO_LOOT["LootDrop × φ"]
+    end
+    subgraph "Peak Midday"
+        MD_HIRE["Hiring × φ"]
+        MD_PURCH["Purchasing × φ"]
+        MD_DEF["Defending × φ"]
+    end
+```
+
+## Application Pattern
+
+All processors call the same two-step pattern:
 
 ```rust
-fn get_time_multiplier(time_of_day: TimeOfDay, activity: ActivityType) -> f64 {
-    match activity {
-        ActivityType::Traveling => match time_of_day {
-            TimeOfDay::Morning => 1.1,
-            TimeOfDay::Afternoon => 1.0,
-            TimeOfDay::Evening => 0.9,
-            TimeOfDay::Night => 0.8,
-        },
-        ActivityType::Mining => match time_of_day {
-            TimeOfDay::Morning => 1.0,
-            TimeOfDay::Afternoon => 1.1,
-            TimeOfDay::Evening => 1.0,
-            TimeOfDay::Night => 1.2,  // Night shift bonus!
-        },
-        ActivityType::Fishing => match time_of_day {
-            TimeOfDay::Morning => 1.2,  // Dawn fishing!
-            TimeOfDay::Afternoon => 1.0,
-            TimeOfDay::Evening => 0.9,
-            TimeOfDay::Night => 0.8,
-        },
-        // ... etc
-    }
-}
+// 1. Determine local time (location-aware)
+let time_of_day = get_time_of_day(now, player.current_long);
+
+// 2. Apply multiplier using integer math
+let result = apply_time_multiplier(base_value, time_of_day, ActivityType::Hiring);
+// internally: base_value as f64 * get_time_multiplier(time_of_day, activity) as u64
 ```
 
----
+The conversion is: `apply_multiplier(base, multiplier)` → `(base as f64 * multiplier) as u64`, capped at `u64::MAX`.
 
-## Application Examples
+```mermaid
+sequenceDiagram
+    participant Processor
+    participant TimeCycle as time_cycle.rs
+    participant Math as safe_math.rs
 
-### Travel Time
-
-```rust
-// Base travel time from distance
-let base_travel_time = (distance_km / speed_kmh) * 3600.0;
-
-// Get time-of-day at origin location
-let time_of_day = get_time_of_day(now, origin_longitude);
-let multiplier = get_time_multiplier(time_of_day, ActivityType::Traveling);
-
-// Morning travel is faster (÷1.1), Night travel is slower (÷0.8)
-let actual_travel_time = base_travel_time / multiplier;
+    Processor->>TimeCycle: get_time_of_day(now, longitude)
+    TimeCycle-->>Processor: TimeOfDay enum variant
+    Processor->>TimeCycle: get_time_multiplier(time_of_day, activity)
+    TimeCycle-->>Processor: f64 multiplier (φ family)
+    Processor->>Math: apply_time_multiplier(base_value, multiplier)
+    Math-->>Processor: u64 result (capped at u64::MAX)
 ```
 
-**Example:**
-- Base travel: 1 hour
-- Morning (1.1x): 54 minutes 33 seconds
-- Night (0.8x): 1 hour 15 minutes
+## Encounter Spawn Weights by Time
 
-### Mining Yields
+Separate from activity multipliers, `get_rarity_spawn_weight(time, rarity)` governs how often each rarity spawns. These also use the φ family but are not clamped to 5 entries — they accept rarity 0–4:
 
-```rust
-let base_yield = operatives * base_gems_per_op_hour * duration_hours;
+| Rarity | DeepNight | Dawn | Morning | Midday | Afternoon | Dusk | Evening |
+|--------|:---------:|:----:|:-------:|:------:|:---------:|:----:|:-------:|
+| Common (0) | 1/φ | 1.0 | 1.0 | √φ | 1.0 | 1.0 | 1.0 |
+| Uncommon (1) | 1/φ | 1.0 | φ | √φ | φ | 1.0 | 1/φ |
+| Rare (2) | √φ | φ² | 1.0 | 1/φ | 1.0 | φ² | 1.0 |
+| Epic (3) | φ | √φ | 1/φ | 1/φ² | 1/φ | √φ | √φ |
+| Legendary (4) | φ² | 1/φ | 1/φ³ | 1/φ³ | 1/φ³ | 1/φ³ | 1/φ |
 
-let time_of_day = get_time_of_day(expedition_start, player_longitude);
-let multiplier = get_time_multiplier(time_of_day, ActivityType::Mining);
-
-// Night mining gets 20% bonus!
-let actual_yield = (base_yield as f64 * multiplier) as u64;
+```mermaid
+graph LR
+    subgraph "Legendary spawn — peaks and restrictions"
+        L1["DeepNight: φ² = 2.618 PEAK"]
+        L2["Dawn: 1/φ = 0.618"]
+        L3["Evening: 1/φ = 0.618"]
+        L4["Morning / Midday / Afternoon / Dusk: 1/φ³ = 0.236<br/>restricted — cannot spawn"]
+    end
+    subgraph "Rare spawn — golden hours peak"
+        R1["Dawn: φ² = 2.618 PEAK"]
+        R2["Dusk: φ² = 2.618 PEAK"]
+        R3["DeepNight: √φ = 1.272"]
+        R4["Other periods: 1/φ or 1.0"]
+    end
 ```
 
-**Example:**
-- Base yield: 100 gems
-- Night shift (1.2x): 120 gems
-- Morning (1.0x): 100 gems
-
-### Fishing Yields
-
-```rust
-let base_produce = operatives * base_produce_per_op_hour * duration_hours;
-
-let time_of_day = get_time_of_day(expedition_start, player_longitude);
-let multiplier = get_time_multiplier(time_of_day, ActivityType::Fishing);
-
-// Dawn fishing is most productive!
-let actual_produce = (base_produce as f64 * multiplier) as u64;
-```
-
-**Example:**
-- Base yield: 100 produce
-- Morning (1.2x): 120 produce
-- Night (0.8x): 80 produce
-
-### Combat Damage
-
-```rust
-let base_damage = calculate_base_damage(attacker, defender);
-
-let time_of_day = get_time_of_day(now, combat_longitude);
-let multiplier = get_time_multiplier(time_of_day, ActivityType::Combat);
-
-// Night raids deal more damage!
-let actual_damage = (base_damage as f64 * multiplier) as u64;
-```
-
----
-
-## Duration Scaling Formulas
-
-### Exponential Growth
-
-Many systems use exponential scaling:
-
-```rust
-/// Calculate value with exponential growth
-/// value = base × (multiplier/divisor)^level
-fn exp_growth(base: u64, multiplier: u64, divisor: u64, level: u32) -> Option<u64> {
-    let mut result = base;
-    for _ in 0..level {
-        result = result.checked_mul(multiplier)?;
-        result = result.checked_div(divisor)?;
-    }
-    Some(result)
-}
-```
-
-### Research Time
-
-```
-time(level) = base_time × 1.5^level
-
-Example (base: 1 hour):
-- Level 1: 1 hour
-- Level 5: 7.6 hours
-- Level 10: 57.7 hours
-- Level 15: 437 hours
-```
-
-### Research Cost
-
-```
-cost(level) = base_cost × 1.8^level
-
-Example (base: 1,000 NOVI):
-- Level 1: 1,000
-- Level 5: 18,895
-- Level 10: 357,047
-```
-
-### Building Time
-
-```
-time(level) = base_time × φ^level
-
-where φ = 1.618034 (golden ratio)
-
-Example (base: 5 minutes):
-- Level 1: 5 min
-- Level 5: 22 min
-- Level 10: 2.3 hours
-- Level 20: 28 hours
-```
-
-### Building Cost
-
-Same φ scaling as time:
-
-```
-cost(level) = base_cost × φ^level
-```
-
----
-
-## Speedup Calculations
-
-### Time Reduction
-
-```rust
-fn calculate_speedup(remaining_time: i64, tier: u8) -> (i64, u64) {
-    let reduction_percent = match tier {
-        1 => 50,  // 50% reduction
-        2 => 75,  // 75% reduction
-        _ => 0,
-    };
-
-    let time_saved = remaining_time * reduction_percent / 100;
-    let new_remaining = remaining_time - time_saved;
-
-    (new_remaining, time_saved)
-}
-```
-
-### Gem Cost
-
-```rust
-fn calculate_speedup_cost(remaining_seconds: i64, gems_per_minute: u64, tier: u8) -> u64 {
-    let remaining_minutes = (remaining_seconds + 59) / 60; // Round up
-    let tier_multiplier = match tier {
-        1 => 1,
-        2 => 2,
-        _ => 1,
-    };
-
-    remaining_minutes as u64 * gems_per_minute * tier_multiplier
-}
-```
-
-### Speedup Costs by System
-
-| System | Base Cost/Min | Tier 1 | Tier 2 |
-|--------|---------------|--------|--------|
-| Expedition | 100 | 100/min (50%) | 200/min (75%) |
-| Research | 50 | 50/min (50%) | 100/min (75%) |
-| Travel | 50 | 50/min (50%) | 100/min (75%) |
-| Rally | 75 | 75/min (50%) | 150/min (75%) |
-| Reinforcement | 75 | 75/min (50%) | 150/min (75%) |
-| Building | 100 | 100/min (50%) | 200/min (75%) |
-
----
-
-## Cooldown Calculations
-
-### Attack Cooldown
-
-```rust
-const COMBAT_COOLDOWN: i64 = 3600; // 1 hour
-
-fn can_attack(last_attack: i64, now: i64, same_target: bool) -> bool {
-    if !same_target {
-        return true; // No cooldown for new targets
-    }
-    now >= last_attack + COMBAT_COOLDOWN
-}
-```
-
-### Collection Cooldown
-
-```rust
-const COLLECTION_COOLDOWN: i64 = 7200; // 2 hours
-
-fn can_collect(last_collection: i64, now: i64) -> bool {
-    now >= last_collection + COLLECTION_COOLDOWN
-}
-```
-
-### Daily Reset
-
-```rust
-fn is_new_day(last_action_timestamp: i64, now: i64) -> bool {
-    let last_day = last_action_timestamp / 86400;
-    let current_day = now / 86400;
-    current_day > last_day
-}
-```
-
----
-
-## Expedition Duration
-
-### Mining Duration by Tier
-
-| Tier | Duration | Base Yield |
-|------|----------|------------|
-| 0 | 1 hour | 10 gems/op |
-| 1 | 2 hours | 18 gems/op |
-| 2 | 4 hours | 30 gems/op |
-| 3 | 8 hours | 50 gems/op |
-| 4 | 16 hours | 80 gems/op |
-
-### Fishing Duration by Tier
-
-| Tier | Duration | Base Yield |
-|------|----------|------------|
-| 0 | 1 hour | 15 produce/op |
-| 1 | 2 hours | 25 produce/op |
-| 2 | 4 hours | 40 produce/op |
-| 3 | 8 hours | 60 produce/op |
-| 4 | 16 hours | 100 produce/op |
-
----
-
-## Client Integration
-
-### Display Time-of-Day Bonus
-
-```javascript
-function getTimeBonus(longitude, activityType) {
-  const now = Date.now() / 1000;
-  const timezoneOffset = longitude / 15; // hours
-  const localTimestamp = now + (timezoneOffset * 3600);
-  const localHour = Math.floor((localTimestamp % 86400) / 3600);
-
-  let timeOfDay;
-  if (localHour >= 6 && localHour < 12) timeOfDay = 'morning';
-  else if (localHour >= 12 && localHour < 18) timeOfDay = 'afternoon';
-  else if (localHour >= 18 && localHour < 22) timeOfDay = 'evening';
-  else timeOfDay = 'night';
-
-  const multiplier = getMultiplier(timeOfDay, activityType);
-
-  return {
-    timeOfDay,
-    localHour,
-    multiplier,
-    bonusPercent: Math.round((multiplier - 1) * 100),
-    isBonus: multiplier > 1.0
-  };
-}
-```
-
-### Show Optimal Times
-
-```javascript
-function getOptimalTimes(longitude, activityType) {
-  const times = ['morning', 'afternoon', 'evening', 'night'];
-  const multipliers = times.map(t => ({
-    time: t,
-    multiplier: getMultiplier(t, activityType)
-  }));
-
-  const best = multipliers.reduce((a, b) =>
-    a.multiplier > b.multiplier ? a : b
-  );
-
-  return {
-    optimal: best.time,
-    bonus: Math.round((best.multiplier - 1) * 100),
-    all: multipliers
-  };
-}
-```
-
-### Duration Preview
-
-```javascript
-function previewDuration(baseDuration, activityType, longitude) {
-  const bonus = getTimeBonus(longitude, activityType);
-  const actualDuration = baseDuration / bonus.multiplier;
-
-  return {
-    base: formatDuration(baseDuration),
-    actual: formatDuration(actualDuration),
-    saved: bonus.multiplier > 1 ? formatDuration(baseDuration - actualDuration) : null,
-    bonus: bonus.bonusPercent > 0 ? `+${bonus.bonusPercent}%` : `${bonus.bonusPercent}%`
-  };
-}
-```
-
----
-
-*Time is your ally or enemy. Master the rhythms of day and night to maximize every action.*
-
----
-
-Next: [Combat Math](./combat-math.md)
+**Spawn restrictions** (`can_spawn_rarity_at_time`):
+- Legendary (4): Only DeepNight, Dawn, Evening allowed
+- Epic (3): Only DeepNight, Evening, Dawn, Dusk allowed
+- Common/Uncommon/Rare: Unrestricted
+
+[Source: logic/time_cycle.rs](../../../programs/novus_mundus/src/logic/time_cycle.rs)

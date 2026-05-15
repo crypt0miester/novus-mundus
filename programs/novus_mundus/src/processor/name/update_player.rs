@@ -15,6 +15,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::PlayerAccount,
+    utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::PlayerNameUpdated,
@@ -54,7 +55,7 @@ use crate::{
 /// - Updates domain name in player account
 pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         old_name_account,
         old_reverse_name_account,
@@ -69,17 +70,13 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         system_program,
         alt_name_service_program,
         tld_house_program,
-    ] = accounts
-    else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse instruction data
-    if data.len() < 64 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let old_reverse_acc_hashed_name: [u8; 32] = data[..32].try_into().unwrap();
-    let new_reverse_acc_hashed_name: [u8; 32] = data[32..64].try_into().unwrap();
+    let old_reverse_acc_hashed_name: [u8; 32] =
+        read_bytes32(data, 0, "old_reverse_acc_hashed_name")?;
+    let new_reverse_acc_hashed_name: [u8; 32] =
+        read_bytes32(data, 32, "new_reverse_acc_hashed_name")?;
 
     // 3. Validate Accounts
     require_signer(owner)?;

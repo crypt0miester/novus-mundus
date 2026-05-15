@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -9,6 +8,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
     validation::{require_signer, require_writable, require_owner},
+    utils::{read_u8, read_u16, read_u64},
     emit,
     events::TeamSettingsUpdated,
 };
@@ -41,14 +41,10 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 12 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let settings = instruction_data[10];
-    let min_level_to_join = instruction_data[11];
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let slot_index = read_u16(instruction_data, 8, "slot_index")?;
+    let settings = read_u8(instruction_data, 10, "settings")?;
+    let min_level_to_join = read_u8(instruction_data, 11, "min_level_to_join")?;
 
     // Validate min_level
     if min_level_to_join == 0 {
@@ -57,14 +53,12 @@ pub fn process(
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         member_account,
         member_slot_account,
         team_account,
         member_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

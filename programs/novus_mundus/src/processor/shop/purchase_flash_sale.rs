@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -20,6 +19,7 @@ use crate::{
         unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner},
+    utils::{read_u16, read_u64},
     emit,
     events::shop::FlashSalePurchased,
 };
@@ -65,20 +65,18 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    if accounts.len() < 10 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let buyer = &accounts[0];
-    let player_account = &accounts[1];
-    let game_engine_account = &accounts[2];
-    let shop_config_account = &accounts[3];
-    let flash_sale_account = &accounts[4];
-    let item_or_bundle_account = &accounts[5];
-    let treasury = &accounts[6];
-    let inventory_account = &accounts[7];
-    let system_program = &accounts[8];
-    let estate_account = &accounts[9];
+    crate::extract_accounts!(accounts, [
+        buyer,
+        player_account,
+        game_engine_account,
+        shop_config_account,
+        flash_sale_account,
+        item_or_bundle_account,
+        treasury,
+        inventory_account,
+        system_program,
+        estate_account,
+    ]);
 
     // 2. Validate Accounts
 
@@ -92,12 +90,8 @@ pub fn process(
 
     // 3. Parse Instruction Data
 
-    if instruction_data.len() < 10 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let sale_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let quantity = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap()) as u64;
+    let sale_id = read_u64(instruction_data, 0, "purchase_flash_sale.sale_id")?;
+    let quantity = read_u16(instruction_data, 8, "purchase_flash_sale.quantity")? as u64;
 
     // Optional payment_type (default 0 = SOL, 2+ = Token)
     let payment_type = if instruction_data.len() >= 11 { instruction_data[10] } else { 0 };
@@ -270,6 +264,7 @@ pub fn process(
         process_token_payment_flow(
             &accounts[token_offset..],
             game_engine_account.address(),
+            &game_engine.treasury_wallet,
             program_id,
             shop_config,
             buyer,

@@ -9,6 +9,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{PlayerAccount, GameEngine, EstateAccount, BuildingStatus, BuildingType},
+    utils::read_u8,
 };
 
 /// Speed-up tiers for building construction
@@ -38,22 +39,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         estate_account,
         owner,
         game_engine_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let building_type_u8 = instruction_data[0];
-    let speedup_tier = instruction_data[1];
+    let building_type_u8 = read_u8(instruction_data, 0, "estate_speedup.building_type")?;
+    let speedup_tier = read_u8(instruction_data, 1, "estate_speedup.speedup_tier")?;
 
     let building_type = BuildingType::from_u8(building_type_u8)
         .ok_or(ProgramError::InvalidInstructionData)?;

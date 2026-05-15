@@ -10,6 +10,7 @@ use crate::{
     constants::PRIZE_DISTRIBUTION,
     error::GameError,
     helpers::{close_account, estate::{treasury_prize_bonus_bps, load_estate_for_player}, validate_token_account_owner},
+    token_helpers::create_associated_token_account,
     state::{EventAccount, EventParticipation, PlayerAccount},
     types::PrizeType,
     validation::{require_signer, require_writable},
@@ -47,6 +48,9 @@ use crate::{
 /// - [] winner_estate: EstateAccount PDA (for Treasury prize bonus)
 /// - [writable] event_vault: (optional, only for SPLToken prizes)
 /// - [writable] winner_spl_token_account: (optional, only for SPLToken prizes)
+/// - [] prize_token_mint: (optional, only for SPLToken prizes) — SPL prize token mint
+/// - [] system_program: (optional, only for SPLToken prizes) — needed to create the recipient ATA
+/// - [] associated_token_program: (optional, only for SPLToken prizes)
 ///
 /// # Building Bonuses
 /// Treasury building provides prize bonus:
@@ -67,27 +71,28 @@ pub fn process(
 
     let base_account_count = 10;
 
-    if accounts.len() < base_account_count {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
+    crate::extract_accounts!(accounts, [
+        payer,
+        winner_account,
+        event_account,
+        participation_account,
+        winner_owner,
+        winner_novi_ata,
+        novi_mint,
+        game_engine,
+        token_program,
+        winner_estate,
+    ]);
 
-    let payer = &accounts[0];
-    let winner_account = &accounts[1];
-    let event_account = &accounts[2];
-    let participation_account = &accounts[3];
-    let winner_owner = &accounts[4];
-    let winner_novi_ata = &accounts[5];
-    let novi_mint = &accounts[6];
-    let game_engine = &accounts[7];
-    let token_program = &accounts[8];
-    let winner_estate = &accounts[9];
-
-    // Optional accounts for SPL token prizes
-    let (event_vault, winner_spl_token_account) = if accounts.len() >= base_account_count + 2 {
-        (Some(&accounts[10]), Some(&accounts[11]))
-    } else {
-        (None, None)
-    };
+    // Optional accounts for SPL token prizes:
+    // [10] event_vault, [11] winner_spl_token_account, [12] prize_token_mint,
+    // [13] system_program, [14] associated_token_program
+    let (event_vault, winner_spl_token_account, prize_mint, spl_system_program) =
+        if accounts.len() >= base_account_count + 5 {
+            (Some(&accounts[10]), Some(&accounts[11]), Some(&accounts[12]), Some(&accounts[13]))
+        } else {
+            (None, None, None, None)
+        };
 
     // 2. Validate Accounts
 
@@ -103,7 +108,7 @@ pub fn process(
     use crate::validation::require_key_match;
     require_key_match(token_program, &pinocchio_token::ID)?;
 
-    // SECURITY: Verify token account belongs to the winner's PlayerAccount PDA
+    // Verify token account belongs to the winner's PlayerAccount PDA
     validate_token_account_owner(winner_novi_ata, winner_account.address())?;
 
     // 3. Load Accounts
@@ -225,6 +230,13 @@ pub fn process(
             let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
             let signer = pinocchio::cpi::Signer::from(&seeds);
 
+            crate::require_keys_eq!(
+                novi_mint.address().as_array(),
+                &crate::constants::NOVI_MINT_ADDRESS,
+                "claim_prize.novi_mint",
+                GameError::InvalidMint,
+            );
+
             // Mint NOVI tokens to winner's token account
             crate::helpers::mint_tokens(
                 novi_mint,
@@ -249,9 +261,45 @@ pub fn process(
             // Verify token accounts provided
             let vault = event_vault.ok_or(ProgramError::NotEnoughAccountKeys)?;
             let recipient = winner_spl_token_account.ok_or(ProgramError::NotEnoughAccountKeys)?;
+            let prize_mint = prize_mint.ok_or(ProgramError::NotEnoughAccountKeys)?;
+            let system_program = spl_system_program.ok_or(ProgramError::NotEnoughAccountKeys)?;
 
             require_writable(vault)?;
             require_writable(recipient)?;
+            require_key_match(system_program, &pinocchio_system::ID)?;
+
+            // The recipient ATA is derived for `prize_mint`; pin it to the
+            // event's designated prize token.
+            crate::require_keys_eq!(
+                prize_mint.address().as_array(),
+                event_data.prize_token_mint.as_array(),
+                "claim_prize.prize_mint",
+                GameError::InvalidMint,
+            );
+
+            // pin the prize vault.
+            validate_token_account_owner(vault, event_account.address())?;
+            {
+                let vault_data = vault.try_borrow()?;
+                if &vault_data[0..32] != event_data.prize_token_mint.as_ref() {
+                    return Err(GameError::InvalidMint.into());
+                }
+            }
+
+            // Create the winner's prize-token ATA if it does not exist.
+            if recipient.data_len() == 0 {
+                create_associated_token_account(
+                    payer,          // Payer (funds rent)
+                    recipient,      // ATA to create
+                    winner_owner,   // Wallet that owns the ATA
+                    prize_mint,     // Prize token mint
+                    system_program,
+                    token_program,
+                )?;
+            }
+
+            // pin the prize destination to the winner's wallet.
+            validate_token_account_owner(recipient, winner_owner.address())?;
 
             // The event vault SPL token account is owned by the
             // EventAccount PDA (the program). The transfer authority must be the

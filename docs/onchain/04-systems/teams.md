@@ -1,469 +1,379 @@
 # Team System
 
-> Guild/clan organization, treasury management, and team operations.
+> Kingdom-scoped guilds with hierarchical ranks, permissioned treasury, and multi-sig withdrawal governance.
 
 ## System Overview
 
-Teams are **persistent social organizations** that enable coordinated gameplay. Members share a treasury, can send reinforcements, and participate in rallies together.
+The Team System provides the social infrastructure for Novus Mundus. Every team is **kingdom-scoped**: a team belongs to exactly one `GameEngine` and its members must be players within that same kingdom. Teams unlock cooperative combat (rallies) and resource sharing (reinforcements).
 
 ```mermaid
 graph TB
-    subgraph "Team Structure"
-        LEADER[Team Leader]
-        MEMBERS[Members<br/>Up to 50]
-        TREASURY[Team Treasury]
+    subgraph "Team Lifecycle"
+        CREATE[Create Team<br/>Burn NOVI] --> LEAD[Leader Rank 0]
+        LEAD --> PUBLIC{Public?}
+        PUBLIC -->|Yes| JOIN[Players Join<br/>Rank 4]
+        PUBLIC -->|No| INVITE[Invite Only<br/>accept_invite]
+        INVITE --> JOIN
+        JOIN --> PROMOTE[Promote / Demote]
+        PROMOTE --> KICK[Kick Member]
+        KICK --> LEAVE[Leave Team]
+        LEAVE --> DISBAND[Disband<br/>member_count == 1]
     end
 
-    subgraph "Team Activities"
-        RALLY[Rallies]
-        REINF[Reinforcements]
-        EVENTS[Team Events]
+    subgraph "Treasury"
+        DEPOSIT[Deposit Cash] --> BALANCE[treasury: u64]
+        BALANCE --> INSTANT[Instant Withdraw<br/>within rank limits]
+        BALANCE --> REQUEST[Request Withdraw<br/>8h cooldown]
+        REQUEST --> APPROVE[Approve / Reject]
+        APPROVE --> EXECUTE[Execute after cooldown]
     end
-
-    LEADER --> MEMBERS
-    MEMBERS --> TREASURY
-    MEMBERS --> RALLY & REINF & EVENTS
 ```
 
 ## Instructions
 
 | ID | Instruction | Description |
 |----|-------------|-------------|
-| 50 | `create_team` | Create a new team |
-| 51 | `join_team` | Join an existing team |
-| 52 | `leave_team` | Leave current team |
-| 53 | `deposit_treasury` | Add funds to treasury |
-| 54 | `invite_player` | Invite player to team |
-| 55 | `accept_invite` | Accept team invitation |
-| 56 | `transfer_leadership` | Hand over leadership |
-| 57 | `kick_member` | Remove member from team |
-| 58 | `disband_team` | Dissolve the team |
-| 59 | `withdraw_treasury` | Leader withdraws funds |
+| 50 | `create_team` | Create team, burn NOVI, leader auto-joins at Rank 0 |
+| 51 | `join_team` | Join a public team (no invite required) |
+| 52 | `leave_team` | Leave team, close member slot, rent returned |
+| 53 | `deposit_treasury` | Deposit cash into team treasury |
+| 54 | `invite` | Invite a player to a private team |
+| 55 | `accept_invite` | Accept a pending team invite |
+| 56 | `transfer_leadership` | Transfer Rank 0 to another member |
+| 57 | `kick_member` | Remove a lower-ranked member (requires `PERM_KICK` and outranking target) |
+| 58 | `disband` | Dissolve team (requires `member_count == 1`) |
+| 59 | `withdraw_treasury` | Instant treasury withdrawal within per-rank limits |
+| 210 | `cancel_invite` | Cancel a pending outbound invite |
+| 211 | `decline_invite` | Invitee rejects an invite |
+| 212 | `set_motd` | Set message of the day (requires `PERM_MOTD`) |
+| 213 | `update_settings` | Change public/auto-accept flags and min level (requires `PERM_SETTINGS`) |
+| 214 | `treasury_request_withdraw` | Create a `TreasuryRequest` for amounts above instant limit |
+| 215 | `treasury_approve_request` | Higher-ranked member approves a pending request immediately |
+| 216 | `treasury_reject_request` | Higher-ranked member rejects a pending request |
+| 217 | `treasury_execute_request` | Requester executes their request after cooldown elapses |
+| 218 | `treasury_cancel_request` | Requester cancels their own pending request |
+| 219 | `update_treasury_settings` | Reconfigure per-rank limits, daily caps, and cooldown hours |
+| 220 | `promote_member` | Decrease a member's rank number (more power) |
+| 221 | `demote_member` | Increase a member's rank number (less power) |
 
 [Source: processor/team/](../../../programs/novus_mundus/src/processor/team/)
 
 ---
 
-## TeamAccount Structure
+## Rank System
+
+Ranks run **0** (most powerful, leader) through **4** (least powerful, recruit). A lower rank number outranks a higher one.
+
+| Rank | Default Permissions Bitfield | Effective Permissions |
+|------|-----------------------------|-----------------------|
+| 0 (Leader) | `0xFF` | All permissions, unlimited treasury |
+| 1 | `0x3F` | All standard permissions |
+| 2 | `0x07` | INVITE, KICK, MOTD |
+| 3 | `0x00` | None |
+| 4 | `0x00` | None (join rank) |
+
+```mermaid
+graph LR
+    R0["Rank 0 — Leader<br/>0xFF all perms<br/>Unlimited treasury"] --> R1["Rank 1<br/>0x3F all standard perms"]
+    R1 --> R2["Rank 2<br/>0x07 INVITE + KICK + MOTD"]
+    R2 --> R3["Rank 3<br/>0x00 no perms"]
+    R3 --> R4["Rank 4 — Recruit<br/>0x00 no perms<br/>(join rank)"]
+```
+
+### Permission Bits
+
+| Bit | Constant | Capability |
+|-----|----------|------------|
+| 0 | `PERM_INVITE` | Send team invites |
+| 1 | `PERM_KICK` | Kick members with a higher rank number |
+| 2 | `PERM_MOTD` | Set message of the day |
+| 3 | `PERM_PROMOTE` | Promote or demote members below own rank |
+| 4 | `PERM_TREASURY` | Access treasury withdrawals |
+| 5 | `PERM_SETTINGS` | Change team settings |
+
+Per-rank permission bitfields are fully configurable via `update_settings` / `update_treasury_settings`. Rank 0 always has unlimited treasury access regardless of bitfield state.
+
+### Kick and Promote Guards
 
 ```
-TeamAccount:
-├── id: u64                    // Unique team ID
-├── leader: Pubkey             // Current leader
-├── name: [u8; 32]             // Team name bytes
-├── name_len: u8               // Name length
-├── disbanded: bool            // True if dissolved
-├── bump: u8                   // PDA bump
-│
-├── members: [Pubkey; 50]      // Member array
-├── member_count: u8           // Current count (0-50)
-│
-├── created_at: i64            // Creation timestamp
-├── treasury: u64              // NOVI balance
-│
-└── _reserved: [u8; 64]        // Future expansion
+kick_member:    rank_has_permission(actor_rank, PERM_KICK) && actor_rank < target_rank
+promote_member: rank_has_permission(actor_rank, PERM_PROMOTE) && actor_rank < target_new_rank
+demote_member:  rank_has_permission(actor_rank, PERM_PROMOTE) && actor_rank < target_rank
 ```
-
-**Seeds:** `["team", team_id_bytes]`
-
-**Size:** ~1,768 bytes
 
 ---
 
-## Team Lifecycle
+## Member Capacity
 
-### Creating a Team
+Teams start at the Rookie (tier 0) cap and can be upgraded.
 
-**Instruction:** `50 - create_team`
+| Tier Index | `MAX_TEAM_MEMBERS_BY_TIER` |
+|------------|---------------------------|
+| 0 (Rookie) | 5 |
+| 1 | 10 |
+| 2 | 25 |
+| 3 | 50 |
 
-```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant TeamAccount
-    participant GameEngine
+New teams are created at tier 0: `max_members = 5`.
 
-    Player->>Program: create_team(name)
-    Program->>Program: Validate name
-    Program->>Program: Validate not in team
-    Program->>GameEngine: Get next team ID
-    Program->>Program: Deduct creation cost
-    Program->>TeamAccount: Create PDA
-    Program->>TeamAccount: Initialize with leader
-    Program-->>Player: Team created
-```
+---
 
-**Requirements:**
-- Player not already in a team
-- Name passes validation rules
-- NOVI cost: 10,000 (configurable)
+## Invite System
 
-### Joining a Team
+`TeamInviteAccount` is a PDA that persists until accepted, declined, cancelled, or expired. One invite per `(team, invitee)` pair.
 
-Teams support two join methods:
-
-#### Direct Join
-
-**Instruction:** `51 - join_team`
+- **Default expiry:** `TEAM_INVITE_EXPIRY = 604800` seconds (7 days). `expires_at = created_at + 604800`.
+- **Seeds:** `[TEAM_INVITE_SEED, team_pubkey, invitee_player_pubkey]`
 
 ```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant TeamAccount
-
-    Player->>Program: join_team(team_pubkey)
-    Program->>Program: Validate team not full
-    Program->>Program: Validate player not in team
-    Program->>TeamAccount: Add to members array
-    Program->>TeamAccount: Increment member_count
-    Program-->>Player: Joined team
+flowchart TD
+    INVITE["invite (54)<br/>Requires PERM_INVITE"] --> PDA["Create TeamInviteAccount PDA<br/>expires_at = now + 604800"]
+    PDA --> PEND[Pending]
+    PEND --> ACC["accept_invite (55)<br/>→ Member at rank 4"]
+    PEND --> DEC["decline_invite (211)<br/>→ PDA closed"]
+    PEND --> CAN["cancel_invite (210)<br/>→ PDA closed"]
+    PEND --> EXP["7 days elapse<br/>→ Expired (cleanable)"]
 ```
 
-#### Invitation Flow
-
-```mermaid
-sequenceDiagram
-    participant Leader
-    participant Program
-    participant Invitee
-    participant TeamAccount
-
-    Leader->>Program: invite_player(invitee)
-    Program->>Program: Store invitation
-    Note over Program: Off-chain notification
-    Invitee->>Program: accept_invite(team)
-    Program->>TeamAccount: Add member
-    Program-->>Invitee: Joined
 ```
-
-**Instruction:** `54 - invite_player`, `55 - accept_invite`
+TeamInviteAccount (136 bytes):
+├── account_key: u8
+├── team: Address      // 32 - Team pubkey
+├── invitee: Address   // 32 - Invitee player account pubkey
+├── bump: u8
+├── inviter: Address   // 32 - Who sent invite (display only)
+├── created_at: i64
+├── expires_at: i64    // created_at + 604800
+└── _reserved: [u8; 8]
+```
 
 ---
 
 ## Treasury System
 
-### Depositing Funds
+```mermaid
+flowchart TD
+    W[Member wants to withdraw] --> CHK{amount <= instant_limit<br/>AND daily cap remaining?}
+    CHK -->|Yes| INST["withdraw_treasury (59)<br/>Immediate transfer<br/>to player.cash_on_hand"]
+    CHK -->|No| REQ["treasury_request_withdraw (214)<br/>Create TreasuryRequest PDA<br/>executable_at = now + cooldown"]
+    REQ --> COOL{8-hour cooldown}
+    COOL -->|Higher rank approves early| APP["treasury_approve_request (215)<br/>Immediate transfer"]
+    COOL -->|Higher rank rejects| REJ["treasury_reject_request (216)<br/>No funds"]
+    COOL -->|Requester cancels| CAN["treasury_cancel_request (218)<br/>No funds"]
+    COOL -->|Cooldown elapsed| EXE["treasury_execute_request (217)<br/>Transfer to cash_on_hand"]
+```
 
-**Instruction:** `53 - deposit_treasury`
+### Instant Withdrawal (Instruction 59)
+
+`withdraw_treasury` succeeds immediately when both guards pass:
+
+```
+amount <= get_instant_limit(rank)
+amount <= get_daily_cap(rank) - slot.treasury_withdrawn_today
+```
+
+Default limits per rank (Rank 0 = unlimited, index maps rank 1→0, rank 2→1, etc.):
+
+| Rank | `treasury_instant_limit` | `treasury_daily_cap` |
+|------|--------------------------|----------------------|
+| 0 (Leader) | Unlimited (`u64::MAX`) | Unlimited |
+| 1 | 1 000 | 5 000 |
+| 2 | 100 | 500 |
+| 3 | 0 | 0 |
+| 4 | 0 | 0 |
+
+Daily counters (`treasury_withdrawn_today` in `TeamMemberSlot`) reset when `unix_timestamp / 86400` changes.
+
+### Multi-Sig Request Flow (Instructions 214–218)
+
+For amounts exceeding instant limits, a `TreasuryRequest` PDA is created with a cooldown.
 
 ```mermaid
 sequenceDiagram
     participant Member
     participant Program
-    participant PlayerAccount
+    participant TreasuryRequest
     participant TeamAccount
 
-    Member->>Program: deposit_treasury(amount)
-    Program->>PlayerAccount: Deduct locked NOVI
-    Program->>TeamAccount: Add to treasury
-    Program-->>Member: Deposited
+    Member->>Program: treasury_request_withdraw(amount)
+    Program->>Program: Verify PERM_TREASURY and treasury balance
+    Program->>TreasuryRequest: Create PDA, executable_at = now + cooldown_seconds
+    Note over TreasuryRequest: Only 1 active request per member at a time
+
+    alt Higher rank approves early
+        Leader->>Program: treasury_approve_request
+        Program->>Member: Immediate fund transfer to player.cash_on_hand
+        Program->>TreasuryRequest: Close account
+    else Higher rank rejects
+        Leader->>Program: treasury_reject_request
+        Program->>TreasuryRequest: Close account (no funds transferred)
+    else Cooldown elapses
+        Member->>Program: treasury_execute_request (now >= executable_at)
+        Program->>Member: Transfer funds
+        Program->>TreasuryRequest: Close account
+    end
 ```
 
-Any member can deposit to the treasury.
-
-### Withdrawing Funds
-
-**Instruction:** `59 - withdraw_treasury`
-
-```mermaid
-sequenceDiagram
-    participant Leader
-    participant Program
-    participant TeamAccount
-    participant PlayerAccount
-
-    Leader->>Program: withdraw_treasury(amount)
-    Program->>Program: Validate is leader
-    Program->>TeamAccount: Deduct from treasury
-    Program->>PlayerAccount: Add to locked NOVI
-    Program-->>Leader: Withdrawn
-```
-
-**Only the leader** can withdraw from treasury.
-
-### Treasury Uses
-
-| Use | Description |
-|-----|-------------|
-| Rally Costs | Fund team rallies |
-| Event Entry | Enter team competitions |
-| Member Bonuses | Distribute rewards |
-| Castle Upkeep | Maintain team castle (future) |
+- **Default cooldown:** 8 hours (`DEFAULT_COOLDOWN_HOURS = 8`). Range: 1–72 hours.
+- **Request expiry:** 7 days after creation (if never actioned).
+- **PDA seeds:** `[TREASURY_REQUEST_SEED, team_pubkey, requester_player_pubkey]`
 
 ---
 
-## Leadership
-
-### Transfer Leadership
-
-**Instruction:** `56 - transfer_leadership`
+## Create Team Flow
 
 ```mermaid
 sequenceDiagram
-    participant CurrentLeader
+    participant Owner
     participant Program
-    participant TeamAccount
-    participant NewLeader
-
-    CurrentLeader->>Program: transfer_leadership(new_leader)
-    Program->>Program: Validate new_leader is member
-    Program->>TeamAccount: Update leader field
-    Program-->>NewLeader: Now leader
-```
-
-### Kick Member
-
-**Instruction:** `57 - kick_member`
-
-Only the leader can remove members:
-
-```mermaid
-sequenceDiagram
-    participant Leader
-    participant Program
-    participant TeamAccount
-    participant Kicked
-
-    Leader->>Program: kick_member(target)
-    Program->>Program: Validate is leader
-    Program->>Program: Validate target is member
-    Program->>TeamAccount: Remove from array
-    Program->>TeamAccount: Decrement count
-    Program-->>Kicked: Removed from team
-```
-
-**Note:** Cannot kick yourself (use `leave_team`) or when you're the last member (use `disband_team`).
-
----
-
-## Leaving & Disbanding
-
-### Leave Team
-
-**Instruction:** `52 - leave_team`
-
-```mermaid
-sequenceDiagram
-    participant Member
-    participant Program
-    participant TeamAccount
-
-    Member->>Program: leave_team
-    Program->>Program: Validate is member
-    Program->>Program: Validate not leader (or last member)
-    Program->>TeamAccount: Remove from array
-    Program->>TeamAccount: Decrement count
-    Program-->>Member: Left team
-```
-
-**Leaders cannot leave** unless they:
-1. Transfer leadership first, OR
-2. Are the last member (use disband)
-
-### Disband Team
-
-**Instruction:** `58 - disband_team`
-
-```mermaid
-sequenceDiagram
-    participant Leader
-    participant Program
-    participant TeamAccount
     participant PlayerAccount
+    participant TeamAccount
+    participant LeaderSlot
 
-    Leader->>Program: disband_team
-    Program->>Program: Validate is leader
-    Program->>Program: Validate no active rallies
-    Program->>PlayerAccount: Return treasury to leader
-    Program->>TeamAccount: Set disbanded = true
-    Program-->>Leader: Team dissolved
+    Owner->>Program: create_team(team_id u64, name_len u8, name bytes)
+    Program->>PlayerAccount: Verify EXT_INVENTORY extension
+    Program->>PlayerAccount: Verify not already in a team
+    Program->>Program: Burn NOVI = team_creation_cost × cost_multiplier
+    Program->>TeamAccount: Create PDA [TEAM_SEED, game_engine, team_id LE]
+    Program->>TeamAccount: Init (max_members=5, member_count=1, leader=player_pda)
+    Program->>LeaderSlot: Create PDA [TEAM_SLOT_SEED, team, 0 (u16 LE)]
+    Program->>LeaderSlot: Init (slot_index=0, rank=0)
+    Program->>PlayerAccount: Set team_address, team_slot_index=0
+    Program-->>Owner: Emit TeamCreated
 ```
 
-**Requirements:**
-- Must be leader
-- No active rallies
-- Treasury automatically returned to leader
+**Instruction data layout (create_team):** `team_id:u64 LE | name_len:u8 | name:[u8; name_len]` — minimum 9 bytes; name 3–32 chars.
 
 ---
 
-## Team Validation
+## Account Structures
 
-### Membership Checks
+### TeamAccount (280 bytes)
 
 ```rust
-/// Check if player is team member
-pub fn is_member(&self, player: &Pubkey) -> bool {
-    self.members().iter().any(|m| m == player)
-}
-
-/// Check if player is team leader
-pub fn is_leader(&self, player: &Pubkey) -> bool {
-    &self.leader == player
-}
-
-/// Check if team is full
-pub fn is_full(&self) -> bool {
-    self.member_count >= 50
-}
-
-/// Check if team is active
-pub fn is_active(&self) -> bool {
-    !self.disbanded && self.leader != NULL_PUBKEY
+pub struct TeamAccount {
+    pub account_key: u8,
+    pub game_engine: Address,               // 32 - kingdom reference
+    pub id: u64,                            // 8  - unique team ID (PDA seed)
+    pub leader: Address,                    // 32 - leader's PLAYER ACCOUNT pubkey (not wallet)
+    pub bump: u8,
+    pub disbanded: bool,
+    pub _padding0: [u8; 6],
+    pub name: [u8; 32],                     // UTF-8, 3–32 chars
+    pub name_len: u8,
+    pub _padding1: [u8; 7],
+    pub member_count: u16,
+    pub max_members: u16,
+    pub _padding2: [u8; 4],
+    pub created_at: i64,
+    pub last_activity: i64,
+    pub treasury: u64,
+    pub settings: u8,                       // bit0=SETTING_PUBLIC, bit1=SETTING_AUTO_ACCEPT
+    pub min_level_to_join: u8,
+    pub role_permissions: [u8; 5],          // index = rank (0..4)
+    pub _padding3: u8,
+    pub motd: [u8; 32],                     // UTF-8
+    pub motd_len: u8,
+    pub _padding4: [u8; 7],
+    pub treasury_instant_limit: [u64; 4],  // index 0=Rank1, 1=Rank2, 2=Rank3, 3=Rank4
+    pub treasury_daily_cap: [u64; 4],
+    pub treasury_cooldown_hours: u8,        // 1–72
+    pub _treasury_reserved: [u8; 7],
 }
 ```
 
-### Name Validation Rules
+**PDA seeds:** `[b"team", game_engine, team_id:u64 LE]`
 
-| Rule | Requirement |
-|------|-------------|
-| Length | 3-32 characters |
-| Characters | Alphanumeric + underscore |
-| No profanity | Filtered word list |
-| Unique | Not already taken |
+> **Note:** The compile-time size assertion at the bottom of `state/team.rs` is `[(); 280]`. The `leader` field stores the **player account pubkey**, not the owner wallet address.
 
----
+### TeamMemberSlot (104 bytes)
 
-## Team Benefits
+Each member occupies one slot PDA. Account existence equals membership. Closing it (leave / kick) returns rent to the leaving member's wallet.
 
-### Rally Participation
+```rust
+pub struct TeamMemberSlot {
+    pub account_key: u8,
+    pub team: Address,                      // 32 - team pubkey
+    pub player: Address,                    // 32 - player ACCOUNT pubkey (not wallet)
+    pub joined_at: i64,
+    pub slot_index: u16,
+    pub bump: u8,
+    pub rank: u8,                           // 0 = leader .. 4 = lowest
+    pub _reserved: [u8; 4],
+    pub treasury_withdrawn_today: u64,
+    pub last_treasury_day: u16,             // unix_ts / 86400 for daily reset
+    pub _treasury_padding: [u8; 6],
+}
+```
 
-Team membership is required for rallies:
-- Only team members can join each other's rallies
-- Leader buffs apply to entire rally
-- Loot shared among participants
+**PDA seeds:** `[b"team_slot", team_pubkey, slot_index:u16 LE]`
 
-### Reinforcements
+### TreasuryRequest (112 bytes)
 
-Team members can reinforce each other:
-- Send units to defend teammates
-- Garrison team castles
-- Shared defense calculations
+```rust
+pub struct TreasuryRequest {
+    pub account_key: u8,
+    pub team: Address,          // 32
+    pub requester: Address,     // 32 - requester's player account pubkey
+    pub amount: u64,
+    pub created_at: i64,
+    pub executable_at: i64,     // created_at + cooldown_seconds
+    pub bump: u8,
+    pub _reserved: [u8; 15],
+}
+```
 
-### Team Events
-
-Some events are team-based:
-- Combined score leaderboards
-- Team vs team competitions
-- Exclusive team rewards
+**PDA seeds:** `[b"treasury_request", team_pubkey, requester_player_pubkey]`
 
 ---
 
 ## Client Integration
 
-### Display Team Info
+```typescript
+import { PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
 
-```javascript
-async function getTeamInfo(connection, teamId) {
-  const [teamPda] = PublicKey.findProgramAddress(
-    [Buffer.from("team"), teamId.toBuffer()],
-    PROGRAM_ID
+// Derive team PDA
+function findTeamPda(gameEngine: PublicKey, teamId: bigint, programId: PublicKey) {
+  const teamIdBuf = Buffer.alloc(8);
+  teamIdBuf.writeBigUInt64LE(teamId);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("team"), gameEngine.toBuffer(), teamIdBuf],
+    programId
   );
-
-  const team = await fetchTeamAccount(connection, teamPda);
-
-  return {
-    id: team.id,
-    name: decodeTeamName(team.name, team.nameLen),
-    leader: team.leader,
-    members: team.members.slice(0, team.memberCount),
-    memberCount: team.memberCount,
-    treasury: team.treasury,
-    isActive: !team.disbanded,
-    createdAt: new Date(team.createdAt * 1000)
-  };
 }
-```
 
-### Check Membership
-
-```javascript
-function getPlayerTeamStatus(player, teams) {
-  for (const team of teams) {
-    if (team.members.some(m => m.equals(player))) {
-      return {
-        inTeam: true,
-        teamId: team.id,
-        teamName: team.name,
-        isLeader: team.leader.equals(player)
-      };
-    }
-  }
-  return { inTeam: false };
-}
-```
-
-### Create Team UI
-
-```javascript
-async function createTeam(connection, wallet, teamName) {
-  // Validate name client-side first
-  if (!isValidTeamName(teamName)) {
-    throw new Error('Invalid team name');
-  }
-
-  // Check player not already in team
-  const playerStatus = await getPlayerTeamStatus(wallet.publicKey);
-  if (playerStatus.inTeam) {
-    throw new Error('Already in a team');
-  }
-
-  const nextTeamId = await getNextTeamId(connection);
-
-  const [teamPda] = PublicKey.findProgramAddress(
-    [Buffer.from("team"), nextTeamId.toBuffer()],
-    PROGRAM_ID
+// Derive member slot PDA
+function findTeamSlotPda(team: PublicKey, slotIndex: number, programId: PublicKey) {
+  const slotBuf = Buffer.alloc(2);
+  slotBuf.writeUInt16LE(slotIndex);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("team_slot"), team.toBuffer(), slotBuf],
+    programId
   );
-
-  const ix = createTeamInstruction({
-    name: teamName,
-    teamId: nextTeamId
-  });
-
-  return sendTransaction(connection, wallet, [ix]);
 }
-```
 
-### Team Management UI
-
-```javascript
-function renderTeamManagement(team, currentUser) {
-  const isLeader = team.leader.equals(currentUser);
-
-  return `
-    Team: ${team.name}
-    Members: ${team.memberCount}/50
-    Treasury: ${formatNovi(team.treasury)} NOVI
-
-    ${team.members.map(member => `
-      - ${formatAddress(member)} ${member.equals(team.leader) ? '(Leader)' : ''}
-        ${isLeader && !member.equals(currentUser) ? '[Kick] [Transfer Leadership]' : ''}
-    `).join('\n')}
-
-    ${isLeader ? `
-      [Deposit to Treasury] [Withdraw from Treasury]
-      [Invite Player] [Disband Team]
-    ` : `
-      [Deposit to Treasury] [Leave Team]
-    `}
-  `;
+// Check if rank can withdraw instantly
+function canWithdrawInstant(
+  team: TeamAccount,
+  slot: TeamMemberSlot,
+  amount: bigint,
+  nowMs: number
+): boolean {
+  if (slot.rank === 0) return true; // leader unlimited
+  const idx = slot.rank - 1;
+  const limit = team.treasuryInstantLimit[idx];
+  const cap = team.treasuryDailyLimit[idx];
+  const todayDay = BigInt(Math.floor(nowMs / 86_400_000));
+  const withdrawn = BigInt(slot.lastTreasuryDay) === todayDay
+    ? slot.treasuryWithdrawnToday
+    : 0n;
+  return amount <= limit && amount <= cap - withdrawn;
 }
 ```
 
 ---
 
-## Constants
+Next: [Events](./events.md)
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `MAX_TEAM_MEMBERS` | 50 | Maximum members |
-| `TEAM_NAME_MAX_LENGTH` | 32 | Name character limit |
-| `TEAM_CREATION_COST` | 10,000 | NOVI to create |
-
----
-
-*Teams transform individuals into empires. Build alliances, pool resources, and conquer together.*
-
----
-
-Next: [Reinforcements](./reinforcements.md)
+*Rank is a number, but trust is the only currency the treasury cannot quantify.*

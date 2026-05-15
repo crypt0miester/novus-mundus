@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
@@ -9,6 +8,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{PlayerAccount, NULL_PUBKEY, require_extension, EXT_HEROES},
+    utils::read_u8,
     validation::{
         require_signer,
         require_writable,
@@ -39,20 +39,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [owner, player_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account]);
 
     // 2. Validate accounts
     require_signer(owner)?;
     require_writable(player_account)?;
 
     // 3. Parse instruction data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let slot_index = instruction_data[0];
+    let slot_index = read_u8(instruction_data, 0, "assign_defensive.slot_index")?;
 
     // 4. SAFETY: Bounds check slot index
     if slot_index >= 3 {

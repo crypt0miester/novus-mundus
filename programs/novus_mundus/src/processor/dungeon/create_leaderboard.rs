@@ -18,7 +18,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -31,6 +30,7 @@ use crate::{
     error::GameError,
     state::{DungeonTemplate, DungeonLeaderboard, GameEngine},
     validation::{require_signer, require_writable},
+    utils::{read_u16, read_u64},
     emit,
     events::KingdomDungeonLeaderboardCreated,
 };
@@ -49,15 +49,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         dungeon_template_account,
         leaderboard_account,
         game_engine,
         _system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate signer
     require_signer(payer)?;
@@ -65,16 +63,9 @@ pub fn process(
     require_writable(leaderboard_account)?;
 
     // 3. Parse instruction data
-    if instruction_data.len() < 12 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let dungeon_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let week_number = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
-    let prize_pool = u64::from_le_bytes([
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
-    ]);
+    let dungeon_id = read_u16(instruction_data, 0, "create_leaderboard.dungeon_id")?;
+    let week_number = read_u16(instruction_data, 2, "create_leaderboard.week_number")?;
+    let prize_pool = read_u64(instruction_data, 4, "create_leaderboard.prize_pool")?;
 
     // 4. Validate dungeon exists
     let _template = DungeonTemplate::load_checked(dungeon_template_account, dungeon_id, program_id)?;

@@ -37,16 +37,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         player_account,
         estate_account,
         player_token_account,
         novi_mint,
         _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -54,6 +52,12 @@ pub fn process(
     require_writable(estate_account)?;
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "estate_build.novi_mint",
+        GameError::InvalidMint,
+    );
     // Program-ownership gate (precedes the unsafe ::load calls below).
     require_owner(player_account, program_id)?;
     require_owner(estate_account, program_id)?;

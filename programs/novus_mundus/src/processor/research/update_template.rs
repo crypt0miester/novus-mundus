@@ -12,6 +12,7 @@ use crate::{
         require_signer,
         require_writable,
     },
+    utils::{read_u8, read_u16, read_u32, read_u64},
 };
 
 /// Update research template (DAO only)
@@ -40,9 +41,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [dao_authority, research_template, game_engine] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [dao_authority, research_template, game_engine]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;
@@ -57,11 +56,7 @@ pub fn process(
     }
 
     // 4. Parse instruction data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let field_to_update = instruction_data[0];
+    let field_to_update = read_u8(instruction_data, 0, "update_template.field_to_update")?;
 
     // 5. Load template
     let mut template_data = research_template.try_borrow_mut()?;
@@ -74,76 +69,56 @@ pub fn process(
             if instruction_data.len() != 5 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_time_seconds = u32::from_le_bytes([
-                instruction_data[1],
-                instruction_data[2],
-                instruction_data[3],
-                instruction_data[4],
-            ]);
+            template.base_time_seconds = read_u32(instruction_data, 1, "update_template.base_time_seconds")?;
         },
         1 => {
             // Update base_novi_cost (u64)
             if instruction_data.len() != 9 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_novi_cost = u64::from_le_bytes([
-                instruction_data[1],
-                instruction_data[2],
-                instruction_data[3],
-                instruction_data[4],
-                instruction_data[5],
-                instruction_data[6],
-                instruction_data[7],
-                instruction_data[8],
-            ]);
+            template.base_novi_cost = read_u64(instruction_data, 1, "update_template.base_novi_cost")?;
         },
         2 => {
             // Update buff_per_level_bps (u16)
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.buff_per_level_bps = u16::from_le_bytes([
-                instruction_data[1],
-                instruction_data[2],
-            ]);
+            template.buff_per_level_bps = read_u16(instruction_data, 1, "update_template.buff_per_level_bps")?;
         },
         3 => {
             // Update gem_cost_per_minute (u16)
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.gem_cost_per_minute = u16::from_le_bytes([
-                instruction_data[1],
-                instruction_data[2],
-            ]);
+            template.gem_cost_per_minute = read_u16(instruction_data, 1, "update_template.gem_cost_per_minute")?;
         },
         4 => {
             // Update is_active (bool)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.is_active = instruction_data[1] != 0;
+            template.is_active = read_u8(instruction_data, 1, "update_template.is_active")? != 0;
         },
         5 => {
             // Update max_level (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.max_level = instruction_data[1];
+            template.max_level = read_u8(instruction_data, 1, "update_template.max_level")?;
         },
         6 => {
             // Update prerequisite_research (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.prerequisite_research = instruction_data[1];
+            template.prerequisite_research = read_u8(instruction_data, 1, "update_template.prerequisite_research")?;
         },
         7 => {
             // Update prerequisite_level (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.prerequisite_level = instruction_data[1];
+            template.prerequisite_level = read_u8(instruction_data, 1, "update_template.prerequisite_level")?;
         },
         _ => return Err(GameError::InvalidParameter.into()),
     }

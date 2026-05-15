@@ -1,8 +1,8 @@
-# Rally System State Machine
+# Rally State Machine
 
 ## Overview
 
-The Rally system coordinates team-based attacks across cities. Teams gather forces at a rally point, march to a target, execute combat, and return home with loot. The system uses separate RallyParticipant accounts for each joiner to track their committed units, weapons, and loot shares.
+The Rally system coordinates team-based attacks on players, encounters, and castles. State is split across two account types: `RallyAccount` (the central record) and `RallyParticipant` (one per joiner). The `RallyParticipant` is created at join time and closed at `process_return`; the `RallyAccount` is closed at `close_rally`.
 
 ---
 
@@ -10,336 +10,296 @@ The Rally system coordinates team-based attacks across cities. Teams gather forc
 
 ### States
 
-| State | Value | Description |
-|-------|-------|-------------|
-| `Gathering` | 0 | Participants traveling to rally point |
-| `Marching` | 1 | Army marching to target |
-| `Combat` | 2 | Combat being resolved |
-| `Returning` | 3 | Participants returning home |
-| `Completed` | 4 | Rally finished, accounts closable |
-| `Cancelled` | 5 | Rally cancelled, all returning |
+| Value | Variant | Description |
+|-------|---------|-------------|
+| 0 | `Gathering` | Participants joining and traveling to rally point |
+| 1 | `Marching` | Army marching to target (reserved for future two-phase march) |
+| 2 | `Combat` | Combat being resolved (reserved; execute completes atomically) |
+| 3 | `Returning` | Execute completed; each participant returning home |
+| 4 | `Completed` | All participants returned; rally account closable |
+| 5 | `Cancelled` | Creator cancelled during Gathering; participants returning |
 
 ### State Diagram
 
-```
-┌────────────────┐  create_rally   ┌────────────────┐
-│                │ ──────────────> │                │
-│  NonExistent   │                 │   Gathering    │◄──┐
-│                │                 │   (status=0)   │   │ join_rally
-└────────────────┘                 └───────┬────────┘───┘
-                                           │
-                                           │ gather_at elapsed
-                                           │ (automatic start_march)
-                                           ▼
-                                   ┌────────────────┐
-                                   │                │
-                                   │    Marching    │
-                                   │   (status=1)   │
-                                   └───────┬────────┘
-                                           │
-                                           │ arrive_at elapsed
-                                           ▼
-                                   ┌────────────────┐
-                                   │                │
-                                   │    Combat      │ (execute_rally)
-                                   │   (status=2)   │
-                                   └───────┬────────┘
-                                           │
-                                           │ combat resolved
-                                           ▼
-                                   ┌────────────────┐
-                                   │                │
-                                   │   Returning    │◄──┐
-                                   │   (status=3)   │   │ process_return
-                                   └───────┬────────┘───┘
-                                           │
-                                           │ all_returned
-                                           ▼
-                                   ┌────────────────┐
-                                   │                │
-                                   │   Completed    │
-                                   │   (status=4)   │
-                                   └───────┬────────┘
-                                           │
-                                           │ close_rally
-                                           ▼
-                                   ┌────────────────┐
-                                   │  NonExistent   │
-                                   └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Gathering : create_rally (60)
+    Gathering --> Gathering : join_rally (61)
+    Gathering --> Cancelled : cancel_rally (64)<br/>(creator only)
+    Gathering --> Returning : execute_rally (62)<br/>(permissionless, >= 2 participants,<br/>gather_at elapsed)
+    Returning --> Completed : all participants returned<br/>(returned_count >= participant_count)
+    Cancelled --> Completed : all participants returned
+    Completed --> [*] : close_rally (67)<br/>(permissionless)
 ```
 
-### Transitions
-
-#### `NonExistent` → `Gathering`
 ```
-Trigger: create_rally
+                    create_rally
+ ┌─────────────┐ ──────────────> ┌───────────────┐
+ │             │                 │               │
+ │ NonExistent │                 │   Gathering   │ <── join_rally
+ │             │                 │               │
+ └─────────────┘                 └───────┬───────┘
+                                         │
+                     ┌───────────────────┼───────────────────┐
+                     │                   │                   │
+              cancel_rally        execute_rally         leave_rally
+              (creator only)   (permissionless,       (participant)
+                     │          gather_at elapsed,         │
+                     │          ≥ 2 participants)          │
+                     ▼                   │                   │
+              ┌───────────┐             │                   ▼
+              │           │             │          ┌────────────────┐
+              │ Cancelled │             │          │ Participant    │
+              │           │             │          │ returning      │
+              └─────┬─────┘             │          │ (early leaver) │
+                    │                   ▼          └────────────────┘
+                    │          ┌─────────────┐
+                    │          │  Returning  │
+                    │          └──────┬──────┘
+                    │                 │
+                    │         all returned
+                    │                 │
+                    └────────┬────────┘
+                             │
+                             ▼
+                      ┌───────────┐
+                      │ Completed │
+                      └─────┬─────┘
+                             │ close_rally (permissionless)
+                             ▼
+                      ┌───────────┐
+                      │  Closed   │
+                      │ (account  │
+                      │  gone)    │
+                      └───────────┘
+```
+
+---
+
+## 2. Gathering Phase Transitions
+
+### `NonExistent` → `Gathering` (create_rally)
+
+```
+Trigger: create_rally (ID 60)
 Guards:
-  - Creator on a team
-  - Creator not traveling
-  - EXT_INVENTORY unlocked (prerequisite for EXT_RALLY)
-  - Citadel building level >= 1
-  - Sufficient units committed (total > 0)
-  - Sufficient weapons owned
-  - gather_duration > 0
+  - EXT_TEAM extension present on creator
+  - creator.team_address != NULL_PUBKEY (on a team)
+  - team is not disbanded
+  - Citadel building level >= 1 (from estate account)
+  - total_units > 0
+  - creator has sufficient units and weapons
+  - creator not traveling (is_traveling_any() == false)
 Actions:
-  - Unlock EXT_RALLY if not unlocked
-  - Create RallyAccount PDA: [RALLY_SEED, creator, rally_id]
-  - Create RallyParticipant PDA: [RALLY_PARTICIPANT_SEED, creator, rally_id, creator]
-  - Deduct units and weapons from creator
-  - Snapshot leader buffs to RallyAccount
-  - Calculate max_participants from tier + hero + citadel bonuses
-  - Set status = Gathering
-  - Update creator.rally_stats
+  - Deduct units/weapons from creator.PlayerAccount
+  - If hero_slot_index < 255: remove hero from slot, snapshot hero power
+  - Snapshot leader buff fields from creator:
+      leader_research_attack_bps, leader_research_crit_chance_bps,
+      leader_research_crit_damage_bps, leader_hero_attack_bps,
+      leader_hero_weapon_efficiency_bps, leader_hero_crit_chance_bps,
+      leader_equipped_weapon_bonus_bps
+  - Compute max_participants from tier + hero buff + Citadel bonus
+  - Create RallyAccount [RALLY_SEED, game_engine, creator_wallet, rally_id LE]
+  - Create leader's RallyParticipant [RALLY_PARTICIPANT_SEED, game_engine, creator_wallet, rally_id, creator_wallet]
+  - status = Gathering
+  - gather_at = execute_at = now + gather_duration (default 3600s if invalid)
   - Emit RallyCreated
 ```
 
-#### `Gathering` → `Gathering` (Join)
+### `Gathering` → `Gathering` (join_rally)
+
 ```
-Trigger: join_rally
+Trigger: join_rally (ID 61)
 Guards:
-  - Rally status == Gathering
-  - Joiner on same team as rally
-  - Joiner not already joined
+  - status == Gathering
+  - now < rally.gather_at (recruiting still open)
   - participant_count < max_participants
-  - Sufficient units committed
+  - Caller != rally creator (already joined)
+  - EXT_TEAM extension on caller
+  - caller.team_address == rally.team (same team)
+  - team is not disbanded
+  - caller has sufficient units and weapons
+  - caller not traveling
 Actions:
-  - Create RallyParticipant PDA for joiner
-  - Deduct units and weapons from joiner
-  - Calculate travel time to rally point
-  - Aggregate totals in RallyAccount
-  - Update joiner.rally_stats.current_rallies_joined
+  - Deduct units/weapons from caller.PlayerAccount
+  - If hero: remove from slot, snapshot hero power
+  - Snapshot caller's buff fields into RallyParticipant
+  - Calculate travel time to rally_city (intracity walking or intercity theme speed)
+  - Create RallyParticipant PDA
+  - rally.participant_count += 1
+  - rally.total_units/weapons updated
   - Emit RallyJoined
 ```
 
-#### `Gathering` → `Marching`
+### `Gathering` → `Cancelled` (cancel_rally)
+
 ```
-Trigger: start_march (or automatic at gather_at)
+Trigger: cancel_rally (ID 64)
 Guards:
-  - now >= rally.gather_at
-  - participant_count >= min_participants
-  - At least some participants arrived at rally point
+  - status == Gathering
+  - Caller == rally.creator (wallet match)
+  - now < rally.gather_at
 Actions:
-  - Mark all arrived participants as included_in_march
-  - Calculate march duration based on distance
-  - Set rally.march_started_at = now
-  - Set rally.arrive_at = now + march_duration
-  - Set status = Marching
-  - Emit MarchStarted
+  - status = Cancelled
+  - Start creator's return journey (calculate intracity return duration)
+  - creator.rally_stats.current_rallies_joined -= 1
+  - Emit RallyCancelled
+Note: Other participants must call process_return to get units back.
 ```
 
-#### `Marching` → `Returning`
+### Participant: `Gathering` → Early Return (leave_rally)
+
 ```
-Trigger: execute_rally
+Trigger: leave_rally (ID 63)
 Guards:
-  - Rally status == Gathering OR Marching
+  - status == Gathering
+  - Caller is a participant (RallyParticipant exists)
+Actions:
+  - Calculate return travel time (from current position to home)
+  - participant.return_started_at = now
+  - participant.included_in_march = false
+  - Decrement rally.participant_count, total_units, total_weapons
+  - Caller's rally_stats.current_rallies_joined -= 1
+  - Emit RallyLeft
+```
+
+---
+
+## 3. Execute Transition
+
+### `Gathering` / `Marching` → `Returning` (execute_rally)
+
+```
+Trigger: execute_rally (ID 62) — permissionless
+Guards:
+  - status ∈ {Gathering, Marching}
+  - participant_count >= MIN_RALLY_PARTICIPANTS (= 2)
   - now >= rally.execute_at
-  - participant_count >= MIN_RALLY_PARTICIPANTS
-  - Target matches rally.target
 Actions:
-  - Aggregate power from arrived participants only
-  - Calculate total damage with leader buffs + citadel bonus
-  - Execute combat based on target_type:
-    - 0 (Player): Full weapon combat mechanics
-    - 1 (Encounter): Damage encounter health, calculate loot pool
-  - Distribute casualties proportionally by contribution
-  - Distribute loot shares proportionally (only if attacker won)
-  - Set return_started_at for all participants
-  - Set status = Returning
-  - Emit RallyExecuted
+  1. Aggregate: For each RallyParticipant where now >= arrives_at_rally:
+       - Mark included_in_march = true
+       - Add units/weapons to totals
+       - contribution_power = units + melee + ranged + siege
+  2. Compute contribution_bps[i] = contribution_power[i] × 10000 / total_contribution
+  3. Apply Citadel damage bonus:
+       total_damage = base_damage × (10000 + citadel_bonus_bps) / 10000
+  4. Resolve combat based on target_type (0=PvP, 1=Encounter, 2=Castle)
+  5. Distribute casualties proportionally by contribution:
+       participant.casualties_k = casualties × (units_k / total_units) capped at committed
+  6. Distribute loot: participant.loot_X = total_loot_X × contribution_bps / 10000
+  7. Set return journey for each marcher:
+       return_started_at = now
+       return_duration = travel_duration (same as outbound)
+  8. rally.status = Returning
+  9. Emit RallyExecuted
 ```
 
-#### `Returning` → `Completed`
+---
+
+## 4. Return Phase
+
+### Participant: `Returning` → `Completed` (process_return)
+
+`process_return` (ID 65) is **permissionless**. It handles three participant types:
+
+| Participant Type | Condition | Units Returned | Weapons | Loot |
+|-----------------|-----------|---------------|---------|------|
+| Marcher | `included_in_march == true` | surviving = committed − casualties | melee+ranged survival-scaled; siege = 0 | proportional share (if won) |
+| Early leaver | `included_in_march == false`, `return_started_at > 0` | 100% committed | 100% committed | none |
+| Late joiner / cancelled | all others | 100% committed | 100% committed | none |
+
 ```
-Trigger: process_return (per participant, multiple times)
-Guards:
-  - Rally status == Returning
-  - Participant included_in_march
+Trigger: process_return (ID 65)
+Guards (marcher/early leaver):
+  - status ∈ {Returning, Completed, Cancelled}
+  - return_started_at > 0
   - now >= return_started_at + return_duration
-  - Participant not yet returned
+Guards (late joiner / cancelled participant):
+  - status == Gathering or Cancelled (late joiner starting return)
+  - OR status ∈ {Returning, Completed, Cancelled}
 Actions:
-  - Return surviving units to player
-  - Return surviving weapons (proportional to survival)
-  - Grant loot share to player
-  - Mark participant as returned
-  - Increment rally.returned_count
-  - Close RallyParticipant account (refund rent)
-  - Emit ParticipantReturned
-
-Final transition when rally.all_returned():
-  - Set status = Completed
+  - Return units/weapons/hero to participant.PlayerAccount
+  - Casualties → estate Infirmary wounded pool (if Infirmary built)
+  - Rally stats: current_rallies_joined -= 1
+  - participant.returned = true
+  - rally.returned_count += 1
+  - If rally.status == Returning AND all returned → status = Completed
+  - Close RallyParticipant (rent → participant wallet)
+  - Emit RallyParticipantReturned
 ```
 
-#### `Completed` → `NonExistent`
+**Weapon return formula for marchers:**
+
 ```
-Trigger: close_rally
+survival_ratio_bps = total_surviving_units × 10000 / total_units_committed
+melee_returned  = melee_committed  × survival_ratio_bps / 10000
+ranged_returned = ranged_committed × survival_ratio_bps / 10000
+siege_returned  = 0   // siege always consumed in execute
+```
+
+### `Returning` / `Cancelled` → `Completed`
+
+```
+Automatic: when returned_count >= participant_count in process_return
+```
+
+### `Completed` / `Cancelled` → `NonExistent` (close_rally)
+
+```
+Trigger: close_rally (ID 67) — permissionless
 Guards:
-  - Rally status == Completed OR Cancelled
-  - rally.all_returned()
+  - status ∈ {Completed, Cancelled}
+  - returned_count >= participant_count (all have processed returns)
+  - Caller must pass creator's wallet as leader_owner (receives rent)
 Actions:
-  - Close RallyAccount (refund rent to creator)
+  - Close RallyAccount (rent → rally.creator wallet)
   - Emit RallyClosed
 ```
 
 ---
 
-## 2. Cancellation Flow
+## 5. Speedup
 
-### Transitions
-
-#### `Gathering` → `Cancelled`
 ```
-Trigger: cancel_rally
+Trigger: speedup_rally (ID 66)
 Guards:
-  - Rally status == Gathering
-  - Caller is creator
-Actions:
-  - Set status = Cancelled
-  - Set return_started_at for all participants
-  - Emit RallyCancelled
-```
-
-#### `Gathering/Marching` → (Leave)
-```
-Trigger: leave_rally
-Guards:
-  - Rally status == Gathering OR Marching
-  - Participant is not leader (cannot abandon own rally)
-Actions:
-  - Return committed units and weapons immediately
-  - Update player.rally_stats.current_rallies_joined
-  - Decrement rally totals
-  - Decrement rally.participant_count
-  - Close RallyParticipant account
-  - Emit ParticipantLeft
+  - Speedup type 0 (Gather): status == Gathering, participant not yet arrived
+  - Speedup type 1 (March):  status == Marching, now < arrive_at
+  - Speedup type 2 (Return): participant.return_started_at > 0, not yet returned
+  - Payer has sufficient gems
+Actions (tier 1 → 50% remains; tier 2 → 25% remains):
+  gem_cost = ceil(remaining_seconds / 60) × gem_cost_per_minute × tier_multiplier
+  Deduct gems from payer.PlayerAccount
+  Adjust arrives_at_rally / arrive_at / return_duration accordingly
+  Emit RallySpeedup
 ```
 
 ---
 
-## 3. Participant State Machine
+## Account Structure
 
-### States
+### RallyAccount
 
-| State | Description |
-|-------|-------------|
-| `Traveling` | Moving to rally point |
-| `AtRally` | Arrived at rally point, waiting |
-| `Marching` | Included in march to target |
-| `Returning` | Returning home |
-| `Returned` | Back home, account closable |
-
-### State Diagram
-
-```
-┌────────────────┐  join_rally   ┌────────────────┐
-│                │ ────────────> │                │
-│  NonExistent   │               │   Traveling    │
-│                │               │ (to rally pt)  │
-└────────────────┘               └───────┬────────┘
-       ▲                                 │
-       │                                 │ arrives_at_rally elapsed
-       │                                 ▼
-       │                         ┌────────────────┐
-       │                         │                │
-       │                         │    AtRally     │
-       │                         │ (waiting)      │
-       │                         └───────┬────────┘
-       │                                 │
-       │                                 │ start_march
-       │                                 ▼
-       │                         ┌────────────────┐
-       │                         │                │
-       │                         │   Marching     │
-       │                         │(to target)     │
-       │                         └───────┬────────┘
-       │                                 │
-       │                                 │ execute_rally
-       │                                 ▼
-       │                         ┌────────────────┐
-       │                         │                │
-       │                         │   Returning    │
-       │                         │ (going home)   │
-       │                         └───────┬────────┘
-       │                                 │
-       │                                 │ process_return
-       │                                 ▼
-       │                         ┌────────────────┐
-       │                         │                │
-       │ account closed          │   Returned     │
-       └─────────────────────────│                │
-                                 └────────────────┘
-```
-
----
-
-## 4. Speedup System
-
-### Travel Speedup (To Rally Point)
-```
-Trigger: speedup_rally_travel
-Guards:
-  - Participant traveling to rally
-  - not arrived_at_rally
-  - Sufficient gems
-Actions:
-  - Calculate time reduction (50% or 75%)
-  - Deduct gems
-  - Adjust arrives_at_rally
-  - Emit TravelSpeedup
-```
-
-### March Speedup
-```
-Trigger: speedup_rally
-Guards:
-  - Rally status == Marching
-  - Caller is creator
-  - Sufficient gems
-Actions:
-  - Calculate time reduction
-  - Deduct gems from creator
-  - Adjust rally.arrive_at
-  - Emit MarchSpeedup
-```
-
----
-
-## 5. Target Types
-
-| Type | Value | Target | Combat Resolution |
-|------|-------|--------|-------------------|
-| Player | 0 | PlayerAccount | Full weapon combat, loot from player |
-| Encounter | 1 | EncounterAccount | Damage health, loot pool on defeat |
-| Castle | 2 | CastleAccount | (Kings Castle extension) |
-
----
-
-## 6. Account Structures
-
-### RallyAccount (304 bytes)
 ```rust
 pub struct RallyAccount {
-    // Identity (48 bytes)
+    pub account_key: u8,
+    pub game_engine: Address,
     pub id: u64,
-    pub creator: Pubkey,
-    pub team: Pubkey,
-
-    // Location (8 bytes)
+    pub creator: Address,                   // creator's WALLET pubkey
+    pub team: Address,
     pub rally_city: u16,
     pub target_city: u16,
-    pub target_type: u8,
-
-    // Target (32 bytes)
-    pub target: Pubkey,
-
-    // Timing (48 bytes)
+    pub target_type: u8,                   // 0=player, 1=encounter, 2=castle
+    pub _padding1: [u8; 3],
+    pub target: Address,
     pub created_at: i64,
     pub gather_at: i64,
-    pub execute_at: i64,
+    pub execute_at: i64,                   // == gather_at (legacy compatibility)
     pub march_started_at: i64,
     pub arrive_at: i64,
     pub march_duration: i32,
-
-    // Leader buffs (16 bytes)
+    pub _padding2: [u8; 4],
+    // Leader buff snapshots (7 × u16):
     pub leader_research_attack_bps: u16,
     pub leader_research_crit_chance_bps: u16,
     pub leader_research_crit_damage_bps: u16,
@@ -347,28 +307,22 @@ pub struct RallyAccount {
     pub leader_hero_weapon_efficiency_bps: u16,
     pub leader_hero_crit_chance_bps: u16,
     pub leader_equipped_weapon_bonus_bps: u16,
-
-    // Participants (8 bytes)
+    pub _padding3: [u8; 2],
     pub min_participants: u8,
     pub max_participants: u8,
     pub participant_count: u8,
     pub arrived_count: u8,
     pub marched_count: u8,
     pub returned_count: u8,
-
-    // Aggregated totals (40 bytes)
+    pub _padding4: [u8; 2],
     pub total_units: u64,
     pub total_melee_weapons: u64,
     pub total_ranged_weapons: u64,
     pub total_siege_weapons: u64,
     pub total_power: u64,
-
-    // Combat results (24 bytes)
     pub total_casualties: u64,
     pub attack_damage_dealt: u64,
     pub defense_damage_received: u64,
-
-    // Loot totals (96 bytes)
     pub total_loot_cash: u64,
     pub total_loot_locked_novi: u64,
     pub total_loot_melee: u64,
@@ -378,37 +332,33 @@ pub struct RallyAccount {
     pub total_loot_vehicles: u64,
     pub total_loot_fragments: u64,
     pub total_loot_gems: u64,
-
-    // Status (8 bytes)
-    pub status: u8,
+    pub status: u8,                        // RallyStatus as u8
     pub fallback_triggered: bool,
     pub attacker_won: bool,
     pub bump: u8,
+    pub _padding5: [u8; 4],
 }
 ```
 
-### RallyParticipant (320 bytes)
+**PDA seeds:** `[b"rally", game_engine, creator_wallet, rally_id:u64 LE]`
+
+### RallyParticipant
+
 ```rust
 pub struct RallyParticipant {
-    // Identity (48 bytes)
+    pub account_key: u8,
     pub rally_id: u64,
-    pub rally_creator: Pubkey,
-    pub participant: Pubkey,
-
-    // Home (4 bytes)
+    pub rally_creator: Address,            // creator's wallet (PDA seed)
+    pub participant: Address,              // this participant's wallet
     pub home_city: u16,
-
-    // Units committed (24 bytes)
+    pub _padding1: [u8; 2],
     pub units_committed_1: u64,
     pub units_committed_2: u64,
     pub units_committed_3: u64,
-
-    // Weapons committed (24 bytes)
     pub melee_weapons_committed: u64,
     pub ranged_weapons_committed: u64,
     pub siege_weapons_committed: u64,
-
-    // Buffs (16 bytes)
+    // Buff snapshots (7 × u16):
     pub research_attack_bps: u16,
     pub research_crit_chance_bps: u16,
     pub research_crit_damage_bps: u16,
@@ -416,28 +366,21 @@ pub struct RallyParticipant {
     pub hero_weapon_efficiency_bps: u16,
     pub hero_crit_chance_bps: u16,
     pub equipped_weapon_bonus_bps: u16,
-
-    // Hero (40 bytes)
-    pub hero: Pubkey,
+    pub _padding2: [u8; 2],
+    pub hero: Address,
     pub hero_power_contribution: u64,
-
-    // Travel (24 bytes)
     pub travel_started_at: i64,
     pub arrives_at_rally: i64,
     pub travel_duration: i32,
-
-    // Status (8 bytes)
+    pub _padding3: [u8; 4],
     pub arrived_at_rally: bool,
     pub included_in_march: bool,
     pub returned: bool,
     pub is_leader: bool,
-
-    // Casualties (24 bytes)
+    pub _padding4: [u8; 4],
     pub casualties_1: u64,
     pub casualties_2: u64,
     pub casualties_3: u64,
-
-    // Loot share (96 bytes)
     pub loot_cash: u64,
     pub loot_locked_novi: u64,
     pub loot_melee: u64,
@@ -447,64 +390,33 @@ pub struct RallyParticipant {
     pub loot_vehicles: u64,
     pub loot_fragments: u64,
     pub loot_gems: u64,
-
-    // Return journey (16 bytes)
     pub return_started_at: i64,
     pub return_duration: i32,
-
-    // Contribution (16 bytes)
+    pub _padding5: [u8; 4],
     pub contribution_power: u64,
     pub contribution_bps: u16,
     pub bump: u8,
+    pub _padding6: [u8; 5],
 }
 ```
 
----
-
-## 7. Building Requirements
-
-### Creating Rallies
-- **Citadel (Estate Level 12+)**: Required to create rallies
-- **Citadel Level Bonus**: +2% rally capacity per level
-- **Citadel Damage Bonus**: +0.5% rally damage per level
-
-### Joining Rallies
-- No building requirements to join
-- Must be on same team as rally creator
+**PDA seeds:** `[b"rally_participant", game_engine, rally_creator_wallet, rally_id:u64 LE, participant_wallet]`
 
 ---
 
-## 8. Loot Distribution
-
-### Contribution Calculation
-```
-contribution = units_committed + weapons_committed
-contribution_bps = (participant_contribution × 10000) / total_contribution
-```
-
-### Loot Share Formula
-```
-participant_loot = (total_loot × contribution_bps) / 10000
-```
-
-### Casualty Distribution
-```
-participant_casualties = (total_casualties × participant_contribution) / total_contribution
-```
-
----
-
-## 9. Invariants
+## Invariants
 
 ```
-1. rally.creator must be team member
-2. All participants must be on rally.team
-3. participant_count <= max_participants
-4. arrived_count <= participant_count
-5. marched_count <= arrived_count
-6. returned_count <= marched_count
-7. Leader cannot leave their own rally
-8. Units/weapons are locked in RallyParticipant until return
-9. Loot only distributed if attacker_won == true
-10. Rally can only close when all_returned()
+1. rally.game_engine matches all participant players' game_engine (kingdom-scoped)
+2. rally.creator stores the WALLET pubkey, not the player account PDA
+3. MIN_RALLY_PARTICIPANTS = 2 enforced at execute_rally
+4. DEFAULT_RALLY_RECRUITING_DURATION = 3600s (1 hour) used when gather_duration <= 0
+5. execute_at == gather_at (set equal at create for current implementation)
+6. Leader's participant PDA uses creator_wallet as both rally_creator and participant seed
+7. Siege weapons committed are never returned (siege_returned = 0 in weapons_returned())
+8. contribution_bps values must sum to ≈ 10000 across all included_in_march participants
+9. returned_count increments only in process_return; Cancelled rallies do not auto-complete
+10. close_rally requires returned_count >= participant_count AND status ∈ {Completed, Cancelled}
+11. Citadel capacity bonus = 500 bps × citadel_level (5%/level)
+12. Citadel damage bonus  = 50 bps × citadel_level (0.5%/level)
 ```

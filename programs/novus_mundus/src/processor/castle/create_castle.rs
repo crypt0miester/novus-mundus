@@ -55,15 +55,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let dao_authority = &accounts[0];
-    let castle_account = &accounts[1];
-    let game_engine_account = &accounts[2];
-    let _system_program = &accounts[3];
-    let _rent_sysvar = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        dao_authority,
+        castle_account,
+        game_engine_account,
+        _system_program,
+        _rent_sysvar,
+    ]);
 
     // Verify signer
     if !dao_authority.is_signer() {

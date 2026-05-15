@@ -38,9 +38,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [player_owner, research_progress, player_account, payer, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [player_owner, research_progress, player_account, payer, system_program]);
 
     // 2. Validate accounts
     require_signer(player_owner)?;

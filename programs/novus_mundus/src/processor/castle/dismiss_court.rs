@@ -22,6 +22,7 @@ use crate::{
         player::{EXT_COURT, COURT_OFFSET, CourtSection},
     },
     helpers::close_account,
+    utils::read_u8,
     validation::{require_owner, require_initialized},
 };
 
@@ -44,16 +45,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 6 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let king_wallet = &accounts[0];
-    let king_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let dismissed_account = &accounts[3];
-    let court_position_account = &accounts[4];
-    let rent_recipient = &accounts[5];
+    crate::extract_accounts!(accounts, [
+        king_wallet,
+        king_account,
+        castle_account,
+        dismissed_account,
+        court_position_account,
+        rent_recipient,
+    ]);
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -61,11 +60,7 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 1 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let position_type = instruction_data[0];
+    let position_type = read_u8(instruction_data, 0, "position_type")?;
 
     // Load king player
     require_owner(king_account, program_id)?;

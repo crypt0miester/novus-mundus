@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -50,15 +49,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (base accounts required)
 
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_account = &accounts[0];
-    let owner = &accounts[1];
-    let origin_city_account = &accounts[2];
-    let destination_city_account = &accounts[3];
-    let destination_location_account = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        player_account,
+        owner,
+        origin_city_account,
+        destination_city_account,
+        destination_location_account,
+    ]);
 
     // Hero accounts are optional (accounts[5..] in pairs of NFT, HeroTemplate)
 

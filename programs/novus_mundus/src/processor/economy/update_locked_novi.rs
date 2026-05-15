@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -66,7 +65,7 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         user_account,
         owner,
@@ -75,9 +74,7 @@ pub fn process(
         game_engine_account,
         _token_program,
         estate_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Signer
 
@@ -85,7 +82,7 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // SECURITY: Verify token account belongs to the PlayerAccount PDA
+    // Verify token account belongs to the PlayerAccount PDA
     crate::helpers::validate_token_account_owner(player_token_account, player_account.address())?;
 
     // 3. Load Accounts
@@ -199,6 +196,13 @@ pub fn process(
         let bump_seed = [game_engine_data.bump];
         let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let signer = pinocchio::cpi::Signer::from(&seeds);
+
+        crate::require_keys_eq!(
+            novi_mint.address().as_array(),
+            &crate::constants::NOVI_MINT_ADDRESS,
+            "update_locked_novi.novi_mint",
+            GameError::InvalidMint,
+        );
 
         // Mint tokens to player's token account (increases total supply)
         crate::helpers::mint_tokens(

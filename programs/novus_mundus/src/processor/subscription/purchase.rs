@@ -81,9 +81,18 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    let [player, user, owner, payment_authority, treasury_wallet, user_novi_ata, novi_mint, game_engine, token_program, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, [
+        player,
+        user,
+        owner,
+        payment_authority,
+        treasury_wallet,
+        user_novi_ata,
+        novi_mint,
+        game_engine,
+        token_program,
+        system_program,
+    ]);
 
     // 2. Validate basic accounts
     require_signer(owner)?;
@@ -91,12 +100,18 @@ pub fn process(
     require_writable(user)?;
     require_writable(user_novi_ata)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "subscription_purchase.novi_mint",
+        GameError::InvalidMint,
+    );
     require_owner(player, program_id)?;
     require_owner(user, program_id)?;
     require_key_match(token_program, &pinocchio_token::ID)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // SECURITY: Verify token account belongs to the UserAccount PDA
+    // Verify token account belongs to the UserAccount PDA
     crate::helpers::validate_token_account_owner(user_novi_ata, user.address())?;
 
     let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
@@ -285,6 +300,7 @@ pub fn process(
         process_token_payment_flow(
             token_accounts,
             game_engine.address(),
+            &game_engine_data.treasury_wallet,
             program_id,
             shop_config,
             owner,

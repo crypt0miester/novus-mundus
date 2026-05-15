@@ -21,8 +21,13 @@ import {
   createHireUnitsInstruction,
   createCollectResourcesInstruction,
   createPurchaseStaminaInstruction,
+  createMintForPrizeInstruction,
+  MintPurpose,
   derivePlayerPda,
   deriveTeamPda,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressSync,
+  RESERVED_NOVI_VESTING_PERIOD,
   UnitType,
   CollectionType,
 } from '../../src/index';
@@ -51,7 +56,9 @@ import {
 import { log } from '../utils/logger';
 import {
   getCurrentTimestamp,
+  advanceTime,
 } from '../fixtures/time';
+import { readSplTokenAmount } from '../fixtures/svm';
 
 // Test Suite
 
@@ -238,6 +245,50 @@ describe('Token Operations', () => {
 
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
+    });
+
+    it('withdraws reserved NOVI and auto-creates the wallet ATA', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+      const AMOUNT = 500_000;
+
+      // DAO mints reserved NOVI to the player's user account.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createMintForPrizeInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              recipientOwner: player.publicKey,
+            },
+            { amount: new BN(AMOUNT), purpose: MintPurpose.Prize },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Reserved NOVI vests for 7 days before it can be withdrawn.
+      await advanceTime(ctx.svm, RESERVED_NOVI_VESTING_PERIOD + 60);
+
+      // The player's wallet NOVI ATA does not exist yet — withdraw must create it.
+      const [noviMint] = deriveNoviMintPda();
+      const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+      expect(ctx.svm.getAccount(walletAta)).toBeNull();
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createWithdrawReservedInstruction(
+            { gameEngine: ctx.gameEngine, owner: player.publicKey },
+            { amount: new BN(AMOUNT) },
+          ),
+        ),
+        [player.keypair],
+      );
+
+      // The wallet ATA now exists and holds the withdrawn NOVI.
+      expect(ctx.svm.getAccount(walletAta)).not.toBeNull();
+      expect(readSplTokenAmount(ctx.svm, walletAta)).toBe(BigInt(AMOUNT));
     });
   });
 

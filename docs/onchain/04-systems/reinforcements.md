@@ -1,24 +1,23 @@
 # Reinforcement System
 
-> Sending units to defend teammates and garrison castles.
+> Send defensive units, weapons, and heroes to protect teammates or garrison castles — with survival-scaled returns and permissionless crank processing.
 
 ## System Overview
 
-Reinforcements allow team members to **send defensive units** to protect each other. The system supports two destination types: **Player** (teammate) and **Castle** (team structure).
+The Reinforcement System allows teammates to lend defensive forces across city boundaries. One `ReinforcementAccount` tracks the sent units from a single sender to a single destination. The destination's `PlayerAccount` maintains aggregate totals that combat systems read directly; individual senders retain proportional ownership for recovery on recall or relief.
+
+Reinforcements are **kingdom-scoped** (`game_engine` enforced at load time).
 
 ```mermaid
 graph TB
-    subgraph "Reinforcement Types"
-        PLAYER[Player Reinforcement<br/>Teammate → Teammate]
-        CASTLE[Castle Garrison<br/>Member → Team Castle]
-    end
-
-    subgraph "Lifecycle"
-        SEND[Send Units] --> TRAVEL[Travel to Destination]
-        TRAVEL --> ACTIVE[Active Defense]
-        ACTIVE --> RECALL[Recall/Relieve]
-        RECALL --> RETURN[Return Home]
-        RETURN --> COMPLETE[Complete]
+    subgraph "Reinforcement Lifecycle"
+        SEND[send<br/>Deduct units from sender<br/>Create ReinforcementAccount] --> TRAVEL[Traveling<br/>Units en route]
+        TRAVEL -->|process_arrival crank| ACTIVE[Active<br/>Units defending destination]
+        ACTIVE -->|recall sender| RETURNING1[Returning<br/>Survival-adjusted amounts]
+        ACTIVE -->|relieve destination| RETURNING1
+        TRAVEL -->|recall sender| RETURNING2[Returning<br/>100% of original amounts]
+        RETURNING1 -->|process_return crank| COMPLETE[Completed<br/>Account closed]
+        RETURNING2 -->|process_return crank| COMPLETE
     end
 ```
 
@@ -26,457 +25,357 @@ graph TB
 
 | ID | Instruction | Description |
 |----|-------------|-------------|
-| 70 | `send_reinforcement` | Send units to teammate |
-| 71 | `send_garrison` | Send units to castle |
-| 72 | `process_arrival` | Mark arrival at destination |
-| 73 | `recall_reinforcement` | Sender recalls their units |
-| 74 | `relieve_reinforcement` | Destination sends units home |
-| 75 | `process_return` | Complete return and close |
-| 76 | `speedup_reinforcement` | Speed up travel |
+| 190 | `send` | Create `ReinforcementAccount`, deduct units/weapons from sender |
+| 191 | `process_arrival` | Permissionless crank: mark Active, add to destination aggregates |
+| 192 | `recall` | Sender initiates return (works on Active or Traveling) |
+| 193 | `relieve` | Destination owner sends reinforcement back (Active only) |
+| 194 | `process_return` | Permissionless crank: return surviving units/weapons, close account |
+| 195 | `speedup` | Sender spends gems to reduce travel or return time |
 
 [Source: processor/reinforcement/](../../../programs/novus_mundus/src/processor/reinforcement/)
 
 ---
 
-## ReinforcementAccount Structure
+## Send Constraints
 
-A single unified account type handles both player reinforcements and castle garrisons:
+| Constraint | Rule |
+|-----------|------|
+| Same kingdom | Sender and destination must share `game_engine` |
+| Same team | Both must be on the same team; team must not be disbanded |
+| "Military Logistics" research | Destination must have the research unlocked |
+| Weapon ratio | `total_weapons <= total_units` (more weapons than soldiers is invalid) |
+| Receive capacity | `destination.total_reinforcement_units + total_units_sent <= MAX_REINFORCEMENT_RECEIVE × hero_multiplier` |
+| Not self | Cannot reinforce own account |
+| Sender not traveling | `sender.is_traveling_any()` must be false |
+| At least 1 unit | `total_units > 0` |
+
+`MAX_REINFORCEMENT_RECEIVE = 10_000`. The hero multiplier applies if the destination has a `hero_unit_capacity_bps` buff active.
+
+---
+
+## Send Instruction Data (57 bytes)
+
+| Offset | Field | Type | Description |
+|--------|-------|------|-------------|
+| 0 | `units_def_1` | u64 LE | Tier 1 defensive units |
+| 8 | `units_def_2` | u64 LE | Tier 2 defensive units |
+| 16 | `units_def_3` | u64 LE | Tier 3 defensive units |
+| 24 | `melee_weapons` | u64 LE | Melee weapons |
+| 32 | `ranged_weapons` | u64 LE | Ranged weapons |
+| 40 | `siege_weapons` | u64 LE | Siege weapons |
+| 48 | `hero_slot` | u8 | 0–2 = commit hero from slot; 255 = no hero |
+| 49 | `team_id` | u64 LE | Team ID for PDA validation |
+
+**Optional account:** `accounts[9]` = hero NFT mint (required when `hero_slot < 3`).
+
+### Two PDA Types
+
+| Target | Seed | Use |
+|--------|------|-----|
+| Player reinforcement | `[b"reinforcement", game_engine, sender_wallet, destination_wallet]` | Teammate-to-teammate |
+| Castle garrison | `[b"garrison", game_engine, sender_wallet, castle_pubkey]` | Team member-to-castle |
+
+Only **one** `ReinforcementAccount` may exist per sender→destination pair within a kingdom at any time.
+
+---
+
+## Travel and Arrival
+
+Travel time uses intercity speed from the `GameEngine.theme_travel_speeds_kmh` config. Same-city reinforcements arrive instantly (`travel_duration = 0`).
+
+`process_arrival` (ID 191) is a **permissionless crank** with no instruction data:
 
 ```
-ReinforcementAccount:
-├── // Identity
-├── sender: Pubkey              // Who sent the reinforcement
-├── destination: Pubkey         // PlayerAccount OR CastleAccount
-│
-├── // Type & Location
-├── destination_type: u8        // 0=Player, 1=Castle
-├── bump: u8
-├── sender_city: u16            // For return travel calc
-├── destination_city: u16
-│
-├── // Units Sent
-├── units_def_1: u64            // Tier 1 defense units
-├── units_def_2: u64            // Tier 2 defense units
-├── units_def_3: u64            // Tier 3 defense units
-│
-├── // Weapons Sent
-├── melee_weapons: u64
-├── ranged_weapons: u64
-├── siege_weapons: u64
-│
-├── // Hero
-├── hero: Pubkey                // NULL_PUBKEY if none
-├── hero_defense_bps: u16       // Snapshotted buff
-├── hero_weapon_eff_bps: u16
-├── hero_armor_eff_bps: u16
-│
-├── // Travel Timing
-├── sent_at: i64
-├── travel_duration: i32
-├── arrives_at: i64
-│
-├── // Return Timing
-├── return_started_at: i64      // 0 if not returning
-├── return_duration: i32
-│
-├── // Status
-├── status: u8                  // ReinforcementStatus enum
-├── relieved_by_destination: bool
-│
-└── combats_participated: u64   // Defense battles fought
+Guards:
+  status == Traveling
+  now >= arrives_at
+  destination_type == Player (castle garrison handled separately)
+Actions:
+  destination.team_section.reinforcement_def_1 += units_def_1
+  destination.team_section.reinforcement_def_2 += units_def_2
+  destination.team_section.reinforcement_def_3 += units_def_3
+  destination.team_section.reinforcement_melee  += melee_weapons
+  destination.team_section.reinforcement_ranged += ranged_weapons
+  destination.team_section.reinforcement_siege  += siege_weapons
+  destination.team_section.reinforcement_original_units  += total_units
+  destination.team_section.reinforcement_original_weapons += total_weapons
+  // Hero buffs: best-hero-wins (MAX, not sum)
+  reinforcement_hero_defense_bps   = max(existing, hero_defense_bps)
+  reinforcement_hero_weapon_eff_bps = max(existing, hero_weapon_eff_bps)
+  reinforcement_hero_armor_eff_bps  = max(existing, hero_armor_eff_bps)
+  reinforcement_source_count += 1
+  status = Active
 ```
 
-### PDA Seeds
+---
 
-**Player Reinforcement:** `["reinforcement", sender, destination_player]`
+## Recall and Relieve
 
-**Castle Garrison:** `["garrison", sender, castle]`
+Both instructions compute a **survival ratio** from the destination's current vs. original aggregates, then adjust the `ReinforcementAccount` fields in place. `process_return` then reads the adjusted fields.
 
-Only one reinforcement per sender→destination pair allowed.
+### Survival Ratio Formula
+
+```
+unit_survival_bps   = reinforcement_def_current_total × 10000 / reinforcement_original_units
+weapon_survival_bps = reinforcement_weapon_current_total × 10000 / reinforcement_original_weapons
+```
+
+### Return Amounts (Active Recall)
+
+```
+return_def_1 = units_def_1 × unit_survival_bps / 10000
+return_def_2 = units_def_2 × unit_survival_bps / 10000
+return_def_3 = units_def_3 × unit_survival_bps / 10000
+return_melee = melee_weapons × weapon_survival_bps / 10000
+return_ranged = ranged_weapons × weapon_survival_bps / 10000
+return_siege = siege_weapons × weapon_survival_bps / 10000
+```
+
+```mermaid
+flowchart TD
+    AGG["Destination aggregates<br/>(current vs. original)"] --> USR["unit_survival_bps =<br/>current_units × 10000 / original_units"]
+    AGG --> WSR["weapon_survival_bps =<br/>current_weapons × 10000 / original_weapons"]
+    USR --> RU["return_def_k =<br/>units_def_k × unit_survival_bps / 10000"]
+    WSR --> RW["return_melee/ranged/siege =<br/>weapon × weapon_survival_bps / 10000"]
+    RU --> WOUND["wounded_def_k = original_k - return_k<br/>(stored in ReinforcementAccount)"]
+    RU & RW --> STORE["Overwrite ReinforcementAccount fields<br/>status = Returning"]
+```
+
+> **Note:** Unlike rally siege weapons which are always consumed, **reinforcement siege weapons use survival scaling** on return. A reinforcement recalled while active returns a proportional fraction of its siege weapons based on destination health.
+
+Wounded units (originals − returns) are stored in `wounded_def_1/2/3` on the `ReinforcementAccount` and transferred to the sender's estate Infirmary during `process_return` (if the Infirmary building exists).
+
+### Traveling Recall
+
+If recalled while still in `Traveling` status, no aggregates were ever added, so 100% of original units and weapons are returned.
+
+### Recall vs. Relieve
+
+| Action | Initiator | Status Required | `relieved_by_destination` |
+|--------|-----------|-----------------|--------------------------|
+| `recall` | Sender | Active or Traveling | `false` |
+| `relieve` | Destination owner | Active only | `true` |
+
+```mermaid
+flowchart LR
+    ACT[Active reinforcement] --> WHO{Who initiates?}
+    WHO -->|Sender| RECALL["recall (192)<br/>reliever_by_destination = false"]
+    WHO -->|Destination owner| RELIEVE["relieve (193)<br/>relieved_by_destination = true"]
+    RECALL & RELIEVE --> SURV[Compute survival ratio<br/>Subtract from dest aggregates<br/>Overwrite reinf fields]
+    SURV --> RET[status = Returning]
+
+    TRAV[Traveling reinforcement] --> RECALL2["recall (192)<br/>100% returned<br/>(aggregates never modified)"]
+    RECALL2 --> RET
+```
 
 ---
 
-## Reinforcement Status
+## Process Return
 
-| Status | Value | Description |
-|--------|-------|-------------|
-| Traveling | 0 | Units en route to destination |
-| Active | 1 | Actively defending destination |
-| Returning | 2 | Units traveling home |
-| Completed | 3 | Ready for account closure |
+`process_return` (ID 194) is **permissionless** and has no instruction data:
+
+```
+Guards:
+  status == Returning OR Completed
+  if Returning: now >= return_started_at + return_duration
+Actions:
+  sender.defensive_unit_1 += return_units_1
+  sender.defensive_unit_2 += return_units_2
+  sender.defensive_unit_3 += return_units_3
+  sender.melee_weapons    += return_melee
+  sender.ranged_weapons   += return_ranged
+  sender.siege_weapons    += return_siege
+  if hero != NULL: restore to first empty hero slot (or keep unlocked if slots full)
+  if Infirmary built: add wounded_def_1/2/3 to estate wounded pool
+  Zero account data, transfer lamports to sender_owner wallet (close)
+```
+
+```mermaid
+flowchart TD
+    PR["process_return (194)<br/>(permissionless)"] --> UNITS[Restore units/weapons<br/>to sender.PlayerAccount]
+    PR --> HERO{Hero sent?}
+    HERO -->|Yes| SLOT{Empty hero<br/>slot available?}
+    SLOT -->|Yes| RESTORE[Place in hero slot<br/>with buff snapshots]
+    SLOT -->|No| UNLOCK[Hero stays unlocked<br/>not slotted]
+    PR --> INFIRM{Infirmary<br/>built?}
+    INFIRM -->|Yes| WOUND[Add wounded_def_k<br/>to estate wounded pool]
+    INFIRM -->|No| LOST[Wounded units lost]
+    UNITS & RESTORE & UNLOCK & WOUND & LOST --> CLOSE[Close ReinforcementAccount<br/>rent → sender wallet]
+```
 
 ---
 
-## Reinforcement vs Garrison
+## Speedup System (Instruction 195)
 
-| Aspect | Player Reinforcement | Castle Garrison |
-|--------|---------------------|-----------------|
-| Destination | Teammate's PlayerAccount | Team's CastleAccount |
-| Seeds | `["reinforcement", ...]` | `["garrison", ...]` |
-| Defense applies to | That player's defense | Castle's defense |
-| Recall authority | Sender OR destination | Sender only |
-| Combat events | Player PvP attacks | Castle sieges |
+Only the sender may speed up their reinforcement. Works on `Traveling` or `Returning` status.
+
+| Tier | Time Remaining After | Gem Cost Multiplier |
+|------|---------------------|---------------------|
+| 1 | 50% of remaining | 1× |
+| 2 | 25% of remaining | 2× |
+
+```
+gem_cost = ceil(remaining_seconds / 60) × gem_cost_per_minute × tier_multiplier
+```
+
+The instruction data is a single byte: `speedup_tier:u8`.
 
 ---
 
-## Lifecycle Flow
-
-### Sending Reinforcement
-
-**Instruction:** `70 - send_reinforcement` / `71 - send_garrison`
+## Sequence: Full Reinforcement
 
 ```mermaid
 sequenceDiagram
     participant Sender
     participant Program
-    participant PlayerAccount as Sender Account
     participant ReinforcementAccount
-    participant Destination
+    participant DestPlayer
 
-    Sender->>Program: send_reinforcement(units, weapons, hero)
-    Program->>Program: Validate same team
-    Program->>Program: Calculate travel time
-    Program->>PlayerAccount: Deduct units + weapons
-    opt Hero Provided
-        Program->>Program: Lock hero in escrow
+    Sender->>Program: send (57 bytes data)
+    Program->>Program: Validate same team, weapon ratio, capacity
+    Program->>ReinforcementAccount: Create PDA, status=Traveling
+    Program->>Sender: Deduct units/weapons/hero from PlayerAccount
+
+    Note over Program: travel_duration elapses
+
+    Anyone->>Program: process_arrival (permissionless)
+    Program->>DestPlayer: Add to reinforcement aggregates (best-hero-wins for buffs)
+    Program->>ReinforcementAccount: status = Active
+
+    alt Sender recalls
+        Sender->>Program: recall
+        Program->>Program: Compute survival ratio
+        Program->>DestPlayer: Subtract survival-adjusted amounts from aggregates
+        Program->>ReinforcementAccount: Overwrite fields with return amounts, status=Returning
+    else Destination relieves
+        DestOwner->>Program: relieve
+        Program->>Program: Compute survival ratio
+        Program->>DestPlayer: Subtract survival-adjusted amounts from aggregates
+        Program->>ReinforcementAccount: Overwrite fields with return amounts, status=Returning
     end
-    Program->>ReinforcementAccount: Create PDA
-    Program->>ReinforcementAccount: Store commitment
-    Program->>ReinforcementAccount: Set arrives_at
-    Program-->>Sender: Reinforcement sent
-```
 
-### Arrival Processing
+    Note over Program: return_duration elapses
 
-**Instruction:** `72 - process_arrival`
-
-```mermaid
-sequenceDiagram
-    participant Crank
-    participant Program
-    participant ReinforcementAccount
-    participant Destination
-
-    Note over Crank: arrives_at reached
-    Crank->>Program: process_arrival
-    Program->>Program: Validate travel complete
-    Program->>Destination: Add to defense aggregates
-    Program->>ReinforcementAccount: Status = Active
-    Program-->>Crank: Arrival processed
-```
-
-### Active Defense
-
-While active, reinforcement contributes to destination's defense:
-
-```
-destination_defense_power = own_units + Σ(reinforcement_units)
-destination_weapon_bonus = own_weapons + Σ(reinforcement_weapons)
-```
-
-### Recall (Sender Initiates)
-
-**Instruction:** `73 - recall_reinforcement`
-
-```mermaid
-sequenceDiagram
-    participant Sender
-    participant Program
-    participant ReinforcementAccount
-    participant Destination
-
-    Sender->>Program: recall_reinforcement
-    Program->>Program: Validate is sender
-    Program->>Destination: Remove from aggregates
-    Program->>ReinforcementAccount: Calculate return time
-    Program->>ReinforcementAccount: Status = Returning
-    Program-->>Sender: Recall initiated
-```
-
-### Relieve (Destination Initiates)
-
-**Instruction:** `74 - relieve_reinforcement`
-
-```mermaid
-sequenceDiagram
-    participant Destination
-    participant Program
-    participant ReinforcementAccount
-
-    Destination->>Program: relieve_reinforcement
-    Program->>Program: Validate is destination owner
-    Program->>ReinforcementAccount: Calculate return time
-    Program->>ReinforcementAccount: Status = Returning
-    Program->>ReinforcementAccount: relieved_by_destination = true
-    Program-->>Destination: Relief initiated
-```
-
-### Return Processing
-
-**Instruction:** `75 - process_return`
-
-```mermaid
-sequenceDiagram
-    participant Sender
-    participant Program
-    participant ReinforcementAccount
-    participant PlayerAccount
-
-    Note over Sender: return complete
-    Sender->>Program: process_return
-    Program->>Program: Calculate survival ratio
-    Program->>PlayerAccount: Return surviving units
-    Program->>PlayerAccount: Return hero (if any)
-    Program->>ReinforcementAccount: Close account
-    Program->>Sender: Refund rent
+    Anyone->>Program: process_return (permissionless)
+    Program->>Sender: Return surviving units/weapons/hero
+    Program->>ReinforcementAccount: Close (rent to sender wallet)
 ```
 
 ---
 
-## Survival Calculation
+## Account Structure
 
-Units may be lost if the destination was attacked while reinforcement was active:
+### ReinforcementAccount
 
-```
-survival_ratio = destination.current_defense_units / destination.original_defense_units
+The size is computed at compile time via `core::mem::size_of::<ReinforcementAccount>()`.
 
-returned_units_1 = units_def_1 × survival_ratio
-returned_units_2 = units_def_2 × survival_ratio
-returned_units_3 = units_def_3 × survival_ratio
-
-// Weapons proportional to unit survival
-returned_melee = melee_weapons × survival_ratio
-returned_ranged = ranged_weapons × survival_ratio
-// Siege consumed in defense
-returned_siege = 0
-```
-
-**Key Point:** The destination tracks aggregate defense counts. When battles occur, casualties are distributed proportionally across all defending sources (own units + all reinforcements).
-
----
-
-## Hero in Reinforcement
-
-Heroes can be committed to reinforce defense:
-
-### Commitment
-
-- Hero NFT is transferred to ReinforcementAccount PDA
-- Defense buffs are snapshotted at send time
-- Hero cannot be used elsewhere while committed
-
-### Buffs Applied
-
-```
-hero_defense_bps → Destination defense multiplier
-hero_weapon_eff_bps → Weapon effectiveness
-hero_armor_eff_bps → Damage reduction
-```
-
-### Return
-
-Hero is always returned (not consumed in combat).
-
----
-
-## Travel Time
-
-```
-distance_km = haversine(sender_city.coords, destination_city.coords)
-base_speed = theme_travel_speed
-travel_time = (distance_km / base_speed) * 3600
-
-// Return uses same calculation
-return_time = travel_time  // Same distance
+```rust
+pub struct ReinforcementAccount {
+    pub account_key: u8,
+    pub game_engine: Address,               // 32 - kingdom reference
+    pub sender: Address,                    // 32 - sender's WALLET pubkey
+    pub destination: Address,               // 32 - destination wallet (Player) or castle pubkey
+    pub destination_type: u8,              // 0=Player, 1=Castle
+    pub bump: u8,
+    pub sender_city: u16,
+    pub destination_city: u16,
+    pub _padding_loc: [u8; 2],
+    // Original amounts sent (overwritten to survival-adjusted on recall/relieve):
+    pub units_def_1: u64,
+    pub units_def_2: u64,
+    pub units_def_3: u64,
+    pub melee_weapons: u64,
+    pub ranged_weapons: u64,
+    pub siege_weapons: u64,
+    pub hero: Address,                      // NULL if no hero
+    pub hero_defense_bps: u16,
+    pub hero_weapon_eff_bps: u16,
+    pub hero_armor_eff_bps: u16,
+    pub _padding_hero: [u8; 2],
+    pub sent_at: i64,
+    pub travel_duration: i32,
+    pub wounded_def_1: u32,                // casualties set during recall
+    pub arrives_at: i64,
+    pub return_started_at: i64,
+    pub return_duration: i32,
+    pub wounded_def_2: u32,
+    pub status: u8,                        // ReinforcementStatus enum
+    pub relieved_by_destination: bool,
+    pub _padding_status: [u8; 2],
+    pub wounded_def_3: u32,
+    pub combats_participated: u64,
+}
 ```
 
----
+### Status Enum
 
-## Speedup System
+| Value | Variant | Description |
+|-------|---------|-------------|
+| 0 | `Traveling` | Units en route to destination |
+| 1 | `Active` | Units actively defending |
+| 2 | `Returning` | Units traveling back to sender |
+| 3 | `Completed` | Return complete, ready to close |
 
-**Instruction:** `76 - speedup_reinforcement`
+### Target Enum
 
-| Tier | Reduction | Cost |
-|------|-----------|------|
-| 1 | 50% | 75 gems/minute |
-| 2 | 75% | 150 gems/minute |
-
-Works for both outbound travel and return travel.
-
----
-
-## Defense Aggregates
-
-Destinations track defense aggregates for combat:
-
-### PlayerAccount Defense Fields
-
-```
-PlayerAccount:
-├── total_reinforcement_units: u64
-├── total_reinforcement_melee: u64
-├── total_reinforcement_ranged: u64
-├── active_reinforcement_count: u8
-└── max_reinforcement_slots: u8    // Based on building
-```
-
-### CastleAccount Defense Fields
-
-```
-CastleAccount:
-├── garrison_units: u64
-├── garrison_melee: u64
-├── garrison_ranged: u64
-├── garrison_siege: u64
-├── garrison_count: u8
-└── max_garrison_slots: u8
-```
-
----
-
-## Restrictions
-
-### Cannot Send Reinforcement When
-
-| Condition | Reason |
-|-----------|--------|
-| Not same team | Team membership required |
-| Already reinforcing that destination | One per sender→destination |
-| Destination at max reinforcements | Slot limit reached |
-| Currently traveling | Must complete current travel |
-| In active rally | Must complete rally first |
-
-### Cannot Recall When
-
-| Condition | Reason |
-|-----------|--------|
-| Still traveling | Must wait for arrival |
-| Already returning | Already recalled |
-| Destination under attack | Combat lock (optional) |
+| Value | Variant | PDA seed prefix |
+|-------|---------|----------------|
+| 0 | `Player` | `b"reinforcement"` |
+| 1 | `Castle` | `b"garrison"` |
 
 ---
 
 ## Client Integration
 
-### Send Reinforcement
+```typescript
+import { PublicKey } from "@solana/web3.js";
 
-```javascript
-async function sendReinforcement(
-  connection,
-  wallet,
-  destinationPlayer,
-  units,
-  weapons,
-  hero
+// Derive player reinforcement PDA
+function findReinforcementPda(
+  gameEngine: PublicKey,
+  senderWallet: PublicKey,
+  destinationWallet: PublicKey,
+  programId: PublicKey
 ) {
-  // Validate team membership
-  const senderTeam = await getPlayerTeam(connection, wallet.publicKey);
-  const destTeam = await getPlayerTeam(connection, destinationPlayer);
-
-  if (!senderTeam || !destTeam || senderTeam.id !== destTeam.id) {
-    throw new Error('Must be in same team');
-  }
-
-  const [reinforcementPda] = PublicKey.findProgramAddress(
+  return PublicKey.findProgramAddressSync(
     [
       Buffer.from("reinforcement"),
-      wallet.publicKey.toBuffer(),
-      destinationPlayer.toBuffer()
+      gameEngine.toBuffer(),
+      senderWallet.toBuffer(),
+      destinationWallet.toBuffer(),
     ],
-    PROGRAM_ID
+    programId
   );
-
-  const ix = sendReinforcementInstruction({
-    destination: destinationPlayer,
-    unitsDef1: units.tier1,
-    unitsDef2: units.tier2,
-    unitsDef3: units.tier3,
-    meleeWeapons: weapons.melee,
-    rangedWeapons: weapons.ranged,
-    siegeWeapons: weapons.siege,
-    heroMint: hero || null
-  });
-
-  return sendTransaction(connection, wallet, [ix]);
 }
-```
 
-### Display Active Reinforcements
-
-```javascript
-async function getActiveReinforcements(connection, player) {
-  // Find all reinforcements sent by player
-  const sentReinforcements = await findReinforcementsBySender(connection, player);
-
-  // Find all reinforcements received by player
-  const receivedReinforcements = await findReinforcementsByDestination(connection, player);
-
-  return {
-    sent: sentReinforcements.map(r => ({
-      destination: r.destination,
-      units: r.totalUnits(),
-      weapons: r.totalWeapons(),
-      status: getStatusName(r.status),
-      hasHero: r.hero !== NULL_PUBKEY,
-      arrivalTime: r.status === 0 ? r.arrivesAt : null,
-      returnTime: r.status === 2 ? r.returnCompletesAt() : null,
-      canRecall: r.status === 1
-    })),
-
-    received: receivedReinforcements.map(r => ({
-      sender: r.sender,
-      units: r.totalUnits(),
-      weapons: r.totalWeapons(),
-      status: getStatusName(r.status),
-      canRelieve: r.status === 1
-    })),
-
-    totalDefenseBonus: receivedReinforcements
-      .filter(r => r.status === 1)
-      .reduce((sum, r) => sum + r.totalUnits(), 0)
-  };
+// Derive castle garrison PDA
+function findGarrisonPda(
+  gameEngine: PublicKey,
+  senderWallet: PublicKey,
+  castle: PublicKey,
+  programId: PublicKey
+) {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("garrison"),
+      gameEngine.toBuffer(),
+      senderWallet.toBuffer(),
+      castle.toBuffer(),
+    ],
+    programId
+  );
 }
-```
 
-### Recall UI
-
-```javascript
-function renderReinforcementCard(reinforcement, isOwner) {
-  const status = getStatusName(reinforcement.status);
-
-  return `
-    ${isOwner ? 'Sent to' : 'From'}: ${formatAddress(
-      isOwner ? reinforcement.destination : reinforcement.sender
-    )}
-    Units: ${reinforcement.totalUnits()}
-    Status: ${status}
-
-    ${reinforcement.status === 0 ? `
-      Arriving in: ${formatDuration(reinforcement.arrivesAt - Date.now()/1000)}
-      [Speedup]
-    ` : ''}
-
-    ${reinforcement.status === 1 ? `
-      Combats: ${reinforcement.combatsParticipated}
-      ${isOwner ? '[Recall]' : '[Relieve]'}
-    ` : ''}
-
-    ${reinforcement.status === 2 ? `
-      Returning in: ${formatDuration(reinforcement.returnCompletesAt() - Date.now()/1000)}
-      [Speedup]
-    ` : ''}
-
-    ${reinforcement.status === 3 ? `
-      [Complete Return]
-    ` : ''}
-  `;
+// Check if process_return is ready
+function canProcessReturn(reinf: ReinforcementAccount, nowSecs: number): boolean {
+  if (reinf.status === 3 /* Completed */) return true;
+  if (reinf.status !== 2 /* Returning */) return false;
+  return nowSecs >= reinf.returnStartedAt + reinf.returnDuration;
 }
 ```
 
 ---
 
-*Reinforcements turn individual strength into collective might. Defend your allies, and they will defend you.*
+Next: [Teams](./teams.md)
 
----
-
-Next: [Forge](./forge.md)
+*Borrowed blades return diminished — but returned at all is better than lost forever.*

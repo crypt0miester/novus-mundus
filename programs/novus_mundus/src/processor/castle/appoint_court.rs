@@ -18,6 +18,7 @@ use crate::{
     emit,
     error::GameError,
     events::CourtAppointed,
+    utils::read_u8,
     validation::{require_empty, require_owner, require_pda},
     state::{
         CastleAccount, CourtPositionAccount, PlayerAccount, CourtPosition,
@@ -47,16 +48,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 6 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let king_wallet = &accounts[0];
-    let king_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let appointee_account = &accounts[3];
-    let court_position_account = &accounts[4];
-    let _system_program = &accounts[5];
+    crate::extract_accounts!(accounts, [
+        king_wallet,
+        king_account,
+        castle_account,
+        appointee_account,
+        court_position_account,
+        _system_program,
+    ]);
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -64,11 +63,7 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 1 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let position_type = instruction_data[0];
+    let position_type = read_u8(instruction_data, 0, "position_type")?;
 
     // Validate position type
     if CourtPosition::from_u8(position_type).is_none() {

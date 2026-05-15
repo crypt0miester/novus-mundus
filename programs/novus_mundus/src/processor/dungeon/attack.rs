@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -81,16 +80,14 @@ pub fn process_attacks(
     attack_count: u8,
 ) -> ProgramResult {
     // 1. Parse accounts (game_authority co-signs to authenticate RNG flags)
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         game_authority,
         player_account,
         dungeon_template_account,
         dungeon_run_account,
         game_engine_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate signers
     require_signer(owner)?;

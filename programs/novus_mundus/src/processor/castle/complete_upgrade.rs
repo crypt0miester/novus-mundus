@@ -7,7 +7,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -38,12 +37,10 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 2 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let _crank = &accounts[0];
-    let castle_account = &accounts[1];
+    crate::extract_accounts!(accounts, [
+        _crank,
+        castle_account,
+    ]);
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;

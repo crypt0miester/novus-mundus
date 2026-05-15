@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -20,6 +19,7 @@ use crate::{
         unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u32},
     emit,
     events::shop::BundlePurchased,
 };
@@ -56,22 +56,18 @@ pub fn process(
     // 1. Parse Accounts
 
     // Minimum accounts: buyer, player, game_engine, shop_config, bundle, treasury, system, inventory, estate
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let buyer = &accounts[0];
-    let player_account = &accounts[1];
-    let game_engine_account = &accounts[2];
-    let shop_config_account = &accounts[3];
-    let bundle_account = &accounts[4];
-    let treasury = &accounts[5];
-    let system_program = &accounts[6];
-    let inventory_account = &accounts[7];
-    let estate_account = &accounts[8];
-
     // Remaining accounts are shop items for fulfillment reference
-    let shop_item_accounts = &accounts[9..];
+    crate::extract_accounts!(accounts, [
+        buyer,
+        player_account,
+        game_engine_account,
+        shop_config_account,
+        bundle_account,
+        treasury,
+        system_program,
+        inventory_account,
+        estate_account,
+    ], rest = shop_item_accounts);
 
     // 2. Validate Accounts
 
@@ -85,12 +81,8 @@ pub fn process(
 
     // 3. Parse Instruction Data
 
-    if instruction_data.len() < 5 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let bundle_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let payment_type = instruction_data[4];
+    let bundle_id = read_u32(instruction_data, 0, "purchase_bundle.bundle_id")?;
+    let payment_type = read_u8(instruction_data, 4, "purchase_bundle.payment_type")?;
 
     // 4. Load and Validate Game Engine / Treasury
 
@@ -230,6 +222,7 @@ pub fn process(
         process_token_payment_flow(
             &accounts[token_offset..],
             game_engine_account.address(),
+            &game_engine.treasury_wallet,
             program_id,
             shop_config,
             buyer,

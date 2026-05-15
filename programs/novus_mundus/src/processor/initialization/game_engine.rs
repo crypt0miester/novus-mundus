@@ -24,6 +24,7 @@ use crate::{
         require_key_match,
     },
     constants::{GAME_ENGINE_SEED, NOVI_MINT_SEED},
+    utils::{read_u8, read_u16, read_i64},
     emit,
     events::KingdomCreated,
 };
@@ -62,17 +63,15 @@ pub fn process(
     if data.len() < 51 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let kingdom_id = u16::from_le_bytes([data[0], data[1]]);
+    let kingdom_id = read_u16(data, 0, "game_engine.kingdom_id")?;
     let mut kingdom_name = [0u8; 32];
     kingdom_name.copy_from_slice(&data[2..34]);
-    let theme = data[34];
-    let kingdom_start_time = i64::from_le_bytes(data[35..43].try_into().unwrap());
-    let registration_closes_at = i64::from_le_bytes(data[43..51].try_into().unwrap());
+    let theme = read_u8(data, 34, "game_engine.theme")?;
+    let kingdom_start_time = read_i64(data, 35, "game_engine.kingdom_start_time")?;
+    let registration_closes_at = read_i64(data, 43, "game_engine.registration_closes_at")?;
 
     // 1. Parse accounts
-    let [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar, program_data] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar, program_data]);
 
     // 2. Validate accounts
     require_signer(authority)?;

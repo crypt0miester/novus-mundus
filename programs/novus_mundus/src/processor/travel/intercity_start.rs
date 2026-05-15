@@ -58,20 +58,18 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (10 required, 1 optional for stealing)
 
-    if accounts.len() < 10 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_account = &accounts[0];
-    let owner = &accounts[1];
-    let origin_city_account = &accounts[2];
-    let destination_city_account = &accounts[3];
-    let game_engine_account = &accounts[4];
-    let origin_location_account = &accounts[5];
-    let destination_location_account = &accounts[6];
-    let _origin_creator_refund = &accounts[7];
-    let _system_program = &accounts[8];
-    let estate_account = &accounts[9];
+    crate::extract_accounts!(accounts, [
+        player_account,
+        owner,
+        origin_city_account,
+        destination_city_account,
+        game_engine_account,
+        origin_location_account,
+        destination_location_account,
+        _origin_creator_refund,
+        _system_program,
+        estate_account,
+    ]);
 
     // Optional: bumped player account (required when stealing a reservation)
     let bumped_player_account = accounts.get(10);
@@ -82,7 +80,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let destination_city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let destination_city_id = crate::utils::read_u16(instruction_data, 0, "destination_city_id")?;
     let dest_grid_lat = i32::from_le_bytes([instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5]]);
     let dest_grid_long = i32::from_le_bytes([instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9]]);
 

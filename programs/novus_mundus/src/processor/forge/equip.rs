@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -13,6 +12,7 @@ use crate::{
         PlayerAccount,
         estate::{CraftedEquipmentAccount, CraftableEquipment},
     },
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
@@ -54,9 +54,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, crafted_equipment] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, crafted_equipment]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -72,13 +70,9 @@ pub fn process(
     )?;
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let equipment_type = CraftableEquipment::from_u8(instruction_data[0])
+    let equipment_type = CraftableEquipment::from_u8(read_u8(instruction_data, 0, "equip.equipment_type")?)
         .ok_or(GameError::InvalidParameter)?;
-    let quality_tier = instruction_data[1];
+    let quality_tier = read_u8(instruction_data, 1, "equip.quality_tier")?;
 
     // Validate tier is in range (0 = unequip, 1-7 = valid tiers)
     if quality_tier > 7 {

@@ -58,7 +58,7 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         player_account,
         city_account,
@@ -69,9 +69,7 @@ pub fn process(
         authority,
         system_program,
         spawn_location_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -82,6 +80,13 @@ pub fn process(
     require_writable(encounter_account)?;
     require_writable(spawn_location_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
+
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "enounter.spawn.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse Instruction Data
     //    [0]     encounter_type: u8

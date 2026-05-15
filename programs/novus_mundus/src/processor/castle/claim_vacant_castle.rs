@@ -27,6 +27,7 @@ use crate::{
         CASTLE_CONTEST_DURATION, MAX_CASTLES_PER_KING,
         GARRISON_CAP_BY_TIER,
     },
+    utils::read_u16,
     validation::require_owner,
 };
 
@@ -47,14 +48,12 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_wallet = &accounts[0];
-    let player_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let king_registry_account = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        player_wallet,
+        player_account,
+        castle_account,
+        king_registry_account,
+    ]);
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -62,12 +61,8 @@ pub fn process(
     }
 
     // Parse instruction data (discriminator already stripped by entry point)
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let city_id = read_u16(instruction_data, 0, "city_id")?;
+    let castle_id = read_u16(instruction_data, 2, "castle_id")?;
 
     // Verify player account ownership
     require_owner(player_account, program_id)?;

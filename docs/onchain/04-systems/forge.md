@@ -1,29 +1,31 @@
 # Forge System
 
-> Staged tempering crafting for equipment with skill-based progression.
+> Skill-based equipment crafting through staged tempering — strike while the iron is hot.
 
 ## System Overview
 
-The Forge System implements **Staged Tempering**, a skill-based crafting mechanic where players must interact with the crafting process at precise moments. Higher quality tiers require more stages and tighter timing windows.
+The Forge System lets players craft combat equipment at ascending quality tiers. Unlike passive wait-and-collect systems, crafting requires active participation: each quality tier demands multiple **tempering stages** where the player must call `strike` within a precise time window. Missing a window fails the craft and forfeits all materials.
 
 ```mermaid
 graph TB
-    subgraph "Staged Tempering"
-        START[Start Craft] --> STAGE1[Stage 1]
-        STAGE1 --> WINDOW1{Window Open?}
-        WINDOW1 -->|Yes| STRIKE1[Strike!]
-        WINDOW1 -->|No| WAIT1[Wait...]
-        WAIT1 --> WINDOW1
-        STRIKE1 --> STAGE2[Stage 2...]
-        STAGE2 --> COMPLETE[Complete]
+    subgraph "Equipment Types"
+        MW[MeleeWeapons]
+        RW[RangedWeapons]
+        SW[SiegeWeapons]
+        AR[Armor]
     end
 
-    subgraph "Quality Tiers"
-        REFINED[Refined<br/>1 Stage]
-        SUPERIOR[Superior<br/>2 Stages]
-        ELITE[Elite<br/>3 Stages]
-        MASTER[Masterwork<br/>5 Stages]
-        LEGEND[Legendary<br/>8 Stages]
+    subgraph "Craft Lifecycle"
+        START[start_craft] --> WAIT[Wait for window]
+        WAIT --> STRIKE["strike — within window"]
+        STRIKE -->|"more stages remain"| WAIT
+        STRIKE -->|"final stage"| COMPLETE[Auto-complete]
+        WAIT -->|"window missed"| FAIL[Craft Fails]
+    end
+
+    subgraph "Post-Craft"
+        COMPLETE --> EQUIP[equip]
+        EQUIP --> BUFF[Combat bonus applied]
     end
 ```
 
@@ -31,441 +33,341 @@ graph TB
 
 | ID | Instruction | Description |
 |----|-------------|-------------|
-| 160 | `start_craft` | Begin staged tempering |
-| 161 | `strike` | Hit during window |
-| 162 | `complete_craft` | Finish successful craft |
-| 163 | `abandon_craft` | Cancel failed craft |
-| 164 | `salvage_equipment` | Break down for materials |
+| 180 | `initialize` | Create `CraftedEquipmentAccount` for player |
+| 181 | `start_craft` | Begin a staged tempering session |
+| 182 | `strike` | Perform one tempering stage (within window) |
+| 183 | `abandon_craft` | Cancel in-progress craft (materials lost) |
+| 184 | `equip` | Equip a crafted item to gain combat bonus |
 
 [Source: processor/forge/](../../../programs/novus_mundus/src/processor/forge/)
+
+> **Note:** There is **no `complete_craft`** and **no `salvage`** instruction. The final `strike` auto-completes the craft. Old documentation listing a `complete_craft` or discriminants in the 160s was incorrect.
+
+---
+
+## Equipment Types
+
+Four equipment categories can be crafted, each occupying its own equip slot:
+
+| Value | Type | Combat Effect |
+|-------|------|---------------|
+| 0 | `MeleeWeapons` | Melee weapon damage bonus |
+| 1 | `RangedWeapons` | Ranged weapon damage bonus |
+| 2 | `SiegeWeapons` | Siege weapon damage bonus |
+| 3 | `Armor` | Damage reduction bonus |
+
+[Source: state/estate.rs — `CraftableEquipment`](../../../programs/novus_mundus/src/state/estate.rs)
 
 ---
 
 ## Quality Tiers
 
-| Tier | Value | Stages | Forge Level | Stat Bonus |
-|------|-------|--------|-------------|------------|
-| Common | 0 | - | Shop bought | Base |
-| Refined | 1 | 1 | 1+ | +10% |
-| Superior | 2 | 2 | 5+ | +25% |
-| Elite | 3 | 3 | 8+ | +50% |
-| Masterwork | 4 | 5 | 12+ | +100% |
-| Legendary | 5 | 8 | 16+ | +200% |
-| Mythic | 6 | 11 | 18+ | +350% |
-| Divine | 7 | 13 | 20 | +500% |
-
-Stage requirements follow **Fibonacci-like progression**: 1, 2, 3, 5, 8, 11, 13...
-
----
-
-## CraftedEquipmentAccount
-
-Each player has one account tracking their crafted equipment:
-
-```
-CraftedEquipmentAccount:
-├── owner: Pubkey
-├── bump: u8
-│
-├── // Active Craft State
-├── active_craft_equipment: u8  // Equipment type being crafted
-├── target_tier: u8             // Target quality tier
-├── stages_required: u8         // Total stages needed
-├── current_stage: u8           // Current stage (1-indexed)
-├── stages_completed: u8        // Successful strikes
-├── window_opens_at: i64        // When window opens
-├── window_closes_at: i64       // When window closes
-├── craft_started_at: i64       // Start timestamp
-├── precision_score: u16        // Accumulated precision
-│
-├── // Crafted Equipment Slots (8 slots)
-├── equipment: [CraftedItem; 8]
-│
-├── // Stats
-├── total_crafts: u32
-├── successful_crafts: u32
-├── failed_crafts: u32
-├── total_novi_spent: u64
-└── total_materials_spent: u64
-```
-
-### CraftedItem Structure
-
-```
-CraftedItem:
-├── equipment_type: u8    // CraftableEquipment enum
-├── quality_tier: u8      // QualityTier enum
-├── crafted_at: i64       // Timestamp
-├── precision_score: u16  // How well crafted
-└── equipped: bool        // Currently in use
-```
-
----
-
-## Craftable Equipment Types
-
-| Type | Value | Category | Effect |
-|------|-------|----------|--------|
-| Sword | 0 | Melee | +Attack |
-| Shield | 1 | Armor | +Defense |
-| Bow | 2 | Ranged | +Ranged Attack |
-| Helmet | 3 | Armor | +HP |
-| Chestplate | 4 | Armor | +Defense |
-| Boots | 5 | Armor | +Speed |
-| Ring | 6 | Accessory | +Crit |
-| Amulet | 7 | Accessory | +All stats |
-
----
-
-## Staged Tempering Process
-
-### 1. Start Craft
-
-**Instruction:** `160 - start_craft`
+Eight quality tiers exist. Only tiers 1–7 are craftable (Common = 0 is shop-only baseline).
 
 ```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant PlayerAccount
-    participant CraftedEquipment
-
-    Player->>Program: start_craft(equipment, tier)
-    Program->>Program: Validate Forge building level
-    Program->>Program: Calculate costs
-    Program->>PlayerAccount: Deduct NOVI + materials
-    Program->>CraftedEquipment: Initialize craft state
-    Program->>CraftedEquipment: Set first window
-    Program-->>Player: Craft started
+graph LR
+    C0["Common<br/>(shop only)"] --> C1["Refined<br/>Lv 1 · 1 stage"]
+    C1 --> C2["Superior<br/>Lv 5 · 2 stages"]
+    C2 --> C3["Elite<br/>Lv 8 · 3 stages"]
+    C3 --> C4["Masterwork<br/>Lv 12 · 5 stages"]
+    C4 --> C5["Legendary<br/>Lv 16 · 8 stages"]
+    C5 --> C6["Mythic<br/>Lv 18 · 11 stages"]
+    C6 --> C7["Divine<br/>Lv 20 · 13 stages"]
 ```
 
-**Costs by Tier:**
+| Value | Tier | Forge Level Gate | Stages | Equip Bonus | NOVI Cost | Craft Time |
+|-------|------|-----------------|--------|-------------|-----------|------------|
+| 0 | Common | — | — | 0% | — | — |
+| 1 | Refined | Lv 1 | 1 | +2.5% | 1,000 | 4h |
+| 2 | Superior | Lv 5 | 2 | +5% | 2,618 | 8h |
+| 3 | Elite | Lv 8 | 3 | +10% | 6,854 | 16h |
+| 4 | Masterwork | Lv 12 | 5 | +15% | 17,944 | 24h |
+| 5 | Legendary | Lv 16 | 8 | +25% | 46,979 | 48h |
+| 6 | Mythic | Lv 18 | 11 | +40% | 122,991 | 72h |
+| 7 | Divine | Lv 20 | 13 | +60% | 322,069 | 7d |
 
-| Tier | NOVI | Common | Uncommon | Rare | Epic | Legendary |
-|------|------|--------|----------|------|------|-----------|
-| Refined | 1,000 | 10 | 0 | 0 | 0 | 0 |
-| Superior | 5,000 | 25 | 5 | 0 | 0 | 0 |
-| Elite | 15,000 | 50 | 15 | 3 | 0 | 0 |
-| Masterwork | 50,000 | 100 | 40 | 10 | 2 | 0 |
-| Legendary | 150,000 | 200 | 100 | 30 | 8 | 1 |
-| Mythic | 400,000 | 500 | 250 | 80 | 20 | 5 |
-| Divine | 1,000,000 | 1000 | 500 | 200 | 50 | 15 |
+Stages listed are **base values** at Forge Lv 0. Higher Forge levels reduce stages required (see Staged Tempering section).
 
-### 2. Strike During Window
+> **Note:** There is **no mastery gate** to start a craft. The only gate is the Forge building level.
 
-**Instruction:** `161 - strike`
+[Source: state/estate.rs — `QualityTier`](../../../programs/novus_mundus/src/state/estate.rs)
+
+---
+
+## Material Costs
+
+Each tier requires specific crafting materials (held in player inventory):
+
+| Tier | Common | Uncommon | Rare | Epic | Legendary |
+|------|--------|----------|------|------|-----------|
+| Refined | 50 | 0 | 0 | 0 | 0 |
+| Superior | 100 | 25 | 0 | 0 | 0 |
+| Elite | 0 | 100 | 25 | 0 | 0 |
+| Masterwork | 0 | 0 | 100 | 25 | 0 |
+| Legendary | 0 | 0 | 0 | 100 | 25 |
+| Mythic | 0 | 0 | 0 | 0 | 200 |
+| Divine | 0 | 0 | 0 | 0 | 400 |
+
+NOVI is **burned** at craft start. Materials and NOVI are **not refunded** on failure or abandon.
+
+---
+
+## Staged Tempering System
+
+### Core Mechanic
+
+Each craft consists of `stages_required` tempering windows. The player must call `strike` within the active window for each stage.
 
 ```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant CraftedEquipment
+stateDiagram-v2
+    [*] --> Idle
 
-    Note over Player: Window is open!
-    Player->>Program: strike
-    Program->>Program: Validate window_opens_at <= now <= window_closes_at
-    Program->>Program: Calculate precision score
-    Program->>CraftedEquipment: Increment stages_completed
-    Program->>CraftedEquipment: Update precision_score
-    alt More stages remaining
-        Program->>CraftedEquipment: Set next window
-    else All stages complete
-        Program->>CraftedEquipment: Mark ready to complete
-    end
-    Program-->>Player: Strike successful!
+    Idle --> WaitingForWindow : "start_craft<br/>(NOVI + materials burned)"
+
+    WaitingForWindow --> WindowOpen : "now >= window_opens_at"
+
+    WindowOpen --> WaitingForWindow : "strike() — stage N done<br/>(more stages remain)"
+    WindowOpen --> Idle : "strike() — final stage<br/>(item added to inventory)"
+    WindowOpen --> Idle : "now > window_closes_at<br/>(detected on next strike call)<br/>craft fails — materials lost"
+
+    Idle --> Idle : "abandon_craft<br/>(materials lost, no refund)"
 ```
 
-### Window Timing
-
-Each stage has a window when the "metal is at the right temperature":
-
 ```
-stage_interval = quality_tier.stage_interval_secs()
-window_opens = previous_strike + stage_interval
-window_closes = window_opens + window_duration
+Stage timing:
+  window_opens  = craft_start + stage_interval
+  window_closes = window_opens + window_duration
 
-// Window duration varies by tier and Forge level
-base_window = tier.base_window_duration()
-forge_bonus = forge_level * 2  // +2 seconds per Forge level
-window_duration = base_window + forge_bonus
+  Too early (now < window_opens)  → Error: StrikeTooEarly
+  On time  (now in [opens, closes]) → Stage complete, precision recorded
+  Too late (now > window_closes)   → Craft fails, materials lost
 ```
+
+### Forge Level Bonuses
+
+Higher Forge levels make crafting more forgiving:
+
+- **Window duration**: `base + base × forge_level × 5 / 100` (capped at +100% at Lv 20)
+- **Stages required**: −1 stage per 5 Forge levels (min 1 stage)
+
+**Examples (Divine tier, 13 base stages, 60s base window):**
+
+| Forge Level | Stages Required | Window Duration |
+|-------------|----------------|-----------------|
+| 0 | 13 | 60s |
+| 5 | 12 | 75s |
+| 10 | 11 | 90s |
+| 15 | 10 | 105s |
+| 20 | 9 | 120s |
+
+### Stage Intervals by Tier
+
+| Tier | Stage Interval | Base Window |
+|------|---------------|-------------|
+| Refined | 60s | 3600s (1h) |
+| Superior | 50s | 1800s (30m) |
+| Elite | 40s | 900s (15m) |
+| Masterwork | 30s | 300s (5m) |
+| Legendary | 25s | 120s (2m) |
+| Mythic | 20s | 90s (1.5m) |
+| Divine | 15s | 60s (1m) |
 
 ### Precision Scoring
 
-How close to the center of the window you strike:
+Each strike calculates a precision score (0–10000) based on how close to the center of the window it was struck. Average precision across all stages is recorded and used to award Forge mastery XP.
 
 ```
-window_center = window_opens + (window_duration / 2)
-deviation = |now - window_center|
-max_deviation = window_duration / 2
-
-precision = 100 - (deviation / max_deviation * 100)
+precision = 10000 - (distance_from_center × 10000 / max_distance)
 ```
 
-Higher precision scores improve final equipment stats.
+---
 
-### 3. Complete Craft
+## Account Structure
 
-**Instruction:** `162 - complete_craft`
+### CraftedEquipmentAccount
+
+Persistent per-player account (not closed after crafting). Tracks all crafted inventory and active craft state.
+
+```rust
+pub struct CraftedEquipmentAccount {
+    pub owner: Address,               // 32 — Player wallet pubkey
+
+    // Inventory: quality counts per equipment type
+    pub melee_weapons: QualityCounts, // 32 — [u32; 8] counts per tier
+    pub ranged_weapons: QualityCounts,// 32
+    pub siege_weapons: QualityCounts, // 32
+    pub armor: QualityCounts,         // 32
+
+    // Active craft state (cleared on success/failure)
+    pub active_craft_equipment: u8,   // 255 = none
+    pub target_tier: u8,
+    pub stages_required: u8,
+    pub current_stage: u8,            // 1-indexed
+    pub stages_completed: u8,
+    pub window_opens_at: i64,
+    pub window_closes_at: i64,
+    pub craft_started_at: i64,
+    pub precision_score: u16,
+
+    // Lifetime stats
+    pub total_crafts: u32,
+    pub successful_crafts: u32,
+    pub failed_crafts: u32,
+    pub total_novi_spent: u64,
+
+    // Equipped tiers (0 = unequipped, 1–7 = QualityTier)
+    pub active_melee_tier: u8,
+    pub active_ranged_tier: u8,
+    pub active_siege_tier: u8,
+    pub active_armor_tier: u8,
+
+    pub bump: u8,
+    pub _padding: [u8; 3],
+}
+```
+
+**PDA seeds:** `["crafted_equipment", owner_wallet]`
+
+> **Note:** `AccountKey::ForgeSession = 46` is the discriminant used by `CraftedEquipmentAccount` (despite the enum name). This account lives in `state/estate.rs`, not a dedicated file.
+
+[Source: state/estate.rs](../../../programs/novus_mundus/src/state/estate.rs)
+
+---
+
+## Craft Failure Modes
+
+```mermaid
+graph TD
+    A["Active Craft"] --> B{"What happened?"}
+    B -->|"window_closes_at passed<br/>(detected on next strike)"| C["failed_crafts++<br/>craft cleared<br/>materials + NOVI lost"]
+    B -->|"abandon_craft called"| D["failed_crafts++<br/>craft cleared<br/>materials + NOVI lost"]
+    B -->|"Forge level too low<br/>at start_craft"| E["Rejected before any cost<br/>nothing lost"]
+```
+
+| Scenario | Result |
+|----------|--------|
+| Window missed (`now > window_closes_at`) | `failed_crafts++`, craft cleared, materials/NOVI lost |
+| `abandon_craft` called | Same as window miss, intentional |
+| Forge building not at required level | `start_craft` rejected before any cost |
+
+---
+
+## Equip Bonus Calculation
+
+Equipping applies the following bonuses to `PlayerAccount`:
+
+```
+equipped_weapon_bonus_bps = sum(tier_to_bonus_bps(melee), tier_to_bonus_bps(ranged), tier_to_bonus_bps(siege))
+equipped_armor_bonus_bps  = tier_to_bonus_bps(armor)
+```
+
+| Tier | `tier_to_bonus_bps` |
+|------|---------------------|
+| 0 (unequipped) | 0 |
+| 1 Refined | 250 (+2.5%) |
+| 2 Superior | 500 (+5%) |
+| 3 Elite | 1000 (+10%) |
+| 4 Masterwork | 1500 (+15%) |
+| 5 Legendary | 2500 (+25%) |
+| 6 Mythic | 4000 (+40%) |
+| 7 Divine | 6000 (+60%) |
+
+A player can equip **one item per equipment type** at a time.
+
+---
+
+## Forge Mastery XP
+
+Successful crafts award Mastery XP to the Forge building slot:
+
+| Tier | Base Mastery XP |
+|------|----------------|
+| Refined | 10 |
+| Superior | 25 |
+| Elite | 50 |
+| Masterwork | 100 |
+| Legendary | 200 |
+| Mythic | 400 |
+| Divine | 800 |
+
+Precision bonus adds `avg_precision / 100` XP. The daily Forge mini-game mastery bonus (`estate.mastery_bonus_bps`) applies multiplicatively.
+
+Mastery XP accumulates on `BuildingSlot.mastery_xp`; each level-up requires `100 × next_level²` XP, capped at mastery level 100.
+
+---
+
+## Craft Flow
 
 ```mermaid
 sequenceDiagram
     participant Player
     participant Program
     participant CraftedEquipment
+    participant Estate
 
-    Player->>Program: complete_craft
-    Program->>Program: Validate all stages completed
-    Program->>Program: Calculate final precision
-    Program->>CraftedEquipment: Create equipment item
-    Program->>CraftedEquipment: Add to inventory
-    Program->>CraftedEquipment: Clear craft state
-    Program-->>Player: Equipment crafted!
+    Player->>Program: start_craft(equipment_type, quality_tier)
+    Program->>Estate: Verify Forge level >= required
+    Program->>CraftedEquipment: Check no active craft
+    Program->>Program: Burn NOVI, deduct materials
+    Program->>CraftedEquipment: Set stages_required, window_opens_at/closes_at
+    Program-->>Player: Stage 1 window scheduled
+
+    loop Each Stage
+        Player->>Program: strike()
+        Program->>CraftedEquipment: Check window open
+        Program->>CraftedEquipment: Record precision, stages_completed++
+        alt Final stage
+            Program->>CraftedEquipment: Add item to QualityCounts, clear craft
+            Program->>Estate: Award Forge mastery XP
+            Program-->>Player: CraftCompleted event
+        else More stages
+            Program->>CraftedEquipment: Schedule next window
+        end
+    end
 ```
-
-### 4. Failed Craft (Missed Window)
-
-If you miss a window (don't strike before `window_closes_at`):
-
-**Instruction:** `163 - abandon_craft`
-
-```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant CraftedEquipment
-
-    Note over Player: Window expired!
-    Player->>Program: abandon_craft
-    Program->>Program: Validate window expired
-    Program->>CraftedEquipment: Clear craft state
-    Program->>CraftedEquipment: Increment failed_crafts
-    Note over Player: Materials lost!
-    Program-->>Player: Craft abandoned
-```
-
-**Materials are NOT refunded** on failed crafts. This creates meaningful skill-based risk.
-
----
-
-## Forge Building Requirements
-
-| Forge Level | Max Tier Craftable | Window Bonus |
-|-------------|-------------------|--------------|
-| 1-4 | Refined | +2-8 sec |
-| 5-7 | Superior | +10-14 sec |
-| 8-11 | Elite | +16-22 sec |
-| 12-15 | Masterwork | +24-30 sec |
-| 16-17 | Legendary | +32-34 sec |
-| 18-19 | Mythic | +36-38 sec |
-| 20 | Divine | +40 sec |
-
-Higher Forge levels also **reduce required stages**:
-
-```
-base_stages = tier.base_stages()
-reduction = forge_level / 5  // 1 stage per 5 levels
-actual_stages = max(base_stages - reduction, 1)
-```
-
----
-
-## Salvage System
-
-**Instruction:** `164 - salvage_equipment`
-
-Break down equipment to recover materials:
-
-```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant CraftedEquipment
-    participant PlayerAccount
-
-    Player->>Program: salvage_equipment(slot)
-    Program->>Program: Validate equipment exists
-    Program->>Program: Calculate material return
-    Program->>PlayerAccount: Add materials
-    Program->>CraftedEquipment: Remove from slot
-    Program-->>Player: Materials recovered
-```
-
-**Recovery Rates:**
-
-| Tier | Recovery % |
-|------|------------|
-| Refined | 30% |
-| Superior | 35% |
-| Elite | 40% |
-| Masterwork | 45% |
-| Legendary | 50% |
-| Mythic | 55% |
-| Divine | 60% |
-
-NOVI is never recovered - it's burned in the forge fire.
-
----
-
-## Equipment Stats
-
-Final stats are calculated from:
-
-```
-base_stats = equipment_type.base_stats()
-tier_multiplier = quality_tier.stat_multiplier()
-precision_bonus = (precision_score / 100) * 0.1  // Up to +10%
-
-final_stats = base_stats * tier_multiplier * (1 + precision_bonus)
-```
-
-**Example:**
-- Sword (base 100 attack)
-- Masterwork tier (2.0x multiplier)
-- 85% precision score (+8.5%)
-- Final: 100 × 2.0 × 1.085 = **217 attack**
 
 ---
 
 ## Client Integration
 
-### Start Craft
+```typescript
+import {
+  createInitializeForgeInstruction,
+  createStartCraftInstruction,
+  createStrikeInstruction,
+  createEquipInstruction,
+} from '@novus-mundus/sdk';
+import { CraftableEquipment, QualityTier } from '@novus-mundus/sdk';
 
-```javascript
-async function startCraft(connection, wallet, equipmentType, qualityTier) {
-  // Check Forge level
-  const estate = await getPlayerEstate(connection, wallet.publicKey);
-  const forgeLevel = estate.buildings.forge;
+// Initialize (once per player)
+const initIx = createInitializeForgeInstruction({ owner, gameEngine });
 
-  if (forgeLevel < getRequiredForgeLevel(qualityTier)) {
-    throw new Error(`Forge level ${getRequiredForgeLevel(qualityTier)} required`);
-  }
+// Start a Masterwork Melee Weapon craft
+const startIx = createStartCraftInstruction(
+  { owner, gameEngine },
+  { equipmentType: CraftableEquipment.MeleeWeapons, qualityTier: QualityTier.Masterwork }
+);
 
-  // Check materials
-  const player = await getPlayerAccount(connection, wallet.publicKey);
-  const costs = getMaterialCosts(qualityTier);
+// Poll CraftedEquipmentAccount and strike when window is open
+const craftedEquipmentPda = deriveCraftedEquipmentPda(owner);
+const account = await fetchCraftedEquipmentAccount(connection, craftedEquipmentPda);
 
-  if (player.commonMaterials < costs.common ||
-      player.uncommonMaterials < costs.uncommon) {
-    throw new Error('Insufficient materials');
-  }
-
-  const ix = startCraftInstruction({
-    equipmentType,
-    qualityTier
-  });
-
-  return sendTransaction(connection, wallet, [ix]);
+const now = Math.floor(Date.now() / 1000);
+if (now >= account.windowOpensAt && now <= account.windowClosesAt) {
+  const strikeIx = createStrikeInstruction({ owner, gameEngine });
 }
-```
 
-### Monitor Craft Window
-
-```javascript
-function getCraftStatus(craftedEquipment) {
-  if (craftedEquipment.activeCraftEquipment === 255) {
-    return { status: 'idle' };
-  }
-
-  const now = Date.now() / 1000;
-  const windowOpens = craftedEquipment.windowOpensAt;
-  const windowCloses = craftedEquipment.windowClosesAt;
-
-  if (now < windowOpens) {
-    return {
-      status: 'waiting',
-      stage: craftedEquipment.currentStage,
-      totalStages: craftedEquipment.stagesRequired,
-      windowOpensIn: windowOpens - now
-    };
-  }
-
-  if (now >= windowOpens && now <= windowCloses) {
-    const windowCenter = windowOpens + (windowCloses - windowOpens) / 2;
-    const distanceFromCenter = Math.abs(now - windowCenter);
-
-    return {
-      status: 'window_open',
-      stage: craftedEquipment.currentStage,
-      totalStages: craftedEquipment.stagesRequired,
-      windowClosesIn: windowCloses - now,
-      precision: calculatePrecision(now, windowOpens, windowCloses),
-      optimalTime: windowCenter
-    };
-  }
-
-  // Window expired
-  return {
-    status: 'failed',
-    stage: craftedEquipment.currentStage,
-    reason: 'Window expired'
-  };
-}
-```
-
-### Strike Timing UI
-
-```javascript
-function renderCraftingUI(craftStatus) {
-  if (craftStatus.status === 'idle') {
-    return '[Start New Craft]';
-  }
-
-  if (craftStatus.status === 'waiting') {
-    return `
-      Stage ${craftStatus.stage}/${craftStatus.totalStages}
-      Window opens in: ${formatDuration(craftStatus.windowOpensIn)}
-      [Preparing...]
-    `;
-  }
-
-  if (craftStatus.status === 'window_open') {
-    const precisionColor = craftStatus.precision > 80 ? 'green' :
-                          craftStatus.precision > 50 ? 'yellow' : 'red';
-    return `
-      Stage ${craftStatus.stage}/${craftStatus.totalStages}
-      STRIKE NOW!
-      Precision: ${craftStatus.precision}% (${precisionColor})
-      Window closes in: ${craftStatus.windowClosesIn.toFixed(1)}s
-      [STRIKE!]
-    `;
-  }
-
-  if (craftStatus.status === 'failed') {
-    return `
-      CRAFT FAILED
-      ${craftStatus.reason}
-      [Abandon Craft]
-    `;
-  }
-}
+// Equip after a successful craft
+const equipIx = createEquipInstruction(
+  { owner, gameEngine },
+  { equipmentType: CraftableEquipment.MeleeWeapons, qualityTier: QualityTier.Masterwork }
+);
 ```
 
 ---
 
-## Materials Acquisition
-
-| Material Tier | Sources |
-|---------------|---------|
-| Common | Encounters, Collections, Salvage |
-| Uncommon | Mining Expeditions, Rallies |
-| Rare | Fishing Expeditions, Events |
-| Epic | Boss Encounters, High-Tier Expeditions |
-| Legendary | World Bosses, Event Prizes |
-
-Materials can also be converted upward:
-
-```
-10 Common → 1 Uncommon
-10 Uncommon → 1 Rare
-10 Rare → 1 Epic
-10 Epic → 1 Legendary
-```
+*The Forge rewards patience and precision. Master the rhythm of tempering to craft equipment that defines battle outcomes.*
 
 ---
 
-*The Forge demands precision and patience. Master the art of tempering, and your weapons will be legend.*
-
----
-
-Next: [Events](./events.md)
+Next: [Sanctuary](./sanctuary.md)

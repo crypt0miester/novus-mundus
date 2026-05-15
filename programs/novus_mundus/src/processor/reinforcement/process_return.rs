@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -39,14 +38,12 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let reinforcement_account = &accounts[0];
-    let sender_player = &accounts[1];
-    let sender_owner = &accounts[2];
-    let estate_account = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        reinforcement_account,
+        sender_player,
+        sender_owner,
+        estate_account,
+    ]);
 
     // 2. Validate Accounts
     require_writable(reinforcement_account)?;

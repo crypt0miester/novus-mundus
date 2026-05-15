@@ -13,6 +13,7 @@ use crate::{
         DungeonConfig, CastleConfig, CombatConfig,
     },
     validation::{require_signer, require_writable},
+    utils::read_u16,
     error::GameError,
 };
 
@@ -59,19 +60,14 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // Need at least 2 bytes for update_flags
-    if data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let update_flags = u16::from_le_bytes([data[0], data[1]]);
+    let update_flags = read_u16(data, 0, "update_game_config.update_flags")?;
 
     if update_flags == 0 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     // Parse accounts
-    let [game_engine_account, authority] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [game_engine_account, authority]);
 
     require_signer(authority)?;
     require_writable(game_engine_account)?;

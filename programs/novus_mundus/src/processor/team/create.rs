@@ -13,6 +13,7 @@ use crate::{
     constants::{PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED, MAX_TEAM_MEMBERS_BY_TIER, TIER_ROOKIE},
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u64},
     logic::safe_math::apply_bp,
     emit,
     events::TeamCreated,
@@ -44,7 +45,7 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         team_account,
         leader_slot_account,
@@ -54,9 +55,7 @@ pub fn process(
         owner,
         system_program,
         _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -66,20 +65,19 @@ pub fn process(
     require_writable(team_account)?;
     require_writable(leader_slot_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "team_create.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse Instruction Data
     // Format: team_id (u64, 8 bytes) + name_len (u8) + name (N bytes)
 
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
 
-    let team_id = u64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-    ]);
-
-    let name_len = instruction_data[8] as usize;
+    let name_len = read_u8(instruction_data, 8, "name_len")? as usize;
 
     if name_len < 3 || name_len > 32 {
         return Err(GameError::TeamNameTooLong.into());

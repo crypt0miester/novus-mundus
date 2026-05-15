@@ -28,6 +28,7 @@ use crate::{
         terrain,
     },
     helpers::{event_scoring::update_event_score, estate::{load_estate_for_player, load_estate_for_player_mut, has_infirmary, infirmary_recovery_bps}},
+    utils::read_u8,
     validation::{
         require_signer,
         require_writable,
@@ -74,18 +75,16 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts (8 required, 4 optional event accounts)
-    if accounts.len() < 8 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let attacker_player = &accounts[0];
-    let defender_player = &accounts[1];
-    let attacker_owner = &accounts[2];
-    let attacker_city = &accounts[3];
-    let defender_city = &accounts[4];
-    let game_engine = &accounts[5];
-    let attacker_estate_account = &accounts[6];
-    let defender_estate_account = &accounts[7];
+    crate::extract_accounts!(accounts, [
+        attacker_player,
+        defender_player,
+        attacker_owner,
+        attacker_city,
+        defender_city,
+        game_engine,
+        attacker_estate_account,
+        defender_estate_account,
+    ]);
 
     let (attacker_event_participation, attacker_event, defender_event_participation, defender_event) = if accounts.len() >= 12 {
         (Some(&accounts[8]), Some(&accounts[9]), Some(&accounts[10]), Some(&accounts[11]))
@@ -105,11 +104,7 @@ pub fn process(
     let attacker_bump = require_pda(attacker_player, &[PLAYER_SEED, game_engine.address().as_ref(), attacker_owner.address().as_ref()], program_id)?;
 
     // 3. Parse instruction data
-    if data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let drive_by = data[0] != 0;
+    let drive_by = read_u8(data, 0, "drive_by")? != 0;
 
     // 4. Load player data
     let mut attacker_data = attacker_player.try_borrow_mut()?;

@@ -2,375 +2,361 @@
 
 > How resources enter, circulate, and exit the Novus Mundus economy.
 
-## Economic Model Overview
+## Overview
 
-Novus Mundus uses a **sink-faucet economy** where resources are continuously created (faucets) and destroyed (sinks). Balance between these determines inflation/deflation.
-
-```mermaid
-graph TB
-    subgraph "Faucets (Creation)"
-        F1[Daily Rewards]
-        F2[Expeditions]
-        F3[Combat Loot]
-        F4[Events]
-        F5[Collection]
-    end
-
-    subgraph "Circulation"
-        POOL[Player Economy]
-        TRADE[Player Trading]
-    end
-
-    subgraph "Sinks (Destruction)"
-        S1[Building Costs]
-        S2[Research Costs]
-        S3[Unit Hiring]
-        S4[Speedups]
-        S5[Combat Losses]
-    end
-
-    F1 & F2 & F3 & F4 & F5 --> POOL
-    POOL <--> TRADE
-    POOL --> S1 & S2 & S3 & S4 & S5
-```
-
-**Note:** Unit hiring uses locked NOVI, not cash.
-
-## Faucets (Resource Creation)
-
-### Daily Rewards
-**Consistency:** Guaranteed daily
-**Scale:** Small but reliable
+The Novus Mundus economy is a **closed-loop with controlled inflows and outflows**. Locked NOVI is continuously minted at subscription-determined rates and burned through gameplay actions. Reserved NOVI enters via prizes and real-money purchases and exits via wallet withdrawal after vesting. Cash, gems, produce, and stamina circulate purely within the program.
 
 ```mermaid
 graph LR
-    LOGIN[Daily Login] --> STREAK{Streak Day}
-    STREAK -->|1-3| LOW[100-200 gems]
-    STREAK -->|4-7| MED[250-500 gems]
-    STREAK -->|7+| HIGH[500+ gems]
+    subgraph "INFLOWS"
+        SUB[Subscription<br/>generation]
+        PRIZE[Prizes &amp;<br/>Events]
+        SHOP[SOL Purchase<br/>purchase_novi]
+    end
+
+    subgraph "CIRCULATION"
+        LOCKED[Locked NOVI]
+        RESERVED[Reserved NOVI]
+        CASH[Cash]
+        GEMS[Gems]
+        PRODUCE[Produce]
+        STAMINA[Stamina]
+    end
+
+    subgraph "OUTFLOWS"
+        BURN[Token Burn<br/>hire / collect /<br/>equip / stamina]
+        WITHDRAW[Wallet Withdrawal<br/>7-day vesting]
+    end
+
+    SUB -->|mint| LOCKED
+    PRIZE -->|mint| RESERVED
+    SHOP -->|mint| RESERVED
+    RESERVED -->|reserved_to_locked| LOCKED
+    LOCKED --> BURN
+    LOCKED -->|consume| CASH
+    LOCKED -->|consume| GEMS
+    LOCKED -->|consume| PRODUCE
+    LOCKED -->|burn| STAMINA
+    RESERVED --> WITHDRAW
 ```
 
-| Day | Gems | Cash | Notes |
-|-----|------|------|-------|
-| 1 | 100 | 500 | Base rewards |
-| 7 | 500 | 2,000 | Week streak |
-| 30 | 1,000 | 5,000 | Month streak |
+## Generation: Locked NOVI
 
-### Expeditions
-**Consistency:** Player-controlled
-**Scale:** Primary income source
+The primary inflow is **subscription-based token generation** handled by `update_locked_novi` (instruction 10).
+
+### Generation Formula
+
+```
+time_interval        = 300 seconds (5 minutes)
+intervals_elapsed    = (now - last_updated_tokens_at) / time_interval
+tokens_to_generate   = intervals_elapsed × generation_rate
+new_locked_novi      = min(locked_novi + tokens_to_generate, effective_cap)
+```
+
+The processor updates `last_updated_tokens_at` to `now` even when the cap is already reached. This prevents time from banking up: a player at cap for days cannot instantly refill after spending.
 
 ```mermaid
-graph TB
-    subgraph "Mining Output"
-        M1[Surface: 10 gems/op/hr]
-        M2[Shallow: 18 gems/op/hr]
-        M3[Deep: 30 gems/op/hr]
-        M4[Volcanic: 50 gems/op/hr]
-        M5[Abyssal: 80 gems/op/hr]
-    end
-
-    subgraph "Fishing Output"
-        F1[Shore: 15 produce/op/hr]
-        F2[River: 25 produce/op/hr]
-        F3[Lake: 40 produce/op/hr]
-        F4[DeepSea: 60 produce/op/hr]
-        F5[Abyss: 100 produce/op/hr]
-    end
+flowchart TD
+    A["update_locked_novi"] --> B{"elapsed >= 300s?"}
+    B -->|No| C["No-op: return Ok"]
+    B -->|Yes| D["intervals = elapsed / 300"]
+    D --> E{"locked_novi >= effective_cap?"}
+    E -->|Yes| F["Advance timestamp only<br/>No mint — time banking closed"]
+    E -->|No| G["tokens = min(intervals × rate,<br/>cap - locked_novi)"]
+    G --> H["CPI: GameEngine PDA<br/>mint_to(player_token_account)"]
+    H --> I["Update locked_novi + timestamp<br/>Emit NoviLocked"]
 ```
 
-**Expedition Modifiers:**
-| Modifier | Effect | Source |
-|----------|--------|--------|
-| Operative Tier | +50-100% | T2/T3 operatives |
-| Time of Day | ±20% | Peak/off-peak hours |
-| Hero Affinity | +5-25% | MiningAffinity/FishingAffinity |
-| Origin Bonus | +25% | Hero origin matches location |
-| Research | +10-50% | Collection research |
-| Observatory | +5-20% | Building bonus |
-| Perfect Score | +15% | Strike minigame |
-| Rare Find | +400% | Lucky roll |
+### Generation Rates (default)
 
-[Source: processor/expedition/claim.rs](../../../programs/novus_mundus/src/processor/expedition/claim.rs)
+| Tier | Rate per 5 min | Fill Time to Base Cap |
+|------|----------------|-----------------------|
+| 0 Rookie | 50 | 60 intervals = 5 hours |
+| 1 Expert | 100 | 60 intervals = 5 hours |
+| 2 Epic | 500 | 60 intervals = 5 hours |
+| 3 Legendary | 2,500 | 60 intervals = 5 hours |
 
-### Combat Loot
-**Consistency:** Variable (PvP/PvE)
-**Scale:** Risk-reward based
+All tiers fill in 5 hours at their respective rates. The higher tiers earn more per interval and have proportionally larger caps.
 
-**PvP Loot Formula:**
-```
-loot = defender_resources × loot_percentage × (1 + hero_loot_bonus)
-loot_percentage = base_rate × (attacker_power / total_power)
-```
+If the subscription has expired, tier 0 rates apply (`subscription_end <= now` check in the processor).
 
-**Encounter Loot:**
-| Encounter Tier | Gems | Fragments | Cash |
-|----------------|------|-----------|------|
-| Common | 5-20 | 10-30 | 100-500 |
-| Uncommon | 20-50 | 30-80 | 500-1,500 |
-| Rare | 50-150 | 80-200 | 1,500-5,000 |
-| Epic | 150-500 | 200-500 | 5,000-15,000 |
+## Consumption: Burning Locked NOVI
 
-### Events
-**Consistency:** Periodic
-**Scale:** Large bursts
+All gameplay actions that burn locked NOVI share a common pattern:
 
-Events create temporary faucets:
-- **Competition prizes** - Top performers get massive rewards
-- **Participation rewards** - Everyone who joins gets something
-- **Milestone rewards** - Reaching thresholds unlocks bonuses
+1. Validate sufficient `player.locked_novi`
+2. Deduct from `player.locked_novi` (state mutation)
+3. Call `burn_tokens` CPI — the `PlayerAccount` PDA signs (PDA controls the token account)
+4. Grant the resource or unit
 
-### Resource Collection
-**Consistency:** Cooldown-based
-**Scale:** Location dependent
+### NOVI Consumption Formula (`collect_resources`, `hire_units`)
+
+The power generated from burning NOVI is calculated by `consume_novi_logic`:
 
 ```mermaid
-graph TB
-    subgraph "Location Types"
-        CITY[City Center] -->|4hr CD| CASH1[Cash: 200-1000]
-        MINE[Mine] -->|2hr CD| GEMS1[Gems: 20-100]
-        FARM[Farm] -->|2hr CD| PROD1[Produce: 50-200]
-    end
+flowchart LR
+    NOVI["novi_amount"] --> SYNC["× synchrony_bp<br/>1.0× to ~2.5×"]
+    SYNC --> BASE["× novi_consumption_base<br/>default: 13.75×"]
+    BASE --> SEC["× secondary_multiplier_base<br/>default: √φ = 1.272×"]
+    SEC --> FIB{"is_fibonacci(novi_amount)?"}
+    FIB -->|Yes| FBNS["× fibonacci_bonus_base<br/>default: φ = 1.618×"]
+    FIB -->|No| POWER["base_power"]
+    FBNS --> POWER
+    POWER --> TIME["× time-of-day multiplier<br/>ActivityType::Consuming"]
+    TIME --> FINAL["final_power"]
 ```
 
-[Source: processor/economy/collect_resources.rs](../../../programs/novus_mundus/src/processor/economy/collect_resources.rs)
+```
+synchrony_bp       = calculate_synchrony(player, config, tiers, now) × 10000
+base_mult_bp       = economic_config.novi_consumption_base    // default: 137500 (13.75×)
+secondary_mult_bp  = economic_config.secondary_multiplier_base // default: 12720  (√φ = 1.272×)
 
----
+base_value = chain_bp(novi_amount, [base_mult_bp, secondary_mult_bp, synchrony_bp])
 
-## Sinks (Resource Destruction)
+if is_fibonacci(novi_amount):
+    fibonacci_bonus_bp = economic_config.fibonacci_bonus_base  // default: 16180 (φ = 1.618×)
+    power = apply_bp(base_value, fibonacci_bonus_bp)
+else:
+    power = base_value
+```
 
-### Building Costs
-**Type:** NOVI, Cash, Time
-**Scale:** Increasing per level
+`chain_bp` interleaves multiply/divide to stay within `u64` without `u128`.
+
+`is_fibonacci` uses the perfect-square property: `n` is Fibonacci iff `5n² + 4` or `5n² - 4` is a perfect square (computed in `u128` for safety).
+
+After the base power is computed, a **time-of-day multiplier** is applied to the result (see [Time-of-Day](../05-formulas/time-multipliers.md)).
+
+### Synchrony Calculation
+
+Synchrony amplifies NOVI consumption efficiency:
+
+```
+synchrony_bp = 10000                                    // 1.0× base
+             + subscription_tiers[tier].synchrony_bonus
+             + min(avg_happiness × happiness_synchrony_max, happiness_synchrony_max)
+             + reputation_synchrony_bonuses[rank]
+             + level × level_synchrony_bonus_per_level
+```
+
+`avg_happiness = (happiness_defensive + happiness_operative) / 2.0`
+
+Reputation ranks (Novice 0, Skilled 1k, Veteran 5k, Elite 20k, Legendary 100k).
+
+### Resource Output by Collection Type
 
 ```mermaid
-graph LR
-    subgraph "Building Cost Curve"
-        L1[Level 1: 1,000]
-        L5[Level 5: 8,000]
-        L10[Level 10: 50,000]
-        L15[Level 15: 200,000]
-        L20[Level 20: 1,000,000]
-    end
+flowchart TD
+    POWER["final_power"] --> CT{"collection_type"}
+    CT -->|Cash| CASH_CALC["cash = (op1×10 + op2×8 + op3×5) × power"]
+    CT -->|Mining| GEM_CALC["gems = sqrt_product(op1×3 + op2×2 + op3×1, power)"]
+    CT -->|Fishing| FISH_CALC["produce = pow_three_quarters(sqrt_product(units, power)) × 3"]
+    CT -->|Farming| FARM_CALC["produce = pow_three_quarters(sqrt_product(units, power)) × 3"]
+    CASH_CALC --> TOD_CASH["× time multiplier: Collecting"]
+    GEM_CALC --> TOD_GEM["× time multiplier: Mining"]
+    FISH_CALC --> TOD_FISH["× time multiplier: Fishing"]
+    FARM_CALC --> TOD_FISH
 ```
 
-Buildings follow φ-based cost scaling:
+| Collection Type | Output Currency | Unit Multipliers | Diminishing Returns |
+|-----------------|-----------------|------------------|---------------------|
+| Cash | `cash_on_hand` | Op1 × 10, Op2 × 8, Op3 × 5, all × power | Linear |
+| Mining | `gems` | Op1 × 3, Op2 × 2, Op3 × 1 | `sqrt_product(unit_factor, power)` |
+| Fishing | `produce` | Op1 × 5, Op2 × 4, Op3 × 3 | `pow_three_quarters(sqrt_product(...))` × 3 |
+| Farming | `produce` | Op1 × 5, Op2 × 4, Op3 × 3 | `pow_three_quarters(sqrt_product(...))` × 3 |
+
+Mining and fishing use integer square-root and `x^0.75` approximations (no `u128`) to implement diminishing returns while preventing overflows.
+
+### Produce Consumption
+
+After each `collect_resources` call, produce is consumed based on total operative units via `consume_produce(sum_of_units, produce)`:
+
 ```
-cost(level) = base_cost × φ^(level-1)
-```
-
-### Research Costs
-**Type:** NOVI, Time
-**Scale:** Category dependent
-
-| Category | Base Cost | Time |
-|----------|-----------|------|
-| Basic | 1,000 | 1 hour |
-| Intermediate | 5,000 | 4 hours |
-| Advanced | 20,000 | 12 hours |
-| Expert | 50,000 | 24 hours |
-| Master | 100,000 | 48 hours |
-
-### Unit Hiring
-**Type:** Locked NOVI
-**Scale:** Tier dependent
-
-| Unit | NOVI Cost | Sink Rate |
-|------|-----------|-----------|
-| T1 Operative | 100 | High volume |
-| T2 Operative | 500 | Medium volume |
-| T3 Operative | 2,000 | Low volume |
-| Weapons | 200-2,000 | Combat losses |
-
-### Speedups
-**Type:** Gems (primary)
-**Scale:** Time-based
-
-Speedups are the **primary gem sink**:
-```
-gem_cost = remaining_minutes × rate × tier_multiplier
+produce_consumed = (sum_of_units / produce) * produce
+                 // i.e. sum_of_units rounded DOWN to the nearest multiple of produce
+                 // returns 0 if produce == 0
+player.produce  -= produce_consumed
 ```
 
-| Speedup Type | Base Rate | Tier 2 Multiplier |
-|--------------|-----------|-------------------|
-| Expedition | 100/min | 2x |
-| Research | 50/min | 2x |
-| Rally | 75/min | 2x |
-| Building | 100/min | N/A |
+This computes `sum_of_units` floored to the nearest multiple of `produce`. If `produce` is zero the function returns 0 (no consumption, no panic).
 
-### Combat Losses
-**Type:** Units, Equipment
-**Scale:** Battle outcome
-
-Combat creates a natural unit sink:
+```mermaid
+flowchart LR
+    UNITS["sum_of_units"] --> FORMULA["produce_consumed =<br/>(sum_of_units / produce) × produce<br/>(nearest lower multiple)"]
+    PRODUCE["player.produce"] --> FORMULA
+    FORMULA --> ZERO{"produce == 0?"}
+    ZERO -->|Yes| SKIP["produce_consumed = 0"]
+    ZERO -->|No| DEDUCT["player.produce -= produce_consumed"]
+    SKIP --> HAPPY["Update happiness_operative"]
+    DEDUCT --> HAPPY
+    HAPPY --> ABANDON{"happiness low?"}
+    ABANDON -->|Yes| UNITS_LEAVE["Units abandon"]
+    ABANDON -->|No| DONE["Continue"]
 ```
-casualties = units × casualty_rate × (1 - defense_reduction)
-casualty_rate = damage_taken / unit_hp
+
+If produce falls short, `happiness_operative` declines, which can trigger unit abandonment on the next call.
+
+## Reserved NOVI Flows
+
+### Mint for Prize (`mint_for_prize`, instruction 14)
+
+DAO-only. Mints NOVI to a `UserAccount`'s reserved token account for events, tournaments, marketing, etc. Tracked against per-purpose allocation caps in `MintingConfig`. Sets `reserved_novi_earned_at = now` to start the 7-day vesting clock.
+
+> **Note (Audit M-17):** The per-purpose cap is not atomic across multiple instructions in the same transaction. DAO frontends must issue exactly one `mint_for_prize` per transaction.
+
+### Purchase NOVI (`purchase_novi`, instruction 300)
+
+Players buy NOVI with SOL. Always mints to reserved (never locked). Resets `reserved_novi_earned_at` on every purchase.
+
+**Pricing cascade:**
+1. If oracle feeds are configured: use Pyth or Switchboard NOVI/USD ÷ SOL/USD × 10^8 for lamports, then apply `novi_market_undercut_bps` discount (default 15%).
+2. If oracle not configured: use `novi_base_price_lamports` (DAO fallback).
+
+When oracle is configured, oracle errors are fatal — no silent fallback. Slippage protection via `max_lamports` parameter.
+
+```mermaid
+flowchart TD
+    CALL["purchase_novi(package_index, max_lamports)"] --> PKG["base_amount = packages[package_index]"]
+    PKG --> BONUS["total_bonus_bps = bulk + subscription + streak"]
+    BONUS --> TOTAL["total_novi = base_amount × (10000 + total_bonus_bps) / 10000"]
+    TOTAL --> ORACLE{"Oracle configured?"}
+    ORACLE -->|Yes| PYTH["price = Pyth/Switchboard<br/>NOVI/USD ÷ SOL/USD × apply undercut"]
+    ORACLE -->|No| FALLBACK["price = base_price_lamports × amount"]
+    PYTH --> SLIP{"cost > max_lamports?"}
+    FALLBACK --> SLIP
+    SLIP -->|Yes| ERR["Error: slippage"]
+    SLIP -->|No| TRANSFER["Transfer SOL → treasury"]
+    TRANSFER --> MINT["CPI: mint total_novi → reserved_token_account"]
+    MINT --> UPDATE["user.reserved_novi += total_novi<br/>reserved_novi_earned_at = now<br/>Update streak + daily cap"]
 ```
 
----
+**Package amounts, bonuses, and daily caps** are stored in `GameEngine.novi_purchase_config`:
 
-## Circulation Mechanics
+| Package | Default Amount |
+|---------|---------------|
+| 0 | 1,000 NOVI |
+| 1 | 10,000 NOVI |
+| 2 | 100,000 NOVI |
+| 3 | 1,000,000 NOVI |
+| 4 | 5,000,000 NOVI |
 
-### Player-to-Player Trading
+Bonuses (additive bps, applied to base amount):
+
+| Bonus Type | Applies to |
+|------------|-----------|
+| Bulk bonus | Per package (default 3%, 5%, 8%, 12%, 15%) |
+| Subscription bonus | Rookie 0%, Expert 4%, Epic 8%, Legendary 12% |
+| Streak bonus | Days 1–7: 0%, 1%, 2%, 3%, 5%, 7%, 10% (streak resets if a day is skipped) |
+
+Daily cap by subscription tier: 100k, 500k, 1M, 10M NOVI.
+
+### Reserved → Locked (`reserved_to_locked`, instruction 15)
+
+Permanent, one-way SPL transfer. `UserAccount` PDA signs.
 
 ```mermaid
 sequenceDiagram
-    participant A as Player A
-    participant P as Program
-    participant B as Player B
+    participant Player
+    participant Program
+    participant UserPDA as UserAccount PDA
+    participant PlayerPDA as PlayerAccount PDA
 
-    A->>P: transfer_cash(B, 1000)
-    P->>P: Deduct from A.cash
-    P->>P: Add to B.cash
-    P-->>A: Success
-    P-->>B: Received 1,000 cash
+    Player->>Program: reserved_to_locked(amount)
+    Program->>Program: Validate user.reserved_novi >= amount
+    Program->>UserPDA: SPL transfer reserved_token → locked_token
+    Program->>Program: user.reserved_novi -= amount
+    Program->>Program: player.locked_novi += amount
+    Program-->>Player: NoviReservedToLocked event
 ```
 
-**Tradeable:**
-- Cash (instruction 18)
-- NOVI (via SPL transfer)
+This is **not** a burn — it is an SPL `transfer` between two token accounts. The total NOVI supply does not change.
 
-**Non-tradeable:**
-- Gems
-- Fragments (bound)
-- Experience
-- Research progress
+### Withdraw Reserved (`withdraw_reserved`, instruction 16)
 
-### Team Treasury
-
-Teams act as economic pools:
-```mermaid
-graph TB
-    subgraph "Team Treasury"
-        M1[Member 1] -->|deposit| TREASURY[Team Treasury]
-        M2[Member 2] -->|deposit| TREASURY
-        M3[Member 3] -->|deposit| TREASURY
-        TREASURY -->|leader withdraw| LEADER[Leader]
-    end
-```
-
-[Source: processor/team/deposit_treasury.rs](../../../programs/novus_mundus/src/processor/team/deposit_treasury.rs)
-
----
-
-## Economic Balance
-
-### Inflation Control
-
-**Problem:** Too many faucets → currency devaluation
-**Solution:** Scale sinks with progression
+SPL transfer from reserved token account to the user's wallet ATA. `UserAccount` PDA signs.
 
 ```mermaid
-graph TB
-    subgraph "Early Game"
-        EF[Small Faucets] --> ES[Small Sinks]
-    end
+sequenceDiagram
+    participant Player
+    participant Program
+    participant UserPDA as UserAccount PDA
+    participant WalletATA as Wallet ATA
 
-    subgraph "Mid Game"
-        MF[Medium Faucets] --> MS[Medium Sinks]
-    end
-
-    subgraph "Late Game"
-        LF[Large Faucets] --> LS[Large Sinks]
-    end
-
-    ES -->|progression| MS
-    MS -->|progression| LS
+    Player->>Program: withdraw_reserved(amount)
+    Program->>Program: Validate user.reserved_novi >= amount
+    Program->>Program: Check now - reserved_novi_earned_at >= 604800
+    Program->>UserPDA: SPL transfer reserved_token → wallet_ata
+    Program->>Program: user.reserved_novi -= amount
+    Program->>Program: user.last_withdrawal = now
+    Program-->>Player: NoviWithdrawn event
 ```
 
-### Deflation Prevention
+This is **not** a mint — it is an SPL `transfer` of existing tokens. Total supply is unchanged.
 
-**Problem:** Too many sinks → player frustration
-**Solution:** Guaranteed minimum income
+## Networth
 
-- Daily rewards always available
-- Expedition base yield unaffected by competition
-- Collection cooldowns, not competition
+Networth is recalculated on every `collect_resources` call via `calculate_networth`:
 
-### Economic Velocity
+```
+networth = Σ(units × unit_value)
+         + Σ(weapons × weapon_value)
+         + Σ(armor × armor_value)
+         + produce × produce_value
+         + vehicles × vehicle_value
+         + cash_on_hand
+         + cash_in_vault
+```
 
-Different currencies have different velocities:
+**Excluded from networth:** `locked_novi`, `gems`, buildings. Only assets in `EconomicConfig` value tables count.
 
-| Currency | Velocity | Design Intent |
-|----------|----------|---------------|
-| Cash | High | Frequent transactions |
-| Gems | Medium | Strategic spending |
-| NOVI | Low | Value store |
-| Fragments | Medium | Crafting cycles |
+Unit values use φ-ratio differentiation (melee weapon = base, ranged = ≈φ×, siege = ≈φ²×).
 
----
-
-## Flow Visualization
-
-### Complete Economy Flow
+## Cash Transfer and Vault
 
 ```mermaid
-flowchart TB
-    subgraph EXTERNAL["External"]
-        MONEY[Real Money]
-        MARKET[DEX/Market]
-    end
-
-    subgraph FAUCETS["Faucets"]
-        DAILY[Daily Rewards]
-        EXPED[Expeditions]
-        COMBAT[Combat]
-        EVENTS[Events]
-        COLLECT[Collection]
-    end
-
-    subgraph PLAYER["Player Balances"]
-        NOVI_L[Locked NOVI]
-        GEMS[Gems]
-        CASH[Cash]
-        FRAG[Fragments]
-        PROD[Produce]
-    end
-
-    subgraph SINKS["Sinks"]
-        BUILD[Buildings]
-        RESEARCH[Research]
-        UNITS[Unit Hiring]
-        SPEED[Speedups]
-        LOSSES[Combat Losses]
-    end
-
-    MONEY -->|purchase| GEMS
-    MONEY -->|purchase| NOVI_L
-    MARKET <-->|trade| NOVI_L
-
-    DAILY --> GEMS & CASH
-    EXPED --> GEMS & FRAG & PROD
-    COMBAT --> CASH & FRAG
-    EVENTS --> GEMS & CASH & NOVI_L
-    COLLECT --> CASH & PROD
-
-    NOVI_L --> BUILD & RESEARCH & UNITS
-    GEMS --> SPEED
-    CASH --> EQUIP
-    FRAG --> BUILD
-    PROD --> RALLY
-
-    UNITS --> LOSSES
+graph LR
+    HAND["cash_on_hand"] -->|"vault_transfer deposit (19)"| VAULT["cash_in_vault<br/>max 75% of total"]
+    VAULT -->|"vault_transfer withdraw (19)"| HAND
+    HAND -->|"transfer_cash (18)<br/>Expert+ / same team"| OTHER["Teammate cash_on_hand"]
 ```
 
+### Transfer Cash (instruction 18)
+
+Peer-to-peer `cash_on_hand` transfer between team members. The transfer subtracts from sender and adds to receiver — no NOVI involved.
+
+**Transfer limits by tier** (default):
+
+| Tier | Max Daily Amount | Max Daily Count |
+|------|-----------------|-----------------|
+| 0 Rookie | 0 (disabled) | 0 |
+| 1 Expert | 100M | 5 |
+| 2 Epic | 500M | 10 |
+| 3 Legendary | 2B | 25 |
+
+Vault building can extend these limits:
+- Lv 10-14: +100% daily limit
+- Lv 15-19: +250% daily limit
+- Lv 20+: Unlimited
+
+### Vault Transfer (instruction 19)
+
+Moves cash between `cash_on_hand` and `cash_in_vault`. Requires Vault building.
+
+```
+direction 0 (deposit):  cash_on_hand → cash_in_vault
+direction 1 (withdraw): cash_in_vault → cash_on_hand
+```
+
+Safebox cap: vault can hold at most 75% of total cash (`cash_on_hand + cash_in_vault`).
+
+[Source: processor/economy/](../../../programs/novus_mundus/src/processor/economy/)
+[Source: processor/shop/purchase_novi.rs](../../../programs/novus_mundus/src/processor/shop/purchase_novi.rs)
+[Source: processor/token/](../../../programs/novus_mundus/src/processor/token/)
+[Source: logic/consume.rs](../../../programs/novus_mundus/src/logic/consume.rs)
+[Source: logic/calculations.rs](../../../programs/novus_mundus/src/logic/calculations.rs)
+[Source: logic/fibonacci.rs](../../../programs/novus_mundus/src/logic/fibonacci.rs)
+[Source: logic/safe_math.rs](../../../programs/novus_mundus/src/logic/safe_math.rs)
+[Source: state/game_engine.rs](../../../programs/novus_mundus/src/state/game_engine.rs)
+
 ---
 
-## Balance Levers
-
-Game designers can tune economy via constants:
-
-| Lever | Location | Effect |
-|-------|----------|--------|
-| `MINING_GEMS_PER_OP_HOUR` | constants.rs | Gem faucet rate |
-| `BUILDING_COST_BASE` | constants.rs | NOVI sink rate |
-| `SPEEDUP_GEMS_PER_MINUTE` | speedup.rs | Gem sink rate |
-| `DAILY_REWARD_BASE` | constants.rs | Guaranteed income |
-| `COMBAT_CASUALTY_RATE` | combat.rs | Unit sink rate |
-
-[Source: constants.rs](../../../programs/novus_mundus/src/constants.rs)
-
----
-
-Next: [Time Value](./time-value.md) - How time creates economic value
+Next: [Time Value](./time-value.md)

@@ -8,7 +8,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -24,6 +23,7 @@ use crate::{
     },
     constants::CASTLE_STATUS_TRANSITIONING,
     helpers::close_account,
+    utils::read_u8,
     validation::{require_owner, require_initialized},
 };
 
@@ -48,22 +48,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let _crank = &accounts[0];
-    let castle_account = &accounts[1];
-    let court_account = &accounts[2];
-    let holder_account = &accounts[3];
-    let rent_recipient = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        _crank,
+        castle_account,
+        court_account,
+        holder_account,
+        rent_recipient,
+    ]);
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 1 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let position = instruction_data[0];
+    let position = read_u8(instruction_data, 0, "position")?;
 
     // Validate position (0-4 for 5 court position types)
     if position > 4 {

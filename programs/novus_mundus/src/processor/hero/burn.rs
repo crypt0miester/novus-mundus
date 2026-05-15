@@ -10,6 +10,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, HeroTemplate, tier_from_mint_cost, calculate_burn_reward},
     constants::{HERO_TEMPLATE_SEED, HERO_MINT_RECEIPT_SEED, HERO_COLLECTION_SEED},
+    utils::read_u16,
     validation::{require_signer, require_writable},
     emit,
     events::HeroBurned,
@@ -39,7 +40,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         player_account,
         hero_asset,
@@ -48,9 +49,7 @@ pub fn process(
         mint_receipt,
         system_program,
         p_core_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate accounts
     require_signer(owner)?;
@@ -62,10 +61,7 @@ pub fn process(
     require_writable(mint_receipt)?;
 
     // 3. Parse instruction data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let template_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let template_id = read_u16(instruction_data, 0, "burn.template_id")?;
 
     // 4. Load player account and verify ownership
     let player_data = player_account.try_borrow()?;

@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -11,6 +10,7 @@ use crate::{
     state::{PlayerAccount, ResearchProgress, ResearchTemplate, EstateAccount, BuildingType},
     helpers::estate::ascension_mastery_cost,
     validation::{require_signer, require_writable, require_owner},
+    utils::read_u8,
     emit,
     events::ResearchAscended,
 };
@@ -48,9 +48,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, research_progress, research_template, estate_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, research_progress, research_template, estate_account]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -62,10 +60,7 @@ pub fn process(
     require_owner(estate_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let research_type = instruction_data[0];
+    let research_type = read_u8(instruction_data, 0, "ascend.research_type")?;
 
     if research_type >= 30 {
         return Err(GameError::InvalidParameter.into());

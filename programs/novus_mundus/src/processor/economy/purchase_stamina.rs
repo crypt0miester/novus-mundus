@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -16,6 +15,7 @@ use crate::{
     validation::{require_signer, require_writable},
     emit,
     events::StaminaPurchased,
+    utils::read_u64,
 };
 
 /// Purchase stamina refill (monetization)
@@ -37,38 +37,29 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         player_token_account,
         novi_mint,
         game_engine_account,
         owner,
         _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
     require_signer(owner)?;
     require_writable(player_account)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "purchase_stamina.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse Instruction Data
 
-    if instruction_data.len() < 8 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let stamina_amount = u64::from_le_bytes([
-        instruction_data[0],
-        instruction_data[1],
-        instruction_data[2],
-        instruction_data[3],
-        instruction_data[4],
-        instruction_data[5],
-        instruction_data[6],
-        instruction_data[7],
-    ]);
+    let stamina_amount = read_u64(instruction_data, 0, "purchase_stamina.stamina_amount")?;
 
     // Validate amount
     if stamina_amount == 0 {

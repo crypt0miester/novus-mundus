@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType, GameEngine},
     validation::{require_signer, require_writable},
+    utils::read_u8,
     emit,
     events::{DungeonRelicChosen, DungeonBossFight},
 };
@@ -42,16 +42,14 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         game_authority,
         player_account,
         dungeon_template_account,
         dungeon_run_account,
         game_engine_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate signers
     require_signer(owner)?;
@@ -69,15 +67,11 @@ pub fn process(
     drop(game_engine);
 
     // 5. Parse instruction data
-    if data.len() < 5 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let relic_id = data[0];
-    let first_room_type = data[1];
-    let relic_option_1 = data[2];
-    let relic_option_2 = data[3];
-    let relic_option_3 = data[4];
+    let relic_id = read_u8(data, 0, "choose_relic.relic_id")?;
+    let first_room_type = read_u8(data, 1, "choose_relic.first_room_type")?;
+    let relic_option_1 = read_u8(data, 2, "choose_relic.relic_option_1")?;
+    let relic_option_2 = read_u8(data, 3, "choose_relic.relic_option_2")?;
+    let relic_option_3 = read_u8(data, 4, "choose_relic.relic_option_3")?;
     // Optional 4th option (for Dawn bonus or +1-choice relic id 19)
     let relic_option_4 = data.get(5).copied();
 

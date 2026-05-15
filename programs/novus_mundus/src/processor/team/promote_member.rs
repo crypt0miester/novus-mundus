@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, require_extension, EXT_TEAM, NULL_PUBKEY},
     validation::{require_signer, require_writable, require_owner},
+    utils::{read_u8, read_u16, read_u64},
     emit,
     events::MemberRankChanged,
 };
@@ -39,14 +39,10 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 13 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let promoter_slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let target_slot_index = u16::from_le_bytes(instruction_data[10..12].try_into().unwrap());
-    let new_rank = instruction_data[12];
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let promoter_slot_index = read_u16(instruction_data, 8, "promoter_slot_index")?;
+    let target_slot_index = read_u16(instruction_data, 10, "target_slot_index")?;
+    let new_rank = read_u8(instruction_data, 12, "new_rank")?;
 
     // Cannot promote to leader rank (0)
     if new_rank == TeamMemberSlot::RANK_0 || new_rank > TeamMemberSlot::RANK_4 {
@@ -55,15 +51,13 @@ pub fn process(
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         promoter_account,
         promoter_slot_account,
         target_slot_account,
         team_account,
         promoter_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

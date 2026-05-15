@@ -32,6 +32,7 @@ use crate::{
         parse_hero_nft,
         subtract_hero_buffs_from_player_with_location,
     },
+    utils::{read_u8, read_u64},
 };
 
 /// Join Garrison instruction data
@@ -62,15 +63,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_wallet = &accounts[0];
-    let player_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let garrison_account = &accounts[3];
-    let system_program = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        player_wallet,
+        player_account,
+        castle_account,
+        garrison_account,
+        system_program,
+    ]);
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -78,17 +77,13 @@ pub fn process(
     }
 
     // Parse instruction data
-    if instruction_data.len() < 49 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let units_1 = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let units_2 = u64::from_le_bytes(instruction_data[8..16].try_into().unwrap());
-    let units_3 = u64::from_le_bytes(instruction_data[16..24].try_into().unwrap());
-    let melee = u64::from_le_bytes(instruction_data[24..32].try_into().unwrap());
-    let ranged = u64::from_le_bytes(instruction_data[32..40].try_into().unwrap());
-    let siege = u64::from_le_bytes(instruction_data[40..48].try_into().unwrap());
-    let hero_slot = instruction_data[48];
+    let units_1 = read_u64(instruction_data, 0, "units_1")?;
+    let units_2 = read_u64(instruction_data, 8, "units_2")?;
+    let units_3 = read_u64(instruction_data, 16, "units_3")?;
+    let melee = read_u64(instruction_data, 24, "melee")?;
+    let ranged = read_u64(instruction_data, 32, "ranged")?;
+    let siege = read_u64(instruction_data, 40, "siege")?;
+    let hero_slot = read_u8(instruction_data, 48, "hero_slot")?;
 
     // Load player
     require_owner(player_account, program_id)?;

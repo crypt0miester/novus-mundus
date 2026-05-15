@@ -56,16 +56,14 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 6 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let king_wallet = &accounts[0];
-    let king_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let relieved_account = &accounts[3];
-    let garrison_account = &accounts[4];
-    let rent_recipient = &accounts[5];
+    crate::extract_accounts!(accounts, [
+        king_wallet,
+        king_account,
+        castle_account,
+        relieved_account,
+        garrison_account,
+        rent_recipient,
+    ]);
 
     // Verify signer
     if !king_wallet.is_signer() {

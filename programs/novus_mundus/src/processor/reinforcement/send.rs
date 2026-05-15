@@ -18,6 +18,7 @@ use crate::{
         TeamAccount,
     },
     logic::location::calculate_intercity_travel_time,
+    utils::{read_u8, read_u64},
     validation::{require_signer, require_writable, require_owner},
     helpers::nft_parser::{parse_nft_buffs, ParsedBuff},
     emit,
@@ -62,19 +63,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for hero)
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let sender_owner = &accounts[0];
-    let sender_player = &accounts[1];
-    let destination_player = &accounts[2];
-    let reinforcement_account = &accounts[3];
-    let sender_city = &accounts[4];
-    let destination_city = &accounts[5];
-    let game_engine = &accounts[6];
-    let system_program = &accounts[7];
-    let team_account = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        sender_owner,
+        sender_player,
+        destination_player,
+        reinforcement_account,
+        sender_city,
+        destination_city,
+        game_engine,
+        system_program,
+        team_account,
+    ]);
     let hero_nft = accounts.get(9); // Optional 10th account
 
     // 2. Validate Accounts
@@ -91,39 +90,14 @@ pub fn process(
     }
 
     // 3. Parse Instruction Data (57 bytes minimum)
-    if instruction_data.len() < 57 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let units_def_1 = u64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-    ]);
-    let units_def_2 = u64::from_le_bytes([
-        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
-        instruction_data[12], instruction_data[13], instruction_data[14], instruction_data[15],
-    ]);
-    let units_def_3 = u64::from_le_bytes([
-        instruction_data[16], instruction_data[17], instruction_data[18], instruction_data[19],
-        instruction_data[20], instruction_data[21], instruction_data[22], instruction_data[23],
-    ]);
-    let melee_weapons = u64::from_le_bytes([
-        instruction_data[24], instruction_data[25], instruction_data[26], instruction_data[27],
-        instruction_data[28], instruction_data[29], instruction_data[30], instruction_data[31],
-    ]);
-    let ranged_weapons = u64::from_le_bytes([
-        instruction_data[32], instruction_data[33], instruction_data[34], instruction_data[35],
-        instruction_data[36], instruction_data[37], instruction_data[38], instruction_data[39],
-    ]);
-    let siege_weapons = u64::from_le_bytes([
-        instruction_data[40], instruction_data[41], instruction_data[42], instruction_data[43],
-        instruction_data[44], instruction_data[45], instruction_data[46], instruction_data[47],
-    ]);
-    let hero_slot = instruction_data[48];
-    let team_id = u64::from_le_bytes([
-        instruction_data[49], instruction_data[50], instruction_data[51], instruction_data[52],
-        instruction_data[53], instruction_data[54], instruction_data[55], instruction_data[56],
-    ]);
+    let units_def_1 = read_u64(instruction_data, 0, "units_def_1")?;
+    let units_def_2 = read_u64(instruction_data, 8, "units_def_2")?;
+    let units_def_3 = read_u64(instruction_data, 16, "units_def_3")?;
+    let melee_weapons = read_u64(instruction_data, 24, "melee_weapons")?;
+    let ranged_weapons = read_u64(instruction_data, 32, "ranged_weapons")?;
+    let siege_weapons = read_u64(instruction_data, 40, "siege_weapons")?;
+    let hero_slot = read_u8(instruction_data, 48, "hero_slot")?;
+    let team_id = read_u64(instruction_data, 49, "team_id")?;
 
     // Calculate totals
     let total_units = units_def_1

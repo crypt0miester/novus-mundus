@@ -129,16 +129,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (6 required, 3 optional)
-    if accounts.len() < 6 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let game_authority = &accounts[1];
-    let player_account = &accounts[2];
-    let estate_account = &accounts[3];
-    let game_engine_account = &accounts[4];
-    let hero_mint = &accounts[5]; // Required for Sanctuary, otherwise NULL_PUBKEY
+    crate::extract_accounts!(accounts, [
+        owner,
+        game_authority,
+        player_account,
+        estate_account,
+        game_engine_account,
+        hero_mint, // Required for Sanctuary, otherwise NULL_PUBKEY
+    ]);
 
     // Optional accounts
     let player_token_account = accounts.get(6); // For Treasury minting
@@ -435,7 +433,7 @@ fn grant_building_rewards(
                 return Err(GameError::Unauthorized.into());
             }
 
-            // SECURITY: Verify NFT is actually owned by player's PlayerAccount PDA
+            // Verify NFT is actually owned by player's PlayerAccount PDA
             // This prevents passing arbitrary pubkeys that happen to be in active_heroes
             let asset_data = hero_mint.try_borrow()?;
             let asset = p_core::state::AssetV1::from_borsh(&asset_data);
@@ -470,8 +468,14 @@ fn grant_building_rewards(
                 .ok_or(GameError::MissingRequiredAccount)?;
             let mint = novi_mint
                 .ok_or(GameError::MissingRequiredAccount)?;
+            crate::require_keys_eq!(
+                mint.address().as_array(),
+                &crate::constants::NOVI_MINT_ADDRESS,
+                "daily_activity.novi_mint",
+                GameError::InvalidMint,
+            );
 
-            // SECURITY: Verify token account belongs to the PlayerAccount PDA
+            // Verify token account belongs to the PlayerAccount PDA
             validate_token_account_owner(token_account, player_account.address())?;
 
             // Load GameEngine to get bump for PDA signer

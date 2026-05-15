@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -51,27 +50,21 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_account = &accounts[0];
-    let owner = &accounts[1];
-    let origin_city_account = &accounts[2];
-    let destination_city_account = &accounts[3];
-    let game_engine_account = &accounts[4];
-    let origin_location_account = &accounts[5];
-    let destination_location_account = &accounts[6];
-    let _system_program = &accounts[7];
-    let estate_account = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        player_account,
+        owner,
+        origin_city_account,
+        destination_city_account,
+        game_engine_account,
+        origin_location_account,
+        destination_location_account,
+        _system_program,
+        estate_account,
+    ]);
 
     // 2. Parse Instruction Data
 
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let destination_city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let destination_city_id = crate::utils::read_u16(instruction_data, 0, "destination_city_id")?;
 
     // 3. Validate Signer
 

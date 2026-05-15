@@ -1,430 +1,385 @@
-# Arena PvP System
+# Arena System
 
-> Weekly competitive battles for glory and NOVI rewards - without losing your troops.
+> Seasonal kingdom-scoped PvP — ELO-rated 1v1 combat with daily participation rewards and a top-10 master prize pool.
 
-## Arena Overview
+## System Overview
 
-The Arena is a **non-lethal** PvP mode where players compete in weekly city-based seasons. Unlike regular combat, arena battles never destroy assets - it's purely a test of strategic loadout optimization and accumulated power.
+The Arena is a **non-lethal** competitive PvP mode. Battles are resolved entirely on-chain in a single transaction using a pre-committed loadout snapshot; no units are lost permanently. Matchmaking is off-chain and validated by `game_authority` co-signature. Each kingdom runs its own independent seasons.
 
 ```mermaid
 graph TB
     subgraph "Season Lifecycle"
-        CREATE[Create Season<br/>Game Authority] --> ACTIVE[Active<br/>7 Days]
-        ACTIVE --> BATTLES[Daily Battles<br/>Max 10/day]
-        BATTLES --> ENDED[Season Ends<br/>Automatic]
-        ENDED --> CLAIM[Claim Period<br/>30 Days]
-        CLAIM --> CLOSE[Close Season<br/>Permissionless]
+        CREATE[create_season<br/>DAO admin] --> ACTIVE[Active<br/>7 days]
+        ACTIVE -->|"end_time passed, lazy"| FINALIZED[Finalized<br/>master claims open]
+        FINALIZED --> CLOSE[close_season<br/>past claim_deadline or 4+ seasons old]
+        ACTIVE --> CLOSE
     end
 
-    subgraph "Rewards"
-        BATTLES --> DAILY[Daily Rewards<br/>5+ battles required]
-        ENDED --> MASTER[Master Rewards<br/>Top 10 only]
+    subgraph "Player Loop"
+        JOIN[join_season<br/>Participant + Loadout created] --> UPDATE[update_loadout]
+        UPDATE --> BATTLE["challenge_player<br/>dual-signer battle"]
+        BATTLE --> DAILY["claim_daily_reward<br/>min 5 battles / day"]
+        BATTLE --> MASTER["claim_master_reward<br/>top-10 after end_time"]
     end
 ```
 
-## Key Principles
+## Instructions
 
-| Principle | Description |
-|-----------|-------------|
-| **Non-Lethal** | Units, weapons, armor never consumed or destroyed |
-| **Per-City** | Each city has independent seasons and leaderboards |
-| **Trusted Loadouts** | No validation against assets (arena is isolated) |
-| **Permissionless Claims** | Anyone can trigger reward distribution |
-| **Deterministic** | Same power = same outcome, no randomness |
+| ID  | Instruction | Signers | Accounts | Data (bytes) | Description |
+|-----|-------------|---------|----------|--------------|-------------|
+| 230 | `create_season` | authority | 4 | 29 | DAO creates a new arena season |
+| 231 | `join_season` | player_authority | 6 | 4 | Player joins; creates Participant + Loadout |
+| 232 | `update_loadout` | player_authority | 2 | 88 | Update army/equipment/hero configuration |
+| 233 | `challenge_player` | challenger_authority, game_authority | 14 | 20 | Execute a ranked battle |
+| 234 | `claim_daily_reward` | — (permissionless) | 8 | 4 | Claim daily NOVI reward |
+| 235 | `claim_master_reward` | — (permissionless) | 8 | 4 | Top-10 player claims season master reward |
+| 236 | `close_season` | — (permissionless) | 3 | 6 | Reclaim rent from expired season account |
 
----
-
-## Battle Flow
-
-```mermaid
-sequenceDiagram
-    participant P as Player
-    participant MM as Matchmaker
-    participant GA as Game Authority
-    participant OC as On-Chain
-
-    P->>MM: Request match
-    MM->>MM: Find opponent (ELO-based)
-    MM->>GA: Sign match assignment
-    GA-->>P: match_id, timestamp, opponent
-    P->>OC: challenge_player(match_data)
-    OC->>OC: Validate match freshness
-    OC->>OC: Calculate both powers
-    OC->>OC: Determine winner
-    OC->>OC: Update points & ELO
-    OC->>OC: Update leaderboard
-    OC-->>P: Battle complete
-```
-
-### Why Off-Chain Matchmaking?
-
-The `game_authority` must co-sign every battle to prevent:
-- **Collusion**: Two players farming points off each other
-- **Target Selection**: Always picking weak opponents
-- **Sybil Attacks**: Fighting your own alt accounts
-- **Win Trading**: Coordinated point manipulation
-
-On-chain still validates:
-- Match freshness (5 minute expiry)
-- Opponent cooldown (max 2 battles vs same player per day)
-- Daily limit (max 10 battles per day)
+[Source: processor/arena/](../../../programs/novus_mundus/src/processor/arena/)
 
 ---
 
-## Power Calculation
-
-Arena power is computed at battle time from your loadout plus all accumulated buffs.
-
-### Base Power Formula
-
-```
-base_power = unit_power + equipment_power
-
-unit_power = (tier1_units × 10) + (tier2_units × 25) + (tier3_units × 60)
-
-equipment_power = (melee × 10) + (ranged × 16) + (siege × 26) + (armor × 5)
-```
-
-### Power Values
-
-| Asset Type | Power per Unit |
-|------------|---------------|
-| Tier 1 Defensive Unit | 10 |
-| Tier 2 Defensive Unit | 25 |
-| Tier 3 Defensive Unit | 60 |
-| Melee Weapon | 10 |
-| Ranged Weapon | 16 |
-| Siege Weapon | 26 |
-| Armor Piece | 5 |
-
-*Note: Ranged and siege follow phi ratio (1.618) scaling*
-
-### Buff Multiplier
-
-```
-total_power = base_power × (1 + total_bonus_bps / 10000)
-```
-
-**Buff Sources:**
-
-| Source | Buffs Applied |
-|--------|--------------|
-| Research | `attack_bps + defense_bps` |
-| Active Heroes | `attack_bps + defense_bps + weapon_efficiency + armor_efficiency` |
-| Location Synergy | Heroes at home city bonus |
-| Sanctuary Blessing | `blessed_hero_bonus_bps` (24h buff) |
-| Equipped Items | `weapon_bonus + armor_bonus` |
-| Arena Hero | Direct NFT buff read |
-| Estate Buildings | `attack + defense + pvp_damage + unit_effectiveness + arena_damage` |
-
----
-
-## Points System
-
-### Battle Points
-
-| Outcome | Challenger Points | Defender Points |
-|---------|------------------|-----------------|
-| Challenger Wins | 100 + underdog bonus | 20 |
-| Defender Wins | 20 | 100 + underdog bonus |
-| Draw | 50 | 50 |
-
-### Underdog Bonus
-
-Beating a stronger opponent rewards bonus points:
-
-```
-if winner_power < loser_power:
-    disadvantage_ratio = (loser_power - winner_power) / loser_power
-    disadvantage_bps = min(disadvantage_ratio × 10000, 5000)  # Cap at 50%
-    bonus = base_points × disadvantage_bps × 0.05 / 10000
-    total_points = base_points + bonus
-```
-
-**Example:**
-- You have 8,000 power, opponent has 10,000 power
-- Disadvantage = 20% → 2000 bps
-- Bonus = 100 × 2000 × 0.05 / 10000 = 1 point
-- Total = 101 points for the upset victory
-
-### Leaderboard
-
-- **Minimum Entry**: 500 total points required
-- **Size**: Top 10 players only
-- **Sorting**: By total_points descending
-- **Updates**: After every battle for both participants
-
----
-
-## ELO Rating System
-
-ELO tracks skill independent of raw power. Used for matchmaking, not rewards.
-
-### Starting Values
-- New participants: **1000 ELO**
-- Floor: **100 ELO** (minimum)
-- K-Factor: **32** (rating volatility)
-
-### ELO Update Formula
-
-```
-expected_score = 1 / (1 + 10^((opponent_elo - your_elo) / 400))
-
-actual_score = 1.0 (win), 0.5 (draw), 0.0 (loss)
-
-new_elo = old_elo + K × (actual_score - expected_score)
-```
-
-### ELO Probability Table
-
-| Your ELO vs Opponent | Your Win Probability |
-|---------------------|---------------------|
-| +0 (equal) | 50% |
-| +100 | 64% |
-| +200 | 76% |
-| +300 | 85% |
-| +400 | 91% |
-| -100 | 36% |
-| -200 | 24% |
-| -300 | 15% |
-| -400 | 9% |
-
----
-
-## Daily Rewards
-
-### Requirements
-- **Minimum Battles**: 5 in rolling 24-hour window
-- **Season Status**: Must be Active
-
-### Calculation
-
-```
-battle_multiplier = battles_today / 10  # 5 battles = 0.5x, 10 = 1.0x
-
-win_rate = season_wins / (season_wins + season_losses)
-win_bonus = max(0, (win_rate - 0.5) × 10000)  # 0-5000 bps bonus
-
-reward = BASE_REWARD × battle_multiplier × (1 + win_bonus / 10000)
-```
-
-**Base Reward**: 100 NOVI (before multipliers)
-
-### Reward Examples
-
-| Battles | Season Record | Win Rate | Reward |
-|---------|--------------|----------|--------|
-| 5 | 10W-10L | 50% | 50 NOVI |
-| 10 | 10W-10L | 50% | 100 NOVI |
-| 10 | 14W-6L | 70% | 120 NOVI |
-| 10 | 18W-2L | 90% | 140 NOVI |
-
-*Note: Rewards capped by daily distribution cap and remaining pool*
-
----
-
-## Master Rewards
-
-Top 10 leaderboard players claim master rewards after season ends.
-
-### Prize Distribution
-
-| Rank | Share |
-|------|-------|
-| 1st | 40% |
-| 2nd | 20% |
-| 3rd | 13% |
-| 4th | 9% |
-| 5th | 6% |
-| 6th | 4% |
-| 7th | 3% |
-| 8th | 2% |
-| 9th | 2% |
-| 10th | 1% |
-
-### Example Pool (10,000 NOVI)
-
-| Rank | NOVI Reward |
-|------|-------------|
-| 1st | 4,000 |
-| 2nd | 2,000 |
-| 3rd | 1,300 |
-| 4th | 900 |
-| 5th | 600 |
-| 6th | 400 |
-| 7th | 300 |
-| 8th | 200 |
-| 9th | 200 |
-| 10th | 100 |
-
-### Claim Window
-- **Start**: When season ends (after 7 days)
-- **Deadline**: 30 days after season end
-- **After Deadline**: Unclaimed rewards remain in closed account until close_season
-
----
-
-## Anti-Exploit Mechanisms
-
-### Rolling Time Windows
-
-All limits use **rolling 24-hour windows**, not UTC day boundaries:
-
-```
-is_within_window = (now - battle_timestamp) < 86400
-```
-
-This prevents timezone exploitation.
-
-### Battle Limits
-
-| Limit | Value | Window |
-|-------|-------|--------|
-| Total battles | 10 max | Rolling 24h |
-| Same opponent | 2 max | Rolling 24h |
-| Match expiry | 5 minutes | From assignment |
-
-### Match Replay Prevention
-
-```
-require!(new_match_id > participant.last_match_id)
-```
-
-Match IDs are monotonically increasing. Once used, cannot be replayed.
-
-### Sybil Resistance
-
-- **500 point minimum** for leaderboard entry
-- At 100 points per win, need ~5 wins minimum
-- Combined with opponent diversity, makes multi-accounting expensive
-
----
-
-## Season Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Active: create_season
-    Active --> Active: battles, daily claims
-    Active --> Ended: end_time reached
-    Ended --> Ended: master claims
-    Ended --> Closed: close_season
-    Closed --> [*]
-
-    note right of Active
-        Duration: 7 days
-        Battles: unlimited (10/day per player)
-    end note
-
-    note right of Ended
-        Claim window: 30 days
-        No new battles
-    end note
-
-    note right of Closed
-        Can close if:
-        - Past claim deadline, OR
-        - 4+ seasons behind current
-    end note
-```
-
-### Timing Constants
-
-| Phase | Duration |
-|-------|----------|
-| Active Season | 7 days |
-| Claim Deadline | 30 days after end |
-| Auto-Close Threshold | 4 seasons behind |
-
----
-
-## City Integration
-
-Each city tracks its own `arena_season_id`:
-
-```
-CityAccount {
-    arena_season_id: u32,  // Incremented on create_season
-    ...
+## Accounts
+
+### ArenaSeasonAccount — 608 bytes
+
+**PDA:** `["arena_season", game_engine, season_id:u32 LE]`
+
+```rust
+pub struct ArenaSeasonAccount {
+    pub account_key:               u8,         // AccountKey::ArenaSeason
+    pub game_engine:               Address,    // 32 — kingdom
+    pub season_id:                 u32,
+    pub city_id:                   u16,        // 0 = kingdom-wide
+    pub authority:                 Address,    // 32 — receives rent on close
+    pub start_time:                i64,
+    pub end_time:                  i64,        // start + 7 days
+    pub claim_deadline:            i64,        // end + 30 days
+    pub status:                    u8,         // ArenaStatus enum
+    pub leaderboard:               [ArenaLeaderboardEntry; 10], // 400
+    pub leaderboard_count:         u8,
+    pub leaderboard_claimed:       [bool; 10],
+    pub master_prize_pool:         u64,
+    pub daily_prize_pool:          u64,
+    pub daily_distribution_cap:    u64,
+    pub distributed_today:         u64,
+    pub last_distribution_day:     u32,
+    pub _padding1:                 [u8; 4],
+    pub prize_remaining:           u64,
+    pub min_level_required:        u8,
+    pub _padding2:                 [u8; 7],
+    pub min_points_for_leaderboard: u64,       // default 500
+    pub total_battles:             u64,
+    pub bump:                      u8,
+    pub _reserved:                 [u8; 7],
 }
 ```
 
-**Why Per-City?**
-- Local competition within geographic regions
-- Different prize pools per city
-- Parallel seasons across cities
-- City-specific leaderboards
+**`ArenaLeaderboardEntry` (40 bytes):** `{ player: Address, total_points: u64 }`
+
+**ArenaStatus:**
+
+| Byte | Variant | Meaning |
+|------|---------|---------|
+| 0 | `Pending` | Unused; seasons begin `Active` immediately |
+| 1 | `Active` | Battles and daily rewards open |
+| 2 | `Finalized` | `end_time` passed; master claims open |
+| 3 | `RewardsDistributed` | Informational end state |
+
+> **Note:** There is NO "Ended" status. Seasons transition `Active → Finalized` lazily inside `claim_master_reward` when `now > end_time`; no separate finalize instruction exists.
+
+### ArenaParticipantAccount — 536 bytes
+
+**PDA:** `["arena_participant", game_engine, season_id:u32 LE, player_account_pda]`
+
+> **Note:** The fourth seed is the **PlayerAccount PDA** (not the player wallet). All load/derive calls pass the player account address, not the wallet.
+
+```rust
+pub struct ArenaParticipantAccount {
+    pub account_key:               u8,
+    pub game_engine:               Address,
+    pub player:                    Address,    // PlayerAccount PDA
+    pub season_id:                 u32,
+    pub battle_timestamps:         [i64; 10], // circular buffer
+    pub battle_opponents:          [Address; 10],
+    pub battle_index:              u8,
+    pub last_match_id:             u64,       // anti-replay monotonic
+    pub daily_reward_claimed_day:  u32,
+    pub elo_rating:                u32,       // starts 1000
+    pub total_points:              u64,
+    pub wins:                      u32,
+    pub losses:                    u32,
+    pub master_reward_claimed:     bool,
+    pub bump:                      u8,
+    pub _reserved:                 [u8; 17],
+}
+```
+
+### ArenaLoadoutAccount — 168 bytes
+
+**PDA:** `["arena_loadout", game_engine, player_account_pda]`
+Reusable across seasons. Created on first `join_season`, updated any time via `update_loadout`.
+
+```rust
+pub struct ArenaLoadoutAccount {
+    pub account_key:     u8,
+    pub game_engine:     Address,
+    pub player:          Address,  // PlayerAccount PDA
+    pub bump:            u8,
+    pub arena_hero:      Address,  // NFT mint; default = no hero
+    pub defensive_units: [u64; 3], // tier 1/2/3
+    pub melee_weapons:   u64,
+    pub ranged_weapons:  u64,
+    pub siege_weapons:   u64,
+    pub armor_pieces:    u64,
+    pub _reserved:       [u8; 7],
+}
+```
 
 ---
 
-## Loadout Strategy
+## Battle Mechanics
 
-Since loadouts aren't validated against actual assets, optimization focuses on:
+### Arena Power Calculation
 
-1. **Maximize Base Power**: Stack highest power-per-unit assets
-2. **Buff Synergy**: Research + heroes + estate all compound
-3. **Hero Selection**: Arena-specific hero can differ from active heroes
-4. **Estate Investment**: Arena building provides dedicated buff
+```mermaid
+flowchart TD
+    A[Load Loadout] --> B["unit_power = units[0]×10 + units[1]×25 + units[2]×60"]
+    B --> C["equip_power = melee×10 + ranged×16 + siege×26 + armor×5"]
+    C --> D["base_power = unit_power + equip_power"]
+    D --> E[Accumulate bonus_bps]
+    E --> F["research_attack + research_defense<br/>hero_attack + hero_defense<br/>hero_weapon_efficiency + hero_armor_efficiency<br/>location_bonus[0..2]<br/>blessed_hero_bonus<br/>equipped_weapon_bonus + equipped_armor_bonus<br/>arena_hero_attack + arena_hero_defense<br/>estate_attack + estate_defense<br/>estate_pvp_damage + estate_unit_effectiveness + estate_arena_damage"]
+    F --> G["final_power = base_power × (10000 + total_bonus_bps) / 10000"]
+    G --> H{Compare powers}
+    H -->|"challenger > defender"| I[Challenger wins]
+    H -->|Equal| J[Draw]
+    H -->|"challenger < defender"| K[Defender wins]
+```
 
-### Power Efficiency
+```
+unit_power   = units[0]×10 + units[1]×25 + units[2]×60
+equip_power  = melee×10 + ranged×16 + siege×26 + armor×5
+base_power   = unit_power + equip_power
 
-| Asset | Power | Cost (typical) | Efficiency |
-|-------|-------|----------------|------------|
-| T3 Unit | 60 | High | Best for whales |
-| T2 Unit | 25 | Medium | Good balance |
-| Siege Weapon | 26 | Medium | High efficiency |
-| Ranged Weapon | 16 | Low | Budget option |
+total_bonus_bps = research_attack + research_defense          (from PlayerAccount)
+                + hero_attack + hero_defense                   (cached hero buffs)
+                + hero_weapon_efficiency + hero_armor_efficiency
+                + location_bonus[0] + location_bonus[1] + location_bonus[2]
+                + blessed_hero_bonus
+                + equipped_weapon_bonus + equipped_armor_bonus
+                + arena_hero_attack + arena_hero_defense       (from NFT attributes)
+                + estate_attack + estate_defense
+                + estate_pvp_damage + estate_unit_effectiveness + estate_arena_damage
+
+final_power = base_power × (10000 + total_bonus_bps) / 10000
+```
+
+Winner = higher `final_power`. Draw if equal.
+
+### Points
+
+| Outcome | Points |
+|---------|--------|
+| Win | 100 + underdog bonus |
+| Loss | 20 |
+| Draw | 50 each |
+
+**Underdog bonus** (winner had lower power):
+```
+gap_bps     = min((loser_power - winner_power) × 10000 / loser_power, 5000)
+bonus       = win_points × gap_bps × 500 / (10000 × 1000)
+max_bonus   = +50% (gap ≥ 50%)
+```
+
+### ELO Rating
+
+Starting: **1000**. K-factor: **32**. Minimum: **100**.
+
+Expected score lookup (challenger perspective, `diff = defender_elo - challenger_elo`):
+
+| |diff| | Expected (challenger) |
+|------|----------------------|
+| 0–50 | 50 |
+| 51–100 | 36 if diff > 0, 64 if diff < 0 |
+| 101–200 | 24 / 76 |
+| 201–300 | 15 / 85 |
+| >300 | 9 / 91 |
+
+```
+delta     = K × (actual − expected) / 100
+new_elo   = max(old_elo + delta, 100)
+```
+Actual: 100 win, 50 draw, 0 loss.
+
+```mermaid
+graph LR
+    A["diff = defender_elo − challenger_elo"] --> B{"|diff|?"}
+    B -->|"0–50"| C["expected = 50"]
+    B -->|"51–100"| D{"diff > 0?"}
+    B -->|"101–200"| E{"diff > 0?"}
+    B -->|"201–300"| F{"diff > 0?"}
+    B -->|"> 300"| G{"diff > 0?"}
+    D -->|Yes| H["expected = 36<br/>(defender stronger)"]
+    D -->|No| I["expected = 64<br/>(challenger stronger)"]
+    E -->|Yes| J["expected = 24"]
+    E -->|No| K["expected = 76"]
+    F -->|Yes| L["expected = 15"]
+    F -->|No| M["expected = 85"]
+    G -->|Yes| N["expected = 9"]
+    G -->|No| O["expected = 91"]
+    C & H & I & J & K & L & M & N & O --> P["delta = 32 × (actual − expected) / 100<br/>new_elo = max(old_elo + delta, 100)"]
+```
+
+### Battle Limits
+
+| Rule | Value | Window |
+|------|-------|--------|
+| Max battles | 10 | Rolling 24 h |
+| Max vs same opponent | 2 | Rolling 24 h |
+| Match expiry | 5 minutes | From `match_timestamp` |
+| Anti-replay | `match_id` > `last_match_id` | monotonic |
+
+### Leaderboard
+
+Updated live after every `challenge_player`. In-place bubble-sort in `ArenaSeasonAccount`. Minimum 500 points to qualify. Top-10 only; displaces lowest scorer when full.
 
 ---
 
-## Reward Mechanics
+## Reward System
 
-### NOVI Token Minting
+### Daily Reward (234)
 
-Both daily and master rewards mint fresh NOVI tokens:
+Permissionless. Season must be `Active`.
 
-```
-1. Calculate reward amount
-2. Mint NOVI to player's token account (GameEngine is mint authority)
-3. Update player.locked_novi balance
-```
-
-**Locked NOVI**: Rewards are added to `locked_novi` which requires unlock period before withdrawal.
-
-### Permissionless Claims
-
-Anyone can trigger claims for any player:
-
-```
-Accounts required:
-- participant_account (identifies player)
-- player_account (receives locked_novi)
-- player_owner (for PDA validation)
-- player_novi_ata (receives minted tokens)
-- novi_mint
-- game_engine (mint authority)
-- token_program
+```mermaid
+flowchart TD
+    A["Count battles in rolling 24h window"] --> B{"≥ 5 battles?"}
+    B -->|No| Z[Rejected]
+    B -->|Yes| C["battle_mult = battles_today × 10000 / 10"]
+    C --> D["win_rate_bps = max(season_wins / total × 10000, 5000)"]
+    D --> E["win_bonus = win_rate_bps − 5000"]
+    E --> F["base = 1000 (= 100 NOVI)<br/>reward = base × battle_mult / 10000 × (1 + win_bonus / 10000)"]
+    F --> G["Cap: min(daily_distribution_cap − distributed_today, daily_prize_pool)"]
+    G --> H[Mint NOVI to player ATA]
 ```
 
-This enables:
-- Backend automation of claims
-- Gas-less claiming for players
-- No missed deadlines due to inactivity
+```
+battles_today     = count in rolling 24 h window (must be ≥ 5)
+battle_mult       = battles_today × 10000 / 10
+win_rate_bps      = max(wins / (wins + losses) × 10000, 5000)
+win_bonus         = win_rate_bps − 5000
+
+base              = 1000 (= 100 NOVI, 1 decimal)
+reward            = base × battle_mult / 10000 × (1 + win_bonus / 10000)
+capped at         = min(daily_distribution_cap − distributed_today, daily_prize_pool)
+```
+
+Win rate uses **season cumulative** wins/losses, not just today's battles.
+
+### Master Reward (235)
+
+Permissionless. Available after `end_time`. Auto-finalizes if still `Active`.
+
+```
+ARENA_PRIZE_DISTRIBUTION = [3500, 2500, 1500, 750, 750, 200, 200, 200, 200, 200]  // bps
+
+reward = master_prize_pool × distribution[rank] / 10000
+```
+
+| Rank | Share |
+|------|-------|
+| 1st | 35% |
+| 2nd | 25% |
+| 3rd | 15% |
+| 4th–5th | 7.5% each |
+| 6th–10th | 2% each |
+
+Deadline: 30 days after `end_time`. One claim per player; double-guarded by `participant.master_reward_claimed` and `season.leaderboard_claimed[rank]`.
+
+### Season Close (236)
+
+Permissionless. Two unlock conditions (either suffices):
+1. `now > claim_deadline`
+2. Current season is ≥ 4 seasons ahead of this one (`current_city_season - season_id ≥ 4`)
+
+Rent returned to `season.authority`.
 
 ---
 
-## Summary
+## Challenge Flow
 
-| Feature | Value |
-|---------|-------|
-| Season Duration | 7 days |
-| Battles per Day | 10 max |
-| Daily Reward Requirement | 5+ battles |
-| Leaderboard Size | Top 10 |
-| Leaderboard Minimum | 500 points |
-| Base Win Points | 100 |
-| Base Loss Points | 20 |
-| Starting ELO | 1000 |
-| ELO K-Factor | 32 |
-| Claim Deadline | 30 days |
-| Auto-Close Threshold | 4 seasons |
+```mermaid
+sequenceDiagram
+    participant C as Challenger
+    participant GA as game_authority
+    participant Prog as Program
+    participant Season as ArenaSeason
+
+    C->>Prog: challenge_player(match_id, timestamp, season_id)
+    GA->>Prog: (co-signs same tx)
+    Prog->>Prog: Load GameEngine, verify game_authority
+    Prog->>Prog: Load Season (must be Active, not expired)
+    Prog->>Prog: Load Participant accounts (challenger + defender)
+    Prog->>Prog: Check match_id > last_match_id (anti-replay)
+    Prog->>Prog: Check timestamp within 5 min (freshness)
+    Prog->>Prog: Check daily battle limits (10 / day, 2 / opponent)
+    Prog->>Prog: Load Loadouts + optional Hero NFTs
+    Prog->>Prog: calculate_arena_power(challenger)
+    Prog->>Prog: calculate_arena_power(defender)
+    Prog->>Prog: Determine winner, calculate ELO deltas
+    Prog->>Prog: Update points, wins/losses, battle history
+    Prog->>Season: update_leaderboard(challenger, defender)
+```
+
+---
+
+## Client Integration
+
+```typescript
+import { PublicKey } from "@solana/web3.js";
+
+// PDA derivations (note: player_account_pda is the PlayerAccount PDA, not wallet)
+function deriveArenaPDAs(gameEngine: PublicKey, seasonId: number, playerAccountPda: PublicKey) {
+  const seasonIdBuf = Buffer.allocUnsafe(4);
+  seasonIdBuf.writeUInt32LE(seasonId);
+
+  const [seasonPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("arena_season"), gameEngine.toBuffer(), seasonIdBuf],
+    PROGRAM_ID
+  );
+  const [participantPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("arena_participant"), gameEngine.toBuffer(), seasonIdBuf, playerAccountPda.toBuffer()],
+    PROGRAM_ID
+  );
+  const [loadoutPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("arena_loadout"), gameEngine.toBuffer(), playerAccountPda.toBuffer()],
+    PROGRAM_ID
+  );
+  return { seasonPda, participantPda, loadoutPda };
+}
+
+// Check battle readiness
+async function getBattleStatus(connection, participantPda) {
+  const data = await connection.getAccountInfo(participantPda);
+  if (!data) return { joined: false };
+  const p = decodeArenaParticipant(data.data);
+  const now = Date.now() / 1000;
+  const cutoff = now - 86400;
+  const recentBattles = p.battleTimestamps.filter(ts => ts > cutoff).length;
+  return {
+    joined: true,
+    eloRating: p.eloRating,
+    totalPoints: p.totalPoints,
+    battlesRemaining: Math.max(0, 10 - recentBattles),
+    canClaimDaily: recentBattles >= 5 && p.dailyRewardClaimedDay < Math.floor(now / 86400),
+  };
+}
+```
+
+---
+
+*Seasons run 7 days. Daily rewards reward consistency; master rewards reward excellence.*
+
+---
+
+Next: [Dungeon](./dungeon.md)

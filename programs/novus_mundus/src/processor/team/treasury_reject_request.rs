@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -10,6 +9,7 @@ use crate::{
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     helpers::close_account,
     validation::{require_signer, require_writable, require_owner, require_initialized},
+    utils::{read_bytes32, read_u16, read_u64},
     emit,
     events::TreasuryRequestRejected,
 };
@@ -39,28 +39,22 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 42 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let rejecter_slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let rejecter_slot_index = read_u16(instruction_data, 8, "rejecter_slot_index")?;
     let requester_pubkey = Address::from(
-        <[u8; 32]>::try_from(&instruction_data[10..42]).unwrap()
+        read_bytes32(instruction_data, 10, "requester_pubkey")?
     );
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         rejecter_account,
         rejecter_slot_account,
         team_account,
         request_account,
         requester_refund,
         rejecter_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

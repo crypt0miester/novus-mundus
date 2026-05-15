@@ -12,6 +12,7 @@ use crate::{
     state::{CityAccount, CityType, GameEngine},
     constants::CITY_SEED,
     logic::location::{is_valid_latitude, is_valid_longitude},
+    utils::read_u16,
     emit,
     events::CityInitialized,
 };
@@ -41,14 +42,12 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         dao_authority,
         city_account,
         game_engine_account,
         _system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
 
@@ -56,7 +55,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let city_id = read_u16(instruction_data, 0, "city.city_id")?;
 
     let mut name = [0u8; 32];
     name.copy_from_slice(&instruction_data[2..34]);

@@ -71,8 +71,7 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
-    let dao_authority = &accounts[0];
-    let game_engine_account = &accounts[1];
+    crate::extract_accounts!(accounts, [dao_authority, game_engine_account]);
     let city_accounts = &accounts[2..2 + count];
     let _system_program = &accounts[2 + count];
 

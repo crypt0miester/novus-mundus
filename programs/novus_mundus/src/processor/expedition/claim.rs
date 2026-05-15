@@ -30,7 +30,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -89,15 +88,13 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 9 with hero)
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let expedition_account = &accounts[2];
-    let estate_account = &accounts[3];
-    let game_engine_account = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        expedition_account,
+        estate_account,
+        game_engine_account,
+    ], rest = hero_accounts);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -274,7 +271,7 @@ pub fn process(
     // cause every claim with an attached hero to abort (game_engine bytes parsed
     // as None by parse_hero_nft + key mismatch), soft-locking the hero in escrow.
     let affinity_adjusted = if has_hero && accounts.len() >= 9 {
-        let hero_mint = &accounts[5];
+        let hero_mint = &hero_accounts[0];
 
         // Verify hero mint matches what was stored in expedition
         if hero_mint.address() != &hero_mint_key {
@@ -390,10 +387,10 @@ pub fn process(
 
     // Hero accounts start at index 5, not 4 (accounts[4] is game_engine).
     if has_hero && accounts.len() >= 9 {
-        let hero_mint = &accounts[5];
-        let hero_collection = &accounts[6];
-        let system_program = &accounts[7];
-        let p_core_program = &accounts[8];
+        let hero_mint = &hero_accounts[0];
+        let hero_collection = &hero_accounts[1];
+        let system_program = &hero_accounts[2];
+        let p_core_program = &hero_accounts[3];
 
         // Verify hero mint matches what was stored
         if hero_mint.address() != &hero_mint_key {

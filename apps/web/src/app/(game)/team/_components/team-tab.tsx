@@ -18,10 +18,16 @@ import { DomainPicker } from "@/components/shared/DomainPicker";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { formatTime } from "@/lib/utils";
 import {
   derivePlayerPda,
+  deriveTreasuryRequestPda,
+  deriveTeamInvitePda,
   isNullPubkey,
   parsePlayer,
+  parseTeam,
+  parseTreasuryRequest,
+  parseTeamInvite,
   createTeamCreateInstruction,
   createTeamLeaveInstruction,
   createTeamDisbandInstruction,
@@ -29,6 +35,8 @@ import {
   createTeamWithdrawTreasuryInstruction,
   createTeamSetMotdInstruction,
   createTeamInviteInstruction,
+  createTeamAcceptInviteInstruction,
+  createTeamDeclineInviteInstruction,
   createTeamKickMemberInstruction,
   createTeamCancelInviteInstruction,
   createTeamPromoteMemberInstruction,
@@ -109,6 +117,56 @@ export function TeamTab() {
     }).catch(() => {});
   }, [members, connection]);
 
+  // On-demand fetch: treasury requests are PDA-derivable per (team, requester).
+  // The store is otherwise only seeded by the WebSocket, so a freshly loaded
+  // page would show nothing — derive + fetch one request PDA per member.
+  useEffect(() => {
+    if (!teamData?.pubkey || !members || members.length === 0) return;
+    const teamKey = teamData.pubkey;
+    const requestPdas = members.map(
+      (m) => deriveTreasuryRequestPda(teamKey, m.account.player)[0],
+    );
+    connection.getMultipleAccountsInfo(requestPdas).then((infos) => {
+      const store = useAccountStore.getState();
+      for (let i = 0; i < infos.length; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parseTreasuryRequest(info);
+        if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
+      }
+    }).catch(() => {});
+  }, [teamData?.pubkey?.toBase58(), members, connection, transact.isPending]);
+
+  // On-demand fetch: incoming team invites for the current player. Invites
+  // addressed to us are streamed by subscriptions.ts, but a freshly loaded
+  // page has nothing until a WS event fires. The invite PDA is derivable from
+  // (team, invitee player), so derive one per active team and fetch in bulk.
+  useEffect(() => {
+    if (!publicKey) return;
+    const ge = client.gameEngine;
+    const [meiPlayerPda] = derivePlayerPda(ge, publicKey);
+    let cancelled = false;
+    client.fetchAllTeams({ activeOnly: true }).then((teams) => {
+      if (cancelled || teams.length === 0) return;
+      const invitePdas = teams.map(
+        (t) => deriveTeamInvitePda(t.pubkey, meiPlayerPda)[0],
+      );
+      return connection.getMultipleAccountsInfo(invitePdas).then((infos) => {
+        if (cancelled) return;
+        const store = useAccountStore.getState();
+        for (let i = 0; i < infos.length; i++) {
+          const info = infos[i];
+          if (!info) continue;
+          const parsed = parseTeamInvite(info);
+          if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
+        }
+      });
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey?.toBase58(), client, connection, transact.isPending]);
+
   const [teamName, setTeamName] = useState("");
   const [depositAmount, setDepositAmount] = useState(0);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
@@ -117,6 +175,7 @@ export function TeamTab() {
   const [requestWithdrawAmount, setRequestWithdrawAmount] = useState(0);
 
   const teamInvites = useAccountStore((s) => s.teamInvites);
+  const treasuryRequests = useAccountStore((s) => s.treasuryRequests);
 
   const isValidInviteAddress = useMemo(() => {
     if (!inviteAddress.trim()) return false;
@@ -429,12 +488,16 @@ export function TeamTab() {
     });
   };
 
-  const handleTreasuryApprove = async (requesterPlayer: PublicKey, requesterRefund: PublicKey) => {
+  const handleTreasuryApprove = async (
+    requesterPlayer: PublicKey,
+    requesterRefund: PublicKey,
+    requesterSlotIndex: number,
+  ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryApproveRequestInstruction({
       approver: publicKey, gameEngine: ge, team: teamPubkey, teamId,
-      approverSlotIndex: player.teamSlotIndex, requesterPlayer, requesterRefund,
+      approverSlotIndex: player.teamSlotIndex, requesterSlotIndex, requesterPlayer, requesterRefund,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -522,30 +585,203 @@ export function TeamTab() {
     });
   }, [members, otherPlayers]);
 
+  // The current player's own PlayerAccount PDA — used to detect own treasury request.
+  const myPlayerPda = useMemo(() => {
+    if (!publicKey) return null;
+    return derivePlayerPda(client.gameEngine, publicKey)[0];
+  }, [publicKey, client.gameEngine]);
+
+  // Pending treasury withdrawal requests for this team, enriched with the
+  // requester's slot index (for approve) and refund wallet (rent recipient).
+  const pendingRequests = useMemo(() => {
+    if (!team) return [];
+    const teamKey = teamData?.pubkey?.toBase58();
+    return Array.from(treasuryRequests.values())
+      .filter((r) => !teamKey || r.account.team.toBase58() === teamKey)
+      .map((r) => {
+        const requesterPda = r.account.requester;
+        const slot = members?.find((m) => m.account.player.equals(requesterPda));
+        const requesterWallet =
+          otherPlayers.get(requesterPda.toBase58())?.account?.owner ?? null;
+        return {
+          pubkey: r.pubkey,
+          account: r.account,
+          requesterPda,
+          requesterSlotIndex: slot?.account.slotIndex ?? null,
+          requesterWallet,
+          isMine: myPlayerPda ? requesterPda.equals(myPlayerPda) : false,
+        };
+      });
+  }, [treasuryRequests, team, teamData, members, otherPlayers, myPlayerPda]);
+
+  const myRequest = useMemo(
+    () => pendingRequests.find((r) => r.isMine) ?? null,
+    [pendingRequests],
+  );
+
+  // Incoming team invites addressed to the current player.
+  // subscriptions.ts only stores invites whose `invitee` matches us, but the
+  // sent-invites UI also reads `teamInvites`, so filter explicitly here.
+  const incomingInvites = useMemo(() => {
+    if (!myPlayerPda) return [];
+    return Array.from(teamInvites.values()).filter((inv) =>
+      inv.account.invitee.equals(myPlayerPda),
+    );
+  }, [teamInvites, myPlayerPda]);
+
+  // Resolve inviter player PDA → wallet for the incoming invites (rent refund).
+  const [inviterWallets, setInviterWallets] = useState<Map<string, PublicKey>>(new Map());
+  useEffect(() => {
+    if (incomingInvites.length === 0) return;
+    const inviterPdas = incomingInvites.map((inv) => inv.account.inviter);
+    const missing = inviterPdas.filter((p) => !inviterWallets.has(p.toBase58()));
+    if (missing.length === 0) return;
+    connection.getMultipleAccountsInfo(missing).then((infos) => {
+      const next = new Map(inviterWallets);
+      for (let i = 0; i < infos.length; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parsePlayer(info);
+        if (parsed) next.set(missing[i].toBase58(), parsed.owner);
+      }
+      setInviterWallets(next);
+    }).catch(() => {});
+  }, [incomingInvites, connection]);
+
+  // Accept an incoming invite — joins the inviting team at a free slot.
+  // The inviting team's account + member slots are fetched here to derive a
+  // free slot index, since the current player is not yet on that team.
+  const handleAcceptInvite = async (
+    inviteTeam: PublicKey,
+    inviterRefund: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const inviteTeamInfo = await connection.getAccountInfo(inviteTeam);
+    if (!inviteTeamInfo) throw new Error("Inviting team not found");
+    const inviteTeamAccount = parseTeam(inviteTeamInfo);
+    if (!inviteTeamAccount) throw new Error("Failed to parse inviting team");
+
+    const slots = await client.fetchTeamMembers(inviteTeam);
+    const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
+    let freeSlot = -1;
+    for (let i = 0; i < inviteTeamAccount.maxMembers; i++) {
+      if (!usedSlots.has(i)) { freeSlot = i; break; }
+    }
+    if (freeSlot < 0) throw new Error("Team is full");
+
+    const ix = createTeamAcceptInviteInstruction({
+      owner: publicKey,
+      gameEngine: ge,
+      team: inviteTeam,
+      teamId: inviteTeamAccount.id.toNumber(),
+      slotIndex: freeSlot,
+      inviteRefund: inviterRefund,
+    });
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"], ["team"], ["teamMembers"]],
+      successMessage: "Invite accepted — joined team!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  // Decline an incoming invite.
+  const handleDeclineInvite = async (
+    inviteTeam: PublicKey,
+    inviterRefund: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const ix = createTeamDeclineInviteInstruction({
+      owner: publicKey,
+      gameEngine: ge,
+      team: inviteTeam,
+      inviterRefund,
+    });
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"]],
+      successMessage: "Invite declined.",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
   const [sidebarSection, setSidebarSection] = useState<"chat" | "treasury" | "settings">("chat");
 
   return (
     <div className="flex h-full flex-col gap-3">
       {/* No Team */}
       {!hasTeam && (
-        <div className="card accent-border">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Create a Team
-          </h3>
-          <div className="flex items-center gap-4">
-            <input
-              type="text"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              placeholder="Team name..."
-              className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-              maxLength={32}
-            />
-            <TxButton onClick={handleCreate} disabled={!teamName.trim()}>
-              Create Team
-            </TxButton>
+        <>
+          <div className="card accent-border">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Create a Team
+            </h3>
+            <div className="flex items-center gap-4">
+              <input
+                type="text"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="Team name..."
+                className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                maxLength={32}
+              />
+              <TxButton onClick={handleCreate} disabled={!teamName.trim()}>
+                Create Team
+              </TxButton>
+            </div>
           </div>
-        </div>
+
+          {/* Incoming Invites */}
+          {incomingInvites.length > 0 && (
+            <div className="card">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Incoming Invites
+              </h3>
+              <div className="space-y-2">
+                {incomingInvites.map((inv) => {
+                  const inviterWallet = inviterWallets.get(inv.account.inviter.toBase58());
+                  return (
+                    <div
+                      key={inv.pubkey.toBase58()}
+                      className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-text-muted">Invited by</span>
+                        <span className="font-mono text-sm text-text-primary">
+                          <DomainName pubkey={inv.account.inviter} chars={4} />
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TxButton
+                          onClick={(rp) => {
+                            if (!inviterWallet) throw new Error("Inviter wallet not resolved yet");
+                            return handleAcceptInvite(inv.account.team, inviterWallet, rp);
+                          }}
+                          variant="secondary"
+                        >
+                          Accept
+                        </TxButton>
+                        <TxButton
+                          onClick={(rp) => {
+                            if (!inviterWallet) throw new Error("Inviter wallet not resolved yet");
+                            return handleDeclineInvite(inv.account.team, inviterWallet, rp);
+                          }}
+                          variant="danger"
+                        >
+                          Decline
+                        </TxButton>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Team exists — 2-column layout */}
@@ -788,18 +1024,33 @@ export function TeamTab() {
                           className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                         />
                       </div>
-                      <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0}>
+                      <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
                         Request
                       </TxButton>
-                      <div className="grid grid-cols-2 gap-2">
-                        <TxButton onClick={handleTreasuryExecute} variant="secondary" className="text-xs">
-                          Execute
-                        </TxButton>
-                        <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
-                          Cancel
-                        </TxButton>
-                      </div>
+                      {/* Execute / Cancel reflect the caller's own request state */}
+                      {myRequest && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <TxButton
+                            onClick={handleTreasuryExecute}
+                            variant="secondary"
+                            className="text-xs"
+                            disabled={myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)}
+                          >
+                            Execute
+                          </TxButton>
+                          <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
+                            Cancel
+                          </TxButton>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Pending Treasury Requests */}
+                    <TreasuryRequestsPanel
+                      requests={pendingRequests}
+                      onApprove={handleTreasuryApprove}
+                      onReject={handleTreasuryReject}
+                    />
 
                     {/* Treasury Settings (Leader Only) */}
                     {isLeader && (
@@ -980,18 +1231,33 @@ export function TeamTab() {
                       className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                     />
                   </div>
-                  <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0}>
+                  <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
                     Request
                   </TxButton>
-                  <div className="grid grid-cols-2 gap-2">
-                    <TxButton onClick={handleTreasuryExecute} variant="secondary" className="text-xs">
-                      Execute
-                    </TxButton>
-                    <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
-                      Cancel
-                    </TxButton>
-                  </div>
+                  {/* Execute / Cancel reflect the caller's own request state */}
+                  {myRequest && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <TxButton
+                        onClick={handleTreasuryExecute}
+                        variant="secondary"
+                        className="text-xs"
+                        disabled={myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)}
+                      >
+                        Execute
+                      </TxButton>
+                      <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
+                        Cancel
+                      </TxButton>
+                    </div>
+                  )}
                 </div>
+
+                {/* Pending Treasury Requests */}
+                <TreasuryRequestsPanel
+                  requests={pendingRequests}
+                  onApprove={handleTreasuryApprove}
+                  onReject={handleTreasuryReject}
+                />
 
                 {isLeader && (
                   <div className="border-t border-border-default pt-3">
@@ -1259,4 +1525,98 @@ function TreasurySettingsPanel({
 
   if (compact) return content;
   return <div className="card">{content}</div>;
+}
+
+// ─── Pending Treasury Requests Sub-Panel ────────────────────
+
+interface TreasuryRequestRow {
+  pubkey: PublicKey;
+  account: { requester: PublicKey; amount: { toNumber: () => number }; executableAt: { toNumber: () => number } };
+  requesterPda: PublicKey;
+  requesterSlotIndex: number | null;
+  requesterWallet: PublicKey | null;
+  isMine: boolean;
+}
+
+function TreasuryRequestsPanel({
+  requests,
+  onApprove,
+  onReject,
+}: {
+  requests: TreasuryRequestRow[];
+  onApprove: (
+    requesterPlayer: PublicKey,
+    requesterRefund: PublicKey,
+    requesterSlotIndex: number,
+  ) => Promise<string>;
+  onReject: (requesterPlayer: PublicKey, requesterRefund: PublicKey) => Promise<string>;
+}) {
+  if (requests.length === 0) {
+    return (
+      <div className="border-t border-border-default pt-3 space-y-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Pending Requests
+        </div>
+        <p className="text-xs text-text-muted">No pending withdrawal requests.</p>
+      </div>
+    );
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  return (
+    <div className="border-t border-border-default pt-3 space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+        Pending Requests
+      </div>
+      {requests.map((r) => {
+        const executableAt = r.account.executableAt.toNumber();
+        const cooldownRemaining = Math.max(0, executableAt - nowSec);
+        const ready = cooldownRemaining === 0;
+        return (
+          <div
+            key={r.pubkey.toBase58()}
+            className="rounded-lg border border-zinc-800 px-3 py-2 space-y-1"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-text-primary">
+                <DomainName pubkey={r.requesterPda} chars={4} />
+                {r.isMine && <span className="ml-1 text-text-gold">(you)</span>}
+              </span>
+              <GoldNumber value={r.account.amount.toNumber()} prefix="$ " size="sm" />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-text-muted">
+                {ready ? "Ready to execute" : `Cooldown: ${formatTime(cooldownRemaining)}`}
+              </span>
+              {!r.isMine && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (!r.requesterWallet || r.requesterSlotIndex == null) return;
+                      onApprove(r.requesterPda, r.requesterWallet, r.requesterSlotIndex);
+                    }}
+                    disabled={!r.requesterWallet || r.requesterSlotIndex == null}
+                    className="text-xs text-green-400 hover:text-green-300 disabled:opacity-40"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!r.requesterWallet) return;
+                      onReject(r.requesterPda, r.requesterWallet);
+                    }}
+                    disabled={!r.requesterWallet}
+                    className="text-xs text-red-400 hover:text-red-300 disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }

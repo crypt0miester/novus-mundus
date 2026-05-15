@@ -47,9 +47,7 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
 
-    let [loot, player, user, owner, game_engine, creator] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [loot, player, user, owner, game_engine, creator]);
 
     // 2. Validate Accounts
 

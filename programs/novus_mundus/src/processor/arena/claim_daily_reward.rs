@@ -15,7 +15,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -30,6 +29,7 @@ use crate::{
     state::{ArenaSeasonAccount, ArenaParticipantAccount, ArenaStatus, PlayerAccount, GameEngine},
     validation::{require_owner, require_writable, require_key_match, require_data_len},
     helpers::{mint_tokens, validate_token_account_owner},
+    utils::read_u32,
 };
 
 /// Instruction data for claim_daily_reward
@@ -41,7 +41,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         participant_account,
         arena_season,
         player_account,
@@ -50,27 +50,24 @@ pub fn process(
         novi_mint,
         game_engine,
         token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate token accounts
     require_writable(player_novi_ata)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "claim_daily_reward.novi_mint",
+        GameError::InvalidMint,
+    );
     require_key_match(token_program, &pinocchio_token::ID)?;
 
-    // SECURITY: Verify token account belongs to the PlayerAccount PDA
+    // Verify token account belongs to the PlayerAccount PDA
     validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Parse Instruction Data (4 bytes minimum)
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let season_id = u32::from_le_bytes([
-        instruction_data[0], instruction_data[1],
-        instruction_data[2], instruction_data[3],
-    ]);
+    let season_id = read_u32(instruction_data, 0, "claim_daily_reward.season_id")?;
 
     // 4. Load Clock
     let clock = Clock::get()?;

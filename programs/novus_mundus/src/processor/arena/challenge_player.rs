@@ -21,7 +21,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -43,6 +42,7 @@ use crate::{
     },
     validation::{require_signer, require_owner, require_data_len},
     helpers::parse_hero_nft,
+    utils::{read_u64, read_i64, read_u32},
 };
 
 /// Instruction data for challenge_player
@@ -56,48 +56,33 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (14 required)
-    if accounts.len() < 14 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let challenger_authority = &accounts[0];
-    let game_authority = &accounts[1];
-    let game_engine = &accounts[2];
-    let challenger_player = &accounts[3];
-    let challenger_participant = &accounts[4];
-    let challenger_loadout = &accounts[5];
-    let challenger_hero = &accounts[6];
-    let challenger_estate = &accounts[7];
-    let defender_player = &accounts[8];
-    let defender_participant = &accounts[9];
-    let defender_loadout = &accounts[10];
-    let defender_hero = &accounts[11];
-    let defender_estate = &accounts[12];
-    let arena_season = &accounts[13];
+    crate::extract_accounts!(accounts, [
+        challenger_authority,
+        game_authority,
+        game_engine,
+        challenger_player,
+        challenger_participant,
+        challenger_loadout,
+        challenger_hero,
+        challenger_estate,
+        defender_player,
+        defender_participant,
+        defender_loadout,
+        defender_hero,
+        defender_estate,
+        arena_season,
+    ]);
 
     // 2. Validate Signers
     require_signer(challenger_authority)?;
     require_signer(game_authority)?;
 
     // 3. Parse Instruction Data (20 bytes minimum)
-    if instruction_data.len() < 20 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let match_id = read_u64(instruction_data, 0, "challenge_player.match_id")?;
 
-    let match_id = u64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-    ]);
+    let match_timestamp = read_i64(instruction_data, 8, "challenge_player.match_timestamp")?;
 
-    let match_timestamp = i64::from_le_bytes([
-        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
-        instruction_data[12], instruction_data[13], instruction_data[14], instruction_data[15],
-    ]);
-
-    let season_id = u32::from_le_bytes([
-        instruction_data[16], instruction_data[17],
-        instruction_data[18], instruction_data[19],
-    ]);
+    let season_id = read_u32(instruction_data, 16, "challenge_player.season_id")?;
 
     // 4. Load Clock
     let clock = Clock::get()?;

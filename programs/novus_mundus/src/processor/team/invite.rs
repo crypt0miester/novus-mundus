@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -12,6 +11,7 @@ use crate::{
     state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM, EXT_INVENTORY},
     constants::{TEAM_INVITE_SEED, TEAM_INVITE_EXPIRY},
     validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
+    utils::{read_i64, read_u16, read_u64},
     emit,
     events::InviteSent,
 };
@@ -42,22 +42,18 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 10 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let slot_index = read_u16(instruction_data, 8, "slot_index")?;
 
     let expires_in_seconds = if instruction_data.len() >= 18 {
-        i64::from_le_bytes(instruction_data[10..18].try_into().unwrap())
+        read_i64(instruction_data, 10, "expires_in_seconds")?
     } else {
         0 // Use default
     };
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         inviter_player_account,
         inviter_slot_account,
         invitee_player_account,
@@ -65,9 +61,7 @@ pub fn process(
         invite_account,
         inviter_owner,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

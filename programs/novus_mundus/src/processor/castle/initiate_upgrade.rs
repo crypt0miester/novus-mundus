@@ -31,6 +31,7 @@ use crate::{
     },
     helpers::burn_tokens,
     validation::require_owner,
+    utils::read_u8,
 };
 
 /// Upgrade durations in seconds (base time per level)
@@ -60,16 +61,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 6 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let king_wallet = &accounts[0];
-    let king_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let locked_token_account = &accounts[3];
-    let novi_mint = &accounts[4];
-    let _token_program = &accounts[5];
+    crate::extract_accounts!(accounts, [
+        king_wallet,
+        king_account,
+        castle_account,
+        locked_token_account,
+        novi_mint,
+        _token_program,
+    ]);
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -77,11 +76,7 @@ pub fn process(
     }
 
     // Parse instruction data (city_id/castle_id from account)
-    if instruction_data.len() < 1 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let upgrade_type = instruction_data[0];
+    let upgrade_type = read_u8(instruction_data, 0, "upgrade_type")?;
 
     // Validate upgrade type
     if upgrade_type < 1 || upgrade_type > 5 {
@@ -104,6 +99,12 @@ pub fn process(
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "castle.initate_upgrade.novi_mint",
+        GameError::InvalidMint,
+    );
     // Verify caller is the king
     if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());

@@ -2,146 +2,158 @@
 
 ## Overview
 
-The Estate system manages the player's personal base containing buildings. Buildings provide passive buffs, unlock features, and gate access to game systems. The estate uses a plot-based expansion model where each plot unlocks 4 building slots.
+The Estate system manages each player's personal city of buildings. Buildings progress through construction states (Empty → Building → Active → Upgrading → Active) and power a daily activity loop. Land is expanded via purchasable plots. Wounded units accumulate on the estate and can be recovered through the Infirmary.
 
 ---
 
-## 1. Estate Lifecycle
-
-### States
-
-| State | Description |
-|-------|-------------|
-| `NonExistent` | No EstateAccount for this player |
-| `Active` | Estate exists and operational |
-
-### Transition
-
-#### `NonExistent` → `Active`
-```
-Trigger: create_estate (via game initialization)
-Guards:
-  - Player exists
-  - Estate PDA doesn't exist
-  - Sufficient lamports for rent
-Actions:
-  - Create EstateAccount PDA: [ESTATE_SEED, owner]
-  - Initialize with 1 plot (4 slots)
-  - Set estate_level = 0
-  - Set city_id from player's current city
-  - Emit EstateCreated
-```
-
----
-
-## 2. Building Lifecycle
+## 1. Building Slot Lifecycle
 
 ### States
 
 | State | Value | Description |
-|-------|-------|-------------|
-| `Empty` | 0 | Slot has no building |
-| `Building` | 1 | Under initial construction |
-| `Active` | 2 | Fully operational |
-| `Upgrading` | 3 | Being upgraded (still provides buffs) |
+|-------|:-----:|-------------|
+| `Empty` | 0 | Slot has no building; available for construction |
+| `Building` | 1 | Under initial construction; no buff provided yet |
+| `Active` | 2 | Fully operational; provides passive buffs |
+| `Upgrading` | 3 | Being upgraded; still provides buffs at current level |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Empty : slot initialised
+    Empty --> Building : build (161)<br/>deduct locked NOVI
+    Building --> Active : complete (163)<br/>[construction_ends <= now]<br/>level = 1
+    Active --> Upgrading : upgrade (162)<br/>deduct locked NOVI<br/>(buffs continue at current level)
+    Upgrading --> Active : complete (163)<br/>[construction_ends <= now]<br/>level += 1
+
+    note right of Upgrading
+        is_active() returns true for
+        both Active and Upgrading —
+        buffs apply at current level
+        throughout upgrade
+    end note
 ```
-┌────────────────┐  build_building   ┌────────────────┐
-│                │ ────────────────> │                │
-│     Empty      │                   │    Building    │
-│   (status=0)   │                   │   (status=1)   │
-└────────────────┘                   └───────┬────────┘
-                                             │
-                                             │ complete_building
-                                             ▼
-                                     ┌────────────────┐
-                                     │                │
-                       ┌─────────────│     Active     │
-                       │             │   (status=2)   │
-                       │             └───────┬────────┘
-                       │                     │
-          upgrade      │                     │ upgrade_building
-                       │                     ▼
-                       │             ┌────────────────┐
-                       │             │                │
-                       └─────────────│   Upgrading    │
-                                     │   (status=3)   │
-                                     └───────┬────────┘
-                                             │
-                                             │ complete_upgrade
-                                             ▼
-                                     ┌────────────────┐
-                                     │     Active     │
-                                     │ (level + 1)    │
-                                     └────────────────┘
+
+ASCII reference:
+```
+             build (161)
+┌──────────┐ ──────────────> ┌──────────────┐
+│          │                 │              │
+│  Empty   │                 │   Building   │
+│          │                 │              │
+└──────────┘                 └──────┬───────┘
+                                    │ complete (163)
+                                    │ [construction_ends <= now]
+                                    ▼
+                             ┌──────────────┐
+              upgrade (162)  │              │  complete (163)
+              ─────────────> │    Active    │ <─────────────────
+                             │              │  [construction_ends <= now]
+                             └──────┬───────┘
+                                    │
+                                    │ upgrade (162)
+                                    ▼
+                             ┌──────────────┐
+                             │              │
+                             │  Upgrading   │
+                             │ (buffs at    │
+                             │ current lvl) │
+                             └──────────────┘
 ```
 
 ### Transitions
 
 #### `Empty` → `Building`
 ```
-Trigger: build_building
+Trigger: build (instruction 161)
 Guards:
-  - Slot is empty
-  - Player has estate level >= building.required_estate_level()
-  - Building type not already present in estate
-  - Sufficient locked NOVI for cost
+  - Slot index is within current_slots (plots_owned × 4)
+  - Slot status == Empty
+  - building_type ∈ [0, 18]
+  - required_estate_level(building_type) <= estate_level  [currently 0 for all]
+  - Sufficient locked NOVI for base_construction_cost
 Actions:
-  - Deduct NOVI cost
-  - Set slot.building_type
-  - Set slot.status = Building
-  - Set slot.level = 0
+  - Deduct base_cost NOVI from player.locked_novi
+  - Set slot.building_type = building_type
+  - Set slot.status = Building (1)
   - Set slot.construction_started = now
-  - Set slot.construction_ends = now + construction_time
-  - Increment total_buildings
-  - Emit BuildingStarted
+  - Set slot.construction_ends = now + base_construction_time
+  - Increment estate.total_buildings
 ```
 
 #### `Building` → `Active`
 ```
-Trigger: complete_building
+Trigger: complete (instruction 163)
 Guards:
-  - slot.status == Building
+  - slot.status == Building (1)
   - now >= slot.construction_ends
 Actions:
-  - Set slot.status = Active
+  - Set slot.status = Active (2)
   - Set slot.level = 1
-  - Set slot.mastery_level = 1
-  - Recalculate estate_level
-  - Recalculate building buffs
-  - Emit BuildingCompleted
+  - Recalculate estate cached passive buffs
+  - Emit EstateConstructionComplete
 ```
 
 #### `Active` → `Upgrading`
 ```
-Trigger: upgrade_building
+Trigger: upgrade (instruction 162)
 Guards:
-  - slot.status == Active
-  - slot.level < MAX_BUILDING_LEVEL (20)
-  - Sufficient locked NOVI for upgrade cost
+  - slot.status == Active (2)
+  - slot.level < 20
+  - Sufficient locked NOVI for upgrade_cost(slot.level)
 Actions:
-  - Deduct NOVI cost (φ² scaling per level)
-  - Set slot.status = Upgrading
+  - Deduct upgrade_cost from player.locked_novi
+  - Set slot.status = Upgrading (3)
   - Set slot.construction_started = now
-  - Set slot.construction_ends = now + construction_time
-  - Emit UpgradeStarted
+  - Set slot.construction_ends = now + calculate_construction_time()
+  - slot.total_novi_invested += upgrade_cost
 ```
 
 #### `Upgrading` → `Active`
 ```
-Trigger: complete_upgrade
+Trigger: complete (instruction 163)
 Guards:
-  - slot.status == Upgrading
+  - slot.status == Upgrading (3)
   - now >= slot.construction_ends
 Actions:
-  - Set slot.status = Active
-  - Increment slot.level
-  - Update slot.total_novi_invested
-  - Recalculate estate_level
-  - Recalculate building buffs
-  - Emit UpgradeCompleted
+  - Set slot.status = Active (2)
+  - Increment slot.level by 1
+  - estate.estate_level = sum of all slot.level values
+  - Recalculate estate cached passive buffs
+  - Emit EstateBuildingUpgraded
+```
+
+---
+
+## 2. Speedup System
+
+```mermaid
+flowchart TD
+    SUP[speedup (168)] --> CHK1{status in<br/>Building/Upgrading?}
+    CHK1 -->|No| ERR1[Rejected]
+    CHK1 -->|Yes| CHK2{construction_ends<br/>> now?}
+    CHK2 -->|No| ERR2[Already finishable]
+    CHK2 -->|Yes| CHK3{Sufficient<br/>gems?}
+    CHK3 -->|No| ERR3[Rejected]
+    CHK3 -->|Yes| ACT["Deduct gems<br/>Adjust construction_starts backward"]
+    ACT --> DONE{construction_ends<br/><= now now?}
+    DONE -->|Yes| READY["Immediately eligible<br/>for complete (163)"]
+    DONE -->|No| WAIT["Timer shortened<br/>wait for complete"]
+```
+
+```
+Trigger: speedup (instruction 168)
+Guards:
+  - slot.status ∈ {Building, Upgrading}
+  - slot.construction_ends > now
+  - Sufficient player.gems
+Actions:
+  - Deduct gems from player
+  - Adjust slot.construction_starts backward
+    (effectively reduces construction_ends - now)
+  - May reduce construction_ends below now (immediate completion eligible)
 ```
 
 ---
@@ -150,164 +162,232 @@ Actions:
 
 ### States
 
-| Plots Owned | Slots Available | Description |
-|-------------|-----------------|-------------|
-| 1 | 4 | Starting estate |
-| 2 | 8 | First expansion |
-| 3 | 12 | Second expansion |
-| 4 | 16 | Third expansion |
-| 5 | 20 | Maximum |
+| plots_owned | Usable Slots | Max Buildings |
+|:-----------:|:------------:|:-------------:|
+| 1 | 4 | 4 |
+| 2 | 8 | 8 |
+| 3 | 12 | 12 |
+| 4 | 16 | 16 |
+| 5 | 20 | 20 (max) |
 
-### Transition
-
-#### Buy Plot
+### Transition: Buy Plot
 ```
-Trigger: buy_plot
+Trigger: buy_plot (instruction 164)
 Guards:
   - plots_owned < 5
-  - Sufficient locked NOVI for cost (φ² scaling)
+  - Sufficient locked NOVI for next_plot_cost()
+  - Estate account has been reallocated to hold 4 more BuildingSlot entries
 Actions:
-  - Deduct NOVI cost
-  - Increment plots_owned
-  - Update current_slots
-  - Initialize new slots as Empty
+  - Deduct next_plot_cost from player.locked_novi
+  - Increment plots_owned by 1
+  - current_slots = plots_owned × 4
+  - New BuildingSlot entries initialized to EMPTY
   - Emit PlotPurchased
 ```
 
-### Plot Costs (φ² Scaling)
+Plot costs (NOVI): Plot 2 → 100,000; Plot 3 → ~262,180; Plot 4 → ~685,848; Plot 5 → ~1,793,989.
+
+---
+
+## 4. Daily Login Claim
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `Available` | `last_login_date < current_day` — player has not claimed today |
+| `Claimed` | `last_login_date == current_day` — already claimed today |
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    Available --> Claimed : daily_claim (165)<br/>[Mansion Lv 1+]<br/>grant rewards + update streak
+    Claimed --> Available : new calendar day<br/>(last_login_date < today)
 ```
-Plot 2: 100,000 NOVI
-Plot 3: ~262,000 NOVI
-Plot 4: ~685,000 NOVI
-Plot 5: ~1,790,000 NOVI
+
+ASCII reference:
+```
+                      new calendar day
+┌──────────┐ ────────────────────────────> ┌───────────┐
+│          │                               │           │
+│ Claimed  │                               │ Available │
+│          │                               │           │
+└──────────┘ <──────────────────────────── └───────────┘
+                 daily_claim (165)
+```
+
+### Transition: `Available` → `Claimed`
+```
+Trigger: daily_claim (instruction 165)
+Guards:
+  - Mansion building exists and is_active() and level >= 1
+  - last_login_date < current_day_number (now / 86400)
+Actions:
+  - Update last_login_date = current_day
+  - Check streak continuity:
+    - If current_day == last_login_date + 1: login_streak += 1
+    - Else: login_streak = 1 (streak broken)
+  - If login_streak > longest_login_streak: update longest
+  - If login_streak >= 180 and permanent_bonus_bps == 0: permanent_bonus_bps = 500
+  - Calculate streak_multiplier_bps
+  - Calculate mansion_bonus: mansion_level × 500 bps
+  - Apply rewards: materials, locked_novi, xp
+  - Apply one-time milestone rewards at streaks 7, 14, 30, 60, 90, 180
+  - Update estate.last_activity = now
+  - Emit EstateDailyClaimed
 ```
 
 ---
 
-## 4. Building Types & Tiers
+## 5. Daily Activity Mini-Game
 
-### Tier 1 - Foundation (Estate Level 1-6)
-
-| Building | Unlock | Effect |
-|----------|--------|--------|
-| Mansion | 1 | XP gain bonus |
-| Barracks | 2 | Attack bonus, training speed |
-| Workshop | 4 | Mining expeditions |
-| Dock | 5 | Fishing expeditions |
-| Vault | 6 | Storage, NOVI cap bonus |
-
-### Tier 2 - Expansion (Estate Level 8-14)
-
-| Building | Unlock | Effect |
-|----------|--------|--------|
-| Sanctuary | 8 | Hero recruitment |
-| Market | 10 | Trade discount |
-| Citadel | 12 | Rally creation, defense |
-| Academy | 14 | Research speed |
-
-### Tier 3 - Mastery (Estate Level 16-24)
-
-| Building | Unlock | Effect |
-|----------|--------|--------|
-| Forge | 16 | Equipment crafting |
-| Arena | 18 | PvP damage bonus |
-| Observatory | 20 | Loot bonus |
-| Treasury | 24 | Prize bonus |
-
----
-
-## 5. Building Buffs
-
-### Per-Level Bonuses (0.5% base per level)
-
-| Building | Primary Buff | Secondary Buff |
-|----------|--------------|----------------|
-| Mansion | +0.5% XP/level | - |
-| Barracks | +0.5% Attack/level | +0.25% Training Speed/level |
-| Vault | +0.5% Storage/level | +2.5% NOVI Cap/level |
-| Forge | +1.5% Craft Success/level | - |
-| Market | +1% Trade Discount/level | - |
-| Academy | +1.5% Research Speed/level | - |
-| Arena | +0.5% PvP Damage/level | - |
-| Observatory | +1% Loot Bonus/level | - |
-| Treasury | +2.5% Prize Bonus/level | - |
-| Citadel | +0.5% Defense/level | +5% Rally Capacity/level |
-
----
-
-## 6. Daily Activity System
-
-### Time Windows
-
-| Window | UTC Time | Duration |
-|--------|----------|----------|
-| Dawn | 00:00-08:00 | 8 hours |
-| Midday | 08:00-16:00 | 8 hours |
-| Dusk | 16:00-24:00 | 8 hours |
-
-### Per-Building Mini-Games
-
-Each building has a daily activity that grants temporary buffs:
-
-| Building | Activity | Buff Duration |
-|----------|----------|---------------|
-| Barracks | Unit inspection | 24h unit effectiveness |
-| Forge | Forge tune-up | 24h mastery bonus |
-| Arena | Training drill | 24h arena damage |
-| Observatory | Star reading | 24h loot bonus |
-| Market | Price survey | 24h market discount |
-| Sanctuary | Blessing | 24h blessed hero |
-| Citadel | Stance selection | 24h defensive stance |
-
-### Login Streak
+### Time Windows (relative to `dawn_timestamp`)
 
 ```
-Days 1-6:   1.0× multiplier
-Days 7-13:  1.25× multiplier
-Days 14-29: 1.5× multiplier
-Days 30-59: 2.0× multiplier
-Days 60-89: 2.5× multiplier
-Days 90+:   3.0× multiplier
+dawn_timestamp set on first daily action
+│
+├── 0 h ─────────────────── 3 h   → Dawn window
+│                  (gap 3–4 h accepts Dawn buildings)
+├── 4 h ─────────────────── 8 h   → Midday window
+│                  (gap 8–9 h accepts Midday buildings)
+├── 9 h ─────────────────── 16 h  → Dusk window
+│
+└── 16 h+                         → Expired
+```
 
-180-day milestone: +5% permanent bonus
+### Completion States (per building per window per day)
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> NotCompleted : new daily_date<br/>(bitflags reset to 0)
+    NotCompleted --> Completed : daily_activity (166)<br/>[correct window, game_authority signs,<br/>score 0–100 validated, not already done]
+    Completed --> [*] : next daily_date rollover<br/>(all bitflags reset)
+
+    note right of Completed
+        Bitflag set in dawn_buildings,
+        midday_buildings, or dusk_buildings
+        (or expansion_daily for types 16–18)
+    end note
+```
+
+ASCII reference:
+```
+┌───────────────┐    daily_activity(166)    ┌───────────────┐
+│  Not Completed│ ─────────────────────────>│   Completed   │
+│  (bitflag=0)  │   [correct window,        │  (bitflag=1)  │
+└───────────────┘    not already done,       └───────────────┘
+                     game_authority signs,
+                     score validated]
+                                        reset at next daily_date rollover ▲
+```
+
+Completion is tracked via bitflags:
+- Buildings 0–15: `dawn_buildings`, `midday_buildings`, `dusk_buildings` (u16 bitfield, bit N = BuildingType N)
+- Buildings 16–18: `expansion_daily` (u8 bitfield, bit 0 = type 16, bit 1 = type 17, bit 2 = type 18)
+
+### Transition: `Not Completed` → `Completed`
+```
+Trigger: daily_activity (instruction 166)
+Guards:
+  - game_authority is signer (game server validates score)
+  - owner is signer
+  - Building exists in estate and is_active()
+  - current_window != Expired
+  - building_type is allowed in current_window
+  - Building not already completed in this window (bitflag check)
+Actions:
+  - If new day: reset all daily tracking fields
+  - Grant score-proportional reward (see building reward table)
+  - Set completion bitflag for building in appropriate window
+  - Check if entire window is now complete (windows_completed |= flag)
+  - Update estate.last_activity = now
 ```
 
 ---
 
-## 7. Mastery System
+## 6. Material Conversion
 
-### Per-Building Mastery (1-100)
-
-Each building has its own mastery level that increases through use:
-
+### Transition: Convert Materials
 ```
-XP per activity = base × (1 + building_level / 10)
-XP required = 100 × level²
+Trigger: convert_materials (instruction 167)
+Guards:
+  - Workshop exists, is_active(), level >= required level for from_tier
+    (Lv 1 for Common→Uncommon, Lv 5 for Uncommon→Rare, Lv 10 for Rare→Epic, Lv 15 for Epic→Legendary)
+  - from_tier ∈ [0, 3]
+  - conversions >= 1
+  - player has conversions × 100 of from_tier materials
+Actions:
+  - Deduct conversions × 100 of from_tier materials
+  - Add conversions × 20 of to_tier materials (5:1 ratio)
 ```
 
-### Mastery Bonuses
-- Every 10 mastery levels: +1% to building's primary effect
-- Mastery level 100: +10% total bonus
+---
+
+## 7. Wounded Unit Recovery
+
+### State Diagram
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    Active : Active (in player.unit_*)
+    Wounded : Wounded (in estate.wounded_*)
+    Active --> Wounded : Combat loss<br/>estate.wounded_* += loss_count
+    Wounded --> Active : recover_troops (169)<br/>[Infirmary Lv 1+, sufficient locked NOVI]<br/>deduct recovery_cost
+```
+
+ASCII reference:
+```
+Unit enters wounded state          Infirmary Lv 1+ present
+(from combat loss) ──────────────> estate.wounded_* counter incremented
+
+recover_troops (169)
+[Infirmary Lv 1+, sufficient locked_novi]
+──────────────────────────────────────>
+  estate.wounded_* -= amount
+  player.unit_* += amount
+  player.locked_novi -= recovery_cost
+```
+
+### Transition: Recover Troops
+```
+Trigger: recover_troops (instruction 169)
+Guards:
+  - Infirmary exists and is_active() and level >= 1
+  - amount <= estate.get_wounded_*(unit_type) [matching unit type field]
+  - player.locked_novi >= total_recovery_cost
+Actions:
+  - Deduct total_recovery_cost from player.locked_novi
+  - Add amount to player.unit_* field
+  - Subtract amount from estate.wounded_* field (via [u8;4] accessors)
+  - Emit TroopsRecovered
+```
+
+Recovery cost formula:
+```
+base    = unit_hire_cost × 5000 bps / 10000  (50%)
+lvl_adj = base × (10000 - infirmary_level × 25) / 10000
+daily   = lvl_adj × (10000 - estate.infirmary_recovery_daily_bps) / 10000
+total   = max(daily, 1) × amount
+```
 
 ---
 
 ## 8. Account Structure
 
-### EstateAccount (901 bytes)
 ```rust
 pub struct EstateAccount {
-    // Identity (35 bytes)
-    pub owner: Pubkey,
+    pub account_key: u8,
+    pub owner: Address,              // player wallet
     pub city_id: u16,
     pub bump: u8,
-
-    // Progression (4 bytes)
-    pub estate_level: u8,
-    pub plots_owned: u8,
+    pub estate_level: u8,            // sum of all building levels
+    pub plots_owned: u8,             // 1–5
     pub total_buildings: u8,
-    pub current_slots: u8,
+    pub current_slots: u8,           // plots_owned × 4
 
-    // Cached buffs (28 bytes)
+    // Cached passive buffs (u16 each, basis points)
     pub attack_bps: u16,
     pub defense_bps: u16,
     pub resource_gen_bps: u16,
@@ -323,62 +403,72 @@ pub struct EstateAccount {
     pub rally_capacity_bonus_bps: u16,
     pub pvp_damage_bps: u16,
 
-    // Daily activity tracking (23 bytes)
+    // Daily tracking
     pub last_login_date: u16,
     pub login_streak: u16,
     pub longest_login_streak: u16,
-    pub permanent_bonus_bps: u16,
+    pub permanent_bonus_bps: u16,    // 500 after 180-day streak
     pub daily_date: u16,
     pub dawn_timestamp: i64,
-    pub windows_completed: u8,
+    pub windows_completed: u8,       // 0b00000DML
     pub dawn_buildings: u16,
     pub midday_buildings: u16,
     pub dusk_buildings: u16,
 
-    // Daily buffs (43 bytes)
+    // Daily active buffs (reset each day)
     pub unit_effectiveness_bps: u16,
     pub mastery_bonus_bps: u16,
     pub arena_damage_bps: u16,
     pub daily_loot_bonus_bps: u16,
     pub market_discount_bps: u16,
-    pub blessed_hero: Pubkey,
+    pub blessed_hero: Address,
     pub citadel_stance: u8,
 
-    // Timestamps (16 bytes)
     pub created_at: i64,
     pub last_activity: i64,
 
-    // Building slots (720 bytes = 20 × 36)
+    // Expansion building daily buffs
+    pub camp_discount_bps: u16,
+    pub stables_speed_bps: u16,
+    pub infirmary_recovery_daily_bps: u16,
+    pub expansion_daily: u8,
+
+    // Wounded counters (u32 stored as [u8;4] for alignment)
+    pub wounded_def_1: [u8; 4],
+    pub wounded_def_2: [u8; 4],
+    pub wounded_def_3: [u8; 4],
+    pub wounded_op_1: [u8; 4],
+    pub wounded_op_2: [u8; 4],
+    pub wounded_op_3: [u8; 4],
+
+    // MUST BE LAST — expandable, 36 bytes each
     pub buildings: [BuildingSlot; 20],
 }
 ```
 
-### BuildingSlot (36 bytes)
-```rust
-pub struct BuildingSlot {
-    pub building_type: u8,
-    pub status: u8,
-    pub level: u8,
-    pub mastery_level: u8,
-    pub mastery_xp: u32,
-    pub construction_started: i64,
-    pub construction_ends: i64,
-    pub total_novi_invested: u64,
-}
-```
+PDA: `[ESTATE_SEED, player_account_pda]` (player PDA, not wallet)
+
+Initial allocation: `INITIAL_LEN = HEADER_SIZE + 4 × 36 bytes = HEADER_SIZE + 144 bytes`.
+
+[Source: state/estate.rs](../../programs/novus_mundus/src/state/estate.rs)
 
 ---
 
 ## 9. Invariants
 
 ```
-1. estate.owner matches PDA derivation
-2. plots_owned ∈ [1, 5]
-3. current_slots == plots_owned × 4
-4. total_buildings <= current_slots
-5. Each building type appears at most once
-6. Building level ∈ [0, 20]
-7. estate_level == sum of all building levels
-8. Only one building per slot can be Building or Upgrading at a time
-9. Building must be Active to use its features
+1. plots_owned ∈ [1, 5]
+2. current_slots = plots_owned × 4
+3. total_buildings <= current_slots
+4. estate_level = ∑ slot.level for all non-empty slots
+5. buildings[i].status == Empty implies buildings[i].level == 0
+6. buildings[i].is_active() = (status == Active OR status == Upgrading)
+7. A building in Upgrading state provides buffs at its CURRENT (pre-upgrade) level
+8. login_streak resets to 1 on a missed day; cannot go to 0 except before any claim
+9. permanent_bonus_bps is set exactly once at streak >= 180; never decremented
+10. Dawn, Midday, Dusk bitflags and expansion_daily reset to 0 on new daily_date
+11. wounded_* counters are u32 values stored as [u8;4] little-endian
+12. recover_troops cannot recover more units than the wounded_* counter for that unit type
+13. Building slots beyond current_slots MUST NOT be used
+14. Account data length = HEADER_SIZE + current_slots × 36 bytes
 ```

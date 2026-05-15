@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -14,6 +13,7 @@ use crate::{
     validation::{require_signer, require_writable},
     emit,
     events::estate::EstateCreated,
+    utils::read_u16,
 };
 
 /// Create Estate
@@ -35,14 +35,12 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         owner,
         player_account,
         estate_account,
         _system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -50,10 +48,7 @@ pub fn process(
     require_writable(estate_account)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
+    let city_id = read_u16(instruction_data, 0, "estate_create.city_id")?;
 
     // 4. Load Player Account
     let mut player_data_ref = player_account.try_borrow_mut()?;

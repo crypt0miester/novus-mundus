@@ -48,17 +48,15 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 7 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let king_wallet = &accounts[0];
-    let king_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let game_engine_account = &accounts[3];
-    let novi_mint = &accounts[4];
-    let _token_program = &accounts[5];
-    let locked_token_account = &accounts[6];
+    crate::extract_accounts!(accounts, [
+        king_wallet,
+        king_account,
+        castle_account,
+        game_engine_account,
+        novi_mint,
+        _token_program,
+        locked_token_account,
+    ]);
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -112,8 +110,14 @@ pub fn process(
 
     // Mint refund to locked token account
     if refund > 0 {
-        // SECURITY: Verify locked token account belongs to the king's PlayerAccount PDA
+        // Verify locked token account belongs to the king's PlayerAccount PDA
         validate_token_account_owner(locked_token_account, king_account.address())?;
+        crate::require_keys_eq!(
+            novi_mint.address().as_array(),
+            &crate::constants::NOVI_MINT_ADDRESS,
+            "cancel_upgrade.novi_mint",
+            GameError::InvalidMint,
+        );
         mint_tokens(
             novi_mint,
             locked_token_account,

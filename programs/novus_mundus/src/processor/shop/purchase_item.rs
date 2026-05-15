@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -21,6 +20,7 @@ use crate::{
         unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner},
+    utils::{read_u8, read_u16, read_u32},
     emit,
     events::shop::ItemPurchased,
 };
@@ -77,20 +77,18 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    if accounts.len() < 10 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let buyer = &accounts[0];
-    let player_account = &accounts[1];
-    let game_engine_account = &accounts[2];
-    let shop_config_account = &accounts[3];
-    let shop_item_account = &accounts[4];
-    let player_purchase_account = &accounts[5];
-    let treasury = &accounts[6];
-    let system_program = &accounts[7];
-    let inventory_account = &accounts[8];
-    let estate_account = &accounts[9];
+    crate::extract_accounts!(accounts, [
+        buyer,
+        player_account,
+        game_engine_account,
+        shop_config_account,
+        shop_item_account,
+        player_purchase_account,
+        treasury,
+        system_program,
+        inventory_account,
+        estate_account,
+    ]);
 
     // 2. Validate Accounts
 
@@ -104,13 +102,9 @@ pub fn process(
 
     // 3. Parse Instruction Data
 
-    if instruction_data.len() < 7 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let item_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let quantity = u16::from_le_bytes(instruction_data[4..6].try_into().unwrap()) as u64;
-    let payment_type = instruction_data[6];
+    let item_id = read_u32(instruction_data, 0, "purchase_item.item_id")?;
+    let quantity = read_u16(instruction_data, 4, "purchase_item.quantity")? as u64;
+    let payment_type = read_u8(instruction_data, 6, "purchase_item.payment_type")?;
 
     if quantity == 0 {
         return Err(GameError::InvalidParameter.into());
@@ -338,6 +332,7 @@ pub fn process(
         process_token_payment_flow(
             &accounts[token_offset..],
             game_engine_account.address(),
+            &game_engine.treasury_wallet,
             program_id,
             shop_config,
             buyer,

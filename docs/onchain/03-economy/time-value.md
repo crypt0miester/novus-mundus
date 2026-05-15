@@ -1,357 +1,229 @@
 # Time Value
 
-> How time gates create economic value and strategic depth in Novus Mundus.
+> How time-of-day and time-gated mechanics create strategic depth across the economy.
 
-## Time as Currency
+## Overview
 
-In Novus Mundus, **time is the universal currency**. Every major action involves time:
-- Waiting (free but slow)
-- Spending gems (fast but costly)
-
-This creates a natural exchange rate between time and premium currency.
-
-```mermaid
-graph LR
-    subgraph "Time-Resource Exchange"
-        TIME[Player Time] -->|wait| RESULT[Action Complete]
-        GEMS[Gems] -->|speedup| RESULT
-    end
-
-    subgraph "Value Equation"
-        V[Value = Time Saved × Gem Cost]
-    end
-```
-
-## Time-Gated Activities
-
-### Research
-**Duration:** 1 hour - 48 hours
-**Speedup Cost:** ~50 gems/minute
-
-```mermaid
-gantt
-    title Research Time by Category
-    dateFormat HH:mm
-    axisFormat %H
-
-    section Basic
-    Research    :00:00, 1h
-
-    section Intermediate
-    Research    :00:00, 4h
-
-    section Advanced
-    Research    :00:00, 12h
-
-    section Expert
-    Research    :00:00, 24h
-
-    section Master
-    Research    :00:00, 48h
-```
-
-**Time Reduction Sources:**
-| Source | Reduction |
-|--------|-----------|
-| Academy Level 5 | -10% |
-| Academy Level 10 | -20% |
-| Academy Level 15 | -30% |
-| Academy Level 20 | -40% |
-| Research Buff | Variable |
-
-### Travel
-**Duration:** Distance-based
-**Speedup:** Teleport (500 gems)
-
-```
-travel_time = distance_km × base_time_per_km × (1 - speed_bonus)
-```
-
-| Distance | Normal Time | With Speed Buff |
-|----------|-------------|-----------------|
-| 100 km | 30 min | 24 min |
-| 500 km | 2.5 hours | 2 hours |
-| 1000 km | 5 hours | 4 hours |
-| 5000 km | 25 hours | 20 hours |
-
-**Teleport Tradeoff:**
-```mermaid
-graph TB
-    A[Need to Travel] --> B{Time vs Gems?}
-    B -->|Have Time| C[Normal Travel]
-    B -->|Need Speed| D[Teleport 500 gems]
-    C --> E[Arrive Later]
-    D --> F[Arrive Instantly]
-```
-
-### Expeditions
-**Duration:** 1 hour - 16 hours
-**Speedup Cost:** ~100 gems/minute
-
-| Tier | Duration | Gem Cost to Skip |
-|------|----------|------------------|
-| 0 | 1 hour | ~3,000 gems |
-| 1 | 2 hours | ~6,000 gems |
-| 2 | 4 hours | ~12,000 gems |
-| 3 | 8 hours | ~24,000 gems |
-| 4 | 16 hours | ~48,000 gems |
-
-**Speedup Tiers:**
-- Tier 1: 50% reduction, 1x cost
-- Tier 2: 75% reduction, 2x cost
-
-### Building Construction
-**Duration:** Minutes to days
-**No Direct Speedup** (design choice)
-
-Buildings intentionally have no speedup to:
-- Create natural pacing
-- Prevent pay-to-win perception
-- Encourage strategic planning
-
-| Building Level | Time |
-|----------------|------|
-| 1-5 | 5 min - 2 hours |
-| 6-10 | 2 hours - 8 hours |
-| 11-15 | 8 hours - 24 hours |
-| 16-20 | 24 hours - 72 hours |
-
-### Rallies
-**Duration:** March + Combat + Return
-**Speedup Cost:** ~75 gems/minute
-
-```mermaid
-sequenceDiagram
-    participant HOME as Home City
-    participant TARGET as Target City
-
-    Note over HOME: Rally Created
-    HOME->>TARGET: March (time based on distance)
-    Note over TARGET: Combat (instant)
-    TARGET->>HOME: Return (same as march)
-    Note over HOME: Loot Available
-```
-
-**Rally Time Breakdown:**
-```
-total_time = march_time + return_time
-march_time = distance × base_rate
-return_time = march_time (same distance)
-```
-
----
-
-## Time-of-Day Mechanics
-
-Real-world time affects in-game activities:
+Every economically significant action in Novus Mundus is modified by **when** it happens, **where** the player is located, and **how long** they wait. The time system is fully deterministic — the same timestamp and longitude always produce the same result.
 
 ```mermaid
 graph TB
-    subgraph "Time of Day Effects"
-        MORNING[6am-12pm<br/>+10% Collection]
-        AFTERNOON[12pm-6pm<br/>Standard Rate]
-        EVENING[6pm-12am<br/>+15% Combat XP]
-        NIGHT[12am-6am<br/>+20% Expedition Yield]
+    subgraph "Inputs"
+        TS[Unix Timestamp]
+        LON[Player Longitude]
+    end
+
+    subgraph "Time Calculation"
+        LOCAL["Local Time 0-999<br/>longitude_offset = (longitude+180) / 360 × 1000"]
+        PERIOD[TimeOfDay Period<br/>7 periods]
+    end
+
+    subgraph "Outputs"
+        MULT[Activity Multiplier<br/>φ family]
+        SPAWN[Encounter Spawn Weight]
+        RARITY[Rarity Restrictions]
+    end
+
+    TS --> LOCAL
+    LON --> LOCAL
+    LOCAL --> PERIOD
+    PERIOD --> MULT
+    PERIOD --> SPAWN
+    PERIOD --> RARITY
+```
+
+## Local Time Calculation
+
+```
+cycle_position   = timestamp mod 86400          // position in current day (0..86399)
+global_time      = (cycle_position × 1000) / 86400   // normalized to 0..999
+longitude_offset = ((longitude + 180.0) / 360.0) × 1000  // -500 to +500
+
+local_time       = (global_time + longitude_offset) mod 1000
+```
+
+Eastern longitudes see dawn earlier (higher offset). A player at longitude 180° is exactly 12 hours (500 units) ahead of UTC.
+
+## Seven Time Periods
+
+```mermaid
+graph LR
+    DN["DeepNight<br/>0-124<br/>00:00-03:00"]
+    DW["Dawn<br/>125-249<br/>03:00-06:00<br/>Golden Hour"]
+    MO["Morning<br/>250-374<br/>06:00-09:00"]
+    MD["Midday<br/>375-624<br/>09:00-15:00<br/>Longest period"]
+    AF["Afternoon<br/>625-749<br/>15:00-18:00"]
+    DU["Dusk<br/>750-874<br/>18:00-21:00<br/>Golden Hour"]
+    EV["Evening<br/>875-999<br/>21:00-00:00"]
+    DN --> DW --> MO --> MD --> AF --> DU --> EV
+```
+
+| Period | Local Time Range | Real Clock (approx) | Type |
+|--------|-----------------|---------------------|------|
+| DeepNight | 0-124 | 00:00-03:00 | Night |
+| Dawn | 125-249 | 03:00-06:00 | Golden Hour |
+| Morning | 250-374 | 06:00-09:00 | Day |
+| Midday | 375-624 | 09:00-15:00 | Peak Day (longest) |
+| Afternoon | 625-749 | 15:00-18:00 | Day |
+| Dusk | 750-874 | 18:00-21:00 | Golden Hour |
+| Evening | 875-999 | 21:00-00:00 | Night |
+
+**Dawn** and **Dusk** are the golden hours — transitions between night and day where the φ² (2.618×) multiplier applies to rare encounter spawns.
+
+## Activity Multipliers
+
+All multipliers are drawn from the golden ratio family: φ = 1.618034, √φ = 1.272020, 1/φ = 0.618034, 1/φ² = 0.381966, 1/φ³ = 0.236068.
+
+### Complete 12-Activity × 7-Period Table
+
+The multiplier returned by `get_time_multiplier(time, activity)`:
+
+| Activity | DeepNight | Dawn | Morning | Midday | Afternoon | Dusk | Evening |
+|----------|-----------|------|---------|--------|-----------|------|---------|
+| **Hiring** (0) | 1/φ (0.618) | 1.0 | √φ (1.272) | φ (1.618) | √φ (1.272) | 1.0 | 1/φ (0.618) |
+| **Purchasing** (1) | 1/φ (0.618) | 1.0 | √φ (1.272) | φ (1.618) | √φ (1.272) | 1.0 | 1/φ (0.618) |
+| **Collecting** (2) | 1/φ (0.618) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1/φ (0.618) |
+| **Mining** (3) | φ (1.618) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Fishing** (4) | 1.0 | φ (1.618) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Attacking** (5) | φ (1.618) | √φ (1.272) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| **Defending** (6) | 1/φ (0.618) | 1.0 | √φ (1.272) | φ (1.618) | √φ (1.272) | 1.0 | 1.0 |
+| **Traveling** (7) | φ (1.618) | √φ (1.272) | 1/φ (0.618) | 1.0 | 1/φ (0.618) | 1.0 | 1.0 |
+| **Consuming** (11) | 1/φ (0.618) | √φ (1.272) | 1.0 | 1.0 | 1.0 | 1.0 | 1/φ (0.618) |
+| **Researching** (12) | φ (1.618) | √φ (1.272) | √φ (1.272) | 1/φ (0.618) | 1/φ (0.618) | 1.0 | 1.0 |
+| **XPGain** (13) | √φ (1.272) | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 | √φ (1.272) |
+| **StaminaRegen** (14) | φ (1.618) | √φ (1.272) | 1.0 | 1/φ (0.618) | 1/φ (0.618) | 1.0 | 1.0 |
+| **LootDrop** (15) | √φ (1.272) | 1.0 | φ (1.618) | 1.0 | 1.0 | 1.0 | √φ (1.272) |
+
+> **Note:** `ActivityType` enum discriminants are not contiguous: Consuming = 11, Researching = 12, XPGain = 13, StaminaRegen = 14, LootDrop = 15. Variants 8, 9, 10 are absent.
+
+> **Code Inconsistency:** The test in `time_cycle.rs` (line 420) asserts `Collecting` at `Dawn` returns `PHI_SQUARED` (2.618×), asserting a "golden hour" cash bonus. The actual `get_time_multiplier` implementation for `ActivityType::Collecting` does **not** implement this — `Dawn` falls through to the wildcard `_` arm returning `1.0`. The table above reflects the actual code behavior, not the test comment. The test fails on this assertion, indicating a planned feature not yet implemented.
+
+> **Code Inconsistency:** The comment on `Researching` for `Morning` reads `"1.0x - Normal study"` but the actual code returns `GOLDEN_ROOT` (1.272×). The table above reflects the actual code value.
+
+> **Code Inconsistency:** The comment on `LootDrop` for `Morning` reads `"1.0x - Normal drops"` but the actual code returns `PHI` (1.618×). The table above reflects the actual code value.
+
+[Source: logic/time_cycle.rs](../../../programs/novus_mundus/src/logic/time_cycle.rs)
+
+## How Multipliers Are Applied
+
+```mermaid
+flowchart TD
+    A["Player action triggered"] --> B["get_time_of_day(now, player.current_long)"]
+    B --> C{"Action type"}
+    C -->|"collect_resources"| D1["base_power = consume_novi_logic(amount, synchrony, config)"]
+    D1 --> D2["power = apply_time_multiplier(base_power, time, Consuming)"]
+    D2 --> D3["base_output = type_specific_formula(power, units)"]
+    D3 --> D4["output = apply_time_multiplier(base_output, time, Collecting|Mining|Fishing)"]
+    C -->|"hire_units"| E1["units = consume_novi_logic(amount, synchrony, config)"]
+    E1 --> E2["units = apply_time_multiplier(units, time, Hiring)"]
+    C -->|"stamina_regen"| F1["base_gain = elapsed / 300"]
+    F1 --> F2["stamina = base_gain × get_multiplier(time, StaminaRegen)"]
+```
+
+### NOVI Consumption (collect_resources, hire_units)
+
+```
+base_power       = consume_novi_logic(novi_amount, synchrony, economic_config)
+time_of_day      = get_time_of_day(now, player.current_long)
+final_power      = apply_time_multiplier(base_power, time_of_day, ActivityType::Consuming)
+```
+
+The consuming multiplier applies *before* collection type multipliers.
+
+### Collection Output
+
+```
+base_output           = <type-specific calculation using final_power>
+time_activity         = Collecting | Mining | Fishing (by collection_type)
+time_adjusted_output  = apply_time_multiplier(base_output, time_of_day, time_activity)
+```
+
+Both the NOVI→power conversion and the output are separately time-modified.
+
+### Stamina Regeneration
+
+```
+intervals           = elapsed / STAMINA_REGEN_INTERVAL
+base_gain           = intervals
+regen_multiplier    = get_time_multiplier(time_of_day, ActivityType::StaminaRegen)
+time_stamina        = base_gain × regen_multiplier   // f64 → u64
+```
+
+### XP Gain
+
+```
+xp_multiplier  = get_time_multiplier(time_of_day, ActivityType::XPGain)
+time_xp        = base_xp × xp_multiplier
+```
+
+## Encounter Spawn Timing
+
+Rarity spawn weights also use the φ family. Note that **Dusk** and **Dawn** are not symmetric for all rarities:
+
+```mermaid
+graph TD
+    subgraph "Legendary Spawn Windows"
+        LDN["DeepNight: φ² = 2.618× PEAK"]
+        LDW["Dawn: 1/φ = 0.618×"]
+        LEV["Evening: 1/φ = 0.618×"]
+        LBL["All other periods: 1/φ³ = 0.236× (restricted)"]
+    end
+    subgraph "Epic Spawn Windows"
+        EDN["DeepNight: φ = 1.618× PEAK"]
+        EDW["Dawn: √φ = 1.272×"]
+        EDK["Dusk: √φ = 1.272×"]
+        EEV["Evening: √φ = 1.272×"]
+        EBL["Morning/Midday/Afternoon: 1/φ = 0.618× (restricted)"]
     end
 ```
 
-**Implementation:**
+| Rarity | DeepNight | Dawn | Morning | Midday | Afternoon | Dusk | Evening |
+|--------|-----------|------|---------|--------|-----------|------|---------|
+| Common (0) | 1/φ (0.618) | 1.0 | 1.0 | √φ (1.272) | 1.0 | 1.0 | 1.0 |
+| Uncommon (1) | 1/φ (0.618) | 1.0 | φ (1.618) | √φ (1.272) | φ (1.618) | 1.0 | 1/φ (0.618) |
+| Rare (2) | √φ (1.272) | φ² (2.618) | 1.0 | 1/φ (0.618) | 1.0 | φ² (2.618) | 1.0 |
+| Epic (3) | φ (1.618) | √φ (1.272) | 1/φ (0.618) | 1/φ² (0.382) | 1/φ (0.618) | √φ (1.272) | √φ (1.272) |
+| Legendary (4) | φ² (2.618) | 1/φ (0.618) | 1/φ³ (0.236) | 1/φ³ (0.236) | 1/φ³ (0.236) | 1/φ³ (0.236) | 1/φ (0.618) |
+
+> **Dusk ≠ Dawn for Legendary:** Legendary spawn weight at Dusk is 1/φ³ (0.236), the same low weight as Morning/Midday/Afternoon — it does **not** share Dawn's 1/φ (0.618) value. Dawn and Dusk are only symmetric for Rare spawns.
+
+Legendary spawns are **restricted** to DeepNight, Dawn, or Evening only (`can_spawn_rarity_at_time`). Epic spawns require DeepNight, Evening, Dawn, or Dusk.
+
+## Vesting Time Gate
+
+Reserved NOVI cannot be withdrawn until 7 days after earning:
+
 ```
-bonus = get_time_of_day_multiplier(timestamp, longitude)
-final_yield = base_yield × (1 + bonus)
+RESERVED_NOVI_VESTING_PERIOD = 604800 seconds
 ```
 
-Each city has a longitude that determines local time:
-- Collection bonuses during "work hours"
-- Combat bonuses during "evening"
-- Expedition bonuses during "night" (miners work overnight)
-
-[Source: logic/time.rs](../../../programs/novus_mundus/src/logic/time.rs)
-
----
-
-## Strategic Time Management
-
-### Parallel Processing
-
-Smart players run multiple timers simultaneously:
+Every `mint_for_prize` or `purchase_novi` resets `UserAccount.reserved_novi_earned_at` to `now`, restarting the window. This prevents instant arbitrage after prize events.
 
 ```mermaid
-gantt
-    title Optimal Parallel Activities
-    dateFormat HH:mm
-    axisFormat %H:%M
-
-    section Research
-    Advanced Research :08:00, 12h
-
-    section Expedition 1
-    Mining T2    :08:00, 2h
-    Mining T2    :10:00, 2h
-    Mining T2    :12:00, 2h
-
-    section Expedition 2
-    Fishing T2   :08:00, 2h
-    Fishing T2   :10:00, 2h
-    Fishing T2   :12:00, 2h
-
-    section Building
-    Upgrade Mansion :08:00, 8h
+flowchart LR
+    MINT["mint_for_prize or purchase_novi"] -->|"reserved_novi_earned_at = now"| CLOCK["7-day vesting clock starts"]
+    CLOCK -->|"604800 s elapsed"| GATE["withdraw_reserved unlocked"]
+    GATE --> WALLET["SPL transfer → Wallet ATA"]
+    MINT2["Another mint during window"] -->|"Clock resets!"| CLOCK
 ```
 
-### Session Alignment
+## Generation Interval Gate
 
-Aligning timers to play sessions maximizes efficiency:
+Locked NOVI generates at discrete 300-second (5-minute) intervals:
 
-**Casual Player (2 sessions/day):**
-- Morning: Start 8-hour activities
-- Evening: Claim and restart
-
-**Active Player (4+ sessions/day):**
-- Shorter expeditions (2-4 hour)
-- More frequent claims
-- Higher total yield
-
-### Speedup Efficiency
-
-When to speedup vs wait:
-
-| Scenario | Recommendation |
-|----------|----------------|
-| 5 minutes remaining | Wait |
-| 2 hours remaining, going to sleep | Consider speedup |
-| Blocking other activities | Speedup |
-| Just impatient | Wait (save gems) |
-
-**Optimal Speedup Timing:**
 ```
-efficiency = time_saved / gem_cost
+intervals_elapsed   = (now - last_updated_tokens_at) / 300
+tokens_to_generate  = intervals_elapsed × generation_rate
 ```
 
-Speedup early in long timers = poor efficiency
-Speedup near completion = good efficiency (if any)
+Fractional intervals are dropped (integer division). A player who triggers `update_locked_novi` at 4:59 gets 0 intervals, not 0.99.
 
----
-
-## Time as Progression Gate
-
-Time gates serve multiple design purposes:
-
-### 1. Natural Pacing
-```mermaid
-graph LR
-    A[Day 1] --> B[Day 7]
-    B --> C[Day 30]
-    C --> D[Day 90]
-
-    A -->|basics| A1[Mansion Lv5]
-    B -->|established| B1[Multiple Buildings]
-    C -->|advanced| C1[Max Level Buildings]
-    D -->|endgame| D1[Full Optimization]
-```
-
-### 2. Preventing Burnout
-- Can't "finish" in one session
-- Encourages daily return
-- Spreads engagement over time
-
-### 3. Monetization without P2W
-- Time = Free path
-- Gems = Accelerated path
-- Same destination, different speed
-
-### 4. Strategic Depth
-- What to prioritize?
-- When to speedup?
-- How to parallelize?
-
----
-
-## Cooldown Systems
-
-Beyond timers, cooldowns limit action frequency:
-
-### Collection Cooldowns
-| Location | Cooldown |
-|----------|----------|
-| City Center | 4 hours |
-| Mine | 2 hours |
-| Farm | 2 hours |
-| Market | 6 hours |
-
-### Combat Cooldowns
-| Action | Cooldown |
-|--------|----------|
-| Attack same player | 1 hour |
-| Attack same encounter | None (if alive) |
-| Rally participation | 30 minutes after return |
-
-### Daily Limits
-| Action | Limit |
-|--------|-------|
-| Daily reward claim | 1 per 24h |
-| Free teleport | 0 (always costs) |
-| Event entry | 1 per event |
-
----
-
-## Time Constants Reference
-
-Key time-related constants in the codebase:
-
-| Constant | Value | Location |
-|----------|-------|----------|
-| `SECONDS_PER_HOUR` | 3600 | constants.rs |
-| `MINING_DURATION_HOURS` | [1,2,4,8,16] | constants.rs |
-| `FISHING_DURATION_HOURS` | [1,2,4,8,16] | constants.rs |
-| `COLLECTION_COOLDOWN` | 7200 (2h) | constants.rs |
-| `TRAVEL_BASE_SECONDS_PER_KM` | 18 | constants.rs |
-
+[Source: logic/time_cycle.rs](../../../programs/novus_mundus/src/logic/time_cycle.rs)
+[Source: logic/stamina.rs](../../../programs/novus_mundus/src/logic/stamina.rs)
+[Source: logic/progression.rs](../../../programs/novus_mundus/src/logic/progression.rs)
+[Source: processor/economy/update_locked_novi.rs](../../../programs/novus_mundus/src/processor/economy/update_locked_novi.rs)
 [Source: constants.rs](../../../programs/novus_mundus/src/constants.rs)
 
 ---
 
-## Client Integration
-
-### Displaying Timers
-
-```javascript
-function formatTimeRemaining(endTime) {
-  const now = Date.now() / 1000;
-  const remaining = Math.max(0, endTime - now);
-
-  const hours = Math.floor(remaining / 3600);
-  const minutes = Math.floor((remaining % 3600) / 60);
-  const seconds = Math.floor(remaining % 60);
-
-  return `${hours}h ${minutes}m ${seconds}s`;
-}
-```
-
-### Speedup Cost Preview
-
-```javascript
-function calculateSpeedupCost(remainingSeconds, ratePerMinute, tierMultiplier) {
-  const remainingMinutes = Math.ceil(remainingSeconds / 60);
-  return remainingMinutes * ratePerMinute * tierMultiplier;
-}
-
-// Example: Expedition speedup
-const cost = calculateSpeedupCost(7200, 100, 1); // 2 hours = 12,000 gems
-```
-
-### Timer Synchronization
-
-Always use on-chain timestamp:
-```javascript
-const clock = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
-const onChainTime = clock.data.readBigInt64LE(32); // unix_timestamp offset
-```
-
----
-
-*Time is the great equalizer in Novus Mundus. Everyone gets the same 24 hours - success comes from using them wisely.*
-
----
-
-Next: [Systems - Combat](../04-systems/combat.md)
+Next: [Combat](../04-systems/combat.md)

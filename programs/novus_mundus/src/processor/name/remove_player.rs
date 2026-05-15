@@ -14,6 +14,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, validate_and_get_domain_name},
     state::PlayerAccount,
+    utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::PlayerNameRemoved,
@@ -40,7 +41,7 @@ use crate::{
 /// - Clears domain name from player account (reverts to default "Player #X")
 pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         name_account,
         reverse_name_account,
@@ -49,16 +50,10 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         tld_house,
         owner,
         alt_name_service_program,
-    ] = accounts
-    else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse instruction data: reverse_acc_hashed_name (32 bytes)
-    if data.len() < 32 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let reverse_acc_hashed_name: [u8; 32] = data[..32].try_into().unwrap();
+    let reverse_acc_hashed_name: [u8; 32] = read_bytes32(data, 0, "reverse_acc_hashed_name")?;
 
     // 3. Validate Accounts
     require_signer(owner)?;

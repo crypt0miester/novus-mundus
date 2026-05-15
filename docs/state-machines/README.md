@@ -1,165 +1,223 @@
 # Novus Mundus State Machines
 
-Complete state machine documentation for all game systems.
+State machine documentation for the stateful game systems — lifecycles, transitions, guards, and invariants.
 
 ## Systems Overview
 
 | System | File | Description |
 |--------|------|-------------|
-| [Player](./player.md) | `player.md` | Core account, extensions, progression |
-| [Dungeon](./dungeon.md) | `dungeon.md` | Roguelike PvE dungeon runs |
+| [Player](./player.md) | `player.md` | Core account, extension sections, progression |
+| [Combat](./combat.md) | `combat.md` | PvE encounters and PvP attacks |
+| [Travel](./travel.md) | `travel.md` | Intercity / intracity movement |
+| [Economy](./economy.md) | `economy.md` | NOVI flows, hiring, collection, transfers |
+| [Research](./research.md) | `research.md` | Tech-tree progression and ascension |
+| [Hero](./hero.md) | `hero.md` | Hero NFT ownership, locking, leveling |
+| [Estate](./estate.md) | `estate.md` | Building construction and upgrades |
+| [Forge](./forge.md) | `forge.md` | Staged-tempering equipment crafting |
 | [Expedition](./expedition.md) | `expedition.md` | Mining and fishing expeditions |
 | [Rally](./rally.md) | `rally.md` | Group combat coordination |
-| [Reinforcement](./reinforcement.md) | `reinforcement.md` | Teammate garrison support |
-| [Estate](./estate.md) | `estate.md` | Building construction and upgrades |
-| [Forge](./forge.md) | `forge.md` | Equipment crafting with staged tempering |
-| [Hero](./hero.md) | `hero.md` | Hero NFTs, buffs, meditation |
-| [Research](./research.md) | `research.md` | Tech tree progression |
-| [Travel](./travel.md) | `travel.md` | Intra/inter-city movement |
-| [Team](./team.md) | `team.md` | Team management and treasury |
+| [Reinforcement](./reinforcement.md) | `reinforcement.md` | Teammate and garrison support |
+| [Team](./team.md) | `team.md` | Team membership and treasury governance |
 | [Arena](./arena.md) | `arena.md` | Seasonal PvP competition |
-| [Economy](./economy.md) | `economy.md` | Tokens, shop, resources |
-| [Combat](./combat.md) | `combat.md` | PvE encounters and PvP attacks |
+| [Dungeon](./dungeon.md) | `dungeon.md` | Roguelike PvE dungeon runs |
 | [Kings Castle](./kings_castle.md) | `kings_castle.md` | Territorial control system |
+
+> Systems without a meaningful lifecycle of their own (Shop, Subscription, Event, Sanctuary, Name) are documented in [`docs/onchain/04-systems/`](../onchain/04-systems/), each with a lifecycle section.
+
+```mermaid
+graph TD
+    subgraph Identity
+        PL[Player]
+    end
+    subgraph World
+        CO[Combat]
+        TR[Travel]
+    end
+    subgraph "Economy & Progression"
+        EC[Economy]
+        RE[Research]
+        ES[Estate]
+        FO[Forge]
+        HE[Hero]
+    end
+    subgraph "Group Activities"
+        TM[Team]
+        RA[Rally]
+        RN[Reinforcement]
+        EX[Expedition]
+    end
+    subgraph Endgame
+        AR[Arena]
+        DU[Dungeon]
+        KC[Kings Castle]
+    end
+    PL --> CO & TR & EC
+    PL --> RE & ES & HE
+    TM --> RA & RN
+    ES --> FO & EX
+    HE --> DU & AR
+    KC --> RN
+```
 
 ## Architecture Principles
 
-### 1. PDA-Based State Management
-All accounts use Program Derived Addresses (PDAs) with deterministic seeds:
-```
-[SEED, identifier1, identifier2, ...]
-```
+### 1. PDA-Based State
+
+Every account is a Program Derived Address with deterministic seeds. Nearly all gameplay PDAs are kingdom-scoped (`game_engine` is a seed component). See [seeds.md](../onchain/06-reference/seeds.md).
 
 ### 2. Temporary vs Persistent Accounts
 
-**Temporary (created on start, closed on completion):**
-- ExpeditionAccount
-- RallyParticipant
-- ReinforcementAccount
-- DungeonRun
-- EventParticipation
+**Temporary** (created on start, closed on completion): `ExpeditionAccount`, `DungeonRun`, `RallyParticipant`, `ReinforcementAccount`, `EventParticipation`, `LootAccount`, `TeamInvite`, `TreasuryRequest`.
 
-**Persistent (never closed):**
-- PlayerAccount
-- EstateAccount
-- TeamAccount
-- KingRegistryAccount
+**Persistent** (never closed by gameplay): `GameEngine`, `PlayerAccount`, `UserAccount`, `EstateAccount`, `TeamAccount`, `KingRegistry`, `ResearchProgress`, `CraftedEquipmentAccount`.
 
 ### 3. Status Enums
-Each system with lifecycle uses u8 status enums:
+
+Systems with a lifecycle store a `u8` status enum, e.g.:
+
 ```rust
 #[repr(u8)]
-pub enum Status {
-    State0 = 0,
-    State1 = 1,
-    // ...
+pub enum CastleStatus {
+    Vacant = 0, Contest = 1, Protected = 2, Vulnerable = 3, Transitioning = 4,
 }
 ```
 
-### 4. Extension System (PlayerAccount)
-Sequential unlocking with account resizing:
+### 4. PlayerAccount Extension System
+
+`PlayerAccount` is `PlayerCore` plus up to 7 extension sections, appended via `realloc` as features unlock. Sizes (from `state/player.rs`):
+
 ```
-CORE (1016B) → +RESEARCH (96B) → +HEROES (130B) → +INVENTORY (424B)
-             → +RALLY (80B) → +TEAM (40B) → +COSMETICS (80B)
+CORE (528 B)
+  → +RESEARCH  (48 B)   EXT_RESEARCH  = 0x01
+  → +INVENTORY (144 B)  EXT_INVENTORY = 0x04
+  → +TEAM      (112 B)  EXT_TEAM      = 0x10
+  → +RALLY     (80 B)   EXT_RALLY     = 0x08
+  → +HEROES    (168 B)  EXT_HEROES    = 0x02
+  → +COSMETICS (80 B)   EXT_COSMETICS = 0x20
+  → +COURT     (48 B)   EXT_COURT     = 0x40
+MAX_SIZE = 1208 B
 ```
 
-### 5. Golden Ratio Scaling
-Deterministic progression using φ (phi) family:
-- `PHI = 1.618` - High-tier multipliers
-- `GOLDEN_ROOT = 1.272` - Base progression per level
-- `PHI_SQUARED = 2.618` - Legendary bonuses
-- `PHI_INVERSE = 0.618` - Diminishing returns
+Sections are appended in the order above; an earlier section must exist before a later one is added.
 
-### 6. Basis Points (BPS)
-All percentages stored as u16 basis points:
-- `10000 bps = 100%`
-- `1500 bps = 15%`
-- `250 bps = 2.5%`
+```mermaid
+graph LR
+    C["PlayerCore<br/>528 B"] --> R["+RESEARCH<br/>48 B"] --> I["+INVENTORY<br/>144 B"] --> T["+TEAM<br/>112 B"] --> RY["+RALLY<br/>80 B"] --> H["+HEROES<br/>168 B"] --> CO["+COSMETICS<br/>80 B"] --> CT["+COURT<br/>48 B"]
+    CT --> MAX["MAX 1208 B"]
+```
+
+### 5. Golden-Ratio Scaling
+
+Deterministic progression using the φ family (`f64` constants in `constants.rs`):
+- `PHI = 1.618033988749895` — high-tier multipliers
+- `GOLDEN_ROOT = 1.2720196495140689` (√φ) — per-level progression
+- `PHI_SQUARED = 2.618033988749895` — major bonuses / upgrade cost scaling
+- `PHI_INVERSE = 0.618...` — diminishing returns / penalties
+
+### 6. Basis Points
+
+All percentages are integer basis points: `10000 = 100%`, `1500 = 15%`, `250 = 2.5%`.
 
 ## State Machine Notation
 
-### States
 ```
 ┌────────────┐
-│   State    │
+│   State    │      a state
 └────────────┘
+
+──────────────>     normal transition (instruction)
+═════════════>      automatic / time-based transition
+- - - - - - ->      conditional / optional transition
 ```
 
-### Transitions
-```
-──────────────>  Normal transition
-- - - - - - ->  Conditional/optional
-═════════════>  Automatic (time-based)
-```
+Each transition is documented as:
 
-### Guards (Conditions)
 ```
-Trigger: instruction_name
+Trigger: instruction_name (discriminant)
 Guards:
-  - condition_1
-  - condition_2
+  - precondition
 Actions:
-  - effect_1
-  - effect_2
+  - state effect
 ```
 
 ## Cross-System Dependencies
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           PLAYER ACCOUNT                                │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
-│  │ RESEARCH│ │  HERO   │ │INVENTORY│ │  RALLY  │ │  TEAM   │           │
-│  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘           │
-└───────┼──────────┼──────────┼──────────┼──────────┼────────────────────┘
-        │          │          │          │          │
-        ▼          ▼          ▼          ▼          ▼
-   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
-   │RESEARCH │ │SANCTUARY│ │  SHOP   │ │  RALLY  │ │  TEAM   │
-   │ SYSTEM  │ │MEDITATION│ │ SYSTEM │ │ SYSTEM  │ │ SYSTEM  │
-   └─────────┘ └─────────┘ └─────────┘ └────┬────┘ └────┬────┘
-                    │                       │          │
-                    ▼                       ▼          ▼
-               ┌─────────┐            ┌─────────┐ ┌─────────┐
-               │  HERO   │            │ COMBAT  │ │REINFORCE│
-               │ SYSTEM  │            │ SYSTEM  │ │  MENT   │
-               └─────────┘            └─────────┘ └─────────┘
-                    │                       │
-                    ▼                       ▼
-               ┌─────────┐            ┌─────────┐
-               │ DUNGEON │            │ KINGS   │
-               │ SYSTEM  │            │ CASTLE  │
-               └─────────┘            └─────────┘
+The `PlayerAccount` is the integration hub. Each extension section is unlocked by — and gates access to — a subsystem; subsystems then depend on one another at runtime.
 
-   ┌─────────┐ ┌─────────┐ ┌─────────┐
-   │ ESTATE  │ │EXPEDITION│ │ TRAVEL │
-   │ SYSTEM  │ │ SYSTEM  │ │ SYSTEM │
-   └────┬────┘ └─────────┘ └─────────┘
-        │
-        ▼
-   ┌─────────┐
-   │  FORGE  │
-   │ SYSTEM  │
-   └─────────┘
+```mermaid
+graph LR
+    PA["PlayerAccount<br/>PlayerCore + 7 sections"]
+    PA --> RES[Research system]
+    PA --> SHOP[Shop system]
+    PA --> TEAM[Team system]
+    PA --> RALLY[Rally system]
+    PA --> HERO[Hero system]
+    PA --> CASTLE[Castle court]
+    TEAM --> RALLY
+    TEAM --> REINF[Reinforcement]
+    RALLY --> COMBAT[Combat]
+    HERO --> SANC[Sanctuary]
+    HERO --> DUN[Dungeon]
+    HERO --> EXP[Expedition]
+    HERO --> ARENA[Arena]
 ```
+
+```
+PLAYER ACCOUNT  —  PlayerCore + 7 extension sections (unlocked in order)
+│
+├─ RESEARCH  section ──→ Research system ──→ combat & encounter buff bonuses
+├─ INVENTORY section ──→ Shop system ────────  purchased items land here
+├─ TEAM      section ──→ Team system ───────→ Rally · Reinforcement
+├─ RALLY     section ──→ Rally system ──────→ Combat (coordinated attacks)
+├─ HEROES    section ──→ Hero system ───────→ Sanctuary · Dungeon · Expedition · Arena
+├─ COSMETICS section ──→ Shop system ────────  cosmetic items
+└─ COURT     section ──→ Castle system ──────  court appointments
+```
+
+**Estate buildings** gate further subsystems:
+
+| Building | Unlocks | Building | Unlocks |
+|----------|---------|----------|---------|
+| Forge | Forge crafting | MeditationChamber | Sanctuary meditation |
+| DungeonEntry | Dungeon runs | Mine / Dock | Expedition (mining / fishing) |
+| Arena | Arena participation | TransportBay | Travel speed / teleport |
+| Academy | Research speed bonus | Treasury | Dungeon NOVI bonus |
+
+**Castle** ties together Combat (`attack_castle`), Reinforcement (garrison support), and Team.
+
+**World layer** (kingdom-scoped, shared geometry): City / Location grid, Encounter spawns, Travel.
 
 ## Instruction Discriminant Ranges
 
 | Range | System |
 |-------|--------|
-| 0-9 | Initialization |
-| 10-19 | Economy |
-| 20-29 | Combat |
-| 30-49 | Travel |
-| 50-59 | Team |
-| 60-69 | Rally |
-| 80-89 | Events |
-| 120-129 | Research |
-| 130-136 | Heroes |
-| 160-179 | Estate |
-| 180-189 | Forge |
-| 190-199 | Reinforcement |
-| 200-209 | Expedition |
-| 230-236 | Arena |
-| 250-269 | Dungeon |
-| 270-299 | Kings Castle |
+| 0–8 | Initialization |
+| 10–14, 17–19 | Economy |
+| 15–16 | Token operations |
+| 20–21 | Combat |
+| 30–34 | Travel — intercity |
+| 40–42 | Travel — intracity |
+| 50–59 | Team (core) |
+| 60–67 | Rally |
+| 70 | Encounter |
+| 71 | Loot |
+| 80–83 | Events |
+| 90 | Progression |
+| 100–102 | Subscription |
+| 110–115 | Name |
+| 120–127 | Research |
+| 130–136 | Hero |
+| 137–139 | Sanctuary |
+| 140–159 | Shop |
+| 160–169 | Estate |
+| 180–184 | Forge |
+| 190–195 | Reinforcement |
+| 200–204 | Expedition |
+| 210–221 | Team (extended) |
+| 230–236 | Arena |
+| 250–260 | Dungeon |
+| 270–290 | Castle |
+| 300 | Purchase NOVI |
+| 310–311 | Hero burn / supply cap |
+
+Full per-instruction detail: [instruction-map.md](../onchain/01-architecture/instruction-map.md).

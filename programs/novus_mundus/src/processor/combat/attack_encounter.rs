@@ -33,6 +33,7 @@ use crate::{
         safe_math::{apply_bp, apply_bp_bonus},
     },
     helpers::{close_account, event_scoring::update_event_score, estate::load_estate_for_player},
+    utils::read_u64,
     validation::{
         require_signer,
         require_key_match,
@@ -92,18 +93,22 @@ pub fn process(
     // 8: base + event
     // 9: base + death (loot + encounter_location + location_creator_refund)
     // 11: base + event + death
-    let (player, encounter, owner, game_engine, system_program, estate_account, event_participation, event, loot, encounter_location, location_creator_refund) = match accounts.len() {
-        11 => (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5],
-              Some(&accounts[6]), Some(&accounts[7]),
+    crate::extract_accounts!(accounts, [
+        player,
+        encounter,
+        owner,
+        game_engine,
+        system_program,
+        estate_account,
+    ]);
+    let (event_participation, event, loot, encounter_location, location_creator_refund) = match accounts.len() {
+        11 => (Some(&accounts[6]), Some(&accounts[7]),
               Some(&accounts[8]), Some(&accounts[9]), Some(&accounts[10])),
-        9 => (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5],
-             None, None,
+        9 => (None, None,
              Some(&accounts[6]), Some(&accounts[7]), Some(&accounts[8])),
-        8 => (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5],
-             Some(&accounts[6]), Some(&accounts[7]),
+        8 => (Some(&accounts[6]), Some(&accounts[7]),
              None, None, None),
-        6 => (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5],
-             None, None,
+        6 => (None, None,
              None, None, None),
         _ => return Err(ProgramError::NotEnoughAccountKeys),
     };
@@ -113,13 +118,7 @@ pub fn process(
 
     // 3. Parse instruction data
     // Format: [encounter_id: u64]
-    if data.len() < 8 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let encounter_id = u64::from_le_bytes(
-        data[0..8].try_into().map_err(|_| ProgramError::InvalidInstructionData)?
-    );
+    let encounter_id = read_u64(data, 0, "encounter_id")?;
 
     // 4. Load GameEngine first to get kingdom context
     // Validate game_engine account (ownership + PDA + discriminator + bump)

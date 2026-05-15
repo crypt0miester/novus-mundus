@@ -8,6 +8,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopItemAccount},
     validation::{require_signer, require_writable},
+    utils::{read_u8, read_u32, read_u64, read_i64},
 };
 
 /// Update field flags - which fields to update
@@ -47,13 +48,11 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         dao_authority,
         game_engine_account,
         shop_item_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -63,12 +62,8 @@ pub fn process(
     // 3. Parse Instruction Data Header
 
     // item_id(4) + update_flags(1) = 5 bytes minimum
-    if instruction_data.len() < 5 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let item_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let update_flags = instruction_data[4];
+    let item_id = read_u32(instruction_data, 0, "item_id")?;
+    let update_flags = read_u8(instruction_data, 4, "update_flags")?;
 
     // 4. Verify DAO Authority
 
@@ -99,9 +94,7 @@ pub fn process(
         if instruction_data.len() < offset + 8 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.price_sol_lamports = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        shop_item.price_sol_lamports = read_u64(instruction_data, offset, "price_sol_lamports")?;
         offset += 8;
     }
 
@@ -110,7 +103,7 @@ pub fn process(
         if instruction_data.len() < offset + 1 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.is_active = instruction_data[offset] != 0;
+        shop_item.is_active = read_u8(instruction_data, offset, "is_active")? != 0;
         offset += 1;
     }
 
@@ -119,7 +112,7 @@ pub fn process(
         if instruction_data.len() < offset + 1 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.is_featured = instruction_data[offset] != 0;
+        shop_item.is_featured = read_u8(instruction_data, offset, "is_featured")? != 0;
         offset += 1;
     }
 
@@ -128,9 +121,7 @@ pub fn process(
         if instruction_data.len() < offset + 8 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.available_from = i64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        shop_item.available_from = read_i64(instruction_data, offset, "available_from")?;
         offset += 8;
     }
 
@@ -139,9 +130,7 @@ pub fn process(
         if instruction_data.len() < offset + 8 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.available_until = i64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        shop_item.available_until = read_i64(instruction_data, offset, "available_until")?;
         offset += 8;
     }
 
@@ -150,12 +139,8 @@ pub fn process(
         if instruction_data.len() < offset + 16 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        shop_item.max_global_stock = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
-        shop_item.current_global_stock = u64::from_le_bytes(
-            instruction_data[offset + 8..offset + 16].try_into().unwrap()
-        );
+        shop_item.max_global_stock = read_u64(instruction_data, offset, "max_global_stock")?;
+        shop_item.current_global_stock = read_u64(instruction_data, offset + 8, "current_global_stock")?;
         // offset += 16;
     }
 

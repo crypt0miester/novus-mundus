@@ -24,6 +24,7 @@ use crate::{
     },
     constants::CASTLE_STATUS_TRANSITIONING,
     validation::require_owner,
+    utils::read_u16,
 };
 
 /// Force Remove King instruction data
@@ -43,15 +44,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let dao_authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let king_account = &accounts[3];
-    let king_registry = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        dao_authority,
+        game_engine_account,
+        castle_account,
+        king_account,
+        king_registry,
+    ]);
 
     // Verify signer
     if !dao_authority.is_signer() {
@@ -67,12 +66,8 @@ pub fn process(
     }
 
     // Parse instruction data
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let castle_id = u16::from_le_bytes([instruction_data[2], instruction_data[3]]);
+    let city_id = read_u16(instruction_data, 0, "city_id")?;
+    let castle_id = read_u16(instruction_data, 2, "castle_id")?;
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useTeam } from "@/lib/hooks/useTeam";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -13,13 +14,16 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { DomainName } from "@/components/shared/DomainName";
 import {
   derivePlayerPda,
   deriveRallyPda,
   deriveEstatePda,
   parseRally,
+  isNullPubkey,
   createRallyCreateInstruction,
   createRallyCancelInstruction,
+  createRallyJoinInstruction,
   createRallyLeaveInstruction,
   createRallyExecuteInstruction,
   createRallyProcessReturnInstruction,
@@ -31,7 +35,9 @@ import {
   getActivityMultiplier,
   getTotalDefensiveUnits,
   getTotalOperativeUnits,
+  type RallyAccount,
 } from "@/lib/sdk";
+import type { PublicKey } from "@solana/web3.js";
 
 const RALLY_STATUS = ["Gathering", "Marching", "Combat", "Returning", "Completed", "Cancelled"];
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
@@ -75,6 +81,70 @@ export function RallyTab() {
 
   const [units, setUnits] = useState(10);
   const [targetType, setTargetType] = useState(1); // Encounter by default
+
+  // Joinable team rallies — fetched via getProgramAccounts filtered on the
+  // player's team. Only gathering-phase rallies (status 0) are joinable.
+  const teamPubkey = player?.team && !isNullPubkey(player.team) ? player.team : null;
+  const { data: teamData } = useTeam(teamPubkey);
+  const teamId = teamData?.account?.id;
+  const [joinableRallies, setJoinableRallies] = useState<
+    { pubkey: PublicKey; account: RallyAccount }[]
+  >([]);
+
+  useEffect(() => {
+    if (!teamPubkey) {
+      setJoinableRallies([]);
+      return;
+    }
+    let cancelled = false;
+    client
+      .fetchActiveRallies({ team: teamPubkey, activeOnly: true })
+      .then((results) => {
+        if (cancelled) return;
+        // Only gathering-phase rallies can be joined.
+        setJoinableRallies(results.filter((r) => r.account.status === 0));
+      })
+      .catch(() => {
+        if (!cancelled) setJoinableRallies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamPubkey?.toBase58(), client, transact.isPending]);
+
+  const handleJoinRally = async (
+    target: { pubkey: PublicKey; account: RallyAccount },
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    if (!teamId) throw new Error("Team not loaded");
+    const geKey = client.gameEngine;
+    const ix = createRallyJoinInstruction(
+      {
+        owner: publicKey,
+        gameEngine: geKey,
+        rally: target.pubkey,
+        rallyCreator: target.account.creator,
+        rallyId: target.account.id.toNumber(),
+        teamId: teamId.toNumber(),
+        rallyCityId: target.account.rallyCity ?? 0,
+      },
+      {
+        defensiveUnit1: units,
+        defensiveUnit2: 0,
+        defensiveUnit3: 0,
+        meleeWeapons: 0,
+        rangedWeapons: 0,
+        siegeWeapons: 0,
+      },
+    );
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"], ["rally"]],
+      successMessage: "Joined rally!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
 
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -291,6 +361,48 @@ export function RallyTab() {
           )}
         </div>
       )}
+
+      {/* Joinable Team Rallies */}
+      <div className="card">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Joinable Team Rallies
+        </h3>
+        {joinableRallies.length === 0 ? (
+          <p className="text-sm text-text-muted">No team rallies are currently gathering.</p>
+        ) : (
+          <div className="space-y-2">
+            {joinableRallies.map((r) => (
+              <div
+                key={r.pubkey.toBase58()}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm text-text-primary">
+                    <DomainName pubkey={r.account.creator} chars={4} />
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    {TARGET_TYPE[r.account.targetType ?? 0]}
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    {r.account.participantCount ?? 0}/{r.account.maxParticipants ?? 0}
+                  </span>
+                </div>
+                <TxButton
+                  onClick={(rp) => handleJoinRally(r, rp)}
+                  variant="secondary"
+                  disabled={
+                    traveling ||
+                    units > availableUnits ||
+                    (r.account.participantCount ?? 0) >= (r.account.maxParticipants ?? 0)
+                  }
+                >
+                  Join
+                </TxButton>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Create Rally */}
       {!rally && (

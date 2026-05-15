@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -11,6 +10,7 @@ use crate::{
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
     helpers::close_account,
     validation::{require_signer, require_writable, require_owner},
+    utils::{read_u16, read_u64},
     emit,
     events::MemberKicked,
 };
@@ -41,17 +41,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 12 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let kicker_slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let kicked_slot_index = u16::from_le_bytes(instruction_data[10..12].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let kicker_slot_index = read_u16(instruction_data, 8, "kicker_slot_index")?;
+    let kicked_slot_index = read_u16(instruction_data, 10, "kicked_slot_index")?;
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         kicker_account,
         kicker_slot_account,
         kicked_account,
@@ -59,9 +55,7 @@ pub fn process(
         kicked_slot_account,
         kicker_owner,
         kicked_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

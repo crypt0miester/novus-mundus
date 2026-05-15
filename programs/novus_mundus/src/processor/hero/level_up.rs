@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
@@ -67,9 +66,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, _clock_sysvar, p_core_program, estate_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, _clock_sysvar, p_core_program, estate_account]);
 
     // 2. Validate accounts
     require_signer(owner)?;

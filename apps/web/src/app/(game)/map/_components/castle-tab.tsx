@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCastle } from "@/lib/hooks/useCastle";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
@@ -20,6 +21,7 @@ import {
   deriveCastlePda,
   derivePlayerPda,
   deriveGarrisonPda,
+  deriveCourtPda,
   createClaimVacantCastleInstruction,
   createJoinGarrisonInstruction,
   createLeaveGarrisonInstruction,
@@ -32,8 +34,16 @@ import {
   createRelieveGarrisonInstruction,
   createClaimGarrisonLootInstruction,
   createAttackCastleInstruction,
+  parseCourtPosition,
+  parseGarrisonContribution,
+  parsePlayer,
+  AccountKey,
+  NOVUS_PROGRAM_ID,
   isNullPubkey,
+  type CourtPositionAccount,
+  type GarrisonContributionAccount,
 } from "@/lib/sdk";
+import bs58 from "bs58";
 
 const CASTLE_TIERS = ["Outpost", "Keep", "Stronghold", "Fortress", "Citadel"];
 const CASTLE_STATUS = ["Vacant", "Contest", "Protected", "Vulnerable", "Transitioning"];
@@ -56,16 +66,112 @@ export function CastleTab() {
   const { data: castleData } = useCastle(cityId, castleId);
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const transact = useTransact();
 
   const castle = castleData?.account;
+  const castlePda = castleData?.pubkey ?? null;
 
   const [appointPosition, setAppointPosition] = useState(0);
   const [appointeeAddress, setAppointeeAddress] = useState("");
   const [resignPosition, setResignPosition] = useState(0);
   const [upgradeType, setUpgradeType] = useState(1);
-  const [relieveAddress, setRelieveAddress] = useState("");
   const [driveBy, setDriveBy] = useState(false);
+
+  // Court roster — court positions are enumerable: 5 fixed slots per castle.
+  // Each entry carries the holder's player PDA + resolved owner wallet.
+  const [courtRoster, setCourtRoster] = useState<
+    { position: number; account: CourtPositionAccount; ownerWallet: PublicKey | null }[]
+  >([]);
+  // Garrison roster — fetched via getProgramAccounts filtered on the castle pubkey.
+  const [garrisonRoster, setGarrisonRoster] = useState<
+    { account: GarrisonContributionAccount; ownerWallet: PublicKey | null }[]
+  >([]);
+
+  // Resolve player-PDA → owner wallet for a batch of player PDAs.
+  const resolveWallets = async (playerPdas: PublicKey[]): Promise<Map<string, PublicKey>> => {
+    const out = new Map<string, PublicKey>();
+    if (playerPdas.length === 0) return out;
+    const infos = await connection.getMultipleAccountsInfo(playerPdas);
+    for (let i = 0; i < infos.length; i++) {
+      const info = infos[i];
+      if (!info) continue;
+      const parsed = parsePlayer(info);
+      if (parsed) out.set(playerPdas[i].toBase58(), parsed.owner);
+    }
+    return out;
+  };
+
+  // Fetch court roster: derive all 5 court PDAs, fetch + parse, resolve holder wallets.
+  useEffect(() => {
+    if (!castlePda) {
+      setCourtRoster([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const courtPdas = [0, 1, 2, 3, 4].map((i) => deriveCourtPda(castlePda, i)[0]);
+      const infos = await connection.getMultipleAccountsInfo(courtPdas);
+      const occupied: { position: number; account: CourtPositionAccount }[] = [];
+      for (let i = 0; i < infos.length; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parseCourtPosition(info);
+        if (parsed) occupied.push({ position: i, account: parsed });
+      }
+      const wallets = await resolveWallets(occupied.map((c) => c.account.holder));
+      if (cancelled) return;
+      setCourtRoster(
+        occupied.map((c) => ({
+          position: c.position,
+          account: c.account,
+          ownerWallet: wallets.get(c.account.holder.toBase58()) ?? null,
+        }))
+      );
+    })().catch(() => {
+      if (!cancelled) setCourtRoster([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [castlePda?.toBase58(), connection, transact.isPending]);
+
+  // Fetch garrison roster via getProgramAccounts filtered on castle pubkey.
+  useEffect(() => {
+    if (!castlePda) {
+      setGarrisonRoster([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const keyByte = bs58.encode(Buffer.from([AccountKey.CastleGarrison]));
+      const accounts = await connection.getProgramAccounts(NOVUS_PROGRAM_ID, {
+        filters: [
+          { memcmp: { offset: 0, bytes: keyByte } },
+          // castle pubkey is the first field after the 1-byte account_key
+          { memcmp: { offset: 1, bytes: castlePda.toBase58() } },
+        ],
+      });
+      const parsedList: GarrisonContributionAccount[] = [];
+      for (const { account } of accounts) {
+        const parsed = parseGarrisonContribution(account);
+        if (parsed) parsedList.push(parsed);
+      }
+      const wallets = await resolveWallets(parsedList.map((g) => g.contributor));
+      if (cancelled) return;
+      setGarrisonRoster(
+        parsedList.map((g) => ({
+          account: g,
+          ownerWallet: wallets.get(g.contributor.toBase58()) ?? null,
+        }))
+      );
+    })().catch(() => {
+      if (!cancelled) setGarrisonRoster([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [castlePda?.toBase58(), connection, transact.isPending]);
 
   const isKing = useMemo(() => {
     if (!castle || !publicKey || !castle.hasKing) return false;
@@ -167,13 +273,17 @@ export function CastleTab() {
     }).then((r) => r.signature);
   };
 
-  const handleDismissCourt = async (position: number, reportPhase: (p: TxPhase) => void) => {
+  const handleDismissCourt = async (
+    position: number,
+    dismissedWallet: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
     const ix = createDismissCourtInstruction(
       {
         king: publicKey,
-        dismissed: publicKey,
+        dismissed: dismissedWallet,
         gameEngine: ge,
         cityId,
         castleId,
@@ -262,13 +372,15 @@ export function CastleTab() {
     }).then((r) => r.signature);
   };
 
-  const handleRelieveGarrison = async (reportPhase: (p: TxPhase) => void) => {
+  const handleRelieveGarrison = async (
+    memberWallet: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const memberPubkey = new PublicKey(relieveAddress.trim());
     const ix = createRelieveGarrisonInstruction({
       king: publicKey,
-      garrisonMember: memberPubkey,
+      garrisonMember: memberWallet,
       gameEngine: ge,
       cityId,
       castleId,
@@ -391,22 +503,29 @@ export function CastleTab() {
               Court Positions ({castle.courtCount ?? 0} / {castle.maxCourt ?? 5})
             </h3>
             <div className="grid gap-2 md:grid-cols-5">
-              {COURT_POSITIONS.map((pos, i) => (
-                <div key={pos} className="rounded-lg border border-zinc-800 p-3 text-center">
-                  <div className="text-xs text-text-muted">{pos}</div>
-                  <div className="mt-1 text-xs text-text-secondary">
-                    {i < (castle.courtCount ?? 0) ? "Occupied" : "Vacant"}
+              {COURT_POSITIONS.map((pos, i) => {
+                const member = courtRoster.find((c) => c.position === i);
+                return (
+                  <div key={pos} className="rounded-lg border border-zinc-800 p-3 text-center">
+                    <div className="text-xs text-text-muted">{pos}</div>
+                    {member ? (
+                      <div className="mt-1 text-xs text-text-primary">
+                        <DomainName pubkey={member.account.holder} chars={4} />
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs text-text-secondary">Vacant</div>
+                    )}
+                    {isKing && member && member.ownerWallet && (
+                      <TxButton
+                        onClick={(rp) => handleDismissCourt(i, member.ownerWallet!, rp)}
+                        variant="danger"
+                      >
+                        Dismiss
+                      </TxButton>
+                    )}
                   </div>
-                  {isKing && i < (castle.courtCount ?? 0) && (
-                    <TxButton
-                      onClick={(rp) => handleDismissCourt(i, rp)}
-                      variant="danger"
-                    >
-                      Dismiss
-                    </TxButton>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {isKing && (
@@ -534,21 +653,45 @@ export function CastleTab() {
               </TxButton>
             </div>
 
-            {isKing && (
-              <div className="mt-4 space-y-2">
-                <h4 className="text-xs font-semibold text-text-muted">Relieve Garrison Member</h4>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={relieveAddress}
-                    onChange={(e) => setRelieveAddress(e.target.value)}
-                    placeholder="Garrison member wallet address"
-                    className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-                  />
-                  <TxButton onClick={handleRelieveGarrison} variant="danger">Relieve</TxButton>
+            {/* Garrison roster */}
+            <div className="mt-4 space-y-2">
+              <h4 className="text-xs font-semibold text-text-muted">
+                Garrison Members ({garrisonRoster.length})
+              </h4>
+              {garrisonRoster.length === 0 ? (
+                <p className="text-xs text-text-muted">No garrison members.</p>
+              ) : (
+                <div className="space-y-2">
+                  {garrisonRoster.map((g) => {
+                    const totalUnits =
+                      (g.account.du1?.toNumber?.() ?? 0) +
+                      (g.account.du2?.toNumber?.() ?? 0) +
+                      (g.account.du3?.toNumber?.() ?? 0);
+                    return (
+                      <div
+                        key={g.account.contributor.toBase58()}
+                        className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-sm text-text-primary">
+                            <DomainName pubkey={g.account.contributor} chars={4} />
+                          </span>
+                          <span className="text-xs text-text-muted">{totalUnits} units</span>
+                        </div>
+                        {isKing && g.ownerWallet && (
+                          <TxButton
+                            onClick={(rp) => handleRelieveGarrison(g.ownerWallet!, rp)}
+                            variant="danger"
+                          >
+                            Relieve
+                          </TxButton>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Actions */}

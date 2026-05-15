@@ -35,7 +35,7 @@ import {
   deriveAllowedTokenPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Initialize Config (Admin)
 
@@ -1426,6 +1426,9 @@ export interface CreateAllowedTokenAccounts {
   gameEngine: PublicKey;
   /** Token mint to allow */
   tokenMint: PublicKey;
+  /** Treasury wallet — must equal game_engine.treasury_wallet. Its ATA for
+   *  `tokenMint` is provisioned by this instruction. */
+  treasuryWallet: PublicKey;
 }
 
 export interface CreateAllowedTokenParams {
@@ -1452,16 +1455,22 @@ export function createCreateAllowedTokenInstruction(
   params: CreateAllowedTokenParams
 ): TransactionInstruction {
     const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+  const treasuryTokenAccount = getAssociatedTokenAddressSyncForPda(accounts.tokenMint, accounts.treasuryWallet);
 
-  // Rust order: authority(signer+payer), game_engine, allowed_token, token_mint, system_program
-  // followed by 0–2 trailing feed accounts (pyth then switchboard) for
-  // DAO-time owner + discriminator validation.
+  // Rust order (base 9): authority(signer+payer), game_engine, allowed_token,
+  // token_mint, system_program, treasury_wallet, treasury_token_account,
+  // token_program, associated_token_program — followed by 0–2 trailing feed
+  // accounts (pyth then switchboard) for DAO-time owner + discriminator validation.
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: allowedToken, isSigner: false, isWritable: true },
     { pubkey: accounts.tokenMint, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: accounts.treasuryWallet, isSigner: false, isWritable: false },
+    { pubkey: treasuryTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Pyth first, then Switchboard. Each only appears when the

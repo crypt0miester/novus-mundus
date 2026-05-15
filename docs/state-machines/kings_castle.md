@@ -1,1132 +1,956 @@
-# Kings Castle State Machine
+# King's Castle State Machine
 
 ## Overview
 
-This document defines the complete state machine for the Kings Castle system, including all states, transitions, guards, and side effects.
+The King's Castle system maintains five overlapping state machines: the **castle status lifecycle**, the **garrison membership** lifecycle, the **court position** lifecycle, the **upgrade** lifecycle, and the **transition cleanup** sequence. All state is stored in on-chain accounts with `#[repr(C)]` `no_std` layout (Pinocchio, no Anchor). Discriminants are 2-byte u16 LE at the front of each instruction.
+
+This document covers every transition, guard, and action derived directly from the Rust processor code.
 
 ---
 
-## Table of Contents
-
-1. [Castle Lifecycle](#1-castle-lifecycle)
-2. [Garrison Membership](#2-garrison-membership)
-3. [Court Position](#3-court-position)
-4. [Upgrade System](#4-upgrade-system)
-5. [Combat (Rally Attack)](#5-combat-rally-attack)
-6. [Ownership Transition](#6-ownership-transition)
-7. [Reward Claims](#7-reward-claims)
-8. [Hero Escrow](#8-hero-escrow)
-9. [King Registry](#9-king-registry)
-10. [Composite State Diagram](#10-composite-state-diagram)
-
----
-
-## 1. Castle Lifecycle
+## 1. Castle Status Lifecycle
 
 ### States
 
 | State | Value | Description |
 |-------|-------|-------------|
-| `Vacant` | 0 | No king, castle can be claimed |
-| `Contest` | 1 | 2-hour challenge window, no rewards, attackable |
-| `Protected` | 2 | 10-day immunity, rewards active, not attackable |
-| `Vulnerable` | 3 | Rewards active, attackable forever |
-| `Transitioning` | 4 | Ownership change in progress, multi-phase cleanup |
+| `Vacant` | 0 | No king; claimable via `claim_vacant_castle` |
+| `Contest` | 1 | 2-hour window after claim; castle is attackable |
+| `Protected` | 2 | Protection window active; attackable only if watchtower-adjusted period expired |
+| `Vulnerable` | 3 | Protection expired; freely attackable |
+| `Transitioning` | 4 | Ownership transfer in progress; cleanup cranks running |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> Vacant : (initial / created)
+
+    Vacant --> Contest : claim_vacant_castle<br/>[player eligible, registry < 5 castles]
+    Contest --> Protected : update_castle_status<br/>[now >= contest_end_at]
+    Protected --> Vulnerable : update_castle_status<br/>[now >= contest_end_at + effective_protection]
+    Contest --> Transitioning : attack_castle<br/>[garrison defeated, now < contest_end_at]
+    Vulnerable --> Transitioning : attack_castle<br/>[garrison defeated]
+    Protected --> Transitioning : attack_castle<br/>[protection expired + garrison defeated]
+    Transitioning --> Transitioning : Other attacker wins challenge window<br/>[replaces transition_new_king]
+    Transitioning --> Protected : finalize_transition<br/>[new king, garrison=0, court=0]
+    Transitioning --> Vacant : finalize_transition<br/>[no new king, garrison=0, court=0]
+    Vacant --> [*]
 ```
-                                    ┌─────────────────────────────────────────────────────────┐
-                                    │                                                         │
-                                    ▼                                                         │
-┌──────────────┐  claim_vacant   ┌──────────────┐  2h elapsed    ┌──────────────┐            │
-│              │ ─────────────>  │              │ ─────────────> │              │            │
-│    Vacant    │                 │   Contest    │                │  Protected   │            │
-│              │ <───────────────│              │                │              │            │
-└──────────────┘  transition     └──────┬───────┘                └──────┬───────┘            │
-       ▲          complete              │                               │                    │
-       │          (no new king)         │                               │ 10d elapsed        │
-       │                                │                               ▼                    │
-       │                                │ loses              ┌──────────────┐                │
-       │                                │ combat             │              │                │
-       │                                │                    │  Vulnerable  │────────────────┤
-       │                                ▼                    │              │  loses combat  │
-       │                         ┌──────────────┐            └──────────────┘                │
-       │                         │              │                                            │
-       │ transition              │Transitioning │<───────────────────────────────────────────┘
-       │ complete                │              │
-       │ (force_remove)          └──────┬───────┘
-       │                                │
-       └────────────────────────────────┘
-                                 transition complete
-                                 (new king installed)
-                                        │
-                                        │
-                                        ▼
-                                 ┌──────────────┐
-                                 │   Contest    │
-                                 │  (new king)  │
-                                 └──────────────┘
+
+ASCII reference:
+
 ```
+┌──────────┐  claim_vacant_castle  ┌──────────────┐
+│          │ ─────────────────────>│   Contest    │
+│  Vacant  │                       │    (1)       │
+│  (0)     │<──────────┐           └──────┬───────┘
+└──────────┘           │                  │
+        ▲              │    update_castle_status (now >= contest_end_at)
+        │              │                  │
+        │    finalize_ │                  ▼
+        │    transition│           ┌──────────────┐
+        │    (no king) │           │  Protected   │
+        │              │           │    (2)       │
+        │              │           └──────┬───────┘
+        │              │                  │
+        │              │    update_castle_status (now >= contest_end_at + effective_protection)
+        │              │                  │
+        │              │                  ▼
+        │              │           ┌──────────────┐
+        │              │           │  Vulnerable  │
+        │              │           │    (3)       │
+        │              │           └──────┬───────┘
+        │              │                  │
+        │              │    attack_castle (garrison defeated)
+        │              │    — or —
+        │              │    Contest attack (garrison defeated)
+        │              │                  │
+        │              │                  ▼
+        │              │           ┌──────────────┐
+        │              │           │ Transitioning│
+        │              └───────────┤    (4)       │
+        │                          └──────┬───────┘
+        │                                 │
+        └─────────────────────────────────┘
+              finalize_transition (new king → Protected)
+```
+
+---
 
 ### Transitions
 
 #### `Vacant` → `Contest`
+
 ```
-Trigger: claim_vacant_castle instruction
+Trigger: claim_vacant_castle (instruction 271)
 Guards:
-  - Claimant is team leader
-  - Claimant.level >= castle.min_level
-  - Claimant.networth >= castle.min_networth_millions * 1_000_000
-  - Claimant.total_units >= castle.min_troops_thousands * 1_000
-  - KingRegistry.castle_count < KingRegistry.max_castles
+  - castle.status == Vacant (0)
+  - castle.king == NULL_PUBKEY
+  - castle.garrison_count == 0 && castle.court_count == 0
+    (previous cleanup must be complete before re-claiming)
+  - Player wallet is signer
+  - Player is on a team (player.team_address() != NULL_PUBKEY)
+  - Player meets eligibility: level >= min_level,
+    networth/1_000_000 >= min_networth_millions,
+    (total_defensive_units / 1000) >= min_troops_thousands
+  - King registry: castle_count < max_castles (5)
 Actions:
-  - castle.king = claimant
-  - castle.team = claimant.team
+  - If KingRegistryAccount does not exist: create it (seeds: [KING_REGISTRY_SEED, player_account])
+  - registry.add_castle(city_id, castle_id, tier, now)
+  - castle.king = player_account.address()
+  - castle.team = player.team_address()
   - castle.claimed_at = now
-  - castle.contest_end_at = now + CASTLE_CONTEST_DURATION
-  - castle.status = Contest
-  - castle.garrison_count = 1
-  - castle.max_garrison = GARRISON_CAP_BY_TIER[claimant.subscription_tier]
-  - Create GarrisonContributionAccount for king (is_king = true)
-  - Create or update KingRegistryAccount
+  - castle.contest_end_at = now + CASTLE_CONTEST_DURATION  (7200 s = 2 hours)
+  - castle.status = Contest (1)
+  - castle.max_garrison = GARRISON_CAP_BY_TIER[player.subscription_tier]
+    (0 for Outpost tier regardless)
+  - castle.times_claimed += 1
   - Emit CastleClaimed
 ```
 
 #### `Contest` → `Protected`
+
 ```
-Trigger: Time elapsed (automatic on next interaction)
+Trigger: update_castle_status (instruction 289) — permissionless
 Guards:
-  - now >= castle.contest_end_at
   - castle.status == Contest
+  - now >= castle.contest_end_at
 Actions:
-  - castle.status = Protected
-  - Emit CastleContestEnded
+  - castle.status = Protected (2)
+  - contest_end_at unchanged (protection is measured from contest_end_at)
+  - Emit CastleStatusChanged { old=1, new=2 }
 ```
 
 #### `Protected` → `Vulnerable`
+
 ```
-Trigger: Time elapsed (automatic on next interaction)
+Trigger: update_castle_status (instruction 289) — permissionless
 Guards:
-  - now >= castle.contest_end_at + castle.protection_duration
   - castle.status == Protected
+  - now >= castle.contest_end_at + castle.effective_protection_duration()
+    where: effective = protection_duration × (10000 + watchtower_level×1000) / 10000
 Actions:
-  - castle.status = Vulnerable
-  - Emit CastleProtectionExpired
+  - castle.status = Vulnerable (3)
+  - Emit CastleStatusChanged { old=2, new=3 }
 ```
 
-#### `Contest` → `Transitioning` (Combat Loss)
+#### `Contest` or `Vulnerable` → `Transitioning` (via attack)
+
 ```
-Trigger: execute_rally (attackers win)
+Trigger: attack_castle (instruction 288)
 Guards:
-  - castle.status == Contest
-  - attack_power > defense_power
+  - castle.can_be_attacked(now):
+      Contest:       now < castle.contest_end_at
+      Vulnerable:    always true
+      Protected:     now >= contest_end_at + effective_protection_duration
+      Transitioning: now < contest_end_at  (challenge window)
+  - Attacker is at castle location: distance <= 50.0 m
+  - Attacker is not traveling, not in active rally
+  - Attacker has defensive units > 0
+  - Garrison is defeated (remaining < 10% of original, or garrison was empty)
 Actions:
-  - castle.status = Transitioning
-  - castle.transition_new_king = rally.creator
-  - castle.transition_garrison_cleaned = 0
-  - castle.transition_court_cleaned = false
-  - castle.transition_rewards_cleaned = 0
-  - Cancel any in-progress upgrade (upgrade_type = 0, upgrade_end_at = 0)
-  - Emit CastleTransitionStarted
+  - castle.status = Transitioning (4)
+  - castle.transition_new_king = attacker PlayerAccount PDA
+  - castle.contest_end_at = now + CASTLE_CONTEST_DURATION  (fresh 2-hour challenge window)
+  - castle.failed_defenses += 1
+  - Update garrison contribution accounts with proportional casualties and loot
+  - Emit CastleConquered, CastleAttacked
 ```
 
-#### `Vulnerable` → `Transitioning` (Combat Loss)
-```
-Trigger: execute_rally (attackers win)
-Guards:
-  - castle.status == Vulnerable
-  - attack_power > defense_power
-Actions:
-  - (Same as Contest → Transitioning)
-```
+#### `Transitioning` → `Protected` (new king)
 
-#### `Transitioning` → `Contest` (New King)
 ```
-Trigger: crank_finalize_transition
+Trigger: finalize_transition (instruction 285) — permissionless
 Guards:
   - castle.status == Transitioning
-  - castle.transition_garrison_cleaned == previous_garrison_count
-  - castle.transition_court_cleaned == true
-  - castle.transition_rewards_cleaned >= required_count
+  - now >= castle.contest_end_at  (2-hour challenge window passed)
+  - castle.garrison_count == 0   (all garrison cleaned)
+  - castle.court_count == 0      (all court positions cleaned)
   - castle.transition_new_king != NULL_PUBKEY
+  - new_king_registry.can_claim_castle()
 Actions:
-  - old_king_registry.remove_castle(castle)
+  - new_king_registry.add_castle(city_id, castle_id, tier, now)
+  - old_king_registry.remove_castle(city_id, castle_id)  [if old registry provided]
   - castle.king = castle.transition_new_king
-  - castle.team = new_king.team
+  - castle.team = new_king.team_address()
+  - castle.transition_new_king = NULL_PUBKEY
+  - castle.status = Protected (2)
   - castle.claimed_at = now
-  - castle.contest_end_at = now + CASTLE_CONTEST_DURATION
-  - castle.status = Contest
-  - castle.garrison_count = 1
-  - Create GarrisonContributionAccount for new king
-  - Update new king's KingRegistryAccount
-  - Clear transition fields
-  - Emit CastleTransitionComplete
+  - castle.contest_end_at = now   (protection starts from now)
+  - castle.times_claimed += 1
+  - Reset: transition_garrison_cleaned=0, transition_court_cleaned=false, transition_rewards_cleaned=0
+  - Emit CastleClaimed
 ```
 
-#### `Transitioning` → `Vacant` (Force Remove)
+> **Note:** The new king is set directly to **Protected** (not Contest). `contest_end_at = now` means `effective_protection_duration` is measured from the finalization timestamp, giving a full protection window immediately.
+
+#### `Transitioning` → `Vacant` (no new king)
+
 ```
-Trigger: crank_finalize_transition (DAO force_remove case)
+Trigger: finalize_transition (instruction 285) — permissionless
 Guards:
   - castle.status == Transitioning
-  - All cleanup complete
-  - castle.transition_new_king == NULL_PUBKEY (set by force_remove_king)
+  - now >= castle.contest_end_at
+  - castle.garrison_count == 0
+  - castle.court_count == 0
+  - castle.transition_new_king == NULL_PUBKEY
+    (set by force_remove_king, or all challengers failed to complete)
 Actions:
   - castle.king = NULL_PUBKEY
   - castle.team = NULL_PUBKEY
-  - castle.status = Vacant
-  - castle.garrison_count = 0
-  - Clear all transition fields
-  - Emit CastleTransitionComplete (vacant = true)
+  - castle.transition_new_king = NULL_PUBKEY
+  - castle.status = Vacant (0)
+  - castle.claimed_at = 0
+  - castle.contest_end_at = 0
+  - old_king_registry.remove_castle(city_id, castle_id)  [if provided]
+  - Reset transition counters
+  - No event emitted (next CastleClaimed will come from claim_vacant_castle)
+```
+
+#### DAO → `Transitioning` (force_remove_king)
+
+```
+Trigger: force_remove_king (instruction 287) — DAO only
+Guards:
+  - dao_authority is signer and == game_engine.authority
+  - castle.king != NULL_PUBKEY
+  - king_account.address() == castle.king
+Actions:
+  - king_registry.remove_castle(city_id, castle_id)
+  - castle.status = Transitioning (4)
+  - castle.king = NULL_PUBKEY
+  - castle.team = NULL_PUBKEY
+  - castle.transition_new_king = NULL_PUBKEY  (routes to Vacant on finalize)
+  - Emit KingForceRemoved
 ```
 
 ---
 
-## 2. Garrison Membership
+## 2. Garrison Membership Lifecycle
 
-### States (Per Player)
+### States
 
 | State | Description |
 |-------|-------------|
-| `NotInGarrison` | Player has no GarrisonContributionAccount for this castle |
-| `InGarrison` | Player has active GarrisonContributionAccount |
-| `InGarrisonAsKing` | Player is king, cannot leave voluntarily |
+| `Absent` | No GarrisonContributionAccount exists for (castle, player) |
+| `InGarrison` | Account exists; units/weapons/hero committed |
+| `LootPending` | Combat occurred; loot_* fields populated; loot_claimed == false |
+| `LootClaimed` | Loot claimed; loot_claimed == true; player can still leave voluntarily |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> Absent
+
+    Absent --> InGarrison : join_garrison<br/>[team member, slots available, units > 0]
+    InGarrison --> LootPending : attack_castle occurs<br/>[loot_* fields populated]
+    LootPending --> LootClaimed : claim_garrison_loot<br/>[loot_claimed = true]
+    InGarrison --> Absent : leave_garrison (voluntary)<br/>relieve_garrison (king)<br/>garrison_cleanup (crank, Transitioning)
+    LootClaimed --> Absent : leave_garrison (voluntary)<br/>relieve_garrison (king)<br/>garrison_cleanup (crank, Transitioning)
+    Absent --> [*]
 ```
-                                  ┌───────────────────────────────────────┐
-                                  │                                       │
-                                  ▼                                       │
-┌────────────────┐  join      ┌────────────────┐                         │
-│                │ ────────>  │                │  leave_garrison         │
-│ NotInGarrison  │            │  InGarrison    │ ─────────────────────>──┤
-│                │ <────────  │                │                         │
-└────────────────┘  relieve   └────────────────┘                         │
-       ▲              or                                                 │
-       │           transition                                            │
-       │           cleanup                                               │
-       │                                                                 │
-       │           transition                                            │
-       │           cleanup     ┌────────────────┐                        │
-       └───────────────────────│                │                        │
-                               │InGarrisonAsKing│                        │
-       ┌───────────────────────│                │                        │
-       │  claim_vacant_castle  └────────────────┘                        │
-       │  (becomes king)              ▲                                  │
-       │                              │                                  │
-       │                              │ claim_vacant_castle              │
-       │                              │ (king of new castle)             │
-       ▼                              │                                  │
-┌────────────────┐                    │                                  │
-│ NotInGarrison  │────────────────────┘                                  │
-│ (this castle)  │                                                       │
-└────────────────┘                                                       │
-                                                                         │
-                                           ┌─────────────────────────────┘
-                                           │ relieve_garrison
-                                           │ (king can relieve others)
-                                           ▼
-                                    ┌────────────────┐
-                                    │ NotInGarrison  │
-                                    └────────────────┘
+
+ASCII reference:
+
+```
+┌────────┐  join_garrison  ┌──────────────┐
+│        │ ──────────────> │ InGarrison   │
+│ Absent │                 │              │<──────────────────┐
+└────────┘                 └──────┬───────┘                   │
+    ▲                             │ (attack occurs)            │
+    │                             ▼                           │
+    │                      ┌──────────────┐                   │
+    │                      │ LootPending  │                   │
+    │                      │              │                   │
+    │                      └──────┬───────┘                   │
+    │                             │ claim_garrison_loot        │
+    │                             ▼                           │
+    │                      ┌──────────────┐                   │
+    │                      │ LootClaimed  │                   │
+    │                      │              │                   │
+    │                      └──────┬───────┘                   │
+    │   leave_garrison (voluntary)│                           │
+    │   relieve_garrison (king)   │                           │
+    │   garrison_cleanup (crank)  │                           │
+    └─────────────────────────────┘                           │
+               (account closed)                               │
+                                                              │
+           Note: garrison_cleanup restores assets and         │
+           increments transition_garrison_cleaned; next        │
+           join_garrison can start the cycle again ───────────┘
 ```
 
 ### Transitions
 
-#### `NotInGarrison` → `InGarrison`
+#### `Absent` → `InGarrison`
+
 ```
-Trigger: join_garrison
+Trigger: join_garrison (instruction 277)
 Guards:
-  - castle.status in [Contest, Protected, Vulnerable]
-  - player.team == castle.team
+  - castle.max_garrison > 0  (not Outpost tier)
   - castle.garrison_count < castle.max_garrison
-  - GarrisonContributionAccount does not exist
-  - units_1 + units_2 + units_3 > 0  // Must contribute something
+  - player.team_address() == castle.team
+  - GarrisonContributionAccount does not exist (require_empty)
+  - units_1 <= player.defensive_unit_1, units_2 <= player.defensive_unit_2,
+    units_3 <= player.defensive_unit_3
+  - melee <= player.melee_weapons, ranged <= player.ranged_weapons,
+    siege <= player.siege_weapons
+  - total_units + total_weapons > 0  OR  hero_slot < 3
+    (at least some contribution)
 Actions:
-  - Deduct units from player: player.defensive_unit_X -= contribution.units_X
-  - Deduct weapons from player: player.melee_weapons -= contribution.melee_weapons
-  - If hero_mint provided: Transfer hero NFT to GarrisonContributionAccount PDA
-  - Create GarrisonContributionAccount
+  - If hero_slot < 3:
+    - Parse hero NFT: cache hero_defense_bps (stat 2), hero_weapon_eff_bps (stat 10)
+    - Subtract hero buffs from player (add_hero_buffs_to_player reversed)
+    - Clear player.active_heroes[hero_slot] = NULL_PUBKEY
+    - Reset defensive_hero_slot if needed
+    - Transfer hero NFT: player_pda → garrison_pda (MPL Core TransferV1, player signs)
+  - Deduct units_1/2/3 from player.defensive_unit_*
+  - Deduct melee/ranged/siege from player.melee/ranged/siege_weapons
+  - Create GarrisonContributionAccount PDA: [GARRISON_SEED, castle, player_account]
+  - Initialize account fields; loot_* = 0; loot_claimed = false
   - castle.garrison_count += 1
   - Emit GarrisonJoined
 ```
 
-#### `NotInGarrison` → `InGarrisonAsKing`
+#### `InGarrison` / `LootPending` → `LootClaimed`
+
 ```
-Trigger: claim_vacant_castle
+Trigger: claim_garrison_loot (instruction 281)
 Guards:
-  - (See Castle Lifecycle: Vacant → Contest)
+  - GarrisonContributionAccount exists (require_initialized)
+  - garrison.contributor == player_account.address()
+  - garrison.loot_melee + loot_ranged + loot_siege > 0
+  - garrison.loot_claimed == false
 Actions:
-  - (See Castle Lifecycle)
-  - GarrisonContributionAccount.is_king = true
+  - player.melee_weapons += garrison.loot_melee
+  - player.ranged_weapons += garrison.loot_ranged
+  - player.siege_weapons += garrison.loot_siege
+  - garrison.loot_melee = 0; loot_ranged = 0; loot_siege = 0
+  - garrison.loot_claimed = true
+  - Emit GarrisonLootClaimed
 ```
 
-#### `InGarrison` → `NotInGarrison` (Voluntary)
+#### `InGarrison` / `LootClaimed` → `Absent` (voluntary)
+
 ```
-Trigger: leave_garrison
+Trigger: leave_garrison (instruction 278)
 Guards:
-  - GarrisonContributionAccount.is_king == false
-  - castle.status != Transitioning
+  - player_wallet is signer
+  - player_account.owner == player_wallet.address()
+  - GarrisonContributionAccount exists and garrison.contributor == player_account
 Actions:
-  - Return units to player: player.defensive_unit_X += contribution.units_X
-  - Return weapons to player: player.melee_weapons += contribution.melee_weapons
-  - If contribution.hero_mint != NULL: Transfer hero NFT back to player
-  - If contribution has unclaimed loot: Transfer loot to player first
-  - Close GarrisonContributionAccount (rent to player)
+  - player.defensive_unit_1 += garrison.units_1 (etc.)
+  - player.melee_weapons += garrison.melee_weapons (etc.)
+  - If garrison has hero:
+    - Find first empty active_heroes slot
+    - If slot found: transfer hero back to player_pda; re-add hero buffs
+    - If all slots full: transfer hero to player wallet (unlocked)
+  - Close GarrisonContributionAccount (rent → player wallet)
   - castle.garrison_count -= 1
-  - Emit GarrisonLeft
+  - Emit GarrisonLeft { relieved: false }
 ```
 
-#### `InGarrison` → `NotInGarrison` (Relieved)
+#### `InGarrison` / `LootClaimed` → `Absent` (king-forced)
+
 ```
-Trigger: relieve_garrison
+Trigger: relieve_garrison (instruction 279)
 Guards:
-  - Caller is castle.king
-  - Target != castle.king (king cannot relieve self)
-  - castle.status != Transitioning
+  - king_wallet is signer
+  - castle.king == king_account.address()
+  - garrison.contributor == relieved_account.address()
 Actions:
-  - (Same as leave_garrison)
-  - Emit GarrisonRelieved
+  - Same as leave_garrison actions on relieved player's account
+  - Emit GarrisonLeft { relieved: true }
 ```
 
-#### `InGarrison` / `InGarrisonAsKing` → `NotInGarrison` (Transition Cleanup)
+#### `InGarrison` / `LootClaimed` → `Absent` (transition crank)
+
 ```
-Trigger: crank_garrison_cleanup
+Trigger: garrison_cleanup (instruction 282) — permissionless
 Guards:
   - castle.status == Transitioning
+  - castle.garrison_count > 0
+  - garrison.contributor == contributor_account.address()
+  - rent_recipient.address() == contributor.owner  (must be contributor's wallet)
 Actions:
-  - Return units to contributor
-  - Return weapons to contributor
-  - If hero_mint != NULL: Transfer hero NFT back to contributor
-  - Close GarrisonContributionAccount (rent to contributor)
+  - contributor.defensive_unit_* += garrison.units_*
+  - contributor.melee/ranged/siege_weapons += garrison.melee/ranged/siege_weapons
+  - contributor.melee/ranged/siege_weapons += garrison.loot_*  (loot also returned)
+  - If garrison has hero: return to contributor (same slot/wallet logic as leave_garrison)
+  - Close GarrisonContributionAccount (rent → contributor wallet)
   - castle.transition_garrison_cleaned += 1
+  - castle.garrison_count -= 1
+  - Emit CastleTransitionProgress { phase: 0 }
 ```
 
 ---
 
-## 3. Court Position
+## 3. Court Position Lifecycle
 
-### States (Per Player, Global)
+### States
 
 | State | Description |
 |-------|-------------|
-| `NoPosition` | Player holds no court position anywhere |
-| `HoldsPosition` | Player holds one court position at one castle |
+| `Vacant` | CourtPositionAccount does not exist |
+| `Filled` | Account exists; holder receives buffs and daily rewards |
 
-### State Diagram
+### Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Vacant
+
+    Vacant --> Filled : appoint_court (king)<br/>[Citadel, not Contest/Transitioning,<br/>court_count < max_court]
+    Filled --> Vacant : dismiss_court (king)
+    Filled --> Vacant : resign_court (holder)
+    Filled --> Vacant : court_cleanup (crank, Transitioning)
+    Vacant --> [*]
+```
+
+ASCII reference:
 
 ```
-┌────────────────┐  appoint_court   ┌────────────────┐
-│                │ ───────────────> │                │
-│  NoPosition    │                  │ HoldsPosition  │
-│                │ <─────────────── │                │
-└────────────────┘  dismiss_court   └───────┬────────┘
-                    or resign_court         │
-                    or transition           │
-                    cleanup                 │
-                                            │ appoint_court
-                                            │ (different castle)
-                                            │
-                                            ▼
-                                     ┌────────────────┐
-                                     │ HoldsPosition  │
-                                     │ (auto-resigned │
-                                     │  from previous)│
-                                     └────────────────┘
+┌────────┐  appoint_court  ┌────────┐
+│        │ ──────────────> │        │
+│ Vacant │                 │ Filled │
+│        │<── ────────── ──│        │
+└────────┘                 └────────┘
+   (account      dismiss_court (king)
+    created)     resign_court (holder)
+                 court_cleanup (crank, during Transitioning)
 ```
 
 ### Transitions
 
-#### `NoPosition` → `HoldsPosition`
+#### `Vacant` → `Filled`
+
 ```
-Trigger: appoint_court
+Trigger: appoint_court (instruction 272)
 Guards:
-  - Caller is castle.king
-  - castle.status not in [Transitioning, Vacant]
-  - now >= castle.contest_end_at (contest period over)
+  - king_wallet is signer
+  - castle.king == king_account.address()
+  - castle.status != Contest && castle.status != Transitioning
+  - castle.max_court > 0  (Citadel tier)
   - castle.court_count < castle.max_court
-  - castle.chambers_level >= desired_position_count
-  - Position not already filled (CourtPositionAccount doesn't exist)
+  - CourtPositionAccount does not exist (require_empty)
+  - CourtPosition::from_u8(position_type).is_some()  (0–4 valid)
+  - appointee is on castle.team && appointee != king_account
+Guards enforced for security:
+  - king_account re-derived PDA matches [PLAYER_SEED, castle.game_engine, king_wallet]
 Actions:
-  - Create CourtPositionAccount
-  - Unlock EXT_COURT on player if needed
-  - player.court_section.castle = castle.key
-  - player.court_section.position_type = position_type
-  - Apply buffs to player.court_section
+  - Create CourtPositionAccount PDA: [COURT_SEED, castle, position_type]
+  - court.holder = appointee_account.address()
+  - court.appointed_at = now
+  - If appointee has EXT_COURT extension: set court section to (castle, position_type)
   - castle.court_count += 1
   - Emit CourtAppointed
 ```
 
-#### `HoldsPosition` → `HoldsPosition` (Different Castle)
-```
-Trigger: appoint_court (to different castle)
-Guards:
-  - (Same as NoPosition → HoldsPosition)
-  - player.court_section.castle != NULL_PUBKEY (has existing position)
-Actions:
-  - Auto-resign from old position:
-    - Close old CourtPositionAccount (rent to player)
-    - old_castle.court_count -= 1
-    - Emit CourtResigned (old castle)
-  - Apply new position:
-    - (Same as NoPosition → HoldsPosition)
-```
+#### `Filled` → `Vacant` (king dismisses)
 
-#### `HoldsPosition` → `NoPosition` (Dismissed)
 ```
-Trigger: dismiss_court
+Trigger: dismiss_court (instruction 273)
 Guards:
-  - Caller is castle.king
-  - CourtPositionAccount exists for target player
+  - king_wallet is signer
+  - castle.king == king_account.address()
+  - CourtPositionAccount exists (require_initialized)
+  - court.holder == dismissed_account.address()
+  - rent_recipient.address() == dismissed.owner  (dismissed player's wallet, not king's)
 Actions:
-  - Clear player.court_section (castle = NULL, buffs = 0)
-  - Close CourtPositionAccount (rent to holder)
+  - Clear dismissed player's court extension section (if EXT_COURT present)
+  - Close CourtPositionAccount (rent → dismissed player's wallet)
   - castle.court_count -= 1
-  - Emit CourtDismissed
+  - Emit CourtDismissed { resigned: false }
 ```
 
-#### `HoldsPosition` → `NoPosition` (Resigned)
+#### `Filled` → `Vacant` (holder resigns)
+
 ```
-Trigger: resign_court
+Trigger: resign_court (instruction 274)
 Guards:
-  - Caller is the position holder
-  - CourtPositionAccount exists
+  - player_wallet is signer
+  - court.holder == player_account.address()
+  - court.castle == castle_account.address()
 Actions:
-  - (Same as dismissed)
-  - Emit CourtResigned
+  - Clear player's court extension section (if EXT_COURT present)
+  - Close CourtPositionAccount (rent → player wallet)
+  - castle.court_count -= 1
+  - Emit CourtDismissed { resigned: true, dismissed_by: NULL_PUBKEY }
 ```
 
-#### `HoldsPosition` → `NoPosition` (Transition Cleanup)
+#### `Filled` → `Vacant` (transition crank)
+
 ```
-Trigger: crank_court_cleanup
+Trigger: court_cleanup (instruction 283) — permissionless
 Guards:
   - castle.status == Transitioning
+  - CourtPositionAccount exists (require_initialized) at derived PDA
+  - court.holder == holder_account.address()
+  - rent_recipient.address() == holder.owner  (holder's wallet)
 Actions:
-  - For each CourtPositionAccount:
-    - Clear holder's court_section
-    - Close CourtPositionAccount (rent to holder)
-  - castle.transition_court_cleaned = true
+  - Clear holder's court extension section (if EXT_COURT present)
+  - castle.court_count -= 1
+  - If castle.court_count == 0: castle.transition_court_cleaned = true
+  - Close CourtPositionAccount (rent → holder's wallet)
+  - Emit CastleTransitionProgress { phase: 1 }
 ```
 
 ---
 
-## 4. Upgrade System
+## 4. Upgrade Lifecycle
 
-### States (Per Castle)
+### States
 
 | State | Description |
 |-------|-------------|
-| `NoUpgrade` | No upgrade in progress |
-| `Upgrading` | Upgrade in progress, waiting for completion |
+| `Idle` | No upgrade in progress: `castle.upgrade_type == 0` |
+| `InProgress` | Upgrade underway: `castle.upgrade_type ∈ {1..5}`, `upgrade_end_at` set |
 
-### State Diagram
+### Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> InProgress : initiate_upgrade (king)<br/>[upgrade_type 0, burns NOVI<br/>cost = 10000 × 1.5^target_level]
+    InProgress --> Idle : cancel_upgrade (king)<br/>[50% NOVI refund]
+    InProgress --> Idle : complete_upgrade (permissionless)<br/>[now >= upgrade_end_at<br/>level applied to CastleAccount]
+```
+
+ASCII reference:
 
 ```
-┌────────────────┐  initiate_upgrade  ┌────────────────┐
-│                │ ─────────────────> │                │
-│   NoUpgrade    │                    │   Upgrading    │
-│                │ <───────────────── │                │
-└────────────────┘  complete_upgrade  └───────┬────────┘
-       ▲           (time elapsed)             │
-       │                                      │
-       │                                      │ cancel_upgrade
-       │                                      │ (voluntary)
-       │                                      │
-       │                                      │ ownership_change
-       │                                      │ (forced cancel)
-       │                                      │
-       └──────────────────────────────────────┘
+┌──────┐  initiate_upgrade  ┌────────────┐
+│      │ ─────────────────> │            │
+│ Idle │                    │ InProgress │
+│      │<── ────────────────│            │
+└──────┘                    └────────────┘
+                  cancel_upgrade (50% refund)
+                  complete_upgrade (permissionless, after timer)
 ```
 
 ### Transitions
 
-#### `NoUpgrade` → `Upgrading`
+#### `Idle` → `InProgress`
+
 ```
-Trigger: initiate_upgrade
+Trigger: initiate_upgrade (instruction 275)
 Guards:
-  - Caller is castle.king
-  - castle.status not in [Transitioning, Vacant]
-  - castle.upgrade_type == 0 (no upgrade in progress)
-  - target_level <= MAX_LEVEL for upgrade type
-  - current_level < target_level
-  - Player has sufficient resources (cash/NOVI)
+  - king_wallet is signer
+  - castle.king == king_account.address()
+  - castle.upgrade_type == 0  (no upgrade in progress)
+  - upgrade_type ∈ {1,2,3,4,5}
+  - current_level < max_level for upgrade_type
+  - king.locked_novi >= cost  where cost = 10000 × 1.5^target_level
 Actions:
-  - Deduct upgrade cost from king
+  - Burn NOVI from king's locked token account (PlayerAccount PDA is authority)
+  - king.locked_novi -= cost
   - castle.upgrade_type = upgrade_type
-  - castle.upgrade_target_level = target_level
-  - castle.upgrade_end_at = now + calculate_duration(upgrade_type, target_level)
+  - castle.upgrade_target_level = current_level + 1
+  - castle.upgrade_end_at = now + 259200 × target_level
   - Emit CastleUpgradeStarted
 ```
 
-#### `Upgrading` → `NoUpgrade` (Complete)
+#### `InProgress` → `Idle` (cancel)
+
 ```
-Trigger: complete_upgrade (or any interaction after time elapsed)
+Trigger: cancel_upgrade (instruction 276)
+Guards:
+  - king_wallet is signer
+  - castle.king == king_account.address()
+  - castle.upgrade_type != 0
+Actions:
+  - refund = original_cost × 5000 / 10000  (50% of cost at target_level)
+  - Mint refund to king's locked token account (GameEngine PDA signs)
+  - king.locked_novi += refund
+  - castle.upgrade_type = 0
+  - castle.upgrade_target_level = 0
+  - castle.upgrade_end_at = 0
+  - Emit CastleUpgradeCancelled
+```
+
+#### `InProgress` → `Idle` (complete)
+
+```
+Trigger: complete_upgrade (instruction 290) — permissionless
 Guards:
   - castle.upgrade_type != 0
   - now >= castle.upgrade_end_at
 Actions:
-  - Apply upgrade: castle.{upgrade_type}_level = castle.upgrade_target_level
+  - Apply upgrade:
+    Fortification (1): castle.fortification_level = target_level
+    Treasury (2):      castle.treasury_level = target_level
+    Chambers (3):      castle.chambers_level = target_level
+                       castle.max_court = target_level
+    Watchtower (4):    castle.watchtower_level = target_level
+    Armory (5):        castle.armory_level = target_level
   - castle.upgrade_type = 0
   - castle.upgrade_target_level = 0
   - castle.upgrade_end_at = 0
   - Emit CastleUpgradeCompleted
 ```
 
-#### `Upgrading` → `NoUpgrade` (Cancel)
-```
-Trigger: cancel_upgrade
-Guards:
-  - Caller is castle.king
-  - castle.upgrade_type != 0
-Actions:
-  - castle.upgrade_type = 0
-  - castle.upgrade_target_level = 0
-  - castle.upgrade_end_at = 0
-  - NO REFUND
-  - Emit CastleUpgradeCancelled { reason: "voluntary" }
-```
+**Upgrade level caps and bonuses:**
 
-#### `Upgrading` → `NoUpgrade` (Ownership Change)
-```
-Trigger: Combat loss (Contest/Vulnerable → Transitioning)
-Guards:
-  - castle.upgrade_type != 0
-Actions:
-  - castle.upgrade_type = 0
-  - castle.upgrade_target_level = 0
-  - castle.upgrade_end_at = 0
-  - NO REFUND
-  - Emit CastleUpgradeCancelled { reason: "ownership_change" }
-```
+| Upgrade | Max Level | Bonus Formula |
+|---------|-----------|---------------|
+| Fortification | 255 (uncapped) | `fortification_level × 500` bps damage reduction |
+| Treasury | 20 | `treasury_level × 1000` bps reward bonus |
+| Chambers | 5 | `chambers_level` court slots |
+| Watchtower | 15 | `watchtower_level × 1000` bps protection extension |
+| Armory | 255 (uncapped) | `armory_level × 300` bps garrison damage boost |
 
 ---
 
-## 5. Combat (Rally Attack)
+## 5. Transition Cleanup Sequence
 
-### States (Per Rally)
+During Transitioning, three families of cleanup run in **any order** (all permissionless):
 
-```
-Note: Uses existing Rally system states with target_type = 2 (Castle)
-```
+```mermaid
+flowchart TD
+    T["status = Transitioning"]
+    T --> GC["garrison_cleanup × garrison_count<br/>closes GarrisonContributionAccount<br/>returns units/weapons/hero/loot"]
+    T --> CC["court_cleanup × court_count<br/>closes CourtPositionAccount<br/>clears court extension in holder"]
+    T --> RC["rewards_cleanup × N<br/>closes TeamCastleRewardAccount<br/>returns rent (N may be unknown)"]
 
-| State | Description |
-|-------|-------------|
-| `Gathering` | Rally created, accepting participants |
-| `Marching` | Gather complete, moving to target |
-| `Resolved` | Combat complete, processing returns |
+    GC --> GATE{"garrison_count == 0<br/>AND court_count == 0<br/>AND now >= contest_end_at?"}
+    CC --> GATE
+    RC -.->|"not required for finalize"| GATE
 
-### State Diagram (Simplified for Castle Target)
-
-```
-┌────────────────┐  create_rally    ┌────────────────┐
-│                │ ───────────────> │                │
-│  (No Rally)    │                  │   Gathering    │
-│                │                  │                │
-└────────────────┘                  └───────┬────────┘
-                                            │
-                               gather_time  │ join_rally
-                               elapsed      │ (participants add)
-                                            │
-                                            ▼
-                                    ┌────────────────┐
-                                    │                │
-                                    │   Marching     │
-                                    │                │
-                                    └───────┬────────┘
-                                            │
-                               march_time   │
-                               elapsed      │
-                                            │
-                                            ▼
-                                    ┌────────────────┐
-                                    │   execute_     │
-                                    │     rally      │
-                                    └───────┬────────┘
-                                            │
-                        ┌───────────────────┴───────────────────┐
-                        │                                       │
-                        ▼                                       ▼
-               ┌────────────────┐                      ┌────────────────┐
-               │  Attackers     │                      │  Defenders     │
-               │     Win        │                      │     Win        │
-               └───────┬────────┘                      └───────┬────────┘
-                       │                                       │
-                       ▼                                       ▼
-               Castle status =                         Castle status
-               Transitioning                           unchanged
-                       │                                       │
-                       ▼                                       ▼
-               process_return                          process_return
-               (participants                           (participants
-               return home)                            return home,
-                                                       garrison gets loot)
+    GATE -->|"transition_new_king != NULL"| PROT["finalize_transition<br/>status → Protected<br/>new king installed"]
+    GATE -->|"transition_new_king == NULL"| VAC["finalize_transition<br/>status → Vacant"]
 ```
 
-### Combat Resolution Logic
-
 ```
-Trigger: execute_rally
-Guards:
-  - rally.target_type == RALLY_TARGET_CASTLE
-  - now >= rally.arrive_at
-  - castle.status in [Contest, Vulnerable]
-
-Calculate Attack Power:
-  attack_power = sum(participant.units * tier_multiplier)
-               + sum(participant.weapons * weapon_power)
-               + sum(participant.hero_buffs)
-               + sum(research_buffs)
-
-Calculate Defense Power:
-  base_defense = sum(garrison.units * tier_multiplier)
-               + sum(garrison.weapons * weapon_power)
-               + sum(garrison.hero_buffs)
-               + sum(research_buffs)
-
-  fortification_bonus = castle.fortification_level * 500  // +5% per level
-  armory_bonus = castle.armory_level * 300               // +3% per level
-
-  defense_power = base_defense * (10000 + fortification_bonus + armory_bonus) / 10000
-
-Resolution:
-  IF attack_power > defense_power:
-    // Attackers win
-    - Castle status = Transitioning
-    - castle.transition_new_king = rally.creator
-    - Calculate attacker casualties (proportional to defense/attack ratio)
-    - Garrison loses (casualties based on attack/defense ratio)
-    - Emit CastleDefenseFailed
-  ELSE:
-    // Defenders win
-    - Castle status unchanged
-    - Attacker casualties = attacker_loss_on_defeat_bps
-    - Defender casualties minimal
-    - Distribute attacker weapons to garrison as loot:
-      - King gets 15% cut
-      - Remaining 85% distributed by contribution_bps
-    - Emit CastleDefenseSuccess
+Transitioning state
+│
+├── garrison_cleanup × garrison_count
+│     (closes GarrisonContributionAccount, returns assets to each member)
+│     castle.garrison_count decrements to 0
+│
+├── court_cleanup × court_count
+│     (closes CourtPositionAccount, clears court extension in each holder)
+│     castle.court_count decrements to 0
+│
+├── rewards_cleanup × N  (N = number of TeamCastleRewardAccounts)
+│     (closes TeamCastleRewardAccount, returns rent to each member wallet)
+│     castle.transition_rewards_cleaned increments
+│     Note: total count unknown ahead of time; cleanup continues until all known accounts are closed
+│
+└── finalize_transition (after garrison_count==0 && court_count==0 && now>=contest_end_at)
+      → Protected (new king) or Vacant (no king)
 ```
+
+`finalize_transition` does **not** require `transition_rewards_cleaned` to be fully drained — it only checks `garrison_count == 0 && court_count == 0`. Orphaned `TeamCastleRewardAccount` PDAs from prior ownership can be cleaned up after finalization via `rewards_cleanup` if still Transitioning, but once the castle is Protected the accounts can accumulate rewards again for the new team.
 
 ---
 
-## 6. Ownership Transition
+## 6. Reward Claim State
 
-### States
+### Per-member claim tracking
 
-| State | Description |
-|-------|-------------|
-| `GarrisonCleanup` | Returning resources to garrison members |
-| `CourtCleanup` | Clearing court positions |
-| `RewardsCleanup` | Closing team reward accounts |
-| `ReadyToFinalize` | All cleanup complete, awaiting finalization |
-| `Complete` | New king installed or castle vacated |
+```
+TeamCastleRewardAccount:
+  last_claim_at:        i64   // Initialised to `now` on first creation
+  total_claimed_novi:   u64   // Running total
+
+Claimable if: (now - last_claim_at) / 86400 >= 1  (at least 1 day)
+Days awarded: min((now - last_claim_at) / 86400, 7)
+```
 
 ### State Diagram
 
-```
-┌────────────────────┐
-│    Transitioning   │  (castle.status = 4)
-│    (entered from   │
-│    combat loss)    │
-└─────────┬──────────┘
-          │
-          ▼
-┌────────────────────┐  crank_garrison_cleanup (batched)
-│  GarrisonCleanup   │ ─────────────────────────────────┐
-│                    │                                  │
-│  garrison_cleaned  │ <────────────────────────────────┘
-│  < garrison_count  │
-└─────────┬──────────┘
-          │ garrison_cleaned == garrison_count
-          ▼
-┌────────────────────┐  crank_court_cleanup
-│   CourtCleanup     │
-│                    │
-│ court_cleaned=false│
-└─────────┬──────────┘
-          │ court_cleaned == true
-          ▼
-┌────────────────────┐  crank_rewards_cleanup (batched)
-│  RewardsCleanup    │ ─────────────────────────────────┐
-│                    │                                  │
-│  rewards_cleaned   │ <────────────────────────────────┘
-│  < member_count    │
-└─────────┬──────────┘
-          │ rewards_cleaned >= required
-          ▼
-┌────────────────────┐
-│ ReadyToFinalize    │
-│                    │
-│ All cleanup done   │
-└─────────┬──────────┘
-          │ crank_finalize_transition
-          │
-          ├──────────────────────────────┐
-          │                              │
-          ▼                              ▼
-┌────────────────────┐        ┌────────────────────┐
-│  New King Installed│        │   Castle Vacant    │
-│  (Contest status)  │        │  (force_remove)    │
-└────────────────────┘        └────────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> NoAccount : (member never claimed)
+
+    NoAccount --> Initialized : claim_castle_rewards (first call)<br/>last_claim_at = now<br/>Returns Ok (0 rewards)
+    Initialized --> Claimable : ≥ 1 day elapses
+    Claimable --> Initialized : claim_castle_rewards<br/>days = min(elapsed, 7)<br/>Mint NOVI + grant cash<br/>last_claim_at = now
+    Initialized --> Closed : rewards_cleanup (Transitioning crank)<br/>rent returned to member wallet
+    Claimable --> Closed : rewards_cleanup (Transitioning crank)
+    Closed --> [*]
 ```
 
-### Crank Instruction Details
+ASCII reference:
 
-#### `crank_garrison_cleanup`
 ```
-Input: castle, batch of GarrisonContributionAccounts (up to 10)
+          ┌─────────────────────────────────────┐
+          │                                     │
+          │ [No TeamCastleRewardAccount]         │
+          │                                     │
+          └─────────┬───────────────────────────┘
+                    │ claim_castle_rewards (first call)
+                    │
+                    ▼
+          ┌─────────────────────────────────────┐
+          │ TeamCastleRewardAccount created      │
+          │ last_claim_at = now                  │
+          │ Returns Ok() immediately (0 days)    │
+          └─────────┬───────────────────────────┘
+                    │
+                    │  ≥ 1 day later
+                    ▼
+          ┌─────────────────────────────────────┐
+          │ claim_castle_rewards (subsequent)    │
+          │ days = min(elapsed_days, 7)          │
+          │ Mint NOVI, grant cash                │
+          │ last_claim_at = now                  │
+          └─────────┬───────────────────────────┘
+                    │
+                    └─────────────────────> (repeat)
+```
+
+### Claim Guards
+
+```
 Guards:
-  - castle.status == Transitioning
-  - Accounts are valid garrison contributions for this castle
-For Each Contribution:
-  - Return units: contributor.defensive_unit_X += contribution.units_X
-  - Return weapons: contributor.melee_weapons += contribution.melee_weapons
-  - If hero_mint != NULL: TransferV1 hero back to contributor (PDA signs)
-  - Close account (rent to contributor)
-  - castle.transition_garrison_cleaned += 1
+  - player_wallet is signer
+  - player.owner == player_wallet.address()
+  - castle has a king if tier.has_king() (Citadel)
+  - player.team_address() == castle.team  OR  castle.king == player_account (king)
+  - TeamCastleRewardAccount PDA validated
+  - elapsed_days >= 1  (or brand-new account returns Ok without minting)
 ```
 
-#### `crank_court_cleanup`
-```
-Input: castle, all CourtPositionAccounts (up to 3)
-Guards:
-  - castle.status == Transitioning
-  - castle.transition_garrison_cleaned == previous garrison count
-For Each Position:
-  - holder.court_section.castle = NULL_PUBKEY
-  - holder.court_section buffs = 0
-  - Close CourtPositionAccount (rent to holder)
-castle.transition_court_cleaned = true
-castle.court_count = 0
-```
+### Token Routing
 
-#### `crank_rewards_cleanup`
 ```
-Input: castle, batch of TeamCastleRewardAccounts (up to 10)
-Guards:
-  - castle.status == Transitioning
-  - castle.transition_court_cleaned == true
-For Each Account:
-  - Close account (rent to member wallet)
-  - castle.transition_rewards_cleaned += 1
-```
-
-#### `crank_finalize_transition`
-```
-Input: castle, new_king PlayerAccount (if applicable), new_king's KingRegistry
-Guards:
-  - castle.status == Transitioning
-  - castle.transition_garrison_cleaned >= previous garrison count
-  - castle.transition_court_cleaned == true
-  - castle.transition_rewards_cleaned >= required count
-
-If castle.transition_new_king != NULL_PUBKEY:
-  - Remove castle from old king's KingRegistryAccount
-  - castle.king = castle.transition_new_king
-  - castle.team = new_king.team
-  - castle.claimed_at = now
-  - castle.contest_end_at = now + CASTLE_CONTEST_DURATION
-  - castle.status = Contest
-  - castle.garrison_count = 1
-  - castle.max_garrison = GARRISON_CAP_BY_TIER[new_king.subscription_tier]
-  - Create GarrisonContributionAccount for new king (is_king = true)
-  - Add castle to new king's KingRegistryAccount
-Else (force_remove case):
-  - Remove castle from old king's KingRegistryAccount
-  - castle.king = NULL_PUBKEY
-  - castle.team = NULL_PUBKEY
-  - castle.status = Vacant
-  - castle.garrison_count = 0
-
-Clear transition fields:
-  - castle.transition_new_king = NULL_PUBKEY
-  - castle.transition_garrison_cleaned = 0
-  - castle.transition_court_cleaned = false
-  - castle.transition_rewards_cleaned = 0
-
-Emit CastleTransitionComplete
+If castle.tier in {Fortress, Citadel}:
+  → Mint to UserAccount.reserved_token_account  (reserved_novi, withdrawable)
+  → user.reserved_novi += novi_reward
+Else (Outpost, Keep, Stronghold):
+  → Mint to PlayerAccount.locked_token_account  (locked_novi, NOT withdrawable)
+  → player.locked_novi += novi_reward
 ```
 
 ---
 
-## 7. Reward Claims
+## 7. Account Structure (all five accounts)
 
-### States (Per Claimant Role)
+### CastleAccount
 
-| Role | Claim Account | Reward Type |
-|------|---------------|-------------|
-| King | Uses castle.king reference | King rewards (NOVI, cash, materials, gems) |
-| Court | Uses CourtPositionAccount | Court rewards + position bonus |
-| Team Member | TeamCastleRewardAccount | Member rewards |
-| Garrison | GarrisonContributionAccount | Combat loot only |
-
-### State Diagram (Team Member Rewards)
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│                                                                │
-│ ┌────────────────┐  claim_castle_rewards  ┌────────────────┐  │
-│ │ NoRewardAccount│ ──────────────────────>│ RewardAccount  │  │
-│ │   (first claim │                        │    Created     │  │
-│ │    creates it) │                        │                │  │
-│ └────────────────┘                        └───────┬────────┘  │
-│                                                   │           │
-│                                                   │ 24h+      │
-│                                                   │ elapsed   │
-│                                                   ▼           │
-│                                           ┌────────────────┐  │
-│                                           │ Claim Available│  │
-│                        claim_castle_      │                │  │
-│        ┌──────────────   rewards          └───────┬────────┘  │
-│        │                                          │           │
-│        ▼                                          │           │
-│ ┌────────────────┐                                │           │
-│ │ Rewards Minted │                                │           │
-│ │ last_claim=now │ ───────────────────────────────┘           │
-│ └────────────────┘    wait 24h                                │
-│                                                                │
-└────────────────────────────────────────────────────────────────┘
-
-On Castle Transition:
-  - All TeamCastleRewardAccounts closed by crank
-  - No pending rewards saved (claim before transition!)
-```
-
-### Transitions
-
-#### First Claim (No Account Exists)
-```
-Trigger: claim_castle_rewards
-Guards:
-  - player.team == castle.team
-  - castle.status in [Protected, Vulnerable]
-  - TeamCastleRewardAccount does not exist
-Actions:
-  - Create TeamCastleRewardAccount
-  - account.last_claim_at = now
-  - Calculate rewards based on role:
-    - King: king_novi_per_day * tier_mult * treasury_bonus
-    - Court: court_novi_per_day * tier_mult + position_bonus
-    - Member: member_novi_per_day * tier_mult
-  - Mint NOVI to player's token account
-  - Add cash to player.cash_on_hand
-  - Add materials to player
-  - Emit CastleRewardsClaimed
-```
-
-#### Subsequent Claim
-```
-Trigger: claim_castle_rewards
-Guards:
-  - TeamCastleRewardAccount exists
-  - now - account.last_claim_at >= SECONDS_PER_DAY
-  - castle.status in [Protected, Vulnerable]
-Actions:
-  - elapsed_days = (now - last_claim_at) / SECONDS_PER_DAY
-  - Calculate rewards * elapsed_days (capped at 7 days max)
-  - account.last_claim_at = now
-  - account.total_claimed_novi += novi_amount
-  - Mint/transfer rewards
-  - Emit CastleRewardsClaimed
+```rust
+#[repr(C)]
+pub struct CastleAccount {
+    pub account_key: u8,                    // AccountKey::Castle
+    pub game_engine: Address,               // 32 — kingdom scope
+    pub castle_id: u16,
+    pub city_id: u16,
+    pub tier: u8,                           // 0–4
+    pub status: u8,                         // 0=Vacant, 1=Contest, 2=Protected, 3=Vulnerable, 4=Transitioning
+    pub bump: u8,
+    pub _padding1: u8,
+    pub name: [u8; 32],
+    pub name_len: u8,
+    pub _padding2: [u8; 3],
+    pub latitude: i32,                      // degrees × 1_000_000 (fixed-point, NOT f64)
+    pub longitude: i32,                     // degrees × 1_000_000 (fixed-point, NOT f64)
+    pub _padding_loc: [u8; 8],
+    pub king: Address,                      // 32 — PlayerAccount PDA (NULL if vacant)
+    pub team: Address,                      // 32 — Team PDA (NULL if vacant)
+    pub claimed_at: i64,
+    pub contest_end_at: i64,                // end of contest window / protection reference
+    pub garrison_count: u8,
+    pub max_garrison: u8,
+    pub _padding3: [u8; 2],
+    pub court_count: u8,
+    pub max_court: u8,                      // set per tier in create_castle; only meaningful for Citadel
+    pub court_appointment_cooldown: u16,
+    pub fortification_level: u8,
+    pub treasury_level: u8,
+    pub chambers_level: u8,
+    pub watchtower_level: u8,
+    pub armory_level: u8,
+    pub _padding4: [u8; 3],
+    pub upgrade_type: u8,                   // 0=none, 1–5 active
+    pub upgrade_target_level: u8,
+    pub _padding5: [u8; 6],
+    pub upgrade_end_at: i64,
+    pub min_level: u8,
+    pub min_networth_millions: u8,
+    pub min_troops_thousands: u8,
+    pub _padding6: [u8; 5],
+    pub protection_duration: i64,
+    pub tier_multiplier_bps: u16,
+    pub king_loot_cut_bps: u16,
+    pub _padding7: [u8; 4],
+    pub king_novi_per_day: u64,
+    pub king_cash_per_day: u64,
+    pub court_novi_per_day: u64,
+    pub court_cash_per_day: u64,
+    pub member_novi_per_day: u64,
+    pub member_cash_per_day: u64,
+    pub times_claimed: u32,
+    pub successful_defenses: u32,
+    pub failed_defenses: u32,
+    pub _padding8: [u8; 4],
+    pub total_rewards_distributed: u64,
+    pub transition_garrison_cleaned: u8,
+    pub transition_court_cleaned: bool,
+    pub transition_rewards_cleaned: u8,
+    pub _transition_padding: [u8; 5],
+    pub transition_new_king: Address,       // 32 — NULL = route to Vacant on finalize
+    pub _transition_reserved: [u8; 8],
+    pub activates_at: i64,
+    pub _activation_padding: [u8; 8],
+    pub _reserved: [u8; 16],
+}
+// PDA: [b"castle", game_engine, city_id:u16 LE, castle_id:u16 LE]
 ```
 
-#### Garrison Loot Claim
-```
-Trigger: claim_garrison_loot
-Guards:
-  - GarrisonContributionAccount exists
-  - contribution.loot_melee > 0 OR loot_ranged > 0 OR loot_siege > 0
-  - contribution.loot_claimed == false
-Actions:
-  - player.melee_weapons += contribution.loot_melee
-  - player.ranged_weapons += contribution.loot_ranged
-  - player.siege_weapons += contribution.loot_siege
-  - contribution.loot_melee = 0
-  - contribution.loot_ranged = 0
-  - contribution.loot_siege = 0
-  - contribution.loot_claimed = true
-  - Emit GarrisonLootClaimed
-```
+[Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
 
 ---
 
-## 8. Hero Escrow
+### KingRegistryAccount
 
-### States (Per Hero NFT)
+```rust
+#[repr(C)]
+pub struct KingRegistryAccount {
+    pub account_key: u8,                    // AccountKey::KingRegistry
+    pub king: Address,                      // 32 — PlayerAccount PDA
+    pub bump: u8,
+    pub castle_count: u8,
+    pub max_castles: u8,                    // Always 5 (MAX_CASTLES_PER_KING)
+    pub _padding1: [u8; 5],
+    pub castles: [CastleReference; 5],      // 160 bytes (32 each)
+}
 
-| State | Owner | Location |
-|-------|-------|----------|
-| `InWallet` | Player wallet | Player's wallet |
-| `InGarrison` | GarrisonContributionAccount PDA | Castle garrison |
-| `InDungeon` | DungeonRun PDA | Dungeon (cannot garrison) |
-| `InExpedition` | ExpeditionAccount PDA | Expedition (cannot garrison) |
-
-### State Diagram
-
-```
-                      ┌────────────────┐
-         ┌───────────>│                │<───────────┐
-         │            │   InWallet     │            │
-         │            │                │            │
-         │            └───────┬────────┘            │
-         │                    │                     │
-         │    leave_garrison  │ join_garrison       │ claim
-         │    relieve_garrison│ (with hero)         │ (dungeon/expedition)
-         │    transition      │                     │
-         │    cleanup         │                     │
-         │                    ▼                     │
-         │            ┌────────────────┐            │
-         │            │                │            │
-         └────────────│  InGarrison    │            │
-                      │                │            │
-                      └────────────────┘            │
-                                                    │
-                                                    │
-┌────────────────┐        enter        ┌────────────┴───────┐
-│                │ ───────────────────>│                    │
-│   InWallet     │                     │ InDungeon /        │
-│                │ <───────────────────│ InExpedition       │
-└────────────────┘   claim / abort     │                    │
-                                       └────────────────────┘
-
-Note: Hero can only be in ONE escrow at a time.
-Transfer to garrison will FAIL if hero is in dungeon/expedition.
+#[repr(C)]
+pub struct CastleReference {
+    pub city_id: u16,
+    pub castle_id: u16,
+    pub claimed_at: i64,
+    pub tier: u8,
+    pub _padding: [u8; 19],                 // Aligns to 32 bytes
+}
+// PDA: [b"king_registry", king_player_account]
+// Never closed — persists across all ownership changes
 ```
 
-### Transitions
-
-#### `InWallet` → `InGarrison`
-```
-Trigger: join_garrison (with hero_mint provided)
-Guards:
-  - Hero NFT owner == player wallet (verified via MPL Core asset.owner)
-  - Hero not in dungeon (transfer would fail)
-  - Hero not in expedition (transfer would fail)
-Actions:
-  - MPL Core TransferV1: owner → GarrisonContributionAccount PDA
-  - contribution.hero_mint = hero_mint.key
-  - contribution.hero_defense_bps = parse_hero_nft(hero).defense_bps
-  - contribution.hero_weapon_eff_bps = parse_hero_nft(hero).weapon_efficiency_bps
-```
-
-#### `InGarrison` → `InWallet`
-```
-Trigger: leave_garrison / relieve_garrison / crank_garrison_cleanup
-Guards:
-  - contribution.hero_mint != NULL_PUBKEY
-Actions:
-  - MPL Core TransferV1 (signed by GarrisonContributionAccount PDA):
-    - current_owner: GarrisonContributionAccount
-    - new_owner: contributor wallet
-  - (Account closed after transfer)
-```
+[Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
 
 ---
 
-## 9. King Registry
+### CourtPositionAccount
 
-### States (Per King)
-
-| State | Description |
-|-------|-------------|
-| `NoRegistry` | Player has never claimed a castle |
-| `HasRegistry` | KingRegistryAccount exists (persists forever) |
-
-### State Diagram
-
-```
-┌────────────────┐  claim_vacant_castle  ┌────────────────┐
-│                │ ─────────────────────>│                │
-│   NoRegistry   │     (first castle)    │  HasRegistry   │
-│                │                       │  count = 1     │
-└────────────────┘                       └───────┬────────┘
-                                                 │
-                                                 │ claim more
-                                                 │ castles
-                                                 ▼
-                                         ┌────────────────┐
-                                         │  HasRegistry   │
-                                         │  count = N     │
-                                         └───────┬────────┘
-                                                 │
-                                                 │ lose castle
-                                                 │ (transition)
-                                                 ▼
-                                         ┌────────────────┐
-                                         │  HasRegistry   │
-                                         │  count = N-1   │
-                                         │ (never closes) │
-                                         └────────────────┘
+```rust
+#[repr(C)]
+pub struct CourtPositionAccount {
+    pub account_key: u8,                    // AccountKey::CourtPosition
+    pub castle: Address,                    // 32 — Parent castle PDA
+    pub position_type: u8,                  // 0=Advisor, 1=Scholar, 2=Guardian, 3=Treasurer, 4=Marshal
+    pub bump: u8,
+    pub _padding1: [u8; 6],
+    pub holder: Address,                    // 32 — Appointed player's PlayerAccount PDA
+    pub appointed_at: i64,
+}
+// PDA: [b"court", castle, position_type:u8]
+// Created by appoint_court; closed by dismiss_court, resign_court, or court_cleanup
 ```
 
-### Transitions
-
-#### `NoRegistry` → `HasRegistry`
-```
-Trigger: claim_vacant_castle (first castle for this player)
-Guards:
-  - KingRegistryAccount does not exist
-Actions:
-  - Create KingRegistryAccount
-  - registry.king = player.key
-  - registry.castle_count = 1
-  - registry.max_castles = DAO default (5)
-  - registry.castles[0] = CastleReference { city_id, castle_id, claimed_at, tier }
-```
-
-#### `HasRegistry` (Add Castle)
-```
-Trigger: claim_vacant_castle (subsequent)
-Guards:
-  - registry.castle_count < registry.max_castles
-Actions:
-  - registry.castles[registry.castle_count] = CastleReference { ... }
-  - registry.castle_count += 1
-```
-
-#### `HasRegistry` (Remove Castle)
-```
-Trigger: crank_finalize_transition (castle lost)
-Guards:
-  - registry contains this castle
-Actions:
-  - Find castle index in registry.castles
-  - Shift remaining entries left
-  - registry.castle_count -= 1
-  - (Account remains open, never closes)
-```
+[Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
 
 ---
 
-## 10. Composite State Diagram
+### GarrisonContributionAccount
 
-### Full System Overview
+```rust
+#[repr(C)]
+pub struct GarrisonContributionAccount {
+    pub account_key: u8,                    // AccountKey::CastleGarrison
+    pub castle: Address,                    // 32 — Parent castle PDA
+    pub contributor: Address,               // 32 — PlayerAccount PDA
+    pub bump: u8,
+    pub is_king: bool,
+    pub _padding1: [u8; 6],
+    pub contributed_at: i64,
+    pub units_1: u64,
+    pub units_2: u64,
+    pub units_3: u64,
+    pub melee_weapons: u64,
+    pub ranged_weapons: u64,
+    pub siege_weapons: u64,
+    pub hero_mint: Address,                 // 32 — NULL if no hero
+    pub hero_defense_bps: u16,             // Cached: hero stat 2 (DefensePower)
+    pub hero_weapon_eff_bps: u16,          // Cached: hero stat 10 (WeaponEfficiency)
+    pub _padding2: [u8; 4],
+    pub loot_melee: u64,                   // Accumulated from successful defenses
+    pub loot_ranged: u64,
+    pub loot_siege: u64,
+    pub loot_claimed: bool,
+    pub _padding3: [u8; 7],
+}
+// PDA: [b"garrison", castle, contributor_player_account]
+// Created by join_garrison; closed by leave_garrison, relieve_garrison, or garrison_cleanup
+```
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    KING'S CASTLE SYSTEM                                 │
-├─────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────────────────────┐   │
-│  │                              CASTLE LIFECYCLE                                    │   │
-│  │                                                                                  │   │
-│  │   Vacant ──> Contest ──> Protected ──> Vulnerable ──┐                           │   │
-│  │     ▲                        │              │        │                           │   │
-│  │     │                        │              │        │ combat                    │   │
-│  │     │                        │              │        │ loss                      │   │
-│  │     │                        │              ▼        ▼                           │   │
-│  │     │                        │         ┌───────────────┐                         │   │
-│  │     └────────────────────────┴────────>│ Transitioning │                         │   │
-│  │                                        └───────┬───────┘                         │   │
-│  │                                                │                                 │   │
-│  │                      ┌─────────────────────────┼─────────────────────────┐       │   │
-│  │                      │                         │                         │       │   │
-│  │                      ▼                         ▼                         ▼       │   │
-│  │              ┌───────────────┐        ┌───────────────┐        ┌────────────┐   │   │
-│  │              │   Garrison    │        │    Court      │        │  Rewards   │   │   │
-│  │              │   Cleanup     │        │   Cleanup     │        │  Cleanup   │   │   │
-│  │              └───────────────┘        └───────────────┘        └────────────┘   │   │
-│  │                      │                         │                         │       │   │
-│  │                      └─────────────────────────┴─────────────────────────┘       │   │
-│  │                                                │                                 │   │
-│  │                                                ▼                                 │   │
-│  │                                         ┌─────────────┐                          │   │
-│  │                                         │  Finalize   │                          │   │
-│  │                                         └──────┬──────┘                          │   │
-│  │                                                │                                 │   │
-│  │                                    ┌───────────┴───────────┐                     │   │
-│  │                                    ▼                       ▼                     │   │
-│  │                             New King (Contest)         Vacant                    │   │
-│  │                                                                                  │   │
-│  └─────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                         │
-│  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐                │
-│  │     GARRISON       │  │       COURT        │  │      UPGRADES      │                │
-│  │                    │  │                    │  │                    │                │
-│  │  NotIn ─> In ─> Out│  │ None ─> Holds ─>   │  │ None ─> Upgrading  │                │
-│  │         ▲    │     │  │         None       │  │         ─> Complete│                │
-│  │   King  │    │     │  │ (global: one only) │  │      or Cancel     │                │
-│  │   ──────┘    │     │  │                    │  │                    │                │
-│  │              ▼     │  │                    │  │                    │                │
-│  │          Relieved  │  │                    │  │                    │                │
-│  └────────────────────┘  └────────────────────┘  └────────────────────┘                │
-│                                                                                         │
-│  ┌────────────────────┐  ┌────────────────────┐  ┌────────────────────┐                │
-│  │    HERO ESCROW     │  │   KING REGISTRY    │  │      REWARDS       │                │
-│  │                    │  │                    │  │                    │                │
-│  │ Wallet ─> Garrison │  │ None ─> Has        │  │ NoAccount ─> Has   │                │
-│  │    ▲         │     │  │ (never closes)     │  │ (24h cooldown)     │                │
-│  │    └─────────┘     │  │ count: 0..max      │  │ + Loot claims      │                │
-│  │                    │  │                    │  │                    │                │
-│  └────────────────────┘  └────────────────────┘  └────────────────────┘                │
-│                                                                                         │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
-```
+[Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
 
 ---
 
-## Appendix: State Invariants
+### TeamCastleRewardAccount
 
-### Castle Invariants
-```
-1. status == Vacant ⟹ king == NULL_PUBKEY ∧ team == NULL_PUBKEY ∧ garrison_count == 0
-2. status == Contest ⟹ king != NULL_PUBKEY ∧ garrison_count >= 1
-3. status == Protected ⟹ now < contest_end_at + protection_duration
-4. status == Transitioning ⟹ transition_new_king is set (or NULL for force_remove)
-5. garrison_count <= max_garrison <= 25
-6. court_count <= max_court <= chambers_level <= 3
-7. upgrade_type != 0 ⟹ upgrade_end_at > 0
-```
-
-### Garrison Invariants
-```
-1. GarrisonContributionAccount exists ⟹ garrison_count > 0
-2. is_king == true ⟹ contributor == castle.king
-3. hero_mint != NULL ⟹ hero NFT owner == GarrisonContributionAccount PDA
-4. sum(all contribution.units_X) = total garrison units
+```rust
+#[repr(C)]
+pub struct TeamCastleRewardAccount {
+    pub account_key: u8,                    // AccountKey::TeamCastleReward
+    pub castle: Address,                    // 32 — Parent castle PDA
+    pub member: Address,                    // 32 — Member's PlayerAccount PDA
+    pub bump: u8,
+    pub _padding1: [u8; 7],
+    pub last_claim_at: i64,                // Set to `now` on first creation (prevents retroactive rewards)
+    pub total_claimed_novi: u64,
+}
+// PDA: [b"team_castle_reward", castle, member_player_account]
+// Created lazily by claim_castle_rewards; closed by rewards_cleanup during Transitioning
 ```
 
-### Court Invariants
-```
-1. CourtPositionAccount exists ⟹ castle.court_count > 0
-2. holder.court_section.castle == CourtPositionAccount.castle
-3. One player can hold at most ONE CourtPositionAccount globally
-4. court_count <= chambers_level
-```
-
-### King Registry Invariants
-```
-1. KingRegistryAccount.king == owner wallet
-2. castle_count == len(castles where city_id/castle_id != 0)
-3. castle_count <= max_castles
-4. For each castle in registry: castle.king == registry.king
-5. Account never closes (castle_count can be 0)
-```
-
-### Hero Escrow Invariants
-```
-1. Hero can only be owned by ONE PDA at a time
-2. hero_mint in GarrisonContribution ⟹ NFT.owner == GarrisonContribution PDA
-3. Hero return must happen before account closure
-```
+[Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
 
 ---
 
-## Appendix: Error Conditions
+## 8. Invariants
 
-| Error | Condition | State Machine Violation |
-|-------|-----------|-------------------------|
-| `CastleNotVacant` | Claiming non-vacant castle | Vacant guard failed |
-| `CastleInContest` | Action requiring post-contest | Contest period check |
-| `CastleProtected` | Attacking protected castle | Protected status guard |
-| `CastleTransitioning` | Action during transition | Transitioning status guard |
-| `GarrisonFull` | Joining full garrison | garrison_count >= max_garrison |
-| `NotInGarrison` | Leaving when not in | No GarrisonContributionAccount |
-| `KingCannotLeave` | King trying to leave garrison | is_king == true guard |
-| `AlreadyHasCourtPosition` | Implicit - auto-resigns | N/A (handled automatically) |
-| `MaxCastlesReached` | Claiming too many castles | registry.castle_count >= max |
-| `UpgradeInProgress` | Starting second upgrade | upgrade_type != 0 |
-| `ClaimCooldown` | Claiming before 24h | last_claim_at + 24h > now |
-| `TransitionNotComplete` | Finalizing early | Cleanup counts not met |
-| `HeroAlreadyEscrowed` | Garrisoning escrowed hero | MPL Core transfer fails |
+The following invariants are enforced by program logic and should hold at all times:
+
+```
+ 1. castle.status ∈ {0, 1, 2, 3, 4}
+
+ 2. castle.king == NULL_PUBKEY  ↔  castle.status == Vacant
+    Exception: force_remove_king sets king=NULL but status=Transitioning (transient state)
+
+ 3. castle.garrison_count <= castle.max_garrison
+
+ 4. castle.court_count <= castle.max_court
+
+ 5. castle.upgrade_type == 0  XOR  castle.upgrade_end_at > 0
+
+ 6. A GarrisonContributionAccount at [GARRISON_SEED, castle, contributor]
+    exists  ↔  castle.garrison_count accounts listed (tracked via PDA existence,
+    not an array — count is an approximation during cleanup)
+
+ 7. A CourtPositionAccount at [COURT_SEED, castle, position_type]
+    exists  ↔  position_type slot is filled
+
+ 8. KingRegistryAccount.castle_count <= KingRegistryAccount.max_castles (5)
+
+ 9. finalize_transition can only succeed when garrison_count == 0 && court_count == 0
+    (prevents orphaned rent-bearing PDAs)
+
+10. TeamCastleRewardAccount.last_claim_at is always initialised to `now` at creation,
+    never to castle.claimed_at — this prevents retroactive reward collection by
+    late-joining team members
+
+11. Upgrade levels (fortification, treasury, chambers, watchtower, armory) survive
+    ownership transitions — they are properties of the castle, not the king
+
+12. castle.latitude and castle.longitude are i32 fixed-point (degrees × 1_000_000),
+    not f64 — the attack range check converts to float before comparing against
+    CASTLE_ATTACK_RANGE_METERS = 50.0
+```
+
+**Reward constants:** `CastleAccount` reward fields are initialized by `create_castle` from `constants.rs` — `KING_CASH_PER_DAY = 10_000_000`, `COURT_CASH_PER_DAY = 1_000_000`, `MEMBER_CASH_PER_DAY = 500_000`. `CastleConfig::default()` in `game_engine.rs` is the DAO-governed template for new kingdoms and is **not** what individual castle accounts receive at creation. Per-castle rates are stored on `CastleAccount` fields and can be updated via `update_castle_config`.

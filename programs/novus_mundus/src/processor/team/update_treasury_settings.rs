@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, TeamAccount, TeamMemberSlot, require_extension, EXT_TEAM, NULL_PUBKEY},
     validation::{require_signer, require_writable, require_owner},
+    utils::{read_u8, read_u16, read_u64},
     emit,
     events::TreasurySettingsUpdated,
 };
@@ -40,28 +40,24 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 75 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let slot_index = read_u16(instruction_data, 8, "slot_index")?;
 
     // Parse instant limits array
     let mut instant_limits = [0u64; 4];
     for i in 0..4 {
         let start = 10 + i * 8;
-        instant_limits[i] = u64::from_le_bytes(instruction_data[start..start + 8].try_into().unwrap());
+        instant_limits[i] = read_u64(instruction_data, start, "instant_limits")?;
     }
 
     // Parse daily caps array
     let mut daily_caps = [0u64; 4];
     for i in 0..4 {
         let start = 42 + i * 8;
-        daily_caps[i] = u64::from_le_bytes(instruction_data[start..start + 8].try_into().unwrap());
+        daily_caps[i] = read_u64(instruction_data, start, "daily_caps")?;
     }
 
-    let cooldown_hours = instruction_data[74];
+    let cooldown_hours = read_u8(instruction_data, 74, "cooldown_hours")?;
 
     // Validate cooldown hours
     if cooldown_hours < TeamAccount::MIN_COOLDOWN_HOURS || cooldown_hours > TeamAccount::MAX_COOLDOWN_HOURS {
@@ -70,14 +66,12 @@ pub fn process(
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         leader_account,
         leader_slot_account,
         team_account,
         leader_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

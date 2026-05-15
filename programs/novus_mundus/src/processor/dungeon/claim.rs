@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -37,17 +36,15 @@ pub fn process(
     _data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts (minimum 7 with mpl_core_program, optional leaderboard at index 7)
-    if accounts.len() < 7 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let dungeon_run_account = &accounts[2];
-    let hero_mint = &accounts[3];
-    let hero_collection = &accounts[4];
-    let system_program = &accounts[5];
-    let p_core_program = &accounts[6];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        dungeon_run_account,
+        hero_mint,
+        hero_collection,
+        system_program,
+        p_core_program,
+    ]);
     let leaderboard_account = accounts.get(7);
 
     // 2. Validate signer

@@ -10,7 +10,7 @@ use crate::{
     constants::USER_SEED,
     state::UserAccount,
     validation::{require_signer, require_writable, require_key_match, derive_pda},
-    token_helpers::get_or_create_associated_token_account,
+    token_helpers::create_associated_token_account,
     emit,
     events::UserCreated,
 };
@@ -58,7 +58,7 @@ pub fn process(
     _data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         user,
         owner,
         user_token_account,
@@ -67,9 +67,7 @@ pub fn process(
         system_program,
         token_program,
         _associated_token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -150,7 +148,7 @@ pub fn process(
     }
 
     // Create or verify user's Associated Token Account
-    get_or_create_associated_token_account(
+    create_associated_token_account(
         owner,                      // Payer (owner pays for creation)
         user_token_account,         // The ATA to create
         user,                       // ATA owner (user PDA)

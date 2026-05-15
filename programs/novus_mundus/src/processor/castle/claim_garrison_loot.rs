@@ -39,14 +39,12 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_wallet = &accounts[0];
-    let player_account = &accounts[1];
-    let castle_account = &accounts[2];
-    let garrison_account = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        player_wallet,
+        player_account,
+        castle_account,
+        garrison_account,
+    ]);
 
     // Verify signer
     if !player_wallet.is_signer() {

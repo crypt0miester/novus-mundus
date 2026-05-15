@@ -59,15 +59,13 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let _crank = &accounts[0];
-    let castle_account = &accounts[1];
-    let contributor_account = &accounts[2];
-    let garrison_account = &accounts[3];
-    let rent_recipient = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        _crank,
+        castle_account,
+        contributor_account,
+        garrison_account,
+        rent_recipient,
+    ]);
 
     // Load castle
     let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;

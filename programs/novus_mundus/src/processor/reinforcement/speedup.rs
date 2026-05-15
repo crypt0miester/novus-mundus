@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -9,6 +8,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{ReinforcementAccount, ReinforcementStatus, PlayerAccount, GameEngine},
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner},
     emit,
     events::reinforcement::ReinforcementSpeedup,
@@ -41,21 +41,15 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         sender_owner,
         sender_player,
         reinforcement_account,
         game_engine,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let speedup_tier = instruction_data[0];
+    let speedup_tier = read_u8(instruction_data, 0, "reinforcement_speedup.speedup_tier")?;
     if speedup_tier < SPEEDUP_TIER_1 || speedup_tier > SPEEDUP_TIER_2 {
         return Err(GameError::InvalidParameter.into());
     }

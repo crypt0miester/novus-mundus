@@ -1,8 +1,16 @@
-# Player System State Machine
+# Player State Machine
 
 ## Overview
 
-The Player system manages core player state, progression, and optional extension sections that unlock as players advance.
+`PlayerAccount` (type alias `PlayerCore`) is the central on-chain record for every kingdom citizen. It is a variable-length `#[repr(C)]` struct built on Pinocchio (`#![no_std]`), beginning with a fixed `PlayerCore` section and growing by appending extension sections on demand.
+
+**PDA:** `[b"player", game_engine_pubkey, owner_pubkey]`
+
+**Program ID:** `J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V`
+
+**Instruction discriminants** are 2-byte u16 little-endian values in the first two bytes of every instruction.
+
+[Source: state/player.rs](../../programs/novus_mundus/src/state/player.rs)
 
 ---
 
@@ -12,53 +20,72 @@ The Player system manages core player state, progression, and optional extension
 
 | State | Description |
 |-------|-------------|
-| `NonExistent` | No PlayerAccount for this wallet |
-| `Active` | PlayerAccount exists and is operational |
-| `Flagged` | Account flagged by governance (restricted) |
+| `NonExistent` | No `PlayerAccount` for this (game_engine, owner) pair |
+| `Active` | Account exists and all instructions are available |
+| `Flagged` | `flagged_by_governance == true`; certain actions restricted |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> NonExistent
+    NonExistent --> Active : init_player (disc 1)<br/>[user exists, registration open,<br/>spawn valid, cell unoccupied]
+    Active --> Flagged : governance flag
+    Flagged --> Active : governance unflag
 ```
-┌────────────────┐  create_player   ┌────────────────┐
-│                │ ───────────────> │                │
-│  NonExistent   │                  │     Active     │
-│                │                  │                │
-└────────────────┘                  └───────┬────────┘
-                                            │
-                                            │ flag_by_governance
-                                            ▼
-                                    ┌────────────────┐
-                                    │                │
-                                    │    Flagged     │
-                                    │                │
-                                    └───────┬────────┘
-                                            │
-                                            │ unflag_by_governance
-                                            ▼
-                                    ┌────────────────┐
-                                    │     Active     │
-                                    └────────────────┘
+
+```
+┌────────────────┐  init_player (1)  ┌────────────────┐
+│                │ ────────────────> │                │
+│  NonExistent   │                   │     Active     │
+│                │                   │                │
+└────────────────┘                   └───────┬────────┘
+                                             │
+                                             │ governance flag
+                                             ▼
+                                     ┌────────────────┐
+                                     │    Flagged     │
+                                     │  (bool=true)   │
+                                     └───────┬────────┘
+                                             │ governance unflag
+                                             ▼
+                                     ┌────────────────┐
+                                     │     Active     │
+                                     └────────────────┘
 ```
 
 ### Transitions
 
 #### `NonExistent` → `Active`
 ```
-Trigger: create_player (via game_engine initialization)
+Trigger:  init_player (discriminant 1)
 Guards:
-  - PlayerAccount PDA does not exist
-  - Sufficient lamports for rent
+  - UserAccount PDA must already exist (GameError::UserAccountNotCreated otherwise)
+  - Kingdom registration must be open
+  - max_players limit not exceeded (0 = unlimited)
+  - Spawn coordinates within city radius
+  - Spawn cell terrain is passable
+  - Spawn location cell is unoccupied
 Actions:
-  - Create PlayerAccount PDA: [PLAYER_SEED, owner_pubkey]
-  - Initialize core fields with defaults
-  - Set starting city, coordinates
-  - Grant starter resources:
-    - 10 defensive_unit_1, 10 operative_unit_1
-    - 3 melee, 2 ranged, 2 armor
-    - 1000 cash, 100 locked_novi
-  - Set new_player_protection_until = now + protection_duration
+  - Create PlayerAccount PDA: [b"player", game_engine, owner]
+  - Initialize via PlayerCore::init_with_city — starter resources:
+      locked_novi            = 1,000,000
+      defensive_unit_1/2/3   = 10,000 / 4,000 / 2,000
+      operative_unit_1/2/3   = 10,000 / 4,000 / 1,000
+      melee_weapons          = 8,000
+      ranged_weapons         = 4,000
+      siege_weapons          = 2,000
+      armor_pieces           = 8,000
+      produce                = 50,000
+      vehicles               = 500
+      cash_on_hand           = 130,000,000
+      gems                   = 10,000
+      level                  = 1
+      encounter_stamina      = 100
+  - Mint 1,000,000 NOVI tokens to player ATA
+  - Set new_player_protection_until = now + gameplay_config.new_player_protection_duration
   - Increment game_engine.total_players
-  - Emit PlayerCreated
+  - Emit PlayerJoinedKingdom
 ```
 
 ---
@@ -69,402 +96,463 @@ Actions:
 
 | State | Description |
 |-------|-------------|
-| `Locked` | Extension not unlocked |
-| `Unlocked` | Extension section available |
+| `Locked` | Extension bit is 0; section memory does not exist |
+| `Unlocked` | Extension bit is 1; section memory is initialized and accessible |
 
-### Extension Flags
+### Extension Flags (from `state/player.rs`)
 
 ```rust
-pub const EXT_RESEARCH: u32   = 1 << 0;  // 0x0001
-pub const EXT_HEROES: u32     = 1 << 1;  // 0x0002
-pub const EXT_INVENTORY: u32  = 1 << 2;  // 0x0004
-pub const EXT_RALLY: u32      = 1 << 3;  // 0x0008
-pub const EXT_TEAM: u32       = 1 << 4;  // 0x0010
-pub const EXT_COSMETICS: u32  = 1 << 5;  // 0x0020
-pub const EXT_COURT: u32      = 1 << 6;  // 0x0040 (Kings Castle)
+pub const EXT_RESEARCH: u32   = 1 << 0;  // 0x01
+pub const EXT_HEROES: u32     = 1 << 1;  // 0x02
+pub const EXT_INVENTORY: u32  = 1 << 2;  // 0x04
+pub const EXT_RALLY: u32      = 1 << 3;  // 0x08
+pub const EXT_TEAM: u32       = 1 << 4;  // 0x10
+pub const EXT_COSMETICS: u32  = 1 << 5;  // 0x20
+pub const EXT_COURT: u32      = 1 << 6;  // 0x40
 ```
 
-### Unlock Chain (Sequential)
+### Unlock Chain and Account Growth
+
+Sections are allocated in this fixed order. Each unlock requires the prior one:
+
+```mermaid
+stateDiagram-v2
+    [*] --> "CORE 528B"
+    "CORE 528B" --> "RESEARCH 576B" : create_progress (disc 121)
+    "RESEARCH 576B" --> "INVENTORY 720B" : unlock_extension_if_eligible<br/>[prereq: EXT_RESEARCH]
+    "INVENTORY 720B" --> "TEAM 832B" : unlock_extension_if_eligible<br/>[prereq: EXT_INVENTORY]
+    "TEAM 832B" --> "RALLY 912B" : unlock_extension_if_eligible<br/>[prereq: EXT_TEAM]
+    "RALLY 912B" --> "HEROES 1080B" : unlock_extension_if_eligible<br/>[prereq: EXT_RALLY]
+    "HEROES 1080B" --> "COSMETICS 1160B" : unlock_extension_if_eligible<br/>[prereq: EXT_HEROES]
+    "COSMETICS 1160B" --> "COURT 1208B" : unlock_extension_if_eligible<br/>[prereq: EXT_COSMETICS]
+```
 
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│          │    │          │    │          │    │          │    │          │    │          │
-│   CORE   │───>│ RESEARCH │───>│  HEROES  │───>│INVENTORY │───>│  RALLY   │───>│   TEAM   │───>COSMETICS
-│  1016B   │    │   +96B   │    │  +130B   │    │  +424B   │    │   +80B   │    │   +40B   │    +80B
-│          │    │          │    │          │    │          │    │          │    │          │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-                     │               │               │               │               │
-                     ▼               ▼               ▼               ▼               ▼
-               Research tree   Hero slots    Shop/inventory   Rally caps     Team membership
-               Daily rewards   Meditation    Materials        Stats          Cosmetics
+PlayerCore (528B, always present)
+  └─ RESEARCH  (+48B)  — prereq: none           → total 576B
+       └─ INVENTORY (+144B) — prereq: EXT_RESEARCH  → total 720B
+            └─ TEAM     (+112B) — prereq: EXT_INVENTORY → total 832B
+                 └─ RALLY    (+80B)  — prereq: EXT_TEAM     → total 912B
+                      └─ HEROES   (+168B) — prereq: EXT_RALLY    → total 1,080B
+                           └─ COSMETICS (+80B) — prereq: EXT_HEROES  → total 1,160B
+                                └─ COURT    (+48B)  — prereq: EXT_COSMETICS → total 1,208B (MAX_SIZE)
 ```
 
-### Transitions
-
-#### `Locked` → `Unlocked`
+### Transition: `Locked` → `Unlocked`
 ```
-Trigger: unlock_extension (implicit in various instructions)
+Trigger:  unlock_extension_if_eligible (called inside various instructions)
 Guards:
-  - Prerequisite extension already unlocked:
-    - RESEARCH: None (first unlock)
-    - HEROES: RESEARCH
-    - INVENTORY: HEROES
-    - RALLY: INVENTORY
-    - TEAM: RALLY
-    - COSMETICS: TEAM
+  - prerequisite_for_extension(ext) is already set in player.extensions
+  - extension bit is not already set
 Actions:
-  - Calculate new account size
-  - Transfer additional lamports from payer for rent
-  - Resize account via account.resize(new_size)
-  - Set extension bit: player.extensions |= extension_flag
-  - Initialize section with defaults
+  - new_size = size_for_extensions(player.extensions | ext)
+  - Transfer additional rent lamports from payer
+  - account.resize(new_size)
+  - Zero-initialize section bytes via write_section_init
+  - player.extensions |= ext
 ```
 
 ---
 
-## 3. Subscription System
+## 3. Subscription State
 
 ### States
 
 | State | Description |
 |-------|-------------|
-| `Free` | No active subscription (tier 0) |
-| `Active` | Paid subscription active |
-| `Expired` | Subscription end time passed |
+| `Free` | `subscription_tier == 0` OR `subscription_end <= now` |
+| `Active(tier)` | `subscription_tier ∈ {1,2,3}` AND `subscription_end > now` |
+| `Expired` | `subscription_tier > 0` AND `subscription_end <= now` |
 
-### Tiers
-
-| Tier | Name | Benefits |
-|------|------|----------|
-| 0 | Rookie | Base rates |
-| 1 | Expert | +25% rewards |
-| 2 | Epic | +50% rewards |
-| 3 | Legendary | +100% rewards |
+`get_effective_tier(now)` returns `subscription_tier.min(3)` if active, or `0` otherwise.
 
 ### State Diagram
 
-```
-┌────────────────┐  purchase    ┌────────────────┐
-│                │ ───────────> │                │
-│      Free      │              │     Active     │
-│   (tier = 0)   │              │  (tier = 1-3)  │
-└────────────────┘              └───────┬────────┘
-       ▲                                │
-       │                                │ subscription_end <= now
-       │                                ▼
-       │                        ┌────────────────┐
-       │                        │                │
-       │ downgrade_expired      │    Expired     │
-       └────────────────────────│                │
-                                └────────────────┘
-                                        │
-                                        │ purchase (renew)
-                                        ▼
-                                ┌────────────────┐
-                                │     Active     │
-                                └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Free
+    Free --> "Active(1-3)" : purchase_subscription (disc 100)
+    "Active(1-3)" --> Expired : now >= subscription_end
+    Expired --> "Active(1-3)" : purchase_subscription (renew)
+    Expired --> Free : downgrade_expired (disc 102)
 ```
 
-### Transitions
+```
+┌──────────┐  purchase_subscription (100)  ┌────────────────┐
+│  Free    │ ─────────────────────────────> │  Active(1-3)  │
+│ (tier=0) │                                │               │
+└──────────┘                                └───────┬───────┘
+     ▲                                              │
+     │                                              │ now >= subscription_end
+     │ downgrade_expired (102)                      ▼
+     │                                      ┌───────────────┐
+     └──────────────────────────────────────│   Expired     │
+                                            └───────┬───────┘
+                                                    │ purchase (renew)
+                                                    ▼
+                                            ┌───────────────┐
+                                            │  Active(1-3)  │
+                                            └───────────────┘
+```
 
 #### `Free` → `Active`
 ```
-Trigger: purchase_subscription
-Guards:
-  - Payment provided (SOL/USDC)
-  - Valid tier (1-3)
+Trigger:  purchase_subscription (discriminant 100)
 Actions:
-  - player.subscription_tier = tier
-  - player.subscription_end = now + duration_days * SECONDS_PER_DAY
-  - Transfer payment to treasury
+  - player.subscription_tier = tier (1–3)
+  - player.subscription_end  = now + duration
+  - update_max_stamina_for_tier(player)
   - Emit SubscriptionPurchased
-```
-
-#### `Active` → `Expired`
-```
-Trigger: Time passage (checked on any interaction)
-Guards:
-  - now >= player.subscription_end
-Actions:
-  - get_effective_tier() returns 0
-  - Benefits revoked until renewal
 ```
 
 #### `Expired` → `Free`
 ```
-Trigger: downgrade_expired instruction
-Guards:
-  - now >= player.subscription_end
+Trigger:  downgrade_expired (discriminant 102)
 Actions:
   - player.subscription_tier = 0
+  - update_max_stamina_for_tier(player)  // cap stamina to tier-0 max (100)
   - Emit SubscriptionExpired
 ```
 
 ---
 
-## 4. Protection System
+## 4. New-Player Protection
 
-### States
+`new_player_protection_until` is a Unix timestamp. The program checks this field before allowing PvP attacks on the player. No explicit state change instruction exists — the transition is purely time-based.
 
-| State | Description |
-|-------|-------------|
-| `Protected` | New player protection active |
-| `Vulnerable` | Protection expired |
-
-### State Diagram
-
-```
-┌────────────────┐  time elapsed   ┌────────────────┐
-│                │ ══════════════> │                │
-│   Protected    │                 │   Vulnerable   │
-│                │                 │                │
-└────────────────┘                 └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Protected : init_player sets new_player_protection_until
+    Protected --> Vulnerable : now >= new_player_protection_until<br/>(time-based, no instruction needed)
 ```
 
-### Transitions
-
-#### `Protected` → `Vulnerable`
 ```
-Trigger: Time passage (automatic)
-Guards:
-  - now >= player.new_player_protection_until
-Actions:
-  - Player can now be attacked
-  - No explicit state change (computed from timestamp)
+┌───────────┐  now >= new_player_protection_until  ┌─────────────┐
+│ Protected │ ────────────────────────────────────> │ Vulnerable  │
+└───────────┘                                       └─────────────┘
 ```
 
 ---
 
 ## 5. Travel State
 
-### States
+`travel_type: u8` encodes the current travel mode:
 
-| State | Value | Description |
+| Value | State | Description |
 |-------|-------|-------------|
-| `Stationary` | 0 | Not traveling |
-| `Intracity` | 1 | Moving within city |
-| `Intercity` | 2 | Moving between cities |
+| 0 | `Stationary` | Not traveling; `arrival_time == -1` |
+| 1 | `Intracity` | Moving within the same city |
+| 2 | `Intercity` | Moving between cities |
 
-### State Diagram
-
-```
-                    ┌─────────────────────────────────────────┐
-                    │                                         │
-                    ▼                                         │
-┌────────────────┐  intracity_start   ┌────────────────┐     │
-│                │ ─────────────────> │                │     │
-│   Stationary   │                    │   Intracity    │     │
-│  (travel_type  │ <───────────────── │  (travel_type  │     │
-│     = 0)       │  intracity_complete│     = 1)       │     │
-└───────┬────────┘  or cancel         └────────────────┘     │
-        │                                                     │
-        │ intercity_start                                     │
-        ▼                                                     │
-┌────────────────┐                                           │
-│                │                                           │
-│   Intercity    │ ───────────────────────────────────────────┘
-│  (travel_type  │  intercity_complete or cancel
-│     = 2)       │
-└────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Stationary
+    Stationary --> Intracity : intracity_start (disc 40)
+    Intracity --> Stationary : intracity_complete (disc 41)<br/>or intracity_cancel (disc 42)
+    Stationary --> Intercity : intercity_start (disc 30)
+    Intercity --> Stationary : intercity_complete (disc 31)<br/>or intercity_cancel (disc 32)
 ```
 
-### Transitions
+```
+                    ┌──────────────────────────────────┐
+                    │                                  │
+                    ▼                                  │
+┌────────────┐  intracity_start (40)  ┌─────────────┐ │
+│ Stationary │ ─────────────────────> │  Intracity  │ │
+│            │ <───────────────────── │ (type=1)    │ │
+└────┬───────┘  intracity_complete/   └─────────────┘ │
+     │          cancel (41/42)                        │
+     │                                                │
+     │ intercity_start (30)                           │
+     ▼                                                │
+┌────────────┐  intercity_complete/cancel (31/32)     │
+│ Intercity  │ ──────────────────────────────────────┘
+│ (type=2)   │
+└────────────┘
+```
 
-See [travel.md](./travel.md) for detailed travel state machine.
+See [travel.md](./travel.md) for full travel state machine.
 
 ---
 
 ## 6. Meditation State
 
-### States
+Tracked via `HeroesSection` fields (requires `EXT_HEROES`):
 
-| State | Description |
-|-------|-------------|
-| `NotMeditating` | No hero meditating |
-| `Meditating` | Hero in meditation |
+| Field | Idle | Meditating |
+|-------|------|-----------|
+| `meditating_hero_slot` | 255 | 0–2 |
+| `meditation_started_at` | 0 | Unix timestamp |
 
-### State Diagram
-
-```
-┌────────────────┐  start_meditation  ┌────────────────┐
-│                │ ─────────────────> │                │
-│ NotMeditating  │                    │   Meditating   │
-│ (slot = 255)   │ <───────────────── │ (slot = 0-2)   │
-└────────────────┘  claim_meditation  └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> NotMeditating : EXT_HEROES unlocked (slot = 255)
+    NotMeditating --> Meditating : start_meditation (disc 137)<br/>[slot < 3, hero present, none meditating]
+    Meditating --> NotMeditating : claim_meditation (disc 138)<br/>[grants hero XP for elapsed time]
 ```
 
-### Transitions
+```
+┌───────────────┐  start_meditation (137)  ┌─────────────────┐
+│ NotMeditating │ ────────────────────────> │   Meditating    │
+│ (slot = 255)  │ <──────────────────────── │ (slot = 0–2)    │
+└───────────────┘  claim_meditation (138)   └─────────────────┘
+```
 
 #### `NotMeditating` → `Meditating`
 ```
-Trigger: start_meditation
+Trigger:  start_meditation (discriminant 137)
 Guards:
+  - EXT_HEROES unlocked
   - hero_slot < 3
   - active_heroes[slot] != NULL_PUBKEY
-  - Player in correct city (meditation_city_id from HeroTemplate)
-  - Sanctuary building active in estate
+  - No hero currently meditating
 Actions:
-  - player.meditating_hero_slot = slot
-  - player.meditation_started_at = now
-  - Emit MeditationStarted
+  - heroes.meditating_hero_slot = slot
+  - heroes.meditation_started_at = now
 ```
 
 #### `Meditating` → `NotMeditating`
 ```
-Trigger: claim_meditation
-Guards:
-  - player.meditating_hero_slot != 255
-  - player.meditation_started_at > 0
+Trigger:  claim_meditation (discriminant 138)
 Actions:
-  - elapsed = min(now - meditation_started_at, max_duration)
-  - Calculate blessed_hero_bonus
-  - player.meditating_hero_slot = 255
-  - player.meditation_started_at = 0
-  - Apply bonus buffs
-  - Emit MeditationCompleted
+  - elapsed = min(now - meditation_started_at, max_duration_seconds)
+  - Grant hero XP proportional to elapsed
+  - heroes.meditating_hero_slot = 255
+  - heroes.meditation_started_at = 0
 ```
 
 ---
 
-## 7. Reinforcement Aggregates
+## 7. Level Progression
 
-### State (Computed from Active Reinforcements)
-
-| Field | Description |
-|-------|-------------|
-| `reinforcement_def_1/2/3` | Aggregated units from teammates |
-| `reinforcement_melee/ranged/siege` | Aggregated weapons |
-| `reinforcement_source_count` | Number of active reinforcement sources |
-| `reinforcement_original_units/weapons` | For survival ratio calculation |
-| `reinforcement_hero_*_bps` | Best hero buff (max, not sum) |
-
-### Update Flow
+Level is stored in `PlayerCore.level: u8` (range 1–255). XP formula (from `logic/progression.rs`):
 
 ```
-┌──────────────────┐
-│ ReinforcementAcct│
-│    Arrives       │
-└────────┬─────────┘
-         │ process_arrival
-         ▼
-┌──────────────────┐
-│  PlayerAccount   │
-│  Aggregates      │
-│  Updated         │
-└──────────────────┘
-         │
-         │ (combat occurs, units lost)
-         ▼
-┌──────────────────┐
-│ Survival Ratio   │
-│   Calculated     │
-└────────┬─────────┘
-         │ process_return
-         ▼
-┌──────────────────┐
-│  Aggregates      │
-│  Decremented     │
-└──────────────────┘
+xp_required_for_level(1) = 0
+xp_required_for_level(2) = 100
+xp_required_for_level(N) = 100 × 2.5^(N − 2)   for N ≥ 2
 ```
+
+Level-up is handled inside `grant_xp` — the loop continues until `current_xp < xp_required_for_next`, potentially gaining multiple levels in a single call.
+
+```mermaid
+stateDiagram-v2
+    [*] --> "Level 1"
+    "Level 1" --> "Level N+1" : any XP-granting action<br/>[current_xp >= xp_required]
+    "Level N+1" --> "Level N+2" : any XP-granting action<br/>[current_xp >= xp_required]
+    note right of "Level N+1"
+        update_max_stamina_for_tier called on each level-up
+    end note
+```
+
+```
+┌──────────┐  any XP-granting action  ┌──────────┐
+│ Level N  │ ────────────────────────> │ Level N+1│
+└──────────┘  current_xp ≥ required    └──────────┘
+```
+
+**Level-up side effect:** `update_max_stamina_for_tier(player)` is called to update stamina cap.
+
+XP sources:
+
+| Source | Amount |
+|--------|--------|
+| Defeat player at level L | `50 + L × 10` |
+| Defeat Common encounter | 10 |
+| Defeat Uncommon encounter | 25 |
+| Defeat Rare encounter | 50 |
+| Defeat Epic encounter | 100 |
+| Defeat Legendary encounter | 250 |
+| Defeat World Event encounter | 500 |
+| Complete travel (distance D km) | `D` |
+| Collect resources (amount A) | `A / 1000` |
+| Daily reward XP | `gameplay_config.daily_xp_base × tier_multiplier × research_bonus` |
+
+Time-of-day XP multipliers (`grant_xp_with_time_bonus`): DeepNight = √φ ≈ 1.272×; Evening = √φ ≈ 1.272×; all other periods (Dawn, Dusk, Morning, Midday, Afternoon) = 1.0× (no bonus).
 
 ---
 
-## 8. Level Progression
+## Account Structure
 
-### States
+```rust
+// CORE — always present, 528 bytes
+#[repr(C)]
+pub struct PlayerCore {
+    // Identity (80 bytes)
+    pub account_key: u8,           // discriminator = AccountKey::Player
+    pub game_engine: Address,      // 32 — kingdom PDA
+    pub owner: Address,            // 32 — wallet pubkey
+    pub bump: u8,
+    pub version: u8,
+    pub _pad1: [u8; 5],
+    pub created_at: i64,
 
-| State | Description |
-|-------|-------------|
-| `Level N` | Player at level N (1-100) |
+    // Name (56 bytes)
+    pub name: [u8; 48],
+    pub name_len: u8,
+    pub _pad_name: [u8; 7],
 
-### Transition
+    // Extension bitmap (8 bytes)
+    pub extensions: u32,
+    pub _pad_ext: [u8; 4],
 
+    // Locked NOVI (16 bytes)
+    pub locked_novi: u64,
+    pub last_updated_tokens_at: i64,
+
+    // Units (48 bytes) — defensive and operative tiers 1–3
+    pub defensive_unit_1/2/3: u64,
+    pub operative_unit_1/2/3:  u64,
+
+    // Equipment (48 bytes)
+    pub melee_weapons: u64,
+    pub ranged_weapons: u64,
+    pub siege_weapons: u64,
+    pub armor_pieces: u64,
+    pub produce: u64,
+    pub vehicles: u64,
+
+    // Cash (16 bytes)
+    pub cash_on_hand: u64,
+    pub cash_in_vault: u64,
+
+    // Happiness (8 bytes)
+    pub happiness_defensive: f32,
+    pub happiness_operative: f32,
+
+    // Location (72 bytes)
+    pub current_lat: f64, pub current_long: f64,
+    pub traveling_to_lat: f64, pub traveling_to_long: f64,
+    pub arrival_time: i64,          // -1 = not traveling
+    pub current_city: u16,
+    pub travel_type: u8,            // 0=none, 1=intracity, 2=intercity
+    pub _pad_loc: [u8; 5],
+    pub origin_city: u16,
+    pub destination_city: u16,
+    pub _pad_loc2: [u8; 4],
+    pub departure_time: i64,
+    pub travel_speed_locked: f32,
+    pub _pad_loc3: [u8; 4],
+
+    // Subscription (16 bytes)
+    pub subscription_tier: u8,      // 0=Rookie, 1=Expert, 2=Epic, 3=Legendary
+    pub _pad_sub: [u8; 7],
+    pub subscription_end: i64,
+
+    // Progression (32 bytes)
+    pub level: u8,
+    pub _pad_lvl: [u8; 7],
+    pub current_xp: u64,
+    pub reputation: u64,
+    pub networth: u64,
+
+    // Stamina (24 bytes)
+    pub encounter_stamina: u64,
+    pub max_encounter_stamina: u64,
+    pub last_stamina_update: i64,
+
+    // Event (8 bytes)
+    pub current_event: u64,
+
+    // Resources (16 bytes)
+    pub gems: u64,
+    pub fragments: u64,
+
+    // Lifetime stats (56 bytes)
+    pub total_attacks: u64,
+    pub total_defenses: u64,
+    pub total_attack_power: u64,
+    pub total_encounter_attacks: u64,
+    pub total_locked_novi_acquired: u64,
+    pub total_sent: u64,
+    pub total_received: u64,
+
+    // Protection & flags (16 bytes)
+    pub new_player_protection_until: i64,
+    pub flagged_by_governance: bool,
+    pub _pad_end: [u8; 7],
+
+    // Loot counter (8 bytes)
+    pub loot_counter: u64,
+}
+// CORE_SIZE = 528 bytes (compile-time verified)
+
+// RESEARCH section — offset 528, size 48 bytes
+pub struct ResearchSection {
+    // Battle buffs (12 bytes, 6 × u16)
+    pub attack_bps: u16,
+    pub defense_bps: u16,
+    pub crit_chance_bps: u16,
+    pub crit_damage_bps: u16,
+    pub loot_bonus_bps: u16,
+    pub encounter_success_bps: u16,
+    // Growth buffs (12 bytes, 6 × u16)
+    pub synchrony_bonus_bps: u16,
+    pub reputation_bonus_bps: u16,
+    pub stamina_bonus_bps: u16,
+    pub collection_bonus_bps: u16,
+    pub loot_magnetism_bps: u16,
+    pub daily_reward_bps: u16,
+    // Unlock flags (8 bytes)
+    pub has_daily_rewards: bool,    // gates claim_daily_reward (disc 90)
+    pub has_mining: bool,           // gates mining expedition
+    pub has_fishing: bool,          // gates fishing expedition
+    pub has_fragment_drops: bool,
+    pub has_gem_drops: bool,
+    pub _reserved_flags: [u8; 3],
+    // State (16 bytes)
+    pub buff_version: u32,
+    pub _pad_state: [u8; 4],
+    pub last_daily_claim: i64,
+}
+// RESEARCH_SIZE = 48 bytes
+
+// INVENTORY section — offset 576, size 144 bytes
+// (consumable counts, crafting materials, shop state, transfer tracking)
+// INVENTORY_SIZE = 144 bytes
+
+// TEAM section — offset 720, size 112 bytes
+// (team pubkey, slot_index, reinforcement unit/weapon aggregates, hero contribution bps)
+// TEAM_SIZE = 112 bytes
+
+// RALLY section — offset 832, size 80 bytes
+// (PlayerRallyCaps + RallyStats lifetime counters)
+// RALLY_SIZE = 80 bytes
+
+// HEROES section — offset 912, size 168 bytes
+// (active_heroes[3 × Pubkey], defensive/meditating slot, 18 hero buff bps fields,
+//  slot_location_bonus[3], meditation_started_at)
+// HEROES_SIZE = 168 bytes
+
+// COSMETICS section — offset 1080, size 80 bytes
+// (6 equipped IDs, 6 owned bitfields)
+// COSMETICS_SIZE = 80 bytes
+
+// COURT section — offset 1160, size 48 bytes
+// (castle pubkey, position_type, court_attack/research_speed/defense/economy bps)
+// COURT_SIZE = 48 bytes
+
+// MAX_SIZE = 1208 bytes (all sections present)
 ```
-┌────────────────┐  gain_xp    ┌────────────────┐
-│                │ ──────────> │                │
-│    Level N     │             │   Level N+1    │
-│  xp < required │             │   xp reset     │
-└────────────────┘             └────────────────┘
-```
 
-#### Level Up
-```
-Trigger: Any XP-granting action
-Guards:
-  - player.current_xp >= xp_required_for_level(player.level)
-  - player.level < MAX_LEVEL (100)
-Actions:
-  - player.level += 1
-  - player.current_xp -= xp_required_for_level(old_level)
-  - Unlock new features (if any)
-  - Emit LevelUp
-```
-
-### XP Formula
-```
-xp_required(level) = BASE_XP_PER_LEVEL * level^XP_EXPONENT
-                   = 1000 * level^2
-```
-
----
-
-## Appendix: Field Reference
-
-### PlayerCore Fields (1016 bytes)
-
-| Section | Fields | Size |
-|---------|--------|------|
-| Identity | owner, created_at, bump, version | 48B |
-| Name | name[48], name_len | 56B |
-| Extensions | extensions (u32 bitfield) | 4B |
-| Locked NOVI | locked_novi, last_updated_tokens_at | 16B |
-| Units | defensive_1/2/3, operative_1/2/3 | 48B |
-| Equipment | melee, ranged, siege, armor, produce, vehicles | 48B |
-| Cash | cash_on_hand, cash_in_vault | 16B |
-| Happiness | happiness_defensive, happiness_operative | 8B |
-| Location | current_lat/long, traveling_to_lat/long, arrival_time, etc. | 56B |
-| Subscription | subscription_tier, subscription_end | 16B |
-| Progression | level, current_xp, reputation, networth | 32B |
-| Stamina | encounter_stamina, max_encounter_stamina, last_stamina_update | 24B |
-| Resources | gems, fragments | 16B |
-| Stats | total_attacks, total_defenses, etc. | 56B |
-| Protection | new_player_protection_until, flagged_by_governance | 16B |
-| Research Buffs | research_*_bps (12 fields) | 24B |
-| Research Flags | has_daily_rewards, has_mining, etc. | 8B |
-| Hero System | active_heroes[3], defensive_hero_slot, meditating_hero_slot, hero_*_bps | 140B |
-| Team | team, team_slot_index | 40B |
-| Transfer Tracking | daily_transfer_count, daily_transferred, last_transfer_reset | 24B |
-| Rally | rally_caps, rally_stats | 80B |
-| Consumables | stamina_potions, xp_boosters, etc. (11 types) | 22B |
-| Materials | common, uncommon, rare, epic, legendary | 40B |
-| Equipped | equipped_weapon_bonus_bps, equipped_armor_bonus_bps | 8B |
-| Shop State | total_shop_spent, milestone_tier, etc. | 32B |
-| Meditation | meditation_started_at | 8B |
-| Reinforcements | reinforcement_def_1/2/3, melee/ranged/siege, hero buffs | 72B |
-
-### Extension Section Sizes
-
-| Extension | Size | Cumulative |
-|-----------|------|------------|
-| CORE | 1016B | 1016B |
-| RESEARCH | 96B | 1112B |
-| HEROES | 130B | 1242B |
-| INVENTORY | 424B | 1666B |
-| RALLY | 80B | 1746B |
-| TEAM | 40B | 1786B |
-| COSMETICS | 80B | 1866B |
+> **Note:** The inline cumulative byte-offset comments inside `HeroesSection` in the source reach 160 bytes before the `_reserved: [u8; 4]` field, giving 160 bytes total by field count. However, `HEROES_SIZE = 168` is set in constants and verified at compile time by `const _: [(); HEROES_SIZE] = [(); core::mem::size_of::<HeroesSection>()]`. The compiler inserts 8 bytes of padding somewhere in the struct (likely after `_pad_bonus: [u8; 2]` to align the i64 `meditation_started_at`). The constant `168` is authoritative.
 
 ---
 
 ## Invariants
 
 ```
-1. player.owner == PDA derivation key
-2. player.bump matches derived bump
-3. extensions unlock sequentially (cannot skip)
-4. subscription_tier in [0, 3]
-5. level in [1, 100]
-6. travel_type in [0, 2]
-7. meditating_hero_slot == 255 OR < 3
-8. reinforcement_source_count == count of active ReinforcementAccounts
+1. account.owner == program_id (IllegalOwner otherwise)
+2. PlayerCore.account_key == AccountKey::Player
+3. PDA: [b"player", player.game_engine, player.owner] matches bump
+4. player.game_engine references a valid GameEngine
+5. extensions bits unlock sequentially per prerequisite_for_extension chain
+6. subscription_tier ∈ {0, 1, 2, 3}
+7. level ∈ [1, 255]
+8. travel_type ∈ {0, 1, 2}
+9. meditating_hero_slot == 255  OR  meditating_hero_slot < 3
+10. locked_novi == token account balance (enforced by mint_tokens / burn CPIs)
+11. new_player_protection_until is a Unix timestamp; protection checked by comparison, no explicit clear
+12. flagged_by_governance == false for normal gameplay instructions
+13. encounter_stamina <= max_encounter_stamina
 ```

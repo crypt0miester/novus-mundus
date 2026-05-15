@@ -12,6 +12,7 @@ use crate::{
         DAOPromotionAccount, DAOPromotionStatus,
     },
     validation::{require_signer, require_writable, require_owner},
+    utils::{read_u8, read_u64, read_bytes32},
 };
 
 /// Sale type for activation
@@ -43,13 +44,11 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         crank,
         game_engine_account,
         sale_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -62,7 +61,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let sale_type = instruction_data[0];
+    let sale_type = read_u8(instruction_data, 0, "sale_type")?;
 
     // 4. Get Current Time
 
@@ -102,12 +101,7 @@ fn activate_seasonal_sale(
     program_id: &Address,
 ) -> ProgramResult {
     // Need event pubkey (32 bytes)
-    if instruction_data.len() < 33 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let event_key = Address::try_from(&instruction_data[1..33])
-        .map_err(|_| ProgramError::InvalidInstructionData)?;
+    let event_key = Address::from(read_bytes32(instruction_data, 1, "event_key")?);
 
     // Verify PDA
     let (expected_pda, _) = SeasonalSaleAccount::derive_pda(game_engine_key, &event_key);
@@ -150,13 +144,7 @@ fn activate_dao_promotion(
     program_id: &Address,
 ) -> ProgramResult {
     // Need proposal_id (8 bytes)
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let proposal_id = u64::from_le_bytes(
-        instruction_data[1..9].try_into().unwrap()
-    );
+    let proposal_id = read_u64(instruction_data, 1, "proposal_id")?;
 
     // Verify PDA
     let (expected_pda, _) = DAOPromotionAccount::derive_pda(game_engine_key, proposal_id);

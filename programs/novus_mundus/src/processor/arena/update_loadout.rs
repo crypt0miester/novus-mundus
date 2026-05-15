@@ -9,7 +9,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -17,6 +16,7 @@ use pinocchio::{
 use crate::{
     state::{ArenaLoadoutAccount, PlayerCore},
     validation::require_signer,
+    utils::{read_u64, read_bytes32},
 };
 
 /// Instruction data for update_loadout
@@ -33,54 +33,25 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         loadout_account,
         player_authority,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(player_authority)?;
 
     // 3. Parse Instruction Data (88 bytes minimum)
-    if instruction_data.len() < 88 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let arena_hero = Address::from(read_bytes32(instruction_data, 0, "update_loadout.arena_hero")?);
 
-    let mut hero_bytes = [0u8; 32];
-    hero_bytes.copy_from_slice(&instruction_data[0..32]);
-    let arena_hero = Address::from(hero_bytes);
+    let defensive_units_0 = read_u64(instruction_data, 32, "update_loadout.defensive_units_0")?;
+    let defensive_units_1 = read_u64(instruction_data, 40, "update_loadout.defensive_units_1")?;
+    let defensive_units_2 = read_u64(instruction_data, 48, "update_loadout.defensive_units_2")?;
 
-    let defensive_units_0 = u64::from_le_bytes([
-        instruction_data[32], instruction_data[33], instruction_data[34], instruction_data[35],
-        instruction_data[36], instruction_data[37], instruction_data[38], instruction_data[39],
-    ]);
-    let defensive_units_1 = u64::from_le_bytes([
-        instruction_data[40], instruction_data[41], instruction_data[42], instruction_data[43],
-        instruction_data[44], instruction_data[45], instruction_data[46], instruction_data[47],
-    ]);
-    let defensive_units_2 = u64::from_le_bytes([
-        instruction_data[48], instruction_data[49], instruction_data[50], instruction_data[51],
-        instruction_data[52], instruction_data[53], instruction_data[54], instruction_data[55],
-    ]);
-
-    let melee_weapons = u64::from_le_bytes([
-        instruction_data[56], instruction_data[57], instruction_data[58], instruction_data[59],
-        instruction_data[60], instruction_data[61], instruction_data[62], instruction_data[63],
-    ]);
-    let ranged_weapons = u64::from_le_bytes([
-        instruction_data[64], instruction_data[65], instruction_data[66], instruction_data[67],
-        instruction_data[68], instruction_data[69], instruction_data[70], instruction_data[71],
-    ]);
-    let siege_weapons = u64::from_le_bytes([
-        instruction_data[72], instruction_data[73], instruction_data[74], instruction_data[75],
-        instruction_data[76], instruction_data[77], instruction_data[78], instruction_data[79],
-    ]);
-    let armor_pieces = u64::from_le_bytes([
-        instruction_data[80], instruction_data[81], instruction_data[82], instruction_data[83],
-        instruction_data[84], instruction_data[85], instruction_data[86], instruction_data[87],
-    ]);
+    let melee_weapons = read_u64(instruction_data, 56, "update_loadout.melee_weapons")?;
+    let ranged_weapons = read_u64(instruction_data, 64, "update_loadout.ranged_weapons")?;
+    let siege_weapons = read_u64(instruction_data, 72, "update_loadout.siege_weapons")?;
+    let armor_pieces = read_u64(instruction_data, 80, "update_loadout.armor_pieces")?;
 
     // 4. Load and validate Loadout (using by_key for kingdom scoping)
     let mut loadout = ArenaLoadoutAccount::load_checked_mut_by_key(

@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -11,6 +10,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, DailyDealAccount},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u32},
 };
 
 /// Create a daily deal slot (DAO only)
@@ -38,15 +38,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         daily_deal_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -59,15 +57,11 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // slot(1) + item_id(4) + discount(2) + next_item(4) + next_discount(2) = 13
-    if instruction_data.len() < 13 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let slot_index = instruction_data[0];
-    let initial_item_id = u32::from_le_bytes(instruction_data[1..5].try_into().unwrap());
-    let initial_discount_bps = u16::from_le_bytes(instruction_data[5..7].try_into().unwrap());
-    let next_item_id = u32::from_le_bytes(instruction_data[7..11].try_into().unwrap());
-    let next_discount_bps = u16::from_le_bytes(instruction_data[11..13].try_into().unwrap());
+    let slot_index = read_u8(instruction_data, 0, "slot_index")?;
+    let initial_item_id = read_u32(instruction_data, 1, "initial_item_id")?;
+    let initial_discount_bps = read_u16(instruction_data, 5, "initial_discount_bps")?;
+    let next_item_id = read_u32(instruction_data, 7, "next_item_id")?;
+    let next_discount_bps = read_u16(instruction_data, 11, "next_discount_bps")?;
 
     // 4. Validate Data
 

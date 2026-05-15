@@ -8,8 +8,9 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, GameEngine, CityAccount, LocationAccount},
     validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
-    token_helpers::get_or_create_associated_token_account,
+    token_helpers::create_associated_token_account,
     helpers::{mint_tokens, validate_token_account_owner},
+    utils::read_u16,
     emit,
     events::PlayerJoinedKingdom,
 };
@@ -75,7 +76,7 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         player,
         owner,
         player_token_account,
@@ -87,9 +88,7 @@ pub fn process(
         system_program,
         token_program,
         _associated_token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
     // [0..2] starting_city_id: u16
@@ -98,7 +97,7 @@ pub fn process(
     if data.len() < 18 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let starting_city_id = u16::from_le_bytes([data[0], data[1]]);
+    let starting_city_id = read_u16(data, 0, "player.starting_city_id")?;
     let spawn_lat = f64::from_le_bytes(data[2..10].try_into().unwrap());
     let spawn_long = f64::from_le_bytes(data[10..18].try_into().unwrap());
 
@@ -374,7 +373,7 @@ pub fn process(
 
     // 12. Create Player's NOVI Token Account (ATA)
 
-    get_or_create_associated_token_account(
+    create_associated_token_account(
         owner,                      // Payer
         player_token_account,       // The ATA to create
         player,                     // ATA owner
@@ -383,9 +382,7 @@ pub fn process(
         token_program,
     )?;
 
-    // SECURITY (L-15): defensive ATA-owner check after CreateIdempotent.
-    // CreateIdempotent enforces this on creation, but explicit verification
-    // hardens against future helper changes.
+    // defensive ATA-owner check after CreateIdempotent.
     validate_token_account_owner(player_token_account, player.address())?;
 
     // 13. Mint Starter NOVI Tokens to Player

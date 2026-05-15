@@ -1,282 +1,274 @@
 # Progression Gates
 
-> How features unlock progressively through the extension system and building requirements.
+> How the sequential extension chain and research flags gate every major feature in Novus Mundus.
 
-## The Extension System
+## The Extension Chain
 
-Novus Mundus uses a **bit-flag extension system** to gate features. Extensions are stored in `PlayerAccount.extensions` as a 32-bit integer where each bit represents an unlocked feature.
+`PlayerAccount.extensions` is a `u32` bitmap. Extensions must be unlocked **in strict sequential order** — each extension requires the previous one as a prerequisite. The program enforces this in `prerequisite_for_extension` and `unlock_extension_if_eligible`.
 
-```mermaid
-graph TB
-    subgraph "Extension Bits"
-        B0[Bit 0: EXT_RESEARCH]
-        B1[Bit 1: EXT_HEROES]
-        B2[Bit 2: EXT_RALLY]
-        B3[Bit 3: EXT_FORGE]
-        B4[Bit 4: EXT_EXPEDITION]
-    end
+The **seven extensions** and their bit values:
 
-    subgraph "Example: extensions = 0b00011"
-        E0[Research: Unlocked]
-        E1[Heroes: Unlocked]
-        E2[Rally: Locked]
-        E3[Forge: Locked]
-    end
+| Constant | Bit | Decimal |
+|----------|-----|---------|
+| `EXT_RESEARCH` | `1 << 0` | 1 |
+| `EXT_HEROES` | `1 << 1` | 2 |
+| `EXT_INVENTORY` | `1 << 2` | 4 |
+| `EXT_RALLY` | `1 << 3` | 8 |
+| `EXT_TEAM` | `1 << 4` | 16 |
+| `EXT_COSMETICS` | `1 << 5` | 32 |
+| `EXT_COURT` | `1 << 6` | 64 |
+
+> **Note:** Old documentation referenced `EXT_FORGE` and `EXT_EXPEDITION` — these do not exist in the program. Mining/fishing expeditions are gated by research flags on the `ResearchSection`, not by extension bits.
+
+The **unlock chain** (each entry requires the one above it):
+
+```
+EXT_RESEARCH  (no prereq)
+  └─ EXT_INVENTORY  (prereq: EXT_RESEARCH)
+       └─ EXT_TEAM  (prereq: EXT_INVENTORY)
+            └─ EXT_RALLY  (prereq: EXT_TEAM)
+                 └─ EXT_HEROES  (prereq: EXT_RALLY)
+                      └─ EXT_COSMETICS  (prereq: EXT_HEROES)
+                           └─ EXT_COURT  (prereq: EXT_COSMETICS)
 ```
 
-[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs) - Extension constants
+```mermaid
+stateDiagram-v2
+    [*] --> EXT_RESEARCH : create_progress (disc 121)
+    EXT_RESEARCH --> EXT_INVENTORY : shop purchase / eligible action
+    EXT_INVENTORY --> EXT_TEAM : eligible action
+    EXT_TEAM --> EXT_RALLY : eligible action
+    EXT_RALLY --> EXT_HEROES : eligible action
+    EXT_HEROES --> EXT_COSMETICS : eligible action
+    EXT_COSMETICS --> EXT_COURT : eligible action
+```
 
-## Extension Unlock Flow
+When an extension is unlocked the `PlayerAccount` is **resized on-chain** and the new section bytes are zero-initialized. Each unlock is paid for by transferring additional rent-exempt lamports from the payer.
 
-Extensions unlock automatically when prerequisites are met:
+[Source: state/player.rs](../../../programs/novus_mundus/src/state/player.rs)
+
+---
+
+## Account Growth by Extension
+
+| Extensions active | Account size |
+|-------------------|-------------|
+| None (core only) | 528 bytes (`CORE_SIZE`) |
+| + EXT_RESEARCH | 576 bytes (+ 48 `RESEARCH_SIZE`) |
+| + EXT_INVENTORY | 720 bytes (+ 144 `INVENTORY_SIZE`) |
+| + EXT_TEAM | 832 bytes (+ 112 `TEAM_SIZE`) |
+| + EXT_RALLY | 912 bytes (+ 80 `RALLY_SIZE`) |
+| + EXT_HEROES | 1,080 bytes (+ 168 `HEROES_SIZE`) |
+| + EXT_COSMETICS | 1,160 bytes (+ 80 `COSMETICS_SIZE`) |
+| + EXT_COURT (MAX) | 1,208 bytes (+ 48 `COURT_SIZE`) |
+
+All sizes are verified by compile-time `const_assert` in `player.rs`.
 
 ```mermaid
 graph LR
-    A[Player Action] --> B{Prerequisites Met?}
-    B -->|Yes| C[unlock_extension_if_eligible]
-    C --> D[Set Extension Bit]
-    D --> E[Feature Available]
-    B -->|No| F[Action Blocked]
+    C0["Core<br/>528 B"] --> C1["+ RESEARCH<br/>576 B"]
+    C1 --> C2["+ INVENTORY<br/>720 B"]
+    C2 --> C3["+ TEAM<br/>832 B"]
+    C3 --> C4["+ RALLY<br/>912 B"]
+    C4 --> C5["+ HEROES<br/>1,080 B"]
+    C5 --> C6["+ COSMETICS<br/>1,160 B"]
+    C6 --> C7["+ COURT<br/>1,208 B (MAX)"]
 ```
 
-### EXT_RESEARCH (Bit 0)
-**Unlocks:** Research system, tech tree
+---
 
-**How to unlock:**
-- Automatic on first valid action
-- Or explicitly via `start_research`
+## Extension-Gated Features
 
-**What it enables:**
-- `start_research` instruction
-- `complete_research` instruction
-- `speed_up_research` instruction
-- Access to tech tree UI
+### EXT_RESEARCH (bit 0)
+
+Unlocked by: `create_progress` (discriminant 121).
+
+**Adds to PlayerAccount:** `ResearchSection` — stores battle buff cache, unlock flags (`has_daily_rewards`, `has_mining`, `has_fishing`, `has_fragment_drops`, `has_gem_drops`), and `last_daily_claim`.
+
+**Enables:**
+- Full research tree (`start_research` 122, `complete_research` 123, etc.)
+- `claim_daily_reward` (discriminant 90) — requires `has_daily_rewards` flag inside this section
+- `start_expedition` (discriminant 200) — requires `has_mining` or `has_fishing` flag
+
+### EXT_INVENTORY (bit 2)
+
+Unlocked after EXT_RESEARCH. Typically triggered by the first shop purchase (buying gems, for example).
+
+**Adds to PlayerAccount:** `InventorySection` — consumable counts, crafting material tiers, shop state, and daily transfer tracking.
+
+**Enables:**
+- Shop purchasing (consumables, materials)
+- Item equip bonuses (`equipped_weapon_bonus_bps`, `equipped_armor_bonus_bps`)
+- Transfer rate limiting (`daily_transfer_count`, `daily_transferred`)
+
+### EXT_TEAM (bit 4)
+
+Unlocked after EXT_INVENTORY.
+
+**Adds to PlayerAccount:** `TeamSection` — team pubkey, slot index, reinforcement unit aggregates, and hero weapon/armor efficiency contributions.
+
+**Enables:**
+- `create_team` (50), `join_team` (51), and related team instructions
+- Receiving reinforcements (`send_reinforcement` 190, `process_arrival` 191)
+- Team treasury operations (53, 59)
+
+### EXT_RALLY (bit 3)
+
+Unlocked after EXT_TEAM.
+
+**Adds to PlayerAccount:** `RallySection` — `PlayerRallyCaps` (max concurrent + daily limits) and `RallyStats` (lifetime rally counters).
+
+Default caps: `max_concurrent_rallies = 3`, `max_rallies_per_day = 5`.
+
+**Enables:**
+- `create_rally` (60), `join_rally` (61), `execute_rally` (62), and all rally instructions
+
+### EXT_HEROES (bit 1)
+
+Unlocked after EXT_RALLY.
+
+**Adds to PlayerAccount:** `HeroesSection` — three active hero slots (pubkeys), defensive/meditation hero slot indexes, and 18 hero buff fields in basis points.
+
+**Enables:**
+- `lock_hero` (132), `unlock_hero` (133), `assign_defensive` (135)
+- `start_meditation` (137), `claim_meditation` (138)
+- Hero buffs active in combat, expeditions, and XP gain
+
+### EXT_COSMETICS (bit 5)
+
+Unlocked after EXT_HEROES.
+
+**Adds to PlayerAccount:** `CosmeticsSection` — equipped frame/color/title/badge/effect/pose IDs, and six `owned_*` u64 bitfields.
+
+**Enables:** Cosmetic equip/unequip instructions.
+
+### EXT_COURT (bit 6)
+
+Unlocked after EXT_COSMETICS.
+
+**Adds to PlayerAccount:** `CourtSection` — castle pubkey, position type, and four court buff fields in basis points (`court_attack_bps`, `court_research_speed_bps`, `court_defense_bps`, `court_economy_bps`).
+
+**Enables:**
+- Holding a court position inside a King's Castle (Castle system, discriminants 270+)
+- Receiving passive castle buffs
 
 ---
 
-### EXT_HEROES (Bit 1)
-**Unlocks:** Hero locking and buffs
+## Research Flag Gates
 
-**Prerequisites:**
-1. `EXT_RESEARCH` must be unlocked
-2. Sanctuary building at Level 1+
+Beyond extensions, features within `EXT_RESEARCH` are gated by boolean flags set by completing specific research nodes:
 
-**How to unlock:**
-- Triggered on first `lock_hero` call
-- Must have Sanctuary built
+| Flag | Research Node | Gates |
+|------|--------------|-------|
+| `has_daily_rewards` | `DailyRewardsSystem` (Growth tree) | `claim_daily_reward` (disc 90) |
+| `has_mining` | `MiningOperations` (Growth tree) | Mining expeditions (disc 200 with type=1) |
+| `has_fishing` | `FishingIndustry` (Growth tree) | Fishing expeditions (disc 200 with type=2) |
+| `has_fragment_drops` | `FragmentDiscovery` (Growth tree) | Fragment drops from encounters |
+| `has_gem_drops` | `GemProspecting` (Growth tree) | Gem drops from encounters |
 
-**What it enables:**
-- `lock_hero` instruction
-- `unlock_hero` instruction
-- Hero buff aggregation on player
-- Heroes in expeditions
-
----
-
-### EXT_RALLY (Bit 2)
-**Unlocks:** Group attack coordination
-
-**Prerequisites:**
-1. `EXT_RESEARCH` must be unlocked
-2. Specific research completed (Rally Technology)
-3. Citadel building at Level 1+
-
-**What it enables:**
-- `create_rally` instruction
-- `join_rally` instruction
-- Team-based combat
+```mermaid
+graph TD
+    R["EXT_RESEARCH unlocked"] --> N1["Research: DailyRewardsSystem"]
+    R --> N2["Research: MiningOperations"]
+    R --> N3["Research: FishingIndustry"]
+    R --> N4["Research: FragmentDiscovery"]
+    R --> N5["Research: GemProspecting"]
+    N1 -->|"sets has_daily_rewards"| F1["claim_daily_reward (disc 90)"]
+    N2 -->|"sets has_mining"| F2["Mining expedition (disc 200 type=1)"]
+    N3 -->|"sets has_fishing"| F3["Fishing expedition (disc 200 type=2)"]
+    N4 -->|"sets has_fragment_drops"| F4["Fragment drops from encounters"]
+    N5 -->|"sets has_gem_drops"| F5["Gem drops from encounters"]
+```
 
 ---
 
-### EXT_FORGE (Bit 3)
-**Unlocks:** Equipment crafting
+## Building-Gated Feature Tiers
 
-**Prerequisites:**
-1. Forge building at Level 1+
-2. Specific research completed
+Buildings gate expedition **tiers** and are independent of the extension system:
 
-**What it enables:**
-- `start_craft` instruction
-- Equipment quality tiers
-- Staged tempering mechanic
+### Mining — Workshop Level Required
+
+| Tier | Name | Workshop Level | Duration |
+|------|------|---------------|----------|
+| 0 | Surface | 1 | 1 hour |
+| 1 | Shallow | 5 | 2 hours |
+| 2 | Deep | 10 | 4 hours |
+| 3 | Volcanic | 15 | 8 hours |
+| 4 | Abyssal | 20 | 16 hours |
+
+### Fishing — Dock Level Required
+
+| Tier | Name | Dock Level | Duration |
+|------|------|-----------|----------|
+| 0 | Shore | 1 | 1 hour |
+| 1 | River | 5 | 2 hours |
+| 2 | Lake | 10 | 4 hours |
+| 3 | DeepSea | 15 | 8 hours |
+| 4 | Abyss | 20 | 16 hours |
+
+[Source: constants.rs](../../../programs/novus_mundus/src/constants.rs) — `MINING_WORKSHOP_REQ`, `FISHING_DOCK_REQ`
 
 ---
 
-### EXT_EXPEDITION (Bit 4)
-**Unlocks:** Mining and fishing expeditions
+## Subscription Tier Gates
 
-**Prerequisites:**
-1. Workshop (for mining) at Level 1+
-2. Dock (for fishing) at Level 1+
-3. Relevant research completed
+The player's effective subscription tier (`get_effective_tier`) affects several caps:
 
-**What it enables:**
-- `start_expedition` instruction
-- Resource gathering activities
-- Hero expedition assignments
+| Tier | Name | Max Stamina | Daily Reward Multiplier |
+|------|------|-------------|------------------------|
+| 0 | Rookie | 100 | 1.0× |
+| 1 | Expert | 500 | configurable |
+| 2 | Epic | 1,000 | configurable |
+| 3 | Legendary | 10,000 | configurable |
+
+`get_effective_tier` returns 0 if the subscription has expired.
+
+[Source: constants.rs](../../../programs/novus_mundus/src/constants.rs) — `MAX_STAMINA_BY_TIER`
 
 ---
 
-## Building Requirements
-
-Beyond extensions, buildings gate feature **tiers** and **power levels**:
+## Progression Path
 
 ```mermaid
 graph TB
-    subgraph "Building → Feature Tiers"
-        MANSION[Mansion Level] --> UNITS[Unit Capacity]
-        BARRACKS[Barracks Level] --> UNIT_TYPES[Unit Types Available]
-        WORKSHOP[Workshop Level] --> MINING[Mining Expedition Tiers]
-        DOCK[Dock Level] --> FISHING[Fishing Expedition Tiers]
-        ACADEMY[Academy Level] --> RESEARCH[Research Categories]
-        SANCTUARY[Sanctuary Level] --> HEROES[Max Locked Heroes]
-        FORGE_B[Forge Level] --> QUALITY[Craftable Quality]
-        CITADEL[Citadel Level] --> RALLY_POWER[Rally Capacity]
-    end
+    A["init_user + init_player"] --> B["create_progress<br/>EXT_RESEARCH"]
+    B --> C["Research: DailyRewardsSystem"]
+    B --> D["Research: MiningOperations"]
+    B --> E["Research: FishingIndustry"]
+    C --> F["claim_daily_reward"]
+    D --> G["start_expedition mining"]
+    E --> H["start_expedition fishing"]
+    B --> I["Shop purchase<br/>EXT_INVENTORY"]
+    I --> J["join_team<br/>EXT_TEAM"]
+    J --> K["join_rally<br/>EXT_RALLY"]
+    K --> L["lock_hero<br/>EXT_HEROES"]
+    L --> M["EXT_COSMETICS"]
+    M --> N["hold court position<br/>EXT_COURT"]
 ```
-
-### Unit Type Requirements
-
-| Unit Type | Barracks Level Required |
-|-----------|------------------------|
-| Tier 1 Operative | 1 |
-| Tier 2 Operative | 5 |
-| Tier 3 Operative | 10 |
-| Melee Weapons | 3 |
-| Ranged Weapons | 7 |
-| Siege Weapons | 12 |
-| Vehicles | 15 |
-
-[Source: helpers/estate.rs](../../../programs/novus_mundus/src/helpers/estate.rs) - `required_barracks_level_for_unit`
-
-### Mining Tier Requirements
-
-| Mining Tier | Workshop Level | Duration |
-|-------------|---------------|----------|
-| Surface | 1 | 1 hour |
-| Shallow | 5 | 2 hours |
-| Deep | 10 | 4 hours |
-| Volcanic | 15 | 8 hours |
-| Abyssal | 20 | 16 hours |
-
-### Fishing Tier Requirements
-
-| Fishing Tier | Dock Level | Duration |
-|--------------|-----------|----------|
-| Shore | 1 | 1 hour |
-| River | 5 | 2 hours |
-| Lake | 10 | 4 hours |
-| Deep Sea | 15 | 8 hours |
-| Abyss | 20 | 16 hours |
-
-### Hero Locking Limits
-
-| Sanctuary Level | Max Locked Heroes |
-|-----------------|-------------------|
-| 1-4 | 1 |
-| 5-9 | 2 |
-| 10-14 | 3 |
-| 15-19 | 4 |
-| 20 | 5 |
-
-[Source: helpers/estate.rs](../../../programs/novus_mundus/src/helpers/estate.rs) - `max_locked_heroes_for_sanctuary_level`
-
-### Research Category Requirements
-
-| Research Category | Academy Level |
-|-------------------|---------------|
-| Basic | 1 |
-| Intermediate | 5 |
-| Advanced | 10 |
-| Expert | 15 |
-| Master | 20 |
 
 ---
 
-## Progression Path Diagram
+## Client-Side Extension Check
 
-```mermaid
-graph TB
-    subgraph "Early Game"
-        A[Create Account] --> B[Build Mansion]
-        B --> C[Hire T1 Operatives]
-        C --> D[Start Research]
-        D --> E[Build Workshop/Dock]
-    end
+```typescript
+const EXT_RESEARCH  = 1 << 0;  // 1
+const EXT_HEROES    = 1 << 1;  // 2
+const EXT_INVENTORY = 1 << 2;  // 4
+const EXT_RALLY     = 1 << 3;  // 8
+const EXT_TEAM      = 1 << 4;  // 16
+const EXT_COSMETICS = 1 << 5;  // 32
+const EXT_COURT     = 1 << 6;  // 64
 
-    subgraph "Mid Game"
-        E --> F[Mining/Fishing Expeditions]
-        F --> G[Build Sanctuary]
-        G --> H[Lock First Hero]
-        H --> I[Build Citadel]
-        I --> J[Join Rallies]
-    end
-
-    subgraph "Late Game"
-        J --> K[Build Forge]
-        K --> L[Craft Equipment]
-        L --> M[Max Buildings]
-        M --> N[Ascension]
-    end
-```
-
-## Checking Requirements (Client-Side)
-
-### Extension Check
-```javascript
-function hasExtension(extensions, extBit) {
-  return (extensions & (1 << extBit)) !== 0;
+function hasExtension(extensions: number, ext: number): boolean {
+  return (extensions & ext) !== 0;
 }
 
-// Usage
-const EXT_RESEARCH = 0;
-const EXT_HEROES = 1;
-
+// Example: show hero UI only when EXT_HEROES is active
 if (hasExtension(player.extensions, EXT_HEROES)) {
-  // Show hero UI
+  renderHeroSection();
 }
 ```
 
-### Building Level Check
-```javascript
-function getBuildingLevel(estate, buildingType) {
-  for (const slot of estate.buildings) {
-    if (slot.building_type === buildingType) {
-      return slot.level;
-    }
-  }
-  return 0; // Not built
-}
-
-// Check if can mine at tier 2
-const workshopLevel = getBuildingLevel(estate, BuildingType.Workshop);
-if (workshopLevel >= 5) {
-  // Can do Shallow mining
-}
-```
-
-## Common Error Codes
-
-| Error | Meaning | Solution |
-|-------|---------|----------|
-| `ExtensionNotUnlocked` | Missing required extension | Complete prerequisites |
-| `BuildingLevelTooLow` | Building level insufficient | Upgrade the building |
-| `ResearchRequired` | Missing research unlock | Complete required research |
-| `MaxHeroesLocked` | Sanctuary limit reached | Upgrade Sanctuary or unlock hero |
-
 ---
 
-## Unlock Summary Table
-
-| Feature | Extension | Building Requirement | Research Requirement |
-|---------|-----------|---------------------|---------------------|
-| Research | EXT_RESEARCH | None | None |
-| Hero Locking | EXT_HEROES | Sanctuary Lv1+ | Research started |
-| Expeditions | - | Workshop/Dock Lv1+ | Relevant unlock |
-| Rallies | EXT_RALLY | Citadel Lv1+ | Rally Technology |
-| Forging | EXT_FORGE | Forge Lv1+ | Crafting research |
-| Higher Tiers | - | Building level | Category unlocks |
-
----
-
-Next: [Daily Loop](./daily-loop.md) - What players do each session
+Next: [Daily Loop](./daily-loop.md)

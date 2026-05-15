@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
 };
 use crate::{
@@ -63,13 +62,12 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (4 required + 0–1 optional feed-validation slot)
 
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-    let authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let allowed_token_account = &accounts[2];
-    let token_mint = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        authority,
+        game_engine_account,
+        allowed_token_account,
+        token_mint,
+    ]);
 
     // 2. Validate Accounts
 

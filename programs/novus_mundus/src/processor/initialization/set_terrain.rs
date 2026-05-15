@@ -86,13 +86,7 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // ── Parse accounts ─────────────────────────────────────────
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let dao_authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let city_account = &accounts[2];
+    crate::extract_accounts!(accounts, [dao_authority, game_engine_account, city_account]);
     // accounts[3] = system program (needed for Transfer CPI)
 
     // Verify signer

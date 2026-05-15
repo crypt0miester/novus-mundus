@@ -1,0 +1,467 @@
+/* ═══════════════════════════════════════════════════════════════
+   REALM MAP — Dark Command Console
+   Dark shell, monospace, tabular numerals. The ACCENT is not fixed:
+   it inherits the player's subscription tier (--tier-accent-bright,
+   set on <body data-tier> by useTierTheme) — bronze / silver / gold /
+   crimson. Falls back to cyan only before hydration.
+   ═══════════════════════════════════════════════════════════════ */
+
+.root {
+  --bg: #090c0e;
+  --bg-panel: #0d1215;
+  --bg-raised: #121a1d;
+
+  /* Tier-driven accent */
+  --accent: var(--tier-accent-bright, #3ad6c4);
+  --glow: var(--tier-accent-glow, rgba(58, 214, 196, 0.18));
+  --line: color-mix(in srgb, var(--accent) 15%, transparent);
+  --line-soft: color-mix(in srgb, var(--accent) 7%, transparent);
+
+  --text: #d4e4e1;
+  --text-dim: #708582;
+  --text-faint: #3c4b49;
+
+  font-family: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+/* ─── Top readout bar ─────────────────────────────────────────── */
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding: 0 0 0.9rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--text);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.titleMark {
+  width: 9px; height: 9px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  animation: blink 2.4s steps(1) infinite;
+}
+.subtitle {
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.readouts { display: flex; gap: 1.6rem; }
+.readout { text-align: right; }
+.readoutLabel {
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+.readoutValue {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.1;
+  text-shadow: 0 0 14px var(--glow);
+}
+
+/* ─── Shell: map + intel panel ────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr 328px;
+  gap: 1rem;
+}
+@media (max-width: 880px) {
+  .shell { grid-template-columns: 1fr; }
+}
+
+/* ─── Map frame ───────────────────────────────────────────────── */
+
+.mapWrap {
+  position: relative;
+  aspect-ratio: 16 / 11;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, #11181b 0%, var(--bg) 78%);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* coordinate grid */
+.mapGrid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
+  background-size: 7.142% 9.09%, 7.142% 9.09%;
+  pointer-events: none;
+}
+
+/* rotating radar sweep */
+.radar {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 160%; aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    color-mix(in srgb, var(--accent) 14%, transparent) 38deg,
+    transparent 60deg
+  );
+  animation: spin 9s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* drifting scanline */
+.scanline {
+  position: absolute;
+  left: 0; right: 0; height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 45%, transparent),
+    transparent
+  );
+  animation: sweep 6.5s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 75% at 50% 50%, transparent 55%, rgba(0,0,0,0.65) 100%);
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* corner brackets */
+.corner {
+  position: absolute;
+  width: 16px; height: 16px;
+  border: 1px solid var(--accent);
+  z-index: 5;
+  pointer-events: none;
+}
+.corner:nth-child(1) { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+.corner:nth-child(2) { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
+.corner:nth-child(3) { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
+.corner:nth-child(4) { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
+
+.mapTag {
+  position: absolute;
+  top: 12px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.56rem;
+  letter-spacing: 0.24em;
+  color: var(--text-faint);
+  z-index: 5;
+  text-transform: uppercase;
+}
+
+/* connection lines */
+.links { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.link {
+  stroke: var(--accent);
+  stroke-width: 0.18;
+  stroke-dasharray: 1.4 1.1;
+  opacity: 0;
+  animation: linkIn 0.6s ease forwards;
+}
+
+/* ─── City nodes ──────────────────────────────────────────────── */
+
+.node {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0);
+  background: none;
+  border: 0;
+  padding: 0;
+  z-index: 3;
+  animation: nodeIn 0.5s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: filter 0.2s ease;
+}
+.node:hover { filter: brightness(1.25); z-index: 8; }
+.node:focus-visible { outline: none; }
+
+.dot {
+  border-radius: 50%;
+  position: relative;
+  transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+.node:hover .dot { transform: scale(1.18); }
+.dotCore {
+  position: absolute;
+  inset: 30%;
+  border-radius: 50%;
+  background: #060809;
+  opacity: 0.55;
+}
+
+/* pulsing ring */
+.pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  animation: pulse 2.6s ease-out infinite;
+}
+
+.label {
+  margin-top: 5px;
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+.node:hover .label { color: var(--text); }
+
+/* hover count chip */
+.chip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.node:hover .chip { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.nodeSelected { z-index: 9; }
+.selRing {
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.nodeSelected .label { color: var(--accent); }
+
+/* your-location marker */
+.home {
+  position: absolute;
+  width: 7px; height: 7px;
+  top: -13px; left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--accent);
+  box-shadow: 0 0 9px var(--accent);
+  animation: bob 1.8s ease-in-out infinite;
+}
+
+/* ─── Intel panel ─────────────────────────────────────────────── */
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.panelHead::before {
+  content: "";
+  width: 6px; height: 6px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.panelBody { padding: 0.95rem 0.9rem; flex: 1; }
+
+.cityName {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-shadow: 0 0 16px var(--glow);
+  animation: fadeUp 0.3s ease;
+}
+.typeBadge {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-top: 1rem;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+}
+.stat { background: var(--bg-raised); padding: 0.6rem 0.65rem; }
+.statLabel {
+  font-size: 0.55rem;
+  letter-spacing: 0.13em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+.statValue {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.enter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+.enter:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* legend (default panel state) */
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.42rem 0;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.swatch {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+.legendCount { margin-left: auto; color: var(--text); font-weight: 700; }
+
+.divider {
+  height: 1px;
+  background: var(--line-soft);
+  margin: 0.9rem 0;
+}
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.62rem;
+  padding: 0.3rem 0;
+  color: var(--text-dim);
+}
+.metaRow span:last-child { color: var(--text); }
+
+.hint {
+  margin-top: 0.9rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+.hint b { color: var(--accent); font-weight: 400; }
+
+/* ─── States ──────────────────────────────────────────────────── */
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.center span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.center span::before {
+  content: "";
+  width: 8px; height: 8px;
+  background: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+
+/* ─── Keyframes ───────────────────────────────────────────────── */
+
+@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes sweep {
+  0% { top: -2%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+@keyframes blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0.25; } }
+@keyframes nodeIn {
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes linkIn { to { opacity: 0.4; } }
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes bob {
+  0%, 100% { transform: translateX(-50%) rotate(45deg) translateY(0); }
+  50% { transform: translateX(-50%) rotate(45deg) translateY(-3px); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar, .scanline, .pulse, .home, .titleMark { animation: none; }
+}

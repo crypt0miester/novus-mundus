@@ -13,6 +13,7 @@ use crate::{
         DAOPromotionAccount, PlayerPurchaseAccount, ShopItemAccount,
     },
     validation::{require_signer, require_writable},
+    utils::{read_u8, read_u64},
 };
 
 /// Sale account type for closing
@@ -61,14 +62,12 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let sale_account = &accounts[2];
-    let rent_recipient = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        authority,
+        game_engine_account,
+        sale_account,
+        rent_recipient,
+    ]);
 
     // 2. Validate Accounts
 
@@ -78,13 +77,9 @@ pub fn process(
 
     // 3. Parse Instruction Data
 
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let sale_type = SaleType::from_u8(instruction_data[0])
+    let sale_type = SaleType::from_u8(read_u8(instruction_data, 0, "close_sale.sale_type")?)
         .ok_or(GameError::InvalidParameter)?;
-    let sale_id = u64::from_le_bytes(instruction_data[1..9].try_into().unwrap());
+    let sale_id = read_u64(instruction_data, 1, "close_sale.sale_id")?;
 
     // 4. Load Game Engine for Authority Check
 

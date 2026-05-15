@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -10,6 +9,7 @@ use crate::{
     state::PlayerAccount,
     helpers::estate::{load_estate_for_player, require_workshop},
     validation::{require_signer, require_writable, require_owner},
+    utils::read_u8,
 };
 
 /// Material Tier Conversion
@@ -43,9 +43,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, estate_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, estate_account]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -53,12 +51,8 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let from_tier = instruction_data[0];
-    let conversions = instruction_data[1] as u64;
+    let from_tier = read_u8(instruction_data, 0, "convert_materials.from_tier")?;
+    let conversions = read_u8(instruction_data, 1, "convert_materials.amount")? as u64;
 
     // Validate from_tier (0-3 only, can't convert legendary)
     if from_tier > 3 {

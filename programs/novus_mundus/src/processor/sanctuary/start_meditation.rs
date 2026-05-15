@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -18,6 +17,7 @@ use crate::{
     },
     constants::HERO_TEMPLATE_SEED,
     validation::{require_signer, require_writable, require_owner},
+    utils::read_u8,
     emit,
     events::MeditationStarted,
 };
@@ -58,9 +58,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, hero_mint, hero_template, estate_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, estate_account]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -69,10 +67,7 @@ pub fn process(
     require_owner(hero_template, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let hero_slot = instruction_data[0];
+    let hero_slot = read_u8(instruction_data, 0, "start_meditation.hero_slot")?;
 
     if hero_slot >= 3 {
         return Err(GameError::InvalidParameter.into());

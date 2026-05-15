@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -10,6 +9,7 @@ use crate::{
     state::{PlayerAccount, TeamAccount, TreasuryRequest, require_extension, EXT_TEAM},
     helpers::close_account,
     validation::{require_signer, require_writable, require_owner, require_initialized},
+    utils::read_u64,
     emit,
     events::TreasuryRequestCancelled,
 };
@@ -34,22 +34,16 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 8 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         team_account,
         request_account,
         owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 

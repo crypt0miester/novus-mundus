@@ -8,6 +8,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, BundleAccount},
     validation::{require_signer, require_writable},
+    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
 };
 
 /// Update field flags
@@ -40,13 +41,11 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         dao_authority,
         game_engine_account,
         bundle_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -55,12 +54,8 @@ pub fn process(
 
     // 3. Parse Instruction Data Header
 
-    if instruction_data.len() < 5 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let bundle_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let update_flags = instruction_data[4];
+    let bundle_id = read_u32(instruction_data, 0, "bundle_id")?;
+    let update_flags = read_u8(instruction_data, 4, "update_flags")?;
 
     // 4. Verify DAO Authority
 
@@ -89,9 +84,7 @@ pub fn process(
         if instruction_data.len() < offset + 8 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        bundle.price_sol_lamports = u64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        bundle.price_sol_lamports = read_u64(instruction_data, offset, "price_sol_lamports")?;
         offset += 8;
     }
 
@@ -99,7 +92,7 @@ pub fn process(
         if instruction_data.len() < offset + 1 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        bundle.is_active = instruction_data[offset] != 0;
+        bundle.is_active = read_u8(instruction_data, offset, "is_active")? != 0;
         offset += 1;
     }
 
@@ -107,12 +100,8 @@ pub fn process(
         if instruction_data.len() < offset + 16 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        bundle.available_from = i64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
-        bundle.available_until = i64::from_le_bytes(
-            instruction_data[offset + 8..offset + 16].try_into().unwrap()
-        );
+        bundle.available_from = read_i64(instruction_data, offset, "available_from")?;
+        bundle.available_until = read_i64(instruction_data, offset + 8, "available_until")?;
         offset += 16;
     }
 
@@ -120,9 +109,7 @@ pub fn process(
         if instruction_data.len() < offset + 2 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        bundle.savings_bps = u16::from_le_bytes(
-            instruction_data[offset..offset + 2].try_into().unwrap()
-        );
+        bundle.savings_bps = read_u16(instruction_data, offset, "savings_bps")?;
         // offset += 2;
     }
 

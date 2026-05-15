@@ -12,7 +12,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -32,6 +31,7 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match},
     emit,
     events::KingdomArenaSeasonStarted,
+    utils::{read_u32, read_u64, read_u8},
 };
 
 /// Instruction data for create_season
@@ -47,14 +47,12 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         arena_season,
         authority,
         game_engine,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(authority)?;
@@ -71,30 +69,15 @@ pub fn process(
     drop(game_engine_data);
 
     // 4. Parse Instruction Data (29 bytes minimum)
-    if instruction_data.len() < 29 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let season_id = read_u32(instruction_data, 0, "create_season.season_id")?;
 
-    let season_id = u32::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-    ]);
+    let master_prize_pool = read_u64(instruction_data, 4, "create_season.master_prize_pool")?;
 
-    let master_prize_pool = u64::from_le_bytes([
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
-    ]);
+    let daily_prize_pool = read_u64(instruction_data, 12, "create_season.daily_prize_pool")?;
 
-    let daily_prize_pool = u64::from_le_bytes([
-        instruction_data[12], instruction_data[13], instruction_data[14], instruction_data[15],
-        instruction_data[16], instruction_data[17], instruction_data[18], instruction_data[19],
-    ]);
+    let daily_distribution_cap = read_u64(instruction_data, 20, "create_season.daily_distribution_cap")?;
 
-    let daily_distribution_cap = u64::from_le_bytes([
-        instruction_data[20], instruction_data[21], instruction_data[22], instruction_data[23],
-        instruction_data[24], instruction_data[25], instruction_data[26], instruction_data[27],
-    ]);
-
-    let min_level_required = instruction_data[28];
+    let min_level_required = read_u8(instruction_data, 28, "create_season.min_level_required")?;
 
     // 5. Load Clock
     let clock = Clock::get()?;

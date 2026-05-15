@@ -13,6 +13,7 @@ use crate::{
         require_signer,
         require_writable,
     },
+    utils::read_u64,
     emit,
     events::ResearchSpeedup,
 };
@@ -35,9 +36,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [player_owner, research_progress, player_account, research_template] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [player_owner, research_progress, player_account, research_template]);
 
     // 2. Validate accounts
     require_signer(player_owner)?;
@@ -49,16 +48,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let speed_up_seconds = u64::from_le_bytes([
-        instruction_data[0],
-        instruction_data[1],
-        instruction_data[2],
-        instruction_data[3],
-        instruction_data[4],
-        instruction_data[5],
-        instruction_data[6],
-        instruction_data[7],
-    ]);
+    let speed_up_seconds = read_u64(instruction_data, 0, "speed_up_research.speed_up_seconds")?;
 
     // 4. Load accounts
     let mut player_data = player_account.try_borrow_mut()?;

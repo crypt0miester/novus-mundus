@@ -1,8 +1,10 @@
-# Team System State Machine
+# Team State Machine
 
 ## Overview
 
-The Team system manages guilds/alliances where players coordinate rallies, share reinforcements, and access team treasury. Teams have a hierarchical structure with roles and permissions.
+The Team system manages kingdom-scoped guilds. Team state is distributed across three account types: `TeamAccount` (team metadata), `TeamMemberSlot` (per-member state), and `TeamInviteAccount` (pending invites). A fourth account, `TreasuryRequest`, models the multi-sig withdrawal flow.
+
+There is no explicit `status` enum on `TeamAccount`. Team state is inferred from the `disbanded: bool` flag and the existence of member slot accounts.
 
 ---
 
@@ -10,60 +12,76 @@ The Team system manages guilds/alliances where players coordinate rallies, share
 
 ### States
 
-| State | Description |
-|-------|-------------|
-| `NonExistent` | Team PDA doesn't exist |
-| `Active` | Team operational |
-| `Disbanded` | Team marked for deletion |
+| State | Condition |
+|-------|-----------|
+| `Active` | `disbanded == false`, `leader != NULL_PUBKEY` |
+| `Disbanded` | `disbanded == true` |
 
 ### State Diagram
 
-```
-┌────────────────┐  create_team    ┌────────────────┐
-│                │ ─────────────> │                │
-│  NonExistent   │                │     Active     │
-│                │                │                │
-└────────────────┘                └───────┬────────┘
-       ▲                                  │
-       │                                  │ disband_team
-       │ account closure                  ▼
-       │                          ┌────────────────┐
-       └──────────────────────────│                │
-                                  │   Disbanded    │
-                                  │                │
-                                  └────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Active : create_team<br/>(burn NOVI, leader rank 0)
+    Active --> Active : join / accept_invite<br/>leave / kick
+    Active --> Disbanded : disband<br/>(member_count == 1)
+    Disbanded --> [*]
 ```
 
-### Transitions
+```
+                  create_team
+┌─────────────┐ ──────────────────> ┌─────────────┐
+│             │                     │             │
+│ NonExistent │                     │   Active    │ <─── join / accept_invite
+│             │                     │             │ ──── leave / kick ────>
+└─────────────┘                     └──────┬──────┘
+                                           │
+                                           │ disband
+                                           │ (member_count == 1)
+                                           ▼
+                                    ┌─────────────┐
+                                    │  Disbanded  │
+                                    │             │
+                                    └─────────────┘
+```
 
-#### `NonExistent` → `Active`
+### `NonExistent` → `Active`
+
 ```
 Trigger: create_team
 Guards:
-  - Creator not on any team
-  - Team name unique
-  - Sufficient NOVI for creation cost
+  - EXT_INVENTORY extension present on player
+  - player.team_address() == NULL_PUBKEY (not already in a team)
+  - name length 3–32 bytes, valid UTF-8
+  - team_id provided by client; PDA [TEAM_SEED, game_engine, team_id LE] must not exist
 Actions:
-  - Create TeamAccount PDA: [TEAM_SEED, team_id]
-  - Set creator as leader (role = 3)
-  - Set team name
-  - Initialize member count = 1
-  - Update creator.team = team_pubkey
-  - Update creator.team_slot_index = 0
+  - Burn NOVI = team_creation_cost × cost_multiplier
+  - Create TeamAccount (max_members=5, member_count=1, leader=player_pda)
+  - Create TeamMemberSlot [TEAM_SLOT_SEED, team, slot_index=0] at rank=0
+  - player.team_address = team_pda
+  - player.team_slot_index = 0
+  - Unlock EXT_TEAM extension if eligible
   - Emit TeamCreated
 ```
 
-#### `Active` → `Disbanded`
+### `Active` → `Disbanded`
+
 ```
-Trigger: disband_team
+Trigger: disband (ID 58)
 Guards:
-  - Caller is leader
-  - All members except leader have left
-  - Treasury is empty
+  - Caller is the team leader (team.leader == caller_player_pda)
+  - team.member_count == 1 (only the leader remains)
+  - team.disbanded == false
 Actions:
-  - Mark team as disbanded
-  - Clear leader's team reference
+  - team.treasury → leader.cash_on_hand (all remaining funds)
+  - team.treasury = 0
+  - team.disbanded = true
+  - team.member_count = 0
+  - team.leader = NULL_PUBKEY
+  - leader.team_address = NULL_PUBKEY
   - Emit TeamDisbanded
+Note: Individual TeamMemberSlot accounts remain. Members discover
+      the disbanded flag when they next interact and can clear their
+      own team_address reference.
 ```
 
 ---
@@ -72,351 +90,386 @@ Actions:
 
 ### States
 
-| State | Description |
-|-------|-------------|
-| `NotMember` | Player not on any team |
-| `Invited` | Pending invite exists |
-| `Member` | Active team member |
-
-### Roles
-
-| Role | Value | Permissions |
-|------|-------|-------------|
-| Member | 0 | Basic access |
-| Officer | 1 | Invite, kick lower ranks |
-| Co-Leader | 2 | Treasury access, promote |
-| Leader | 3 | Full control, disband |
+| State | Condition |
+|-------|-----------|
+| `NonMember` | No `TeamMemberSlot` PDA for this player+team |
+| `Member` | `TeamMemberSlot` exists, `rank` 0–4 |
 
 ### State Diagram
 
-```
-┌────────────────┐  receive_invite  ┌────────────────┐
-│                │ ───────────────> │                │
-│   NotMember    │                  │    Invited     │
-│                │ <─────────────── │                │
-└───────┬────────┘  decline_invite  └───────┬────────┘
-        │                                   │
-        │ join_team                         │ accept_invite
-        │ (open team)                       │
-        ▼                                   ▼
-┌────────────────────────────────────────────────────┐
-│                      Member                         │
-│  ┌────────┐  promote  ┌─────────┐  promote  ┌────┐ │
-│  │ Member │ ────────> │ Officer │ ────────> │CoL │ │
-│  │(role=0)│ <──────── │(role=1) │ <──────── │ (2)│ │
-│  └────────┘  demote   └─────────┘  demote   └────┘ │
-└────────────────────────────────────────────────────┘
-        │
-        │ leave_team / kick_member
-        ▼
-┌────────────────┐
-│   NotMember    │
-└────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Member : join_team / accept_invite<br/>(rank = 4)
+    Member --> Member : promote_member<br/>demote_member<br/>transfer_leadership
+    Member --> [*] : leave_team<br/>kick_member<br/>disband
 ```
 
-### Transitions
-
-#### `NotMember` → `Invited`
 ```
-Trigger: invite_to_team
-Guards:
-  - Caller has Officer+ role
-  - Target not on any team
-  - No pending invite to target
-  - Team not at member cap
-Actions:
-  - Create TeamInviteAccount PDA
-  - Set expiration time
-  - Emit InviteSent
-```
-
-#### `Invited` → `Member`
-```
-Trigger: accept_invite
-Guards:
-  - Valid invite exists
-  - Invite not expired
-  - Team not disbanded
-  - Team not at member cap
-Actions:
-  - Find empty slot in team.members
-  - Set player.team = team_pubkey
-  - Set player.team_slot_index = slot
-  - Increment team.member_count
-  - Close invite account
-  - Emit MemberJoined
+                   join / accept_invite
+┌───────────┐ ──────────────────────> ┌──────────┐
+│           │                         │          │
+│ NonMember │                         │  Member  │
+│           │ <────────────────────── │  (Rank   │
+└───────────┘  leave / kick / disband │   0–4)   │
+                                      └──────────┘
+                                            │
+                                     promote/demote
+                                     transfer_leadership
+                                            │
+                                      ┌─────▼────┐
+                                      │  Member  │
+                                      │ (new rank)│
+                                      └──────────┘
 ```
 
-#### `Invited` → `NotMember`
-```
-Trigger: decline_invite
-Guards:
-  - Valid invite exists
-Actions:
-  - Close invite account
-  - Emit InviteDeclined
-```
+### `NonMember` → `Member` (via `join_team`, ID 51)
 
-#### `NotMember` → `Member` (Open Join)
 ```
 Trigger: join_team
 Guards:
-  - Team is open (join_type = Open)
-  - Player not on any team
-  - Team not at member cap
+  - team.is_public() == true (SETTING_PUBLIC bit set)
+  - team.is_disbanded() == false
+  - player.team_address() == NULL_PUBKEY
+  - team.member_count < team.max_members
+  - slot_index < team.max_members
+  - slot PDA must not exist (account empty)
+  - player.level >= team.min_level_to_join
+  - Same kingdom (player.game_engine == team.game_engine)
 Actions:
-  - Same as accept_invite
-  - Emit MemberJoined
+  - Create TeamMemberSlot at rank=4 (lowest join rank)
+  - team.member_count += 1
+  - team.last_activity = now
+  - player.team_address = team_pda
+  - player.team_slot_index = slot_index
+  - Emit TeamJoined
 ```
 
-#### `Member` → `NotMember`
+### `NonMember` → `Member` (via `accept_invite`, ID 55)
+
+Same actions as `join_team` but requires a valid `TeamInviteAccount` PDA (not expired). The invite account is closed and rent returned.
+
+### `Member` → `NonMember` (via `leave_team`, ID 52)
+
 ```
 Trigger: leave_team
 Guards:
-  - Player is team member
-  - Player is not leader (leader must disband or transfer)
+  - Caller's slot.rank != 0 (leader cannot leave; must transfer leadership first)
+  - team is not disbanded (or disbanded and player is clearing their reference)
 Actions:
-  - Clear team.members[slot]
-  - Decrement team.member_count
-  - Clear player.team
-  - Clear player.team_slot_index
-  - Emit MemberLeft
+  - Close TeamMemberSlot (rent → member wallet)
+  - team.member_count -= 1
+  - player.team_address = NULL_PUBKEY
+  - Emit TeamLeft
 ```
 
----
+### `Member` → `NonMember` (via `kick_member`, ID 57)
 
-## 3. Leadership Transfer
+```
+Trigger: kick_member
+Guards:
+  - actor slot has PERM_KICK permission
+  - actor_rank < target_rank (actor outranks target)
+  - target is not the leader (rank 0 cannot be kicked)
+Actions:
+  - Close target's TeamMemberSlot (rent → target wallet or team wallet)
+  - team.member_count -= 1
+  - target.team_address = NULL_PUBKEY
+  - Emit TeamMemberKicked
+```
 
-### Transition
+### Rank Transitions (`promote_member` / `demote_member`)
 
-#### Transfer Leadership
+```
+Trigger: promote_member (ID 220) or demote_member (ID 221)
+Guards:
+  - actor has PERM_PROMOTE
+  - actor_rank < target_rank (outranks target)
+  - For promote: target.rank > 1 (cannot promote to leader via this path)
+Actions:
+  - slot.rank -= 1 (promote) or slot.rank += 1 (demote)
+  - Emit MemberPromoted / MemberDemoted
+```
+
+### `transfer_leadership` (ID 56)
+
 ```
 Trigger: transfer_leadership
 Guards:
-  - Caller is leader
-  - Target is team member
+  - Caller has rank == 0 (is the leader)
+  - Target is an existing member (slot exists)
 Actions:
-  - Set target role = Leader (3)
-  - Set caller role = Co-Leader (2)
+  - target_slot.rank = 0
+  - leader_slot.rank = 1
+  - team.leader = target_player_pda
   - Emit LeadershipTransferred
 ```
 
 ---
 
-## 4. Role Management
-
-### Promote
-```
-Trigger: promote_member
-Guards:
-  - Caller.role > target.role
-  - target.role < 2 (cannot promote to leader)
-Actions:
-  - Increment target role
-  - Emit MemberPromoted
-```
-
-### Demote
-```
-Trigger: demote_member
-Guards:
-  - Caller.role > target.role
-  - target.role > 0
-Actions:
-  - Decrement target role
-  - Emit MemberDemoted
-```
-
-### Kick
-```
-Trigger: kick_member
-Guards:
-  - Caller.role > target.role
-  - Target != leader
-Actions:
-  - Clear target from team
-  - Decrement member_count
-  - Clear target's player.team
-  - Emit MemberKicked
-```
-
----
-
-## 5. Treasury System
+## 3. Invite Lifecycle
 
 ### States
 
-| State | Description |
-|-------|-------------|
-| `NoRequest` | No withdrawal pending |
-| `RequestPending` | Withdrawal request active |
+| State | Condition |
+|-------|-----------|
+| `NonExistent` | No `TeamInviteAccount` PDA for (team, invitee) |
+| `Pending` | PDA exists, `now < expires_at` |
+| `Expired` | PDA exists, `now >= expires_at` |
+
+### State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : invite (54)<br/>(expires_at = now + 604800)
+    Pending --> [*] : accept_invite (55)<br/>cancel_invite (210)<br/>decline_invite (211)
+    Pending --> Expired : 7 days elapse
+    Expired --> [*] : cleaned up
+```
+
+```
+                invite (ID 54)
+┌────────────┐ ──────────────> ┌─────────┐
+│            │                 │         │
+│ NonExistent│                 │ Pending │
+│            │ <────────────── │         │
+└────────────┘ cancel (210)    └────┬────┘
+                decline (211)       │
+                accept  (55)        │ time passes
+                                    ▼
+                              ┌──────────┐
+                              │ Expired  │
+                              │ (can be  │
+                              │ cleaned  │
+                              │  up)     │
+                              └──────────┘
+```
 
 ### Transitions
 
-#### Deposit
+#### `NonExistent` → `Pending`
+
 ```
-Trigger: deposit_treasury
+Trigger: invite (ID 54)
 Guards:
-  - Player is team member
-  - Amount > 0
+  - Caller has PERM_INVITE
+  - Invitee is not already a member
+  - Team has space (member_count < max_members)
+  - No existing invite PDA for (team, invitee)
 Actions:
-  - Transfer NOVI from player to team treasury
-  - Emit TreasuryDeposit
+  - Create TeamInviteAccount [TEAM_INVITE_SEED, team, invitee_player_pda]
+  - expires_at = now + 604800 (7 days)
 ```
 
-#### Request Withdrawal
+#### `Pending` → `NonExistent` (accepted)
+
 ```
-Trigger: treasury_request_withdraw
+Trigger: accept_invite (ID 55)
 Guards:
-  - Caller is Co-Leader+
-  - Amount <= treasury balance
-  - No pending request
+  - invite.invitee == caller_player_pda
+  - !invite.is_expired(now)
+  - Team has space, player not already a member
 Actions:
-  - Create withdrawal request
-  - Set required_approvals based on settings
-  - Emit WithdrawalRequested
+  - Close TeamInviteAccount (rent returned)
+  - Create TeamMemberSlot at rank=4
+  - team.member_count += 1
+  - player.team_address = team_pda
 ```
 
-#### Approve Request
-```
-Trigger: treasury_approve_request
-Guards:
-  - Valid request exists
-  - Caller is Co-Leader+
-  - Caller hasn't already approved
-Actions:
-  - Add approval
-  - If approvals >= required:
-    - Mark ready for execution
-  - Emit WithdrawalApproved
-```
+#### `Pending` → `NonExistent` (declined / cancelled)
 
-#### Execute Request
 ```
-Trigger: treasury_execute_request
-Guards:
-  - Request has sufficient approvals
-  - Caller is requester
+Trigger: decline_invite (ID 211) by invitee
+         cancel_invite (ID 210) by inviter or leader with PERM_INVITE
 Actions:
-  - Transfer NOVI from treasury to recipient
-  - Clear request
-  - Emit WithdrawalExecuted
-```
-
-#### Reject/Cancel Request
-```
-Trigger: treasury_reject_request / treasury_cancel_request
-Guards:
-  - Valid request exists
-  - Caller has permission (reject: Co-Leader+, cancel: requester)
-Actions:
-  - Clear request
-  - Emit WithdrawalRejected / WithdrawalCancelled
+  - Close TeamInviteAccount (rent returned)
 ```
 
 ---
 
-## 6. Team Settings
+## 4. Treasury Request Lifecycle
 
-### Configurable Settings
+### States
 
-| Setting | Options |
-|---------|---------|
-| Join Type | Open, InviteOnly |
-| Min Level | 1-100 |
-| Treasury Approvals | 1-3 required |
-| MOTD | Message of the Day |
+| State | Condition |
+|-------|-----------|
+| `NonExistent` | No `TreasuryRequest` PDA for (team, requester) |
+| `Pending` | PDA exists, `now < executable_at` |
+| `Executable` | PDA exists, `now >= executable_at` |
 
-### Update Settings
+### State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : treasury_request_withdraw (214)<br/>(executable_at = now + cooldown)
+    Pending --> Executable : cooldown elapses<br/>(default 8 hours)
+    Pending --> [*] : approve (215)<br/>reject (216)<br/>cancel (218)
+    Executable --> [*] : execute (217)<br/>approve (215)<br/>reject (216)<br/>cancel (218)
 ```
-Trigger: update_team_settings
+
+```
+                   treasury_request_withdraw (214)
+┌────────────┐ ───────────────────────────────────> ┌──────────┐
+│            │                                      │          │
+│ NonExistent│                                      │ Pending  │
+│            │ <──────────────────────────────────┐ │          │
+└────────────┘   approve (215) / reject (216)     │ └──────┬───┘
+                 cancel  (218) / execute (217)     │        │
+                                                   │        │ cooldown elapses
+                                                   │        ▼
+                                                   │ ┌────────────┐
+                                                   └─│ Executable │
+                                                     └────────────┘
+```
+
+### Transitions
+
+#### `NonExistent` → `Pending`
+
+```
+Trigger: treasury_request_withdraw (ID 214)
 Guards:
-  - Caller is Co-Leader+
+  - rank has PERM_TREASURY
+  - treasury.balance >= amount
+  - No existing TreasuryRequest for this member
 Actions:
-  - Update specified settings
-  - Emit SettingsUpdated
+  - Create TreasuryRequest PDA [TREASURY_REQUEST_SEED, team, requester_player_pda]
+  - executable_at = now + (team.treasury_cooldown_hours × 3600)
 ```
 
-### Set MOTD
+#### `Pending` / `Executable` → `NonExistent`
+
 ```
-Trigger: set_team_motd
-Guards:
-  - Caller is Officer+
-Actions:
-  - Update team.motd
-  - Emit MOTDUpdated
+Trigger: treasury_approve_request (ID 215)
+Guards:  approver_rank < requester_rank (outranks), treasury has funds
+Actions: Transfer amount to requester.cash_on_hand; close TreasuryRequest
+
+Trigger: treasury_reject_request (ID 216)
+Guards:  approver_rank < requester_rank
+Actions: Close TreasuryRequest (no funds)
+
+Trigger: treasury_execute_request (ID 217)
+Guards:  caller == requester; now >= executable_at; treasury has funds
+Actions: Transfer amount to requester.cash_on_hand; close TreasuryRequest
+
+Trigger: treasury_cancel_request (ID 218)
+Guards:  caller == requester
+Actions: Close TreasuryRequest (no funds)
 ```
 
 ---
 
-## 7. Account Structures
+## Account Structure
 
-### TeamAccount (296 bytes)
+### TeamAccount (280 bytes)
+
 ```rust
 pub struct TeamAccount {
+    pub account_key: u8,
+    pub game_engine: Address,               // kingdom reference
     pub id: u64,
-    pub leader: Pubkey,
+    pub leader: Address,                    // leader's PLAYER ACCOUNT pubkey
+    pub bump: u8,
+    pub disbanded: bool,
+    pub _padding0: [u8; 6],
     pub name: [u8; 32],
     pub name_len: u8,
+    pub _padding1: [u8; 7],
+    pub member_count: u16,
+    pub max_members: u16,
+    pub _padding2: [u8; 4],
     pub created_at: i64,
-    pub member_count: u8,
-    pub max_members: u8,
-    pub join_type: u8,
-    pub min_join_level: u8,
-    pub is_disbanded: bool,
-
-    // Treasury
-    pub treasury_balance: u64,
-    pub treasury_approvals_required: u8,
-
-    // Current withdrawal request
-    pub withdrawal_amount: u64,
-    pub withdrawal_recipient: Pubkey,
-    pub withdrawal_approvals: u8,
-    pub withdrawal_approved_by: [bool; 8],
-
-    // Settings
-    pub motd: [u8; 128],
+    pub last_activity: i64,
+    pub treasury: u64,
+    pub settings: u8,
+    pub min_level_to_join: u8,
+    pub role_permissions: [u8; 5],         // index = rank 0..4
+    pub _padding3: u8,
+    pub motd: [u8; 32],
     pub motd_len: u8,
-
-    // Member slots (role per slot)
-    pub member_roles: [u8; 50],  // MAX_TEAM_SIZE
-
-    pub bump: u8,
+    pub _padding4: [u8; 7],
+    pub treasury_instant_limit: [u64; 4],
+    pub treasury_daily_cap: [u64; 4],
+    pub treasury_cooldown_hours: u8,
+    pub _treasury_reserved: [u8; 7],
 }
+// Compile-time assertion: size_of::<TeamAccount>() == 280
 ```
 
-### TeamInviteAccount (80 bytes)
+**PDA seeds:** `[b"team", game_engine, team_id:u64 LE]`
+
+### TeamMemberSlot (104 bytes)
+
+```rust
+pub struct TeamMemberSlot {
+    pub account_key: u8,
+    pub team: Address,
+    pub player: Address,                    // player ACCOUNT pubkey
+    pub joined_at: i64,
+    pub slot_index: u16,
+    pub bump: u8,
+    pub rank: u8,
+    pub _reserved: [u8; 4],
+    pub treasury_withdrawn_today: u64,
+    pub last_treasury_day: u16,
+    pub _treasury_padding: [u8; 6],
+}
+// Compile-time assertion: size_of::<TeamMemberSlot>() == 104
+```
+
+**PDA seeds:** `[b"team_slot", team_pubkey, slot_index:u16 LE]`
+
+### TeamInviteAccount (136 bytes)
+
 ```rust
 pub struct TeamInviteAccount {
-    pub team: Pubkey,
-    pub invitee: Pubkey,
-    pub inviter: Pubkey,
+    pub account_key: u8,
+    pub team: Address,
+    pub invitee: Address,
+    pub bump: u8,
+    pub _padding0: [u8; 7],
+    pub inviter: Address,
     pub created_at: i64,
     pub expires_at: i64,
-    pub bump: u8,
+    pub _reserved: [u8; 8],
 }
+// Compile-time assertion: size_of::<TeamInviteAccount>() == 136
 ```
 
-### PlayerAccount Team Fields
+**PDA seeds:** `[b"team_invite", team_pubkey, invitee_player_pubkey]`
+
+### TreasuryRequest (112 bytes)
+
 ```rust
-pub team: Pubkey,           // NULL_PUBKEY if not on team
-pub team_slot_index: u8,    // Index in team.members array
+pub struct TreasuryRequest {
+    pub account_key: u8,
+    pub team: Address,
+    pub requester: Address,                 // requester's player account pubkey
+    pub amount: u64,
+    pub created_at: i64,
+    pub executable_at: i64,
+    pub bump: u8,
+    pub _reserved: [u8; 15],
+}
+// Compile-time assertion: size_of::<TreasuryRequest>() == 112
 ```
+
+**PDA seeds:** `[b"treasury_request", team_pubkey, requester_player_pubkey]`
 
 ---
 
-## 8. Invariants
+## Invariants
 
 ```
-1. Player can only be on one team
-2. Team must have exactly one leader
-3. Leader cannot leave (must transfer or disband)
-4. Member count matches actual members
-5. Role hierarchy: Leader > Co-Leader > Officer > Member
-6. Can only promote to one rank below own
-7. Cannot kick equal or higher rank
-8. Treasury requires approval for withdrawals
-9. Disbanded teams cannot accept new members
-10. Team name must be unique
+1. team.game_engine matches all members' player.game_engine (kingdom-scoped)
+2. team.leader stores a PLAYER ACCOUNT pubkey, not a wallet address
+3. team.member_count == number of live TeamMemberSlot PDAs
+4. Exactly one rank-0 slot exists while team is active
+5. slot.player stores the player ACCOUNT pubkey, not the wallet
+6. leader (rank 0) cannot be kicked; can only leave after transfer_leadership
+7. disband requires member_count == 1 (leader must kick/wait for all members to leave)
+8. Only one TreasuryRequest per member (team, requester) at any time
+9. Invite expires_at = created_at + 604800 (7 days) — set at invite creation
+10. treasury_instant_limit and treasury_daily_cap arrays are indexed [rank-1] for ranks 1–4
+11. Rank 0 always has u64::MAX for both instant_limit and daily_cap (not in array)
+12. treasury_cooldown_hours is clamped to [1, 72] in get_cooldown_seconds()
 ```

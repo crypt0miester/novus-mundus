@@ -64,14 +64,12 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Fixed Accounts
 
-    if accounts.len() < 4 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let rally_account = &accounts[0];
-    let target_account = &accounts[1];
-    let game_engine_account = &accounts[2];
-    let leader_estate_account = &accounts[3];
+    crate::extract_accounts!(accounts, [
+        rally_account,
+        target_account,
+        game_engine_account,
+        leader_estate_account,
+    ]);
 
     // Load rally to get participant count
     // RallyAccount doesn't have load_checked - verify program ownership manually

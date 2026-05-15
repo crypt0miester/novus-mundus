@@ -12,6 +12,7 @@ use crate::{
     events::NoviReservedToLocked,
     state::{PlayerAccount, UserAccount},
     constants::{PLAYER_SEED, USER_SEED},
+    utils::read_u64,
     validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
@@ -52,7 +53,7 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         player,
         user,
         owner,
@@ -61,9 +62,7 @@ pub fn process(
         _game_engine,
         _novi_mint,
         _token_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -82,10 +81,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let amount = u64::from_le_bytes([
-        data[0], data[1], data[2], data[3],
-        data[4], data[5], data[6], data[7],
-    ]);
+    let amount = read_u64(data, 0, "reserved_to_locked.amount")?;
 
     if amount == 0 {
         return Err(GameError::InvalidParameter.into());

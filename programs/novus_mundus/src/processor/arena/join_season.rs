@@ -12,7 +12,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -27,6 +26,7 @@ use crate::{
         PlayerAccount, ARENA_PARTICIPANT_ACCOUNT_SIZE, ARENA_LOADOUT_ACCOUNT_SIZE,
     },
     validation::{require_signer, require_writable, require_key_match, require_owner, require_data_len},
+    utils::read_u32,
 };
 
 /// Instruction data for join_season
@@ -38,16 +38,14 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         arena_season,
         participant_account,
         loadout_account,
         player_account,
         player_authority,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(player_authority)?;
@@ -58,14 +56,7 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data (4 bytes minimum)
-    if instruction_data.len() < 4 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let season_id = u32::from_le_bytes([
-        instruction_data[0], instruction_data[1],
-        instruction_data[2], instruction_data[3],
-    ]);
+    let season_id = read_u32(instruction_data, 0, "join_season.season_id")?;
 
     // 4. Load Clock
     let clock = Clock::get()?;

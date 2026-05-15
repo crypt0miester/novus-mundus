@@ -16,7 +16,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -26,6 +25,7 @@ use crate::{
     constants::EXPEDITION_SEED,
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, GameEngine},
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
     events::ExpeditionStrike,
@@ -51,15 +51,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let game_authority = &accounts[1];
-    let player_account = &accounts[2];
-    let expedition_account = &accounts[3];
-    let game_engine_account = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        owner,
+        game_authority,
+        player_account,
+        expedition_account,
+        game_engine_account,
+    ]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -68,10 +66,7 @@ pub fn process(
     require_owner(expedition_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let score = instruction_data[0].min(100); // Cap at 100
+    let score = read_u8(instruction_data, 0, "score")?.min(100); // Cap at 100
 
     // 4. Validate game_authority against GameEngine
     // Validate game_engine account (ownership + PDA + discriminator + bump)

@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{Sysvar, clock::Clock},
@@ -10,6 +9,7 @@ use crate::{
     error::GameError,
     state::{HeroTemplate, GameEngine},
     constants::HERO_TEMPLATE_SEED,
+    utils::{read_u16, read_u32},
     validation::{require_signer, require_writable},
     emit,
     events::SupplyCapUpdated,
@@ -34,27 +34,19 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         dao_authority,
         hero_template,
         game_engine,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;
     require_writable(hero_template)?;
 
     // 3. Parse instruction data
-    if instruction_data.len() < 6 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let template_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let new_supply_cap = u32::from_le_bytes([
-        instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5],
-    ]);
+    let template_id = read_u16(instruction_data, 0, "update_supply_cap.template_id")?;
+    let new_supply_cap = read_u32(instruction_data, 2, "update_supply_cap.new_supply_cap")?;
 
     // 4. Verify DAO authority
     // Validate game_engine account (ownership + PDA + discriminator + bump)

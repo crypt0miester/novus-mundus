@@ -29,6 +29,7 @@ use crate::{
         event_scoring::update_event_score,
         estate::{observatory_loot_bonus_bps, load_estate_for_player, require_mine, require_dock, require_farm, mine_mining_bonus_bps, dock_fishing_bonus_bps, farm_produce_bonus_bps},
     },
+    utils::{read_u8, read_u64},
     validation::require_signer,
     emit,
     events::{ResourcesCollected, XpGained, PlayerLeveledUp},
@@ -78,28 +79,40 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // estate_account is required, event accounts are optional
-    let (player, user, owner, player_token_account, novi_mint, game_engine, _token_program, estate_account, event_participation, event) = if accounts.len() >= 10 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], Some(&accounts[8]), Some(&accounts[9]))
-    } else if accounts.len() >= 8 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], &accounts[7], None, None)
+    crate::extract_accounts!(accounts, [
+        player,
+        user,
+        owner,
+        player_token_account,
+        novi_mint,
+        game_engine,
+        _token_program,
+        estate_account,
+    ]);
+    let (event_participation, event) = if accounts.len() >= 10 {
+        (Some(&accounts[8]), Some(&accounts[9]))
     } else {
-        return Err(ProgramError::NotEnoughAccountKeys);
+        (None, None)
     };
 
     // 2. Validate signer
     require_signer(owner)?;
+
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "collect_resources.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse instruction data
     if data.len() != 9 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let novi_amount = u64::from_le_bytes([
-        data[0], data[1], data[2], data[3],
-        data[4], data[5], data[6], data[7],
-    ]);
+    let novi_amount = read_u64(data, 0, "novi_amount")?;
 
-    let collection_type = CollectionType::try_from(data[8])?;
+    let collection_type = CollectionType::try_from(read_u8(data, 8, "collection_type")?)?;
 
     // 4. Load GameEngine for config (kingdom-scoped)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;

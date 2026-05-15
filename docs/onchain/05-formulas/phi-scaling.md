@@ -1,287 +1,294 @@
 # Phi (φ) Scaling
 
-> The Golden Ratio as the mathematical foundation of Novus Mundus progression.
+> The golden ratio as the single mathematical foundation for all progression, cost, and buff scaling in Novus Mundus.
 
-## The Golden Ratio
+## Overview
 
-The Golden Ratio (φ ≈ 1.618033988749895) appears throughout Novus Mundus as the basis for progression curves. This creates:
-
-- **Aesthetically pleasing** growth curves
-- **Balanced** progression that feels rewarding
-- **Predictable** scaling for both players and designers
-
-```
-φ = (1 + √5) / 2 ≈ 1.618033988749895
-√φ ≈ 1.272019649514069
-```
-
-## Where φ Appears
+Every scaling function in Novus Mundus uses the golden ratio family rather than arbitrary exponents or lookup tables. The result is a self-similar progression curve where relationships between tiers are always φ-multiples of each other.
 
 ```mermaid
-graph TB
-    PHI[Golden Ratio φ]
-    PHI --> HERO[Hero Buff Scaling]
-    PHI --> BUILD[Building Bonuses]
-    PHI --> RESEARCH[Research Costs]
-    PHI --> MEDITATE[Meditation XP]
-    PHI --> UPGRADE[Upgrade Costs]
+graph TD
+    subgraph "Golden Ratio Family"
+        PHI["φ = 1.618... (base)"]
+        ROOT["√φ = 1.272... (half step)"]
+        PHI2["φ² = 2.618... (two steps)"]
+        PHIINV["1/φ = 0.618... (inverse)"]
+        PHI2INV["1/φ² = 0.382... (double inverse)"]
+        PHI3INV["1/φ³ = 0.236... (triple inverse)"]
+    end
+
+    subgraph "Applied To"
+        HERO["Hero Buff Scaling<br/>base × √φ^level"]
+        RESEARCH["Research Cost<br/>base × 1.8^level"]
+        RESTIME["Research Time<br/>base × 1.5^level"]
+        ESTATE["Estate Upgrade Cost<br/>base × φ²^level"]
+        BLDTIME["Building Time<br/>φ² per 5 levels"]
+    end
+
+    ROOT --> HERO
+    PHI2 --> ESTATE
+    PHI2 --> BLDTIME
 ```
-
----
-
-## Hero Buff Scaling
-
-Hero buffs scale with level using **√φ**:
-
-```
-buff_at_level = base_bps × (√φ)^level
-```
-
-### Why √φ?
-
-Using √φ instead of φ directly creates gentler curves:
-- Level 10: ~7x multiplier (vs ~123x with φ)
-- Level 50: ~150x multiplier (vs ~2.5 billion with φ)
-
-This keeps high-level heroes powerful but not game-breaking.
-
-### Growth Table
-
-| Level | Multiplier | 500 base → |
-|-------|------------|------------|
-| 1 | 1.00× | 500 |
-| 2 | 1.27× | 635 |
-| 5 | 2.06× | 1,030 |
-| 10 | 4.24× | 2,120 |
-| 20 | 17.9× | 8,950 |
-| 30 | 76.0× | 38,000 |
-| 50 | 1,364× | 682,000 |
-| 100 | 1,860,498× | 930M |
-
-### Implementation
-
-```rust
-pub fn calculate_buff_at_level(base_bps: u64, level: u32) -> u64 {
-    // √φ ≈ 1.272019649514069
-    // Using fixed-point: 1272019 / 1000000
-    let sqrt_phi_num: u64 = 1_272_019;
-    let sqrt_phi_den: u64 = 1_000_000;
-
-    let mut result = base_bps;
-    for _ in 0..level {
-        result = result * sqrt_phi_num / sqrt_phi_den;
-    }
-    result
-}
-```
-
-[Source: logic/mod.rs](../../../programs/novus_mundus/src/logic/mod.rs)
-
----
-
-## Building Bonus Scaling
-
-Building bonuses scale with level using **φ directly**:
-
-```
-bonus_at_level = base_bonus × φ^(level-1)
-```
-
-### Growth Table
-
-| Level | Multiplier | 100 base → |
-|-------|------------|------------|
-| 1 | 1.00× | 100 |
-| 5 | 6.85× | 685 |
-| 10 | 76.0× | 7,600 |
-| 15 | 843× | 84,300 |
-| 20 | 9,349× | 934,900 |
-
-### Why φ for Buildings?
-
-Buildings have:
-- Hard cap at level 20
-- Significant resource investment
-- Long construction times
-
-Using φ rewards this investment with dramatic bonuses at high levels.
-
-### Implementation
-
-```rust
-pub const PHI_NUMER: u64 = 1_618_034;
-pub const PHI_DENOM: u64 = 1_000_000;
-
-pub fn phi_scale(base: u64, level: u8) -> u64 {
-    if level == 0 { return 0; }
-
-    let mut result = base;
-    for _ in 1..level {
-        result = result * PHI_NUMER / PHI_DENOM;
-    }
-    result
-}
-```
-
-[Source: helpers/estate.rs](../../../programs/novus_mundus/src/helpers/estate.rs)
-
----
-
-## Research Cost Scaling
-
-Research costs scale with category and tier using φ:
-
-```
-cost = base_cost × φ^tier
-```
-
-| Category | Base Cost | Tier 5 Cost |
-|----------|-----------|-------------|
-| Basic | 1,000 | 11,090 |
-| Intermediate | 5,000 | 55,450 |
-| Advanced | 20,000 | 221,800 |
-| Expert | 50,000 | 554,500 |
-
----
-
-## Meditation XP Requirements
-
-XP required for each meditation level:
-
-```
-xp_for_level = base_xp × φ^(level-1)
-```
-
-| Level | XP Required | Total XP |
-|-------|-------------|----------|
-| 1 | 100 | 100 |
-| 5 | 685 | 1,755 |
-| 10 | 7,600 | 19,750 |
-| 20 | 935,000 | 2.43M |
-
-### Diminishing Returns
-
-Higher levels require exponentially more XP, creating natural plateaus where players feel accomplished while still having goals.
-
-[Source: helpers/estate.rs](../../../programs/novus_mundus/src/helpers/estate.rs) - meditation formulas
-
----
-
-## Upgrade Cost Scaling
-
-Building upgrade costs follow φ progression:
-
-```
-upgrade_cost(level) = base_cost × φ^(level-1)
-```
-
-### Example: Mansion
-
-| Level | NOVI Cost | Cash Cost | Time |
-|-------|-----------|-----------|------|
-| 1→2 | 1,000 | 500 | 5 min |
-| 5→6 | 6,854 | 3,427 | 34 min |
-| 10→11 | 76,013 | 38,006 | 6.3 hr |
-| 15→16 | 843,468 | 421,734 | 70 hr |
-| 19→20 | 6,765,201 | 3,382,600 | 564 hr |
-
----
-
-## Visual Comparison
 
 ```mermaid
-xychart-beta
-    title "Scaling Comparison: φ vs √φ vs Linear"
-    x-axis "Level" [1, 5, 10, 15, 20]
-    y-axis "Multiplier" 0 --> 100
-    line [1, 6.85, 76, 843, 9349]
-    line [1, 2.06, 4.24, 8.73, 17.9]
-    line [1, 5, 10, 15, 20]
+graph LR
+    subgraph "φ family relationships"
+        A["1/φ³ = 0.236"]
+        B["1/φ² = 0.382"]
+        C["1/φ = 0.618"]
+        D["1.0"]
+        E["√φ = 1.272"]
+        F["φ = 1.618"]
+        G["φ² = 2.618"]
+        A -->|"× φ"| B -->|"× φ"| C -->|"× φ"| D -->|"× √φ"| E -->|"× √φ"| F -->|"× φ"| G
+    end
 ```
 
-Legend:
-- **Blue (φ^n)**: Building bonuses - dramatic growth
-- **Orange (√φ^n)**: Hero buffs - moderate growth
-- **Green (linear)**: Reference baseline
+## Golden Ratio Constants
 
----
-
-## Design Benefits
-
-### 1. Psychological Appeal
-
-The Golden Ratio appears in nature and art. Humans find φ-based proportions inherently satisfying.
-
-### 2. Balanced Progression
-
-- Early levels are achievable
-- Mid levels feel meaningful
-- Late levels are aspirational
-
-### 3. Anti-Inflation
-
-Exponential costs absorb currency that would otherwise cause inflation.
-
-### 4. Predictable Math
-
-Both designers and players can calculate expected values:
-```
-"Level 10 is roughly 75x level 1"
-"Each 5 levels is about 10x stronger"
-```
-
----
-
-## Implementation Constants
-
-Key constants in the codebase:
+All constants are `f64` stored in `constants.rs`. They use full irrational precision, converted to integers only at the final output step.
 
 ```rust
-// Golden Ratio (φ)
-pub const PHI_NUMER: u64 = 1_618_034;
-pub const PHI_DENOM: u64 = 1_000_000;
-
-// Square Root of φ (√φ)
-pub const SQRT_PHI_NUMER: u64 = 1_272_019;
-pub const SQRT_PHI_DENOM: u64 = 1_000_000;
-
-// Basis points base
-pub const BPS_BASE: u64 = 10_000;
+pub const PHI: f64            = 1.618033988749895;       // φ
+pub const GOLDEN_ROOT: f64    = 1.2720196495140689;      // √φ
+pub const PHI_SQUARED: f64    = 2.618033988749895;       // φ²
+pub const PHI_INVERSE: f64    = 0.6180339887498949;      // 1/φ
+pub const PHI_SQUARED_INVERSE: f64 = 0.3819660112501051; // 1/φ²
+pub const PHI_CUBED_INVERSE: f64   = 0.2360679774997897; // 1/φ³
 ```
+
+Key identities:
+- `(√φ)² = φ` — every 2 levels equals one golden ratio multiplier
+- `φ × (1/φ) = 1` — inverse relationships for diminishing returns
+- `φ² = φ + 1` — self-similar scaling for legendary tiers
 
 [Source: constants.rs](../../../programs/novus_mundus/src/constants.rs)
 
----
+## Hero Buff Scaling
 
-## Practical Examples
+**Formula:** `buff(level) = base × √φ ^ level`
 
-### Hero Attack Buff
+Implemented in `calculate_buff_at_level` → `golden_root_power`:
 
-A hero with 500 base attack buff:
-- Level 1: 500 bps (+5%)
-- Level 10: 2,120 bps (+21.2%)
-- Level 50: 682,000 bps (+6,820%)
+```rust
+pub fn golden_root_power(n: u32) -> f64 {
+    if n == 0 { return 1.0; }
+    libm::pow(GOLDEN_ROOT, n as f64)
+}
 
-### Academy Research Speed
-
-Academy with 100 bps base bonus:
-- Level 1: 100 bps (-1% time)
-- Level 10: 7,600 bps (-76% time, capped at -75%)
-- Level 20: Massively over cap
-
-### Building Upgrade Cost
-
-Sanctuary upgrade from level 10→11:
-```
-base_cost = 5,000 NOVI
-φ^9 = 76.013
-cost = 5,000 × 76.013 = 380,065 NOVI
+pub fn calculate_buff_at_level(base: u64, level: u32) -> u64 {
+    let multiplier = golden_root_power(level);
+    let result = base as f64 * multiplier;
+    if result >= u64::MAX as f64 { u64::MAX } else { result as u64 }
+}
 ```
 
----
+**Progression table** (base = 1,000):
 
-*The Golden Ratio isn't just mathematics—it's the rhythm of growth that players feel even without seeing the formulas.*
+| Level | Multiplier | Buff Value |
+|-------|-----------|------------|
+| 0 | 1.000× | 1,000 |
+| 1 | √φ = 1.272× | 1,272 |
+| 2 | φ = 1.618× | 1,618 |
+| 3 | φ√φ = 2.058× | 2,058 |
+| 4 | φ² = 2.618× | 2,618 |
+| 5 | φ²√φ = 3.330× | 3,330 |
+| 6 | φ³ = 4.236× | 4,236 |
+| 8 | φ⁴ = 6.854× | 6,854 |
+| 10 | φ⁵ = 11.09× | 11,090 |
+| 20 | φ¹⁰ = 122.99× | 122,990 |
 
----
+Every 2 levels exactly multiplies the buff by φ. Every 10 levels multiplies by φ⁵ ≈ 11.09.
 
-Next: [Combat Math](./combat-math.md)
+```mermaid
+graph LR
+    L0["Lv 0<br/>1.000×"] -->|"× √φ"| L1["Lv 1<br/>1.272×"]
+    L1 -->|"× √φ"| L2["Lv 2<br/>φ = 1.618×"]
+    L2 -->|"× √φ"| L3["Lv 3<br/>2.058×"]
+    L3 -->|"× √φ"| L4["Lv 4<br/>φ² = 2.618×"]
+    L4 -->|"× √φ"| L5["Lv 5<br/>3.330×"]
+    L5 -->|"× √φ"| L6["Lv 6<br/>φ³ = 4.236×"]
+```
+
+[Source: logic/golden_math.rs](../../../programs/novus_mundus/src/logic/golden_math.rs)
+
+## Research Cost Scaling
+
+**Formula:** `cost(level) = base_cost × 1.8 ^ level`
+
+Implemented via `exp_growth` in `safe_math.rs`:
+
+```rust
+pub fn exp_growth(base: u64, numerator: u64, denominator: u64, iterations: u32) -> Option<u64> {
+    let mut result = base;
+    for _ in 0..iterations {
+        result = result.checked_mul(numerator)?.checked_div(denominator)?;
+    }
+    Some(result)
+}
+// Called as: exp_growth(base_cost, 18, 10, level)
+```
+
+**Example** (base = 1,000 NOVI):
+
+| Level | Cost |
+|-------|------|
+| 1 | 1,800 |
+| 5 | 18,896 |
+| 10 | 357,047 |
+| 15 | 6,746,640 |
+| 20 | 127,482,273 |
+
+## Research Time Scaling
+
+**Formula:** `time(level) = base_time × 1.5 ^ level`
+
+Same `exp_growth` function: `exp_growth(base_time, 3, 2, level)`.
+
+**Example** (base = 3,600 seconds = 1 hour):
+
+| Level | Duration |
+|-------|----------|
+| 1 | 1.5h |
+| 5 | 7.6h |
+| 10 | 57.7h |
+| 15 | 437h |
+| 20 | 3,325h |
+
+## Estate Upgrade Cost Scaling
+
+**Formula:** `cost(level) = base_cost × φ² ^ level` = `base_cost × 2.618033... ^ level`
+
+φ² = `PHI_SQUARED` = 2.618033988749895.
+
+This is the steepest scaling in the game — each level costs 2.618× the previous, creating a strong soft cap on building levels.
+
+**Example** (base = 100):
+
+| Level | Cost |
+|-------|------|
+| 1 | 262 |
+| 2 | 685 |
+| 3 | 1,793 |
+| 5 | 12,289 |
+| 10 | 1,509,560 |
+
+```mermaid
+graph LR
+    subgraph "Cost scaling comparison per level"
+        H["Hero buff: × √φ (1.272)"]
+        R["Research cost: × 1.8"]
+        E["Estate cost: × φ² (2.618)"]
+    end
+    H -->|"weakest"| R -->|"steepest"| E
+```
+
+## Building Time Scaling
+
+Building construction time scales by φ² per 5 levels. This creates the same exponential character as estate costs but on a coarser level band.
+
+```
+time_band(floor) = base_time × φ² ^ floor
+where floor = (building_level - 1) / 5
+```
+
+## NOVI Consumption Scaling
+
+The `consume_novi_logic` function applies three basis-point multipliers in sequence:
+
+```mermaid
+flowchart LR
+    NOVI["novi_amount"] --> M1["× 13.75<br/>novi_consumption_base<br/>137500 bps"]
+    M1 --> M2["× √φ = 1.272<br/>secondary_multiplier_base<br/>12720 bps"]
+    M2 --> M3["× synchrony<br/>1.0× to ~2.5×<br/>(player stats)"]
+    M3 --> FIB{"is_fibonacci?<br/>5n²±4 perfect square"}
+    FIB -->|Yes| FB["× φ = 1.618<br/>fibonacci_bonus_base<br/>16180 bps"]
+    FIB -->|No| OUT["power output"]
+    FB --> OUT
+```
+
+```
+base_value = chain_bp(novi_amount, [
+    novi_consumption_base,    // default: 137500 bp = 13.75×
+    secondary_multiplier_base, // default: 12720  bp = √φ = 1.272×
+    synchrony_bp,              // 1.0× to ~2.5× based on player stats
+])
+
+if is_fibonacci(novi_amount):
+    power = apply_bp(base_value, fibonacci_bonus_base)  // default: 16180 bp = φ = 1.618×
+else:
+    power = base_value
+```
+
+**Default multiplier chain:** `13.75 × 1.272 × synchrony`. For a 1.0 synchrony player consuming 100 NOVI: `100 × 13.75 × 1.272 = 1,749` power.
+
+**Fibonacci bonus:** Consuming a Fibonacci-number amount of NOVI applies an additional φ (1.618×) multiplier. The test `is_fibonacci(n)` uses:
+```
+n is Fibonacci ⟺ (5n² + 4) or (5n² - 4) is a perfect square
+```
+Computed in `u128` to prevent overflow. Fibonacci amounts: 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, ...
+
+> **Note:** The Fibonacci bonus default is **φ = 1.618× (16180 bps)**, not √φ. Previous documentation that stated √φ as the Fibonacci bonus is incorrect.
+
+[Source: logic/consume.rs](../../../programs/novus_mundus/src/logic/consume.rs)
+[Source: logic/fibonacci.rs](../../../programs/novus_mundus/src/logic/fibonacci.rs)
+[Source: state/game_engine.rs EconomicConfig](../../../programs/novus_mundus/src/state/game_engine.rs)
+
+## Weapon Cost Ratios (φ-based)
+
+Weapon costs in `EconomicConfig` are differentiated by φ ratios:
+
+| Weapon Type | Cost Ratio | Approximate |
+|-------------|-----------|-------------|
+| Melee | 1.0× | base |
+| Armor | √φ× | 1.272× |
+| Ranged | φ× | 1.618× |
+| Siege | φ²× | 2.618× |
+
+Combat power in the Arena follows the same pattern: melee = 10, ranged = 16 ≈ φ×10, siege = 26 ≈ φ²×10.
+
+```mermaid
+graph LR
+    MELEE["Melee<br/>1.0× (base)"] -->|"× √φ"| ARMOR["Armor<br/>1.272×"]
+    ARMOR -->|"× √φ"| RANGED["Ranged<br/>φ = 1.618×"]
+    RANGED -->|"× φ"| SIEGE["Siege<br/>φ² = 2.618×"]
+```
+
+## XP Level Progression
+
+XP required to level up follows a 2.5× exponential:
+
+```rust
+xp_required_for_level(level) = 100.0 × 2.5^(level - 2)
+```
+
+| Level | XP Required |
+|-------|-------------|
+| 2 | 100 |
+| 3 | 250 |
+| 4 | 625 |
+| 5 | 1,563 |
+| 10 | 38,147 |
+| 20 | 9,094,947 |
+
+[Source: logic/progression.rs](../../../programs/novus_mundus/src/logic/progression.rs)
+
+## Basis Points Arithmetic
+
+All integer multiplications use the `safe_math` module which keeps calculations within `u64` without `u128`:
+
+```rust
+// apply_bp: value × multiplier_bp / 10000
+fn apply_bp(value: u64, multiplier_bp: u64) -> Option<u64>
+
+// chain_bp: apply multiple multipliers sequentially (interleaved ×/)
+fn chain_bp(mut value: u64, multipliers_bp: &[u64]) -> Option<u64>
+
+// exp_growth: base × (num/den)^iterations
+fn exp_growth(base: u64, num: u64, den: u64, iter: u32) -> Option<u64>
+```
+
+The interleaved multiply/divide in `chain_bp` prevents intermediate overflow without needing `u128` — each step stays within the u64 range.
+
+[Source: logic/safe_math.rs](../../../programs/novus_mundus/src/logic/safe_math.rs)
+[Source: logic/golden_math.rs](../../../programs/novus_mundus/src/logic/golden_math.rs)

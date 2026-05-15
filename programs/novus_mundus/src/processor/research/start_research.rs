@@ -23,6 +23,7 @@ use crate::{
         require_signer,
         require_writable,
     },
+    utils::read_u8,
     emit,
     events::ResearchStarted,
 };
@@ -57,9 +58,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [player_owner, research_progress, research_template, player_account, game_engine, estate_account, player_token_account, novi_mint, _token_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [player_owner, research_progress, research_template, player_account, game_engine, estate_account, player_token_account, novi_mint, _token_program]);
 
     // 2. Validate accounts
     require_signer(player_owner)?;
@@ -67,12 +66,18 @@ pub fn process(
     require_writable(player_account)?;
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "start_research.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse instruction data
     if instruction_data.len() != 1 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let research_type = instruction_data[0];
+    let research_type = read_u8(instruction_data, 0, "start_research.research_type")?;
 
     if research_type >= 30 {
         return Err(GameError::InvalidParameter.into());

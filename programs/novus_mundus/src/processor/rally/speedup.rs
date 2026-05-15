@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -9,6 +8,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{PlayerAccount, GameEngine, RallyAccount, RallyParticipant, RallyStatus},
+    utils::read_u8,
     validation::require_owner,
     emit,
     events::RallySpeedup,
@@ -57,23 +57,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         rally_account,
         rally_participant_account,
         payer_player_account,
         payer_owner,
         game_engine_account,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let speedup_type = instruction_data[0];
-    let speedup_tier = instruction_data[1];
+    let speedup_type = read_u8(instruction_data, 0, "rally_speedup.speedup_type")?;
+    let speedup_tier = read_u8(instruction_data, 1, "rally_speedup.speedup_tier")?;
 
     if speedup_tier < 1 || speedup_tier > 2 {
         return Err(GameError::InvalidParameter.into());

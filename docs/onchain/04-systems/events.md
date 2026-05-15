@@ -1,32 +1,30 @@
 # Events System
 
-> Timed competitions with leaderboards and prize pools.
+> Kingdom-scoped skill competitions — leaderboard scoring, anti-Sybil eligibility, and tiered prize distribution.
 
 ## System Overview
 
-Events are **time-limited competitions** where players compete for rankings and prizes. The system supports multiple event types, participation tracking, and automated prize distribution.
+Events are time-bounded competitions where players accumulate or snapshot a score based on in-game actions. A top-10 leaderboard updates live as scores are submitted (via other game processors that call the shared `update_event_score` helper). After `end_time` elapses, any caller can finalize the event and the top-10 players may claim their weighted share of the prize pool.
+
+Events are **kingdom-scoped**: the `GameEngine` pubkey is embedded in both the `EventAccount` and `EventParticipation` PDAs, ensuring leaderboards are isolated per kingdom.
 
 ```mermaid
 graph TB
     subgraph "Event Lifecycle"
-        CREATE[Create Event] --> PENDING[Pending]
-        PENDING --> ACTIVE[Active]
-        ACTIVE --> FINALIZED[Finalized]
-        FINALIZED --> CLAIMS[Prize Claims]
+        PENDING[Pending<br/>status=0] -->|auto_activate or activate_sale| ACTIVE[Active<br/>status=1]
+        ACTIVE -->|finalize, permissionless| FINAL[Finalized<br/>status=2]
+        PENDING -->|DAO cancel| CANCELLED[Cancelled<br/>status=3]
     end
 
-    subgraph "Participation"
-        JOIN[Join Event]
-        SCORE[Score Points]
-        BOARD[Leaderboard]
-        JOIN --> SCORE --> BOARD
+    subgraph "Score Flow"
+        GAME[Game Action<br/>attack, collect, etc.] -->|update_event_score helper| PART[EventParticipation<br/>score updated]
+        PART -->|update_leaderboard| LB[EventAccount<br/>leaderboard top-10]
     end
 
-    subgraph "Prizes"
-        POOL[Prize Pool]
-        DIST[Distribution]
-        CLAIM[Claim Prize]
-        POOL --> DIST --> CLAIM
+    subgraph "Claim Flow"
+        FINAL --> CLAIM[claim_prize]
+        CLAIM --> ELIGIBILITY[Anti-Sybil Checks]
+        ELIGIBILITY --> PRIZE[Prize transferred<br/>participation account closed]
     end
 ```
 
@@ -34,475 +32,389 @@ graph TB
 
 | ID | Instruction | Description |
 |----|-------------|-------------|
-| 90 | `create_event` | Admin creates new event |
-| 91 | `join_event` | Player joins competition |
-| 92 | `update_score` | Increment player's score |
-| 93 | `activate_event` | Start the event |
-| 94 | `finalize_event` | End and lock rankings |
-| 95 | `claim_prize` | Winner claims reward |
-| 96 | `cancel_event` | Admin cancels event |
+| 80 | `create_event` | Create EventAccount PDA (DAO only) |
+| 81 | `join_event` | Player joins an active/pending event, creates EventParticipation |
+| 82 | `finalize_event` | Permissionless — finalize after end_time |
+| 83 | `claim_prize` | Top-10 player claims weighted prize share |
 
 [Source: processor/event/](../../../programs/novus_mundus/src/processor/event/)
 
 ---
 
-## EventAccount Structure
+## Account Structures
 
+### EventAccount
+
+**PDA:** `[EVENT_SEED, game_engine, event_id_u64_le]`
+
+```rust
+pub struct EventAccount {
+    pub account_key: u8,
+    pub game_engine: Address,               // kingdom reference
+    pub id: u64,
+    pub name: [u8; 64],                     // UTF-8, length in name_len
+    pub name_len: u8,
+
+    pub start_time: i64,
+    pub end_time: i64,
+    pub status: u8,                         // 0=Pending, 1=Active, 2=Finalized, 3=Cancelled
+    pub auto_activate: bool,                // if true, activates at start_time automatically
+
+    pub event_type: u8,                     // EventType enum (0–7)
+
+    // Participation requirements (0 = no requirement)
+    pub min_level: u8,
+    pub min_reputation: u64,
+    pub required_subscription_tier: u8,
+
+    // Top-10 leaderboard (sorted descending by score)
+    pub leaderboard: [LeaderboardEntry; 10], // 40 bytes × 10 = 400 bytes
+    pub leaderboard_count: u8,
+
+    // Prize pool
+    pub prize_type: u8,                     // PrizeType enum (0–3)
+    pub prize_amount: u64,                  // total pool
+    pub prize_remaining: u64,               // decrements as prizes are claimed
+    pub prize_token_mint: Address,          // only used when prize_type=SPLToken
+
+    pub participant_count: u32,
+    pub bump: u8,
+}
+
+pub struct LeaderboardEntry {
+    pub player: Address,    // player wallet pubkey
+    pub score: u64,
+}
 ```
-EventAccount:
-├── id: u64                       // Unique event ID
-├── name: [u8; 64]                // Event name
-├── name_len: u8
-│
-├── // Timing
-├── start_time: i64               // When event starts
-├── end_time: i64                 // When event ends
-├── status: u8                    // EventStatus enum
-├── auto_activate: bool           // Auto-start at start_time
-│
-├── // Event Type
-├── event_type: u8                // EventType enum
-│
-├── // Requirements
-├── min_level: u8                 // Minimum player level
-├── min_reputation: u64           // Minimum reputation
-├── required_subscription_tier: u8
-│
-├── // Leaderboard (Top 10)
-├── leaderboard: [LeaderboardEntry; 10]
-├── leaderboard_count: u8
-│
-├── // Prize Pool
-├── prize_type: u8                // PrizeType enum
-├── prize_amount: u64             // Total pool
-├── prize_remaining: u64          // Unclaimed
-├── prize_token_mint: Pubkey      // For SPL prizes
-│
-├── participant_count: u32
-└── bump: u8
+
+`EventAccount::LEN` is fixed at allocation time and does not change.
+
+### EventParticipation
+
+**PDA:** `[EVENT_PARTICIPATION_SEED, game_engine, event_id_u64_le, player_owner_wallet]`
+
+Created by `join_event`, **closed** (rent refunded to winner) by `claim_prize`.
+
+```rust
+pub struct EventParticipation {
+    pub account_key: u8,
+    pub game_engine: Address,
+    pub event_id: u64,
+    pub player: Address,          // player wallet pubkey
+    pub score: u64,
+    pub joined_at: i64,
+    pub last_update: i64,
+    pub bump: u8,
+}
 ```
 
-**Seeds:** `["event", event_id_bytes]`
-
-### LeaderboardEntry
-
-```
-LeaderboardEntry:
-├── player: Pubkey    // Player's address
-└── score: u64        // Player's score
-```
-
----
-
-## Event Status
-
-| Status | Value | Description |
-|--------|-------|-------------|
-| Pending | 0 | Created but not started |
-| Active | 1 | In progress, accepting scores |
-| Finalized | 2 | Ended, prizes claimable |
-| Cancelled | 3 | Admin cancelled |
+[Source: state/event.rs](../../../programs/novus_mundus/src/state/event.rs)
 
 ---
 
 ## Event Types
 
-| Type | Value | Scoring Method |
-|------|-------|----------------|
-| CombatKills | 0 | Encounter/PvP kills |
-| ResourcesCollected | 1 | Total resources gathered |
-| ExpeditionPoints | 2 | Expedition completions |
-| RallyDamage | 3 | Damage dealt in rallies |
-| TravelDistance | 4 | Kilometers traveled |
-| ResearchCompleted | 5 | Research nodes finished |
-| BuildingsUpgraded | 6 | Building level gains |
-| HeroXPGained | 7 | Hero experience earned |
+| Value | Name | Scoring Mode |
+|-------|------|-------------|
+| 0 | `TotalDamageDealt` | Accumulative |
+| 1 | `MostAttacksWonPvP` | Accumulative |
+| 2 | `MostAttacksWonPvE` | Accumulative |
+| 3 | `HighestCash` | **Snapshot** — replaces score only if higher |
+| 4 | `MostXPGained` | Accumulative |
+| 5 | `MostEncountersDefeated` | Accumulative |
+| 6 | `MostResourcesCollected` | Accumulative |
+| 7 | `MostNoviConsumed` | Accumulative |
 
-Each event type automatically increments scores when the relevant action occurs.
+`HighestCash` is the only snapshot type. All others add the reported `score_value` to `EventParticipation.score`.
 
 ---
 
 ## Prize Types
 
-| Type | Value | Description |
-|------|-------|-------------|
-| LockedNovi | 0 | NOVI added to locked balance |
-| Gems | 1 | Gem currency |
-| Cash | 2 | Cash currency |
-| SPLToken | 3 | Custom SPL token |
-
----
-
-## EventParticipation Account
-
-Per-player-per-event tracking:
-
-```
-EventParticipation:
-├── event_id: u64       // Which event
-├── player: Pubkey      // Participant
-├── score: u64          // Current score
-├── joined_at: i64      // Join timestamp
-├── last_update: i64    // Last score update
-└── bump: u8
-```
-
-**Seeds:** `["event_participation", event_id_bytes, player_pubkey]`
-
-**Note:** This account is **closed after claiming prize** (rent refunded).
-
----
-
-## Event Lifecycle
-
-### 1. Create Event (Admin)
-
-**Instruction:** `90 - create_event`
-
-```mermaid
-sequenceDiagram
-    participant Admin
-    participant Program
-    participant EventAccount
-    participant Treasury
-
-    Admin->>Program: create_event(config, prize_pool)
-    Program->>Program: Validate admin authority
-    Program->>Treasury: Transfer prize funds
-    Program->>EventAccount: Create with config
-    Program->>EventAccount: Status = Pending
-    Program-->>Admin: Event created
-```
-
-### 2. Activate Event
-
-**Instruction:** `93 - activate_event`
-
-Can be manual or automatic (`auto_activate = true`):
-
-```mermaid
-sequenceDiagram
-    participant Anyone
-    participant Program
-    participant EventAccount
-
-    Anyone->>Program: activate_event
-    Program->>Program: Validate start_time reached
-    Program->>EventAccount: Status = Active
-    Program-->>Anyone: Event activated
-```
-
-### 3. Join Event
-
-**Instruction:** `91 - join_event`
-
-```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant EventAccount
-    participant EventParticipation
-
-    Player->>Program: join_event(event_id)
-    Program->>Program: Validate event is Active
-    Program->>Program: Validate player meets requirements
-    Program->>EventParticipation: Create participation account
-    Program->>EventAccount: Increment participant_count
-    Program-->>Player: Joined event
-```
-
-**Requirements checked:**
-- `player.level >= event.min_level`
-- `player.reputation >= event.min_reputation`
-- `player.subscription_tier >= event.required_subscription_tier`
-
-### 4. Score Updates
-
-**Instruction:** `92 - update_score`
-
-Scores are updated **automatically** when relevant actions occur:
-
-```mermaid
-sequenceDiagram
-    participant Player
-    participant Program
-    participant EventParticipation
-    participant EventAccount
-
-    Note over Player: Performs scoring action
-    Program->>Program: Check active events of this type
-    Program->>EventParticipation: Add points to score
-    Program->>EventAccount: Update leaderboard if needed
-    Note over EventAccount: Top 10 sorted by score
-```
-
-### Leaderboard Management
-
-The leaderboard maintains the **top 10 players** sorted by score descending:
-
-```rust
-fn update_leaderboard(&mut self, player: Pubkey, score: u64) {
-    // Check if player already on board
-    if let Some(pos) = self.find_rank(&player) {
-        self.leaderboard[pos].score = score;
-        self.sort_leaderboard();
-        return;
-    }
-
-    // Check if score beats #10
-    if self.leaderboard_count < 10 ||
-       score > self.leaderboard[9].score {
-        // Add new entry, remove lowest if full
-        self.insert_entry(player, score);
-    }
-}
-```
-
-### 5. Finalize Event
-
-**Instruction:** `94 - finalize_event`
-
-```mermaid
-sequenceDiagram
-    participant Anyone
-    participant Program
-    participant EventAccount
-
-    Anyone->>Program: finalize_event
-    Program->>Program: Validate end_time reached
-    Program->>EventAccount: Status = Finalized
-    Program->>EventAccount: Lock leaderboard
-    Program-->>Anyone: Event finalized
-```
-
-### 6. Claim Prize
-
-**Instruction:** `95 - claim_prize`
-
-```mermaid
-sequenceDiagram
-    participant Winner
-    participant Program
-    participant EventAccount
-    participant EventParticipation
-    participant PlayerAccount
-
-    Winner->>Program: claim_prize
-    Program->>Program: Validate event Finalized
-    Program->>Program: Find player's rank
-    Program->>Program: Calculate prize share
-    Program->>EventAccount: Deduct from prize_remaining
-    Program->>PlayerAccount: Add prize
-    Program->>EventParticipation: Close account (refund rent)
-    Program-->>Winner: Prize claimed!
-```
+| Value | Name | How Prize is Delivered |
+|-------|------|------------------------|
+| 0 | `LockedNovi` | Minted to winner's NOVI token account; `player.locked_novi` incremented |
+| 1 | `Gems` | Added to `player.gems` |
+| 2 | `Cash` | Added to `player.cash_on_hand` |
+| 3 | `SPLToken` | CPI transfer from event vault (EventAccount PDA as authority) to winner's token account |
 
 ---
 
 ## Prize Distribution
 
-Prizes are distributed based on rank:
+`PRIZE_DISTRIBUTION` is a compile-time constant guaranteed to sum to exactly 10,000 bps:
 
-| Rank | Share of Pool |
-|------|---------------|
-| 1st | 35% |
-| 2nd | 20% |
-| 3rd | 15% |
-| 4th | 10% |
-| 5th | 7% |
-| 6th | 5% |
-| 7th | 3% |
-| 8th | 2% |
-| 9th | 2% |
-| 10th | 1% |
+```mermaid
+graph TD
+    POOL["Prize Pool<br/>(100%)"] --> R1["Rank 1 — 35%"]
+    POOL --> R2["Rank 2 — 25%"]
+    POOL --> R3["Rank 3 — 15%"]
+    POOL --> R4["Rank 4 — 7.5%"]
+    POOL --> R5["Rank 5 — 7.5%"]
+    POOL --> R610["Ranks 6–10<br/>2% each (10% total)"]
+```
 
-**Example:** 100,000 NOVI pool
-- 1st: 35,000 NOVI
-- 2nd: 20,000 NOVI
-- 3rd: 15,000 NOVI
-- ...and so on
+| Rank | Percentage | Basis Points |
+|:----:|:-----------:|:------------:|
+| 1 | 35.0% | 3,500 |
+| 2 | 25.0% | 2,500 |
+| 3 | 15.0% | 1,500 |
+| 4 | 7.5% | 750 |
+| 5 | 7.5% | 750 |
+| 6–10 | 2.0% each | 200 each |
+
+[Source: constants.rs `PRIZE_DISTRIBUTION`](../../../programs/novus_mundus/src/constants.rs)
+
+### Treasury Building Prize Bonus
+
+Players with a Treasury building in their estate receive a bonus applied to their prize share:
+
+| Treasury Level | Prize Bonus |
+|:-------------:|:-----------:|
+| 1–4 | 0% |
+| 5–9 | +10% (1,000 bps) |
+| 10–14 | +25% (2,500 bps) |
+| 15–19 | +40% (4,000 bps) |
+| 20 | +50% (5,000 bps) |
+
+```
+prize_share = base_share × (10000 + treasury_bonus_bps) / 10000
+```
+
+This bonus can push a winner's prize above their nominal percentage share, funded by the remaining `prize_remaining` pool.
 
 ---
 
-## Automatic Score Increment
+## Scoring Engine
 
-When players perform actions, the system checks for relevant active events:
+```mermaid
+flowchart TD
+    ACTION["Game action<br/>(attack, collect, etc.)"] --> HELPER["update_event_score helper"]
+    HELPER --> AUTO{auto_activate<br/>and now >= start_time?}
+    AUTO -->|Yes| ACT["Activate event"]
+    AUTO -->|No| MATCH
+    ACT --> MATCH{Event type<br/>matches action?}
+    MATCH -->|No| SKIP["No-op"]
+    MATCH -->|Yes| MODE{Event scoring<br/>mode?}
+    MODE -->|Accumulative| ADD["score += score_value"]
+    MODE -->|"Snapshot (HighestCash)"| SNAP{"score_value<br/>> current score?"}
+    SNAP -->|No| SKIP
+    SNAP -->|Yes| REPLACE["score = score_value"]
+    ADD --> LB["Update leaderboard<br/>(bubble-sort top 10)"]
+    REPLACE --> LB
+    LB --> EMIT["Emit EventScoreUpdated"]
+```
 
-| Action | Event Type Triggered |
-|--------|---------------------|
-| `attack_encounter` | CombatKills |
-| `attack_player` | CombatKills |
-| `collect_resources` | ResourcesCollected |
-| `complete_expedition` | ExpeditionPoints |
-| `execute_rally` | RallyDamage |
-| `intercity_complete` | TravelDistance |
-| `complete_research` | ResearchCompleted |
-| `complete_building` | BuildingsUpgraded |
-| `claim_meditation` | HeroXPGained |
+Score updates are driven by game processors calling the shared `update_event_score()` helper in `helpers/event_scoring.rs`. The helper:
 
-This happens atomically within the action's transaction.
+1. Auto-activates the event if `auto_activate=true` and `now >= start_time`.
+2. Verifies the event type matches the calling action.
+3. Applies accumulative (`+=`) or snapshot (`replace if higher`) logic.
+4. Maintains the `leaderboard` array (top 10, descending) via bubble-sort insertion.
+5. Emits `EventScoreUpdated` if the score changed.
+
+A player can accumulate score from multiple different in-game actions within the event window with no direct on-chain interaction — the leaderboard always reflects the latest state.
+
+[Source: helpers/event_scoring.rs](../../../programs/novus_mundus/src/helpers/event_scoring.rs)
+
+---
+
+## Anti-Sybil Eligibility
+
+Prize claims apply three tiered eligibility checks, all sourced from `logic/eligibility.rs`. Thresholds scale with `event.prize_amount`:
+
+```mermaid
+flowchart TD
+    CLAIM[claim_prize] --> POOL{Prize pool<br/>size?}
+    POOL -->|"< 25k NOVI"| T1["Tier 1 limits<br/>Ratio 10:1 / Age 7d / Attacks 5"]
+    POOL -->|"25k–99k NOVI"| T2["Tier 2 limits<br/>Ratio 3:1 / Age 30d / Attacks 20"]
+    POOL -->|">= 100k NOVI"| T3["Tier 3 limits<br/>Ratio 2:1 / Age 60d / Attacks 50"]
+    T1 --> CR{Check 1<br/>Transfer ratio<br/><= limit?}
+    T2 --> CR
+    T3 --> CR
+    CR -->|No| ERR1["TransferRatioExceedsLimit"]
+    CR -->|Yes| CA{Check 2<br/>Account age<br/>>= min?}
+    CA -->|No| ERR2["AccountTooNew"]
+    CA -->|Yes| CAT{Check 3<br/>Total attacks<br/>>= min?}
+    CAT -->|No| ERR3["PlayerInactive"]
+    CAT -->|Yes| PAY["Prize transferred<br/>Participation account closed"]
+```
+
+### Tier Thresholds
+
+| Prize Pool | Transfer Ratio Limit | Min Account Age | Min Attacks |
+|:----------:|:-------------------:|:---------------:|:-----------:|
+| < 25,000 NOVI | 10:1 | 7 days | 5 |
+| 25,000 – 99,999 NOVI | 3:1 | 30 days | 20 |
+| ≥ 100,000 NOVI | 2:1 | 60 days | 50 |
+
+### Check 1: Transfer Ratio
+
+```
+ratio = player.total_received / max(player.total_sent, 1)
+if ratio > max_ratio → Err(TransferRatioExceedsLimit)
+```
+
+Detects bot accounts that consolidate resources from many source accounts. Legitimate players have balanced send/receive ratios from team cooperation.
+
+### Check 2: Account Age
+
+```
+if (now - player.created_at) < min_age_seconds → Err(AccountTooNew)
+```
+
+Prevents newly created bot accounts from farming events.
+
+### Check 3: Activity Requirement
+
+```
+if player.total_attacks < min_attacks → Err(PlayerInactive)
+```
+
+Ensures players have actually engaged in combat, not passively farmed.
+
+[Source: logic/eligibility.rs](../../../programs/novus_mundus/src/logic/eligibility.rs)
+
+---
+
+## Status State Machine
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Pending : create_event (DAO)
+    Pending --> Active : auto_activate at start_time<br/>or activate_sale (DAO)
+    Active --> Finalized : finalize_event<br/>(permissionless, after end_time)
+    Pending --> Cancelled : DAO cancel
+    Finalized --> [*] : claims complete
+    Cancelled --> [*]
+
+    note right of Finalized
+        Top-10 may claim_prize
+        Leaderboard locked
+    end note
+```
+
+| Status | Value | Description | Transitions |
+|--------|:-----:|-------------|------------|
+| Pending | 0 | Created, not yet started | → Active (auto or manual activate) |
+| Active | 1 | Accepting score updates | → Finalized (after end_time) |
+| Finalized | 2 | Leaderboard locked; claims open | Terminal |
+| Cancelled | 3 | Abandoned by DAO | Terminal |
+
+`finalize_event` (instruction 82) is **permissionless** — any caller can invoke it after `end_time`. It requires `status == 1` (Active); Pending events that were never activated must be cancelled via DAO rather than finalized.
+
+---
+
+## Event Lifecycle Flow
+
+### Create
+
+```mermaid
+sequenceDiagram
+    participant DAO
+    participant Program
+    participant EventAccount
+
+    DAO->>Program: create_event(event_id, name, start_time, end_time, event_type, prize_type, prize_amount, ...)
+    Program->>Program: Verify dao_authority == game_engine.authority
+    Program->>Program: Validate event_type and prize_type
+    Program->>Program: Derive PDA [EVENT_SEED, game_engine, event_id]
+    Program->>EventAccount: CreateAccount + initialize (status=0, auto_activate flag)
+    Program-->>DAO: KingdomEventCreated emitted
+```
+
+### Join
+
+```mermaid
+sequenceDiagram
+    participant Player
+    participant Program
+    participant EventAccount
+    participant EventParticipation
+
+    Player->>Program: join_event()
+    Program->>Program: Check status <= 1 and now < end_time
+    Program->>Program: Auto-activate if pending and now >= start_time
+    Program->>Program: Check min_level, min_reputation, subscription_tier
+    Program->>Program: Verify EXT_RESEARCH extension (player onboarded)
+    Program->>Program: Verify player.current_event == 0 (not in another event)
+    Program->>EventParticipation: CreateAccount (payer pays rent)
+    Program->>EventAccount: participant_count += 1
+    Program->>PlayerAccount: current_event = event_id
+```
+
+### Finalize + Claim
+
+```mermaid
+sequenceDiagram
+    participant Anyone
+    participant Winner
+    participant Program
+    participant EventAccount
+    participant EventParticipation
+
+    Anyone->>Program: finalize_event()
+    Program->>Program: Verify status=1 and now >= end_time
+    Program->>EventAccount: status = 2 (Finalized)
+
+    Winner->>Program: claim_prize()
+    Program->>Program: Anti-Sybil checks (ratio, age, attacks)
+    Program->>Program: Find winner rank in leaderboard
+    Program->>Program: Calculate base_share from PRIZE_DISTRIBUTION
+    Program->>Program: Apply Treasury building bonus
+    Program->>Program: Transfer prize (mint NOVI / add gems / add cash / token CPI)
+    Program->>EventAccount: prize_remaining -= prize_share
+    Program->>PlayerAccount: current_event = 0
+    Program->>EventParticipation: Close account, refund rent to winner_owner
+    Program-->>Winner: EventPrizeClaimed emitted
+```
 
 ---
 
 ## Client Integration
 
-### Display Active Events
+```typescript
+import {
+  createEventInstruction,
+  joinEventInstruction,
+  finalizeEventInstruction,
+  claimPrizeInstruction,
+} from "@novus-mundus/sdk";
 
-```javascript
-async function getActiveEvents(connection) {
-  const events = await fetchAllEvents(connection);
+// Join an active event
+const joinIx = joinEventInstruction({
+  payer: wallet.publicKey,
+  playerAccount: playerPda,
+  eventAccount: eventPda,
+  eventParticipation: participationPda,
+  playerOwner: wallet.publicKey,
+  systemProgram: SystemProgram.programId,
+});
 
-  return events
-    .filter(e => e.status === 1) // Active
-    .map(e => ({
-      id: e.id,
-      name: decodeEventName(e.name, e.nameLen),
-      type: getEventTypeName(e.eventType),
-      endsAt: new Date(e.endTime * 1000),
-      prizePool: e.prizeAmount,
-      prizeType: getPrizeTypeName(e.prizeType),
-      participantCount: e.participantCount,
-      leaderboard: e.leaderboard.slice(0, e.leaderboardCount),
-      requirements: {
-        minLevel: e.minLevel,
-        minReputation: e.minReputation,
-        subscriptionTier: e.requiredSubscriptionTier
-      }
-    }));
-}
-```
+// Finalize after end_time (permissionless — any caller)
+const finalizeIx = finalizeEventInstruction({
+  eventAccount: eventPda,
+});
 
-### Check Participation
-
-```javascript
-async function getMyEventStatus(connection, wallet, eventId) {
-  const [participationPda] = PublicKey.findProgramAddress(
-    [
-      Buffer.from("event_participation"),
-      eventId.toBuffer(),
-      wallet.toBuffer()
-    ],
-    PROGRAM_ID
-  );
-
-  try {
-    const participation = await fetchEventParticipation(connection, participationPda);
-    const event = await fetchEvent(connection, eventId);
-
-    const rank = event.leaderboard
-      .slice(0, event.leaderboardCount)
-      .findIndex(e => e.player.equals(wallet));
-
-    return {
-      joined: true,
-      score: participation.score,
-      rank: rank >= 0 ? rank + 1 : null, // 1-indexed for display
-      inTopTen: rank >= 0,
-      prizeEstimate: rank >= 0 ? calculatePrize(event.prizeAmount, rank) : 0
-    };
-  } catch {
-    return { joined: false };
-  }
-}
-```
-
-### Join Event
-
-```javascript
-async function joinEvent(connection, wallet, eventId) {
-  const event = await fetchEvent(connection, eventId);
-  const player = await getPlayerAccount(connection, wallet.publicKey);
-
-  // Client-side validation
-  if (event.status !== 1) throw new Error('Event not active');
-  if (player.level < event.minLevel) throw new Error('Level too low');
-  if (player.reputation < event.minReputation) throw new Error('Reputation too low');
-
-  const [participationPda] = PublicKey.findProgramAddress(
-    [
-      Buffer.from("event_participation"),
-      eventId.toBuffer(),
-      wallet.publicKey.toBuffer()
-    ],
-    PROGRAM_ID
-  );
-
-  const ix = joinEventInstruction({ eventId });
-  return sendTransaction(connection, wallet, [ix]);
-}
-```
-
-### Display Leaderboard
-
-```javascript
-function renderLeaderboard(event, currentPlayer) {
-  const board = event.leaderboard.slice(0, event.leaderboardCount);
-
-  return `
-    EVENT: ${event.name}
-    Prize Pool: ${formatAmount(event.prizePool)} ${event.prizeType}
-    Ends: ${formatDate(event.endTime)}
-
-    LEADERBOARD
-    -----------
-    ${board.map((entry, idx) => {
-      const isMe = entry.player.equals(currentPlayer);
-      const prize = calculatePrize(event.prizePool, idx);
-      return `${idx + 1}. ${formatAddress(entry.player)} - ${entry.score} pts (${formatAmount(prize)}) ${isMe ? '← YOU' : ''}`;
-    }).join('\n')}
-  `;
-}
-```
-
-### Claim Prize
-
-```javascript
-async function claimPrize(connection, wallet, eventId) {
-  const status = await getMyEventStatus(connection, wallet.publicKey, eventId);
-
-  if (!status.joined) throw new Error('Not a participant');
-  if (!status.inTopTen) throw new Error('Not in top 10');
-
-  const event = await fetchEvent(connection, eventId);
-  if (event.status !== 2) throw new Error('Event not finalized');
-
-  const ix = claimPrizeInstruction({ eventId });
-  return sendTransaction(connection, wallet, [ix]);
-}
+// Claim prize (winner only)
+const claimIx = claimPrizeInstruction({
+  payer: wallet.publicKey,     // can be backend for gas-less claims
+  winnerPlayer: playerPda,
+  eventAccount: eventPda,
+  eventParticipation: participationPda,
+  winnerOwner: wallet.publicKey,
+  winnerNoviAta: winnerNoviTokenAccount,
+  noviMint: noviMintAddress,
+  gameEngine: gameEnginePda,
+  tokenProgram: TOKEN_PROGRAM_ID,
+  winnerEstate: estatePda,     // for Treasury bonus
+});
 ```
 
 ---
 
-## Admin Operations
-
-### Create Event Example
-
-```javascript
-async function createEvent(connection, admin, config) {
-  const nextEventId = await getNextEventId(connection);
-
-  const ix = createEventInstruction({
-    eventId: nextEventId,
-    name: config.name,
-    eventType: config.type,
-    startTime: Math.floor(config.startDate.getTime() / 1000),
-    endTime: Math.floor(config.endDate.getTime() / 1000),
-    autoActivate: config.autoActivate,
-    minLevel: config.minLevel || 0,
-    minReputation: config.minReputation || 0,
-    requiredSubscriptionTier: config.requiredTier || 0,
-    prizeType: config.prizeType,
-    prizeAmount: config.prizeAmount,
-    prizeTokenMint: config.prizeType === 3 ? config.tokenMint : null
-  });
-
-  return sendTransaction(connection, admin, [ix]);
-}
-```
-
----
-
-*Events transform daily gameplay into epic competitions. Join the battle, climb the ranks, claim your glory.*
+*Events are the arena of kingdoms — every attack dealt, every resource gathered, and every encounter defeated can tip the leaderboard. Score updates happen automatically as you play.*
 
 ---
 

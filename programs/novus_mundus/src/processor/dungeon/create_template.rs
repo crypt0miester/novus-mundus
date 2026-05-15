@@ -15,6 +15,7 @@ use crate::{
         require_writable,
         require_key_match,
     },
+    utils::{read_u8, read_u16, read_u32, read_u64},
 };
 
 /// Create a dungeon template (DAO only)
@@ -62,9 +63,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [dao_authority, dungeon_template, game_engine, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [dao_authority, dungeon_template, game_engine, system_program]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;
@@ -87,27 +86,18 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let dungeon_id = u16::from_le_bytes([
-        instruction_data[0],
-        instruction_data[1],
-    ]);
+    let dungeon_id = read_u16(instruction_data, 0, "create_template.dungeon_id")?;
 
-    let theme = instruction_data[2];
-    let total_floors = instruction_data[3];
-    let rooms_per_floor = instruction_data[4];
-    let checkpoint_interval = instruction_data[5];
-    let min_player_level = instruction_data[6];
-    let required_building_level = instruction_data[7];
+    let theme = read_u8(instruction_data, 2, "create_template.theme")?;
+    let total_floors = read_u8(instruction_data, 3, "create_template.total_floors")?;
+    let rooms_per_floor = read_u8(instruction_data, 4, "create_template.rooms_per_floor")?;
+    let checkpoint_interval = read_u8(instruction_data, 5, "create_template.checkpoint_interval")?;
+    let min_player_level = read_u8(instruction_data, 6, "create_template.min_player_level")?;
+    let required_building_level = read_u8(instruction_data, 7, "create_template.required_building_level")?;
 
-    let stamina_cost = u16::from_le_bytes([
-        instruction_data[8],
-        instruction_data[9],
-    ]);
+    let stamina_cost = read_u16(instruction_data, 8, "create_template.stamina_cost")?;
 
-    let boss_power_multiplier = u16::from_le_bytes([
-        instruction_data[10],
-        instruction_data[11],
-    ]);
+    let boss_power_multiplier = read_u16(instruction_data, 10, "create_template.boss_power_multiplier")?;
 
     // Skip bump and padding1 (bytes 12-15)
 
@@ -119,88 +109,33 @@ pub fn process(
     let mut floor_power = [0u32; 10];
     for i in 0..10 {
         let offset = 48 + (i * 4);
-        floor_power[i] = u32::from_le_bytes([
-            instruction_data[offset],
-            instruction_data[offset + 1],
-            instruction_data[offset + 2],
-            instruction_data[offset + 3],
-        ]);
+        floor_power[i] = read_u32(instruction_data, offset, "create_template.floor_power")?;
     }
 
     // Parse room weights
-    let combat_weight = u16::from_le_bytes([
-        instruction_data[88],
-        instruction_data[89],
-    ]);
-    let treasure_weight = u16::from_le_bytes([
-        instruction_data[90],
-        instruction_data[91],
-    ]);
-    let camp_weight = u16::from_le_bytes([
-        instruction_data[92],
-        instruction_data[93],
-    ]);
-    let rest_weight = u16::from_le_bytes([
-        instruction_data[94],
-        instruction_data[95],
-    ]);
-    let trap_weight = u16::from_le_bytes([
-        instruction_data[96],
-        instruction_data[97],
-    ]);
+    let combat_weight = read_u16(instruction_data, 88, "create_template.combat_weight")?;
+    let treasure_weight = read_u16(instruction_data, 90, "create_template.treasure_weight")?;
+    let camp_weight = read_u16(instruction_data, 92, "create_template.camp_weight")?;
+    let rest_weight = read_u16(instruction_data, 94, "create_template.rest_weight")?;
+    let trap_weight = read_u16(instruction_data, 96, "create_template.trap_weight")?;
 
     // Skip padding2 (bytes 98-99)
 
     // Parse darkness config
-    let darkness_base_bps = u16::from_le_bytes([
-        instruction_data[100],
-        instruction_data[101],
-    ]);
-    let darkness_per_floor_bps = u16::from_le_bytes([
-        instruction_data[102],
-        instruction_data[103],
-    ]);
+    let darkness_base_bps = read_u16(instruction_data, 100, "create_template.darkness_base_bps")?;
+    let darkness_per_floor_bps = read_u16(instruction_data, 102, "create_template.darkness_per_floor_bps")?;
 
     // Parse time limit
-    let time_limit_seconds = u32::from_le_bytes([
-        instruction_data[104],
-        instruction_data[105],
-        instruction_data[106],
-        instruction_data[107],
-    ]);
+    let time_limit_seconds = read_u32(instruction_data, 104, "create_template.time_limit_seconds")?;
 
     // Parse reward config
-    let base_xp_per_room = u64::from_le_bytes([
-        instruction_data[108],
-        instruction_data[109],
-        instruction_data[110],
-        instruction_data[111],
-        instruction_data[112],
-        instruction_data[113],
-        instruction_data[114],
-        instruction_data[115],
-    ]);
+    let base_xp_per_room = read_u64(instruction_data, 108, "create_template.base_xp_per_room")?;
 
-    let base_novi_per_floor = u64::from_le_bytes([
-        instruction_data[116],
-        instruction_data[117],
-        instruction_data[118],
-        instruction_data[119],
-        instruction_data[120],
-        instruction_data[121],
-        instruction_data[122],
-        instruction_data[123],
-    ]);
+    let base_novi_per_floor = read_u64(instruction_data, 116, "create_template.base_novi_per_floor")?;
 
-    let completion_bonus_bps = u16::from_le_bytes([
-        instruction_data[124],
-        instruction_data[125],
-    ]);
+    let completion_bonus_bps = read_u16(instruction_data, 124, "create_template.completion_bonus_bps")?;
 
-    let reward_scaling_bps = u16::from_le_bytes([
-        instruction_data[126],
-        instruction_data[127],
-    ]);
+    let reward_scaling_bps = read_u16(instruction_data, 126, "create_template.reward_scaling_bps")?;
 
     // 5. Validate configuration
     if total_floors == 0 || total_floors > 10 {

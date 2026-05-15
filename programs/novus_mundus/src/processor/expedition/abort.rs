@@ -9,7 +9,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -51,13 +50,11 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 3, up to 7 with hero)
-    if accounts.len() < 3 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let expedition_account = &accounts[2];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        expedition_account,
+    ], rest = hero_accounts);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -126,10 +123,10 @@ pub fn process(
     drop(player_data_ref);
 
     if has_hero && accounts.len() >= 7 {
-        let hero_mint = &accounts[3];
-        let hero_collection = &accounts[4];
-        let system_program = &accounts[5];
-        let p_core_program = &accounts[6];
+        let hero_mint = &hero_accounts[0];
+        let hero_collection = &hero_accounts[1];
+        let system_program = &hero_accounts[2];
+        let p_core_program = &hero_accounts[3];
 
         // Verify hero mint matches what was stored
         if hero_mint.address() != &hero_mint_key {

@@ -67,18 +67,16 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    if accounts.len() < 8 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let rally_account = &accounts[0];
-    let rally_participant_account = &accounts[1];
-    let player_account = &accounts[2];
-    let participant_owner = &accounts[3];
-    let game_engine_account = &accounts[4];
-    let rally_city_account = &accounts[5];
-    let home_city_account = &accounts[6];
-    let estate_account = &accounts[7];
+    crate::extract_accounts!(accounts, [
+        rally_account,
+        rally_participant_account,
+        player_account,
+        participant_owner,
+        game_engine_account,
+        rally_city_account,
+        home_city_account,
+        estate_account,
+    ]);
 
     // 2. Validate basic account requirements
     require_writable(rally_account)?;

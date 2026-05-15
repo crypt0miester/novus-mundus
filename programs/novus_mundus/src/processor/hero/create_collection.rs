@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -44,9 +43,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    let [dao_authority, hero_collection, game_engine, system_program, _p_core_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [dao_authority, hero_collection, game_engine, system_program, _p_core_program]);
 
     // 2. Validate accounts
     require_signer(dao_authority)?;

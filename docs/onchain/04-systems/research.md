@@ -18,12 +18,12 @@ graph TB
         START[Start Research] --> WAIT[Time Passes]
         WAIT --> COMPLETE[Complete Research]
         COMPLETE --> BUFF[Gain Buff]
-        BUFF --> NEXT[Next Level/Node]
+        BUFF --> NEXT[Next Level / Node]
     end
 
     subgraph "Endgame"
         MAX[Max Level] --> ASCEND[Ascend Node]
-        ASCEND --> BONUS[+25% Effectiveness]
+        ASCEND --> BONUS["+25% Effectiveness"]
     end
 ```
 
@@ -84,6 +84,8 @@ Resource generation and efficiency buffs.
 
 Feature unlocks and quality-of-life improvements.
 
+`completed_levels` tracks **30 nodes (IDs 0–29)**. `TravelSpeed` (enum value 30) is a `ResearchBuffType` variant used at runtime but is **not a tracked research node** — it has no template account and no entry in `completed_levels`.
+
 | Node | Buff Type | Effect |
 |------|-----------|--------|
 | DailyRewardsSystem | Unlock | Daily login rewards |
@@ -96,7 +98,7 @@ Feature unlocks and quality-of-life improvements.
 | FragmentDiscovery | +X% fragments | Crafting materials |
 | GemProspecting | +X% gems | Gem drop rate |
 | CollectionMastery | +X% collection | Hero buff bonus |
-| TravelSpeed | +X% speed | Faster movement |
+| TravelSpeed = 30 | +X% speed | *(enum-only — not an active research node)* |
 
 **Note:** Mining and Fishing are **gate unlocks** - you must complete these before starting expeditions.
 
@@ -138,7 +140,7 @@ ResearchProgress:
 ├── current_level: u8        // Level being researched
 ├── started_at: i64          // Start timestamp
 ├── completes_at: i64        // Completion timestamp
-├── completed_levels: [u8; 30] // Level per node
+├── completed_levels: [u8; 30] // Level per node (nodes 0-29)
 ├── total_gems_spent: u64    // Speedup tracking
 ├── total_novi_spent: u64    // Investment tracking
 ├── buff_cache_version: u32  // Invalidation counter
@@ -160,6 +162,15 @@ ResearchProgress:
 ## Cost & Time Scaling
 
 Research costs and times scale exponentially:
+
+```mermaid
+graph LR
+    B["Base Cost / Time"] --> L1["Level 1: 1×"]
+    L1 --> L5["Level 5: ~19× (cost) / 7.6× (time)"]
+    L5 --> L10["Level 10: ~357× / 58×"]
+    L10 --> L15["Level 15: ~6747× / 437×"]
+    L15 --> L20["Level 20: ~127k× / 3325×"]
+```
 
 ### NOVI Cost
 
@@ -247,6 +258,23 @@ sequenceDiagram
     Program-->>Player: Buffs applied
 ```
 
+### Research State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    Idle --> Active : "start_research<br/>(NOVI burned)"
+    Active --> Idle : "cancel_research<br/>(no refund)"
+    Active --> Complete : "time elapsed<br/>(now >= completes_at)"
+    Complete --> Idle : "complete_research<br/>(buffs applied)"
+
+    Active --> Active : "speed_up_research<br/>(gems spent)"
+
+    Idle --> Ascended : "ascend()<br/>(node at max_level)"
+    Ascended --> Idle : "buff ×1.25 applied"
+```
+
 ---
 
 ## Academy Building Requirement
@@ -275,6 +303,18 @@ actual_time = base_time × (1 - speed_bonus_bps/10000)
 
 Players can spend gems to reduce remaining time:
 
+```mermaid
+graph LR
+    START["Active Research"] --> CHECK{"Level range?"}
+    CHECK -->|"1–5"| G1["1 gem/min"]
+    CHECK -->|"6–10"| G2["2 gems/min"]
+    CHECK -->|"11–15"| G5["5 gems/min"]
+    CHECK -->|"16–20"| G10["10 gems/min"]
+    CHECK -->|"21–25"| G20["20 gems/min"]
+    G1 & G2 & G5 & G10 & G20 --> COST["cost = remaining_min × rate"]
+    COST --> APPLY["completes_at reduced"]
+```
+
 | Level Range | Gems per Minute |
 |-------------|-----------------|
 | 1-5 | 1 |
@@ -295,11 +335,25 @@ gem_cost = remaining_minutes × gems_per_minute
 
 When a research node reaches **max level**, it can be **ascended** for a permanent +25% effectiveness bonus.
 
+```mermaid
+graph TD
+    A["Node at max_level"] --> B{"Already ascended?"}
+    B -->|"No"| C{"Academy active?"}
+    C -->|"Yes"| D{"mastery_level >= Fibonacci cost?"}
+    D -->|"Yes"| E["Deduct mastery_level<br/>ascended_nodes bit set<br/>total_ascensions++"]
+    E --> F["buff × 1.25 applied on next complete_research"]
+    B -->|"Yes"| ERR1["Error: AlreadyAscended"]
+    C -->|"No"| ERR2["Error: BuildingRequired"]
+    D -->|"No"| ERR3["Error: InsufficientMastery"]
+```
+
 ### Ascension Requirements
 
-1. Research node at maximum level
-2. All prerequisites also at max level
-3. Ascension cost (varies by node)
+1. Research node at maximum level (per `template.max_level`)
+2. Active Academy building
+3. Sufficient Academy mastery (Fibonacci-sequence cost)
+
+> **Note:** Only the target node needs to be at max level. Prerequisites do **not** need to be maxed — the old requirement "all prerequisites at max level" was incorrect and is not enforced by the on-chain code.
 
 ### Ascension Benefits
 
@@ -329,6 +383,18 @@ ascended_nodes |= (1 << research_type)
 ---
 
 ## Buff Application
+
+```mermaid
+graph TD
+    COMPLETE["complete_research"] --> RECALC["recalculate_buffs()"]
+    RECALC --> BATTLE{"Battle buff?"}
+    RECALC --> ECON{"Economy buff?"}
+    RECALC --> GROWTH{"Growth buff?"}
+    BATTLE -->|"Yes"| PA["PlayerAccount<br/>(fast combat lookup)"]
+    ECON -->|"Yes"| RP["ResearchProgress<br/>(stored separately)"]
+    GROWTH -->|"Flag unlock"| PA2["PlayerAccount<br/>(has_mining / has_fishing flags)"]
+    GROWTH -->|"Numeric buff"| PA3["PlayerAccount<br/>(loot_magnetism, stamina, etc.)"]
+```
 
 ### Battle Buffs → PlayerAccount
 
@@ -422,4 +488,4 @@ function getNodeStatus(progress, template) {
 
 ---
 
-Next: [Rallies](./rallies.md)
+Next: [Estates](./estates.md)

@@ -14,6 +14,7 @@ use crate::{
     validation::{require_signer, require_writable, require_owner},
     emit,
     events::VaultTransfer,
+    utils::{read_u64, read_u8},
 };
 
 /// Transfer cash between hand and vault
@@ -41,9 +42,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, estate_account, game_engine_account] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, estate_account, game_engine_account]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -51,12 +50,8 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let direction = instruction_data[0];
-    let amount = u64::from_le_bytes(instruction_data[1..9].try_into().unwrap());
+    let direction = read_u8(instruction_data, 0, "vault_transfer.direction")?;
+    let amount = read_u64(instruction_data, 1, "vault_transfer.amount")?;
 
     if amount == 0 {
         return Err(GameError::InvalidAmount.into());

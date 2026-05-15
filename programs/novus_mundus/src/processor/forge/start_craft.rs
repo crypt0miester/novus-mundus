@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{Sysvar, clock::Clock},
     ProgramResult,
@@ -22,6 +21,7 @@ use crate::{
         },
     },
     constants::PLAYER_SEED,
+    utils::read_u8,
     validation::{require_signer, require_writable, require_owner, require_pda},
 };
 
@@ -74,9 +74,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [owner, player_account, estate_account, crafted_equipment, player_token_account, novi_mint, _token_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    crate::extract_accounts!(accounts, exact [owner, player_account, estate_account, crafted_equipment, player_token_account, novi_mint, _token_program]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -92,15 +90,17 @@ pub fn process(
     )?;
     require_writable(player_token_account)?;
     require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "start_craft.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse Instruction Data
-    if instruction_data.len() < 2 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let equipment_type = CraftableEquipment::from_u8(instruction_data[0])
+    let equipment_type = CraftableEquipment::from_u8(read_u8(instruction_data, 0, "start_craft.equipment_type")?)
         .ok_or(GameError::InvalidParameter)?;
-    let quality_tier = QualityTier::from_u8(instruction_data[1])
+    let quality_tier = QualityTier::from_u8(read_u8(instruction_data, 1, "start_craft.quality_tier")?)
         .ok_or(GameError::InvalidParameter)?;
 
     // Cannot craft Common tier (shop-bought baseline)

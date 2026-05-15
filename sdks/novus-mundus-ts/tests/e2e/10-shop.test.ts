@@ -717,6 +717,7 @@ describe('Shop System', () => {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
           tokenMint: testTokenMint,
+          treasuryWallet: ctx.treasury.publicKey,
         },
         {
           pythFeed: mockPythFeed,
@@ -800,6 +801,7 @@ describe('Shop System', () => {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
           tokenMint: tokenToClose,
+          treasuryWallet: ctx.treasury.publicKey,
         },
         {
           pythFeed: mockPythFeed,
@@ -838,6 +840,7 @@ describe('Shop System', () => {
           payer: player.publicKey,
           daoAuthority: player.publicKey,
           tokenMint: nonDaoToken,
+          treasuryWallet: ctx.treasury.publicKey,
         },
         {
           pythFeed: mockPythFeed,
@@ -980,6 +983,7 @@ describe('Shop System', () => {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
               tokenMint,
+              treasuryWallet: ctx.treasury.publicKey,
             },
             {
               pythFeed: tokenFeed,
@@ -1047,6 +1051,94 @@ describe('Shop System', () => {
       expect(BUYER_START - buyerAfter).toBe(treasuryAfter);
     }, 60_000);
 
+    it('rejects token payment to a treasury_token_ata not owned by the treasury wallet', async () => {
+      // Free-purchase guard. process_token_payment_flow pins treasury_token_ata
+      // to game_engine.treasury_wallet. Here the buyer passes their OWN token
+      // account as treasury_token_ata — i.e. tries to pay themselves. The
+      // on-chain owner check must reject it before any transfer settles.
+      const tokenMint = Keypair.generate().publicKey;
+      seedSplMint(ctx.svm, tokenMint, {
+        decimals: 9,
+        mintAuthority: ctx.daoAuthority.publicKey,
+      });
+
+      const solFeed = Keypair.generate().publicKey;
+      const tokenFeed = Keypair.generate().publicKey;
+      seedMockPythFeed(ctx.svm, solFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, { price: 100_000_000, conf: 0, expo: -8 });
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createUpdateConfigInstruction(
+            { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
+            { solPythFeed: solFeed, solMaxStalenessSlots: 1_000_000, solConfidenceThresholdBps: 1000 },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateAllowedTokenInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              tokenMint,
+              treasuryWallet: ctx.treasury.publicKey,
+            },
+            {
+              pythFeed: tokenFeed,
+              switchboardFeed: undefined,
+              maxStalenessSlots: 1_000_000,
+              confidenceThresholdBps: 1000,
+              discountBps: 0,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const buyer = await createShopReadyPlayer(ctx, factory);
+      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const BUYER_START = 1_000_000_000_000n;
+      seedSplTokenAccount(ctx.svm, buyerAta, {
+        mint: tokenMint,
+        owner: buyer.publicKey,
+        amount: BUYER_START,
+      });
+
+      // The attack: pass the buyer's own token account as treasury_token_ata.
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseItemInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: buyer.publicKey,
+              itemId: 9999,
+              treasury: ctx.treasury.publicKey,
+              tokenPayment: {
+                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                tokenMint,
+                buyerTokenAta: buyerAta,
+                treasuryTokenAta: buyerAta, // not the treasury's ATA — must be rejected
+                solOracleFeed: solFeed,
+                tokenOracleFeed: tokenFeed,
+              },
+            },
+            { quantity: 1, paymentType: 2 },
+          ),
+        ),
+        [buyer.keypair],
+      );
+
+      // No free purchase: the buyer's balance is untouched.
+      expect(readSplTokenAmount(ctx.svm, buyerAta)).toBe(BUYER_START);
+    }, 60_000);
+
     it('should accept SPL token payment via Switchboard feeds', async () => {
       // Same flow as the Pyth test, but both oracle feeds are Switchboard
       // pull-feeds. process_token_payment_flow's detect_oracle_type picks the
@@ -1094,6 +1186,7 @@ describe('Shop System', () => {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
               tokenMint,
+              treasuryWallet: ctx.treasury.publicKey,
             },
             {
               pythFeed: undefined,
@@ -1201,6 +1294,7 @@ describe('Shop System', () => {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
               tokenMint,
+              treasuryWallet: ctx.treasury.publicKey,
             },
             {
               pythFeed: undefined,

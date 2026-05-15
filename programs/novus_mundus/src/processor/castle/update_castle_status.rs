@@ -11,7 +11,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
@@ -41,12 +40,10 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 2 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let _caller = &accounts[0];
-    let castle_account = &accounts[1];
+    crate::extract_accounts!(accounts, [
+        _caller,
+        castle_account,
+    ]);
 
     // Get current timestamp
     let clock = Clock::get()?;

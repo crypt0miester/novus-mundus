@@ -19,6 +19,7 @@ use crate::{
         event_scoring::update_event_score,
         estate::{required_building_for_unit, required_level_for_unit, load_estate_for_player, require_building},
     },
+    utils::{read_u8, read_u64},
     validation::{require_signer, require_writable, require_owner, require_pda},
     emit,
     events::UnitsHired,
@@ -48,12 +49,19 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    let (player, owner, player_token_account, novi_mint, game_engine, _token_program, estate_account, event_participation, event) = if accounts.len() >= 9 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], Some(&accounts[7]), Some(&accounts[8]))
-    } else if accounts.len() >= 7 {
-        (&accounts[0], &accounts[1], &accounts[2], &accounts[3], &accounts[4], &accounts[5], &accounts[6], None, None)
+    crate::extract_accounts!(accounts, [
+        player,
+        owner,
+        player_token_account,
+        novi_mint,
+        game_engine,
+        _token_program,
+        estate_account,
+    ]);
+    let (event_participation, event) = if accounts.len() >= 9 {
+        (Some(&accounts[7]), Some(&accounts[8]))
     } else {
-        return Err(ProgramError::NotEnoughAccountKeys);
+        (None, None)
     };
 
     // 2. Validate Accounts
@@ -64,16 +72,20 @@ pub fn process(
     // Verify player PDA matches expected derivation
     let bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
 
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "hire_units.novi_mint",
+        GameError::InvalidMint,
+    );
+
     // 3. Parse Instruction Data
     if data.len() != 9 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let unit_type = UnitType::try_from(data[0])?;
-    let novi_amount = u64::from_le_bytes([
-        data[1], data[2], data[3], data[4],
-        data[5], data[6], data[7], data[8],
-    ]);
+    let unit_type = UnitType::try_from(read_u8(data, 0, "unit_type")?)?;
+    let novi_amount = read_u64(data, 1, "novi_amount")?;
 
     // 4. PHASE 1: Validate and calculate (scoped player borrow - dropped before CPI)
     let (units_with_time_bonus, units_to_hire, time_bonus_bps, player_name, current_event, now) = {

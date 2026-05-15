@@ -1,260 +1,238 @@
 # Player Onboarding
 
-> The first steps a new player takes in Novus Mundus, from wallet connection to first meaningful action.
+> From zero to kingdom citizen: creating accounts, receiving starter resources, and establishing your estate.
 
 ## Overview
 
-Onboarding in Novus Mundus is designed to be progressive - players don't see all complexity at once. The initial flow is streamlined to get players into the core loop quickly.
+Joining Novus Mundus requires three on-chain instructions executed in strict order. The program enforces this sequence: `init_player` (discriminant 1) reads the `UserAccount` and errors `UserAccountNotCreated` if it does not exist, so `init_user` (discriminant 2) **must** be submitted first.
 
 ```mermaid
-graph TB
-    A[Connect Wallet] --> B[Initialize Player]
-    B --> C[Initialize User]
-    C --> D[Spawn in Starting City]
-    D --> E[Create Estate]
-    E --> F[First Building: Mansion]
-    F --> G[Hire First Operatives]
-    G --> H[Start First Research]
-    H --> I[Core Loop Begins]
+graph LR
+    W[Wallet] -->|"init_user (disc 2)"| U["UserAccount PDA"]
+    W -->|"init_player (disc 1)"| P["PlayerAccount PDA + NOVI ATA + Location"]
+    P -->|"create_progress (disc 121)"| R["ResearchProgress PDA + EXT_RESEARCH"]
+    P -->|"create_estate (disc 160)"| E["EstateAccount PDA"]
+    E -->|"build + hire_units (disc 11)"| Ready["Ready to play"]
 ```
 
-## Step 1: Account Initialization
+All three initialization instructions — `init_user`, `init_player`, and `create_progress` — can be batched into a single Solana transaction. Within one transaction, instructions execute sequentially and see state changes from prior instructions in the same batch.
 
-### PlayerAccount Creation
+[Source: processor/initialization/](../../../programs/novus_mundus/src/processor/initialization/)
 
-The first transaction creates the player's core account:
+---
 
-**Instruction:** `1 - initialize_player`
+## Instruction Reference
 
-**What happens:**
-1. System derives PlayerAccount PDA from wallet
-2. Account is created with rent-exempt SOL
-3. Player is assigned a starting city
-4. Initial resources are granted
-5. Extension flags are set to minimal defaults
+### `init_user` — discriminant 2
 
-**Starting Resources:**
-| Resource | Amount | Purpose |
-|----------|--------|---------|
-| Cash | 10,000 | Initial purchases |
-| Locked NOVI | 0 | Must deposit |
-| Operatives | 0 | Must hire |
-| Gems | 100 | Tutorial actions |
+Creates the global **UserAccount** PDA. This account is kingdom-agnostic: one per wallet, shared across all kingdoms.
+
+**Accounts:**
+
+| # | Account | Role |
+|---|---------|------|
+| 1 | `user` PDA | Created; seeds `[b"user", owner]` |
+| 2 | `owner` | Signer + fee payer |
+| 3 | `user_token_account` | NOVI ATA for reserved (withdrawable) NOVI |
+| 4 | `game_engine` | GameEngine PDA (provides NOVI mint address) |
+| 5 | `novi_mint` | NOVI token mint |
+| 6 | `system_program` | System program |
+| 7 | `token_program` | SPL Token program |
+| 8 | `associated_token_program` | ATA program |
+
+**Instruction data:** none
+
+**Effects:**
+- Allocates `UserAccount` at `[b"user", owner_pubkey]`
+- Initializes with free (tier 0) subscription and zero `reserved_novi`
+- Creates the owner's NOVI ATA for reserved NOVI withdrawals
+- Emits `UserCreated` event
+
+[Source: processor/initialization/user.rs](../../../programs/novus_mundus/src/processor/initialization/user.rs)
+
+---
+
+### `init_player` — discriminant 1
+
+Creates the kingdom-scoped **PlayerAccount** PDA, a NOVI ATA for locked gameplay NOVI, and a `LocationAccount` for the spawn cell.
+
+> **Note:** The program checks `user.data_len() == 0` and returns `GameError::UserAccountNotCreated` if the UserAccount does not exist. Always call `init_user` before `init_player` — old documentation showing the reverse order is wrong.
+
+**Accounts:**
+
+| # | Account | Role |
+|---|---------|------|
+| 1 | `player` PDA | Created; seeds `[b"player", game_engine, owner]` |
+| 2 | `owner` | Signer + fee payer |
+| 3 | `player_token_account` | NOVI ATA for locked (non-withdrawable) NOVI |
+| 4 | `game_engine` | GameEngine PDA (mutable — increments `total_players`) |
+| 5 | `novi_mint` | NOVI token mint |
+| 6 | `starting_city` | CityAccount for spawn city (mutable — increments `players_present`) |
+| 7 | `spawn_location` | LocationAccount for spawn cell (created if absent) |
+| 8 | `user` | Existing UserAccount PDA — must already exist |
+| 9 | `system_program` | System program |
+| 10 | `token_program` | SPL Token program |
+| 11 | `associated_token_program` | ATA program |
+
+**Instruction data:**
+
+| Bytes | Field | Type | Description |
+|-------|-------|------|-------------|
+| 0–1 | `starting_city_id` | u16 LE | City where the player spawns |
+| 2–9 | `spawn_lat` | f64 LE | Spawn latitude (must be within city radius) |
+| 10–17 | `spawn_long` | f64 LE | Spawn longitude (must be within city radius) |
+
+**Guards:**
+
+```mermaid
+flowchart TD
+    A["init_player called"] --> B{"UserAccount exists?"}
+    B -->|No| ERR1["GameError::UserAccountNotCreated"]
+    B -->|Yes| C{"registration_open == true?"}
+    C -->|No| ERR2["RegistrationClosed error"]
+    C -->|Yes| D{"max_players == 0 or under limit?"}
+    D -->|No| ERR3["MaxPlayersReached error"]
+    D -->|Yes| E{"Spawn coords within city radius?"}
+    E -->|No| ERR4["InvalidSpawnLocation error"]
+    E -->|Yes| F{"Cell terrain passable?"}
+    F -->|No| ERR5["ImpassableTerrain error"]
+    F -->|Yes| G{"Spawn cell unoccupied?"}
+    G -->|No| ERR6["CellOccupied error"]
+    G -->|Yes| H["Create PlayerAccount + mint 1,000,000 NOVI"]
+```
+
+**Starter resources granted by `PlayerCore::init_with_city`:**
+
+| Resource | Amount |
+|----------|--------|
+| `locked_novi` | 1,000,000 (`STARTER_LOCKED_NOVI`) |
+| `defensive_unit_1` | 10,000 |
+| `defensive_unit_2` | 4,000 |
+| `defensive_unit_3` | 2,000 |
+| `operative_unit_1` | 10,000 |
+| `operative_unit_2` | 4,000 |
+| `operative_unit_3` | 1,000 |
+| `melee_weapons` | 8,000 |
+| `ranged_weapons` | 4,000 |
+| `siege_weapons` | 2,000 |
+| `armor_pieces` | 8,000 |
+| `produce` | 50,000 |
+| `vehicles` | 500 |
+| `cash_on_hand` | 130,000,000 |
+| `gems` | 10,000 |
+| New-player protection | `created_at + gameplay_config.new_player_protection_duration` |
+
+1,000,000 NOVI tokens are minted to the player's ATA (matching `locked_novi`).
+
+**Emits:** `PlayerJoinedKingdom`
+
+[Source: processor/initialization/player.rs](../../../programs/novus_mundus/src/processor/initialization/player.rs)
+
+---
+
+### `create_progress` — discriminant 121
+
+Creates the `ResearchProgress` PDA and unlocks `EXT_RESEARCH` on the `PlayerAccount`. This is the first extension in the chain and is required before all subsequent extensions (`EXT_INVENTORY`, `EXT_TEAM`, etc.).
+
+**Seeds:** `[b"research", player_pda]`
+
+After this instruction the player account is grown to `CORE_SIZE + RESEARCH_SIZE = 576 bytes`.
+
+---
+
+### `create_estate` — discriminant 160
+
+Creates the player's `EstateAccount` in a specified city. Buildings are constructed here and the daily mini-game (`daily_activity`, discriminant 166) takes place on the estate.
+
+**Seeds:** `[b"estate", player_pda]`
+
+---
+
+## Full Onboarding Sequence
 
 ```mermaid
 sequenceDiagram
     participant Wallet
     participant Program
-    participant PlayerAccount
+    participant UserPDA
+    participant PlayerPDA
+    participant ResearchPDA
+    participant EstateAccount
 
-    Wallet->>Program: initialize_player
-    Program->>Program: Derive PDA ["player", wallet]
-    Program->>PlayerAccount: Create account
-    Program->>PlayerAccount: Set owner = wallet
-    Program->>PlayerAccount: Set starting_city
-    Program->>PlayerAccount: Grant initial resources
-    Program-->>Wallet: Success
+    Note over Wallet,EstateAccount: Transaction 1 (all three can be batched)
+
+    Wallet->>Program: init_user (disc 2)
+    Program->>UserPDA: Create + init (free tier, 0 reserved_novi)
+    Program-->>Wallet: emit UserCreated
+
+    Wallet->>Program: init_player (disc 1)
+    Program->>Program: Validate user exists, city, terrain, registration
+    Program->>PlayerPDA: Create + init_with_city (starter resources)
+    Program->>Program: Mint 1,000,000 NOVI to player ATA
+    Program-->>Wallet: emit PlayerJoinedKingdom
+
+    Wallet->>Program: create_progress (disc 121)
+    Program->>ResearchPDA: Create + init
+    Program->>PlayerPDA: Resize + set EXT_RESEARCH bit
+
+    Note over Wallet,EstateAccount: Transaction 2
+
+    Wallet->>Program: create_estate (disc 160)
+    Program->>EstateAccount: Create + init
 ```
-
-### UserAccount Creation
-
-Immediately after, the user identity account is created:
-
-**Instruction:** `2 - initialize_user`
-
-**What happens:**
-1. Links wallet to PlayerAccount
-2. Records referrer (if any)
-3. Sets subscription to free tier
-4. Enables cross-game features
-
-[Source: processor/initialization/player.rs](../../../programs/novus_mundus/src/processor/initialization/player.rs)
-[Source: processor/initialization/user.rs](../../../programs/novus_mundus/src/processor/initialization/user.rs)
-
-## Step 2: Estate Creation
-
-Before meaningful progression, players need an estate:
-
-**Instruction:** `160 - create_estate`
-
-**What happens:**
-1. EstateAccount PDA is created
-2. Player receives 1 starting plot
-3. Building slots are initialized
-4. Daily tracking is set up
-
-The estate is the foundation for all progression - buildings unlock features and provide bonuses.
-
-```mermaid
-graph LR
-    subgraph "Estate Created"
-        P1[Plot 1<br/>Empty]
-    end
-
-    subgraph "After First Build"
-        P1B[Plot 1<br/>Mansion Lv1]
-    end
-
-    P1 -->|build| P1B
-```
-
-[Source: processor/estate/create.rs](../../../programs/novus_mundus/src/processor/estate/create.rs)
-
-## Step 3: First Building - Mansion
-
-The Mansion is the mandatory first building:
-
-**Instruction:** `161 - build`
-
-**Why Mansion First:**
-- Increases unit capacity (can't hire without it)
-- Foundation for all other buildings
-- Represents player's "home base"
-
-**Building Flow:**
-```mermaid
-stateDiagram-v2
-    [*] --> Empty: Plot available
-    Empty --> Building: build (Mansion)
-    Building --> Ready: Time elapsed
-    Ready --> Level1: complete
-    Level1 --> [*]: Can now hire units
-```
-
-The Mansion at Level 1 provides:
-- 100 base unit capacity
-- Ability to hire Tier 1 operatives
-- Unlock other building options
-
-[Source: processor/estate/build.rs](../../../programs/novus_mundus/src/processor/estate/build.rs)
-
-## Step 4: Hire First Operatives
-
-With a Mansion built, players can hire their first troops:
-
-**Instruction:** `11 - hire_units`
-
-**Requirements:**
-- Mansion Level 1 (for Tier 1 units)
-- Sufficient cash
-- Available unit capacity
-
-**First Hire Recommendation:**
-| Unit Type | Cost | Purpose |
-|-----------|------|---------|
-| Operative T1 | 100 cash each | Basic workforce |
-
-Operatives are essential for:
-- Resource collection
-- Expeditions (mining/fishing)
-- Combat
-- Rallies
-
-```mermaid
-graph TB
-    A[Have Mansion] --> B{Have Cash?}
-    B -->|Yes| C[Hire Units]
-    C --> D[Units in Inventory]
-    D --> E[Ready for Actions]
-    B -->|No| F[Collect Resources]
-    F --> B
-```
-
-[Source: processor/economy/hire_units.rs](../../../programs/novus_mundus/src/processor/economy/hire_units.rs)
-
-## Step 5: Start First Research
-
-The final onboarding step unlocks the extension system:
-
-**Instruction:** `122 - start_research`
-
-**What This Does:**
-1. Creates ResearchProgress account (if not exists)
-2. Unlocks `EXT_RESEARCH` extension
-3. Begins first research timer
-4. Opens the tech tree UI
-
-**Why Research is Required:**
-- Research unlocks all major features
-- First research is quick (tutorial pacing)
-- Teaches the research mechanic early
-- Gates hero system, rallies, etc.
-
-```mermaid
-graph TB
-    A[Start Research] --> B[EXT_RESEARCH Unlocked]
-    B --> C[Tech Tree Available]
-    C --> D[Future Unlocks Possible]
-
-    subgraph "What Research Enables"
-        E[Heroes]
-        F[Advanced Combat]
-        G[Higher Tier Units]
-        H[Expeditions]
-    end
-
-    D --> E & F & G & H
-```
-
-[Source: processor/research/start_research.rs](../../../programs/novus_mundus/src/processor/research/start_research.rs)
-
-## Onboarding Complete Checklist
-
-After completing onboarding, a player has:
-
-| Requirement | Status |
-|-------------|--------|
-| PlayerAccount | Created |
-| UserAccount | Created |
-| EstateAccount | Created |
-| Mansion | Level 1 |
-| Operatives | Some hired |
-| Research | In progress |
-| Extensions | EXT_RESEARCH unlocked |
-
-## What's Next?
-
-After onboarding, players enter the **core loop**:
-
-1. **Complete first research** → Unlocks new features
-2. **Start expeditions** → Earn gems and resources
-3. **Upgrade buildings** → Increase capacity and bonuses
-4. **Lock heroes** → Gain combat buffs (requires Sanctuary)
-5. **Join rallies** → Team-based gameplay
-
-See [Progression Gates](./progression-gates.md) for how features unlock.
-
-## Client Integration Notes
-
-### Recommended UI Flow
-
-```
-1. Wallet Connect
-   └── Check if PlayerAccount exists
-       ├── No  → Show "Create Account" button
-       │         └── Call initialize_player + initialize_user
-       └── Yes → Check EstateAccount exists
-                 ├── No  → Show "Create Estate" prompt
-                 │         └── Call create_estate
-                 └── Yes → Check Mansion exists
-                           ├── No  → Show "Build Mansion" tutorial
-                           └── Yes → Show main game UI
-```
-
-### Transactions to Batch
-
-These can be combined in a single transaction for better UX:
-- `initialize_player` + `initialize_user`
-- `create_estate` + `build` (Mansion)
-
-### Error Handling
-
-| Error | Meaning | Recovery |
-|-------|---------|----------|
-| `AccountAlreadyExists` | Player account exists | Skip to next step |
-| `InsufficientFunds` | Not enough SOL for rent | Show deposit prompt |
-| `PlotNotAvailable` | No empty plot | Should not happen on fresh account |
 
 ---
 
-Next: [Progression Gates](./progression-gates.md) - How features unlock over time
+## PDA Derivation Reference
+
+| Account | Seeds |
+|---------|-------|
+| `UserAccount` | `[b"user", owner_pubkey]` |
+| `PlayerAccount` | `[b"player", game_engine_pubkey, owner_pubkey]` |
+| `ResearchProgress` | `[b"research", player_pda]` |
+| `EstateAccount` | `[b"estate", player_pda]` |
+| `LocationAccount` | `[b"location", game_engine, city_id_le, grid_lat_le, grid_long_le]` |
+
+---
+
+## Two-Token Design
+
+Novus Mundus uses two distinct NOVI token accounts per player:
+
+| Token Account | Owner | NOVI Type | Withdrawable |
+|---------------|-------|-----------|--------------|
+| Player ATA | PlayerAccount PDA | Locked | No — gameplay fuel only |
+| User ATA | UserAccount PDA | Reserved | Yes — prizes and event rewards |
+
+```mermaid
+graph LR
+    W[Wallet / Owner] --> PA["Player ATA<br/>(locked_novi)"]
+    W --> UA["User ATA<br/>(reserved_novi)"]
+    PA -->|"reserved_to_locked (disc 15)"| PA
+    UA -->|"reserved_to_locked (disc 15)"| PA
+    UA -->|"withdraw_reserved (disc 16)"| W
+    PA -.->|"gameplay fuel<br/>(not withdrawable)"| Game["Game Instructions"]
+    UA -.->|"prizes / event rewards"| UA
+```
+
+The `locked_novi` field on `PlayerCore` tracks gameplay NOVI. Reserved NOVI flows through the `UserAccount` and can be converted to locked via `reserved_to_locked` (discriminant 15) or withdrawn via `withdraw_reserved` (discriminant 16).
+
+---
+
+## What Happens After Onboarding
+
+After `init_user` + `init_player` + `create_progress`, the player has:
+- A fully initialized `PlayerAccount` with all starter resources
+- `EXT_RESEARCH` unlocked (account is 576 bytes: `CORE_SIZE` + `RESEARCH_SIZE`)
+- A `ResearchProgress` account for the technology tree
+- 1,000,000 locked NOVI for immediate hiring and building
+
+Typical next steps:
+1. `create_estate` (discriminant 160) — establish home base
+2. `build` (discriminant 161) + `complete_building` (discriminant 163) — construct Mansion and other buildings
+3. `hire_units` (discriminant 11) — build up troops using locked NOVI
+4. `start_research` (discriminant 122) — begin unlocking Growth and Battle nodes
+
+---
+
+Next: [Progression Gates](./progression-gates.md)

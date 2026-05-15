@@ -23,7 +23,7 @@ import {
   deriveEventPda,
   deriveEventParticipationPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Create Event (Admin)
 
@@ -236,6 +236,8 @@ export interface ClaimPrizeAccounts {
   eventVault?: PublicKey;
   /** Winner's SPL token account (optional, only for SPLToken prizes) */
   winnerSplTokenAccount?: PublicKey;
+  /** SPL prize token mint (optional, only for SPLToken prizes) */
+  prizeTokenMint?: PublicKey;
 }
 
 /** ~10,000 CU */
@@ -280,6 +282,9 @@ export function createClaimPrizeInstruction(
   // 9. winner_estate (READ)
   // 10. [optional] event_vault (WRITE)
   // 11. [optional] winner_spl_token_account (WRITE)
+  // 12. [optional] prize_token_mint (READ)
+  // 13. [optional] system_program (READ)
+  // 14. [optional] associated_token_program (READ)
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -293,12 +298,20 @@ export function createClaimPrizeInstruction(
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
 
-  // Add optional SPL token accounts
+  // Add optional SPL token accounts (all-or-nothing for SPLToken prizes).
+  // The on-chain handler creates the winner's ATA if missing, so it needs
+  // the prize mint, system program, and associated-token program too.
   if (accounts.eventVault) {
+    if (!accounts.winnerSplTokenAccount || !accounts.prizeTokenMint) {
+      throw new Error(
+        'SPLToken prize claim requires eventVault, winnerSplTokenAccount, and prizeTokenMint'
+      );
+    }
     keys.push({ pubkey: accounts.eventVault, isSigner: false, isWritable: true });
-  }
-  if (accounts.winnerSplTokenAccount) {
     keys.push({ pubkey: accounts.winnerSplTokenAccount, isSigner: false, isWritable: true });
+    keys.push({ pubkey: accounts.prizeTokenMint, isSigner: false, isWritable: false });
+    keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
+    keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
   const data = createInstructionData(DISCRIMINATORS.EVENT_CLAIM_PRIZE);

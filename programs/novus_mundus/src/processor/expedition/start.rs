@@ -23,7 +23,6 @@
 
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::{clock::Clock, Sysvar},
     ProgramResult,
@@ -40,6 +39,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
     helpers::estate::{load_estate_for_player, require_mine, require_dock},
+    utils::{read_u8, read_u64},
     validation::{require_signer, require_writable, require_owner, require_empty},
     emit,
     events::ExpeditionStarted,
@@ -81,15 +81,13 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 8 with hero)
-    if accounts.len() < 5 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let owner = &accounts[0];
-    let player_account = &accounts[1];
-    let expedition_account = &accounts[2];
-    let estate_account = &accounts[3];
-    let system_program = &accounts[4];
+    crate::extract_accounts!(accounts, [
+        owner,
+        player_account,
+        expedition_account,
+        estate_account,
+        system_program,
+    ], rest = hero_accounts);
 
     // Optional hero accounts (if len >= 8)
     let has_hero_accounts = accounts.len() >= 8;
@@ -101,24 +99,11 @@ pub fn process(
     require_owner(player_account, program_id)?;
 
     // 3. Parse Instruction Data (26 bytes: type + tier + 3x u64 operatives)
-    if instruction_data.len() < 26 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let expedition_type = instruction_data[0];
-    let tier = instruction_data[1];
-    let operative_unit_1 = u64::from_le_bytes([
-        instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5],
-        instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9],
-    ]);
-    let operative_unit_2 = u64::from_le_bytes([
-        instruction_data[10], instruction_data[11], instruction_data[12], instruction_data[13],
-        instruction_data[14], instruction_data[15], instruction_data[16], instruction_data[17],
-    ]);
-    let operative_unit_3 = u64::from_le_bytes([
-        instruction_data[18], instruction_data[19], instruction_data[20], instruction_data[21],
-        instruction_data[22], instruction_data[23], instruction_data[24], instruction_data[25],
-    ]);
+    let expedition_type = read_u8(instruction_data, 0, "expedition_type")?;
+    let tier = read_u8(instruction_data, 1, "tier")?;
+    let operative_unit_1 = read_u64(instruction_data, 2, "operative_unit_1")?;
+    let operative_unit_2 = read_u64(instruction_data, 10, "operative_unit_2")?;
+    let operative_unit_3 = read_u64(instruction_data, 18, "operative_unit_3")?;
 
     let total_operatives = operative_unit_1
         .saturating_add(operative_unit_2)
@@ -256,9 +241,9 @@ pub fn process(
 
     // 19. Handle optional hero NFT transfer (escrow to expedition PDA)
     let hero_mint_key = if has_hero_accounts {
-        let hero_mint = &accounts[5];
-        let hero_collection = &accounts[6];
-        let p_core_program = &accounts[7];
+        let hero_mint = &hero_accounts[0];
+        let hero_collection = &hero_accounts[1];
+        let p_core_program = &hero_accounts[2];
 
         require_writable(hero_mint)?;
 

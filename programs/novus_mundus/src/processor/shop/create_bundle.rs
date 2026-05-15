@@ -10,6 +10,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, BundleAccount, BundleItem, BundleTier, ShopCategory, MAX_BUNDLE_ITEMS},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
 };
 
 /// Create a bundle (DAO only)
@@ -42,15 +43,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         bundle_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -64,20 +63,16 @@ pub fn process(
 
     // Header: bundle_id(4) + tier(1) + category(1) + item_count(1) + req_sub(1) +
     //         savings(2) + sol(8) + from(8) + until(8) + active(1) = 35 bytes
-    if instruction_data.len() < 35 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let bundle_id = u32::from_le_bytes(instruction_data[0..4].try_into().unwrap());
-    let tier = instruction_data[4];
-    let category = instruction_data[5];
-    let item_count = instruction_data[6] as usize;
-    let requires_subscription = instruction_data[7];
-    let savings_bps = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
-    let price_sol_lamports = u64::from_le_bytes(instruction_data[10..18].try_into().unwrap());
-    let available_from = i64::from_le_bytes(instruction_data[18..26].try_into().unwrap());
-    let available_until = i64::from_le_bytes(instruction_data[26..34].try_into().unwrap());
-    let is_active = instruction_data[34] != 0;
+    let bundle_id = read_u32(instruction_data, 0, "bundle_id")?;
+    let tier = read_u8(instruction_data, 4, "tier")?;
+    let category = read_u8(instruction_data, 5, "category")?;
+    let item_count = read_u8(instruction_data, 6, "item_count")? as usize;
+    let requires_subscription = read_u8(instruction_data, 7, "requires_subscription")?;
+    let savings_bps = read_u16(instruction_data, 8, "savings_bps")?;
+    let price_sol_lamports = read_u64(instruction_data, 10, "price_sol_lamports")?;
+    let available_from = read_i64(instruction_data, 18, "available_from")?;
+    let available_until = read_i64(instruction_data, 26, "available_until")?;
+    let is_active = read_u8(instruction_data, 34, "is_active")? != 0;
 
     // Parse items (8 bytes each: item_id(4) + quantity(4))
     let items_offset = 35;
@@ -167,12 +162,8 @@ pub fn process(
     for i in 0..MAX_BUNDLE_ITEMS {
         if i < item_count {
             let item_offset = items_offset + (i * 8);
-            let item_id = u32::from_le_bytes(
-                instruction_data[item_offset..item_offset + 4].try_into().unwrap()
-            );
-            let quantity = u32::from_le_bytes(
-                instruction_data[item_offset + 4..item_offset + 8].try_into().unwrap()
-            );
+            let item_id = read_u32(instruction_data, item_offset, "item_id")?;
+            let quantity = read_u32(instruction_data, item_offset + 4, "quantity")?;
 
             // Validate quantity > 0
             if quantity == 0 {

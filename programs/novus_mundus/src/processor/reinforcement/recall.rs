@@ -40,16 +40,14 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         sender_owner,
         reinforcement_account,
         destination_player,
         sender_city,
         destination_city,
         game_engine,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
     require_signer(sender_owner)?;

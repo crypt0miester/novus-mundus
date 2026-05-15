@@ -25,6 +25,7 @@ use crate::{
         parse_hero_nft,
         subtract_hero_buffs_from_player_with_location,
     },
+    utils::{read_u64, read_bytes32, read_u8, read_i64, read_u16},
     validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::RallyCreated,
@@ -80,19 +81,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 base, +2 optional for hero commitment)
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let creator_player = &accounts[0];
-    let rally_account = &accounts[1];
-    let participant_account = &accounts[2];
-    let creator_owner = &accounts[3];
-    let game_engine = &accounts[4];
-    let rally_city_account = &accounts[5];
-    let system_program = &accounts[6];
-    let team_account = &accounts[7];
-    let estate_account = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        creator_player,
+        rally_account,
+        participant_account,
+        creator_owner,
+        game_engine,
+        rally_city_account,
+        system_program,
+        team_account,
+        estate_account,
+    ]);
 
     // 2. Validate Accounts
     require_signer(creator_owner)?;
@@ -103,57 +102,25 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // 3. Parse Instruction Data (108 bytes minimum)
-    if instruction_data.len() < 108 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let rally_id = read_u64(instruction_data, 0, "rally_id")?;
 
-    let rally_id = u64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
-    ]);
-
-    let mut target_bytes = [0u8; 32];
-    target_bytes.copy_from_slice(&instruction_data[8..40]);
+    let target_bytes = read_bytes32(instruction_data, 8, "target")?;
     let target = Address::from(target_bytes);
 
-    let target_type = instruction_data[40];
+    let target_type = read_u8(instruction_data, 40, "target_type")?;
 
-    let gather_duration = i64::from_le_bytes([
-        instruction_data[41], instruction_data[42], instruction_data[43], instruction_data[44],
-        instruction_data[45], instruction_data[46], instruction_data[47], instruction_data[48],
-    ]);
+    let gather_duration = read_i64(instruction_data, 41, "gather_duration")?;
 
-    let target_city = u16::from_le_bytes([instruction_data[49], instruction_data[50]]);
+    let target_city = read_u16(instruction_data, 49, "target_city")?;
 
-    let units_1 = u64::from_le_bytes([
-        instruction_data[51], instruction_data[52], instruction_data[53], instruction_data[54],
-        instruction_data[55], instruction_data[56], instruction_data[57], instruction_data[58],
-    ]);
-    let units_2 = u64::from_le_bytes([
-        instruction_data[59], instruction_data[60], instruction_data[61], instruction_data[62],
-        instruction_data[63], instruction_data[64], instruction_data[65], instruction_data[66],
-    ]);
-    let units_3 = u64::from_le_bytes([
-        instruction_data[67], instruction_data[68], instruction_data[69], instruction_data[70],
-        instruction_data[71], instruction_data[72], instruction_data[73], instruction_data[74],
-    ]);
-    let melee = u64::from_le_bytes([
-        instruction_data[75], instruction_data[76], instruction_data[77], instruction_data[78],
-        instruction_data[79], instruction_data[80], instruction_data[81], instruction_data[82],
-    ]);
-    let ranged = u64::from_le_bytes([
-        instruction_data[83], instruction_data[84], instruction_data[85], instruction_data[86],
-        instruction_data[87], instruction_data[88], instruction_data[89], instruction_data[90],
-    ]);
-    let siege = u64::from_le_bytes([
-        instruction_data[91], instruction_data[92], instruction_data[93], instruction_data[94],
-        instruction_data[95], instruction_data[96], instruction_data[97], instruction_data[98],
-    ]);
-    let team_id = u64::from_le_bytes([
-        instruction_data[99], instruction_data[100], instruction_data[101], instruction_data[102],
-        instruction_data[103], instruction_data[104], instruction_data[105], instruction_data[106],
-    ]);
-    let hero_slot_index = instruction_data[107]; // 255 = no hero, 0-2 = commit hero from slot
+    let units_1 = read_u64(instruction_data, 51, "units_1")?;
+    let units_2 = read_u64(instruction_data, 59, "units_2")?;
+    let units_3 = read_u64(instruction_data, 67, "units_3")?;
+    let melee = read_u64(instruction_data, 75, "melee")?;
+    let ranged = read_u64(instruction_data, 83, "ranged")?;
+    let siege = read_u64(instruction_data, 91, "siege")?;
+    let team_id = read_u64(instruction_data, 99, "team_id")?;
+    let hero_slot_index = read_u8(instruction_data, 107, "hero_slot_index")?; // 255 = no hero, 0-2 = commit hero from slot
 
     // 4. Validate inputs
     if target == NULL_PUBKEY {

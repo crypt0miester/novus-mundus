@@ -10,6 +10,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, SeasonalSaleAccount, SeasonalSaleStatus, MAX_FEATURED_ITEMS},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u8, read_u16, read_u32, read_u64, read_i64, read_bytes32},
 };
 
 /// Create a seasonal sale tied to an event (DAO only)
@@ -41,16 +42,14 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         event_account,
         seasonal_sale_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -63,19 +62,14 @@ pub fn process(
     // 3. Parse Instruction Data Header
 
     // name(32) + global_discount(2) + starts(8) + ends(8) + threshold(8) + cosmetic(4) + count(1) = 63
-    if instruction_data.len() < 63 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let name = read_bytes32(instruction_data, 0, "name")?;
 
-    let mut name = [0u8; 32];
-    name.copy_from_slice(&instruction_data[0..32]);
-
-    let global_discount_bps = u16::from_le_bytes(instruction_data[32..34].try_into().unwrap());
-    let starts_at = i64::from_le_bytes(instruction_data[34..42].try_into().unwrap());
-    let ends_at = i64::from_le_bytes(instruction_data[42..50].try_into().unwrap());
-    let spend_threshold = u64::from_le_bytes(instruction_data[50..58].try_into().unwrap());
-    let exclusive_cosmetic_id = u32::from_le_bytes(instruction_data[58..62].try_into().unwrap());
-    let featured_count = instruction_data[62] as usize;
+    let global_discount_bps = read_u16(instruction_data, 32, "global_discount_bps")?;
+    let starts_at = read_i64(instruction_data, 34, "starts_at")?;
+    let ends_at = read_i64(instruction_data, 42, "ends_at")?;
+    let spend_threshold = read_u64(instruction_data, 50, "spend_threshold")?;
+    let exclusive_cosmetic_id = read_u32(instruction_data, 58, "exclusive_cosmetic_id")?;
+    let featured_count = read_u8(instruction_data, 62, "featured_count")? as usize;
 
     // 4. Validate Data
 
@@ -153,12 +147,8 @@ pub fn process(
 
     for i in 0..featured_count {
         let offset = 63 + i * 6;
-        featured_item_ids[i] = u32::from_le_bytes(
-            instruction_data[offset..offset + 4].try_into().unwrap()
-        );
-        featured_discounts_bps[i] = u16::from_le_bytes(
-            instruction_data[offset + 4..offset + 6].try_into().unwrap()
-        );
+        featured_item_ids[i] = read_u32(instruction_data, offset, "featured_item_id")?;
+        featured_discounts_bps[i] = read_u16(instruction_data, offset + 4, "featured_discount_bps")?;
     }
 
     sale.featured_item_ids = featured_item_ids;

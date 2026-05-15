@@ -15,6 +15,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     state::{CastleAccount, GameEngine},
+    utils::{read_u8, read_u16, read_u64},
 };
 
 /// Update Castle Config instruction data
@@ -40,13 +41,11 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    if accounts.len() < 3 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let dao_authority = &accounts[0];
-    let game_engine_account = &accounts[1];
-    let castle_account = &accounts[2];
+    crate::extract_accounts!(accounts, [
+        dao_authority,
+        game_engine_account,
+        castle_account,
+    ]);
 
     // Verify signer
     if !dao_authority.is_signer() {
@@ -73,50 +72,20 @@ pub fn process(
 
     match config_type {
         CONFIG_REWARD_RATES => {
-            // Update reward rates
-            // Format: king_novi(8), king_cash(8), court_novi(8), court_cash(8), member_novi(8), member_cash(8)
-            if instruction_data.len() < 49 {
-                return Err(ProgramError::InvalidInstructionData);
-            }
-
-            castle.king_novi_per_day = u64::from_le_bytes([
-                instruction_data[1], instruction_data[2], instruction_data[3], instruction_data[4],
-                instruction_data[5], instruction_data[6], instruction_data[7], instruction_data[8],
-            ]);
-            castle.king_cash_per_day = u64::from_le_bytes([
-                instruction_data[9], instruction_data[10], instruction_data[11], instruction_data[12],
-                instruction_data[13], instruction_data[14], instruction_data[15], instruction_data[16],
-            ]);
-            castle.court_novi_per_day = u64::from_le_bytes([
-                instruction_data[17], instruction_data[18], instruction_data[19], instruction_data[20],
-                instruction_data[21], instruction_data[22], instruction_data[23], instruction_data[24],
-            ]);
-            castle.court_cash_per_day = u64::from_le_bytes([
-                instruction_data[25], instruction_data[26], instruction_data[27], instruction_data[28],
-                instruction_data[29], instruction_data[30], instruction_data[31], instruction_data[32],
-            ]);
-            castle.member_novi_per_day = u64::from_le_bytes([
-                instruction_data[33], instruction_data[34], instruction_data[35], instruction_data[36],
-                instruction_data[37], instruction_data[38], instruction_data[39], instruction_data[40],
-            ]);
-            castle.member_cash_per_day = u64::from_le_bytes([
-                instruction_data[41], instruction_data[42], instruction_data[43], instruction_data[44],
-                instruction_data[45], instruction_data[46], instruction_data[47], instruction_data[48],
-            ]);
+            // 6 consecutive u64 reward rates starting at byte 1. Each read_u64
+            // bounds-checks its own slice, so a short buffer fails cleanly.
+            castle.king_novi_per_day   = read_u64(instruction_data, 1,  "king_novi")?;
+            castle.king_cash_per_day   = read_u64(instruction_data, 9,  "king_cash")?;
+            castle.court_novi_per_day  = read_u64(instruction_data, 17, "court_novi")?;
+            castle.court_cash_per_day  = read_u64(instruction_data, 25, "court_cash")?;
+            castle.member_novi_per_day = read_u64(instruction_data, 33, "member_novi")?;
+            castle.member_cash_per_day = read_u64(instruction_data, 41, "member_cash")?;
         }
         CONFIG_TIER_MULTIPLIER => {
-            // Update tier multiplier (BPS)
-            if instruction_data.len() < 3 {
-                return Err(ProgramError::InvalidInstructionData);
-            }
-            castle.tier_multiplier_bps = u16::from_le_bytes([instruction_data[1], instruction_data[2]]);
+            castle.tier_multiplier_bps = read_u16(instruction_data, 1, "tier_multiplier")?;
         }
         CONFIG_TREASURY_LEVEL => {
-            // Update treasury level
-            if instruction_data.len() < 2 {
-                return Err(ProgramError::InvalidInstructionData);
-            }
-            castle.treasury_level = instruction_data[1];
+            castle.treasury_level = read_u8(instruction_data, 1, "treasury_level")?;
         }
         CONFIG_NAME => {
             // Update castle name (CastleAccount::name is [u8; 32])

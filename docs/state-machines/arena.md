@@ -1,8 +1,8 @@
-# Arena System State Machine
+# Arena State Machine
 
 ## Overview
 
-The Arena system provides seasonal competitive PvP rankings. Players earn points from battles, climb tiers, and receive rewards based on their performance at season end.
+The Arena system manages two concurrent lifecycles: the **season lifecycle** (global per kingdom) and the **participant lifecycle** (per-player per-season). There is no separate "battle account" — combat is fully resolved in one transaction and state is updated in-place on the participant and season accounts.
 
 ---
 
@@ -10,312 +10,344 @@ The Arena system provides seasonal competitive PvP rankings. Players earn points
 
 ### States
 
-| State | Description |
-|-------|-------------|
-| `Inactive` | No active season |
-| `Active` | Season in progress |
-| `Ended` | Season complete, claiming period |
+| State | Value | Description |
+|-------|-------|-------------|
+| `Pending` | 0 | Reserved; not used — seasons start `Active` |
+| `Active` | 1 | Battles open; daily rewards claimable |
+| `Finalized` | 2 | Past `end_time`; master rewards open |
+| `RewardsDistributed` | 3 | Informational; no further on-chain gate |
+| `Closed` | — | Account closed; no ArenaSeasonAccount on-chain |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> Active : create_season (DAO)<br/>status = Active(1)<br/>end_time = now + 7d<br/>claim_deadline = end_time + 30d
+
+    Active --> Active : challenge_player<br/>claim_daily_reward
+
+    Active --> Finalized : claim_master_reward<br/>(lazy — now > end_time)
+
+    Active --> Closed : close_season<br/>(past deadline OR 4+ behind)
+
+    Finalized --> Closed : close_season
+
+    Closed --> [*]
 ```
-┌────────────────┐  start_season   ┌────────────────┐
-│                │ ──────────────> │                │
-│    Inactive    │                 │     Active     │
-│                │                 │                │
-└────────────────┘                 └───────┬────────┘
-       ▲                                   │
-       │                                   │ end_season
-       │ reset_for_next                    ▼
-       │                           ┌────────────────┐
-       └───────────────────────────│                │
-                                   │     Ended      │
-                                   │                │
-                                   └────────────────┘
+
+ASCII reference:
+
+```
+                create_season (DAO)
+                       │
+                       ▼
+            ┌─────────────────────┐
+            │       Active        │  ◄── challenge_player (battles)
+            │   (now < end_time)  │  ◄── claim_daily_reward
+            └─────────┬───────────┘
+                      │
+          ┌───────────┴────────────────────────┐
+          │                                    │
+          │ claim_master_reward                │ close_season
+          │ (lazy, now > end_time)             │ (past deadline OR 4+ behind)
+          ▼                                    ▼
+┌──────────────────────┐            ┌──────────────────────┐
+│      Finalized       │            │       CLOSED         │
+│ (master claims open) │            │   (account gone)     │
+└─────────┬────────────┘            └──────────────────────┘
+          │
+          │ close_season
+          ▼
+┌──────────────────────┐
+│       CLOSED         │
+│   (account gone)     │
+└──────────────────────┘
 ```
 
 ### Transitions
 
-#### `Inactive` → `Active`
+#### `[*] → Active`
 ```
-Trigger: start_season (admin)
+Trigger: create_season (instruction 230)
 Guards:
-  - No active season
-  - Valid season configuration
+  - Caller is game_engine.game_authority
+  - ArenaSeasonAccount PDA does not already exist
 Actions:
-  - Set arena_state.current_season += 1
-  - Set arena_state.season_start = now
-  - Set arena_state.season_end = now + duration
-  - Reset tier thresholds
-  - Emit SeasonStarted
+  - Create ArenaSeasonAccount (608 bytes)
+  - Set status = Active (1)
+  - Set start_time = now
+  - Set end_time = now + 604800 (7 days)
+  - Set claim_deadline = end_time + 2592000 (30 days)
+  - Initialize leaderboard, prize pools, thresholds
+  - Emit KingdomArenaSeasonStarted
 ```
 
-#### `Active` → `Ended`
+#### `Active → Finalized`
 ```
-Trigger: end_season (automatic or admin)
+Trigger: claim_master_reward (instruction 235), lazy transition
 Guards:
-  - now >= season_end
+  - season.status == Active
+  - now > season.end_time
 Actions:
-  - Calculate final rankings
-  - Prepare reward distribution
-  - Emit SeasonEnded
+  - season.status = Finalized (2)
+  - (master reward calculation proceeds in same instruction)
+```
+
+#### `Active|Finalized → Closed`
+```
+Trigger: close_season (instruction 236)
+Guards:
+  - season_authority == season.authority
+  - EITHER: now > season.claim_deadline
+  - OR:     city.arena_season_id − season.season_id >= 4
+Actions:
+  - Close ArenaSeasonAccount
+  - Transfer rent lamports to season.authority
 ```
 
 ---
 
-## 2. Player Arena State
+## 2. Participant Lifecycle
+
+Each participant account tracks ELO, points, battle history, and reward claims for one player in one season.
 
 ### States
 
 | State | Description |
 |-------|-------------|
-| `Unregistered` | Player hasn't joined arena |
-| `Registered` | Active arena participant |
-
-### Tier Levels
-
-| Tier | Name | Points Required |
-|------|------|-----------------|
-| 0 | Bronze | 0 |
-| 1 | Silver | 1,000 |
-| 2 | Gold | 3,000 |
-| 3 | Platinum | 6,000 |
-| 4 | Diamond | 10,000 |
-| 5 | Master | 15,000 |
-| 6 | Grandmaster | 25,000 |
-| 7 | Champion | 50,000 |
+| `NonExistent` | No ArenaParticipantAccount exists for this player/season |
+| `Joined` | Participant account exists; battles and rewards can occur |
+| `Closed` | Run closed; participant account can be manually closed |
 
 ### State Diagram
 
+```mermaid
+stateDiagram-v2
+    [*] --> Joined : join_season<br/>elo = 1000<br/>points = 0
+
+    Joined --> Joined : challenge_player<br/>(ELO + points updated)
+
+    Joined --> Joined : claim_daily_reward<br/>(≥5 battles today)
+
+    Joined --> Joined : claim_master_reward<br/>(after end_time, top-10)
 ```
-┌────────────────┐  join_arena   ┌────────────────┐
-│                │ ────────────> │                │
-│  Unregistered  │               │   Registered   │
-│                │               │                │
-└────────────────┘               └───────┬────────┘
-                                         │
-                         ┌───────────────┼───────────────┐
-                         │               │               │
-                         ▼               ▼               ▼
-                   ┌──────────┐  ┌──────────────┐  ┌──────────┐
-                   │ Battle   │  │  Tier Up/    │  │  Claim   │
-                   │ (win/lose)│  │  Down        │  │  Rewards │
-                   └──────────┘  └──────────────┘  └──────────┘
+
+ASCII reference:
+
+```
+                    join_season
+┌─────────────┐  ──────────────►  ┌──────────────────────────────────┐
+│ NonExistent │                   │             Joined               │
+└─────────────┘                   │                                  │
+                                  │  ◄─── challenge_player           │
+                                  │  ◄─── claim_daily_reward         │
+                                  │  ◄─── claim_master_reward        │
+                                  └──────────────────────────────────┘
 ```
 
 ### Transitions
 
-#### `Unregistered` → `Registered`
+#### `NonExistent → Joined`
 ```
-Trigger: join_arena (implicit on first battle)
+Trigger: join_season (instruction 231)
 Guards:
-  - Active season
-  - Player meets minimum requirements
+  - season.status == Active
+  - now < season.end_time
+  - player.level >= season.min_level_required
+  - ArenaParticipantAccount does not already exist
 Actions:
-  - Initialize player arena stats for season
-  - Set tier = 0 (Bronze)
-  - Set points = 0
-  - Emit ArenaJoined
+  - Create ArenaParticipantAccount (536 bytes)
+  - Set elo_rating = 1000
+  - Set total_points = 0, wins = 0, losses = 0
+  - Create ArenaLoadoutAccount (168 bytes) if absent
+  - Emit (none; no event defined for join)
+```
+
+#### `Joined: challenge_player`
+```
+Trigger: challenge_player (instruction 233)
+Guards:
+  - Both challenger_authority and game_authority sign
+  - season.status == Active and now < season.end_time
+  - match_id > participant.last_match_id  (anti-replay)
+  - now − match_timestamp <= 300  (freshness)
+  - match_timestamp <= now
+  - challenger != defender (not self-challenge)
+  - count_battles_in_window(now, 86400) < 10
+  - count_opponent_in_window(defender, now, 86400) < 2
+  - If loadout.arena_hero set: hero NFT key must match; NFT must be valid
+Actions:
+  - calculate_arena_power(challenger), calculate_arena_power(defender)
+  - Determine winner (higher power wins; equal = draw)
+  - Update ELO (K=32, lookup-table expected score)
+  - Award points (win=100+bonus, loss=20, draw=50)
+  - challenger_participant.last_match_id = match_id
+  - record_battle() on both participants (circular buffer)
+  - season.total_battles += 1
+  - season.update_leaderboard(challenger, defender)
+```
+
+#### `Joined: claim_daily_reward`
+```
+Trigger: claim_daily_reward (instruction 234)
+Guards:
+  - season.status == Active
+  - participant.daily_reward_claimed_day != today
+  - count_battles_in_window(now, 86400) >= 5
+  - daily pool not exhausted (distributed_today < daily_distribution_cap)
+Actions:
+  - participant.daily_reward_claimed_day = today
+  - Compute reward (battle_mult × win_rate_mult × base)
+  - Cap to pool remainder
+  - season.distributed_today += reward
+  - season.daily_prize_pool -= reward
+  - Mint NOVI to player ATA; player.locked_novi += reward
+```
+
+#### `Joined: claim_master_reward`
+```
+Trigger: claim_master_reward (instruction 235)
+Guards:
+  - season.status >= Finalized (or auto-finalizes if Active + now > end_time)
+  - now <= season.claim_deadline
+  - participant.master_reward_claimed == false
+  - player is on leaderboard (find_player_rank returns Some)
+  - season.leaderboard_claimed[rank] == false
+Actions:
+  - participant.master_reward_claimed = true
+  - season.leaderboard_claimed[rank] = true
+  - Compute reward = master_prize_pool × ARENA_PRIZE_DISTRIBUTION[rank] / 10000
+  - season.prize_remaining -= reward
+  - Mint NOVI to player ATA; player.locked_novi += reward
 ```
 
 ---
 
-## 3. Battle System
+## 3. Loadout Lifecycle
 
-### Point Calculation
-```
-win_points = base_points × tier_multiplier × streak_bonus
-lose_points = base_loss × tier_difference_modifier
-
-Where:
-- base_points = 100
-- tier_multiplier = 1 + (opponent_tier - own_tier) × 0.1
-- streak_bonus = 1 + (win_streak × 0.05) capped at 1.5
+```mermaid
+stateDiagram-v2
+    [*] --> Configured : join_season (first time)<br/>creates ArenaLoadoutAccount
+    Configured --> Configured : update_loadout<br/>(any time, any season)
 ```
 
-### Battle Resolution
+ASCII reference:
+
 ```
-Trigger: arena_battle
-Guards:
-  - Both players registered
-  - Active season
-  - Battle cooldown elapsed
-  - Sufficient stamina
-Actions:
-  - Calculate combat outcome
-  - Update winner points (+)
-  - Update loser points (-)
-  - Update win/loss streaks
-  - Check tier changes
-  - Award XP
-  - Emit ArenaBattle
+                    join_season (first time)
+┌─────────────┐  ──────────────────────────►  ┌───────────────────────┐
+│ NonExistent │                               │      Configured       │
+└─────────────┘                               │                       │
+                   update_loadout             │  hero, units, weapons │
+                   (any time)                 │                       │
+                                              └───────────────────────┘
 ```
+
+`ArenaLoadoutAccount` is season-agnostic — persists across seasons. No transition to "closed"; players may re-use loadouts indefinitely.
 
 ---
 
-## 4. Daily Rewards
+## 4. Account Structure
 
-### States
+### ArenaSeasonAccount (608 bytes)
 
-| State | Description |
-|-------|-------------|
-| `Available` | Daily reward claimable |
-| `Claimed` | Already claimed today |
-
-### Tier-Based Daily Rewards
-
-| Tier | Daily NOVI | Daily Gems |
-|------|------------|------------|
-| Bronze | 100 | 1 |
-| Silver | 250 | 2 |
-| Gold | 500 | 5 |
-| Platinum | 1,000 | 10 |
-| Diamond | 2,500 | 25 |
-| Master | 5,000 | 50 |
-| Grandmaster | 10,000 | 100 |
-| Champion | 25,000 | 250 |
-
-### Transition
-
-#### Claim Daily Reward
-```
-Trigger: claim_daily_arena_reward
-Guards:
-  - Registered in arena
-  - 24 hours since last claim
-Actions:
-  - Grant NOVI based on tier
-  - Grant gems based on tier
-  - Update last_claim timestamp
-  - Emit DailyRewardClaimed
-```
-
----
-
-## 5. Season Rewards
-
-### Master Tier Rewards
-
-| Rank | Reward |
-|------|--------|
-| 1st | 1,000,000 NOVI + Exclusive NFT |
-| 2-10 | 500,000 NOVI |
-| 11-50 | 100,000 NOVI |
-| 51-100 | 50,000 NOVI |
-
-### Tier Completion Rewards
-
-| Tier Reached | Bonus NOVI |
-|--------------|------------|
-| Silver | 1,000 |
-| Gold | 5,000 |
-| Platinum | 15,000 |
-| Diamond | 50,000 |
-| Master | 150,000 |
-| Grandmaster | 500,000 |
-| Champion | 1,000,000 |
-
-### Transition
-
-#### Claim Master Reward
-```
-Trigger: claim_master_arena_reward
-Guards:
-  - Season ended
-  - Registered in season
-  - Haven't claimed yet
-Actions:
-  - Calculate final rank
-  - Grant rank-based rewards
-  - Grant tier completion bonuses
-  - Mark as claimed
-  - Emit MasterRewardClaimed
-```
-
----
-
-## 6. Account Structures
-
-### ArenaAccount (Global - 128 bytes)
 ```rust
-pub struct ArenaAccount {
-    pub current_season: u32,
-    pub season_start: i64,
-    pub season_end: i64,
-    pub total_participants: u32,
-    pub total_battles: u64,
-    pub is_active: bool,
-
-    // Tier thresholds
-    pub tier_thresholds: [u32; 8],
-
-    // Top players (cached)
-    pub top_player_1: Pubkey,
-    pub top_player_2: Pubkey,
-    pub top_player_3: Pubkey,
-    pub top_score_1: u32,
-    pub top_score_2: u32,
-    pub top_score_3: u32,
-
-    pub bump: u8,
+#[repr(C)]
+pub struct ArenaSeasonAccount {
+    pub account_key:                u8,
+    pub game_engine:                Address,
+    pub season_id:                  u32,
+    pub city_id:                    u16,
+    pub authority:                  Address,
+    pub start_time:                 i64,
+    pub end_time:                   i64,
+    pub claim_deadline:             i64,
+    pub status:                     u8,   // ArenaStatus: Pending=0, Active=1, Finalized=2, RewardsDistributed=3
+    pub leaderboard:                [ArenaLeaderboardEntry; 10],
+    pub leaderboard_count:          u8,
+    pub leaderboard_claimed:        [bool; 10],
+    pub master_prize_pool:          u64,
+    pub daily_prize_pool:           u64,
+    pub daily_distribution_cap:     u64,
+    pub distributed_today:          u64,
+    pub last_distribution_day:      u32,
+    pub _padding1:                  [u8; 4],
+    pub prize_remaining:            u64,
+    pub min_level_required:         u8,
+    pub _padding2:                  [u8; 7],
+    pub min_points_for_leaderboard: u64,
+    pub total_battles:              u64,
+    pub bump:                       u8,
+    pub _reserved:                  [u8; 7],
 }
 ```
 
-### PlayerArenaStats (in PlayerAccount)
+**PDA:** `["arena_season", game_engine, season_id:u32 LE]`
+
+### ArenaParticipantAccount (536 bytes)
+
 ```rust
-// Arena extension fields
-pub arena_season: u32,           // Which season stats are for
-pub arena_points: u32,           // Current points
-pub arena_tier: u8,              // Current tier (0-7)
-pub arena_wins: u32,             // Total wins this season
-pub arena_losses: u32,           // Total losses this season
-pub arena_win_streak: u8,        // Current win streak
-pub arena_best_streak: u8,       // Best streak this season
-pub arena_last_battle: i64,      // Last battle timestamp
-pub arena_last_daily_claim: i64, // Last daily reward claim
-pub arena_master_claimed: bool,  // Season reward claimed
+#[repr(C)]
+pub struct ArenaParticipantAccount {
+    pub account_key:              u8,
+    pub game_engine:              Address,
+    pub player:                   Address,  // PlayerAccount PDA
+    pub season_id:                u32,
+    pub battle_timestamps:        [i64; 10],
+    pub battle_opponents:         [Address; 10],
+    pub battle_index:             u8,
+    pub last_match_id:            u64,
+    pub daily_reward_claimed_day: u32,
+    pub elo_rating:               u32,     // floor 100; starts 1000
+    pub total_points:             u64,
+    pub wins:                     u32,
+    pub losses:                   u32,
+    pub master_reward_claimed:    bool,
+    pub bump:                     u8,
+    pub _reserved:                [u8; 17],
+}
 ```
+
+**PDA:** `["arena_participant", game_engine, season_id:u32 LE, player_account_pda]`
+
+### ArenaLoadoutAccount (168 bytes)
+
+```rust
+#[repr(C)]
+pub struct ArenaLoadoutAccount {
+    pub account_key:     u8,
+    pub game_engine:     Address,
+    pub player:          Address,  // PlayerAccount PDA
+    pub bump:            u8,
+    pub arena_hero:      Address,
+    pub defensive_units: [u64; 3],
+    pub melee_weapons:   u64,
+    pub ranged_weapons:  u64,
+    pub siege_weapons:   u64,
+    pub armor_pieces:    u64,
+    pub _reserved:       [u8; 7],
+}
+```
+
+**PDA:** `["arena_loadout", game_engine, player_account_pda]`
 
 ---
 
-## 7. Building Integration
-
-### Arena Building Requirements
-- **Unlock**: Estate Level 18
-- **Effect**: Enables arena participation
-- **Per-Level Bonus**: +0.5% PvP damage per level
-
-### Daily Activity Bonus
-Completing Arena building daily activity grants:
-- +10% arena damage for 24 hours
-
----
-
-## 8. Matchmaking
-
-### Rating-Based Matching
-```
-eligible_opponents = players where:
-  |opponent.arena_points - player.arena_points| <= 1000
-  AND opponent.arena_tier ∈ [player.tier - 1, player.tier + 2]
-```
-
-### Tier Protection
-- Cannot drop below current tier floor
-- Tier down requires 3 consecutive losses at floor
-
----
-
-## 9. Invariants
+## 5. Invariants
 
 ```
-1. Points cannot go negative
-2. Tier matches point thresholds
-3. Only one battle per cooldown period
-4. Daily rewards once per 24 hours
-5. Season rewards claimed once per season
-6. Win streak resets on loss
-7. Stats reset each season
-8. Cannot battle self
-9. Both participants must be registered
+1. season.end_time == season.start_time + 604800
+2. season.claim_deadline == season.end_time + 2592000
+3. season.status ∈ {0, 1, 2, 3}
+4. season.leaderboard_count ∈ [0, 10]
+5. For all i: leaderboard[i].total_points >= min_points_for_leaderboard (500 default)
+6. Σ ARENA_PRIZE_DISTRIBUTION == 10000 (compile-time verified)
+7. participant.elo_rating >= 100 (ELO floor)
+8. participant.last_match_id is monotonically non-decreasing
+9. participant.master_reward_claimed == true → season.leaderboard_claimed[rank] == true
+10. Daily reward can only be claimed once per calendar day (UTC day = now / 86400)
+11. Master reward can only be claimed after season.end_time has passed
+12. close_season can only happen after claim_deadline OR 4+ seasons behind
+13. ArenaLoadoutAccount is per-kingdom (not per-season); one per player per kingdom
+14. All account PDAs include game_engine as a seed → kingdom isolation guaranteed
 ```

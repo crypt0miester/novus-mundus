@@ -56,19 +56,17 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for stealing)
 
-    if accounts.len() < 9 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    let player_account = &accounts[0];
-    let owner = &accounts[1];
-    let current_city_account = &accounts[2];
-    let game_engine_account = &accounts[3];
-    let origin_location_account = &accounts[4];
-    let destination_location_account = &accounts[5];
-    let _origin_creator_refund = &accounts[6];
-    let _system_program = &accounts[7];
-    let estate_account = &accounts[8];
+    crate::extract_accounts!(accounts, [
+        player_account,
+        owner,
+        current_city_account,
+        game_engine_account,
+        origin_location_account,
+        destination_location_account,
+        _origin_creator_refund,
+        _system_program,
+        estate_account,
+    ]);
 
     // Optional: bumped player account (required when stealing a reservation)
     let bumped_player_account = accounts.get(9);

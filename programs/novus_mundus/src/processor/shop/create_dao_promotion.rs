@@ -1,7 +1,6 @@
 use pinocchio::{
     ProgramResult,
     AccountView,
-    error::ProgramError,
     Address,
     sysvars::Sysvar,
 };
@@ -11,6 +10,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, DAOPromotionAccount, DAOPromotionStatus},
     validation::{require_signer, require_writable, require_key_match},
+    utils::{read_u16, read_u64, read_i64, read_bytes32},
 };
 
 /// Create a DAO promotion (DAO only, after governance vote)
@@ -44,15 +44,13 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         payer,
         game_engine_account,
         dao_authority,
         dao_promotion_account,
         system_program,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Validate Accounts
 
@@ -65,25 +63,20 @@ pub fn process(
     // 3. Parse Instruction Data
 
     // proposal_id(8) + title(32) + discounts(12) + starts(8) + ends(8) + budget(8) = 76
-    if instruction_data.len() < 76 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    let proposal_id = read_u64(instruction_data, 0, "proposal_id")?;
 
-    let proposal_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
+    let title = read_bytes32(instruction_data, 8, "title")?;
 
-    let mut title = [0u8; 32];
-    title.copy_from_slice(&instruction_data[8..40]);
+    let equipment_discount_bps = read_u16(instruction_data, 40, "equipment_discount_bps")?;
+    let consumable_discount_bps = read_u16(instruction_data, 42, "consumable_discount_bps")?;
+    let material_discount_bps = read_u16(instruction_data, 44, "material_discount_bps")?;
+    let cosmetic_discount_bps = read_u16(instruction_data, 46, "cosmetic_discount_bps")?;
+    let global_discount_bps = read_u16(instruction_data, 48, "global_discount_bps")?;
+    let max_discount_bps = read_u16(instruction_data, 50, "max_discount_bps")?;
 
-    let equipment_discount_bps = u16::from_le_bytes(instruction_data[40..42].try_into().unwrap());
-    let consumable_discount_bps = u16::from_le_bytes(instruction_data[42..44].try_into().unwrap());
-    let material_discount_bps = u16::from_le_bytes(instruction_data[44..46].try_into().unwrap());
-    let cosmetic_discount_bps = u16::from_le_bytes(instruction_data[46..48].try_into().unwrap());
-    let global_discount_bps = u16::from_le_bytes(instruction_data[48..50].try_into().unwrap());
-    let max_discount_bps = u16::from_le_bytes(instruction_data[50..52].try_into().unwrap());
-
-    let starts_at = i64::from_le_bytes(instruction_data[52..60].try_into().unwrap());
-    let ends_at = i64::from_le_bytes(instruction_data[60..68].try_into().unwrap());
-    let max_discount_budget_lamports = u64::from_le_bytes(instruction_data[68..76].try_into().unwrap());
+    let starts_at = read_i64(instruction_data, 52, "starts_at")?;
+    let ends_at = read_i64(instruction_data, 60, "ends_at")?;
+    let max_discount_budget_lamports = read_u64(instruction_data, 68, "max_discount_budget_lamports")?;
 
     // 4. Validate Data
 

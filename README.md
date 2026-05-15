@@ -4,7 +4,7 @@
 
 Novus Mundus is a continuous strategy game built on Solana where players command armies, capture castles, run dungeons, swing forge hammers, and compete in events to earn **NOVI** — the game's dual-purpose token that fuels both gameplay and real rewards.
 
-**Multi-Kingdom System**: Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own theme, leaderboards, events, castles, and dungeons.
+**Multi-Kingdom System**: Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own teams, theme, leaderboards, events, castles, and dungeons.
 
 **Theme-Flexible Design**: Medieval, cyberpunk, sci-fi, modern, or post-apocalyptic — five themes are defined in code. Unit names and visuals change per kingdom theme; strategy stays the same.
 
@@ -518,6 +518,72 @@ See `TECHNICAL_ARCHITECTURE.md` for full module structure, account layouts, inst
 ### Determinism & Float Math
 
 The codebase favors integer basis-point math, but some logic paths still use `f64` via `libm` (combat damage splits, Haversine distance, progression scaling).
+
+---
+
+## Running Locally (Development)
+
+Run the full stack — Solana program, local validator, and web client — on your machine.
+
+### Prerequisites
+
+- **Rust** + the Solana toolchain (`solana-test-validator`, `cargo build-sbf`)
+- **Bun** (used for the SDK, CLI, and web app)
+- Internet access for the one-time external-program dump (clones MPL Core / ANS from mainnet)
+
+### 1. Build the program
+
+From the repo root:
+
+```bash
+cargo build-sbf          # → target/deploy/novus_mundus.so
+```
+
+### 2. Dump external programs (one-time)
+
+```bash
+cd sdks/novus-mundus-ts
+./scripts/dump-programs.sh    # downloads MPL Core, TLD House, ALT Name Service
+```
+
+### 3. Start the local validator
+
+```bash
+bun run validator:start       # solana-test-validator on http://127.0.0.1:8899
+```
+
+This loads the Novus Mundus program plus MPL Core, TLD House, and ALT Name Service, and clones the `.sol` TLD accounts from mainnet. Leave it running in its own terminal. Use `bun run validator:reset` to wipe the ledger.
+
+### 4. Initialize game data
+
+In a second terminal, seed the kingdom with the `novus` CLI:
+
+```bash
+cd sdks/novus-mundus-ts
+bun run novus airdrop         # fund the authority + treasury keypairs
+bun run novus init all        # 10 phases: GameEngine, 50 cities, heroes, research, shop, dungeons, castles, arena, events
+bun run novus status          # verify each system reports OK
+bun run novus create-player   # register a player for your wallet
+```
+
+`init all` is create-or-skip — existing accounts are never overwritten. See `sdks/novus-mundus-ts/cli/README.md` for the full command reference.
+
+### 5. Run the web client
+
+```bash
+cd apps/web
+bun install
+bun dev                       # → http://localhost:3000
+```
+
+The web app reads `apps/web/.env.local`. It ships pointing at the local validator; the relevant variables are:
+
+```
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899   # default
+NEXT_PUBLIC_KINGDOM_ID=0                    # optional, defaults to 0
+```
+
+Open `/world` to see the realm map. Point `NEXT_PUBLIC_RPC_URL` at devnet to run against a deployed kingdom instead.
 
 ---
 

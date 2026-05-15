@@ -15,6 +15,7 @@ use crate::{
     error::GameError,
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::PlayerAccount,
+    utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
     emit,
     events::PlayerNameSet,
@@ -50,7 +51,7 @@ use crate::{
 /// - Stores domain+tld name in player account
 pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
-    let [
+    crate::extract_accounts!(accounts, exact [
         player_account,
         name_account,
         reverse_name_account,
@@ -63,16 +64,10 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         system_program,
         alt_name_service_program,
         tld_house_program,
-    ] = accounts
-    else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 2. Parse instruction data: reverse_acc_hashed_name (32 bytes)
-    if data.len() < 32 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let reverse_acc_hashed_name: [u8; 32] = data[..32].try_into().unwrap();
+    let reverse_acc_hashed_name: [u8; 32] = read_bytes32(data, 0, "reverse_acc_hashed_name")?;
 
     // 3. Validate Accounts
     require_signer(owner)?;

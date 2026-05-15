@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -8,6 +7,7 @@ use pinocchio::{
 use crate::{
     error::GameError,
     constants::DUNGEON_MAX_MULTI_ATTACKS,
+    utils::read_u8,
 };
 
 use super::attack::process_attacks;
@@ -29,11 +29,7 @@ pub fn process(
     data: &[u8],
 ) -> ProgramResult {
     // Parse attack count
-    if data.is_empty() {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let attack_count = data[0];
+    let attack_count = read_u8(data, 0, "attack_multi.attack_count")?;
 
     // Validate attack count
     if attack_count == 0 || attack_count > DUNGEON_MAX_MULTI_ATTACKS {

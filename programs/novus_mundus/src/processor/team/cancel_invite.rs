@@ -1,6 +1,5 @@
 use pinocchio::{
     AccountView,
-    error::ProgramError,
     Address,
     ProgramResult,
 };
@@ -11,6 +10,7 @@ use crate::{
     constants::TEAM_INVITE_SEED,
     helpers::close_account,
     validation::{require_signer, require_writable, require_owner, require_initialized},
+    utils::{read_u16, read_u64},
     emit,
     events::InviteCancelled,
 };
@@ -38,25 +38,19 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Instruction Data
 
-    if instruction_data.len() < 10 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let team_id = u64::from_le_bytes(instruction_data[0..8].try_into().unwrap());
-    let slot_index = u16::from_le_bytes(instruction_data[8..10].try_into().unwrap());
+    let team_id = read_u64(instruction_data, 0, "team_id")?;
+    let slot_index = read_u16(instruction_data, 8, "slot_index")?;
 
     // 2. Parse Accounts
 
-    let [
+    crate::extract_accounts!(accounts, exact [
         member_account,
         member_slot_account,
         team_account,
         invite_account,
         invitee_account,
         member_owner,
-    ] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+    ]);
 
     // 3. Validate Accounts
 
