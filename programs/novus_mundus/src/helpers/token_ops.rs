@@ -354,64 +354,60 @@ pub fn read_token_decimals(mint_data: &[u8]) -> Result<u8, ProgramError> {
     Ok(mint_data[44])
 }
 
-/// Calculate token amount for payment given oracle prices
+/// Compute `numerator * 10^net_expo / denominator` in u128, overflow-checked.
 ///
-/// Formula: token_amount = (sol_price_lamports * sol_usd) / token_usd
-/// Adjusted for token decimals.
+/// Oracle price math (SOL→token, token→lamports) always reduces to a ratio of
+/// two raw integer prices times a net power of ten. Callers fold every
+/// power-of-ten adjustment — both price exponents, token decimals, SOL
+/// decimals — into a single signed `net_expo` and pass it here so the scale is
+/// applied exactly once. We never normalize an individual price to a fixed
+/// working exponent: at expo -18 a $150 SOL price (15e9 @ expo -8 → 1.5e20)
+/// overflows u64. Staying in u128 with one combined exponent keeps products
+/// far below u128::MAX (raw oracle prices are ~1e10).
+pub fn scale_ratio(
+    numerator: u128,
+    denominator: u128,
+    net_expo: i32,
+) -> Result<u128, ProgramError> {
+    let (num, den) = if net_expo >= 0 {
+        let scale = 10u128
+            .checked_pow(net_expo as u32)
+            .ok_or(GameError::OracleOverflow)?;
+        (numerator.checked_mul(scale).ok_or(GameError::OracleOverflow)?, denominator)
+    } else {
+        let scale = 10u128
+            .checked_pow((-net_expo) as u32)
+            .ok_or(GameError::OracleOverflow)?;
+        (numerator, denominator.checked_mul(scale).ok_or(GameError::OracleOverflow)?)
+    };
+
+    if den == 0 {
+        return Err(GameError::OracleUnavailable.into());
+    }
+    Ok(num.checked_div(den).ok_or(GameError::OracleOverflow)?)
+}
+
+/// Calculate token amount for payment given oracle prices.
 ///
-/// # Arguments
-/// * `sol_price_lamports` - Item price in lamports
-/// * `sol_price` - SOL/USD oracle price
-/// * `token_price` - TOKEN/USD oracle price
-/// * `token_decimals` - Token decimals (from mint)
-///
-/// # Returns
-/// Token amount to charge (in token's smallest units)
+/// `token_amount = lamports * (sol_usd / token_usd) * 10^token_decimals / 10^9`
+/// — all powers of ten folded into one `net_expo` for [`scale_ratio`].
 pub fn calculate_token_amount(
     sol_price_lamports: u64,
     sol_price: &OraclePrice,
     token_price: &OraclePrice,
     token_decimals: u8,
 ) -> Result<u64, ProgramError> {
-    // Convert both prices to same exponent for calculation
-    // We use -18 as the working exponent for precision
-    const WORK_EXPO: i32 = -18;
-
-    let sol_usd = sol_price.get_price_in_target_expo(WORK_EXPO)
-        .ok_or(GameError::OracleOverflow)?;
-    let token_usd = token_price.get_price_in_target_expo(WORK_EXPO)
-        .ok_or(GameError::OracleOverflow)?;
-
-    if token_usd == 0 {
+    if sol_price.price <= 0 || token_price.price <= 0 {
         return Err(GameError::OracleUnavailable.into());
     }
 
-    // Calculate: (lamports * sol_usd / token_usd) * (10^token_decimals / 10^9)
-    // Rearranged for precision: (lamports * sol_usd * 10^token_decimals) / (token_usd * 10^9)
-
-    // First: lamports * sol_usd (could overflow for large amounts, use u128)
-    let lamports_x_sol = (sol_price_lamports as u128)
-        .checked_mul(sol_usd as u128)
+    let net_expo = sol_price.expo - token_price.expo + token_decimals as i32 - 9;
+    let numerator = (sol_price_lamports as u128)
+        .checked_mul(sol_price.price as u128)
         .ok_or(GameError::OracleOverflow)?;
 
-    // Then: multiply by 10^token_decimals
-    let token_scale = 10u128.pow(token_decimals as u32);
-    let numerator = lamports_x_sol
-        .checked_mul(token_scale)
-        .ok_or(GameError::OracleOverflow)?;
+    let token_amount = scale_ratio(numerator, token_price.price as u128, net_expo)?;
 
-    // Denominator: token_usd * 10^9 (SOL has 9 decimals)
-    let sol_scale = 10u128.pow(9);
-    let denominator = (token_usd as u128)
-        .checked_mul(sol_scale)
-        .ok_or(GameError::OracleOverflow)?;
-
-    // Final division
-    let token_amount = numerator
-        .checked_div(denominator)
-        .ok_or(GameError::OracleOverflow)?;
-
-    // Convert back to u64 (check for overflow)
     if token_amount > u64::MAX as u128 {
         return Err(GameError::OracleOverflow.into());
     }

@@ -24,6 +24,7 @@ use crate::{
     events::{CastleAttacked, CastleConquered, CastleDefended},
     state::{
         CastleAccount, GarrisonContributionAccount, PlayerAccount, GameEngine,
+        LocationAccount,
     },
     constants::{
         CASTLE_STATUS_TRANSITIONING, CASTLE_ATTACK_RANGE_METERS,
@@ -107,17 +108,18 @@ pub fn process(
     }
 
     // Verify attacker is not in active rally
-    if attacker.rally_stats.current_rallies_joined > 0 {
+    if attacker.rally_stats().current_rallies_joined > 0 {
         return Err(GameError::InActiveRally.into());
     }
 
-    // Verify attacker is at castle location (within attack range)
-    // Castle lat/long are i32 fixed-point, need to convert to f64
+    // Verify attacker is at castle location (within attack range).
+    // castle.latitude/longitude are i32 grid coords (degrees × GRID_PRECISION);
+    // convert back to degrees so the comparison matches player.current_lat/long.
     let distance_meters = calculate_distance_meters(
         attacker.current_lat,
         attacker.current_long,
-        castle.latitude as f64,
-        castle.longitude as f64,
+        LocationAccount::from_grid(castle.latitude),
+        LocationAccount::from_grid(castle.longitude),
     );
 
     if distance_meters > CASTLE_ATTACK_RANGE_METERS {
@@ -204,13 +206,13 @@ pub fn process(
         attacker.total_weapons(),
         drive_by,
         gameplay_config,
-        attacker.research_attack_bps,
-        attacker.research_crit_chance_bps,
-        attacker.research_crit_damage_bps,
-        attacker.hero_attack_bps,
-        attacker.hero_weapon_efficiency_bps,
-        attacker.hero_crit_chance_bps,
-        attacker.equipped_weapon_bonus_bps,
+        attacker.research_attack_bps(),
+        attacker.research_crit_chance_bps(),
+        attacker.research_crit_damage_bps(),
+        attacker.hero_attack_bps(),
+        attacker.hero_weapon_efficiency_bps(),
+        attacker.hero_crit_chance_bps(),
+        attacker.equipped_weapon_bonus_bps(),
     );
 
     if attacker_damage == 0 {
@@ -254,8 +256,8 @@ pub fn process(
         attacker.armor_pieces,
         garrison_damage as f64,
         gameplay_config,
-        attacker.hero_armor_efficiency_bps,
-        attacker.equipped_armor_bonus_bps,
+        attacker.hero_armor_efficiency_bps(),
+        attacker.equipped_armor_bonus_bps(),
     );
 
     let attacker_casualties = attacker_defensive_total
@@ -461,7 +463,7 @@ pub fn process(
                 previous_king: defending_king,
                 new_king: *attacker_player.address(),
                 new_king_name: attacker_name,
-                new_team: attacker.team,
+                new_team: attacker.team_address(),
                 rally_id: 0, // Solo attack, no rally
                 timestamp: now,
             });

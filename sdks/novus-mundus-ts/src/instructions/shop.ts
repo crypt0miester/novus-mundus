@@ -306,6 +306,27 @@ export function createUpdateItemInstruction(
 
 // Purchase Item
 
+/**
+ * The 6 caller-supplied accounts for an SPL-token payment (the 7th, the SPL
+ * Token program, is fixed and appended automatically). Required when
+ * `PurchaseItemParams.paymentType >= 2`. The on-chain processor expects them
+ * in exactly this order after the base + discount accounts.
+ */
+export interface TokenPaymentAccounts {
+  /** AllowedTokenAccount PDA for `tokenMint`. */
+  allowedToken: PublicKey;
+  /** SPL mint of the payment token. */
+  tokenMint: PublicKey;
+  /** Buyer's ATA for `tokenMint` (writable). */
+  buyerTokenAta: PublicKey;
+  /** Treasury's ATA for `tokenMint` (writable). */
+  treasuryTokenAta: PublicKey;
+  /** SOL/USD oracle feed — must equal shop_config.sol_pyth_feed. */
+  solOracleFeed: PublicKey;
+  /** TOKEN/USD oracle feed — must equal allowed_token.pyth_feed. */
+  tokenOracleFeed: PublicKey;
+}
+
 export interface PurchaseItemAccounts {
   /** Buyer's wallet (signer) */
   buyer: PublicKey;
@@ -315,6 +336,8 @@ export interface PurchaseItemAccounts {
   itemId: number;
   /** Treasury wallet to receive payment */
   treasury: PublicKey;
+  /** Token-payment accounts — required iff params.paymentType >= 2. */
+  tokenPayment?: TokenPaymentAccounts;
 }
 
 export interface PurchaseItemParams {
@@ -369,6 +392,23 @@ export function createPurchaseItemInstruction(
     const weekNum = BN.isBN(params.weeklySaleWeek) ? params.weeklySaleWeek.toNumber() : params.weeklySaleWeek;
     const [weeklySale] = deriveWeeklySalePda(accounts.gameEngine, weekNum);
     keys.push({ pubkey: weeklySale, isSigner: false, isWritable: false });
+  }
+
+  // Token-payment accounts (paymentType >= 2). The on-chain processor reads
+  // these from accounts[token_offset..] where token_offset = 10 + discountAccts,
+  // so they must come AFTER the discount accounts above.
+  if ((params.paymentType ?? 0) >= 2) {
+    if (!accounts.tokenPayment) {
+      throw new Error('purchaseItem: tokenPayment accounts required when paymentType >= 2');
+    }
+    const tp = accounts.tokenPayment;
+    keys.push({ pubkey: tp.allowedToken, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.tokenMint, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.buyerTokenAta, isSigner: false, isWritable: true });
+    keys.push({ pubkey: tp.treasuryTokenAta, isSigner: false, isWritable: true });
+    keys.push({ pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
   }
 
   // Instruction data
@@ -788,44 +828,90 @@ export function createPurchaseFlashSaleInstruction(
   });
 }
 
-// Close Sale (Admin)
+// Close Sale (Admin / Owner)
+
+/**
+ * SaleType discriminant for `close_sale`. Mirrors the Rust enum:
+ * 0=FlashSale, 1=WeeklySale, 2=SeasonalSale, 3=DAOPromotion, 4=PlayerPurchase.
+ */
+export type CloseSaleParams =
+  | { saleType: 0; saleId: bigint | number }
+  | { saleType: 1; weekNumber: bigint | number }
+  | { saleType: 2; event: PublicKey }
+  | { saleType: 3; proposalId: bigint | number }
+  | { saleType: 4; player: PublicKey; itemId: number; shopItem: PublicKey };
 
 export interface CloseSaleAccounts {
-  /** Rent recipient */
-  rentRecipient: PublicKey;
-  /** DAO authority (signer) */
-  daoAuthority: PublicKey;
+  /** Signer — DAO authority OR the account's original payer/owner. */
+  authority: PublicKey;
   /** GameEngine account */
   gameEngine: PublicKey;
-  /** Flash sale ID to close */
-  saleId: bigint | number;
+  /** Rent recipient (must equal account.payer when authority is not DAO). */
+  rentRecipient: PublicKey;
 }
 
 /** ~5,000 CU */
 /**
- * Close a flash sale.
+ * Close a sale account and return rent to the recipient.
  *
- * Admin-only. Reclaims rent after sale ends.
+ * The Rust processor accepts five SaleType variants — pass the matching
+ * `CloseSaleParams` to derive the right PDA and ix payload. DAO authority can
+ * close any sale regardless of state; non-DAO callers must be the original
+ * payer AND the sale must be closable (ended/sold-out).
  */
 export function createCloseSaleInstruction(
-  accounts: CloseSaleAccounts
+  accounts: CloseSaleAccounts,
+  params: CloseSaleParams,
 ): TransactionInstruction {
-    const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+  // Resolve sale PDA + numeric sale_id (encoded as u64 in ix data; SeasonalSale
+  // is keyed by event pubkey so sale_id is unused on-chain but we still send 0
+  // to satisfy the 9-byte payload length check).
+  let salePda: PublicKey;
+  let saleIdU64: bigint;
+  let extraKey: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean } | undefined;
 
+  switch (params.saleType) {
+    case 0:
+      [salePda] = deriveFlashSalePda(accounts.gameEngine, params.saleId);
+      saleIdU64 = BigInt(params.saleId);
+      break;
+    case 1:
+      [salePda] = deriveWeeklySalePda(accounts.gameEngine, params.weekNumber);
+      saleIdU64 = BigInt(params.weekNumber);
+      break;
+    case 2:
+      [salePda] = deriveSeasonalSalePda(accounts.gameEngine, params.event);
+      saleIdU64 = 0n;
+      break;
+    case 3:
+      [salePda] = deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
+      saleIdU64 = BigInt(params.proposalId);
+      break;
+    case 4: {
+      [salePda] = derivePlayerPurchasePda(params.player, params.itemId);
+      saleIdU64 = BigInt(params.itemId); // Rust treats sale_id as u32 item_id
+      extraKey = { pubkey: params.shopItem, isSigner: false, isWritable: false };
+      break;
+    }
+  }
+
+  // Rust account order: [signer authority, gameEngine, sale (W), rentRecipient (W), shopItem?]
   const keys = [
-    { pubkey: accounts.rentRecipient, isSigner: false, isWritable: true },
+    { pubkey: accounts.authority, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
-    { pubkey: flashSale, isSigner: false, isWritable: true },
+    { pubkey: salePda, isSigner: false, isWritable: true },
+    { pubkey: accounts.rentRecipient, isSigner: false, isWritable: true },
   ];
+  if (extraKey) keys.push(extraKey);
 
-  const data = createInstructionData(DISCRIMINATORS.SHOP_CLOSE_SALE);
+  // Payload: sale_type (u8) + sale_id (u64 LE)
+  const writer = new BufferWriter(9);
+  writer.writeU8(params.saleType);
+  writer.writeU64(saleIdU64);
 
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  const data = createInstructionData(DISCRIMINATORS.SHOP_CLOSE_SALE, writer.toBuffer());
+
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }
 
 // Create Daily Deal (Admin)
@@ -1265,41 +1351,68 @@ export function createUpdateConfigInstruction(
   });
 }
 
-// Activate Sale (Admin)
+// Activate Sale (Permissionless crank)
+
+/**
+ * Activates SeasonalSale (saleType=0) or DAOPromotion (saleType=1).
+ * The Rust processor walks the status state machine based on the current
+ * clock; callers don't pass a target state.
+ */
+export type ActivateSaleParams =
+  | { saleType: 0; event: PublicKey }
+  | { saleType: 1; proposalId: bigint | number };
 
 export interface ActivateSaleAccounts {
-  /** DAO authority (signer) */
-  daoAuthority: PublicKey;
+  /** Anyone can call (permissionless crank). */
+  crank: PublicKey;
   /** GameEngine account */
   gameEngine: PublicKey;
-  /** Flash sale ID to activate */
-  saleId: bigint | number;
 }
 
 /** ~5,000 CU */
 /**
- * Activate a flash sale.
+ * Crank a sale forward through its lifecycle (Scheduled → Active → Ended).
  *
- * Admin-only. Manually activates a pending sale.
+ * Permissionless. Caller pays the tx fee but never receives anything from
+ * the call. Used by anyone to push a stale sale into its correct state.
  */
 export function createActivateSaleInstruction(
-  accounts: ActivateSaleAccounts
+  accounts: ActivateSaleAccounts,
+  params: ActivateSaleParams,
 ): TransactionInstruction {
-    const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+  let salePda: PublicKey;
+  // Payload: sale_type (u8) + sale_id (Seasonal: 32-byte event; DAOPromo: u64)
+  let payload: Buffer;
 
+  switch (params.saleType) {
+    case 0: {
+      [salePda] = deriveSeasonalSalePda(accounts.gameEngine, params.event);
+      const w = new BufferWriter(33);
+      w.writeU8(0);
+      w.writeBytes(params.event.toBuffer());
+      payload = w.toBuffer();
+      break;
+    }
+    case 1: {
+      [salePda] = deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
+      const w = new BufferWriter(9);
+      w.writeU8(1);
+      w.writeU64(BigInt(params.proposalId));
+      payload = w.toBuffer();
+      break;
+    }
+  }
+
+  // Rust account order: [signer crank, gameEngine, sale (W)]
   const keys = [
+    { pubkey: accounts.crank, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
-    { pubkey: flashSale, isSigner: false, isWritable: true },
+    { pubkey: salePda, isSigner: false, isWritable: true },
   ];
 
-  const data = createInstructionData(DISCRIMINATORS.SHOP_ACTIVATE_SALE);
+  const data = createInstructionData(DISCRIMINATORS.SHOP_ACTIVATE_SALE, payload);
 
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }
 
 // Create Allowed Token (Admin)

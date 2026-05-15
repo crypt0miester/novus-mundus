@@ -12,7 +12,7 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::shop::NoviPurchased,
-    helpers::{validate_token_account_owner, detect_oracle_type, get_pyth_price, pin_oracle_feed, read_switchboard_price, OracleType},
+    helpers::{validate_token_account_owner, detect_oracle_type, get_pyth_price, pin_oracle_feed, read_switchboard_price, scale_ratio, OracleType},
     logic::safe_math::apply_bp_penalty,
     utils::{read_u64, read_u8, unlikely},
 };
@@ -380,26 +380,18 @@ fn calculate_lamports_from_pyth(
     sol_price: &OraclePrice,
     novi_price: &OraclePrice,
 ) -> Result<u64, ProgramError> {
-    const WORK_EXPO: i32 = -18;
-
-    let sol_usd = sol_price.get_price_in_target_expo(WORK_EXPO)
-        .ok_or(GameError::OracleOverflow)?;
-    let novi_usd = novi_price.get_price_in_target_expo(WORK_EXPO)
-        .ok_or(GameError::OracleOverflow)?;
-
-    if sol_usd == 0 {
+    // lamports = base_amount * (novi_usd / sol_usd) * 10^8
+    // — all powers of ten folded into one `net_expo` for scale_ratio.
+    if sol_price.price <= 0 || novi_price.price <= 0 {
         return Err(GameError::OracleUnavailable.into());
     }
 
+    let net_expo = novi_price.expo - sol_price.expo + 8;
     let numerator = (base_amount as u128)
-        .checked_mul(novi_usd as u128)
-        .ok_or(GameError::OracleOverflow)?
-        .checked_mul(100_000_000) // 10^8
+        .checked_mul(novi_price.price as u128)
         .ok_or(GameError::OracleOverflow)?;
 
-    let lamports = numerator
-        .checked_div(sol_usd as u128)
-        .ok_or(GameError::OracleOverflow)?;
+    let lamports = scale_ratio(numerator, sol_price.price as u128, net_expo)?;
 
     if lamports > u64::MAX as u128 {
         return Err(GameError::OracleOverflow.into());

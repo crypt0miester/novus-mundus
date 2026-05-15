@@ -26,7 +26,7 @@ pub use token_ops::{
     validate_token_account_owner,
     // Oracle helpers
     consume_optional_feed_slot, detect_oracle_type, get_pyth_price,
-    pin_oracle_feed, read_switchboard_price, OracleType, ZERO_PUBKEY,
+    pin_oracle_feed, read_switchboard_price, scale_ratio, OracleType, ZERO_PUBKEY,
 };
 
 // Hero helpers (NFT-Only System)

@@ -128,11 +128,14 @@ pub fn process(
 
             // Validate UTF-8 and non-empty (after stripping null padding)
             core::str::from_utf8(new_name).map_err(|_| GameError::InvalidParameter)?;
-            if new_name.iter().filter(|&&b| b != 0).count() == 0 {
+            // Length is everything up to the first null byte (or full slice if none).
+            let new_name_len = new_name.iter().position(|&b| b == 0).unwrap_or(NAME_LEN);
+            if new_name_len == 0 {
                 return Err(GameError::InvalidParameter.into());
             }
 
             castle.name.copy_from_slice(new_name);
+            castle.name_len = new_name_len as u8;
         }
         _ => {
             return Err(ProgramError::InvalidInstructionData);

@@ -110,7 +110,7 @@ pub fn process(
     let (role, base_novi, base_cash) = if tier.has_king() && castle.king == *player_account.address() {
         // Player is the king (Citadel only)
         (ROLE_KING, castle.king_novi_per_day, castle.king_cash_per_day)
-    } else if player.team == castle.team && castle.team != NULL_PUBKEY {
+    } else if player.team_address() == castle.team && castle.team != NULL_PUBKEY {
         // Check if court member (Citadel only)
         let is_court = if tier.has_court() && accounts.len() > 5 {
             let court_account = &accounts[5];
@@ -150,7 +150,8 @@ pub fn process(
     }
 
     // Create reward account if doesn't exist
-    if reward_account.data_len() == 0 {
+    let was_brand_new = reward_account.data_len() == 0;
+    if was_brand_new {
         let lamports = crate::utils::rent_exempt_const(TeamCastleRewardAccount::LEN);
 
         let bump_seed = [reward_bump];
@@ -199,6 +200,12 @@ pub fn process(
     let elapsed_days = (elapsed_seconds / SECONDS_PER_DAY) as u64;
 
     if elapsed_days == 0 {
+        // First-touch on a brand-new account: persist the init (last_claim_at = now)
+        // so the next call ≥ 1 day later actually accrues. Erroring here would
+        // roll back the CreateAccount CPI and leave the user with no account at all.
+        if was_brand_new {
+            return Ok(());
+        }
         return Err(GameError::NoRewardsToClaim.into());
     }
 

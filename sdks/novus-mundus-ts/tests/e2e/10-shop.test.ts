@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
-import { Keypair, PublicKey, Transaction, SystemProgram, TransactionInstruction } from '@solana/web3.js';
+import { Keypair, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
 
 import {
@@ -23,7 +23,10 @@ import {
   createCreateBundleInstruction,
   createUpdateBundleInstruction,
   createPurchaseBundleInstruction,
+  createCreateFlashSaleInstruction,
   createPurchaseFlashSaleInstruction,
+  createCloseSaleInstruction,
+  createActivateSaleInstruction,
   createCreateAllowedTokenInstruction,
   createUpdateAllowedTokenInstruction,
   createCloseAllowedTokenInstruction,
@@ -39,17 +42,27 @@ import {
   deriveAllowedTokenPda,
   deriveNoviMintPda,
   deriveDailyDealPda,
+  deriveFlashSalePda,
   deriveWeeklySalePda,
   deriveSeasonalSalePda,
   deriveDaoPromotionPda,
   deriveEventPda,
+  deserializeSeasonalSale,
+  deserializeDaoPromotion,
 } from '../../src/index';
 
 import {
   type TestContext,
   beforeAllTests,
 } from '../fixtures/setup';
-import { seedMockPythFeed } from '../fixtures/svm';
+import {
+  seedMockPythFeed,
+  seedMockSwitchboardFeed,
+  seedSplMint,
+  seedSplTokenAccount,
+  readSplTokenAmount,
+} from '../fixtures/svm';
+import { getAssociatedTokenAddressSync } from '../../src/index';
 import {
   PlayerFactory,
   type TestPlayer,
@@ -59,6 +72,7 @@ import {
 } from '../utils/assertions';
 import {
   getCurrentTimestamp,
+  advanceTime,
 } from '../fixtures/time';
 import {
   sendTransaction,
@@ -86,6 +100,16 @@ async function createShopReadyPlayer(
     buildings: [BuildingType.Market],
   });
   return player;
+}
+
+/**
+ * The Rust contract auto-assigns flash sale IDs from shop_config.next_flash_sale_id
+ * and increments. The caller has to know the right ID to derive the matching
+ * PDA — fetch it from the live config to avoid cross-test coupling.
+ */
+async function getNextFlashSaleId(ctx: TestContext): Promise<number> {
+  const cfg = await fetchShopConfig(ctx.svm, ctx.gameEngine);
+  return cfg!.nextFlashSaleId.toNumber();
 }
 
 // Test Suite
@@ -462,6 +486,217 @@ describe('Shop System', () => {
         [player.keypair]
       );
     });
+
+    it('should successfully purchase from an active flash sale', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 1),
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Advance so the sale auto-flips Announced → Active on first purchase
+      await advanceTime(ctx.svm, 2);
+
+      const player = await createShopReadyPlayer(ctx, factory);
+      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseFlashSaleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: player.publicKey,
+              saleId,
+              itemOrBundle: itemPda,
+              treasury: ctx.treasury.publicKey,
+            },
+            { quantity: 1 },
+          ),
+        ),
+        [player.keypair],
+      );
+    }, 60_000);
+
+    it('should reject purchase before sale starts (SaleNotActive)', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 10_000), // far in the future
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const player = await createShopReadyPlayer(ctx, factory);
+      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+
+      // Status is Announced; auto-flip won't trigger (now < starts_at);
+      // purchase rejects with SaleNotActive.
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseFlashSaleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: player.publicKey,
+              saleId,
+              itemOrBundle: itemPda,
+              treasury: ctx.treasury.publicKey,
+            },
+            { quantity: 1 },
+          ),
+        ),
+        [player.keypair],
+      );
+    }, 60_000);
+
+    it('should reject purchase after sale ends (SaleNotActive)', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 1),
+              durationSecs: 3600, // min duration
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Advance past ends_at (1 + 3600 + slack)
+      await advanceTime(ctx.svm, 3700);
+
+      const player = await createShopReadyPlayer(ctx, factory);
+      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseFlashSaleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: player.publicKey,
+              saleId,
+              itemOrBundle: itemPda,
+              treasury: ctx.treasury.publicKey,
+            },
+            { quantity: 1 },
+          ),
+        ),
+        [player.keypair],
+      );
+    }, 60_000);
+
+    it('should reject flash sale creation by non-DAO', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      const rando = Keypair.generate();
+      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: rando.publicKey,
+              daoAuthority: rando.publicKey, // non-DAO signer
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 100),
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [rando],
+      );
+    });
+
+    it('should reject duration below the configured minimum', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 100),
+              durationSecs: 60, // below min (3600s)
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+    });
   });
 
   // Allowed Payment Token Tests
@@ -474,37 +709,6 @@ describe('Shop System', () => {
     // magic/version/atype check) without actually publishing a price.
     const mockPythFeed = Keypair.generate().publicKey;
     beforeAll(() => seedMockPythFeed(ctx.svm, mockPythFeed));
-
-    /** Create a real SPL mint on-chain (82 bytes) so it passes the data_len check */
-    async function createRealMint(): Promise<Keypair> {
-      const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-      const mintKeypair = Keypair.generate();
-      const lamports = Number(ctx.svm.minimumBalanceForRentExemption(BigInt(82)));
-      const createAccountIx = SystemProgram.createAccount({
-        fromPubkey: ctx.daoAuthority.publicKey,
-        newAccountPubkey: mintKeypair.publicKey,
-        lamports,
-        space: 82,
-        programId: TOKEN_PROGRAM_ID,
-      });
-      // InitializeMint instruction: discriminator=0, decimals=9, mintAuthority, freezeAuthorityOption=0
-      const initMintData = Buffer.alloc(67);
-      initMintData.writeUInt8(0, 0); // instruction discriminator (InitializeMint)
-      initMintData.writeUInt8(9, 1); // decimals
-      ctx.daoAuthority.publicKey.toBuffer().copy(initMintData, 2); // mintAuthority
-      initMintData.writeUInt8(0, 34); // freezeAuthorityOption = None
-      const initMintIx = new TransactionInstruction({
-        keys: [
-          { pubkey: mintKeypair.publicKey, isSigner: false, isWritable: true },
-          { pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false },
-        ],
-        programId: TOKEN_PROGRAM_ID,
-        data: initMintData,
-      });
-      const tx = new Transaction().add(createAccountIx, initMintIx);
-      await sendTransaction(ctx.svm, tx, [ctx.daoAuthority, mintKeypair]);
-      return mintKeypair;
-    }
 
     it('should create allowed token (DAO)', async () => {
       const ix = createCreateAllowedTokenInstruction(
@@ -582,9 +786,12 @@ describe('Shop System', () => {
     });
 
     it('should close allowed token (DAO)', async () => {
-      // Create a real SPL mint so it passes the data_len == 82 check
-      const mintKeypair = await createRealMint();
-      const tokenToClose = mintKeypair.publicKey;
+      // Seed a real SPL mint so it passes the data_len == 82 check
+      const tokenToClose = Keypair.generate().publicKey;
+      seedSplMint(ctx.svm, tokenToClose, {
+        decimals: 9,
+        mintAuthority: ctx.daoAuthority.publicKey,
+      });
 
       // First create it
       const createIx = createCreateAllowedTokenInstruction(
@@ -722,6 +929,334 @@ describe('Shop System', () => {
       const treasuryAfter = await ctx.svm.getBalance(ctx.treasury.publicKey);
       expect(treasuryAfter).toBeGreaterThan(treasuryBefore);
     });
+
+    it('should accept SPL token payment for an item', async () => {
+      // Token payment flow (purchase_item, payment_type=2):
+      //   1. shop_config.sol_pyth_feed must point at a live SOL/USD feed
+      //   2. allowed_token must exist for the payment mint, pointing at a
+      //      live TOKEN/USD feed
+      //   3. buyer + treasury must hold ATAs for the payment mint
+      //   token_amount = (lamports × sol_usd × 10^decimals) / (token_usd × 10^9)
+
+      // A distinct mint for the payment token (NOVI's allowed-token PDA is
+      // already taken by the "Allowed Payment Tokens" describe block).
+      const tokenMintKp = Keypair.generate();
+      const tokenMint = tokenMintKp.publicKey;
+      seedSplMint(ctx.svm, tokenMint, {
+        decimals: 9,
+        mintAuthority: ctx.daoAuthority.publicKey,
+      });
+
+      // Two distinct Pyth feeds: SOL/USD (shop config) and TOKEN/USD (allowed token).
+      const solFeed = Keypair.generate().publicKey;
+      const tokenFeed = Keypair.generate().publicKey;
+      seedMockPythFeed(ctx.svm, solFeed);   // header-only for the config-time gate
+      seedMockPythFeed(ctx.svm, tokenFeed);
+
+      // Register the SOL feed in shop config (generous staleness so slot
+      // drift between setup and purchase never trips the freshness check).
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createUpdateConfigInstruction(
+            { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
+            {
+              solPythFeed: solFeed,
+              solMaxStalenessSlots: 1_000_000,
+              solConfidenceThresholdBps: 1000,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Register the payment token + its TOKEN/USD feed.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateAllowedTokenInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              tokenMint,
+            },
+            {
+              pythFeed: tokenFeed,
+              switchboardFeed: undefined,
+              maxStalenessSlots: 1_000_000,
+              confidenceThresholdBps: 1000,
+              discountBps: 0,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Buyer + treasury ATAs for the payment token.
+      const buyer = await createShopReadyPlayer(ctx, factory);
+      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      const BUYER_START = 1_000_000_000_000n; // 1000 tokens (9 decimals)
+      seedSplTokenAccount(ctx.svm, buyerAta, {
+        mint: tokenMint,
+        owner: buyer.publicKey,
+        amount: BUYER_START,
+      });
+      seedSplTokenAccount(ctx.svm, treasuryAta, {
+        mint: tokenMint,
+        owner: ctx.treasury.publicKey,
+        amount: 0n,
+      });
+
+      // Re-seed the feeds with live prices + a fresh pub_slot right before the
+      // purchase: SOL/USD = $150, TOKEN/USD = $1 (both at expo -8).
+      seedMockPythFeed(ctx.svm, solFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, { price: 100_000_000, conf: 0, expo: -8 });
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseItemInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: buyer.publicKey,
+              itemId: 9999,
+              treasury: ctx.treasury.publicKey,
+              tokenPayment: {
+                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                tokenMint,
+                buyerTokenAta: buyerAta,
+                treasuryTokenAta: treasuryAta,
+                solOracleFeed: solFeed,
+                tokenOracleFeed: tokenFeed,
+              },
+            },
+            { quantity: 1, paymentType: 2 },
+          ),
+        ),
+        [buyer.keypair],
+      );
+
+      // Buyer paid in tokens → balance dropped; treasury received the tokens.
+      const buyerAfter = readSplTokenAmount(ctx.svm, buyerAta);
+      const treasuryAfter = readSplTokenAmount(ctx.svm, treasuryAta);
+      expect(buyerAfter < BUYER_START).toBe(true);
+      expect(treasuryAfter > 0n).toBe(true);
+      // Conservation: what left the buyer arrived at the treasury.
+      expect(BUYER_START - buyerAfter).toBe(treasuryAfter);
+    }, 60_000);
+
+    it('should accept SPL token payment via Switchboard feeds', async () => {
+      // Same flow as the Pyth test, but both oracle feeds are Switchboard
+      // pull-feeds. process_token_payment_flow's detect_oracle_type picks the
+      // Switchboard branch off the feed-account owner, so this exercises
+      // calculate_token_amount_switchboard / read_switchboard_price — code
+      // never touched by the Pyth path. Switchboard prices are scaled to 10^18.
+      const E18 = 10n ** 18n;
+
+      const tokenMintKp = Keypair.generate();
+      const tokenMint = tokenMintKp.publicKey;
+      seedSplMint(ctx.svm, tokenMint, {
+        decimals: 9,
+        mintAuthority: ctx.daoAuthority.publicKey,
+      });
+
+      const solFeed = Keypair.generate().publicKey;
+      const tokenFeed = Keypair.generate().publicKey;
+      // Discriminator-only seed satisfies the config-time validation gate.
+      seedMockSwitchboardFeed(ctx.svm, solFeed);
+      seedMockSwitchboardFeed(ctx.svm, tokenFeed);
+
+      // Register the SOL Switchboard feed in shop config.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createUpdateConfigInstruction(
+            { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
+            {
+              solSwitchboardFeed: solFeed,
+              solMaxStalenessSlots: 1_000_000,
+              solConfidenceThresholdBps: 1000,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Register the payment token + its TOKEN/USD Switchboard feed.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateAllowedTokenInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              tokenMint,
+            },
+            {
+              pythFeed: undefined,
+              switchboardFeed: tokenFeed,
+              maxStalenessSlots: 1_000_000,
+              confidenceThresholdBps: 1000,
+              discountBps: 0,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const buyer = await createShopReadyPlayer(ctx, factory);
+      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      const BUYER_START = 1_000_000_000_000n;
+      seedSplTokenAccount(ctx.svm, buyerAta, {
+        mint: tokenMint,
+        owner: buyer.publicKey,
+        amount: BUYER_START,
+      });
+      seedSplTokenAccount(ctx.svm, treasuryAta, {
+        mint: tokenMint,
+        owner: ctx.treasury.publicKey,
+        amount: 0n,
+      });
+
+      // Re-seed with live prices + fresh result_slot: SOL/USD = $150, TOKEN/USD = $1.
+      seedMockSwitchboardFeed(ctx.svm, solFeed, { value: 150n * E18 });
+      seedMockSwitchboardFeed(ctx.svm, tokenFeed, { value: 1n * E18 });
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseItemInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: buyer.publicKey,
+              itemId: 9999,
+              treasury: ctx.treasury.publicKey,
+              tokenPayment: {
+                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                tokenMint,
+                buyerTokenAta: buyerAta,
+                treasuryTokenAta: treasuryAta,
+                solOracleFeed: solFeed,
+                tokenOracleFeed: tokenFeed,
+              },
+            },
+            { quantity: 1, paymentType: 2 },
+          ),
+        ),
+        [buyer.keypair],
+      );
+
+      const buyerAfter = readSplTokenAmount(ctx.svm, buyerAta);
+      const treasuryAfter = readSplTokenAmount(ctx.svm, treasuryAta);
+      expect(buyerAfter < BUYER_START).toBe(true);
+      expect(treasuryAfter > 0n).toBe(true);
+      expect(BUYER_START - buyerAfter).toBe(treasuryAfter);
+    }, 60_000);
+
+    it('should reject mixed Pyth + Switchboard feeds', async () => {
+      // process_token_payment_flow requires both feeds to be the same oracle
+      // type. A Pyth SOL feed + Switchboard token feed must be rejected.
+      const E18 = 10n ** 18n;
+
+      const tokenMintKp = Keypair.generate();
+      const tokenMint = tokenMintKp.publicKey;
+      seedSplMint(ctx.svm, tokenMint, {
+        decimals: 9,
+        mintAuthority: ctx.daoAuthority.publicKey,
+      });
+
+      // SOL feed = Pyth, token feed = Switchboard.
+      const solPythFeed = Keypair.generate().publicKey;
+      const tokenSbFeed = Keypair.generate().publicKey;
+      seedMockPythFeed(ctx.svm, solPythFeed);
+      seedMockSwitchboardFeed(ctx.svm, tokenSbFeed);
+
+      // Config registers the Pyth SOL feed...
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createUpdateConfigInstruction(
+            { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
+            {
+              solPythFeed: solPythFeed,
+              solMaxStalenessSlots: 1_000_000,
+              solConfidenceThresholdBps: 1000,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // ...but the allowed token registers a Switchboard feed.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateAllowedTokenInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              tokenMint,
+            },
+            {
+              pythFeed: undefined,
+              switchboardFeed: tokenSbFeed,
+              maxStalenessSlots: 1_000_000,
+              confidenceThresholdBps: 1000,
+              discountBps: 0,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const buyer = await createShopReadyPlayer(ctx, factory);
+      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      seedSplTokenAccount(ctx.svm, buyerAta, {
+        mint: tokenMint,
+        owner: buyer.publicKey,
+        amount: 1_000_000_000_000n,
+      });
+      seedSplTokenAccount(ctx.svm, treasuryAta, {
+        mint: tokenMint,
+        owner: ctx.treasury.publicKey,
+        amount: 0n,
+      });
+
+      seedMockPythFeed(ctx.svm, solPythFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockSwitchboardFeed(ctx.svm, tokenSbFeed, { value: 1n * E18 });
+
+      // SOL feed is Pyth-owned, token feed is Switchboard-owned → the
+      // detect_oracle_type mismatch guard rejects the purchase.
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createPurchaseItemInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: buyer.publicKey,
+              itemId: 9999,
+              treasury: ctx.treasury.publicKey,
+              tokenPayment: {
+                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                tokenMint,
+                buyerTokenAta: buyerAta,
+                treasuryTokenAta: treasuryAta,
+                solOracleFeed: solPythFeed,
+                tokenOracleFeed: tokenSbFeed,
+              },
+            },
+            { quantity: 1, paymentType: 2 },
+          ),
+        ),
+        [buyer.keypair],
+      );
+    }, 60_000);
   });
 
   // Daily Deal Tests
@@ -920,6 +1455,543 @@ describe('Shop System', () => {
         const stockAfter = itemAfter.currentGlobalStock.toNumber();
         expect(stockAfter).toBeLessThanOrEqual(stockBefore);
       }
+    });
+  });
+
+  // Sale Lifecycle Tests (activate + close)
+  //
+  // close_sale has 5 SaleType variants (FlashSale, WeeklySale, SeasonalSale,
+  // DAOPromotion, PlayerPurchase). DAO authority can close any of them
+  // regardless of state. activate_sale is a permissionless crank that walks
+  // SeasonalSale (Scheduled → Active → Ended) and DAOPromotion
+  // (Approved → Active → Ended/BudgetExhausted) state machines based on wall
+  // clock vs starts_at / ends_at.
+
+  describe('Sale Lifecycle', () => {
+    it('should close a FlashSale (DAO bypasses state check)', async () => {
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 10),
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [salePda] = deriveFlashSalePda(ctx.gameEngine, saleId);
+      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+
+      // DAO closes immediately (still scheduled). Non-DAO would hit
+      // SaleNotActive since the sale hasn't ended; DAO short-circuits that.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCloseSaleInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              rentRecipient: ctx.daoAuthority.publicKey,
+            },
+            { saleType: 0, saleId },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+    });
+
+    it('should close a WeeklySale', async () => {
+      // Use a week well in the future so we don't collide with the existing
+      // "Weekly Sales" describe block (which uses Math.floor(now/604800)).
+      const now = await getCurrentTimestamp(ctx.svm);
+      const weekNumber = Math.floor(now / 604800) + 100;
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateWeeklySaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+            },
+            {
+              weekNumber,
+              theme: 0,
+              bonusType: 0,
+              bonusValueBps: 500,
+              categoryDiscounts: [1000, 1500, 2000, 500],
+              startsAt: now,
+              durationDays: 7,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [salePda] = deriveWeeklySalePda(ctx.gameEngine, weekNumber);
+      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCloseSaleInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              rentRecipient: ctx.daoAuthority.publicKey,
+            },
+            { saleType: 1, weekNumber },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+    });
+
+    it('should close a SeasonalSale', async () => {
+      const eventId = 200;
+      const now = await getCurrentTimestamp(ctx.svm);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateEventInstruction(
+            { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
+            {
+              name: 'CloseTestEvent',
+              startTime: now - 3600,
+              endTime: now + 86400,
+              eventType: 0,
+              minLevel: 1,
+              minReputation: 0,
+              requiredSubscriptionTier: 0,
+              prizeType: 0,
+              prizeAmount: 1000,
+              autoActivate: true,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateSeasonalSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              event: eventPda,
+            },
+            {
+              name: 'CloseTest',
+              globalDiscountBps: 500,
+              startsAt: now,
+              endsAt: now + 3600,
+              spendThreshold: 0,
+              exclusiveCosmeticId: 0,
+              featuredItems: [],
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCloseSaleInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              rentRecipient: ctx.daoAuthority.publicKey,
+            },
+            { saleType: 2, event: eventPda },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+    });
+
+    it('should close a DAOPromotion', async () => {
+      const now = await getCurrentTimestamp(ctx.svm);
+      const proposalId = 100; // existing test uses proposalId=1; pick a distinct one
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateDaoPromotionInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+            },
+            {
+              proposalId,
+              title: 'CloseTestPromo',
+              equipmentDiscountBps: 1000,
+              consumableDiscountBps: 1000,
+              materialDiscountBps: 1000,
+              cosmeticDiscountBps: 1000,
+              globalDiscountBps: 500,
+              maxDiscountBps: 2000,
+              startsAt: now,
+              endsAt: now + 86400,
+              maxDiscountBudgetLamports: 1_000_000,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [salePda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
+      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCloseSaleInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              rentRecipient: ctx.daoAuthority.publicKey,
+            },
+            { saleType: 3, proposalId },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+    });
+
+    it('should reject close by non-DAO when sale is still active', async () => {
+      // Non-DAO can only close if (a) they are the original payer, AND
+      // (b) the sale is already ended/sold-out. Here it's the DAO that paid
+      // AND the sale is far from ending — both checks fail.
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: new BN(onChainNow + 10),
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const rando = Keypair.generate();
+      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(
+          createCloseSaleInstruction(
+            {
+              authority: rando.publicKey,
+              gameEngine: ctx.gameEngine,
+              rentRecipient: rando.publicKey,
+            },
+            { saleType: 0, saleId },
+          ),
+        ),
+        [rando],
+      );
+    });
+
+    // activate_sale: SeasonalSale (Scheduled → Active → Ended)
+
+    it('should activate SeasonalSale from Scheduled → Active when starts_at reached', async () => {
+      const eventId = 201;
+      const now = await getCurrentTimestamp(ctx.svm);
+      const startsAt = now + 500;
+      const endsAt = now + 5000;
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateEventInstruction(
+            { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
+            {
+              name: 'ActivateTestSeason',
+              startTime: startsAt,
+              endTime: endsAt,
+              eventType: 0,
+              minLevel: 1,
+              minReputation: 0,
+              requiredSubscriptionTier: 0,
+              prizeType: 0,
+              prizeAmount: 1000,
+              autoActivate: true,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateSeasonalSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              event: eventPda,
+            },
+            {
+              name: 'ActivateTest',
+              globalDiscountBps: 1000,
+              startsAt,
+              endsAt,
+              spendThreshold: 0,
+              exclusiveCosmeticId: 0,
+              featuredItems: [],
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+
+      // Initial status: Scheduled (0)
+      const scheduled = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      expect(scheduled.status).toBe(0);
+
+      // Try to activate before starts_at — status stays Scheduled (no error, no transition)
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 0, event: eventPda },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      const stillScheduled = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      expect(stillScheduled.status).toBe(0);
+
+      // Advance past starts_at and activate → Active
+      await advanceTime(ctx.svm, 600);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 0, event: eventPda },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      const active = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      expect(active.status).toBe(1);
+
+      // Advance past ends_at and activate → Ended
+      await advanceTime(ctx.svm, 5000);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 0, event: eventPda },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      const ended = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      expect(ended.status).toBe(2);
+    }, 60_000);
+
+    it('should activate DAOPromotion through Approved → Active → Ended', async () => {
+      const now = await getCurrentTimestamp(ctx.svm);
+      const proposalId = 200;
+      const startsAt = now + 500;
+      const endsAt = now + 5000;
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateDaoPromotionInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+            },
+            {
+              proposalId,
+              title: 'ActivateTestPromo',
+              equipmentDiscountBps: 1000,
+              consumableDiscountBps: 1000,
+              materialDiscountBps: 1000,
+              cosmeticDiscountBps: 1000,
+              globalDiscountBps: 500,
+              maxDiscountBps: 2000,
+              startsAt,
+              endsAt,
+              maxDiscountBudgetLamports: 1_000_000,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [promoPda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
+
+      // Initial: Approved (0) — same byte slot as Scheduled
+      const approved = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      expect(approved.status).toBe(0);
+
+      // Advance past starts_at and activate → Active
+      await advanceTime(ctx.svm, 600);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 1, proposalId },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      const active = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      expect(active.status).toBe(1);
+
+      // Advance past ends_at and activate → Ended
+      await advanceTime(ctx.svm, 5000);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 1, proposalId },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      const ended = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      expect(ended.status).toBe(2);
+    }, 60_000);
+
+    it('should allow activate_sale by anyone (permissionless crank)', async () => {
+      // Same setup as the seasonal test but a non-DAO signer cranks the
+      // status. Confirms the processor doesn't gate on DAO.
+      const eventId = 202;
+      const now = await getCurrentTimestamp(ctx.svm);
+      const startsAt = now - 60; // already started
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateEventInstruction(
+            { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
+            {
+              name: 'PermissionlessSeason',
+              startTime: startsAt,
+              endTime: now + 3600,
+              eventType: 0,
+              minLevel: 1,
+              minReputation: 0,
+              requiredSubscriptionTier: 0,
+              prizeType: 0,
+              prizeAmount: 1000,
+              autoActivate: true,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createCreateSeasonalSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              event: eventPda,
+            },
+            {
+              name: 'PermissionlessTest',
+              globalDiscountBps: 500,
+              startsAt,
+              endsAt: now + 3600,
+              spendThreshold: 0,
+              exclusiveCosmeticId: 0,
+              featuredItems: [],
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      // Random crank signs the activate call
+      const rando = Keypair.generate();
+      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createActivateSaleInstruction(
+            { crank: rando.publicKey, gameEngine: ctx.gameEngine },
+            { saleType: 0, event: eventPda },
+          ),
+        ),
+        [rando],
+      );
+
+      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      const active = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      expect(active.status).toBe(1);
     });
   });
 });
