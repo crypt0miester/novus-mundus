@@ -4,13 +4,9 @@ import { gameAuthorityKeypair } from "@/lib/server/game-authority";
 import { expeditionPda, gameEnginePda, getExpedition } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollScore } from "@/lib/server/score-logic";
-import { coSignResponse, fail, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, fail, requireSession } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
-
-interface StrikeRequest {
-  owner?: string;
-}
 
 /**
  * POST /api/cosign/expedition/strike
@@ -23,9 +19,9 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<StrikeRequest>(req);
-  if ("error" in parsed) return parsed.error;
-  const { owner } = parsed;
+  const session = requireSession(req);
+  if ("error" in session) return session.error;
+  const { owner } = session;
 
   const expedition = await getExpedition(owner);
   if (!expedition) return fail("no active expedition", 409);

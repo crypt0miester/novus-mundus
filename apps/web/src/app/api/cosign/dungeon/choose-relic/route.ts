@@ -14,7 +14,7 @@ import {
   coSignResponse,
   fail,
   parseOwner,
-  parseOwnerBody,
+  parseSessionBody,
 } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<{ owner?: string; relicId?: number }>(req);
+  const parsed = await parseSessionBody<{ relicId?: number }>(req);
   if ("error" in parsed) return parsed.error;
   const { owner, body } = parsed;
 

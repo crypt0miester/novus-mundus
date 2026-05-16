@@ -19,12 +19,11 @@ import {
 } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollScore } from "@/lib/server/score-logic";
-import { coSignResponse, fail, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, fail, parseSessionBody } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
 
 interface DailyActivityRequest {
-  owner?: string;
   buildingType?: number;
 }
 
@@ -40,7 +39,7 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<DailyActivityRequest>(req);
+  const parsed = await parseSessionBody<DailyActivityRequest>(req);
   if ("error" in parsed) return parsed.error;
   const { owner, body } = parsed;
 

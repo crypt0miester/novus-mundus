@@ -31,7 +31,7 @@ import {
   findBuilding,
   BuildingStatus,
 } from "@/lib/sdk";
-import { requestCoSign } from "@/lib/cosign";
+import { useCoSign } from "@/lib/cosign";
 
 const BUILDING_TYPES = [
   { id: 0, name: "Mansion", desc: "Home base", tier: 1 },
@@ -241,6 +241,7 @@ export function EstateTab() {
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
+  const { requestCoSign } = useCoSign();
 
   const [selectedBuilding, setSelectedBuilding] = useState<number | null>(null);
   const [speedupBuilding, setSpeedupBuilding] = useState<number | null>(null);
@@ -412,7 +413,6 @@ export function EstateTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const versionedTx = await requestCoSign("/api/cosign/estate/daily-activity", {
-      owner: publicKey.toBase58(),
       buildingType,
     });
     return transact.mutateAsync({

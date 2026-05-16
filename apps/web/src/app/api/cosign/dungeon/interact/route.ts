@@ -8,13 +8,9 @@ import {
 } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollDungeonInteract } from "@/lib/server/dungeon-logic";
-import { coSignResponse, fail, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, fail, requireSession } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
-
-interface InteractRequest {
-  owner?: string;
-}
 
 /**
  * POST /api/cosign/dungeon/interact
@@ -26,9 +22,9 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<InteractRequest>(req);
-  if ("error" in parsed) return parsed.error;
-  const { owner } = parsed;
+  const session = requireSession(req);
+  if ("error" in session) return session.error;
+  const { owner } = session;
 
   const run = await getDungeonRun(owner);
   if (!run) return fail("no active dungeon run", 409);

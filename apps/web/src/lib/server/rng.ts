@@ -18,6 +18,11 @@ export class Rng {
   private counter = 0;
 
   constructor(domain: string, account: string, discriminator: string) {
+    if (!RNG_SECRET) {
+      // An empty secret makes every roll client-predictable — fail loudly
+      // rather than silently void the anti-cheat guarantee.
+      throw new Error("GAME_AUTHORITY_RNG_SECRET is not set");
+    }
     this.seed = createHash("sha256")
       .update(RNG_SECRET)
       .update("|")

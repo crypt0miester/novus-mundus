@@ -28,7 +28,7 @@ import {
   isTraveling,
   ENCOUNTER_STAMINA_COSTS,
 } from "@/lib/sdk";
-import { requestCoSign } from "@/lib/cosign";
+import { useCoSign } from "@/lib/cosign";
 
 // Expedition reward constants (from novus_mundus constants)
 const MINING_DURATION_HOURS = [1, 2, 4, 8, 16] as const;
@@ -56,6 +56,7 @@ export function ExpeditionTab() {
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
+  const { requestCoSign } = useCoSign();
 
   const player = playerData?.account;
   const expedition = expeditionData?.account;
@@ -246,9 +247,7 @@ export function ExpeditionTab() {
   // A strike is a skill action — the score is game_authority-co-signed.
   const handleStrike = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const versionedTx = await requestCoSign("/api/cosign/expedition/strike", {
-      owner: publicKey.toBase58(),
-    });
+    const versionedTx = await requestCoSign("/api/cosign/expedition/strike");
     return transact.mutateAsync({
       versionedTx,
       invalidateKeys: [["expedition"], ["player"]],

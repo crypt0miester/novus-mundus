@@ -1,11 +1,22 @@
+"use client";
+
+import { useCallback } from "react";
 import { VersionedTransaction } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
+import type {
+  SolanaSignInInput,
+  SolanaSignInOutput,
+} from "@solana/wallet-standard-features";
 
 /**
  * Client helpers for the game_authority co-sign API (`/api/cosign/*`).
  *
- * A co-sign endpoint returns a VersionedTransaction already partial-signed by
- * the game server. Pass it to `useTransact` via `mutateAsync({ versionedTx })`
- * so the connected wallet adds the final signature before submitting.
+ * The POST co-sign endpoints require a Sign-In-With-Solana session — they
+ * answer 401 without one. `useCoSign` handles that lazily: on a 401 it runs the
+ * SIWS flow (one wallet prompt), then retries. A co-sign endpoint returns a
+ * VersionedTransaction already partial-signed by the game server; pass it to
+ * `useTransact` via `mutateAsync({ versionedTx })` so the connected wallet adds
+ * the final signature before submitting.
  */
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -15,27 +26,54 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-/** POST a co-sign endpoint and return the game-authority-co-signed transaction. */
-export async function requestCoSign(
-  endpoint: string,
-  body: Record<string, unknown>,
-): Promise<VersionedTransaction> {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as {
-    transaction?: string;
-    error?: string;
-  };
-  if (!res.ok || !json.transaction) {
-    throw new Error(json.error ?? `co-sign request failed (${res.status})`);
-  }
-  return VersionedTransaction.deserialize(base64ToBytes(json.transaction));
+function bytesToBase64(bytes: Iterable<number>): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
 }
 
-/** GET a co-sign endpoint — used for previews (e.g. the relic offer). */
+type SignIn = (input?: SolanaSignInInput) => Promise<SolanaSignInOutput>;
+
+/** Run the SIWS handshake and establish the server session cookie. */
+async function establishSession(signIn: SignIn): Promise<void> {
+  const challenge = await fetch("/api/auth/siws");
+  const { nonce } = (await challenge.json().catch(() => ({}))) as {
+    nonce?: string;
+  };
+  if (!nonce) throw new Error("Could not start sign-in");
+
+  const input: SolanaSignInInput = {
+    domain: window.location.host,
+    statement: "Sign in to authorize Novus Mundus game actions.",
+    version: "1",
+    nonce,
+    issuedAt: new Date().toISOString(),
+    expirationTime: new Date(Date.now() + 5 * 60_000).toISOString(),
+  };
+  const output = await signIn(input);
+
+  const res = await fetch("/api/auth/siws", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      input,
+      output: {
+        account: {
+          address: output.account.address,
+          publicKey: bytesToBase64(output.account.publicKey),
+        },
+        signedMessage: bytesToBase64(output.signedMessage),
+        signature: bytesToBase64(output.signature),
+      },
+    }),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(error ?? "Sign-in failed");
+  }
+}
+
+/** GET a co-sign endpoint — used for ungated previews (e.g. the relic offer). */
 export async function fetchCoSign<T>(endpoint: string): Promise<T> {
   const res = await fetch(endpoint);
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -43,4 +81,49 @@ export async function fetchCoSign<T>(endpoint: string): Promise<T> {
     throw new Error(json.error ?? `request failed (${res.status})`);
   }
   return json;
+}
+
+/**
+ * Hook for the session-gated POST co-sign endpoints. Returns `requestCoSign`,
+ * which POSTs the endpoint and, on a 401, runs SIWS once and retries.
+ */
+export function useCoSign() {
+  const { signIn } = useWallet();
+
+  const requestCoSign = useCallback(
+    async (
+      endpoint: string,
+      body: Record<string, unknown> = {},
+    ): Promise<VersionedTransaction> => {
+      const post = () =>
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+      let res = await post();
+      if (res.status === 401) {
+        if (!signIn) {
+          throw new Error(
+            "This wallet does not support Sign In With Solana — cannot authorize game actions.",
+          );
+        }
+        await establishSession(signIn);
+        res = await post();
+      }
+
+      const json = (await res.json().catch(() => ({}))) as {
+        transaction?: string;
+        error?: string;
+      };
+      if (!res.ok || !json.transaction) {
+        throw new Error(json.error ?? `co-sign request failed (${res.status})`);
+      }
+      return VersionedTransaction.deserialize(base64ToBytes(json.transaction));
+    },
+    [signIn],
+  );
+
+  return { requestCoSign };
 }

@@ -20,6 +20,7 @@ import { Rng } from "./rng";
  */
 
 // Fixed relic ids (0-19; see programs/novus_mundus/src/constants.rs).
+const RELIC_COUNT = 20;
 const RELIC_CRIT = 2; // grants base crit chance
 const RELIC_DOUBLE_ATTACK = 14; // grants double-strike chance
 const RELIC_DARKNESS_WARD = 16; // nullifies the darkness crit penalty
@@ -37,7 +38,7 @@ const RNG_RELIC = "dungeon.relic";
 
 function ownedRelicIds(mask: number): number[] {
   const ids: number[] = [];
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < RELIC_COUNT; i += 1) {
     if ((mask >>> i) & 1) ids.push(i);
   }
   return ids;
@@ -166,7 +167,7 @@ export function rollRelicOffer(
   const owned = new Set(ownedRelicIds(run.relicMask));
 
   const unowned: number[] = [];
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < RELIC_COUNT; i += 1) {
     if (!owned.has(i)) unowned.push(i);
   }
 

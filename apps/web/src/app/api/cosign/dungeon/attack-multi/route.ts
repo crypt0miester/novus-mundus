@@ -4,13 +4,12 @@ import { gameAuthorityKeypair } from "@/lib/server/game-authority";
 import { gameEnginePda } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollDungeonAttack } from "@/lib/server/dungeon-logic";
-import { coSignResponse, fail, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, fail, parseSessionBody } from "@/lib/server/route-helpers";
 import { loadCombatRun } from "../_shared";
 
 export const runtime = "nodejs";
 
 interface MultiAttackRequest {
-  owner?: string;
   attackCount?: number;
 }
 
@@ -24,7 +23,7 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<MultiAttackRequest>(req);
+  const parsed = await parseSessionBody<MultiAttackRequest>(req);
   if ("error" in parsed) return parsed.error;
   const { owner, body } = parsed;
 

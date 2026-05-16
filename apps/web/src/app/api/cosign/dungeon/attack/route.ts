@@ -4,14 +4,10 @@ import { gameAuthorityKeypair } from "@/lib/server/game-authority";
 import { gameEnginePda } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollDungeonAttack } from "@/lib/server/dungeon-logic";
-import { coSignResponse, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, requireSession } from "@/lib/server/route-helpers";
 import { loadCombatRun } from "../_shared";
 
 export const runtime = "nodejs";
-
-interface AttackRequest {
-  owner?: string;
-}
 
 /**
  * POST /api/cosign/dungeon/attack
@@ -24,9 +20,9 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<AttackRequest>(req);
-  if ("error" in parsed) return parsed.error;
-  const { owner } = parsed;
+  const session = requireSession(req);
+  if ("error" in session) return session.error;
+  const { owner } = session;
 
   const loaded = await loadCombatRun(owner);
   if ("error" in loaded) return loaded.error;

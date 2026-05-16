@@ -1,13 +1,13 @@
 import "server-only";
-import type { AccountInfo } from "@solana/web3.js";
 import { PublicKey } from "@solana/web3.js";
-import { derivePlayerPda, parsePlayer } from "novus-mundus-sdk";
+import {
+  ARENA_MAX_BATTLES_PER_OPPONENT,
+  ARENA_MAX_DAILY_BATTLES,
+  SECONDS_PER_DAY,
+  derivePlayerPda,
+  parsePlayer,
+} from "novus-mundus-sdk";
 import { serverClient, serverConnection } from "./game-authority";
-
-const SECONDS_PER_DAY = 86_400;
-const MAX_DAILY_BATTLES = 10;
-const MAX_BATTLES_PER_OPPONENT = 2;
-const ACCOUNTS_PER_FETCH = 100; // getMultipleAccountsInfo per-call cap
 
 export interface MatchResult {
   defenderWallet: PublicKey;
@@ -16,23 +16,11 @@ export interface MatchResult {
   matchTimestamp: number;
 }
 
-/** Resolve participant player-PDAs to their owner wallets in bounded batches. */
-async function resolveWallets(
-  playerPdas: PublicKey[],
-): Promise<Map<string, PublicKey>> {
-  const conn = serverConnection();
-  const pdaToWallet = new Map<string, PublicKey>();
-  for (let i = 0; i < playerPdas.length; i += ACCOUNTS_PER_FETCH) {
-    const slice = playerPdas.slice(i, i + ACCOUNTS_PER_FETCH);
-    const infos = await conn.getMultipleAccountsInfo(slice);
-    slice.forEach((pda, j) => {
-      const info = infos[j];
-      if (!info) return;
-      const player = parsePlayer(info as AccountInfo<Buffer>);
-      if (player) pdaToWallet.set(pda.toBase58(), player.owner);
-    });
-  }
-  return pdaToWallet;
+/** Resolve a participant player-PDA to its owner wallet, or null. */
+async function resolveWallet(playerPda: PublicKey): Promise<PublicKey | null> {
+  const info = await serverConnection().getAccountInfo(playerPda);
+  if (!info) return null;
+  return parsePlayer(info)?.owner ?? null;
 }
 
 /**
@@ -41,8 +29,9 @@ async function resolveWallets(
  * Picks the eligible opponent whose ELO is closest to the challenger's (ties
  * broken by pubkey), so a retried request yields the same match — no
  * match-shopping. Enforces the on-chain caps (rolling-24h battle limit and
- * per-opponent cooldown) before issuing a match, and resolves opponent player
- * PDAs to wallet addresses (challenge_player needs the defender's wallet).
+ * per-opponent cooldown) before issuing a match, and resolves the chosen
+ * opponent's player PDA to a wallet address (challenge_player needs the
+ * defender's wallet).
  */
 export async function findMatch(
   seasonId: number,
@@ -68,7 +57,7 @@ export async function findMatch(
   const recentBattles = challenger.battleTimestamps.filter(
     (t) => now - t.toNumber() < SECONDS_PER_DAY,
   ).length;
-  if (recentBattles >= MAX_DAILY_BATTLES) {
+  if (recentBattles >= ARENA_MAX_DAILY_BATTLES) {
     throw new Error("Daily battle limit reached — try again later");
   }
 
@@ -82,34 +71,35 @@ export async function findMatch(
     }
   });
 
-  // Resolve only the season's participant player-PDAs to owner wallets.
-  const pdaToWallet = await resolveWallets(
-    participants.map((p) => p.account.player),
-  );
+  // Eligible = not self, under the per-opponent cap — ordered closest ELO
+  // first with a deterministic pubkey tie-break.
+  const eligible = participants
+    .filter((p) => {
+      const pda = p.account.player.toBase58();
+      if (pda === challengerPlayerKey) return false;
+      return (opponentCounts.get(pda) ?? 0) < ARENA_MAX_BATTLES_PER_OPPONENT;
+    })
+    .sort((a, b) => {
+      const da = Math.abs(a.account.eloRating - challenger.eloRating);
+      const db = Math.abs(b.account.eloRating - challenger.eloRating);
+      if (da !== db) return da - db;
+      return a.account.player
+        .toBase58()
+        .localeCompare(b.account.player.toBase58());
+    });
 
-  const candidates = participants.filter((p) => {
-    const pda = p.account.player.toBase58();
-    if (pda === challengerPlayerKey) return false; // not self
-    if ((opponentCounts.get(pda) ?? 0) >= MAX_BATTLES_PER_OPPONENT) return false;
-    return pdaToWallet.has(pda); // wallet must be resolvable
-  });
-  if (candidates.length === 0) {
-    throw new Error("No eligible opponents are available right now");
+  // Resolve wallets in closest-ELO order and take the first that resolves, so
+  // the common case costs a single account fetch instead of the whole season.
+  for (const candidate of eligible) {
+    const wallet = await resolveWallet(candidate.account.player);
+    if (wallet) {
+      return {
+        defenderWallet: wallet,
+        defenderElo: candidate.account.eloRating,
+        matchId: challenger.lastMatchId.toNumber() + 1,
+        matchTimestamp: now,
+      };
+    }
   }
-
-  // Closest ELO; deterministic tie-break by pubkey.
-  candidates.sort((a, b) => {
-    const da = Math.abs(a.account.eloRating - challenger.eloRating);
-    const db = Math.abs(b.account.eloRating - challenger.eloRating);
-    if (da !== db) return da - db;
-    return a.account.player.toBase58().localeCompare(b.account.player.toBase58());
-  });
-
-  const defender = candidates[0]!;
-  return {
-    defenderWallet: pdaToWallet.get(defender.account.player.toBase58())!,
-    defenderElo: defender.account.eloRating,
-    matchId: challenger.lastMatchId.toNumber() + 1,
-    matchTimestamp: now,
-  };
+  throw new Error("No eligible opponents are available right now");
 }

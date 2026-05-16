@@ -22,7 +22,7 @@ import {
   ARENA_MAX_DAILY_BATTLES,
   ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
 } from "@/lib/sdk";
-import { requestCoSign } from "@/lib/cosign";
+import { useCoSign } from "@/lib/cosign";
 
 export function ArenaTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -35,6 +35,7 @@ export function ArenaTab() {
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
+  const { requestCoSign } = useCoSign();
 
   const season = seasonData?.account;
   const participant = participantData?.account;
@@ -110,16 +111,26 @@ export function ArenaTab() {
 
   const handleChallenge = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const versionedTx = await requestCoSign("/api/cosign/arena/challenge", {
-      owner: publicKey.toBase58(),
-      seasonId: currentSeasonId,
-    });
-    return transact.mutateAsync({
-      versionedTx,
-      invalidateKeys: [["arenaParticipant"], ["arenaSeason"], ["player"]],
-      successMessage: "Match resolved!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    // The co-signed match carries a match_timestamp with a 300s on-chain window
+    // and a blockhash that expires sooner — a long wallet-sign step can outlast
+    // them. Re-request once on failure: matchmaking is deterministic, so the
+    // retry re-issues the same match_id (a stale one is rejected on-chain).
+    const submit = async () => {
+      const versionedTx = await requestCoSign("/api/cosign/arena/challenge", {
+        seasonId: currentSeasonId,
+      });
+      return transact.mutateAsync({
+        versionedTx,
+        invalidateKeys: [["arenaParticipant"], ["arenaSeason"], ["player"]],
+        successMessage: "Match resolved!",
+        onPhase: reportPhase,
+      });
+    };
+    try {
+      return (await submit()).signature;
+    } catch {
+      return (await submit()).signature;
+    }
   };
 
   return (

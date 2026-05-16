@@ -39,7 +39,7 @@ import {
   DungeonStatus,
   RoomType,
 } from "novus-mundus-sdk";
-import { requestCoSign, fetchCoSign } from "@/lib/cosign";
+import { fetchCoSign, useCoSign } from "@/lib/cosign";
 
 const DUNGEON_FLEE_PENALTY_BPS = [7000, 6000, 5000, 4000] as const;
 const ROOMS: Record<RoomType, { label: string; icon: string }> = {
@@ -57,6 +57,7 @@ export function DungeonTab() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const transact = useTransact();
+  const { requestCoSign } = useCoSign();
 
   const player = playerData?.account;
   const ownerStr = publicKey?.toBase58() ?? null;
@@ -82,6 +83,7 @@ export function DungeonTab() {
   const runMaxHp = run ? run.originalUnits.reduce((a, b) => a.add(b)).toNumber() : 100;
   const room = ROOMS[(run?.roomType ?? RoomType.Combat) as RoomType] ?? ROOMS[RoomType.Combat];
   const [selectedDungeon, setSelectedDungeon] = useState(0);
+  const [attackCount, setAttackCount] = useState(1);
 
   // First locked hero — required to enter a dungeon (the hero is escrowed).
   const heroMint = useMemo<PublicKey | null>(() => {
@@ -117,6 +119,10 @@ export function DungeonTab() {
 
   // Per-room stamina cost (each room in a dungeon costs 1 encounter worth)
   const roomStaminaCost = useMemo(() => ENCOUNTER_STAMINA_COSTS[0] ?? 10, []);
+
+  // attack_multi batches up to 5 attacks; each one still costs a room's stamina.
+  const maxAttacks = Math.min(5, Math.floor(playerStamina / roomStaminaCost));
+  const effectiveAttacks = Math.min(attackCount, Math.max(1, maxAttacks));
 
   // Time-of-day indicator
   const now = Math.floor(Date.now() / 1000);
@@ -225,24 +231,28 @@ export function DungeonTab() {
   // These need the off-chain game_authority signature, so they go through the
   // /api/cosign endpoints and submit via useTransact's versionedTx path.
 
-  const handleAttackRoom = async (reportPhase: (p: TxPhase) => void) => {
+  // One co-signed attack, or a batched attack_multi (2-5) — one roll, one tx.
+  const handleAttack = async (reportPhase: (p: TxPhase) => void) => {
     if (!ownerStr) throw new Error("Wallet not connected");
-    const versionedTx = await requestCoSign("/api/cosign/dungeon/attack", {
-      owner: ownerStr,
-    });
+    const count = effectiveAttacks;
+    const versionedTx =
+      count > 1
+        ? await requestCoSign("/api/cosign/dungeon/attack-multi", {
+            attackCount: count,
+          })
+        : await requestCoSign("/api/cosign/dungeon/attack");
     return transact.mutateAsync({
       versionedTx,
       invalidateKeys: [["dungeonRun"], ["player"]],
-      successMessage: "Room cleared!",
+      successMessage:
+        count > 1 ? `Struck ${count}× — room cleared!` : "Room cleared!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleInteract = async (reportPhase: (p: TxPhase) => void) => {
     if (!ownerStr) throw new Error("Wallet not connected");
-    const versionedTx = await requestCoSign("/api/cosign/dungeon/interact", {
-      owner: ownerStr,
-    });
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/interact");
     return transact.mutateAsync({
       versionedTx,
       invalidateKeys: [["dungeonRun"], ["player"]],
@@ -257,7 +267,6 @@ export function DungeonTab() {
   ) => {
     if (!ownerStr) throw new Error("Wallet not connected");
     const versionedTx = await requestCoSign("/api/cosign/dungeon/choose-relic", {
-      owner: ownerStr,
       relicId,
     });
     return transact.mutateAsync({
@@ -331,15 +340,38 @@ export function DungeonTab() {
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-3">
+            <div className="flex flex-wrap items-start justify-center gap-3">
               {run.roomType === RoomType.Combat ? (
-                <TxButton
-                  onClick={handleAttackRoom}
-                  className="px-6"
-                  disabled={playerStamina < roomStaminaCost}
-                >
-                  {room.icon} Attack Room
-                </TxButton>
+                <div className="flex flex-col items-center gap-2">
+                  {maxAttacks > 1 && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-text-muted">Strikes:</span>
+                      {Array.from({ length: maxAttacks }, (_, i) => i + 1).map(
+                        (n) => (
+                          <button
+                            key={n}
+                            onClick={() => setAttackCount(n)}
+                            className={`h-6 w-6 rounded text-xs transition-colors ${
+                              effectiveAttacks === n
+                                ? "bg-amber-600 text-white"
+                                : "border border-zinc-700 text-text-muted hover:border-zinc-500"
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                  <TxButton
+                    onClick={handleAttack}
+                    className="px-6"
+                    disabled={playerStamina < effectiveAttacks * roomStaminaCost}
+                  >
+                    {room.icon} Attack
+                    {effectiveAttacks > 1 ? ` ×${effectiveAttacks}` : " Room"}
+                  </TxButton>
+                </div>
               ) : (
                 <TxButton onClick={handleInteract} className="px-6">
                   {room.icon} Resolve Room
@@ -352,11 +384,13 @@ export function DungeonTab() {
                 Claim &amp; Exit
               </TxButton>
             </div>
-            {run.roomType === RoomType.Combat && playerStamina < roomStaminaCost && (
-              <div className="text-center text-[11px] text-red-400">
-                Not enough stamina to attack ({playerStamina}/{roomStaminaCost})
-              </div>
-            )}
+            {run.roomType === RoomType.Combat &&
+              playerStamina < effectiveAttacks * roomStaminaCost && (
+                <div className="text-center text-[11px] text-red-400">
+                  Not enough stamina to attack ({playerStamina}/
+                  {effectiveAttacks * roomStaminaCost})
+                </div>
+              )}
           </>
         );
     }

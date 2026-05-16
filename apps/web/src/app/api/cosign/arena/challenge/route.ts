@@ -11,14 +11,13 @@ import { gameAuthorityKeypair, serverClient } from "@/lib/server/game-authority"
 import { gameEnginePda, getArenaLoadout } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { findMatch } from "@/lib/server/matchmaker";
-import { coSignResponse, fail, parseOwnerBody } from "@/lib/server/route-helpers";
+import { coSignResponse, fail, parseSessionBody } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
 
 const DEFAULT_SEASON_ID = 1;
 
 interface ChallengeRequest {
-  owner?: string;
   seasonId?: number;
 }
 
@@ -33,7 +32,7 @@ export async function POST(req: Request) {
   const limited = rateLimited(req);
   if (limited) return limited;
 
-  const parsed = await parseOwnerBody<ChallengeRequest>(req);
+  const parsed = await parseSessionBody<ChallengeRequest>(req);
   if ("error" in parsed) return parsed.error;
   const { owner, body } = parsed;
 
@@ -45,18 +44,19 @@ export async function POST(req: Request) {
   const client = serverClient();
   const gameEngine = gameEnginePda();
 
-  const season = await client.fetchArenaSeason(seasonId);
+  // The season fetch and matchmaking are independent — run them together.
+  const [season, matchOrError] = await Promise.all([
+    client.fetchArenaSeason(seasonId),
+    findMatch(seasonId, owner).catch((e: unknown) =>
+      e instanceof Error ? e : new Error("matchmaking failed"),
+    ),
+  ]);
   if (!season?.account) return fail("arena season not found", 409);
   if (!isSeasonActive(season.account)) {
     return fail("the arena season is not active", 409);
   }
-
-  let match;
-  try {
-    match = await findMatch(seasonId, owner);
-  } catch (e) {
-    return fail(e instanceof Error ? e.message : "matchmaking failed", 409);
-  }
+  if (matchOrError instanceof Error) return fail(matchOrError.message, 409);
+  const match = matchOrError;
 
   const challengerPlayer = derivePlayerPda(gameEngine, owner)[0];
   const defenderPlayer = derivePlayerPda(gameEngine, match.defenderWallet)[0];
