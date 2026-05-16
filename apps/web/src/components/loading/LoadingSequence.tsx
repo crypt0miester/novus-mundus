@@ -21,7 +21,7 @@ export function LoadingSequence({
   completedKeys,
   children,
 }: LoadingSequenceProps) {
-  // Upgrade to tier-aware labels after hydration (SSR always gets tier-0)
+  // Upgrade to act-aware labels after hydration (SSR always gets act 0)
   const [steps, setSteps] = useState<readonly LoadingStep[]>(initialSteps);
   useEffect(() => {
     if (screen && TIERED[screen]) {
@@ -127,11 +127,11 @@ export function LoadingSequence({
   );
 }
 
-// ────────────────────────────────────────────────────────
-// Tiered loading step labels
-// Index: [free, bronze, silver, gold, legendary]
-// ────────────────────────────────────────────────────────
-
+/**
+ * Act-keyed loading step labels. The tone escalates with the player's
+ * narrative act, grim at the start of the climb and grand once it is earned.
+ * Index maps to the act: [act 0, act 1, act 2, act 3, acts 4-5].
+ */
 type TieredStep = { key: string; labels: readonly [string, string, string, string, string] };
 
 const TIERED: Record<string, readonly TieredStep[]> = {
@@ -178,18 +178,19 @@ const TIERED: Record<string, readonly TieredStep[]> = {
   ],
 };
 
-import { getCachedTier } from "@/lib/hooks/useTierTheme";
+import { getCachedAct } from "@/lib/narrative";
 
-/** Get loading steps for a screen. Always returns tier-0 labels to avoid hydration mismatch.
- *  LoadingSequence upgrades to the cached tier after mount. */
+/** Get loading steps for a screen. Always returns the act-0 labels to avoid
+ *  hydration mismatch. LoadingSequence upgrades to the cached act after mount. */
 export function getLoadingSteps(screen: keyof typeof TIERED): LoadingStep[] {
   return TIERED[screen].map((s) => ({ key: s.key, label: s.labels[0] }));
 }
 
-/** Resolve tier-aware labels (client-only, post-hydration) */
+/** Resolve act-aware labels (client-only, post-hydration). Acts run 0-5 onto
+ *  five label pools; the Crown act (5) shares the top pool with act 4. */
 function getTieredSteps(screen: string, steps: readonly TieredStep[]): LoadingStep[] {
-  const tier = getCachedTier();
-  const idx = Math.min(Math.max(tier, 0), 4);
+  const act = getCachedAct();
+  const idx = Math.min(Math.max(act, 0), 4);
   return steps.map((s) => ({ key: s.key, label: s.labels[idx] }));
 }
 

@@ -1,0 +1,94 @@
+{
+  "questions": [
+    {
+      "prompt": "What was the great civilization that ruled the world before the Sundering?",
+      "options": ["Aeondral", "Novus Mundus", "Korthain", "Valdenmoor"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What crystallized energy did the old world mine and build its empires upon?",
+      "options": ["Novis", "Salvage", "Produce", "Cash"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What is the name of the catastrophe that broke the old world apart?",
+      "options": ["The Sundering", "The Crowning", "The Ashfall", "The Reborning"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "Beneath which mountains did the Sundering's first tremor begin?",
+      "options": ["The Korthain Mountains", "The Jade Straits", "Ashenmere", "Duskfeld"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "For how many days did the earth groan before the world split open?",
+      "options": ["Seven", "Three", "Twelve", "Forty"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What is the most valuable substance in the trade of Novus Mundus?",
+      "options": ["NOVI", "Cash", "Weapons", "Produce"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "NOVI fused permanently into a building or weapon is called what?",
+      "options": ["Locked NOVI", "Reserved NOVI", "Raw NOVI", "Bonded salvage"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What are the political units of Novus Mundus — bound by oath and ambition — called?",
+      "options": ["Houses", "Kingdoms", "Guilds", "Courts"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "According to the lore, what is scarcer than NOVI itself?",
+      "options": ["Trust", "Produce", "Weapons", "Vehicles"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What is the name of a kingdom's first, rawest age?",
+      "options": ["The Age of Ashes", "The Age of Crowns", "The Age of Dominion", "The Age of Aeondral"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "On the danger spectrum of the bestiary, what tier is a Wyvern?",
+      "options": ["Rare", "Common", "Epic", "Legendary"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "Which creatures burrowed into the world's crust for eons and were stirred by the Sundering?",
+      "options": ["Ancient Wyrms", "Dragons", "Troll Warlords", "Goblin Raiders"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "Why do the smiths of Novus Mundus restore old weapons rather than forge new ones?",
+      "options": [
+        "Ancient metallurgy outmatches anything they could make",
+        "NOVI is far too rare to spend on forging",
+        "The old guilds forbid new forging",
+        "New iron simply does not exist"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "What made the soil of the reborn world so absurdly fertile?",
+      "options": [
+        "Centuries of volcanic ash",
+        "Buried NOVI dust",
+        "Old-world fertilizer stores",
+        "The receding of the seas"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "The old scholars believed the Novis veins were not a resource, but a what?",
+      "options": [
+        "A circulatory system within the planet",
+        "A weapon left by the gods",
+        "A curse laid upon Aeondral",
+        "An endless, bottomless well"
+      ],
+      "correctIndex": 0
+    }
+  ]
+}

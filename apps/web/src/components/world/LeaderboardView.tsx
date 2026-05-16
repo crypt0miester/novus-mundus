@@ -6,8 +6,8 @@ import { useWorldPlayers, useWorldCities, useWorldTeams, useCitizenStatus } from
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { cn, shortenAddress } from "@/lib/utils";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
-import { calculateDefensivePower } from "@/lib/sdk";
-import type { PlayerAccount } from "@/lib/sdk";
+import { calculateDefensivePower } from "novus-mundus-sdk";
+import type { PlayerAccount } from "novus-mundus-sdk";
 
 const TABS = [
   { key: "networth", label: "Networth" },

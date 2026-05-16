@@ -9,7 +9,7 @@ import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { cn, shortenAddress } from "@/lib/utils";
 import { useDomainName } from "@/lib/hooks/useDomainName";
-import { isNullPubkey, calculateDefensivePower } from "@/lib/sdk";
+import { isNullPubkey, calculateDefensivePower } from "novus-mundus-sdk";
 
 const TIER_LABELS = ["Rookie", "Expert", "Epic", "Legendary"] as const;
 const TIER_VARIANTS = ["default", "info", "epic", "legendary"] as const;

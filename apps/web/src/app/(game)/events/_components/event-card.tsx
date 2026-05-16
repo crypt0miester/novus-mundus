@@ -23,7 +23,7 @@ import {
   createClaimPrizeInstruction,
   type EventAccount,
   type EventParticipation,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const STATUS_LABEL: Record<number, string> = {
   [EventStatus.Pending]: "Upcoming",

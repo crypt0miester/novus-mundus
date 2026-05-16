@@ -59,6 +59,43 @@ export function rollNextRoomType(rng: Rng, t: DungeonTemplateAccount): number {
   ]);
 }
 
+/**
+ * First room type for a fresh dungeon entry. Unlike the mid-run rolls, the
+ * `enter` instruction has no game_authority signer — this is an RNG oracle,
+ * not a co-signed result. The value is advisory; the program independently
+ * re-validates it is a RoomType (0-4). Non-deterministic: there is no GET/POST
+ * pair to reconcile, so each entry rolls fresh.
+ */
+export function rollEnterRoom(
+  template: DungeonTemplateAccount,
+  owner: string,
+  dungeonId: number,
+): number {
+  return rollNextRoomType(
+    new Rng(RNG_ROOM, owner, `enter:${dungeonId}:${Date.now()}`),
+    template,
+  );
+}
+
+/**
+ * First room type for a resumed run. Like `rollEnterRoom`, the `resume`
+ * instruction has no game_authority signer — advisory only. Seeded off the
+ * run's checkpoint + resume count so a retry of one resume reproduces the roll.
+ */
+export function rollResumeRoom(
+  run: DungeonRunAccount,
+  template: DungeonTemplateAccount,
+): number {
+  return rollNextRoomType(
+    new Rng(
+      RNG_ROOM,
+      run.player.toBase58(),
+      `resume:${run.lastCheckpoint}:${run.resumeCount}`,
+    ),
+    template,
+  );
+}
+
 export interface AttackRolls {
   nextRoomType: number;
   doubleStrike: boolean;

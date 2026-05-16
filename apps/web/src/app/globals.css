@@ -325,3 +325,55 @@ body[data-tier="4"] .tier-badge {
   font-variant-numeric: tabular-nums;
 }
 
+/* The Cairn — the guiding orb (PLAYER_JOURNEY_GAMEPLAN.md §4).
+   Colour tracks the estate's mood; brightness tracks the climb.
+   Casts a shadow in the light theme, throws light in the dark — inverted,
+   so the stone never disappears into the page. */
+
+@keyframes cairn-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.035); }
+}
+
+.cairn-orb {
+  --cairn-color: #6f6557;
+  --cairn-lit: 0;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 36% 31%,
+    color-mix(in srgb, var(--cairn-color) 80%, white) 0%,
+    var(--cairn-color) 47%,
+    color-mix(in srgb, var(--cairn-color) 62%, black) 100%
+  );
+  /* light theme (default): the stone casts a shadow */
+  box-shadow:
+    0 calc(3px + 5px * var(--cairn-lit)) calc(7px + 13px * var(--cairn-lit)) -2px
+      rgba(38, 30, 18, 0.5),
+    inset 0 2px 5px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.28);
+  filter:
+    saturate(calc(0.4 + 0.6 * var(--cairn-lit)))
+    brightness(calc(0.84 + 0.32 * var(--cairn-lit)));
+  animation: cairn-pulse 6s ease-in-out infinite;
+  transition: background 1s ease, box-shadow 1s ease, filter 1s ease;
+}
+
+/* dark theme: the stone throws light instead of shadow */
+body[data-theme="dark"] .cairn-orb {
+  box-shadow:
+    0 0 calc(9px + 34px * var(--cairn-lit)) calc(1px + 5px * var(--cairn-lit))
+      color-mix(in srgb, var(--cairn-color) 70%, transparent),
+    inset 0 2px 6px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 7px rgba(0, 0, 0, 0.42);
+}
+
+.cairn-orb[data-mood="raw"]        { --cairn-color: #6f6557; }
+.cairn-orb[data-mood="working"]    { --cairn-color: #b07d2b; }
+.cairn-orb[data-mood="thriving"]   { --cairn-color: #e0aa3c; }
+.cairn-orb[data-mood="threatened"] { --cairn-color: #a23a2c; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cairn-orb { animation: none; }
+}
+

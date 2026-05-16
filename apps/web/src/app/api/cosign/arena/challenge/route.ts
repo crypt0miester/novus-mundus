@@ -29,7 +29,7 @@ interface ChallengeRequest {
  * resolved opponent for display.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const parsed = await parseSessionBody<ChallengeRequest>(req);

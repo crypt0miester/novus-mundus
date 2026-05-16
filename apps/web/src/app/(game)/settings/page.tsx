@@ -16,7 +16,7 @@ import {
   createSetPlayerNameInstruction,
   createUpdatePlayerNameInstruction,
   createRemovePlayerNameInstruction,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { useSettings, type Explorer, type ThemePreference } from "@/lib/store/settings";
 import { TierSwitcher } from "@/components/layout/Sidebar";
 

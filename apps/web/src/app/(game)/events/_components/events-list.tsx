@@ -9,14 +9,14 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useAccountStore } from "@/lib/store/accounts";
 import {
   AccountKey,
-  NOVUS_PROGRAM_ID,
+  PROGRAM_ID as NOVUS_PROGRAM_ID,
   parseEvent,
   parseEventParticipation,
   deriveEventParticipationPda,
   EventStatus,
   type EventAccount,
   type EventParticipation,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { EventCard } from "./event-card";
 
 type StatusFilter = "active" | "history";

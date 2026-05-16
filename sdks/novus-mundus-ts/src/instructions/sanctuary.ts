@@ -146,7 +146,7 @@ export interface SpeedupMeditationAccounts {
 
 export interface SpeedupMeditationParams {
   /** Speedup tier: 1 = 1 hour (3000 gems), 2 = 6 hours (18000 gems) */
-  speedupTier: number;
+  speedupTier: 1 | 2;
 }
 
 /** ~5,000 CU */

@@ -1,0 +1,84 @@
+{
+  "questions": [
+    {
+      "prompt": "A unit's wound has begun to fester and rot. What do you order?",
+      "options": [
+        "Cleanse it and pack it with boiled brimroot",
+        "Bind it tight and leave it be",
+        "Sear it shut at once",
+        "Let the rot run its course"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A soldier collapses on the march under the Sunward Reach heat. The remedy?",
+      "options": [
+        "Shade, rest, and salted water",
+        "A brisk walk to revive them",
+        "Strong drink to steady them",
+        "Cold immersion in the nearest river"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "Frostbite takes a scout's hand on a Duskfeld campaign. How is it treated?",
+      "options": [
+        "Warm the hand slowly — never by open fire",
+        "Plunge it into the hottest water to hand",
+        "Rub it briskly with snow",
+        "Amputate without delay"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A crushing blow left no broken skin, only deep bruising and swelling. What now?",
+      "options": [
+        "Bind the limb and rest it",
+        "Massage the swelling away",
+        "March it off before it stiffens",
+        "Open the bruise to drain it"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A goblin blade left a shallow but filthy cut. The correct order of care?",
+      "options": [
+        "Flush the wound clean, then close it",
+        "Close it fast to stop the bleeding",
+        "Leave it open to the air",
+        "Pack it with field dirt to clot"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A unit has gone three days without sleep and is failing. The remedy?",
+      "options": [
+        "Enforced rest — and no stimulants",
+        "A double ration of strong tea",
+        "Heavier drilling to harden them",
+        "Cold water poured on the hour"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A smith is burned at the Forge furnace. The first care?",
+      "options": [
+        "Cool the burn with clean water, then dress it",
+        "Smear it thickly with grease",
+        "Wrap it tightly while still hot",
+        "Leave it uncovered beside the fire"
+      ],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "A wyvern's claw left a wound that swells and runs to fever. What is done?",
+      "options": [
+        "Draw the venom, then fever-bark tea",
+        "Cauterize the wound and hope",
+        "Bleed the patient to cool the fever",
+        "Bind it and wait for the swelling to pass"
+      ],
+      "correctIndex": 0
+    }
+  ]
+}

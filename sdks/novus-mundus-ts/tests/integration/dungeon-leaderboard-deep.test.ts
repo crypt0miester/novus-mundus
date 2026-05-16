@@ -27,7 +27,6 @@ import {
   createCreateDungeonTemplateInstruction,
   createCreateLeaderboardInstruction,
   createClaimLeaderboardPrizeInstruction,
-  createEnterDungeonInstruction,
   createAttackInstruction,
   createAttackMultiInstruction,
   createInteractInstruction,
@@ -47,6 +46,7 @@ import {
   PlayerFactory,
   type TestPlayer,
 } from '../fixtures/players';
+import { enterDungeon } from '../fixtures/dungeon';
 import {
   sendTransaction,
   expectTransactionToFail,
@@ -145,16 +145,11 @@ async function tryCompleteDungeon(
   weekNumber?: number,
 ): Promise<boolean> {
   try {
-    await sendTransaction(
-      ctx.svm,
-      new Transaction().add(
-        createEnterDungeonInstruction(
-          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMint.publicKey },
-          { templateId, firstRoomType: 0, heroSpecialization: 0 },
-        ),
-      ),
-      [player.keypair],
-    );
+    await enterDungeon(ctx, player, heroMint.publicKey, {
+      templateId,
+      firstRoomType: 0,
+      heroSpecialization: 0,
+    });
 
     // Spam attackMulti — max attackCount=5, deterministic crit + doubleStrike.
     // Most aggressive damage profile we can request.

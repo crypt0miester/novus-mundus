@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  * and a retry reproduces it. On-chain timing limits are enforced by the program.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const session = requireSession(req);

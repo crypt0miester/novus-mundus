@@ -7,7 +7,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType, GameEngine},
+    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
     helpers::dungeon::{
         calculate_unit_power,
         calculate_dungeon_damage,
@@ -42,7 +42,7 @@ use crate::{
         calculate_relic_hero_bonus,
     },
     logic::safe_math::apply_bp,
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_game_authority},
     emit,
     events::{DungeonRoomCleared, DungeonFloorCompleted, DungeonFailed},
 };
@@ -111,15 +111,7 @@ pub fn process_attacks(
     }
 
     // 4a. Validate game_authority against the player's kingdom GameEngine
-    {
-        let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-        if game_engine_account.address() != &player.game_engine {
-            return Err(GameError::KingdomMismatch.into());
-        }
-        if game_authority.address() != &game_engine.game_authority {
-            return Err(GameError::Unauthorized.into());
-        }
-    }
+    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
 
     // 5. Load and validate dungeon run using load_checked_mut (PDA derived from player_account)
     let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;

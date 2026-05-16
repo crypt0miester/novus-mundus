@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { usePlayer } from "./usePlayer";
 import { useEstate } from "./useEstate";
+import { buildingFraming } from "@/lib/narrative";
 
 // ─── Building IDs (matches Rust BuildingType enum) ───────────
 export const BuildingId = {
@@ -16,7 +17,7 @@ export const BuildingName: Record<number, string> = {
   0: "Mansion", 1: "Barracks", 2: "Workshop", 3: "Vault", 4: "Dock",
   5: "Forge", 6: "Market", 7: "Academy", 8: "Arena", 9: "Sanctuary",
   10: "Observatory", 11: "Treasury", 12: "Citadel", 13: "Camp",
-  14: "Mine", 15: "Catacombs", 16: "Farm", 17: "Stables", 18: "Infirmary",
+  14: "Mine", 15: "Catacombs", 16: "Farm", 17: "TransportBay", 18: "Infirmary",
 };
 
 // ─── Extension flags (matches SDK ExtensionFlags) ────────────
@@ -146,7 +147,8 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
   ],
   [FEATURES.HERO_LOCK]: [
     { estate: true },
-    { building: { type: BuildingId.Citadel, level: 1 } },
+    // hero/lock.rs gates on Sanctuary (require_sanctuary), not Citadel.
+    { building: { type: BuildingId.Sanctuary, level: 1 } },
     { extension: Ext.RALLY },
   ],
   [FEATURES.HERO_LEVEL_UP]: [
@@ -204,11 +206,43 @@ const EXT_NAMES: Record<number, string> = {
   [Ext.TEAM]: "Team Extension",
 };
 
+// Extensions are earned through play, not bought. The chain is fixed on-chain
+// (Team → Rally → Heroes), so each one points at the action that unlocks it.
+const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: string }> = {
+  [Ext.RESEARCH]: {
+    label: "Begin a study",
+    href: "/estate?tab=research",
+    narrative: "The Academy stands idle. Begin your first study there and the way opens.",
+  },
+  [Ext.INVENTORY]: {
+    label: "Trade at the Shop",
+    href: "/shop",
+    narrative: "A first trade with the Caravan opens its stores — buy anything from the Shop.",
+  },
+  [Ext.TEAM]: {
+    label: "Join a Team",
+    href: "/team",
+    narrative: "This is past the reach of one pair of hands. Stand with a House first.",
+  },
+  [Ext.RALLY]: {
+    label: "Run a Rally",
+    href: "/team",
+    narrative: "A war-band must rally before this opens — join your House to a Rally on the Team page.",
+  },
+  [Ext.HEROES]: {
+    label: "Lock your first hero",
+    href: "/combat?tab=heroes",
+    narrative: "Binding your first hero to a slot opens the rest of the hero arts.",
+  },
+};
+
 // ─── Result types ────────────────────────────────────────────
 export interface MissingRequirement {
   label: string;
   detail: string;
   href: string;
+  /** The Cairn's framing of what the climb is missing — see §7.5. */
+  narrative: string;
 }
 
 interface GateResult {
@@ -238,15 +272,26 @@ function evaluateReq(
   playerAccount: any,
 ): MissingRequirement | null {
   if (req.estate && !hasEstate) {
-    return { label: "Create an Estate", detail: "An estate is required for this action", href: "/estate" };
+    return {
+      label: "Create an Estate",
+      detail: "An estate is required for this action",
+      href: "/estate",
+      narrative:
+        "There is no holding here yet. The ground must be claimed before anything can be built on it.",
+    };
   }
   if (req.building && buildings) {
     if (!hasBuildingAtLevel(buildings, req.building.type, req.building.level)) {
       const name = BuildingName[req.building.type] ?? `Building #${req.building.type}`;
+      const framing = buildingFraming(req.building.type);
+      const standing = hasBuildingAtLevel(buildings, req.building.type, 1);
       return {
         label: `Build ${name} (Lv${req.building.level})`,
         detail: `Requires ${name} at level ${req.building.level} or higher`,
         href: "/estate",
+        narrative: standing
+          ? `${framing.line} It must rise to level ${req.building.level} first.`
+          : `${framing.line} It does not stand yet.`,
       };
     }
   }
@@ -256,14 +301,28 @@ function evaluateReq(
       label: `Build ${name} (Lv${req.building.level})`,
       detail: `Requires estate with ${name}`,
       href: "/estate",
+      narrative: `${buildingFraming(req.building.type).line} It does not stand yet.`,
     };
   }
   if (req.extension !== undefined && !(extensions & req.extension)) {
     const extName = EXT_NAMES[req.extension] ?? `Extension ${req.extension}`;
-    return { label: `Unlock ${extName}`, detail: `Requires ${extName}`, href: "/shop" };
+    const guide = EXT_GUIDANCE[req.extension];
+    return {
+      label: guide?.label ?? `Unlock ${extName}`,
+      detail: `Requires ${extName}`,
+      href: guide?.href ?? "/shop",
+      narrative:
+        guide?.narrative ?? "This way is shut for now. It opens further along the climb.",
+    };
   }
   if (req.team && !hasTeamFlag) {
-    return { label: "Join a Team", detail: "Team membership is required", href: "/team" };
+    return {
+      label: "Join a Team",
+      detail: "Team membership is required",
+      href: "/team",
+      narrative:
+        "This is past the reach of one pair of hands. It waits on a House at your back.",
+    };
   }
   if (req.researchFlag && playerAccount) {
     // Research flags are stored as BN — check truthy
@@ -274,6 +333,8 @@ function evaluateReq(
         label: `Research ${flagName}`,
         detail: `Requires ${flagName} research to be completed`,
         href: "/estate?tab=research",
+        narrative:
+          "The work is known, but the knowing of it is not. The Academy must dig it back to the light before the holding can put it to use.",
       };
     }
   }
@@ -294,7 +355,19 @@ export function useFeatureGate(feature: string): GateResult {
 
     const player = playerData?.account;
     if (!player) {
-      return { allowed: false, missing: [{ label: "Create a Player", detail: "You need to create a player first", href: "/dashboard" }], loading };
+      return {
+        allowed: false,
+        missing: [
+          {
+            label: "Create a Player",
+            detail: "You need to create a player first",
+            href: "/dashboard",
+            narrative:
+              "No one has come up the road to claim this. The climb begins with a lord to make it.",
+          },
+        ],
+        loading,
+      };
     }
 
     const hasEstate = !!estateData?.account;
@@ -322,7 +395,19 @@ function usePageGate(features: string[]): GateResult {
     const loading = playerLoading || estateLoading;
     const player = playerData?.account;
     if (!player) {
-      return { allowed: false, missing: [{ label: "Create a Player", detail: "You need to create a player first", href: "/dashboard" }], loading };
+      return {
+        allowed: false,
+        missing: [
+          {
+            label: "Create a Player",
+            detail: "You need to create a player first",
+            href: "/dashboard",
+            narrative:
+              "No one has come up the road to claim this. The climb begins with a lord to make it.",
+          },
+        ],
+        loading,
+      };
     }
 
     const hasEstate = !!estateData?.account;

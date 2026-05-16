@@ -3,8 +3,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCastle } from "@/lib/hooks/useCastle";
+import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
+import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { systemFraming } from "@/lib/narrative";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
@@ -15,12 +18,15 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
-import { bpsToPercent, formatTime } from "@/lib/utils";
 import {
-  deriveCastlePda,
-  derivePlayerPda,
-  deriveGarrisonPda,
+  TripleCountInput,
+  DEFENSIVE_UNIT_LABELS,
+  WEAPON_LABELS,
+} from "@/components/shared/TripleCountInput";
+import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useTransitionStore } from "@/lib/store/transition";
+import { bpsToPercent, formatTime, shortenAddress } from "@/lib/utils";
+import {
   deriveCourtPda,
   createClaimVacantCastleInstruction,
   createJoinGarrisonInstruction,
@@ -38,16 +44,26 @@ import {
   parseGarrisonContribution,
   parsePlayer,
   AccountKey,
-  NOVUS_PROGRAM_ID,
-  isNullPubkey,
+  PROGRAM_ID as NOVUS_PROGRAM_ID,
   type CourtPositionAccount,
   type GarrisonContributionAccount,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import bs58 from "bs58";
 
 const CASTLE_TIERS = ["Outpost", "Keep", "Stronghold", "Fortress", "Citadel"];
 const CASTLE_STATUS = ["Vacant", "Contest", "Protected", "Vulnerable", "Transitioning"];
 const COURT_POSITIONS = ["Advisor", "Scholar", "Guardian", "Treasurer", "Marshal"];
+
+// The condition of the seat, told as a line rather than a status word.
+const CASTLE_STATUS_NARRATION: Record<number, string> = {
+  0: "The seat stands empty. A banner could be planted here today.",
+  1: "The seat is contested — blades are already in the field for it.",
+  2: "The seat is held and under protection. No one may move against it yet.",
+  3: "The seat is held, but its protection has lapsed. It can be taken.",
+  4: "The seat is changing hands. Wait for the dust to settle.",
+};
+
+const CASTLE_FRAMING = systemFraming("castle");
 const UPGRADE_TYPES = [
   { value: 1, label: "Fortification" },
   { value: 2, label: "Treasury" },
@@ -73,10 +89,35 @@ export function CastleTab() {
   const castlePda = castleData?.pubkey ?? null;
 
   const [appointPosition, setAppointPosition] = useState(0);
-  const [appointeeAddress, setAppointeeAddress] = useState("");
+  const [appointeeWallet, setAppointeeWallet] = useState("");
   const [resignPosition, setResignPosition] = useState(0);
   const [upgradeType, setUpgradeType] = useState(1);
   const [driveBy, setDriveBy] = useState(false);
+
+  // Garrison contribution the player commits when joining (on-chain order).
+  const [garrisonUnits, setGarrisonUnits] = useState<[number, number, number]>([0, 0, 0]);
+  const [garrisonWeapons, setGarrisonWeapons] = useState<[number, number, number]>([0, 0, 0]);
+  const [garrisonHeroSlot, setGarrisonHeroSlot] = useState(NO_HERO_SLOT);
+  const availUnits: [number, number, number] = [
+    player?.defensiveUnit1?.toNumber?.() ?? 0,
+    player?.defensiveUnit2?.toNumber?.() ?? 0,
+    player?.defensiveUnit3?.toNumber?.() ?? 0,
+  ];
+  const availWeapons: [number, number, number] = [
+    player?.meleeWeapons?.toNumber?.() ?? 0,
+    player?.rangedWeapons?.toNumber?.() ?? 0,
+    player?.siegeWeapons?.toNumber?.() ?? 0,
+  ];
+
+  // The player's locked heroes (slots 0-2); one may optionally join the garrison.
+  const lockedHeroes = useLockedHeroes();
+
+  // The king's House — the court is drawn from its sworn members.
+  const houseKey =
+    player?.team && player.team.toBase58() !== "11111111111111111111111111111111"
+      ? player.team
+      : null;
+  const { data: houseMembers } = useTeamMembers(houseKey);
 
   // Court roster — court positions are enumerable: 5 fixed slots per castle.
   // Each entry carries the holder's player PDA + resolved owner wallet.
@@ -86,6 +127,11 @@ export function CastleTab() {
   // Garrison roster — fetched via getProgramAccounts filtered on the castle pubkey.
   const [garrisonRoster, setGarrisonRoster] = useState<
     { account: GarrisonContributionAccount; ownerWallet: PublicKey | null }[]
+  >([]);
+  // House members eligible for court appointment — sworn members resolved to
+  // their owner wallets, with the king's own wallet excluded.
+  const [courtCandidates, setCourtCandidates] = useState<
+    { playerPda: PublicKey; wallet: PublicKey }[]
   >([]);
 
   // Resolve player-PDA → owner wallet for a batch of player PDAs.
@@ -173,6 +219,33 @@ export function CastleTab() {
     };
   }, [castlePda?.toBase58(), connection, transact.isPending]);
 
+  // Resolve the king's House members to owner wallets for the court picker.
+  // The king cannot appoint themselves, so their own wallet is dropped.
+  useEffect(() => {
+    if (!houseMembers || houseMembers.length === 0 || !publicKey) {
+      setCourtCandidates([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const memberPdas = houseMembers.map((m) => m.account.player);
+      const wallets = await resolveWallets(memberPdas);
+      if (cancelled) return;
+      const candidates: { playerPda: PublicKey; wallet: PublicKey }[] = [];
+      for (const pda of memberPdas) {
+        const wallet = wallets.get(pda.toBase58());
+        if (!wallet || wallet.equals(publicKey)) continue;
+        candidates.push({ playerPda: pda, wallet });
+      }
+      setCourtCandidates(candidates);
+    })().catch(() => {
+      if (!cancelled) setCourtCandidates([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [houseMembers, publicKey?.toBase58(), connection]);
+
   const isKing = useMemo(() => {
     if (!castle || !publicKey || !castle.hasKing) return false;
     return castle.king.equals(publicKey);
@@ -190,42 +263,46 @@ export function CastleTab() {
   const handleClaimVacant = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [castlePda] = deriveCastlePda(ge, cityId, castleId);
     const ix = createClaimVacantCastleInstruction({
-      player: playerPda,
-      castle: castlePda,
+      castleId,
+      cityId,
       gameEngine: ge,
-      owner: publicKey,
+      claimer: publicKey,
     });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["castle"], ["player"]],
       successMessage: "Castle claimed!",
       onPhase: reportPhase,
-    }).then((r) => r.signature);
+    }).then((r) => {
+      useTransitionStore.getState().triggerActBeat({ act: 5, phase: "coronation" });
+      return r.signature;
+    });
   };
 
   const handleJoinGarrison = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0)) {
+      throw new Error("Choose units or weapons to contribute");
+    }
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [castlePda] = deriveCastlePda(ge, cityId, castleId);
-    const [garrisonPda] = deriveGarrisonPda(castlePda, playerPda);
+    const hero = garrisonHeroSlot < 3 ? lockedHeroes[garrisonHeroSlot] : null;
     const ix = createJoinGarrisonInstruction(
+      { owner: publicKey, gameEngine: ge, cityId, castleId },
       {
-        player: playerPda,
-        castle: castlePda,
-        garrison: garrisonPda,
-        gameEngine: ge,
-        owner: publicKey,
+        units: garrisonUnits,
+        weapons: garrisonWeapons,
+        heroSlot: hero ? garrisonHeroSlot : NO_HERO_SLOT,
+        heroMint: hero?.mint,
+        heroTemplateId: hero?.templateId,
       },
-      { units: 10 }
     );
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Joined garrison!",
+      successMessage: hero
+        ? `Joined garrison with hero ${hero.name}!`
+        : `Joined garrison with ${garrisonUnits.reduce((a, b) => a + b, 0).toLocaleString()} units!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -233,13 +310,9 @@ export function CastleTab() {
   const handleLeaveGarrison = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [castlePda] = deriveCastlePda(ge, cityId, castleId);
-    const [garrisonPda] = deriveGarrisonPda(castlePda, playerPda);
     const ix = createLeaveGarrisonInstruction({
-      player: playerPda,
-      castle: castlePda,
-      garrison: garrisonPda,
+      castleId,
+      cityId,
       gameEngine: ge,
       owner: publicKey,
     });
@@ -254,7 +327,11 @@ export function CastleTab() {
   const handleAppointCourt = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const appointeePubkey = new PublicKey(appointeeAddress.trim());
+    if (!appointeeWallet) throw new Error("Choose a House member to appoint");
+    const appointeePubkey = new PublicKey(appointeeWallet);
+    if (appointeePubkey.equals(publicKey)) {
+      throw new Error("A king cannot appoint himself to his own court");
+    }
     const ix = createAppointCourtInstruction(
       {
         king: publicKey,
@@ -433,13 +510,23 @@ export function CastleTab() {
   if (!hasTeam) {
     return (
       <div className="card text-center">
-        <p className="text-text-muted">You need to join a team before you can interact with castles.</p>
+        <p className="text-text-muted">
+          A seat is held by a House, not a lone hand. Swear to a House before you
+          contest a castle.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-text-primary">
+          {CASTLE_FRAMING.title}
+        </h2>
+        <p className="mt-1 text-xs italic text-text-muted">{CASTLE_FRAMING.line}</p>
+      </div>
+
       {/* Castle selector */}
       <div className="flex gap-1 rounded-lg bg-surface p-1">
         {[0, 1, 2].map((id) => (
@@ -487,6 +574,10 @@ export function CastleTab() {
                 />
               </div>
             </div>
+            <p className="mt-3 text-xs italic text-text-muted">
+              {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
+                "The condition of the seat is unclear."}
+            </p>
             {castle.hasKing && (
               <div className="mt-3 border-t border-zinc-800 pt-3">
                 <div className="text-xs text-text-muted">King</div>
@@ -531,25 +622,39 @@ export function CastleTab() {
             {isKing && (
               <div className="mt-4 space-y-2">
                 <h4 className="text-xs font-semibold text-text-muted">Appoint Court Member</h4>
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    value={appointPosition}
-                    onChange={(e) => setAppointPosition(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                  >
-                    {COURT_POSITIONS.map((pos, i) => (
-                      <option key={pos} value={i}>{pos}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={appointeeAddress}
-                    onChange={(e) => setAppointeeAddress(e.target.value)}
-                    placeholder="Appointee wallet address"
-                    className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-                  />
-                  <TxButton onClick={handleAppointCourt}>Appoint</TxButton>
-                </div>
+                {courtCandidates.length === 0 ? (
+                  <p className="text-xs italic text-text-muted">
+                    A court is your own people — a House must stand behind you
+                    first. Swear members to your House, then call them to court.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      value={appointPosition}
+                      onChange={(e) => setAppointPosition(Number(e.target.value))}
+                      className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                    >
+                      {COURT_POSITIONS.map((pos, i) => (
+                        <option key={pos} value={i}>{pos}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={appointeeWallet}
+                      onChange={(e) => setAppointeeWallet(e.target.value)}
+                      className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+                    >
+                      <option value="">Choose a House member…</option>
+                      {courtCandidates.map((c) => (
+                        <option key={c.wallet.toBase58()} value={c.wallet.toBase58()}>
+                          {shortenAddress(c.wallet.toBase58(), 4)}
+                        </option>
+                      ))}
+                    </select>
+                    <TxButton onClick={handleAppointCourt} disabled={!appointeeWallet}>
+                      Appoint
+                    </TxButton>
+                  </div>
+                )}
               </div>
             )}
 
@@ -641,10 +746,62 @@ export function CastleTab() {
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
               Garrison Actions
             </h3>
-            <div className="flex flex-wrap gap-3">
-              <TxButton onClick={handleJoinGarrison} variant="secondary">
+            {/* Contribute units & weapons to the castle garrison */}
+            <div className="rounded-lg border border-zinc-800 p-3">
+              <h4 className="mb-2 text-xs font-semibold text-text-muted">Contribute to Garrison</h4>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Defensive Units
+              </div>
+              <TripleCountInput
+                labels={DEFENSIVE_UNIT_LABELS}
+                available={availUnits}
+                value={garrisonUnits}
+                onChange={setGarrisonUnits}
+              />
+              <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Weapons
+              </div>
+              <TripleCountInput
+                labels={WEAPON_LABELS}
+                available={availWeapons}
+                value={garrisonWeapons}
+                onChange={setGarrisonWeapons}
+              />
+              <div className="mt-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Hero
+                </div>
+                <select
+                  value={garrisonHeroSlot}
+                  onChange={(e) => setGarrisonHeroSlot(Number(e.target.value))}
+                  className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+                >
+                  <option value={NO_HERO_SLOT}>No hero</option>
+                  {lockedHeroes.map((h, i) =>
+                    h ? (
+                      <option key={i} value={i}>
+                        Slot {i}: {h.name}
+                      </option>
+                    ) : null,
+                  )}
+                </select>
+                {lockedHeroes.every((h) => h === null) && (
+                  <p className="mt-1 text-[10px] text-text-muted">
+                    Lock a hero in the Heroes tab to commit one.
+                  </p>
+                )}
+              </div>
+              <TxButton
+                onClick={handleJoinGarrison}
+                variant="secondary"
+                className="mt-3 w-full"
+                disabled={garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0)}
+              >
                 Join Garrison
               </TxButton>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-3">
               <TxButton onClick={handleLeaveGarrison} variant="danger">
                 Leave Garrison
               </TxButton>

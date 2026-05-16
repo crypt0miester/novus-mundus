@@ -24,10 +24,10 @@ import {
   parseResearchProgress,
   isResearching,
   getResearchLevel,
-} from "@/lib/sdk";
-import type { ResearchTemplateAccount } from "@/lib/sdk";
+} from "novus-mundus-sdk";
+import type { ResearchTemplateAccount } from "novus-mundus-sdk";
 
-// ─── Category / buff-type display maps ──────────────────────
+// Category / buff-type display maps
 const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
 const BUFF_NAMES: Record<number, string> = {

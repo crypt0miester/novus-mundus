@@ -3,7 +3,6 @@
   "packageManager": "bun@1.2.10",
   "workspaces": [
     "apps/*",
-    "packages/*",
     "sdks/novus-mundus-ts"
   ],
   "scripts": {
@@ -15,14 +14,14 @@
     "novus": "cd sdks/novus-mundus-ts && bun run cli/cli.ts"
   },
   "devDependencies": {
-    "chai": "^4.3.4",
-    "mocha": "^9.0.3",
-    "ts-mocha": "^10.0.0",
-    "@types/bn.js": "^5.1.0",
-    "@types/chai": "^4.3.0",
-    "@types/mocha": "^9.0.0",
-    "typescript": "^4.3.5",
-    "prettier": "^2.6.2",
-    "turbo": "^2"
+    "chai": "4.3.4",
+    "mocha": "9.0.3",
+    "ts-mocha": "10.0.0",
+    "@types/bn.js": "5.1.0",
+    "@types/chai": "4.3.0",
+    "@types/mocha": "9.0.0",
+    "typescript": "4.3.5",
+    "prettier": "2.6.2",
+    "turbo": "2.9.2"
   }
 }

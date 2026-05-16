@@ -12,7 +12,6 @@ import {
   useSubscriptionStatus,
   useDailyRewards,
 } from "@/lib/hooks/useDerived";
-import { useEstate } from "@/lib/hooks/useEstate";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
@@ -24,11 +23,9 @@ import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NoviRewards } from "@/components/shared/NoviRewards";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSequence";
-import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useTransact } from "@/lib/hooks/useTransact";
-import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
@@ -37,14 +34,13 @@ import {
   xpRequiredForLevel, levelProgressPercent,
   getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier,
   createClaimDailyRewardInstruction,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 export default function DashboardPage() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
   const { data: userData, isSuccess: userReady } = useUser();
   const { data: geData, isSuccess: geReady } = useGameEngine();
   const { data: lootData, isSuccess: lootReady } = useLoot();
-  const { data: estateData } = useEstate();
 
   const player = playerData?.account;
   const power = useCombatPower();
@@ -72,9 +68,13 @@ export default function DashboardPage() {
   if (userReady) completedKeys.add("user");
   if (lootReady) completedKeys.add("loot");
 
-  // Onboarding check
+  // No player yet — the (game) layout redirects to /estate, where the Arrival lives.
   if (!playerData?.exists && playerReady) {
-    return <OnboardingFlow />;
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-sm text-text-muted">
+        Taking you to your holding…
+      </div>
+    );
   }
 
   const lootCount = lootData?.length ?? 0;
@@ -86,7 +86,7 @@ export default function DashboardPage() {
           {/* Header row */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
             <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">
-              HOME
+              STATUS
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted sm:gap-3">
               <span>{todName}</span>
@@ -139,7 +139,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* ── Main grid: Player stuff (left 2/3) + NOVI stuff (right 1/3) ── */}
+              {/* Main grid: player stuff (left 2/3) + NOVI stuff (right 1/3) */}
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
                 {/* Left column: Player Card → Treasury/Power → Activity → Game Info */}
                 <div className="flex flex-col gap-3 lg:col-span-2">
@@ -244,12 +244,11 @@ export default function DashboardPage() {
                   })()}
                 </div>
 
-                {/* Right column: NOVI Generator + Rewards + Quest Steps */}
+                {/* Right column: NOVI Generator + Rewards */}
                 <div className="flex flex-col gap-3">
                   <NoviGenerator />
                   <NoviRewards />
                   <DailyRewardCard daily={daily} />
-                  <QuestSteps player={player} estate={estateData?.account} />
                 </div>
               </div>
             </>
@@ -260,114 +259,7 @@ export default function DashboardPage() {
   );
 }
 
-// ─── Quest Steps ────────────────────────────────────────────
-function QuestSteps({ player, estate }: { player: any; estate: any }) {
-  const buildings = estate?.buildings as Array<{ buildingType: number; status: number; level: number }> | undefined;
-  const hasBuilding = (type: number) =>
-    !!buildings?.some((b) => b.buildingType === type && (b.status === 2 || b.status === 3) && b.level >= 1);
-
-  const totalUnits =
-    (player.defensiveUnit1?.toNumber?.() ?? 0) +
-    (player.defensiveUnit2?.toNumber?.() ?? 0) +
-    (player.defensiveUnit3?.toNumber?.() ?? 0) +
-    (player.operativeUnit1?.toNumber?.() ?? 0) +
-    (player.operativeUnit2?.toNumber?.() ?? 0) +
-    (player.operativeUnit3?.toNumber?.() ?? 0);
-
-  const steps = [
-    { label: "Create Player", done: true, href: "/dashboard", detail: "Account created" },
-    { label: "Create Estate", done: !!estate, href: "/estate", detail: "Build your base of operations" },
-    { label: "Build Barracks", done: hasBuilding(BuildingId.Barracks), href: "/estate", detail: "Train defensive units" },
-    { label: "Build Camp", done: hasBuilding(BuildingId.Camp), href: "/estate", detail: "Train operative units" },
-    { label: "Hire Units", done: totalUnits > 0, href: "/estate?tab=market", detail: "Recruit your first soldiers" },
-    { label: "Build Market", done: hasBuilding(BuildingId.Market), href: "/estate", detail: "Purchase equipment" },
-    { label: "Build Academy", done: hasBuilding(BuildingId.Academy), href: "/estate", detail: "Unlock research" },
-    { label: "Start Research", done: (player.attackBps ?? 0) > 0, href: "/estate?tab=research", detail: "Boost your stats" },
-    { label: "Build Stables", done: hasBuilding(BuildingId.Stables), href: "/estate", detail: "Travel between cities" },
-    { label: "Travel Between Cities", done: (player.totalIntercityTravels?.toNumber?.() ?? 0) > 0, href: "/map", detail: "Explore the world" },
-    { label: "Fight an Encounter", done: (player.totalEncounterAttacks?.toNumber?.() ?? 0) > 0, href: "/combat", detail: "Battle for loot" },
-  ];
-
-  const firstIncomplete = steps.findIndex((s) => !s.done);
-  const allDone = firstIncomplete === -1;
-
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (allDone) return null;
-
-  const completedCount = steps.filter((s) => s.done).length;
-  const currentStep = steps[firstIncomplete]!;
-
-  return (
-    <div className="card accent-border">
-      {/* Compact view: current step CTA + toggle */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-900/30">
-          <span className="text-sm text-text-gold">{completedCount}/{steps.length}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary">{currentStep.label}</span>
-            <span className="text-xs text-text-muted hidden sm:inline">{currentStep.detail}</span>
-          </div>
-          {/* Progress bar */}
-          <div className="mt-1 h-1 w-full rounded-full bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-amber-600 transition-all"
-              style={{ width: `${(completedCount / steps.length) * 100}%` }}
-            />
-          </div>
-        </div>
-        <Link
-          href={currentStep.href}
-          className="shrink-0 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-text-gold transition-colors hover:bg-amber-900/40"
-        >
-          Go &rarr;
-        </Link>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="shrink-0 rounded-md p-1 text-xs text-text-muted hover:text-text-secondary"
-        >
-          {collapsed ? "+" : "−"}
-        </button>
-      </div>
-
-      {/* Expanded: all steps */}
-      {!collapsed && (
-        <div className="mt-3 space-y-1.5 border-t border-border-default pt-3">
-          {steps.map((step, i) => {
-            const isCurrent = i === firstIncomplete;
-            return (
-              <div key={step.label} className="flex items-center gap-3">
-                <span className={`w-5 text-center text-sm ${step.done ? "text-green-500" : isCurrent ? "text-text-gold" : "text-zinc-700"}`}>
-                  {step.done ? "\u2713" : isCurrent ? "\u2192" : "\u25CC"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <span className={`text-sm ${step.done ? "text-text-muted line-through" : isCurrent ? "text-text-primary font-medium" : "text-zinc-600"}`}>
-                    {step.label}
-                  </span>
-                  {isCurrent && (
-                    <span className="ml-2 text-xs text-text-muted">{step.detail}</span>
-                  )}
-                </div>
-                {isCurrent && (
-                  <Link
-                    href={step.href}
-                    className="shrink-0 rounded-md border border-amber-800/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-text-gold transition-colors hover:bg-amber-900/40"
-                  >
-                    Go &rarr;
-                  </Link>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Daily Reward ───────────────────────────────────────────
+// Daily Reward
 function DailyRewardCard({
   daily,
 }: {

@@ -23,7 +23,7 @@ import {
   getTimeOfDayName,
   getActivityMultiplier,
   isTraveling,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const CRAFT_TYPES = [
   { id: 0, name: "Sword", desc: "Melee weapon", icon: "\uD83D\uDDE1" },
@@ -133,16 +133,14 @@ export function ForgeTab() {
   const handleStartCraft = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [craftPda] = deriveCraftedEquipmentPda(playerPda);
     const ix = createStartCraftInstruction(
-      { player: playerPda, craftedEquipment: craftPda, gameEngine: ge, owner: publicKey },
-      { craftType: selectedCraft }
+      { owner: publicKey, gameEngine: ge },
+      { equipmentType: selectedCraft, qualityTier: selectedQuality },
     );
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["craft"], ["player"]],
-      successMessage: "Crafting started!",
+      successMessage: `Crafting ${CRAFT_TYPES[selectedCraft]?.name ?? "equipment"} at ${QUALITY_TIERS[selectedQuality]?.name ?? ""} tier...`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -150,14 +148,7 @@ export function ForgeTab() {
   const handleStrike = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [craftPda] = deriveCraftedEquipmentPda(playerPda);
-    const ix = createStrikeInstruction({
-      player: playerPda,
-      craftedEquipment: craftPda,
-      gameEngine: ge,
-      owner: publicKey,
-    });
+    const ix = createStrikeInstruction({ owner: publicKey, gameEngine: ge });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["craft"], ["player"]],

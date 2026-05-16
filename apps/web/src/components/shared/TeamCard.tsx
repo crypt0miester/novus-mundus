@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, formatTime } from "@/lib/utils";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { Badge } from "@/components/shared/Badge";
 import { DomainName } from "@/components/shared/DomainName";
-import type { TeamAccount } from "@/lib/sdk";
+import type { TeamAccount } from "novus-mundus-sdk";
 
 interface TeamCardProps {
   teamId: number;
@@ -11,6 +11,8 @@ interface TeamCardProps {
   rank?: number;
   actions?: React.ReactNode;
   className?: string;
+  /** Render the data labels in the House framing (sworn blades, war-chest, banner). */
+  lordlyLabels?: boolean;
 }
 
 export function TeamCard({
@@ -19,8 +21,18 @@ export function TeamCard({
   rank,
   actions,
   className,
+  lordlyLabels,
 }: TeamCardProps) {
   const isPublic = (team.settings & 1) !== 0;
+  const memberLabel = lordlyLabels ? "sworn blades" : "members";
+  const treasuryLabel = lordlyLabels ? "War-chest" : "Treasury";
+  const bannerAge =
+    lordlyLabels && team.createdAt.toNumber() > 0
+      ? formatTime(
+          Math.max(0, Math.floor(Date.now() / 1000) - team.createdAt.toNumber()),
+          "compact",
+        )
+      : null;
 
   return (
     <div className={cn("card transition-all", className)}>
@@ -42,17 +54,18 @@ export function TeamCard({
               {isPublic ? "Public" : "Private"}
             </Badge>
             <span>
-              {team.memberCount}/{team.maxMembers} members
+              {team.memberCount}/{team.maxMembers} {memberLabel}
             </span>
             {team.minLevelToJoin > 1 && (
               <span>Lv {team.minLevelToJoin}+</span>
             )}
+            {bannerAge && <span>Banner flown {bannerAge}</span>}
           </div>
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="text-right">
-            <div className="text-[10px] text-text-muted">Treasury</div>
+            <div className="text-[10px] text-text-muted">{treasuryLabel}</div>
             <GoldNumber value={team.treasury.toNumber()} size="sm" prefix="$" />
           </div>
           {actions && <div>{actions}</div>}

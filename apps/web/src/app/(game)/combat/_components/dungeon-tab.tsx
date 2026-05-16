@@ -27,17 +27,15 @@ import {
   getTimeOfDayName,
   getActivityMultiplier,
   ENCOUNTER_STAMINA_COSTS,
-  createPurchaseStaminaInstruction,
-} from "@/lib/sdk";
-import type { DungeonRunAccount } from "@/lib/sdk";
+} from "novus-mundus-sdk";
+import type { DungeonRunAccount } from "novus-mundus-sdk";
 // Strict instruction builders — lib/sdk's re-exports widen these param types.
 import {
-  createEnterDungeonInstruction,
   createFleeInstruction,
   createClaimDungeonInstruction,
-  createResumeInstruction,
   DungeonStatus,
   RoomType,
+  HeroSpecialization,
 } from "novus-mundus-sdk";
 import { fetchCoSign, useCoSign } from "@/lib/cosign";
 
@@ -49,6 +47,15 @@ const ROOMS: Record<RoomType, { label: string; icon: string }> = {
   [RoomType.Rest]: { label: "Rest", icon: "🛏" },
   [RoomType.Trap]: { label: "Trap", icon: "⚡" },
 };
+
+// Hero specialization is chosen per run — it drives the run's combat bonuses
+// on-chain (see HeroSpecialization in the program). No hero NFT carries it.
+const SPECS: { id: HeroSpecialization; label: string; perk: string }[] = [
+  { id: HeroSpecialization.Warrior, label: "Warrior", perk: "+20% attack" },
+  { id: HeroSpecialization.Guardian, label: "Guardian", perk: "+25% unit survival" },
+  { id: HeroSpecialization.Scout, label: "Scout", perk: "+15% loot · −25% darkness" },
+  { id: HeroSpecialization.Tactician, label: "Tactician", perk: "+30% relic power" },
+];
 
 export function DungeonTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -84,6 +91,9 @@ export function DungeonTab() {
   const room = ROOMS[(run?.roomType ?? RoomType.Combat) as RoomType] ?? ROOMS[RoomType.Combat];
   const [selectedDungeon, setSelectedDungeon] = useState(0);
   const [attackCount, setAttackCount] = useState(1);
+  const [heroSpec, setHeroSpec] = useState<HeroSpecialization>(
+    HeroSpecialization.Warrior,
+  );
 
   // First locked hero — required to enter a dungeon (the hero is escrowed).
   const heroMint = useMemo<PublicKey | null>(() => {
@@ -147,12 +157,14 @@ export function DungeonTab() {
     if (!heroMint) {
       throw new Error("Lock a hero in the Heroes tab before entering a dungeon");
     }
-    const ix = createEnterDungeonInstruction(
-      { gameEngine: client.gameEngine, owner: publicKey, heroMint },
-      { templateId: selectedDungeon, firstRoomType: 0, heroSpecialization: 0 },
-    );
+    // The program rejects an entry that is not game_authority-co-signed.
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/enter", {
+      dungeonId: selectedDungeon,
+      heroMint: heroMint.toBase58(),
+      heroSpecialization: heroSpec,
+    });
     return transact.mutateAsync({
-      instructions: [ix],
+      versionedTx,
       invalidateKeys: [["dungeonRun"], ["player"]],
       successMessage: "Entered the dungeon!",
       onPhase: reportPhase,
@@ -164,16 +176,15 @@ export function DungeonTab() {
     if (!heroMint) {
       throw new Error("Lock a hero in the Heroes tab before entering a dungeon");
     }
-    const staminaIx = createPurchaseStaminaInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { amount: 1 },
-    );
-    const enterIx = createEnterDungeonInstruction(
-      { gameEngine: client.gameEngine, owner: publicKey, heroMint },
-      { templateId: selectedDungeon, firstRoomType: 0, heroSpecialization: 0 },
-    );
+    // buyStamina bundles a stamina top-up into the same co-signed entry tx.
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/enter", {
+      dungeonId: selectedDungeon,
+      heroMint: heroMint.toBase58(),
+      heroSpecialization: heroSpec,
+      buyStamina: true,
+    });
     return transact.mutateAsync({
-      instructions: [staminaIx, enterIx],
+      versionedTx,
       invalidateKeys: [["dungeonRun"], ["player"]],
       successMessage: "Bought stamina & entered the dungeon!",
       onPhase: reportPhase,
@@ -215,12 +226,9 @@ export function DungeonTab() {
   const handleResume = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!run) throw new Error("No dungeon run to resume");
-    const ix = createResumeInstruction(
-      { gameEngine: client.gameEngine, owner: publicKey },
-      { templateId: run.dungeonId, firstRoomType: 0 },
-    );
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/resume");
     return transact.mutateAsync({
-      instructions: [ix],
+      versionedTx,
       invalidateKeys: [["dungeonRun"], ["player"]],
       successMessage: "Dungeon run resumed!",
       onPhase: reportPhase,
@@ -228,10 +236,8 @@ export function DungeonTab() {
   };
 
   // ── Co-signed handlers (attack / interact / choose-relic) ─────
-  // These need the off-chain game_authority signature, so they go through the
-  // /api/cosign endpoints and submit via useTransact's versionedTx path.
 
-  // One co-signed attack, or a batched attack_multi (2-5) — one roll, one tx.
+  // One co-signed attack, or a batched attack_multi (2-5).
   const handleAttack = async (reportPhase: (p: TxPhase) => void) => {
     if (!ownerStr) throw new Error("Wallet not connected");
     const count = effectiveAttacks;
@@ -481,6 +487,29 @@ export function DungeonTab() {
               Lock a hero in the Heroes tab — a dungeon run escrows one hero.
             </div>
           )}
+
+          {/* Hero specialization — chosen per run, locked in for its duration */}
+          <div className="mt-4">
+            <div className="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Hero Specialization
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {SPECS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setHeroSpec(s.id)}
+                  className={`rounded-lg border p-2 text-left transition-all ${
+                    heroSpec === s.id
+                      ? "border-amber-600 bg-amber-900/20"
+                      : "border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="text-sm font-semibold text-text-primary">{s.label}</div>
+                  <div className="text-[10px] text-text-muted">{s.perk}</div>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <TxButton onClick={handleEnter} className="px-8 py-3 text-lg" disabled={playerTraveling || !hasStamina || !heroMint}>

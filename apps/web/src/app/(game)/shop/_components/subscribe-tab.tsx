@@ -18,7 +18,7 @@ import {
   derivePlayerPda,
   createPurchaseSubscriptionInstruction,
   getEffectiveTier,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const TIERS = [
   {
@@ -91,18 +91,28 @@ export function SubscribeTab() {
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
-      successMessage: `Subscribed to ${TIERS[tierId]?.name}!`,
+      successMessage: `${TIERS[tierId]?.name} charter held.`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-text-primary">
+          A Patron&apos;s Charter
+        </h2>
+        <p className="mt-1 text-xs text-text-muted">
+          A charter is a standing arrangement with a patron. Each tier sets what
+          it grants and what it costs. The terms are listed below.
+        </p>
+      </div>
+
       {/* Current Status */}
       <div className="card accent-border">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-text-muted">Current Tier</div>
+            <div className="text-xs text-text-muted">Current Charter</div>
             <div className={`text-lg font-bold ${TIERS[sub.tier]?.color || "text-zinc-400"}`}>
               {sub.tierName}
             </div>
@@ -115,7 +125,7 @@ export function SubscribeTab() {
           )}
         </div>
         <div className="mt-3 text-xs text-text-muted">
-          <span>Effective tier: </span>
+          <span>Effective charter: </span>
           <span className={TIERS[effectiveTier]?.color || "text-zinc-400"}>
             {TIERS[effectiveTier]?.name || "Unknown"}
           </span>
@@ -161,7 +171,7 @@ export function SubscribeTab() {
                     variant={tier.id >= 2 ? "primary" : "secondary"}
                     className="w-full"
                   >
-                    {sub.tier < tier.id ? "Upgrade" : "Subscribe"}
+                    {sub.tier < tier.id ? "Move to this charter" : "Hold this charter"}
                   </TxButton>
                   {tier.price > noviBalance && (
                     <p className="mt-1 text-center text-[11px] text-red-400">
@@ -171,7 +181,7 @@ export function SubscribeTab() {
                 </div>
               )}
               {isCurrent && (
-                <div className="mt-4 text-center text-xs text-amber-400">Active</div>
+                <div className="mt-4 text-center text-xs text-amber-400">Held</div>
               )}
             </div>
           );

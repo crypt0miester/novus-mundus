@@ -12,7 +12,7 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { Badge } from "@/components/shared/Badge";
 import { WeaponGrid } from "@/components/shared/WeaponGrid";
-import { createClaimLootInstruction } from "@/lib/sdk";
+import { createClaimLootInstruction } from "novus-mundus-sdk";
 
 const RARITY_NAMES = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 const RARITY_VARIANTS: ("common" | "uncommon" | "rare" | "epic" | "legendary")[] = [

@@ -14,7 +14,7 @@ import {
   createReservedToLockedInstruction,
   createWithdrawReservedInstruction,
   RESERVED_NOVI_VESTING_PERIOD,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 interface NoviRewardsProps {
   className?: string;

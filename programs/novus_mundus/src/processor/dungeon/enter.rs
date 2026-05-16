@@ -13,7 +13,7 @@ use crate::{
     constants::DUNGEON_RUN_SEED,
     helpers::estate::{load_estate_for_player, has_building_at_level},
     utils::{read_u8, read_u16},
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_game_authority},
     emit,
     events::DungeonEntered,
 };
@@ -29,6 +29,7 @@ use crate::{
 ///
 /// # Accounts
 /// - [signer, writable] owner: Player's wallet
+/// - [signer] game_authority: Game server (authenticates the backed-rolled first_room_type)
 /// - [writable] player: PlayerAccount PDA
 /// - [] dungeon_template: DungeonTemplate PDA
 /// - [writable] dungeon_run: DungeonRun PDA (to be created)
@@ -36,19 +37,22 @@ use crate::{
 /// - [writable] hero_mint: Champion hero NFT mint (MPL Core asset)
 /// - [] hero_collection: Hero collection PDA
 /// - [] system_program: System program
+/// - [] mpl_core_program: MPL Core program
+/// - [] game_engine: GameEngine PDA (for game_authority validation)
 ///
 /// # Instruction Data
 /// - dungeon_id: u16 (2 bytes, little-endian)
-/// - first_room_type: u8 (provided by backend, signed)
+/// - first_room_type: u8 (chosen by backend; authenticated by the game_authority signature)
 /// - hero_specialization: u8 (0=Warrior, 1=Guardian, 2=Scout, 3=Tactician)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse accounts
+    // 1. Parse accounts (game_authority co-signs to authenticate first_room_type)
     crate::extract_accounts!(accounts, [
         owner,
+        game_authority,
         player_account,
         dungeon_template_account,
         dungeon_run_account,
@@ -57,10 +61,12 @@ pub fn process(
         hero_collection,
         system_program,
         p_core_program,
+        game_engine_account,
     ]);
 
-    // 2. Validate signer
+    // 2. Validate signers
     require_signer(owner)?;
+    require_signer(game_authority)?;
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
     require_writable(hero_mint)?;
@@ -84,6 +90,11 @@ pub fn process(
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
+
+    // 4a. Validate game_authority against the player's kingdom GameEngine.
+    // The game_authority signature is what authenticates the backend-rolled
+    // first_room_type — without it a client could freely pick the opening room.
+    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
 
     // 5. Validate dungeon run doesn't already exist
     // (account should have 0 lamports if not created)

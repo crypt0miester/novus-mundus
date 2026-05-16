@@ -9,7 +9,7 @@ import { WalletModalProvider } from "@/components/shared/wallet-adapter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Connection } from "@solana/web3.js";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { NovusMundusClient } from "@/lib/sdk";
+import { NovusMundusClient } from "novus-mundus-sdk";
 import { startGameSubscriptions } from "@/lib/store/subscriptions";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useTierTheme } from "@/lib/hooks/useTierTheme";

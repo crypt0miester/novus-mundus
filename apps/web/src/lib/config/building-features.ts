@@ -1,4 +1,5 @@
 import { BuildingId, FEATURES } from "@/lib/hooks/useFeatureGate";
+import { buildingFraming } from "@/lib/narrative";
 
 // ── Building categories ──
 export type BuildingCategory =
@@ -9,11 +10,11 @@ export type BuildingCategory =
   | "Exploration";
 
 export const CATEGORY_COLORS: Record<BuildingCategory, string> = {
-  Military: "border-l-red-600",
-  Economy: "border-l-amber-500",
-  Growth: "border-l-emerald-500",
-  Combat: "border-l-purple-500",
-  Exploration: "border-l-cyan-500",
+  Military: "border-l-amber-300",
+  Economy: "border-l-amber-400",
+  Growth: "border-l-amber-500",
+  Combat: "border-l-amber-600",
+  Exploration: "border-l-amber-900",
 };
 
 export const CATEGORY_ORDER: BuildingCategory[] = [
@@ -43,15 +44,15 @@ export interface BuildingFeatureConfig {
 
 export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
   // Military
-  { id: BuildingId.Barracks, name: "Barracks", desc: "Recruit defensive units", tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_DEFENSIVE, centerView: true, featureHint: "Hire units" },
-  { id: BuildingId.Camp, name: "Camp", desc: "Hire operative units", tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_OPERATIVE, centerView: true, featureHint: "Hire operatives" },
+  { id: BuildingId.Barracks, name: "Barracks", desc: buildingFraming(BuildingId.Barracks).role, tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_DEFENSIVE, centerView: true, featureHint: "Hire units" },
+  { id: BuildingId.Camp, name: "Camp", desc: buildingFraming(BuildingId.Camp).role, tier: 1, category: "Military", primaryFeature: FEATURES.HIRE_OPERATIVE, centerView: true, featureHint: "Hire operatives" },
   { id: BuildingId.Citadel, name: "Citadel", desc: "Lead rallies", tier: 2, category: "Military", primaryFeature: FEATURES.RALLY_CREATE, featureHint: "Rally" },
   { id: BuildingId.Infirmary, name: "Infirmary", desc: "Unit recovery", tier: 3, category: "Military", centerView: true, featureHint: "Recover units" },
 
   // Economy
-  { id: BuildingId.Market, name: "Market", desc: "Trade with others", tier: 2, category: "Economy", primaryFeature: FEATURES.PURCHASE_EQUIPMENT, centerView: true, featureHint: "Trade" },
+  { id: BuildingId.Market, name: "Market", desc: buildingFraming(BuildingId.Market).role, tier: 2, category: "Economy", primaryFeature: FEATURES.PURCHASE_EQUIPMENT, centerView: true, featureHint: "Trade" },
   { id: BuildingId.Workshop, name: "Workshop", desc: "Convert materials", tier: 1, category: "Economy", centerView: true, featureHint: "Convert materials" },
-  { id: BuildingId.Vault, name: "Vault", desc: "Secure your wealth", tier: 1, category: "Economy", primaryFeature: FEATURES.VAULT_TRANSFER, featureHint: "Vault" },
+  { id: BuildingId.Vault, name: "Vault", desc: buildingFraming(BuildingId.Vault).role, tier: 1, category: "Economy", primaryFeature: FEATURES.VAULT_TRANSFER, centerView: true, featureHint: "Vault" },
   { id: BuildingId.Treasury, name: "Treasury", desc: "Maximize prizes", tier: 3, category: "Economy", featureHint: "Treasury" },
 
   // Growth
@@ -65,10 +66,10 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
   { id: BuildingId.Catacombs, name: "Catacombs", desc: "Dungeon access", tier: 3, category: "Combat", primaryFeature: FEATURES.DUNGEON_ENTER, featureHint: "Dungeon" },
 
   // Exploration
-  { id: BuildingId.Mine, name: "Mine", desc: "Mining expeditions", tier: 2, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_MINING, featureHint: "Mine" },
-  { id: BuildingId.Dock, name: "Dock", desc: "Fishing expeditions", tier: 1, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_FISHING, featureHint: "Fish" },
-  { id: BuildingId.Farm, name: "Farm", desc: "Produce collection", tier: 1, category: "Exploration", primaryFeature: FEATURES.COLLECT_FARMING, featureHint: "Farm" },
-  { id: BuildingId.Stables, name: "Stables", desc: "Travel gating", tier: 2, category: "Exploration", primaryFeature: FEATURES.INTERCITY_TRAVEL, featureHint: "Travel" },
+  { id: BuildingId.Mine, name: "Mine", desc: buildingFraming(BuildingId.Mine).role, tier: 2, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_MINING, centerView: true, featureHint: "Mine" },
+  { id: BuildingId.Dock, name: "Dock", desc: buildingFraming(BuildingId.Dock).role, tier: 1, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_FISHING, centerView: true, featureHint: "Fish" },
+  { id: BuildingId.Farm, name: "Farm", desc: buildingFraming(BuildingId.Farm).role, tier: 1, category: "Exploration", primaryFeature: FEATURES.COLLECT_FARMING, centerView: true, featureHint: "Farm" },
+  { id: BuildingId.Stables, name: "TransportBay", desc: "Travel gating", tier: 2, category: "Exploration", primaryFeature: FEATURES.INTERCITY_TRAVEL, featureHint: "Travel" },
 ];
 
 /** Map from building ID to feature config */

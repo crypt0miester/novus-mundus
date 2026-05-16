@@ -9,23 +9,24 @@ import { useTransact } from "./useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import type { TxPhase } from "@/components/shared/TxButton";
 import {
-  derivePlayerPda,
-  deriveEstatePda,
   createCreateEstateInstruction,
   createBuildBuildingInstruction,
   createUpgradeBuildingInstruction,
   createBuildingSpeedupInstruction,
   createCompleteBuildingInstruction,
-  createDailyActivityInstruction,
   createBuyPlotInstruction,
   calculateUpgradeCost,
   findBuilding,
   BuildingStatus,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 
-/** Plot costs: φ^2 scaling from 10k base */
-const PLOT_COSTS = [0, 10_000, 26_200, 68_500, 179_400];
+/**
+ * Plot costs — must match the program's `EstateAccount::next_plot_cost()`
+ * (φ² scaling from a 100k base). Display only; the chain computes the real
+ * charge. Index = plots_owned, so [1] is the cost of the 2nd plot.
+ */
+const PLOT_COSTS = [0, 100_000, 261_800, 685_400, 1_794_400];
 
 export function useEstateActions() {
   const { publicKey } = useWallet();
@@ -45,12 +46,13 @@ export function useEstateActions() {
     async (reportPhase: (p: TxPhase) => void) => {
       if (!publicKey) throw new Error("Wallet not connected");
       const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey);
-      const [estatePda] = deriveEstatePda(playerPda);
+
+      const playerCity = playerData?.account.currentCity;
       const ix = createCreateEstateInstruction(
-        { player: playerPda, estate: estatePda, gameEngine: ge, owner: publicKey },
-        {}
+        { gameEngine: ge, owner: publicKey },
+        { cityId: playerCity! }
       );
+
       return transact
         .mutateAsync({
           instructions: [ix],
@@ -77,12 +79,10 @@ export function useEstateActions() {
           )
         : createBuildBuildingInstruction(
             {
-              player: derivePlayerPda(ge, publicKey)[0],
-              estate: deriveEstatePda(derivePlayerPda(ge, publicKey)[0])[0],
               gameEngine: ge,
               owner: publicKey,
             },
-            { buildingType, slot: 0 }
+            { buildingType }
           );
 
       return transact
@@ -129,27 +129,6 @@ export function useEstateActions() {
         .mutateAsync({
           instructions: [ix],
           successMessage: `${name} construction complete!`,
-          onPhase: reportPhase,
-        })
-        .then((r) => r.signature);
-    },
-    [publicKey, client, transact]
-  );
-
-  const handleDailyActivity = useCallback(
-    async (reportPhase: (p: TxPhase) => void) => {
-      if (!publicKey) throw new Error("Wallet not connected");
-      const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey);
-      const [estatePda] = deriveEstatePda(playerPda);
-      const ix = createDailyActivityInstruction(
-        { player: playerPda, estate: estatePda, gameEngine: ge, owner: publicKey },
-        {}
-      );
-      return transact
-        .mutateAsync({
-          instructions: [ix],
-          successMessage: "Daily activity claimed!",
           onPhase: reportPhase,
         })
         .then((r) => r.signature);
@@ -212,7 +191,6 @@ export function useEstateActions() {
     handleBuildOrUpgrade,
     handleBuildingSpeedup,
     handleCompleteBuilding,
-    handleDailyActivity,
     handleBuyPlot,
     getBuildCostInfo,
     getUpgradeCostPreview,

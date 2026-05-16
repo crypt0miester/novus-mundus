@@ -16,12 +16,14 @@ import { getTierInfo, getCachedTier } from "@/lib/hooks/useTierTheme";
 import { useDomainName } from "@/lib/hooks/useDomainName";
 import { formatNumber } from "@/lib/utils";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
+import { CairnPresence } from "@/components/cairn/CairnPresence";
+import { CairnReport } from "@/components/cairn/CairnReport";
 import {
   createUpdateLockedNoviInstruction,
   getEffectiveTier,
   findBuilding,
   type SubscriptionTierConfig,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const INTERVAL_SECONDS = 300;
 
@@ -227,6 +229,9 @@ export function LeftPanel() {
           </div>
         </div>
       )}
+
+      <CairnPresence />
+      <CairnReport />
     </div>
   );
 }

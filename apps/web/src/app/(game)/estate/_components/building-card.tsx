@@ -3,11 +3,16 @@
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { CATEGORY_COLORS, type BuildingFeatureConfig } from "@/lib/config/building-features";
+import { formatTime } from "@/lib/utils";
+import { hasCenterView } from "./feature-view";
+import type { BuildingPhase } from "@/lib/narrative";
 
 export type BuildingStatus = "active" | "building" | "upgrading" | "unbuilt" | "locked";
 
 export interface BuildingCardData {
   config: BuildingFeatureConfig;
+  /** Lifecycle phase — the single source of truth (lib/narrative). */
+  phase: BuildingPhase;
   status: BuildingStatus;
   level: number;
   constructing: boolean;
@@ -33,13 +38,11 @@ export function BuildingCard({
   onSpeedup,
   onComplete,
 }: BuildingCardProps) {
-  const { config, status, level, constructing, remainingSec, ready, lockReason } = data;
+  const { config, phase, status, level, constructing, remainingSec, ready, lockReason } = data;
   const categoryColor = CATEGORY_COLORS[config.category];
 
   // Time display for constructing buildings
-  const mins = Math.floor(remainingSec / 60);
-  const hrs = Math.floor(mins / 60);
-  const timeStr = hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
+  const timeStr = formatTime(remainingSec, "compact");
 
   // Progress for constructing buildings
   const pct = data.slot
@@ -90,7 +93,13 @@ export function BuildingCard({
           <div className="text-xs text-amber-600 font-mono tabular-nums mt-1">
             {ready ? "Ready to complete" : `${timeStr} remaining (${pct}%)`}
           </div>
-          <div className="mt-2 flex gap-1">
+          {(phase === "improving" || phase === "improved") &&
+            hasCenterView(config.id) && (
+              <div className="mt-0.5 text-[10px] text-text-muted">
+                {config.featureHint ?? "In use"} · still open
+              </div>
+            )}
+          <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
             {ready && onComplete ? (
               <TxButton
                 onClick={(rp) => { rp("sending"); return onComplete(rp); }}

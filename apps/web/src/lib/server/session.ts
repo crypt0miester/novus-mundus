@@ -24,7 +24,7 @@ function hmac(data: string): string {
       "SESSION_SECRET (or GAME_AUTHORITY_RNG_SECRET) must be set for co-sign auth",
     );
   }
-  return createHmac("sha256", SECRET).update(data).digest("base64url");
+  return createHmac("sha256", SECRET).update(data).digest("hex");
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -33,16 +33,24 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-/** Issue a stateless, HMAC-bound login nonce for a SIWS challenge. */
+/**
+ * Issue a stateless, HMAC-bound login nonce for a SIWS challenge.
+ *
+ * SIWS requires the nonce to be strictly alphanumeric (`8*(ALPHA / DIGIT)`),
+ * so it carries no separator: a base36 timestamp followed by the fixed
+ * 64-char hex HMAC. `verifyNonce` splits the two on that known width.
+ */
 export function issueNonce(): string {
   const ts = Date.now().toString(36);
-  return `${ts}.${hmac(`nonce:${ts}`)}`;
+  return `${ts}${hmac(`nonce:${ts}`)}`;
 }
 
 /** True when `nonce` is one we issued and is still within its TTL. */
 export function verifyNonce(nonce: string): boolean {
-  const [ts, sig] = nonce.split(".");
-  if (!ts || !sig || !safeEqual(sig, hmac(`nonce:${ts}`))) return false;
+  if (nonce.length <= 64) return false;
+  const ts = nonce.slice(0, -64);
+  const sig = nonce.slice(-64);
+  if (!ts || !safeEqual(sig, hmac(`nonce:${ts}`))) return false;
   const issued = parseInt(ts, 36);
   return Number.isFinite(issued) && Date.now() - issued < NONCE_TTL_MS;
 }

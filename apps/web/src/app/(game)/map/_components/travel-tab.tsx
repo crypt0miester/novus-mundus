@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useAllCities } from "@/lib/hooks/useAllCities";
@@ -19,8 +19,8 @@ import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToPercent } from "@/lib/utils";
 import {
-  derivePlayerPda,
-  deriveCityPda,
+  deriveLocationPda,
+  toGrid,
   createIntercityStartInstruction,
   createIntercityCompleteInstruction,
   createIntercityCancelInstruction,
@@ -34,7 +34,7 @@ import {
   getTimeOfDayName,
   getActivityMultiplier,
   isTraveling,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const CITY_TYPE_LABELS = ["Capital", "Resource", "Combat", "Trade"];
 
@@ -51,6 +51,8 @@ export function TravelTab() {
   const ge = geData?.account;
 
   const [destinationCity, setDestinationCity] = useState<number | null>(null);
+  // The exact landing cell in the destination city — player-picked via the grid.
+  const [destCell, setDestCell] = useState<{ gridLat: number; gridLong: number } | null>(null);
 
   const currentCityData = cities?.find((c) => c.account.cityId === player?.currentCity);
   const destCityData = cities?.find((c) => c.account.cityId === destinationCity);
@@ -98,16 +100,22 @@ export function TravelTab() {
 
   const handleIntercityStart = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
+    if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
-    const [originCityPda] = deriveCityPda(geKey, player.currentCity);
-    const [destCityPda] = deriveCityPda(geKey, destinationCity);
     const ix = createIntercityStartInstruction({
-      player: playerPda,
-      originCity: originCityPda,
-      destinationCity: destCityPda,
-      gameEngine: geKey,
       owner: publicKey,
+      gameEngine: geKey,
+      originCityId: player.currentCity,
+      destinationCityId: destinationCity,
+      destGridLat: destCell.gridLat,
+      destGridLong: destCell.gridLong,
+      originLocation: deriveLocationPda(
+        geKey, player.currentCity, toGrid(player.currentLat), toGrid(player.currentLong),
+      )[0],
+      destinationLocation: deriveLocationPda(
+        geKey, destinationCity, destCell.gridLat, destCell.gridLong,
+      )[0],
+      originCreatorRefund: ge?.authority ?? publicKey,
     });
     const destName = destCityData?.account.name || `City ${destinationCity}`;
     return transact.mutateAsync({
@@ -119,13 +127,16 @@ export function TravelTab() {
   };
 
   const handleIntercityComplete = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
+    if (!publicKey || !player) throw new Error("Not ready");
     const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
     const ix = createIntercityCompleteInstruction({
-      player: playerPda,
-      gameEngine: geKey,
       owner: publicKey,
+      gameEngine: geKey,
+      originCityId: player.currentCity,
+      destinationCityId: player.destinationCity,
+      destinationLocation: deriveLocationPda(
+        geKey, player.destinationCity, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+      )[0],
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -136,13 +147,24 @@ export function TravelTab() {
   };
 
   const handleIntercityCancel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
+    if (!publicKey || !player) throw new Error("Not ready");
+    const originCity = currentCityData?.account;
+    if (!originCity) throw new Error("Origin city not loaded");
     const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
     const ix = createIntercityCancelInstruction({
-      player: playerPda,
-      gameEngine: geKey,
       owner: publicKey,
+      gameEngine: geKey,
+      originCityId: player.currentCity,
+      destinationCityId: player.destinationCity,
+      originLocation: deriveLocationPda(
+        geKey, player.currentCity,
+        toGrid(fixedPointToFloat(originCity.latitude)),
+        toGrid(fixedPointToFloat(originCity.longitude)),
+      )[0],
+      destinationLocation: deriveLocationPda(
+        geKey, player.destinationCity, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+      )[0],
+      destinationCreatorRefund: ge?.authority ?? publicKey,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -154,16 +176,19 @@ export function TravelTab() {
 
   const handleTeleport = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
+    if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
-    const [originCityPda] = deriveCityPda(geKey, player.currentCity);
-    const [destCityPda] = deriveCityPda(geKey, destinationCity);
     const ix = createIntercityTeleportInstruction({
-      player: playerPda,
-      originCity: originCityPda,
-      destinationCity: destCityPda,
-      gameEngine: geKey,
       owner: publicKey,
+      gameEngine: geKey,
+      originCityId: player.currentCity,
+      destinationCityId: destinationCity,
+      originLocation: deriveLocationPda(
+        geKey, player.currentCity, toGrid(player.currentLat), toGrid(player.currentLong),
+      )[0],
+      destinationLocation: deriveLocationPda(
+        geKey, destinationCity, destCell.gridLat, destCell.gridLong,
+      )[0],
     });
     const destName = destCityData?.account.name || `City ${destinationCity}`;
     return transact.mutateAsync({
@@ -179,7 +204,7 @@ export function TravelTab() {
     const geKey = client.gameEngine;
     const ix = createTravelSpeedupInstruction(
       { owner: publicKey, gameEngine: geKey },
-      { speedupTier: tier },
+      { speedupTier: tier as 1 | 2 },
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -191,17 +216,26 @@ export function TravelTab() {
 
   const handleTravelAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
+    if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
-    const [originCityPda] = deriveCityPda(geKey, player.currentCity);
-    const [destCityPda] = deriveCityPda(geKey, destinationCity);
     const startIx = createIntercityStartInstruction({
-      player: playerPda, originCity: originCityPda, destinationCity: destCityPda,
-      gameEngine: geKey, owner: publicKey,
+      owner: publicKey,
+      gameEngine: geKey,
+      originCityId: player.currentCity,
+      destinationCityId: destinationCity,
+      destGridLat: destCell.gridLat,
+      destGridLong: destCell.gridLong,
+      originLocation: deriveLocationPda(
+        geKey, player.currentCity, toGrid(player.currentLat), toGrid(player.currentLong),
+      )[0],
+      destinationLocation: deriveLocationPda(
+        geKey, destinationCity, destCell.gridLat, destCell.gridLong,
+      )[0],
+      originCreatorRefund: ge?.authority ?? publicKey,
     });
     const speedupIx = createTravelSpeedupInstruction(
       { owner: publicKey, gameEngine: geKey },
-      { speedupTier: tier },
+      { speedupTier: tier as 1 | 2 },
     );
     const destName = destCityData?.account.name || `City ${destinationCity}`;
     return transact.mutateAsync({
@@ -328,7 +362,12 @@ export function TravelTab() {
                     return (
                       <button
                         key={city.account.cityId}
-                        onClick={() => !isCurrent && setDestinationCity(city.account.cityId)}
+                        onClick={() => {
+                          if (!isCurrent) {
+                            setDestinationCity(city.account.cityId);
+                            setDestCell(null);
+                          }
+                        }}
                         disabled={isCurrent}
                         className={`w-full rounded-lg border p-3 text-left transition-all ${
                           isCurrent
@@ -373,7 +412,10 @@ export function TravelTab() {
           {/* Right: destination detail panel */}
           <DetailPanel
             open={destinationCity != null && destinationCity !== player.currentCity}
-            onClose={() => setDestinationCity(null)}
+            onClose={() => {
+              setDestinationCity(null);
+              setDestCell(null);
+            }}
           >
             {destCityData && (
               <>
@@ -440,18 +482,28 @@ export function TravelTab() {
                   </div>
                 )}
 
+                {/* Landing cell picker — choose where to arrive in the destination city */}
+                <DestinationCellGrid
+                  cityId={destCityData.account.cityId}
+                  centerGridLat={toGrid(fixedPointToFloat(destCityData.account.latitude))}
+                  centerGridLong={toGrid(fixedPointToFloat(destCityData.account.longitude))}
+                  selected={destCell}
+                  onSelect={(gridLat, gridLong) => setDestCell({ gridLat, gridLong })}
+                />
+
                 {/* Action buttons */}
                 <div className="space-y-2">
-                  <TxButton onClick={handleIntercityStart} className="w-full py-3 text-base font-bold">
+                  <TxButton onClick={handleIntercityStart} disabled={!destCell} className="w-full py-3 text-base font-bold">
                     Travel
                   </TxButton>
-                  <TxButton onClick={handleTeleport} variant="secondary" className="w-full text-xs">
+                  <TxButton onClick={handleTeleport} disabled={!destCell} variant="secondary" className="w-full text-xs">
                     Teleport (instant, costs NOVI)
                   </TxButton>
                 </div>
                 <div className="space-y-2">
                   <TxButton
                     onClick={(rp) => handleTravelAndSpeedup(1, rp)}
+                    disabled={!destCell}
                     variant="secondary"
                     className="w-full text-xs"
                   >
@@ -459,6 +511,7 @@ export function TravelTab() {
                   </TxButton>
                   <TxButton
                     onClick={(rp) => handleTravelAndSpeedup(2, rp)}
+                    disabled={!destCell}
                     variant="secondary"
                     className="w-full text-xs"
                   >
@@ -494,6 +547,99 @@ export function TravelTab() {
           </GameInfoPanel>
         );
       })()}
+    </div>
+  );
+}
+
+// Destination cell grid: a 5x5 block of candidate landing cells around the
+// destination city centre. The player picks one empty cell to land in.
+function DestinationCellGrid({
+  cityId,
+  centerGridLat,
+  centerGridLong,
+  selected,
+  onSelect,
+}: {
+  cityId: number;
+  centerGridLat: number;
+  centerGridLong: number;
+  selected: { gridLat: number; gridLong: number } | null;
+  onSelect: (gridLat: number, gridLong: number) => void;
+}) {
+  const client = useNovusMundusClient();
+  const ge = client.gameEngine;
+
+  const cells = useMemo(() => {
+    const result: { gridLat: number; gridLong: number }[] = [];
+    for (const dy of [2, 1, 0, -1, -2]) {
+      for (const dx of [-2, -1, 0, 1, 2]) {
+        result.push({ gridLat: centerGridLat + dy, gridLong: centerGridLong + dx });
+      }
+    }
+    return result;
+  }, [centerGridLat, centerGridLong]);
+
+  const [occupancy, setOccupancy] = useState<(boolean | null)[]>(() => new Array(25).fill(null));
+
+  useEffect(() => {
+    let cancelled = false;
+    const pdas = cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0]);
+    client.connection
+      .getMultipleAccountsInfo(pdas)
+      .then((accts) => {
+        if (!cancelled) setOccupancy(accts.map((a) => a !== null));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [cells, ge, cityId, client]);
+
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        Landing Cell
+      </div>
+      <div className="mt-1 grid grid-cols-5 gap-1">
+        {cells.map((cell, i) => {
+          const occupied = occupancy[i];
+          const loading = occupied === null;
+          const isEmpty = occupied === false;
+          const isCenter = i === 12;
+          const isSelected =
+            selected != null &&
+            selected.gridLat === cell.gridLat &&
+            selected.gridLong === cell.gridLong;
+
+          let style: string;
+          if (isSelected) {
+            style = "border-amber-500 bg-amber-900/40 text-amber-300 ring-1 ring-amber-500/50";
+          } else if (loading) {
+            style = "border-zinc-800 bg-surface/40 text-zinc-600 animate-pulse";
+          } else if (!isEmpty) {
+            style = "border-zinc-800 bg-zinc-900/50 text-zinc-700 opacity-50";
+          } else {
+            style = "border-green-800 bg-green-900/10 text-green-500 hover:bg-green-900/30 cursor-pointer";
+          }
+
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={!isEmpty}
+              onClick={() => isEmpty && onSelect(cell.gridLat, cell.gridLong)}
+              className={`aspect-square rounded border text-[10px] font-mono transition-all ${style}`}
+            >
+              {loading ? "" : isSelected ? "X" : !isEmpty ? "·" : isCenter ? "+" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 text-[9px] text-text-muted">
+        <span className="text-amber-300">X selected</span>
+        <span className="text-green-500">+ city centre</span>
+        <span className="text-zinc-600">· occupied</span>
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   createRecoverTroopsInstruction,
   calculateRecoveryCost,
   findBuilding,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const WOUNDED_UNITS = [
   { type: 0, label: "Infantry", field: "woundedDef1" as const },

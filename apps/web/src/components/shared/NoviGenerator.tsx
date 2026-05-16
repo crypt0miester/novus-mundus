@@ -14,7 +14,7 @@ import {
   createUpdateLockedNoviInstruction,
   getEffectiveTier,
   type SubscriptionTierConfig,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const INTERVAL_SECONDS = 300; // 5 minutes
 

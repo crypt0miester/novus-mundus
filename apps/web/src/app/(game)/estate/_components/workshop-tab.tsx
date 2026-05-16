@@ -9,7 +9,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { createConvertMaterialsInstruction } from "@/lib/sdk";
+import { createConvertMaterialsInstruction } from "novus-mundus-sdk";
 
 const MATERIAL_TIERS = [
   { id: 0, name: "Common", field: "commonMaterials" as const },

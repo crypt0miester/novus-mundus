@@ -231,13 +231,9 @@ impl GameEngine {
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored kingdom_id
-        let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
+        let expected_pda = Self::create_pda(loaded.kingdom_id, loaded.bump)?;
         if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
         }
 
         Ok(unsafe { super::Loaded::new(data, ptr) })
@@ -258,13 +254,9 @@ impl GameEngine {
         let loaded = unsafe { &*ptr };
 
         // Verify PDA matches stored kingdom_id
-        let (expected_pda, bump) = Self::derive_pda(loaded.kingdom_id);
+        let expected_pda = Self::create_pda(loaded.kingdom_id, loaded.bump)?;
         if account.address() != &expected_pda {
             return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
         }
 
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
@@ -1221,7 +1213,7 @@ impl CombatConfig {
             max_stamina_by_tier: [100, 500, 1000, 10000],
 
             stamina_regen_interval: 300,            // 5 minutes per 1 stamina
-            encounter_attack_range_meters: 10.0,
+            encounter_attack_range_meters: 16.0,
             pvp_attack_range_meters: 15.0,
 
             encounters_per_player_count: 5,         // +1 encounter per 5 players

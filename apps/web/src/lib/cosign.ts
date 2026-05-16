@@ -73,6 +73,11 @@ async function establishSession(signIn: SignIn): Promise<void> {
   }
 }
 
+/** Decode a base64 co-signed transaction from a co-sign endpoint response. */
+export function deserializeCoSignTx(base64: string): VersionedTransaction {
+  return VersionedTransaction.deserialize(base64ToBytes(base64));
+}
+
 /** GET a co-sign endpoint — used for ungated previews (e.g. the relic offer). */
 export async function fetchCoSign<T>(endpoint: string): Promise<T> {
   const res = await fetch(endpoint);
@@ -81,6 +86,35 @@ export async function fetchCoSign<T>(endpoint: string): Promise<T> {
     throw new Error(json.error ?? `request failed (${res.status})`);
   }
   return json;
+}
+
+/**
+ * POST a session-gated endpoint. On a 401 it runs the SIWS flow once (via
+ * `signIn`) and retries; the resulting `Response` is returned undecoded so the
+ * caller can parse it however it needs.
+ */
+async function postWithSiws(
+  endpoint: string,
+  body: Record<string, unknown>,
+  signIn: SignIn | undefined,
+): Promise<Response> {
+  const post = () =>
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const res = await post();
+  if (res.status !== 401) return res;
+
+  if (!signIn) {
+    throw new Error(
+      "This wallet does not support Sign In With Solana — cannot authorize game actions.",
+    );
+  }
+  await establishSession(signIn);
+  return post();
 }
 
 /**
@@ -95,23 +129,7 @@ export function useCoSign() {
       endpoint: string,
       body: Record<string, unknown> = {},
     ): Promise<VersionedTransaction> => {
-      const post = () =>
-        fetch(endpoint, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-      let res = await post();
-      if (res.status === 401) {
-        if (!signIn) {
-          throw new Error(
-            "This wallet does not support Sign In With Solana — cannot authorize game actions.",
-          );
-        }
-        await establishSession(signIn);
-        res = await post();
-      }
+      const res = await postWithSiws(endpoint, body, signIn);
 
       const json = (await res.json().catch(() => ({}))) as {
         transaction?: string;
@@ -125,5 +143,28 @@ export function useCoSign() {
     [signIn],
   );
 
-  return { requestCoSign };
+  /**
+   * Hook variant for session-gated endpoints that return arbitrary JSON (the
+   * mini-game `/start` and `/move` routes, the daily-activity co-sign). Same
+   * lazy-SIWS handling as `requestCoSign`.
+   */
+  const requestJson = useCallback(
+    async <T>(
+      endpoint: string,
+      body: Record<string, unknown> = {},
+    ): Promise<T> => {
+      const res = await postWithSiws(endpoint, body, signIn);
+
+      const json = (await res.json().catch(() => ({}))) as T & {
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(json.error ?? `request failed (${res.status})`);
+      }
+      return json;
+    },
+    [signIn],
+  );
+
+  return { requestCoSign, requestJson };
 }

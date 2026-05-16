@@ -19,7 +19,7 @@ import {
   createClaimMeditationInstruction,
   createSpeedupMeditationInstruction,
   getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const SPEEDUP_TIERS = [
   { tier: 1, label: "+1 hour", gems: 3_000 },
@@ -108,7 +108,7 @@ export function SanctuaryTab() {
     const ge = client.gameEngine;
     const ix = createSpeedupMeditationInstruction(
       { owner: publicKey, gameEngine: ge },
-      { speedupTier: tier }
+      { speedupTier: tier as 1 | 2 }
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -129,7 +129,7 @@ export function SanctuaryTab() {
     );
     const speedupIx = createSpeedupMeditationInstruction(
       { owner: publicKey, gameEngine: ge },
-      { speedupTier: tier }
+      { speedupTier: tier as 1 | 2 }
     );
     return transact.mutateAsync({
       instructions: [startIx, speedupIx],

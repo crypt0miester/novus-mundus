@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 
 /** POST /api/cosign/dungeon/choose-relic — co-sign the chosen relic. */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const parsed = await parseSessionBody<{ relicId?: number }>(req);

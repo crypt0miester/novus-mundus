@@ -12,8 +12,8 @@ import { refetchAccounts } from "@/lib/store/refetch";
 import { useEventStore, serializeEventData, type EventEntry } from "@/lib/store/events";
 import { classifyEvent } from "@/lib/events/classify";
 import { formatEventMessage } from "@/lib/events/format";
-import { parseTransactionError, parseEventsFromLogs } from "@/lib/sdk";
-import type { NovusMundusEvent } from "@/lib/sdk";
+import { parseTransactionError, parseEventsFromLogs } from "novus-mundus-sdk";
+import type { NovusMundusEvent } from "novus-mundus-sdk";
 
 // Pending TX Registry (WebSocket-based confirmation)
 

@@ -41,7 +41,7 @@ export function GET() {
  * derive `owner` from the session rather than trusting the request body.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   let payload: { input?: SolanaSignInInput; output?: SerializedOutput };

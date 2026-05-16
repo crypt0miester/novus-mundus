@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useExpedition } from "@/lib/hooks/useExpedition";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -15,10 +16,13 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import {
+  TripleCountInput,
+  OPERATIVE_UNIT_LABELS,
+} from "@/components/shared/TripleCountInput";
 import { bpsToPercent } from "@/lib/utils";
 import {
-  derivePlayerPda,
-  deriveExpeditionPda,
+  deriveHeroCollectionPda,
   createExpeditionStartInstruction,
   createExpeditionClaimInstruction,
   createExpeditionAbortInstruction,
@@ -26,8 +30,9 @@ import {
   getExpeditionEndTime,
   getExpeditionDurationSeconds,
   isTraveling,
+  isNullPubkey,
   ENCOUNTER_STAMINA_COSTS,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { useCoSign } from "@/lib/cosign";
 
 // Expedition reward constants (from novus_mundus constants)
@@ -63,6 +68,18 @@ export function ExpeditionTab() {
   const hasExpedition = expeditionData?.exists && expedition;
 
   const [selectedType, setSelectedType] = useState(1);
+  // Expedition configuration the player commits when starting.
+  const [expeditionTier, setExpeditionTier] = useState(0);
+  const [expeditionOps, setExpeditionOps] = useState<[number, number, number]>([0, 0, 0]);
+  const [expeditionHeroSlot, setExpeditionHeroSlot] = useState(NO_HERO_SLOT);
+  const availOps: [number, number, number] = [
+    player?.operativeUnit1?.toNumber?.() ?? 0,
+    player?.operativeUnit2?.toNumber?.() ?? 0,
+    player?.operativeUnit3?.toNumber?.() ?? 0,
+  ];
+
+  // The player's locked heroes (slots 0-2); one may optionally join the expedition.
+  const lockedHeroes = useLockedHeroes();
 
   // Traveling check
   const playerTraveling = player ? isTraveling(player) : false;
@@ -80,6 +97,9 @@ export function ExpeditionTab() {
     return true;
   }, [player, playerTraveling, hasExpedition]);
 
+  // Can only start once stamina + at least one operative are committed.
+  const canStartNow = canStart && hasStamina && expeditionOps.some((n) => n > 0);
+
   // Expedition time remaining
   const expeditionRemaining = hasExpedition
     ? Math.max(0, getExpeditionEndTime(expedition) - Math.floor(Date.now() / 1000))
@@ -87,12 +107,8 @@ export function ExpeditionTab() {
 
   // Reward preview for selected expedition type (tier 0 = base tier)
   const rewardPreview = useMemo(() => {
-    const tier = 0;
-    const ops = player
-      ? (player.operativeUnit1?.toNumber?.() ?? 0) +
-        (player.operativeUnit2?.toNumber?.() ?? 0) +
-        (player.operativeUnit3?.toNumber?.() ?? 0)
-      : 0;
+    const tier = expeditionTier;
+    const ops = expeditionOps[0] + expeditionOps[1] + expeditionOps[2];
 
     if (selectedType === 1) {
       // Mining
@@ -125,7 +141,7 @@ export function ExpeditionTab() {
         resourceIcon: "\uD83C\uDF3E",
       };
     }
-  }, [selectedType, player]);
+  }, [selectedType, expeditionTier, expeditionOps]);
 
   // Active expedition reward display
   const activeRewardInfo = useMemo(() => {
@@ -161,12 +177,25 @@ export function ExpeditionTab() {
 
   const handleStart = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (expeditionOps.every((n) => n === 0)) {
+      throw new Error("Send at least one operative");
+    }
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [expPda] = deriveExpeditionPda(playerPda);
+    const hero = expeditionHeroSlot < 3 ? lockedHeroes[expeditionHeroSlot] : null;
     const ix = createExpeditionStartInstruction(
-      { player: playerPda, expedition: expPda, gameEngine: ge, owner: publicKey },
-      { expeditionType: selectedType }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        heroMint: hero?.mint,
+        heroCollection: hero ? deriveHeroCollectionPda()[0] : undefined,
+      },
+      {
+        expeditionType: selectedType,
+        tier: expeditionTier,
+        operativeUnit1: expeditionOps[0],
+        operativeUnit2: expeditionOps[1],
+        operativeUnit3: expeditionOps[2],
+      },
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -179,11 +208,14 @@ export function ExpeditionTab() {
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [expPda] = deriveExpeditionPda(playerPda);
-    const ix = createExpeditionClaimInstruction(
-      { player: playerPda, expedition: expPda, gameEngine: ge, owner: publicKey }
-    );
+    const expHeroMint =
+      expedition && !isNullPubkey(expedition.heroMint) ? expedition.heroMint : null;
+    const ix = createExpeditionClaimInstruction({
+      owner: publicKey,
+      gameEngine: ge,
+      heroMint: expHeroMint ?? undefined,
+      heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
+    });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["expedition"], ["player"]],
@@ -195,11 +227,14 @@ export function ExpeditionTab() {
   const handleAbort = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [expPda] = deriveExpeditionPda(playerPda);
-    const ix = createExpeditionAbortInstruction(
-      { player: playerPda, expedition: expPda, gameEngine: ge, owner: publicKey }
-    );
+    const expHeroMint =
+      expedition && !isNullPubkey(expedition.heroMint) ? expedition.heroMint : null;
+    const ix = createExpeditionAbortInstruction({
+      owner: publicKey,
+      gameEngine: ge,
+      heroMint: expHeroMint ?? undefined,
+      heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
+    });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["expedition"], ["player"]],
@@ -213,7 +248,7 @@ export function ExpeditionTab() {
     const geKey = client.gameEngine;
     const ix = createExpeditionSpeedupInstruction(
       { owner: publicKey, gameEngine: geKey },
-      { speedupTier: tier },
+      { speedupTier: tier as 1 | 2 },
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -225,16 +260,29 @@ export function ExpeditionTab() {
 
   const handleStartAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (expeditionOps.every((n) => n === 0)) {
+      throw new Error("Send at least one operative");
+    }
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [expPda] = deriveExpeditionPda(playerPda);
+    const hero = expeditionHeroSlot < 3 ? lockedHeroes[expeditionHeroSlot] : null;
     const startIx = createExpeditionStartInstruction(
-      { player: playerPda, expedition: expPda, gameEngine: ge, owner: publicKey },
-      { expeditionType: selectedType }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        heroMint: hero?.mint,
+        heroCollection: hero ? deriveHeroCollectionPda()[0] : undefined,
+      },
+      {
+        expeditionType: selectedType,
+        tier: expeditionTier,
+        operativeUnit1: expeditionOps[0],
+        operativeUnit2: expeditionOps[1],
+        operativeUnit3: expeditionOps[2],
+      },
     );
     const speedupIx = createExpeditionSpeedupInstruction(
       { owner: publicKey, gameEngine: ge },
-      { speedupTier: tier },
+      { speedupTier: tier as 1 | 2 },
     );
     return transact.mutateAsync({
       instructions: [startIx, speedupIx],
@@ -405,11 +453,72 @@ export function ExpeditionTab() {
               ))}
             </div>
 
+            {/* Tier — higher tier = longer duration, better rewards */}
+            <div className="mt-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Tier
+              </div>
+              <div className="mt-2 grid grid-cols-5 gap-2">
+                {(() => {
+                  const durations =
+                    selectedType === 1 ? MINING_DURATION_HOURS : FISHING_DURATION_HOURS;
+                  return [0, 1, 2, 3, 4].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setExpeditionTier(t)}
+                      className={`rounded-lg border p-2 text-center transition-all ${
+                        expeditionTier === t
+                          ? "border-amber-600 bg-amber-900/20 text-text-primary"
+                          : "border-zinc-800 text-text-muted hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">T{t}</div>
+                      <div className="text-[10px] text-text-muted">{durations[t]}h</div>
+                    </button>
+                  ));
+                })()}
+              </div>
+            </div>
+
+            {/* Operatives to send — locked for the expedition's duration */}
+            <div className="mt-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Operatives to Send
+              </div>
+              <TripleCountInput
+                labels={OPERATIVE_UNIT_LABELS}
+                available={availOps}
+                value={expeditionOps}
+                onChange={setExpeditionOps}
+              />
+            </div>
+
+            {/* Hero — optional, grants bonus yield */}
+            <div className="mt-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Hero (optional)
+              </div>
+              <select
+                value={expeditionHeroSlot}
+                onChange={(e) => setExpeditionHeroSlot(Number(e.target.value))}
+                className="mt-2 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+              >
+                <option value={NO_HERO_SLOT}>No hero</option>
+                {lockedHeroes.map((h, i) =>
+                  h ? (
+                    <option key={i} value={i}>
+                      Slot {i}: {h.name}
+                    </option>
+                  ) : null,
+                )}
+              </select>
+            </div>
+
             {/* Reward Preview */}
             {rewardPreview && (
               <div className="mt-4 rounded-lg border border-zinc-800 bg-surface/50 p-3">
                 <div className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">
-                  Reward Preview (Tier 0)
+                  Reward Preview (Tier {expeditionTier})
                 </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div>
@@ -434,7 +543,7 @@ export function ExpeditionTab() {
                   </div>
                 </div>
                 <div className="mt-1 text-[11px] text-text-muted">
-                  Estimated rewards based on your {(player?.operativeUnit1?.toNumber?.() ?? 0) + (player?.operativeUnit2?.toNumber?.() ?? 0) + (player?.operativeUnit3?.toNumber?.() ?? 0)} operative units.
+                  Estimated for {(expeditionOps[0] + expeditionOps[1] + expeditionOps[2]).toLocaleString()} operatives sent.
                 </div>
               </div>
             )}
@@ -448,7 +557,7 @@ export function ExpeditionTab() {
 
             <div className="mt-4 space-y-3">
               <div className="flex justify-center">
-                <TxButton onClick={handleStart} className="px-8 py-3 text-lg" disabled={!canStart || !hasStamina}>
+                <TxButton onClick={handleStart} className="px-8 py-3 text-lg" disabled={!canStartNow}>
                   Start Expedition
                 </TxButton>
               </div>
@@ -457,7 +566,7 @@ export function ExpeditionTab() {
                   onClick={(rp) => handleStartAndSpeedup(1, rp)}
                   variant="secondary"
                   className="text-xs"
-                  disabled={!canStart || !hasStamina}
+                  disabled={!canStartNow}
                 >
                   Start &amp; Hasten (50% faster, costs gems)
                 </TxButton>
@@ -465,7 +574,7 @@ export function ExpeditionTab() {
                   onClick={(rp) => handleStartAndSpeedup(2, rp)}
                   variant="secondary"
                   className="text-xs"
-                  disabled={!canStart || !hasStamina}
+                  disabled={!canStartNow}
                 >
                   Start &amp; Rush (75% faster, costs gems)
                 </TxButton>

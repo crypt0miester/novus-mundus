@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  * Trap). The camp buff is only attached when the current room is a Camp.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const session = requireSession(req);

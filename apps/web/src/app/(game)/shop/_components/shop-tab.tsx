@@ -41,16 +41,19 @@ import {
   getActivityMultiplier,
   isGoldenHour,
   getEffectiveTier,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import type { PublicKey } from "@solana/web3.js";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import { systemFraming } from "@/lib/narrative";
 import { bpsToPercent } from "@/lib/utils";
 
+const CARAVAN_FRAMING = systemFraming("shop");
+
 const SHOP_CATEGORIES = [
-  { key: "items", label: "Items" },
-  { key: "bundles", label: "Bundles" },
-  { key: "flash", label: "Flash Sales" },
+  { key: "items", label: "Wares" },
+  { key: "bundles", label: "Caravan Lots" },
+  { key: "flash", label: "Passing Trade" },
   { key: "novi", label: "Buy NOVI" },
 ];
 
@@ -261,7 +264,7 @@ export function ShopTab() {
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
-      successMessage: `Purchased ${amount} NOVI!`,
+      successMessage: `Purchased ${amount} NOVI — credited to your Reserved balance.`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -300,6 +303,13 @@ export function ShopTab() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-text-primary">
+          {CARAVAN_FRAMING.title}
+        </h2>
+        <p className="mt-1 text-xs text-text-muted">{CARAVAN_FRAMING.line}</p>
+      </div>
+
       {/* Balance Bar */}
       {player && (
         <div className="card accent-border">
@@ -354,9 +364,9 @@ export function ShopTab() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {!itemsReady ? (
-              <div className="card"><p className="text-sm text-text-muted">Loading items...</p></div>
+              <div className="card"><p className="text-sm text-text-muted">Loading wares...</p></div>
             ) : activeItems.length === 0 ? (
-              <div className="card"><p className="text-sm text-text-muted">No items available in the shop right now.</p></div>
+              <div className="card"><p className="text-sm text-text-muted">The caravan has no wares laid out at the moment.</p></div>
             ) : (
               <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
                 {activeItems.map((item) => {
@@ -414,7 +424,7 @@ export function ShopTab() {
               return (
                 <>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Shop Item</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Ware</h3>
                     <button onClick={() => setSelectedItem(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
                   </div>
 
@@ -507,9 +517,9 @@ export function ShopTab() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {!bundlesReady ? (
-              <div className="card"><p className="text-sm text-text-muted">Loading bundles...</p></div>
+              <div className="card"><p className="text-sm text-text-muted">Loading caravan lots...</p></div>
             ) : activeBundles.length === 0 ? (
-              <div className="card"><p className="text-sm text-text-muted">No bundles available right now.</p></div>
+              <div className="card"><p className="text-sm text-text-muted">The caravan is carrying no lots at the moment.</p></div>
             ) : (
               <div className="grid gap-2 grid-cols-2">
                 {activeBundles.map((bundle) => {
@@ -526,7 +536,7 @@ export function ShopTab() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-text-gold">Bundle #{bundle.bundleId}</span>
+                        <span className="text-sm font-semibold text-text-gold">Lot #{bundle.bundleId}</span>
                         {b.savingsBps > 0 && (
                           <span className="text-[10px] text-green-400">{(b.savingsBps / 100).toFixed(0)}% off</span>
                         )}
@@ -549,12 +559,12 @@ export function ShopTab() {
               return (
                 <>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Bundle</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Caravan Lot</h3>
                     <button onClick={() => setSelectedBundle(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
                   </div>
 
                   <div>
-                    <div className="text-sm font-semibold text-text-gold">Bundle #{effectiveBundle}</div>
+                    <div className="text-sm font-semibold text-text-gold">Lot #{effectiveBundle}</div>
                     <div className="text-xs text-text-muted">
                       Tier {b.tier} &middot; {b.itemCount} items
                       {b.requiresSubscription > 0 && " \u00b7 Subscription required"}
@@ -610,9 +620,9 @@ export function ShopTab() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {!flashSalesReady ? (
-              <div className="card"><p className="text-sm text-text-muted">Loading flash sales...</p></div>
+              <div className="card"><p className="text-sm text-text-muted">Loading passing trade...</p></div>
             ) : activeFlashSales.length === 0 ? (
-              <div className="card text-center"><p className="text-text-muted">No flash sales active right now. Check back soon!</p></div>
+              <div className="card text-center"><p className="text-text-muted">No merchant is passing through with a limited offer at the moment.</p></div>
             ) : (
               <div className="grid gap-2 grid-cols-2">
                 {activeFlashSales.map((sale) => {
@@ -620,7 +630,7 @@ export function ShopTab() {
                   const discountPct = (s.discountBps / 100).toFixed(0);
                   const isSelected = effectiveSale === sale.saleId;
                   const itemName = s.isBundle
-                    ? `Bundle #${s.itemId}`
+                    ? `Lot #${s.itemId}`
                     : (() => {
                         const info = getItemTypeInfo(findItemType(activeItems, s.itemId));
                         return info ? info.name : `Item #${s.itemId}`;
@@ -636,7 +646,7 @@ export function ShopTab() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold uppercase text-red-400">Flash Sale</span>
+                        <span className="text-[10px] font-semibold uppercase text-red-400">Passing Trade</span>
                         <span className="text-[10px] font-bold text-red-400">-{discountPct}%</span>
                       </div>
                       <div className="text-sm font-semibold text-text-primary truncate">{itemName}</div>
@@ -660,16 +670,8 @@ export function ShopTab() {
                 : deriveShopItemPda(ge, s.itemId)[0];
               const discountPct = (s.discountBps / 100).toFixed(0);
               const endsAtSec = s.endsAt.toNumber();
-              const remainingSec = Math.max(0, endsAtSec - nowSec);
-              const totalDurationSec = endsAtSec - s.startsAt.toNumber();
-              const pctRemaining = totalDurationSec > 0
-                ? Math.round((remainingSec / totalDurationSec) * 100)
-                : 0;
-              const stockPct = s.maxStock.gtn(0)
-                ? Math.round((s.remainingStock.toNumber() / s.maxStock.toNumber()) * 100)
-                : 100;
               const itemName = s.isBundle
-                ? `Bundle #${s.itemId}`
+                ? `Lot #${s.itemId}`
                 : (() => {
                     const info = getItemTypeInfo(findItemType(activeItems, s.itemId));
                     return info ? info.name : `Item #${s.itemId}`;
@@ -677,7 +679,7 @@ export function ShopTab() {
               return (
                 <>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Flash Sale</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Passing Trade</h3>
                     <button onClick={() => setSelectedSale(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
                   </div>
 
@@ -689,21 +691,15 @@ export function ShopTab() {
                   <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Stock</span>
-                      <span className={stockPct <= 20 ? "text-red-400 font-semibold" : "text-text-muted"}>
+                      <span className="text-text-muted">
                         {s.remainingStock.toString()}/{s.maxStock.toString()}
-                        {stockPct <= 20 && " — Almost gone!"}
                       </span>
                     </div>
                   </div>
 
-                  <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
-                    <div className="text-xs text-text-muted">Ends in</div>
+                  <div className="rounded-lg border border-zinc-800 bg-surface/60 p-3 text-center">
+                    <div className="text-xs text-text-muted">Offer ends</div>
                     <GoldCountdown endsAt={endsAtSec} startedAt={s.startsAt.toNumber()} format="compact" size="sm" />
-                    {pctRemaining <= 25 && pctRemaining > 0 && (
-                      <div className="mt-1 text-[11px] font-semibold text-amber-400">
-                        {pctRemaining}% time remaining
-                      </div>
-                    )}
                   </div>
 
                   <TxButton
@@ -711,7 +707,7 @@ export function ShopTab() {
                     className="w-full"
                     disabled={s.remainingStock.eqn(0)}
                   >
-                    {s.remainingStock.eqn(0) ? "Sold Out" : `Buy Now (-${discountPct}%)`}
+                    {s.remainingStock.eqn(0) ? "Sold Out" : `Buy for -${discountPct}%`}
                   </TxButton>
                 </>
               );
@@ -879,6 +875,13 @@ export function ShopTab() {
 
                 <div className="text-[10px] text-text-muted">
                   Base: {lamportsToSol(gameEngine.noviPurchaseConfig.noviBasePriceLamports.toNumber())} SOL/NOVI
+                </div>
+
+                <div className="rounded-md border border-amber-900/40 bg-amber-900/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300/90">
+                  Purchased NOVI is credited to your{" "}
+                  <span className="font-semibold">Reserved</span> balance — not Locked.
+                  Convert it to Locked NOVI (Dashboard, or Estate &rarr; Vault) before you
+                  can spend it on gameplay.
                 </div>
 
                 <TxButton

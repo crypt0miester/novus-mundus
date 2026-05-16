@@ -20,7 +20,7 @@ interface MultiAttackRequest {
  * batch — the program applies the same crit / double-strike to every attack.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const parsed = await parseSessionBody<MultiAttackRequest>(req);

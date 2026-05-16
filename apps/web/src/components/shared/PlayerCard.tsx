@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { Badge } from "@/components/shared/Badge";
 import { UnitGrid } from "@/components/shared/UnitGrid";
-import type { PlayerAccount } from "@/lib/sdk";
+import type { PlayerAccount } from "novus-mundus-sdk";
 
 interface PlayerCardProps {
   address: string;

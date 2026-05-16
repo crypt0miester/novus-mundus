@@ -209,8 +209,10 @@ pub const MAX_STAMINA_BY_TIER: [u64; 4] = [
     10000,  // Legendary: 10000 max stamina
 ];
 
-/// Attack range for encounters (meters)
-pub const ENCOUNTER_ATTACK_RANGE_METERS: f64 = 10.0;
+/// Attack range for encounters (meters).
+/// Must exceed one grid cell (~11m N/S, ~10.2m E/W at mid latitudes) so an
+/// encounter in an adjacent cell is reachable — 16m clears a diagonal cell.
+pub const ENCOUNTER_ATTACK_RANGE_METERS: f64 = 16.0;
 
 /// Attack range for PvP combat (meters)
 pub const PVP_ATTACK_RANGE_METERS: f64 = 15.0;

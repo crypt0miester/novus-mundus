@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useTeam } from "@/lib/hooks/useTeam";
+import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -15,21 +17,24 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
 import {
+  TripleCountInput,
+  DEFENSIVE_UNIT_LABELS,
+  WEAPON_LABELS,
+} from "@/components/shared/TripleCountInput";
+import {
   derivePlayerPda,
-  deriveReinforcementPda,
   createSendReinforcementInstruction,
   createRecallReinforcementInstruction,
   createProcessArrivalInstruction,
   createRelieveReinforcementInstruction,
   createReinforcementSpeedupInstruction,
   parsePlayer,
+  isNullPubkey,
   isTraveling,
   getCurrentTimeOfDay,
   getTimeOfDayName,
-  getActivityMultiplier,
-  getTotalDefensiveUnits,
   type ReinforcementAccount,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const REINFORCEMENT_STATUS_LABEL = ["Traveling", "Active", "Returning", "Completed"];
 
@@ -51,15 +56,32 @@ export function ReinforceTab() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const transact = useTransact();
+  const teamPubkey = player?.team && !isNullPubkey(player.team) ? player.team : null;
+  const { data: teamData } = useTeam(teamPubkey);
+  const teamId = teamData?.account?.id;
+  const ownedUnits: [number, number, number] = [
+    player?.defensiveUnit1?.toNumber?.() ?? 0,
+    player?.defensiveUnit2?.toNumber?.() ?? 0,
+    player?.defensiveUnit3?.toNumber?.() ?? 0,
+  ];
+  const ownedWeapons: [number, number, number] = [
+    player?.meleeWeapons?.toNumber?.() ?? 0,
+    player?.rangedWeapons?.toNumber?.() ?? 0,
+    player?.siegeWeapons?.toNumber?.() ?? 0,
+  ];
+
+  // Locked heroes (slots 0-2); one may optionally travel with the reinforcement.
+  const [reinHeroSlot, setReinHeroSlot] = useState(NO_HERO_SLOT);
+  const lockedHeroes = useLockedHeroes();
 
   const nowSec = Math.floor(Date.now() / 1000);
   const traveling = player ? isTraveling(player) : false;
   const tod = useMemo(() => getCurrentTimeOfDay(nowSec, 0), [nowSec]);
   const todName = getTimeOfDayName(tod);
-  const totalDefensive = player ? getTotalDefensiveUnits(player).toNumber() : 0;
 
   const [targetAddress, setTargetAddress] = useState("");
-  const [units, setUnits] = useState(10);
+  const [reinUnits, setReinUnits] = useState<[number, number, number]>([0, 0, 0]);
+  const [reinWeapons, setReinWeapons] = useState<[number, number, number]>([0, 0, 0]);
 
   // In-flight reinforcements — fetched both directions (sent + received).
   // The store only keeps a single reinforcement singleton, so the list of all
@@ -130,26 +152,46 @@ export function ReinforceTab() {
   }, [targetAddress]);
 
   const handleSend = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !targetAddress) throw new Error("Missing data");
+    if (!publicKey || !player) throw new Error("Wallet not connected");
+    if (!isValidAddress) throw new Error("Enter a valid target address");
+    if (!teamId) throw new Error("You must be on a team to send reinforcements");
+    if (reinUnits.every((n) => n === 0) && reinWeapons.every((n) => n === 0)) {
+      throw new Error("Choose units or weapons to send");
+    }
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const targetPubkey = new PublicKey(targetAddress);
-    const [receiverPda] = derivePlayerPda(ge, targetPubkey);
-    const [reinforcementPda] = deriveReinforcementPda(ge, playerPda, receiverPda);
+    const targetPubkey = new PublicKey(targetAddress.trim());
+    // The destination's current city is needed for the instruction — read it
+    // from their on-chain player account.
+    const [destPda] = derivePlayerPda(ge, targetPubkey);
+    const destInfo = await connection.getAccountInfo(destPda);
+    const destPlayer = destInfo ? parsePlayer(destInfo) : null;
+    if (!destPlayer) throw new Error("Target player not found");
+    const hero = reinHeroSlot < 3 ? lockedHeroes[reinHeroSlot] : null;
     const ix = createSendReinforcementInstruction(
       {
-        player: playerPda,
-        receiver: receiverPda,
-        reinforcement: reinforcementPda,
+        sender: publicKey,
         gameEngine: ge,
-        owner: publicKey,
+        destinationOwner: targetPubkey,
+        senderCityId: player.currentCity,
+        destinationCityId: destPlayer.currentCity,
+        teamId: teamId.toNumber(),
+        heroNft: hero?.mint,
       },
-      { units }
+      {
+        defensiveUnit1: reinUnits[0],
+        defensiveUnit2: reinUnits[1],
+        defensiveUnit3: reinUnits[2],
+        meleeWeapons: reinWeapons[0],
+        rangedWeapons: reinWeapons[1],
+        siegeWeapons: reinWeapons[2],
+        heroSlot: hero ? reinHeroSlot : NO_HERO_SLOT,
+      },
     );
+    const total = reinUnits.reduce((a, b) => a + b, 0);
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
-      successMessage: `Sent ${units} reinforcements!`,
+      successMessage: `Sent ${total.toLocaleString()} units in reinforcement!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -288,25 +330,56 @@ export function ReinforceTab() {
               <p className="text-xs text-red-400">Invalid Solana address</p>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-text-muted">Units:
-              <input
-                type="number"
-                value={units}
-                onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                min={1}
-              />
-            </label>
-            {units > totalDefensive && totalDefensive > 0 && (
-              <p className="text-xs text-red-400">
-                Exceeds defensive units ({totalDefensive.toLocaleString()})
-              </p>
-            )}
+          {/* Units & weapons committed to the reinforcement */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Defensive Units
+            </div>
+            <TripleCountInput
+              labels={DEFENSIVE_UNIT_LABELS}
+              available={ownedUnits}
+              value={reinUnits}
+              onChange={setReinUnits}
+            />
+            <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Weapons
+            </div>
+            <TripleCountInput
+              labels={WEAPON_LABELS}
+              available={ownedWeapons}
+              value={reinWeapons}
+              onChange={setReinWeapons}
+            />
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Hero (optional)
+            </div>
+            <select
+              value={reinHeroSlot}
+              onChange={(e) => setReinHeroSlot(Number(e.target.value))}
+              className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+            >
+              <option value={NO_HERO_SLOT}>No hero</option>
+              {lockedHeroes.map((h, i) =>
+                h ? (
+                  <option key={i} value={i}>
+                    Slot {i}: {h.name}
+                  </option>
+                ) : null,
+              )}
+            </select>
           </div>
           <div className="flex flex-wrap gap-3">
-            <TxButton onClick={handleSend} disabled={!isValidAddress || units > totalDefensive || traveling}>
-              Send {units} Units
+            <TxButton
+              onClick={handleSend}
+              disabled={
+                !isValidAddress ||
+                traveling ||
+                (reinUnits.every((n) => n === 0) && reinWeapons.every((n) => n === 0))
+              }
+            >
+              Send Reinforcement
             </TxButton>
           </div>
         </div>

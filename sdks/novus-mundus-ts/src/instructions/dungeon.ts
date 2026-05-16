@@ -248,6 +248,8 @@ export interface EnterDungeonAccounts {
   gameEngine: PublicKey;
   /** Hero NFT mint (MPL Core asset) */
   heroMint: PublicKey;
+  /** Game authority (signer) — authenticates the backend-rolled first room type */
+  gameAuthority: PublicKey;
 }
 
 export interface EnterDungeonParams {
@@ -277,16 +279,19 @@ export function createEnterDungeonInstruction(
 
   // Rust account order:
   // 0. owner (signer, writable)
-  // 1. player (writable)
-  // 2. dungeon_template (read)
-  // 3. dungeon_run (writable)
-  // 4. estate (read)
-  // 5. hero_mint (writable)
-  // 6. hero_collection (read)
-  // 7. system_program (read)
-  // 8. mpl_core_program (needed for hero NFT transfer CPI)
+  // 1. game_authority (signer)
+  // 2. player (writable)
+  // 3. dungeon_template (read)
+  // 4. dungeon_run (writable)
+  // 5. estate (read)
+  // 6. hero_mint (writable)
+  // 7. hero_collection (read)
+  // 8. system_program (read)
+  // 9. mpl_core_program (needed for hero NFT transfer CPI)
+  // 10. game_engine (read — for game_authority validation)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
+    { pubkey: accounts.gameAuthority, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: false },
     { pubkey: dungeonRun, isSigner: false, isWritable: true },
@@ -295,6 +300,7 @@ export function createEnterDungeonInstruction(
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: dungeon_id (u16), first_room_type (u8), hero_specialization (u8)
@@ -708,6 +714,8 @@ export interface ResumeAccounts {
   owner: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
+  /** Game authority (signer) — authenticates the backend-rolled first room type */
+  gameAuthority: PublicKey;
 }
 
 export interface ResumeParams {
@@ -733,14 +741,18 @@ export function createResumeInstruction(
 
   // Rust account order:
   // 0. owner (signer)
-  // 1. player (writable)
-  // 2. dungeon_template (read)
-  // 3. dungeon_run (writable)
+  // 1. game_authority (signer)
+  // 2. player (writable)
+  // 3. dungeon_template (read)
+  // 4. dungeon_run (writable)
+  // 5. game_engine (read — for game_authority validation)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: accounts.gameAuthority, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: false },
     { pubkey: dungeonRun, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: first_room_type (u8)

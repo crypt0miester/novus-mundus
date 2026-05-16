@@ -21,7 +21,7 @@ import {
   isSeasonActive,
   ARENA_MAX_DAILY_BATTLES,
   ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { useCoSign } from "@/lib/cosign";
 
 export function ArenaTab() {

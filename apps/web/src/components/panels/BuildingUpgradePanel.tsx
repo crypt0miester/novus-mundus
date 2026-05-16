@@ -9,7 +9,8 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
-import { findBuilding, BuildingStatus } from "@/lib/sdk";
+import { findBuilding } from "novus-mundus-sdk";
+import { buildingPhase } from "@/lib/narrative";
 
 /** Renders in the right panel when a building is selected for build/upgrade/speedup. */
 export function BuildingUpgradePanel({
@@ -34,11 +35,14 @@ export function BuildingUpgradePanel({
 
   const config = BUILDING_FEATURE_MAP.get(buildingId);
   const slot = estate ? findBuilding(estate, buildingId) : null;
-  const isConstructing =
-    slot?.status === BuildingStatus.Building ||
-    slot?.status === BuildingStatus.Upgrading;
 
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
+  const phase = buildingPhase(slot, tick);
+  const isConstructing =
+    phase === "rising" ||
+    phase === "raised" ||
+    phase === "improving" ||
+    phase === "improved";
   useEffect(() => {
     if (!isConstructing) return;
     const interval = setInterval(() => setTick(Math.floor(Date.now() / 1000)), 1000);
@@ -48,7 +52,7 @@ export function BuildingUpgradePanel({
   const remainingSec = isConstructing
     ? Math.max(0, (slot?.constructionEnds?.toNumber?.() ?? 0) - tick)
     : 0;
-  const ready = isConstructing && remainingSec === 0;
+  const ready = phase === "raised" || phase === "improved";
 
   const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
   const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;

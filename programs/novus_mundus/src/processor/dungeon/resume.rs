@@ -9,7 +9,7 @@ use crate::{
     error::GameError,
     state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
     constants::DUNGEON_RESUME_GEM_COST,
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_game_authority},
     emit,
     events::DungeonResumed,
 };
@@ -26,27 +26,32 @@ use crate::{
 ///
 /// # Accounts
 /// - [signer] owner: Player's wallet
+/// - [signer] game_authority: Game server (authenticates the backend-rolled first_room_type)
 /// - [writable] player: PlayerAccount PDA
 /// - [] dungeon_template: DungeonTemplate PDA
 /// - [writable] dungeon_run: DungeonRun PDA
+/// - [] game_engine: GameEngine PDA (for game_authority validation)
 ///
 /// # Instruction Data
-/// - first_room_type: u8 (room type for first room after resume)
+/// - first_room_type: u8 (chosen by backend; authenticated by the game_authority signature)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse accounts
+    // 1. Parse accounts (game_authority co-signs to authenticate first_room_type)
     crate::extract_accounts!(accounts, exact [
         owner,
+        game_authority,
         player_account,
         dungeon_template_account,
         dungeon_run_account,
+        game_engine_account,
     ]);
 
-    // 2. Validate signer
+    // 2. Validate signers
     require_signer(owner)?;
+    require_signer(game_authority)?;
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
 
@@ -58,6 +63,10 @@ pub fn process(
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
+
+    // 4a. Validate game_authority against the player's kingdom GameEngine.
+    // The game_authority signature authenticates the backend-rolled first_room_type.
+    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
 
     // 5. Load dungeon run using load_checked_mut (PDA derived from player_account)
     let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;

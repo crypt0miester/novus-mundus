@@ -552,7 +552,9 @@ cd sdks/novus-mundus-ts
 bun run validator:start       # solana-test-validator on http://127.0.0.1:8899
 ```
 
-This loads the Novus Mundus program plus MPL Core, TLD House, and ALT Name Service, and clones the `.sol` TLD accounts from mainnet. Leave it running in its own terminal. Use `bun run validator:reset` to wipe the ledger.
+This loads the Novus Mundus program plus MPL Core, TLD House, and ALT Name Service, and clones the `.solana` TLD accounts from mainnet. Leave it running in its own terminal.
+
+Every `validator:start` boots a **fresh ledger** (`start-validator.sh` always passes `--reset`) — game state does not persist across restarts, so re-run step 4 after each start. `bun run validator:reset` additionally deletes the `.validator-ledger` directory; `bun run validator:debug` adds `--log`; `bun run validator:stop` stops it.
 
 ### 4. Initialize game data
 
@@ -561,7 +563,7 @@ In a second terminal, seed the kingdom with the `novus` CLI:
 ```bash
 cd sdks/novus-mundus-ts
 bun run novus airdrop         # fund the authority + treasury keypairs
-bun run novus init all        # 10 phases: GameEngine, 50 cities, heroes, research, shop, dungeons, castles, arena, events
+bun run novus init all        # 10 phases: GameEngine, 32 cities, heroes, research, shop, dungeons, castles, arena, events
 bun run novus status          # verify each system reports OK
 bun run novus create-player   # register a player for your wallet
 ```
@@ -576,12 +578,15 @@ bun install
 bun dev                       # → http://localhost:3000
 ```
 
-The web app reads `apps/web/.env.local`. It ships pointing at the local validator; the relevant variables are:
+The web app reads `apps/web/.env.local`. It ships pointing at the local validator; the client-facing variables are:
 
 ```
-NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899   # default
+NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899   # local validator
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:8900      # local validator websocket
 NEXT_PUBLIC_KINGDOM_ID=0                    # optional, defaults to 0
 ```
+
+SIWS login and co-signed instructions (dungeon enter, expedition strike, arena matches, estate daily activity) additionally need **server-only** secrets — `GAME_AUTHORITY_SECRET_KEY`, `GAME_AUTHORITY_RNG_SECRET`, and `SESSION_SECRET`. On a local validator `GAME_AUTHORITY_SECRET_KEY` is the DAO authority keypair (`sdks/novus-mundus-ts/keys/dao-authority.json`). Never prefix these with `NEXT_PUBLIC_`; see `GAME_AUTHORITY_API.md`.
 
 Open `/world` to see the realm map. Point `NEXT_PUBLIC_RPC_URL` at devnet to run against a deployed kingdom instead.
 
@@ -600,7 +605,7 @@ Browse available kingdoms by theme and age. New player? Pick a recently launched
 - `init_player` (per-kingdom, instruction 1) — receive 1M starter locked NOVI; 24-hour new-player protection begins
 
 ### Step 4: Build Your Strategy
-Hire units, maintain happiness, attack diverse opponents, collect resources, claim a name via `set_player_name` (alt-name-service / .alldomains).
+Hire units, maintain happiness, attack diverse opponents, collect resources, claim a name via `set_player_name` (alt-name-service / .solana).
 
 ### Step 5: Join Events
 Start with daily challenges (7-day eligibility). Progress to weekly tournaments (30-day), seasonal events (60-day+).

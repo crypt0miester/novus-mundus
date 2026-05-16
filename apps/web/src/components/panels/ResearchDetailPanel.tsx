@@ -29,8 +29,8 @@ import {
   isResearchComplete,
   getResearchLevel,
   checkResearchPrerequisites,
-} from "@/lib/sdk";
-import type { ResearchTemplateAccount, ResearchProgressAccount } from "@/lib/sdk";
+} from "novus-mundus-sdk";
+import type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
 
 const BUFF_NAMES: Record<number, string> = {
   0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",

@@ -134,3 +134,26 @@ pub fn require_key_match(account: &AccountView, expected: &Address) -> Result<()
     }
     Ok(())
 }
+
+/// Require `game_authority` co-signs for `player`'s kingdom.
+///
+/// Loads `game_engine_account`, confirms it is the player's own GameEngine
+/// (`KingdomMismatch` otherwise) and that the signer matches its stored
+/// `game_authority` (`Unauthorized` otherwise). The game_authority signature
+/// is what authenticates backend-rolled instruction data (room types, RNG
+/// flags) — without this check a client could supply those freely.
+pub fn require_game_authority(
+    game_engine_account: &AccountView,
+    game_authority: &AccountView,
+    player_game_engine: &Address,
+    program_id: &Address,
+) -> Result<(), ProgramError> {
+    let game_engine = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    if game_engine_account.address() != player_game_engine {
+        return Err(crate::error::GameError::KingdomMismatch.into());
+    }
+    if game_authority.address() != &game_engine.game_authority {
+        return Err(crate::error::GameError::Unauthorized.into());
+    }
+    Ok(())
+}

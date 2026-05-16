@@ -8,9 +8,12 @@ import { sessionOwner } from "./session";
  * Shared request/response helpers for the `/api/cosign/*` route handlers.
  */
 
-/** A JSON error response. */
-export function fail(error: string, status = 400): NextResponse {
-  return NextResponse.json({ error }, { status });
+/**
+ * A JSON error response. `code` is an optional machine-readable tag the client
+ * can branch on (e.g. `WRONG_WINDOW`) alongside the human-readable `error`.
+ */
+export function fail(error: string, status = 400, code?: string): NextResponse {
+  return NextResponse.json(code ? { error, code } : { error }, { status });
 }
 
 /** Parse an `owner` pubkey string, or return an error response. */

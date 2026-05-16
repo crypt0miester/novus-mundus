@@ -1,6 +1,6 @@
 import type { PublicKey } from "@solana/web3.js";
-import type { NovusMundusClient } from "@/lib/sdk";
-import { tryDeserializeAnyAccount } from "@/lib/sdk";
+import type { NovusMundusClient } from "novus-mundus-sdk";
+import { tryDeserializeAnyAccount } from "novus-mundus-sdk";
 import { useAccountStore } from "./accounts";
 
 /**

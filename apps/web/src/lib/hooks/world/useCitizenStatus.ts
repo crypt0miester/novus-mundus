@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { derivePlayerPda } from "@/lib/sdk";
+import { derivePlayerPda } from "novus-mundus-sdk";
 
 export function useCitizenStatus() {
   const { publicKey, connected } = useWallet();

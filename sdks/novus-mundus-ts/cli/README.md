@@ -37,7 +37,7 @@ novus init <target>              # Initialize a specific system
 | Phase | Target | Description |
 |-------|--------|-------------|
 | 1 | `engine` | GameEngine root account |
-| 2 | `cities` | 50 city POIs |
+| 2 | `cities` | 32 city POIs |
 | 3 | `heroes` | Hero collection + templates |
 | 4 | `research` | Research templates |
 | 5 | `subscriptions` | Subscription tier definitions |

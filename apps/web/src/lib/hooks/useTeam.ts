@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { parseTeam } from "@/lib/sdk";
+import { parseTeam } from "novus-mundus-sdk";
 import type { PublicKey } from "@solana/web3.js";
 
 export function useTeam(teamPubkey: PublicKey | null | undefined) {

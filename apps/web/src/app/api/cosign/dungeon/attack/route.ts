@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  * game_authority-signed VersionedTransaction for the wallet to finish.
  */
 export async function POST(req: Request) {
-  const limited = rateLimited(req);
+  const limited = await rateLimited(req);
   if (limited) return limited;
 
   const session = requireSession(req);

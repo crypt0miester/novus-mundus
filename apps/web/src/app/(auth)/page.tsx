@@ -3,29 +3,32 @@
 import { useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
-import { useTransitionStore, enterMessage, spectateMessage } from "@/lib/store/transition";
+import Noise from "@/components/shared/animations/Noise";
+import { useTransitionStore, spectateMessage } from "@/lib/store/transition";
 
 export default function LandingPage() {
   const { connected } = useWallet();
   const trigger = useTransitionStore((s) => s.trigger);
   const phase = useTransitionStore((s) => s.phase);
 
-  // Transition to dashboard when wallet connects
+  // Cross into the realm when the wallet connects — the estate is home.
   useEffect(() => {
     if (connected && phase === "idle") {
-      trigger(enterMessage(), "/dashboard");
+      trigger("The road brought you here.", "/estate");
     }
   }, [connected, phase, trigger]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 px-4">
+      <Noise />
+
       {/* Title */}
       <div className="text-center">
         <h1 className="tier-title font-display text-5xl font-bold tracking-wider md:text-7xl">
           NOVUS MUNDUS
         </h1>
         <p className="mt-4 text-lg text-text-secondary">
-          Conquer kingdoms. Forge empires. Command armies.
+          The old world is gone. What rises from its bones is yours to shape — or to lose.
         </p>
         <p className="mt-1 text-sm text-text-muted">On Solana.</p>
       </div>

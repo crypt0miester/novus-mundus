@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useCallback } from "react";
+import { Suspense, useMemo, useCallback, useState, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -12,10 +12,16 @@ import { TxButton } from "@/components/shared/TxButton";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToPercent } from "@/lib/utils";
-import { getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling } from "@/lib/sdk";
+import { getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling, findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
 import { BuildingGrid } from "./_components/building-grid";
 import { FeatureView, hasCenterView } from "./_components/feature-view";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
+import { Arrival } from "@/components/arrival/Arrival";
+import { Chronicle } from "@/components/chronicle/Chronicle";
+import { ChapterBand } from "./_components/chapter-band";
+import { buildingPhase } from "@/lib/narrative";
+import MagicRings from "@/components/shared/animations/MagicRing";
+import { DailyActivityTracker } from "./_components/daily-activity/DailyActivityTracker";
 
 function EstateContent() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -29,7 +35,6 @@ function EstateContent() {
 
   const {
     handleCreateEstate,
-    handleDailyActivity,
     handleBuyPlot,
     handleBuildOrUpgrade,
     handleBuildingSpeedup,
@@ -59,10 +64,11 @@ function EstateContent() {
 
   // Building counts
   const activeCount = estate?.buildings?.filter(
-    (b: any) => b.status === 2 || b.status === 3
+    (b: BuildingSlot) =>
+      b.status === BuildingStatus.Active || b.status === BuildingStatus.Upgrading
   ).length ?? 0;
   const constructingCount = estate?.buildings?.filter(
-    (b: any) => b.status === 1 || b.status === 4
+    (b: BuildingSlot) => b.status === BuildingStatus.Building
   ).length ?? 0;
 
   // Handle building selection for right panel
@@ -91,13 +97,46 @@ function EstateContent() {
     [setActiveBuilding]
   );
 
-  // If a building feature view is active, show it
-  if (activeBuilding && hasCenterView(Number(activeBuilding))) {
+  // The Arrival — onboarding gate. The estate is home; a player without an
+  // estate (or no player at all) sees the Arrival before the holding.
+  const [arrivalState, setArrivalState] = useState<"pending" | "running" | "done">(
+    "pending",
+  );
+  useEffect(() => {
+    if (arrivalState !== "pending") return;
+    if (!playerReady || !estateReady) return;
+    setArrivalState(playerData?.exists && estateData?.exists ? "done" : "running");
+  }, [arrivalState, playerReady, estateReady, playerData, estateData]);
+
+  if (arrivalState === "pending") {
     return (
-      <PageTransition>
-        <FeatureView buildingId={Number(activeBuilding)} />
-      </PageTransition>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-56 w-56">
+          <MagicRings color="#92400e" colorTwo="#fbbf24" />
+        </div>
+      </div>
     );
+  }
+  if (arrivalState === "running") {
+    return (
+      <Arrival
+        hasPlayer={!!playerData?.exists}
+        onComplete={() => setArrivalState("done")}
+      />
+    );
+  }
+
+  // If a building feature view is active and the building is usable, show it.
+  if (activeBuilding && hasCenterView(Number(activeBuilding))) {
+    const slot = estate ? findBuilding(estate, Number(activeBuilding)) : null;
+    const phase = buildingPhase(slot, now);
+    if (phase === "standing" || phase === "improving" || phase === "improved") {
+      return (
+        <PageTransition>
+          <FeatureView buildingId={Number(activeBuilding)} />
+        </PageTransition>
+      );
+    }
   }
 
   return (
@@ -109,24 +148,32 @@ function EstateContent() {
           </div>
         )}
 
-        {/* No estate yet */}
+        {/* No holding yet — the ground is unclaimed */}
         {!estateData?.exists && estateReady && (
           <div className="card accent-border text-center">
             <p className="mb-4 text-text-secondary">
-              You haven&apos;t established your estate yet. Build your domain!
+              The ground here is yours for the taking. Drive your stakes and
+              the climb begins.
             </p>
-            <TxButton onClick={handleCreateEstate}>Establish Estate</TxButton>
+            <TxButton onClick={handleCreateEstate}>Claim the Ground</TxButton>
           </div>
         )}
 
         {/* Estate exists */}
         {estateData?.exists && (
           <>
-            {/* Estate header */}
+            <Chronicle />
+            <ChapterBand />
+            {/* The holding header — the land, named and counted */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-              <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">
-                ESTATE
-              </h1>
+              <div>
+                <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">
+                  YOUR HOLDING
+                </h1>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  The ground you have claimed, and the ground still beyond it.
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-6 text-sm">
                   <div>
@@ -178,16 +225,11 @@ function EstateContent() {
                       Buy Plot ({(nextPlotCost / 1000).toFixed(0)}k NOVI)
                     </TxButton>
                   )}
-                  <TxButton
-                    onClick={handleDailyActivity}
-                    variant="secondary"
-                    className="text-xs px-4"
-                  >
-                    Daily Claim
-                  </TxButton>
                 </div>
               </div>
             </div>
+
+            <DailyActivityTracker />
 
             {/* Building grid */}
             <div className="min-h-0 flex-1 overflow-y-auto">

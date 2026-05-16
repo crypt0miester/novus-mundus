@@ -37,10 +37,7 @@ export function createTestSvm(): LiteSVM {
     .withLamports(100_000_000_000_000n); // 100k SOL for airdrops
 
   // Load program binaries
-  const novusSoPath = fs.existsSync(NOVUS_MUNDUS_SO)
-    ? NOVUS_MUNDUS_SO
-    : path.join(SDK_DIR, 'target/deploy/novus_mundus.so');
-
+  const novusSoPath = NOVUS_MUNDUS_SO;
   svm.addProgramFromFile(NOVUS_MUNDUS_PROGRAM_ID, novusSoPath);
   svm.addProgramFromFile(MPL_CORE_PROGRAM_ID, path.join(BIN_DIR, 'mpl_core.so'));
   svm.addProgramFromFile(TLD_HOUSE_PROGRAM_ID, path.join(BIN_DIR, 'tld_house.so'));
@@ -52,17 +49,6 @@ export function createTestSvm(): LiteSVM {
   loadAccountFromJson(svm, TLD_HOUSE_SOLANA, path.join(dataDir, 'tld-house-solana.json'));
 
   // Pin the initial clock to a deterministic Midday-at-Americas timestamp.
-  //
-  // `get_time_of_day(timestamp, longitude)` in the program maps local time to
-  // multipliers; for `ActivityType::Hiring`, DeepNight and Evening apply a
-  // 0.618× penalty that rounds 1-unit hires down to 0 → InsufficientPower.
-  // Using `Date.now()` made the suite flaky: tests passed or failed depending
-  // on what wall-clock time the runner happened to start at.
-  //
-  // 04:48:00 UTC → global_time bucket 200, which places every test city
-  // (longitudes -125..+40 incl. Americas, Europe, Western Asia) in Morning,
-  // Midday, Afternoon, or Dusk (all ≥ 1.0× for Hiring). Choice is calendar-
-  // arbitrary (Jan 15 2024) — only the time-of-day matters.
   const now = BigInt(Math.floor(Date.UTC(2024, 0, 15, 4, 48, 0) / 1000));
   const clock = new Clock(1n, now, 0n, 0n, now);
   svm.setClock(clock);

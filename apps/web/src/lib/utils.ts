@@ -42,6 +42,13 @@ export function shortenAddress(address: string, chars = 4): string {
   return `${address.slice(0, chars)}..${address.slice(-chars)}`;
 }
 
+/** Parse a number-input string, floor it, and clamp to [0, max]. */
+export function clampInt(raw: string, max: number): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(n, max);
+}
+
 /** Convert basis points to percentage string: 7500 → "75%" */
 export function bpsToPercent(bps: number): string {
   return (bps / 100).toFixed(bps % 100 === 0 ? 0 : 1) + "%";

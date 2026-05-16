@@ -8,7 +8,11 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useTransact } from "@/lib/hooks/useTransact";
-import { createTeamJoinInstruction } from "@/lib/sdk";
+import { systemFraming } from "@/lib/narrative";
+import { useTransitionStore } from "@/lib/store/transition";
+import { createTeamJoinInstruction } from "novus-mundus-sdk";
+
+const HOUSE_FRAMING = systemFraming("house");
 
 type SortOption = "members" | "treasury" | "name" | "newest";
 
@@ -92,24 +96,34 @@ export function TeamBrowser() {
         successMessage: `Joined ${t.account.name}!`,
         onPhase: reportPhase,
       })
-      .then((r) => r.signature);
+      .then((r) => {
+        useTransitionStore.getState().triggerActBeat({ act: 3, phase: "oath" });
+        return r.signature;
+      });
   };
 
   if (isLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-text-muted">
-        Loading teams...
+        Reading the rolls of the Houses...
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-lg font-semibold text-text-primary">
+          {HOUSE_FRAMING.title}
+        </h2>
+        <p className="mt-1 text-xs italic text-text-muted">{HOUSE_FRAMING.line}</p>
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
-          placeholder="Search teams..."
+          placeholder="Search Houses..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-gold focus:outline-none"
@@ -128,10 +142,10 @@ export function TeamBrowser() {
           onChange={(e) => setSort(e.target.value as SortOption)}
           className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary focus:border-border-gold focus:outline-none"
         >
-          <option value="members">Most Members</option>
-          <option value="treasury">Highest Treasury</option>
+          <option value="members">Most Sworn Blades</option>
+          <option value="treasury">Largest War-chest</option>
           <option value="name">Name (A-Z)</option>
-          <option value="newest">Newest</option>
+          <option value="newest">Newest Banner</option>
         </select>
       </div>
 
@@ -147,6 +161,7 @@ export function TeamBrowser() {
               key={t.pubkey.toBase58()}
               teamId={t.account.id.toNumber()}
               team={t.account}
+              lordlyLabels
               actions={
                 canJoin ? (
                   <TxButton
@@ -154,7 +169,7 @@ export function TeamBrowser() {
                     variant="secondary"
                     className="text-xs"
                   >
-                    Join
+                    Swear In
                   </TxButton>
                 ) : undefined
               }
@@ -166,13 +181,25 @@ export function TeamBrowser() {
       {filtered.length === 0 && (
         <div className="card">
           <p className="text-sm text-text-muted">
-            No teams match your filters.
+            No House answers to that search.
+          </p>
+        </div>
+      )}
+
+      {citizen.isCitizen && !citizenHasTeam && (
+        <div className="card accent-border">
+          <h3 className="mb-1 text-sm font-semibold text-text-primary">
+            Raise your own banner.
+          </h3>
+          <p className="text-xs text-text-muted">
+            No House here suits you? Found one of your own on the Team screen and
+            let others swear to it.
           </p>
         </div>
       )}
 
       <div className="text-center text-xs text-text-muted">
-        {filtered.length} team{filtered.length !== 1 ? "s" : ""} found
+        {filtered.length} House{filtered.length !== 1 ? "s" : ""} on the rolls
       </div>
     </div>
   );

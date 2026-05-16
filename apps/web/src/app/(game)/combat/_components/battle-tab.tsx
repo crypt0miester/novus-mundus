@@ -46,7 +46,7 @@ import {
   calculateDefensivePower,
   getTotalDefensiveUnits,
   getTotalOperativeUnits,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { calculateDistanceMeters, GRID_PRECISION, hasArrived, TravelType } from "novus-mundus-sdk";
 
 type CombatTab = "encounter" | "pvp";
@@ -88,8 +88,11 @@ export function BattleTab() {
 
   const encounters = encounterData || [];
 
-  // Attack range from game engine config
-  const encounterRange = geData?.account?.combatConfig?.encounterAttackRangeMeters ?? 10;
+  // Attack ranges. Encounter range mirrors the program's compile-time
+  // ENCOUNTER_ATTACK_RANGE_METERS constant (attack_encounter.rs enforces that,
+  // not the GameEngine CombatConfig field — which a live kingdom may still
+  // hold at the old 10m). PvP still reads config.
+  const encounterRange = 16;
   const pvpRange = geData?.account?.combatConfig?.pvpAttackRangeMeters ?? 15;
 
   // Batch-resolve domain names for city player wallets
@@ -200,7 +203,7 @@ export function BattleTab() {
         encounterLocation,
         locationCreatorRefund,
       },
-      { encounterId: enc.id }
+      { encounterId: enc.id.toNumber() }
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -222,7 +225,7 @@ export function BattleTab() {
     );
     const locationCreatorRefund = geData?.account?.authority ?? publicKey;
     const staminaIx = createPurchaseStaminaInstruction(
-      { player: playerPda, gameEngine: ge, owner: publicKey },
+      { gameEngine: ge, owner: publicKey },
       { amount: 1 }
     );
     const attackIx = createAttackEncounterInstruction(
@@ -230,7 +233,7 @@ export function BattleTab() {
         owner: publicKey, gameEngine: ge, encounter: encounter.pubkey,
         loot, encounterLocation, locationCreatorRefund,
       },
-      { encounterId: enc.id }
+      { encounterId: enc.id.toNumber() }
     );
     return transact.mutateAsync({
       instructions: [staminaIx, attackIx],
@@ -341,7 +344,7 @@ export function BattleTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     const ix = createTravelSpeedupInstruction(
       { owner: publicKey, gameEngine: client.gameEngine },
-      { speedupTier: tier },
+      { speedupTier: tier as 1 | 2 },
     );
     return transact.mutateAsync({
       instructions: [ix],

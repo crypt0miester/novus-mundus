@@ -10,6 +10,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { useAccountStore } from "@/lib/store/accounts";
+import { useTransitionStore } from "@/lib/store/transition";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -53,7 +54,7 @@ import {
   createUpdateTeamNameInstruction,
   createRemoveTeamNameInstruction,
   isTraveling,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 
 const RANK_LABELS: Record<number, string> = {
   0: "Leader",
@@ -61,6 +62,12 @@ const RANK_LABELS: Record<number, string> = {
   2: "Officer",
   3: "Member",
   4: "Recruit",
+};
+
+const SIDEBAR_LABELS: Record<"chat" | "treasury" | "settings", string> = {
+  chat: "War-table",
+  treasury: "Treasury",
+  settings: "Settings",
 };
 
 export function TeamTab() {
@@ -684,7 +691,10 @@ export function TeamTab() {
       invalidateKeys: [["player"], ["team"], ["teamMembers"]],
       successMessage: "Invite accepted — joined team!",
       onPhase: reportPhase,
-    }).then((r) => r.signature);
+    }).then((r) => {
+      useTransitionStore.getState().triggerActBeat({ act: 3, phase: "oath" });
+      return r.signature;
+    });
   };
 
   // Decline an incoming invite.
@@ -717,20 +727,23 @@ export function TeamTab() {
       {!hasTeam && (
         <>
           <div className="card accent-border">
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Create a Team
+            <h3 className="mb-1 text-sm font-semibold text-text-primary">
+              Raise your own banner.
             </h3>
+            <p className="mb-4 text-xs text-text-muted">
+              Name the House and others may swear their blades to it.
+            </p>
             <div className="flex items-center gap-4">
               <input
                 type="text"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
-                placeholder="Team name..."
+                placeholder="House name..."
                 className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
                 maxLength={32}
               />
               <TxButton onClick={handleCreate} disabled={!teamName.trim()}>
-                Create Team
+                Raise Banner
               </TxButton>
             </div>
           </div>
@@ -963,7 +976,7 @@ export function TeamTab() {
                           : "text-text-muted hover:text-text-secondary"
                       }`}
                     >
-                      {s}
+                      {SIDEBAR_LABELS[s]}
                     </button>
                   ))}
                 </div>
@@ -1173,17 +1186,19 @@ export function TeamTab() {
                       : "text-text-muted hover:text-text-secondary"
                   }`}
                 >
-                  {s}
+                  {SIDEBAR_LABELS[s]}
                 </button>
               ))}
             </div>
 
-            {/* Chat (disabled) */}
+            {/* War-table (disabled) */}
             {sidebarSection === "chat" && (
               <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                <div className="text-2xl text-text-muted">&#128172;</div>
-                <p className="text-sm text-text-muted">Team chat coming soon</p>
-                <p className="text-[11px] text-text-muted">Coordinate with your team in real-time</p>
+                <div className="text-2xl text-text-muted">&#128737;</div>
+                <p className="text-sm text-text-muted">The war-table is not yet set</p>
+                <p className="text-[11px] text-text-muted">
+                  A place to read the map and plan the next move with your House
+                </p>
               </div>
             )}
 

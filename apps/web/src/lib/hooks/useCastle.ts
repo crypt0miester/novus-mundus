@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { deriveCastlePda, parseCastle } from "@/lib/sdk";
+import { deriveCastlePda, parseCastle } from "novus-mundus-sdk";
 
 export function useCastle(
   cityId: number | null | undefined,

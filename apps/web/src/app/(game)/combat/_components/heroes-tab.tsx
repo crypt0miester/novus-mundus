@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useHeroBuffs } from "@/lib/hooks/useDerived";
@@ -30,7 +31,7 @@ import {
   canMintHero,
   type ParsedAssetV1,
   type HeroTemplateAccount,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useFeatureGate, FEATURES, BuildingId } from "@/lib/hooks/useFeatureGate";
@@ -198,20 +199,27 @@ export function HeroesTab() {
     setLoading(true);
 
     const mints = player.activeHeroes as PublicKey[];
-    const fetchLocked = Promise.all(
-      mints.map(async (mint) => {
-        if (isNullPubkey(mint)) return null;
-        try {
-          const info = await connection.getAccountInfo(mint);
-          if (!info?.data) return null;
+    const fetchLocked = (async () => {
+      const slots: (HeroData | null)[] = [null, null, null];
+      const filled = mints
+        .map((mint, slot) => ({ mint, slot }))
+        .filter((e) => !isNullPubkey(e.mint));
+      if (filled.length === 0) return slots;
+      try {
+        const infos = await connection.getMultipleAccountsInfo(
+          filled.map((e) => e.mint),
+        );
+        filled.forEach((e, i) => {
+          const info = infos[i];
+          if (!info?.data) return;
           const asset = parseAssetV1(info.data);
-          if (!asset) return null;
-          return { address: mint, asset } as HeroData;
-        } catch {
-          return null;
-        }
-      })
-    );
+          if (asset) slots[e.slot] = { address: e.mint, asset };
+        });
+      } catch {
+        // Leave slots null on RPC failure.
+      }
+      return slots;
+    })();
 
     const fetchUnlocked = connection
       .getProgramAccounts(MPL_CORE_PROGRAM_ID, {
@@ -654,10 +662,19 @@ export function HeroesTab() {
                 <div className="rounded-md border border-zinc-800 bg-surface px-3 py-2">
                   <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Level Up</div>
                   {!levelUpGate.allowed ? (
-                    <div>
-                      <p className="text-[10px] font-medium text-amber-400">Requires:</p>
+                    <div className="space-y-2">
                       {levelUpGate.missing.map((m) => (
-                        <p key={m.label} className="text-[10px] text-text-muted">{m.detail}</p>
+                        <div key={m.label}>
+                          <p className="text-[10px] leading-relaxed text-text-muted">
+                            {m.narrative}
+                          </p>
+                          <Link
+                            href={m.href}
+                            className="mt-1 inline-block rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                          >
+                            {m.label} &rarr;
+                          </Link>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -744,10 +761,19 @@ export function HeroesTab() {
                       {emptySlots === 0 && <p className="text-[10px] text-amber-400">Unlock a slot first</p>}
                     </>
                   ) : (
-                    <div className="rounded-md border border-amber-900/40 bg-surface px-3 py-2">
-                      <p className="text-[10px] font-medium text-amber-400">Locking requires:</p>
+                    <div className="space-y-2 rounded-md border border-amber-900/40 bg-surface px-3 py-2">
                       {lockGate.missing.map((m) => (
-                        <p key={m.label} className="text-[10px] text-text-muted">{m.detail}</p>
+                        <div key={m.label}>
+                          <p className="text-[10px] leading-relaxed text-text-muted">
+                            {m.narrative}
+                          </p>
+                          <Link
+                            href={m.href}
+                            className="mt-1 inline-block rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                          >
+                            {m.label} &rarr;
+                          </Link>
+                        </div>
                       ))}
                     </div>
                   )}

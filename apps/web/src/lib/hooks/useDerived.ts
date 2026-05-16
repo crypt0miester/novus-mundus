@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { usePlayer } from "./usePlayer";
-import { calculateDefensivePower } from "@/lib/sdk";
+import { calculateDefensivePower } from "novus-mundus-sdk";
 
 /** Calculate combat power from player defensive units (operatives don't fight on-chain) */
 export function useCombatPower() {

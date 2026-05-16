@@ -3,6 +3,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
+import { useEncounters } from "@/lib/hooks/useEncounters";
+import { useCityPlayers } from "@/lib/hooks/useCityPlayers";
+import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -13,11 +16,17 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import {
+  TripleCountInput,
+  DEFENSIVE_UNIT_LABELS,
+  WEAPON_LABELS,
+} from "@/components/shared/TripleCountInput";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { DomainName } from "@/components/shared/DomainName";
 import {
   derivePlayerPda,
   deriveRallyPda,
+  deriveCastlePda,
   deriveEstatePda,
   parseRally,
   isNullPubkey,
@@ -34,10 +43,8 @@ import {
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
-  getTotalDefensiveUnits,
-  getTotalOperativeUnits,
   type RallyAccount,
-} from "@/lib/sdk";
+} from "novus-mundus-sdk";
 import type { PublicKey } from "@solana/web3.js";
 
 const RALLY_STATUS = ["Gathering", "Marching", "Combat", "Returning", "Completed", "Cancelled"];
@@ -52,6 +59,22 @@ export function RallyTab() {
   const transact = useTransact();
   const { data: geData } = useGameEngine();
   const ge = geData?.account;
+  const { data: cityEncounters } = useEncounters(player?.currentCity);
+  const { data: cityPlayers } = useCityPlayers(player?.currentCity);
+  const ownedUnits: [number, number, number] = [
+    player?.defensiveUnit1?.toNumber?.() ?? 0,
+    player?.defensiveUnit2?.toNumber?.() ?? 0,
+    player?.defensiveUnit3?.toNumber?.() ?? 0,
+  ];
+  const ownedWeapons: [number, number, number] = [
+    player?.meleeWeapons?.toNumber?.() ?? 0,
+    player?.rangedWeapons?.toNumber?.() ?? 0,
+    player?.siegeWeapons?.toNumber?.() ?? 0,
+  ];
+
+  // Locked heroes (slots 0-2); one may optionally be committed to the rally.
+  const [rallyHeroSlot, setRallyHeroSlot] = useState(NO_HERO_SLOT);
+  const lockedHeroes = useLockedHeroes();
 
   // Fetch active rally if player has one
   const rallyId = 0;
@@ -76,12 +99,12 @@ export function RallyTab() {
   const tod = useMemo(() => getCurrentTimeOfDay(nowSec, 0), [nowSec]);
   const todName = getTimeOfDayName(tod);
   const rallyBonus = getActivityMultiplier('attacking' as any, tod);
-  const totalDefensive = player ? getTotalDefensiveUnits(player).toNumber() : 0;
-  const totalOperative = player ? getTotalOperativeUnits(player).toNumber() : 0;
-  const availableUnits = totalDefensive + totalOperative;
 
-  const [units, setUnits] = useState(10);
   const [targetType, setTargetType] = useState(1); // Encounter by default
+  const [rallyUnits, setRallyUnits] = useState<[number, number, number]>([0, 0, 0]);
+  const [rallyWeapons, setRallyWeapons] = useState<[number, number, number]>([0, 0, 0]);
+  const [rallyTarget, setRallyTarget] = useState<{ pubkey: PublicKey; label: string } | null>(null);
+  const [gatherMinutes, setGatherMinutes] = useState(15);
 
   // Joinable team rallies — fetched via getProgramAccounts filtered on the
   // player's team. Only gathering-phase rallies (status 0) are joinable.
@@ -120,6 +143,7 @@ export function RallyTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!teamId) throw new Error("Team not loaded");
     const geKey = client.gameEngine;
+    const joinHero = rallyHeroSlot < 3 ? lockedHeroes[rallyHeroSlot] : null;
     const ix = createRallyJoinInstruction(
       {
         owner: publicKey,
@@ -131,12 +155,15 @@ export function RallyTab() {
         rallyCityId: target.account.rallyCity ?? 0,
       },
       {
-        defensiveUnit1: units,
-        defensiveUnit2: 0,
-        defensiveUnit3: 0,
-        meleeWeapons: 0,
-        rangedWeapons: 0,
-        siegeWeapons: 0,
+        defensiveUnit1: rallyUnits[0],
+        defensiveUnit2: rallyUnits[1],
+        defensiveUnit3: rallyUnits[2],
+        meleeWeapons: rallyWeapons[0],
+        rangedWeapons: rallyWeapons[1],
+        siegeWeapons: rallyWeapons[2],
+        heroSlotIndex: joinHero ? rallyHeroSlot : NO_HERO_SLOT,
+        heroMint: joinHero?.mint,
+        heroTemplateId: joinHero?.templateId,
       },
     );
     return transact.mutateAsync({
@@ -148,17 +175,42 @@ export function RallyTab() {
   };
 
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
+    if (!publicKey || !player) throw new Error("Wallet not connected");
+    if (!teamId) throw new Error("Team not loaded");
+    if (!rallyTarget) throw new Error("Pick a rally target");
+    if (rallyUnits.every((n) => n === 0) && rallyWeapons.every((n) => n === 0)) {
+      throw new Error("Commit units or weapons to the rally");
+    }
+    const geKey = client.gameEngine;
+    const hero = rallyHeroSlot < 3 ? lockedHeroes[rallyHeroSlot] : null;
     const ix = createRallyCreateInstruction(
-      { player: playerPda, gameEngine: ge, owner: publicKey },
-      { targetType, units }
+      {
+        owner: publicKey,
+        gameEngine: geKey,
+        rallyId: player.rallyStats.totalRalliesCreated.toNumber(),
+        target: rallyTarget.pubkey,
+        teamId: teamId.toNumber(),
+        rallyCityId: player.currentCity,
+      },
+      {
+        targetType,
+        gatherDuration: gatherMinutes * 60,
+        targetCityId: player.currentCity,
+        defensiveUnit1: rallyUnits[0],
+        defensiveUnit2: rallyUnits[1],
+        defensiveUnit3: rallyUnits[2],
+        meleeWeapons: rallyWeapons[0],
+        rangedWeapons: rallyWeapons[1],
+        siegeWeapons: rallyWeapons[2],
+        heroSlotIndex: hero ? rallyHeroSlot : NO_HERO_SLOT,
+        heroMint: hero?.mint,
+        heroTemplateId: hero?.templateId,
+      },
     );
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"], ["rally"]],
-      successMessage: "Rally created!",
+      successMessage: `Rally created against ${rallyTarget.label}!`,
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -193,14 +245,14 @@ export function RallyTab() {
     : 0;
 
   const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !rallyData) throw new Error("No rally");
+    if (!publicKey || !rallyData || !rally) throw new Error("No rally");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
     const ix = createRallyCancelInstruction({
-      player: playerPda,
-      rally: rallyData.pubkey,
-      gameEngine: ge,
       owner: publicKey,
+      gameEngine: ge,
+      rally: rallyData.pubkey,
+      rallyId: rally.id.toNumber(),
+      rallyCityId: rally.rallyCity ?? 0,
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -412,7 +464,7 @@ export function RallyTab() {
                   variant="secondary"
                   disabled={
                     traveling ||
-                    units > availableUnits ||
+                    (rallyUnits.every((n) => n === 0) && rallyWeapons.every((n) => n === 0)) ||
                     (r.account.participantCount ?? 0) >= (r.account.maxParticipants ?? 0)
                   }
                 >
@@ -426,15 +478,20 @@ export function RallyTab() {
 
       {/* Create Rally */}
       {!rally && (
-        <div className="card">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        <div className="card space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
             Create Rally
           </h3>
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
+
+          {/* Target type */}
+          <div className="grid gap-3 md:grid-cols-3">
             {TARGET_TYPE.map((t, i) => (
               <button
                 key={t}
-                onClick={() => setTargetType(i)}
+                onClick={() => {
+                  setTargetType(i);
+                  setRallyTarget(null);
+                }}
                 className={`rounded-lg border p-3 text-center transition-all ${
                   targetType === i
                     ? "border-amber-600 bg-amber-900/20"
@@ -445,26 +502,158 @@ export function RallyTab() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-text-muted">Units:
-              <input
-                type="number"
-                value={units}
-                onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-24 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                min={1}
-              />
-            </label>
-            {units > availableUnits && availableUnits > 0 && (
-              <p className="text-xs text-red-400">
-                Exceeds available units ({availableUnits.toLocaleString()})
-              </p>
-            )}
-            {availableUnits === 0 && player && (
-              <p className="text-xs text-text-muted">No units available — hire some first</p>
-            )}
-            <TxButton onClick={handleCreate} disabled={units > availableUnits || traveling}>Create Rally</TxButton>
+
+          {/* Target picker — an actual encounter / player / castle in your city */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Target — {TARGET_TYPE[targetType]} in your city
+            </div>
+            <div className="mt-1 max-h-40 space-y-1 overflow-y-auto">
+              {targetType === 0 &&
+                ((cityPlayers ?? []).length === 0 ? (
+                  <p className="text-xs text-text-muted">No players in your city.</p>
+                ) : (
+                  cityPlayers!.map((p) => {
+                    const label = p.account.name || p.account.owner.toBase58().slice(0, 6);
+                    const sel = rallyTarget?.pubkey.equals(p.pubkey) ?? false;
+                    return (
+                      <button
+                        key={p.pubkey.toBase58()}
+                        onClick={() => setRallyTarget({ pubkey: p.pubkey, label })}
+                        className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
+                          sel
+                            ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                            : "border-zinc-800 text-text-muted hover:border-zinc-700"
+                        }`}
+                      >
+                        {label} · Lv {p.account.level}
+                      </button>
+                    );
+                  })
+                ))}
+              {targetType === 1 &&
+                ((cityEncounters ?? []).length === 0 ? (
+                  <p className="text-xs text-text-muted">No encounters in your city.</p>
+                ) : (
+                  cityEncounters!.map((e) => {
+                    const label = `Encounter #${e.account.id.toString()}`;
+                    const sel = rallyTarget?.pubkey.equals(e.pubkey) ?? false;
+                    return (
+                      <button
+                        key={e.pubkey.toBase58()}
+                        onClick={() => setRallyTarget({ pubkey: e.pubkey, label })}
+                        className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
+                          sel
+                            ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                            : "border-zinc-800 text-text-muted hover:border-zinc-700"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })
+                ))}
+              {targetType === 2 &&
+                [0, 1, 2].map((castleId) => {
+                  const pubkey = deriveCastlePda(
+                    client.gameEngine,
+                    player?.currentCity ?? 0,
+                    castleId,
+                  )[0];
+                  const label = `Castle ${castleId}`;
+                  const sel = rallyTarget?.pubkey.equals(pubkey) ?? false;
+                  return (
+                    <button
+                      key={castleId}
+                      onClick={() => setRallyTarget({ pubkey, label })}
+                      className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
+                        sel
+                          ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                          : "border-zinc-800 text-text-muted hover:border-zinc-700"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
+
+          {/* Troops committed to the rally */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Defensive Units
+            </div>
+            <TripleCountInput
+              labels={DEFENSIVE_UNIT_LABELS}
+              available={ownedUnits}
+              value={rallyUnits}
+              onChange={setRallyUnits}
+            />
+            <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Weapons
+            </div>
+            <TripleCountInput
+              labels={WEAPON_LABELS}
+              available={ownedWeapons}
+              value={rallyWeapons}
+              onChange={setRallyWeapons}
+            />
+          </div>
+
+          {/* Gather window before the rally marches */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Gather Window
+            </div>
+            <div className="mt-1 flex gap-2">
+              {[5, 15, 60].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setGatherMinutes(m)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs transition-all ${
+                    gatherMinutes === m
+                      ? "border-amber-600 bg-amber-900/20 text-text-primary"
+                      : "border-zinc-800 text-text-muted hover:border-zinc-700"
+                  }`}
+                >
+                  {m < 60 ? `${m}m` : "1h"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hero — optional, committed to the rally */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+              Hero
+            </div>
+            <select
+              value={rallyHeroSlot}
+              onChange={(e) => setRallyHeroSlot(Number(e.target.value))}
+              className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+            >
+              <option value={NO_HERO_SLOT}>No hero</option>
+              {lockedHeroes.map((h, i) =>
+                h ? (
+                  <option key={i} value={i}>
+                    Slot {i}: {h.name}
+                  </option>
+                ) : null,
+              )}
+            </select>
+          </div>
+
+          <TxButton
+            onClick={handleCreate}
+            disabled={
+              traveling ||
+              !rallyTarget ||
+              (rallyUnits.every((n) => n === 0) && rallyWeapons.every((n) => n === 0))
+            }
+          >
+            Create Rally
+          </TxButton>
         </div>
       )}
     </div>

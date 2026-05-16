@@ -12,7 +12,7 @@ import { GoldNumber } from "@/components/shared/GoldNumber";
 import { Badge } from "@/components/shared/Badge";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { DomainName } from "@/components/shared/DomainName";
-import { deriveTeamPda } from "@/lib/sdk";
+import { deriveTeamPda } from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 
 const RANK_LABELS = ["Member", "Officer", "Co-Leader", "Leader"] as const;

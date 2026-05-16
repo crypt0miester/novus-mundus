@@ -11,6 +11,9 @@ export * from './constants';
 // Time calculations (day/night cycle, activity multipliers)
 export * from './time';
 
+// Daily-activity time windows (estate Dawn/Midday/Dusk mini-game gating)
+export * from './windows';
+
 // Travel calculations (distance, travel time, teleport costs)
 export * from './travel';
 

@@ -21,13 +21,18 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
 function LockedCard({ missing }: { missing: MissingRequirement[] }) {
   return (
     <div className="rounded-lg border border-amber-900/40 bg-surface-raised p-6 text-center">
-      <div className="mb-2 text-2xl text-text-muted">&#9906;</div>
-      <h4 className="mb-1 text-sm font-semibold text-text-secondary">Feature Locked</h4>
+      <div className="mb-3 text-2xl text-text-muted">&#9906;</div>
+      <p className="mb-1 text-[0.65rem] uppercase tracking-[0.18em] text-text-muted">
+        The Cairn
+      </p>
       <div className="mb-4 space-y-2">
         {missing.map((m) => (
-          <div key={m.label} className="text-xs text-text-muted">
-            <span>{m.detail}</span>
-          </div>
+          <p
+            key={m.label}
+            className="text-sm leading-relaxed text-text-secondary"
+          >
+            {m.narrative}
+          </p>
         ))}
       </div>
       <div className="flex flex-wrap justify-center gap-2">

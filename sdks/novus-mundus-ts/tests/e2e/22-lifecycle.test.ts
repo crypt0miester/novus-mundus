@@ -86,7 +86,6 @@ import {
 
   // Dungeon
   createCreateDungeonTemplateInstruction,
-  createEnterDungeonInstruction,
   createAttackInstruction,
   createFleeInstruction,
 
@@ -153,6 +152,7 @@ import {
 
 import { PlayerFactory, type TestPlayer } from '../fixtures/players';
 import { HeroFactory, type TestHero } from '../fixtures/heroes';
+import { enterDungeonIx } from '../fixtures/dungeon';
 import {
   fetchPlayer,
   snapshotPlayer,
@@ -1597,19 +1597,12 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Echo: has Arena building + echoWarrior + no rally state
-      const enterIx = createEnterDungeonInstruction(
-        {
-          owner: echo.publicKey,
-          gameEngine: ctx.gameEngine,
-          heroMint: echoWarrior.mintPubkey,
-        },
-        {
-          templateId: DUNGEON_TEMPLATE_ID,
-          firstRoomType: 0, // Enemy room
-          heroSpecialization: 0, // Warrior
-        }
-      );
-      await sendTx(ctx.svm, new Transaction().add(enterIx), [echo.keypair], ctx.config);
+      const enterIx = enterDungeonIx(ctx, echo.publicKey, echoWarrior.mintPubkey, {
+        templateId: DUNGEON_TEMPLATE_ID,
+        firstRoomType: 0, // Enemy room
+        heroSpecialization: 0, // Warrior
+      });
+      await sendTx(ctx.svm, new Transaction().add(enterIx), [echo.keypair, ctx.daoAuthority], ctx.config);
       log.txSuccess('Echo: enterDungeon');
 
       const attackIx = createAttackInstruction(
