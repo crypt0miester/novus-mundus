@@ -3,6 +3,9 @@
 import { useState, useMemo } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useTeam } from "@/lib/hooks/useTeam";
+import { useQuery } from "@tanstack/react-query";
+import { PublicKey } from "@solana/web3.js";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -24,6 +27,9 @@ import {
   createCollectResourcesInstruction,
   createVaultTransferInstruction,
   createUpdateLockedNoviInstruction,
+  createTransferCashInstruction,
+  derivePlayerPda,
+  isNullPubkey,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
@@ -86,7 +92,7 @@ export default function EconomyPage() {
   const transact = useTransact();
 
   const player = playerData?.account;
-  const [activeTab, setActiveTab] = useState<"collect" | "stamina" | "transfer">("collect");
+  const [activeTab, setActiveTab] = useState<"collect" | "stamina" | "transfer" | "send">("collect");
   const [collectType, setCollectType] = useState(0);
   const [collectNoviAmount, setCollectNoviAmount] = useState(100);
   const [vaultAmount, setVaultAmount] = useState(0);
@@ -96,6 +102,7 @@ export default function EconomyPage() {
     { key: "collect" as const, label: "Collect" },
     { key: "stamina" as const, label: "Stamina" },
     { key: "transfer" as const, label: "Vault" },
+    { key: "send" as const, label: "Send Cash" },
   ];
 
   const now = Math.floor(Date.now() / 1000);
@@ -420,6 +427,11 @@ export default function EconomyPage() {
           </FeatureGate>
         )}
 
+        {/* ── Send Cash ── */}
+        {activeTab === "send" && player && (
+          <SendCashPanel player={player} />
+        )}
+
         {/* Game Parameters */}
         {geData?.account && (() => {
           const ge = geData.account;
@@ -654,5 +666,135 @@ function CollectPanel({
         </div>
       </div>
     </FeatureGate>
+  );
+}
+
+// ─── Send Cash Panel ────────────────────────────────────────
+
+function SendCashPanel({ player }: { player: any }) {
+  const client = useNovusMundusClient();
+  const { publicKey } = useWallet();
+  const transact = useTransact();
+  const [recipient, setRecipient] = useState<PublicKey | null>(null);
+  const [amount, setAmount] = useState(0);
+
+  const teamPubkey =
+    player?.team && !isNullPubkey(player.team) ? player.team : null;
+  const { data: teamData } = useTeam(teamPubkey);
+  const teamId = teamData?.account?.id;
+
+  const { data: members } = useQuery({
+    queryKey: ["teamMembers", teamPubkey?.toBase58()],
+    queryFn: async () => {
+      if (!teamPubkey) return [];
+      return client.fetchTeamMembers(teamPubkey);
+    },
+    enabled: !!teamPubkey,
+    staleTime: 30_000,
+  });
+
+  if (!teamPubkey) {
+    return (
+      <div className="card text-center">
+        <p className="text-sm text-text-muted">
+          Join a team to send cash to teammates.
+        </p>
+      </div>
+    );
+  }
+
+  const myPlayerPda = publicKey
+    ? derivePlayerPda(client.gameEngine, publicKey)[0].toBase58()
+    : null;
+  const recipients = (members ?? []).filter(
+    (m: any) => m.account.player.toBase58() !== myPlayerPda,
+  );
+
+  const cashOnHand = player?.cashOnHand?.toNumber?.() ?? 0;
+  const amountError =
+    amount > 0 && amount > cashOnHand
+      ? `Insufficient cash (have $${cashOnHand.toLocaleString()})`
+      : null;
+
+  const handleSend = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    if (!recipient) throw new Error("Select a recipient");
+    if (teamId == null) throw new Error("Team not loaded");
+    const ix = createTransferCashInstruction(
+      {
+        sender: publicKey,
+        gameEngine: client.gameEngine,
+        receiverPlayer: recipient,
+        team: teamPubkey,
+        teamId: teamId.toNumber(),
+      },
+      { amount },
+    );
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"]],
+      successMessage: "Cash sent!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  return (
+    <div className="card">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        Send Cash to Teammate
+      </h3>
+      <p className="mb-4 text-xs text-text-muted">
+        Transfer cash on hand to a member of your team. Cash on hand: $
+        {cashOnHand.toLocaleString()}.
+      </p>
+
+      {recipients.length === 0 ? (
+        <p className="text-sm text-text-muted">No other team members to send to.</p>
+      ) : (
+        <>
+          <div className="mb-4 space-y-2">
+            {recipients.map((m: any) => {
+              const pda = m.account.player.toBase58();
+              const isSelected = recipient?.toBase58() === pda;
+              return (
+                <button
+                  key={pda}
+                  onClick={() => setRecipient(m.account.player)}
+                  className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all ${
+                    isSelected
+                      ? "border-amber-600 bg-amber-900/20"
+                      : "border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <span className="font-mono text-sm text-text-primary">
+                    {pda.slice(0, 4)}…{pda.slice(-4)}
+                  </span>
+                  <span className="text-xs text-text-muted">Slot {m.account.slotIndex}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary sm:w-40"
+              placeholder="Amount"
+            />
+            <TxButton
+              onClick={handleSend}
+              disabled={!recipient || amount <= 0 || !!amountError}
+              className="w-full sm:w-auto"
+            >
+              Send ${amount.toLocaleString()}
+            </TxButton>
+          </div>
+          {amountError && (
+            <div className="mt-2 text-xs text-red-400">{amountError}</div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

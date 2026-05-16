@@ -22,6 +22,7 @@ import {
   ARENA_MAX_DAILY_BATTLES,
   ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
 } from "@/lib/sdk";
+import { requestCoSign } from "@/lib/cosign";
 
 export function ArenaTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -55,11 +56,12 @@ export function ArenaTab() {
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
     const ix = createJoinSeasonInstruction({
       owner: publicKey,
       gameEngine: ge,
-      seasonAuthority: publicKey, // TODO: use actual season authority
+      seasonAuthority: season.authority,
       seasonId: currentSeasonId,
     });
     return transact.mutateAsync({
@@ -72,11 +74,12 @@ export function ArenaTab() {
 
   const handleClaimDailyReward = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
     const ix = createClaimArenaDailyRewardInstruction({
       playerOwner: publicKey,
       gameEngine: ge,
-      seasonAuthority: publicKey,
+      seasonAuthority: season.authority,
       seasonId: currentSeasonId,
     });
     return transact.mutateAsync({
@@ -89,17 +92,32 @@ export function ArenaTab() {
 
   const handleClaimMasterReward = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
     const ix = createClaimMasterRewardInstruction({
       playerOwner: publicKey,
       gameEngine: ge,
-      seasonAuthority: publicKey,
+      seasonAuthority: season.authority,
       seasonId: currentSeasonId,
     });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["arenaParticipant"], ["arenaSeason"], ["player"]],
       successMessage: "Master reward claimed!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleChallenge = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const versionedTx = await requestCoSign("/api/cosign/arena/challenge", {
+      owner: publicKey.toBase58(),
+      seasonId: currentSeasonId,
+    });
+    return transact.mutateAsync({
+      versionedTx,
+      invalidateKeys: [["arenaParticipant"], ["arenaSeason"], ["player"]],
+      successMessage: "Match resolved!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -172,8 +190,21 @@ export function ArenaTab() {
               {dailyBattlesRemaining <= 0 && <span className="ml-1 text-xs">(max reached)</span>}
             </span>
           </div>
-          <div className="mt-4 text-center text-xs text-text-muted">
-            Challenge system requires game authority matchmaking
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <TxButton
+              onClick={handleChallenge}
+              disabled={
+                dailyBattlesRemaining <= 0 ||
+                (season != null && !isSeasonActive(season))
+              }
+            >
+              Find a Match
+            </TxButton>
+            <p className="text-center text-[11px] text-text-muted">
+              {dailyBattlesRemaining > 0
+                ? "An opponent near your rating is matched and battled automatically."
+                : "Daily battle limit reached — try again later."}
+            </p>
           </div>
           {/* Arena Reward Buttons */}
           <div className="mt-4 flex flex-wrap justify-center gap-3">

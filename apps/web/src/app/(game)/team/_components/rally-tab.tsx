@@ -27,6 +27,7 @@ import {
   createRallyLeaveInstruction,
   createRallyExecuteInstruction,
   createRallyProcessReturnInstruction,
+  createRallyCloseInstruction,
   createRallySpeedupInstruction,
   RallySpeedupType,
   isTraveling,
@@ -271,6 +272,20 @@ export function RallyTab() {
     }).then((r) => r.signature);
   };
 
+  const handleClose = async (reportPhase: (p: TxPhase) => void) => {
+    if (!rallyData || !rally) throw new Error("No rally");
+    const ix = createRallyCloseInstruction({
+      rally: rallyData.pubkey,
+      leaderOwner: rally.creator,
+    });
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["rally"], ["player"]],
+      successMessage: "Rally closed.",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -345,6 +360,11 @@ export function RallyTab() {
             {(rally.status === 3 || rally.status === 4) && (
               <TxButton onClick={handleProcessReturn}>
                 Process Return
+              </TxButton>
+            )}
+            {rally.status === 4 && (
+              <TxButton onClick={handleClose} variant="secondary">
+                Close Rally
               </TxButton>
             )}
           </div>

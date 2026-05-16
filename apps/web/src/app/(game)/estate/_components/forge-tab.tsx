@@ -18,6 +18,7 @@ import {
   createStartCraftInstruction,
   createStrikeInstruction,
   createAbandonCraftInstruction,
+  createEquipInstruction,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
@@ -29,6 +30,13 @@ const CRAFT_TYPES = [
   { id: 1, name: "Bow", desc: "Ranged weapon", icon: "\uD83C\uDFF9" },
   { id: 2, name: "Shield", desc: "Defensive armor", icon: "\uD83D\uDEE1" },
   { id: 3, name: "Helm", desc: "Head armor", icon: "\u26D1" },
+];
+
+const EQUIP_TYPES = [
+  { id: 0, name: "Melee Weapon" },
+  { id: 1, name: "Ranged Weapon" },
+  { id: 2, name: "Siege Weapon" },
+  { id: 3, name: "Armor" },
 ];
 
 export function ForgeTab() {
@@ -57,6 +65,8 @@ export function ForgeTab() {
 
   const [selectedCraft, setSelectedCraft] = useState(0);
   const [selectedQuality, setSelectedQuality] = useState(1); // Default to Refined
+  const [equipType, setEquipType] = useState(0);
+  const [equipTier, setEquipTier] = useState(1);
 
   // Quality tier reference data (mirrors on-chain QualityTier)
   const QUALITY_TIERS = useMemo(() => [
@@ -167,6 +177,24 @@ export function ForgeTab() {
       instructions: [ix],
       invalidateKeys: [["craft"], ["player"]],
       successMessage: "Craft abandoned!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleEquip = async (
+    equipmentType: number,
+    qualityTier: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createEquipInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { equipmentType, qualityTier },
+    );
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["craft"], ["player"]],
+      successMessage: qualityTier === 0 ? "Unequipped." : "Equipped!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -340,6 +368,51 @@ export function ForgeTab() {
           </div>
         </div>
       )}
+
+      {/* Equip Gear */}
+      <div className="card">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Equip Gear
+        </h3>
+        <p className="mb-3 text-[11px] text-text-muted">
+          Set a crafted item active for combat. You must own the chosen quality tier.
+        </p>
+        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {EQUIP_TYPES.map((et) => (
+            <button
+              key={et.id}
+              onClick={() => setEquipType(et.id)}
+              className={`rounded-lg border p-2 text-center text-xs transition-all ${
+                equipType === et.id
+                  ? "border-amber-600 bg-amber-900/20 text-text-primary"
+                  : "border-zinc-800 text-text-muted hover:border-zinc-700"
+              }`}
+            >
+              {et.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-text-muted">
+            Quality:
+            <select
+              value={equipTier}
+              onChange={(e) => setEquipTier(parseInt(e.target.value))}
+              className="ml-2 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
+            >
+              {QUALITY_TIERS.filter((q) => q.id > 0).map((q) => (
+                <option key={q.id} value={q.id}>{q.name}</option>
+              ))}
+            </select>
+          </label>
+          <TxButton onClick={(rp) => handleEquip(equipType, equipTier, rp)}>
+            Equip
+          </TxButton>
+          <TxButton onClick={(rp) => handleEquip(equipType, 0, rp)} variant="secondary">
+            Unequip
+          </TxButton>
+        </div>
+      </div>
 
       {/* Actions */}
       <div className="flex flex-wrap justify-center gap-3">

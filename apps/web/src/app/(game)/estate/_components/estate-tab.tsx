@@ -22,7 +22,6 @@ import {
   createUpgradeBuildingInstruction,
   createBuildingSpeedupInstruction,
   createCompleteBuildingInstruction,
-  createDailyActivityInstruction,
   createBuyPlotInstruction,
   calculateUpgradeCost,
   getCurrentTimeOfDay,
@@ -32,6 +31,7 @@ import {
   findBuilding,
   BuildingStatus,
 } from "@/lib/sdk";
+import { requestCoSign } from "@/lib/cosign";
 
 const BUILDING_TYPES = [
   { id: 0, name: "Mansion", desc: "Home base", tier: 1 },
@@ -69,6 +69,7 @@ function BuildingDetailPanel({
   onBuildAndSpeedup,
   onCompleteBuilding,
   onBuildingSpeedup,
+  onDailyActivity,
   onClose,
 }: {
   selectedBuilding: number | null;
@@ -82,6 +83,7 @@ function BuildingDetailPanel({
   onBuildAndSpeedup: (tier: number, rp: (p: TxPhase) => void) => Promise<string>;
   onCompleteBuilding: (id: number, rp: (p: TxPhase) => void) => Promise<string>;
   onBuildingSpeedup: (tier: number, rp: (p: TxPhase) => void) => Promise<string>;
+  onDailyActivity: (buildingType: number, rp: (p: TxPhase) => void) => Promise<string>;
   onClose: () => void;
 }) {
   const speedupTarget = speedupBuilding != null
@@ -214,6 +216,15 @@ function BuildingDetailPanel({
             <TxButton onClick={onBuild} className="px-6 w-full">
               {buildingInfo[selectedBuilding]?.status === "active" ? "Upgrade" : "Build"} {BUILDING_TYPES[selectedBuilding]?.name}
             </TxButton>
+            {buildingInfo[selectedBuilding]?.status === "active" && (
+              <TxButton
+                onClick={(rp) => onDailyActivity(selectedBuilding, rp)}
+                variant="secondary"
+                className="px-6 w-full"
+              >
+                Daily Activity
+              </TxButton>
+            )}
           </div>
         </div>
       )}
@@ -394,18 +405,20 @@ export function EstateTab() {
     }).then((r) => r.signature);
   }, [selectedBuilding, publicKey, client, transact, buildingInfo]);
 
-  const handleDailyActivity = async (reportPhase: (p: TxPhase) => void) => {
+  // A building's daily mini-game — the score is game_authority-co-signed.
+  const handleDailyActivity = async (
+    buildingType: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [estatePda] = deriveEstatePda(playerPda);
-    const ix = createDailyActivityInstruction(
-      { player: playerPda, estate: estatePda, gameEngine: ge, owner: publicKey },
-      {}
-    );
+    const versionedTx = await requestCoSign("/api/cosign/estate/daily-activity", {
+      owner: publicKey.toBase58(),
+      buildingType,
+    });
     return transact.mutateAsync({
-      instructions: [ix],
-      successMessage: "Daily activity claimed!",
+      versionedTx,
+      invalidateKeys: [["estate"], ["player"]],
+      successMessage: "Daily activity complete!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
@@ -466,6 +479,7 @@ export function EstateTab() {
     onBuildAndSpeedup: handleBuildOrUpgradeAndSpeedup,
     onCompleteBuilding: handleCompleteBuilding,
     onBuildingSpeedup: handleBuildingSpeedup,
+    onDailyActivity: handleDailyActivity,
     onClose: closePanel,
   };
 
@@ -524,9 +538,6 @@ export function EstateTab() {
                   Buy Plot ({(nextPlotCost / 1000).toFixed(0)}k NOVI)
                 </TxButton>
               )}
-              <TxButton onClick={handleDailyActivity} variant="secondary" className="text-xs px-4">
-                Daily Claim
-              </TxButton>
             </div>
           </div>
 

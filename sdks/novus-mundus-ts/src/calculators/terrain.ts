@@ -5,9 +5,7 @@
  * Computes surface terrain from anchor data stored in CityAccount.
  */
 
-// ───────────────────────────────────────────────────────────────
 // Types
-// ───────────────────────────────────────────────────────────────
 
 /** Weighted point beneath the surface. Matches on-chain Anchor (9 bytes). */
 export interface Anchor {
@@ -47,17 +45,13 @@ export interface TerrainAffinity {
   elevationBps: number;  // -500 to +500, high ground advantage
 }
 
-// ───────────────────────────────────────────────────────────────
 // Constants
-// ───────────────────────────────────────────────────────────────
 
 export const TERRAIN_HEADER_SIZE = 16;
 export const ANCHOR_SIZE = 9;
 export const GRID_PRECISION = 10_000;
 
-// ───────────────────────────────────────────────────────────────
 // Core API
-// ───────────────────────────────────────────────────────────────
 
 /** Surface elevation at an offset from city center. Returns 0-255. */
 export function terrainElevation(terrain: CityTerrain, ox: number, oy: number): number {
@@ -147,9 +141,7 @@ export function terrainAffinity(terrain: CityTerrain, ox: number, oy: number): T
   return { miningBps, fishingBps, elevationBps };
 }
 
-// ───────────────────────────────────────────────────────────────
 // Coordinate helpers
-// ───────────────────────────────────────────────────────────────
 
 /** Convert geographic coordinate to grid units. Matches Rust to_grid(). */
 export function toGrid(coord: number): number {
@@ -174,9 +166,7 @@ export function radiusToGridUnits(radiusKm: number, latitude: number): number {
   return Math.round(radiusKm * avgDegreesPerKm * GRID_PRECISION);
 }
 
-// ───────────────────────────────────────────────────────────────
 // Serialization
-// ───────────────────────────────────────────────────────────────
 
 /** Deserialize terrain from CityAccount buffer at the terrain fields offset. */
 export function deserializeTerrain(data: Buffer | Uint8Array, offset: number): CityTerrain {
@@ -230,9 +220,7 @@ export function serializeTerrain(terrain: CityTerrain): Buffer {
   return buf;
 }
 
-// ───────────────────────────────────────────────────────────────
 // Rendering
-// ───────────────────────────────────────────────────────────────
 
 /** Map elevation to [R, G, B]. Optionally biome-aware via moisture (0=arid, 255=lush). */
 export function elevationToColor(
@@ -338,9 +326,7 @@ export function renderTerrainPixels(
   return pixels;
 }
 
-// ───────────────────────────────────────────────────────────────
 // Internal: nearest anchor search
-// ───────────────────────────────────────────────────────────────
 
 function twoNearest(
   anchors: Anchor[],
@@ -365,17 +351,13 @@ function twoNearest(
   return [bestIdx, secondIdx, bestD, secondD];
 }
 
-// ───────────────────────────────────────────────────────────────
 // Internal: buoyancy (isostasy)
-// ───────────────────────────────────────────────────────────────
 
 function buoyancy(mass: number, lift: number): number {
   return ((lift * (255 - mass)) / 255) | 0;
 }
 
-// ───────────────────────────────────────────────────────────────
 // Internal: pressure effect at boundaries
-// ───────────────────────────────────────────────────────────────
 
 function pressureEffect(
   nearest: Anchor,
@@ -411,9 +393,7 @@ function pressureEffect(
   return (effect * strength / 256) | 0;
 }
 
-// ───────────────────────────────────────────────────────────────
 // Internal: multi-octave noise
-// ───────────────────────────────────────────────────────────────
 
 function terrainHash(seed: number, x: number, y: number): number {
   let h = (seed ^ (x >>> 0) ^ rotateLeft(y >>> 0, 16)) >>> 0;

@@ -28,6 +28,7 @@ import {
   isTraveling,
   ENCOUNTER_STAMINA_COSTS,
 } from "@/lib/sdk";
+import { requestCoSign } from "@/lib/cosign";
 
 // Expedition reward constants (from novus_mundus constants)
 const MINING_DURATION_HOURS = [1, 2, 4, 8, 16] as const;
@@ -242,6 +243,20 @@ export function ExpeditionTab() {
     }).then((r) => r.signature);
   };
 
+  // A strike is a skill action — the score is game_authority-co-signed.
+  const handleStrike = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const versionedTx = await requestCoSign("/api/cosign/expedition/strike", {
+      owner: publicKey.toBase58(),
+    });
+    return transact.mutateAsync({
+      versionedTx,
+      invalidateKeys: [["expedition"], ["player"]],
+      successMessage: "Strike landed!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
   return (
     <div className="space-y-4">
       {/* Traveling Warning */}
@@ -318,11 +333,18 @@ export function ExpeditionTab() {
           )}
 
           <div className="mt-4 flex flex-wrap gap-3">
+            <TxButton onClick={handleStrike} variant="secondary">
+              Strike
+            </TxButton>
             <TxButton onClick={handleClaim}>Claim Rewards</TxButton>
             <TxButton onClick={handleAbort} variant="danger">
               Abort
             </TxButton>
           </div>
+          <p className="mt-1 text-center text-[11px] text-text-muted">
+            One strike unlocks per elapsed hour — higher average score lifts the
+            final yield.
+          </p>
           {/* Speedup */}
           <SpeedupPanel
             visible={expeditionRemaining > 0}

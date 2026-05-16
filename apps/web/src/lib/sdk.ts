@@ -316,6 +316,10 @@ export const createCompleteBuildingInstruction = _completeBuilding as unknown as
 export const createRecoverTroopsInstruction = _recoverTroops as unknown as FlexIxBuilder;
 export const createConvertMaterialsInstruction = _convertMaterials as unknown as FlexIxBuilder;
 
+// Progression
+import { createClaimDailyRewardInstruction as _claimDailyReward } from "novus-mundus-sdk";
+export const createClaimDailyRewardInstruction = _claimDailyReward as unknown as FlexIxBuilder;
+
 // Dungeon
 import { createEnterDungeonInstruction as _enterDungeon } from "novus-mundus-sdk";
 import { createAttackInstruction as _dungeonAttack } from "novus-mundus-sdk";
@@ -439,6 +443,9 @@ export const createRallyExecuteInstruction = _rallyExecute as unknown as FlexIxB
 export const createRallyProcessReturnInstruction = _rallyProcessReturn as unknown as FlexIxBuilder;
 export { RallySpeedupType } from "novus-mundus-sdk";
 
+import { createRallyCloseInstruction as _rallyClose } from "novus-mundus-sdk";
+export const createRallyCloseInstruction = _rallyClose as unknown as FlexIxBuilder;
+
 // Reinforcement
 import { createSendReinforcementInstruction as _sendReinforcement } from "novus-mundus-sdk";
 import { createRecallReinforcementInstruction as _recallReinforcement } from "novus-mundus-sdk";
@@ -478,6 +485,9 @@ export const createLockHeroInstruction = _lockHero as unknown as FlexIxBuilder;
 export const createUnlockHeroInstruction = _unlockHero as unknown as FlexIxBuilder;
 export const createLevelUpHeroInstruction = _levelUpHero as unknown as FlexIxBuilder;
 export const createBurnHeroInstruction = _burnHero as unknown as FlexIxBuilder;
+
+import { createAssignDefensiveHeroInstruction as _assignDefensiveHero } from "novus-mundus-sdk";
+export const createAssignDefensiveHeroInstruction = _assignDefensiveHero as unknown as FlexIxBuilder;
 
 // Forge
 import { createStartCraftInstruction as _startCraft } from "novus-mundus-sdk";

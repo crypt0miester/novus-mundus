@@ -1,4 +1,4 @@
-# Novus Mundus — World Lore & Story Bible
+# Novus Mundus — World Lore & Story line
 
 > *"The old world is gone. What rises from its bones is ours to shape — or to lose."*
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import type { PublicKey } from "@solana/web3.js";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -8,7 +9,6 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { GoldNumber } from "@/components/shared/GoldNumber";
-import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -19,25 +19,36 @@ import { bpsToPercent } from "@/lib/utils";
 import {
   derivePlayerPda,
   deriveDungeonRunPda,
-  deriveDungeonTemplatePda,
-  createEnterDungeonInstruction,
-  createDungeonAttackInstruction,
-  createFleeInstruction,
-  createClaimDungeonInstruction,
-  createPurchaseStaminaInstruction,
   parseDungeonRun,
+  isNullPubkey,
   isTraveling,
   getEncounterStaminaCost,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
   ENCOUNTER_STAMINA_COSTS,
+  createPurchaseStaminaInstruction,
 } from "@/lib/sdk";
 import type { DungeonRunAccount } from "@/lib/sdk";
+// Strict instruction builders — lib/sdk's re-exports widen these param types.
+import {
+  createEnterDungeonInstruction,
+  createFleeInstruction,
+  createClaimDungeonInstruction,
+  createResumeInstruction,
+  DungeonStatus,
+  RoomType,
+} from "novus-mundus-sdk";
+import { requestCoSign, fetchCoSign } from "@/lib/cosign";
 
 const DUNGEON_FLEE_PENALTY_BPS = [7000, 6000, 5000, 4000] as const;
-const ROOM_TYPES = ["Combat", "Rest", "Treasure", "Trap", "Boss", "Relic", "Exit"];
-const ROOM_ICONS = ["\u2694", "\uD83D\uDECF", "\uD83D\uDCB0", "\u26A1", "\uD83D\uDC80", "\uD83D\uDD2E", "\uD83D\uDEAA"];
+const ROOMS: Record<RoomType, { label: string; icon: string }> = {
+  [RoomType.Combat]: { label: "Combat", icon: "⚔" },
+  [RoomType.Treasure]: { label: "Treasure", icon: "💰" },
+  [RoomType.Camp]: { label: "Camp", icon: "⛺" },
+  [RoomType.Rest]: { label: "Rest", icon: "🛏" },
+  [RoomType.Trap]: { label: "Trap", icon: "⚡" },
+};
 
 export function DungeonTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -48,6 +59,7 @@ export function DungeonTab() {
   const transact = useTransact();
 
   const player = playerData?.account;
+  const ownerStr = publicKey?.toBase58() ?? null;
 
   // Fetch active dungeon run
   const { data: runData, isSuccess: runReady } = useQuery({
@@ -65,22 +77,32 @@ export function DungeonTab() {
     staleTime: 5_000,
   });
 
-  // Fetch dungeon template
-  const { data: templateData, isSuccess: templateReady } = useQuery({
-    queryKey: ["dungeonTemplate", 0],
-    queryFn: async () => {
-      const [templatePda] = deriveDungeonTemplatePda(0);
-      const info = await connection.getAccountInfo(templatePda);
-      if (!info) return { pubkey: templatePda, account: null, exists: false };
-      return { pubkey: templatePda, account: info, exists: true };
-    },
-    staleTime: 60_000,
-  });
-
   const run = runData?.account as DungeonRunAccount | null | undefined;
   const runHp = run ? run.remainingUnits.reduce((a, b) => a.add(b)).toNumber() : 0;
   const runMaxHp = run ? run.originalUnits.reduce((a, b) => a.add(b)).toNumber() : 100;
+  const room = ROOMS[(run?.roomType ?? RoomType.Combat) as RoomType] ?? ROOMS[RoomType.Combat];
   const [selectedDungeon, setSelectedDungeon] = useState(0);
+
+  // First locked hero — required to enter a dungeon (the hero is escrowed).
+  const heroMint = useMemo<PublicKey | null>(() => {
+    if (!player) return null;
+    for (const h of player.activeHeroes as PublicKey[]) {
+      if (!isNullPubkey(h)) return h;
+    }
+    return null;
+  }, [player]);
+
+  // Relic offer — fetched from the co-sign API only while awaiting a choice.
+  const awaitingRelic = run?.status === DungeonStatus.AwaitingRelic;
+  const { data: relicOffer } = useQuery({
+    queryKey: ["dungeonRelicOffer", ownerStr, run?.currentFloor],
+    queryFn: () =>
+      fetchCoSign<{ relicOptions: number[]; firstRoomType: number }>(
+        `/api/cosign/dungeon/choose-relic?owner=${ownerStr}`,
+      ),
+    enabled: !!ownerStr && awaitingRelic,
+    staleTime: 30_000,
+  });
 
   // Traveling check
   const playerTraveling = player ? isTraveling(player) : false;
@@ -112,15 +134,16 @@ export function DungeonTab() {
     return Math.floor(bps / 100);
   }, [selectedDungeon]);
 
+  // ── Wallet-only handlers (enter / flee / claim / resume) ──────
+
   const handleEnter = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [runPda] = deriveDungeonRunPda(playerPda);
-    const [templatePda] = deriveDungeonTemplatePda(selectedDungeon);
+    if (!heroMint) {
+      throw new Error("Lock a hero in the Heroes tab before entering a dungeon");
+    }
     const ix = createEnterDungeonInstruction(
-      { player: playerPda, dungeonRun: runPda, dungeonTemplate: templatePda, gameEngine: ge, owner: publicKey },
-      { dungeonId: selectedDungeon }
+      { gameEngine: client.gameEngine, owner: publicKey, heroMint },
+      { templateId: selectedDungeon, firstRoomType: 0, heroSpecialization: 0 },
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -130,31 +153,35 @@ export function DungeonTab() {
     }).then((r) => r.signature);
   };
 
-  const handleAttackRoom = async (reportPhase: (p: TxPhase) => void) => {
+  const handleStaminaAndEnter = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [runPda] = deriveDungeonRunPda(playerPda);
-    const ix = createDungeonAttackInstruction(
-      { player: playerPda, dungeonRun: runPda, gameEngine: ge, owner: publicKey },
-      { action: 0 }
+    if (!heroMint) {
+      throw new Error("Lock a hero in the Heroes tab before entering a dungeon");
+    }
+    const staminaIx = createPurchaseStaminaInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { amount: 1 },
+    );
+    const enterIx = createEnterDungeonInstruction(
+      { gameEngine: client.gameEngine, owner: publicKey, heroMint },
+      { templateId: selectedDungeon, firstRoomType: 0, heroSpecialization: 0 },
     );
     return transact.mutateAsync({
-      instructions: [ix],
+      instructions: [staminaIx, enterIx],
       invalidateKeys: [["dungeonRun"], ["player"]],
-      successMessage: "Room cleared!",
+      successMessage: "Bought stamina & entered the dungeon!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
   const handleFlee = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [runPda] = deriveDungeonRunPda(playerPda);
-    const ix = createFleeInstruction(
-      { player: playerPda, dungeonRun: runPda, gameEngine: ge, owner: publicKey }
-    );
+    if (!run) throw new Error("No active dungeon run");
+    const ix = createFleeInstruction({
+      gameEngine: client.gameEngine,
+      owner: publicKey,
+      heroMint: run.heroMint,
+    });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["dungeonRun"], ["player"]],
@@ -165,12 +192,12 @@ export function DungeonTab() {
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [runPda] = deriveDungeonRunPda(playerPda);
-    const ix = createClaimDungeonInstruction(
-      { player: playerPda, dungeonRun: runPda, gameEngine: ge, owner: publicKey }
-    );
+    if (!run) throw new Error("No active dungeon run");
+    const ix = createClaimDungeonInstruction({
+      gameEngine: client.gameEngine,
+      owner: publicKey,
+      heroMint: run.heroMint,
+    });
     return transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["dungeonRun"], ["player"]],
@@ -179,26 +206,160 @@ export function DungeonTab() {
     }).then((r) => r.signature);
   };
 
-  const handleStaminaAndEnter = async (reportPhase: (p: TxPhase) => void) => {
+  const handleResume = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [runPda] = deriveDungeonRunPda(playerPda);
-    const [templatePda] = deriveDungeonTemplatePda(selectedDungeon);
-    const staminaIx = createPurchaseStaminaInstruction(
-      { player: playerPda, gameEngine: ge, owner: publicKey },
-      { amount: 1 }
-    );
-    const enterIx = createEnterDungeonInstruction(
-      { player: playerPda, dungeonRun: runPda, dungeonTemplate: templatePda, gameEngine: ge, owner: publicKey },
-      { dungeonId: selectedDungeon }
+    if (!run) throw new Error("No dungeon run to resume");
+    const ix = createResumeInstruction(
+      { gameEngine: client.gameEngine, owner: publicKey },
+      { templateId: run.dungeonId, firstRoomType: 0 },
     );
     return transact.mutateAsync({
-      instructions: [staminaIx, enterIx],
+      instructions: [ix],
       invalidateKeys: [["dungeonRun"], ["player"]],
-      successMessage: "Bought stamina & entered the dungeon!",
+      successMessage: "Dungeon run resumed!",
       onPhase: reportPhase,
     }).then((r) => r.signature);
+  };
+
+  // ── Co-signed handlers (attack / interact / choose-relic) ─────
+  // These need the off-chain game_authority signature, so they go through the
+  // /api/cosign endpoints and submit via useTransact's versionedTx path.
+
+  const handleAttackRoom = async (reportPhase: (p: TxPhase) => void) => {
+    if (!ownerStr) throw new Error("Wallet not connected");
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/attack", {
+      owner: ownerStr,
+    });
+    return transact.mutateAsync({
+      versionedTx,
+      invalidateKeys: [["dungeonRun"], ["player"]],
+      successMessage: "Room cleared!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleInteract = async (reportPhase: (p: TxPhase) => void) => {
+    if (!ownerStr) throw new Error("Wallet not connected");
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/interact", {
+      owner: ownerStr,
+    });
+    return transact.mutateAsync({
+      versionedTx,
+      invalidateKeys: [["dungeonRun"], ["player"]],
+      successMessage: "Room resolved!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleChooseRelic = async (
+    relicId: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!ownerStr) throw new Error("Wallet not connected");
+    const versionedTx = await requestCoSign("/api/cosign/dungeon/choose-relic", {
+      owner: ownerStr,
+      relicId,
+    });
+    return transact.mutateAsync({
+      versionedTx,
+      invalidateKeys: [["dungeonRun"], ["player"]],
+      successMessage: "Relic claimed — descending!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  // Run actions, keyed by the run's state-machine status.
+  const renderActions = () => {
+    if (!run) return null;
+    switch (run.status) {
+      case DungeonStatus.AwaitingRelic:
+        return (
+          <div className="card accent-border">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Choose a Relic
+            </h3>
+            {!relicOffer ? (
+              <p className="text-sm text-text-muted">Loading relic options…</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-3">
+                {relicOffer.relicOptions.map((relicId) => (
+                  <TxButton
+                    key={relicId}
+                    onClick={(rp) => handleChooseRelic(relicId, rp)}
+                    variant="secondary"
+                  >
+                    {"🔮"} Relic #{relicId}
+                  </TxButton>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      case DungeonStatus.Failed:
+        return (
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-sm text-red-400">
+              This run failed. Resume from the last checkpoint?
+            </div>
+            <TxButton onClick={handleResume}>Resume Run</TxButton>
+          </div>
+        );
+      case DungeonStatus.Completed:
+        return (
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-sm text-green-400">
+              Dungeon complete — claim your rewards.
+            </div>
+            <TxButton onClick={handleClaim}>Claim Rewards</TxButton>
+          </div>
+        );
+      case DungeonStatus.Fled:
+        return (
+          <div className="text-center text-sm text-text-muted">
+            This run has ended.
+          </div>
+        );
+      default:
+        return (
+          <>
+            {/* Flee Penalty Warning */}
+            <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-3">
+              <div className="text-xs font-semibold text-red-400">Flee Warning</div>
+              <div className="mt-1 text-[11px] text-red-300/80">
+                Fleeing forfeits <span className="font-semibold text-red-400">{fleePenaltyPercent}%</span> of all collected loot.
+                You lose dungeon progress and all unclaimed rewards above the last checkpoint.
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-3">
+              {run.roomType === RoomType.Combat ? (
+                <TxButton
+                  onClick={handleAttackRoom}
+                  className="px-6"
+                  disabled={playerStamina < roomStaminaCost}
+                >
+                  {room.icon} Attack Room
+                </TxButton>
+              ) : (
+                <TxButton onClick={handleInteract} className="px-6">
+                  {room.icon} Resolve Room
+                </TxButton>
+              )}
+              <TxButton onClick={handleFlee} variant="secondary">
+                Flee
+              </TxButton>
+              <TxButton onClick={handleClaim} variant="secondary">
+                Claim &amp; Exit
+              </TxButton>
+            </div>
+            {run.roomType === RoomType.Combat && playerStamina < roomStaminaCost && (
+              <div className="text-center text-[11px] text-red-400">
+                Not enough stamina to attack ({playerStamina}/{roomStaminaCost})
+              </div>
+            )}
+          </>
+        );
+    }
   };
 
   return (
@@ -281,16 +442,21 @@ export function DungeonTab() {
           <div className="mt-1 text-center text-[11px] text-text-muted">
             Per room: <span className="text-text-secondary">{roomStaminaCost} stamina</span>
           </div>
+          {!heroMint && (
+            <div className="mt-1 text-center text-[11px] text-amber-400">
+              Lock a hero in the Heroes tab — a dungeon run escrows one hero.
+            </div>
+          )}
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <TxButton onClick={handleEnter} className="px-8 py-3 text-lg" disabled={playerTraveling || !hasStamina}>
+            <TxButton onClick={handleEnter} className="px-8 py-3 text-lg" disabled={playerTraveling || !hasStamina || !heroMint}>
               Enter Dungeon
             </TxButton>
             <TxButton
               onClick={handleStaminaAndEnter}
               variant="secondary"
               className="text-xs"
-              disabled={playerTraveling}
+              disabled={playerTraveling || !heroMint}
             >
               +Stamina &amp; Enter
             </TxButton>
@@ -308,8 +474,7 @@ export function DungeonTab() {
                   Floor {run.currentFloor ?? 0} / 10
                 </h3>
                 <div className="text-xs text-text-muted">
-                  Room Type: {ROOM_ICONS[run.roomType ?? 0]}{" "}
-                  {ROOM_TYPES[run.roomType ?? 0]}
+                  Room Type: {room.icon} {room.label}
                 </div>
               </div>
               <div className="text-right">
@@ -382,32 +547,7 @@ export function DungeonTab() {
             </div>
           </div>
 
-          {/* Flee Penalty Warning */}
-          <div className="rounded-lg border border-red-900/50 bg-red-950/20 p-3">
-            <div className="text-xs font-semibold text-red-400">Flee Warning</div>
-            <div className="mt-1 text-[11px] text-red-300/80">
-              Fleeing forfeits <span className="font-semibold text-red-400">{fleePenaltyPercent}%</span> of all collected loot.
-              You lose dungeon progress and all unclaimed rewards above the last checkpoint.
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-wrap justify-center gap-3">
-            <TxButton onClick={handleAttackRoom} className="px-6" disabled={playerStamina < roomStaminaCost}>
-              {ROOM_ICONS[run.roomType ?? 0]} Attack Room
-            </TxButton>
-            <TxButton onClick={handleFlee} variant="secondary">
-              Flee
-            </TxButton>
-            <TxButton onClick={handleClaim} variant="secondary">
-              Claim & Exit
-            </TxButton>
-          </div>
-          {playerStamina < roomStaminaCost && (
-            <div className="text-center text-[11px] text-red-400">
-              Not enough stamina to attack ({playerStamina}/{roomStaminaCost})
-            </div>
-          )}
+          {renderActions()}
         </>
       )}
       {/* Game Parameters */}

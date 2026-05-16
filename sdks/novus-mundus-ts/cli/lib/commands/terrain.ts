@@ -23,9 +23,7 @@ import { deriveCityPda } from '../../../src/pda';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// ───────────────────────────────────────────────────────────────
 // Preset city terrain configs
-// ───────────────────────────────────────────────────────────────
 
 interface CityPreset {
   name: string;
@@ -99,9 +97,7 @@ const PRESETS: Record<number, CityPreset> = {
   },
 };
 
-// ───────────────────────────────────────────────────────────────
 // Handlers
-// ───────────────────────────────────────────────────────────────
 
 export async function handleTerrain(ctx: CliContext, args: ParsedArgs): Promise<void> {
   const sub = args.target;
@@ -121,9 +117,7 @@ export async function handleTerrain(ctx: CliContext, args: ParsedArgs): Promise<
   }
 }
 
-// ───────────────────────────────────────────────────────────────
 // Preview — ASCII terrain in terminal
-// ───────────────────────────────────────────────────────────────
 
 function terrainPreview(_ctx: CliContext, args: ParsedArgs): void {
   const cityId = parseCityId(args);
@@ -177,9 +171,7 @@ function terrainPreview(_ctx: CliContext, args: ParsedArgs): void {
   log.info(`Land: ${((landCount / total) * 100).toFixed(1)}%  Water: ${((waterCount / total) * 100).toFixed(1)}%  Mountain: ${((mountainCount / total) * 100).toFixed(1)}%`);
 }
 
-// ───────────────────────────────────────────────────────────────
 // Export — save config as JSON
-// ───────────────────────────────────────────────────────────────
 
 function terrainExport(args: ParsedArgs): void {
   const cityId = parseCityId(args);
@@ -194,9 +186,7 @@ function terrainExport(args: ParsedArgs): void {
   log.info(`  Anchors: ${preset.terrain.anchors.length}`);
 }
 
-// ───────────────────────────────────────────────────────────────
 // Set — submit set_terrain instruction
-// ───────────────────────────────────────────────────────────────
 
 async function terrainSet(ctx: CliContext, args: ParsedArgs): Promise<void> {
   const cityId = parseCityId(args);
@@ -224,9 +214,7 @@ async function terrainSet(ctx: CliContext, args: ParsedArgs): Promise<void> {
   }
 }
 
-// ───────────────────────────────────────────────────────────────
 // Add — append anchors
-// ───────────────────────────────────────────────────────────────
 
 async function terrainAdd(ctx: CliContext, args: ParsedArgs): Promise<void> {
   const cityId = parseCityId(args);
@@ -258,9 +246,7 @@ async function terrainAdd(ctx: CliContext, args: ParsedArgs): Promise<void> {
   }
 }
 
-// ───────────────────────────────────────────────────────────────
 // Helpers
-// ───────────────────────────────────────────────────────────────
 
 function parseCityId(args: ParsedArgs): number {
   const raw = args.extra?.['city-id'] ?? args.positional?.[0];

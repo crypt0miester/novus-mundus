@@ -15,6 +15,8 @@ import {
 import { useEstate } from "@/lib/hooks/useEstate";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { TxButton } from "@/components/shared/TxButton";
+import type { TxPhase } from "@/components/shared/TxButton";
 import { StatBar } from "@/components/shared/StatBar";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
@@ -23,6 +25,9 @@ import { NoviRewards } from "@/components/shared/NoviRewards";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSequence";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useTransact } from "@/lib/hooks/useTransact";
 import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
@@ -31,6 +36,7 @@ import { bpsToMultiplier, formatTime } from "@/lib/utils";
 import {
   xpRequiredForLevel, levelProgressPercent,
   getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier,
+  createClaimDailyRewardInstruction,
 } from "@/lib/sdk";
 
 export default function DashboardPage() {
@@ -242,6 +248,7 @@ export default function DashboardPage() {
                 <div className="flex flex-col gap-3">
                   <NoviGenerator />
                   <NoviRewards />
+                  <DailyRewardCard daily={daily} />
                   <QuestSteps player={player} estate={estateData?.account} />
                 </div>
               </div>
@@ -354,6 +361,58 @@ function QuestSteps({ player, estate }: { player: any; estate: any }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Daily Reward ───────────────────────────────────────────
+function DailyRewardCard({
+  daily,
+}: {
+  daily: { available: boolean; cooldownEnds: number; hasDailyRewards: boolean };
+}) {
+  const { publicKey } = useWallet();
+  const client = useNovusMundusClient();
+  const transact = useTransact();
+
+  if (!daily.hasDailyRewards) return null;
+
+  const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createClaimDailyRewardInstruction({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Daily reward claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  return (
+    <div className="card accent-border">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        Daily Reward
+      </h3>
+      {daily.available ? (
+        <>
+          <p className="mb-3 text-sm text-text-secondary">
+            Your daily login reward is ready to claim.
+          </p>
+          <TxButton onClick={handleClaim} className="w-full">
+            Claim Daily Reward
+          </TxButton>
+        </>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-muted">Next reward</span>
+          <GoldCountdown endsAt={daily.cooldownEnds} format="compact" size="sm" />
         </div>
       )}
     </div>

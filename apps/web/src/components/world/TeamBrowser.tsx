@@ -3,7 +3,12 @@
 import { useState, useMemo } from "react";
 import { useWorldTeams, useCitizenStatus } from "@/lib/hooks/world";
 import { TeamCard } from "@/components/shared/TeamCard";
-import Link from "next/link";
+import { TxButton } from "@/components/shared/TxButton";
+import type { TxPhase } from "@/components/shared/TxButton";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useTransact } from "@/lib/hooks/useTransact";
+import { createTeamJoinInstruction } from "@/lib/sdk";
 
 type SortOption = "members" | "treasury" | "name" | "newest";
 
@@ -13,6 +18,10 @@ export function TeamBrowser() {
   const [search, setSearch] = useState("");
   const [publicOnly, setPublicOnly] = useState(false);
   const [sort, setSort] = useState<SortOption>("members");
+
+  const { publicKey } = useWallet();
+  const client = useNovusMundusClient();
+  const transact = useTransact();
 
   const filtered = useMemo(() => {
     if (!teams) return [];
@@ -53,6 +62,38 @@ export function TeamBrowser() {
     citizen.isCitizen &&
     citizen.player &&
     citizen.player.team.toBase58() !== "11111111111111111111111111111111";
+
+  const handleJoin = async (
+    t: (typeof filtered)[number],
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const slots = await client.fetchTeamMembers(t.pubkey);
+    const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
+    let freeSlot = -1;
+    for (let i = 0; i < t.account.maxMembers; i++) {
+      if (!usedSlots.has(i)) {
+        freeSlot = i;
+        break;
+      }
+    }
+    if (freeSlot < 0) throw new Error("Team is full");
+    const ix = createTeamJoinInstruction({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      team: t.pubkey,
+      teamId: t.account.id.toNumber(),
+      slotIndex: freeSlot,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"], ["teamMembers"]],
+        successMessage: `Joined ${t.account.name}!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
 
   if (isLoading) {
     return (
@@ -108,12 +149,13 @@ export function TeamBrowser() {
               team={t.account}
               actions={
                 canJoin ? (
-                  <Link
-                    href={`/team?join=${t.account.id.toNumber()}`}
-                    className="rounded border border-border-gold px-2 py-1 text-xs text-text-gold hover:bg-amber-900/20 transition-colors"
+                  <TxButton
+                    onClick={(rp) => handleJoin(t, rp)}
+                    variant="secondary"
+                    className="text-xs"
                   >
                     Join
-                  </Link>
+                  </TxButton>
                 ) : undefined
               }
             />

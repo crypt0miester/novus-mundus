@@ -53,6 +53,29 @@ SDK builder with no call site in `apps/web/src`.
 > Highest confidence / impact: **team invite accept/decline** (an invited player
 > currently has no way to accept), **daily reward claim**, and **arena challenge**.
 
+**Status: 6 of the 13 wired this pass** (typecheck-clean; runtime-unverified —
+`apps/web` has no e2e suite). Done: daily login reward claim (dashboard
+`DailyRewardCard`), transfer cash (economy "Send Cash" tab → `SendCashPanel`),
+equip item (forge-tab "Equip Gear" card), assign defensive hero (heroes-tab
+locked-hero panel), close own rally (rally-tab action bar), join team directly
+(`TeamBrowser` — the dead `?join=` link is now a `TxButton`). Join-a-rally and
+accept/decline-invite were already covered by P2a.
+
+**Deferred — blocked, not skipped:**
+
+- **Arena direct challenge** (`createChallengePlayerInstruction`) and **dungeon
+  choose-relic** (`createChooseRelicInstruction`) require the off-chain
+  `game_authority` to *co-sign* the transaction. `apps/web` has no backend, and
+  `useTransact` has no path to carry a server-held signer — so these cannot be
+  produced client-side. They need a backend endpoint that builds and
+  game-authority-signs a `VersionedTransaction` for the client to relay.
+- **Dungeon resume / leaderboard prize** — same backend dependency (`resume`'s
+  `firstRoomType` and the leaderboard `weekNumber` are server-derived).
+  Separately, the *already-shipped* `dungeon-attack` / `flee` / `claim` calls are
+  missing required accounts (`gameAuthority` signer; `heroMint`) — a latent
+  on-chain bug hidden by the `FlexIxBuilder` cast in `sdk.ts`. The dungeon
+  backend + account wiring should be fixed before adding more dungeon actions.
+
 ### P2a — Display gaps: action wired, but the target list is never rendered
 
 A whole class of "act on another account" flows are broken the same way: a
@@ -107,8 +130,11 @@ cast in `sdk.ts`).
 
 - [ ] **Team chat** — "coming soon" placeholder.
       `app/(game)/team/_components/team-tab.tsx:739` and `:934` (two variants).
-- [ ] **Arena season authority hardcoded** — `arena-tab.tsx:62` has
-      `TODO: use actual season authority` (currently falls back to `publicKey`).
+      _Deferred_ — real-time chat needs a backend (websockets / a chat service);
+      it is not an on-chain instruction wire.
+- [x] **Arena season authority hardcoded** — fixed. `arena-tab.tsx`
+      `handleJoin` / `handleClaimDailyReward` / `handleClaimMasterReward` now pass
+      `season.authority` from the fetched season account instead of `publicKey`.
 
 ---
 
@@ -128,13 +154,13 @@ cast in `sdk.ts`).
 | System | Coverage | Gap |
 |---|---|---|
 | Event | 🟢 Wired | `(game)/events` route built — see P1 (admin create still CLI-only) |
-| Progression | 🟡 Read-only | Daily reward claim unwired — see P2 |
-| Arena | 🟢 Wired | Direct challenge missing — see P2 |
-| Dungeon | 🟢 Wired | Choose relic / resume / leaderboard prize — see P2 |
-| Economy | 🟢 Wired | `transferCash` missing — see P2 |
-| Hero | 🟢 Wired | `assignDefensiveHero` _(verify)_ |
-| Forge | 🟢 Wired | `equip` _(verify)_ |
-| Rally | 🟢 Wired | `rallyJoin` / `rallyClose` _(verify)_ |
+| Progression | 🟢 Wired | Daily reward claim wired (dashboard) |
+| Arena | 🟢 Wired | Season-authority bug fixed; direct challenge needs a game_authority backend |
+| Dungeon | 🟡 Partial | choose-relic/resume/leaderboard need a game_authority backend; attack/flee/claim missing required accounts (latent bug) |
+| Economy | 🟢 Wired | `transferCash` wired (economy "Send Cash" tab) |
+| Hero | 🟢 Wired | `assignDefensiveHero` wired |
+| Forge | 🟢 Wired | `equip` wired |
+| Rally | 🟢 Wired | `rallyJoin` (P2a) + `rallyClose` wired |
 | Team | 🟢 Wired | Invites + treasury requests fixed (P2a). Remaining: chat stub (P3) |
 | Castle | 🟢 Wired | Garrison/court rosters + Dismiss bug fixed (P2a) |
 | Combat | 🟢 Wired | Player actions complete |

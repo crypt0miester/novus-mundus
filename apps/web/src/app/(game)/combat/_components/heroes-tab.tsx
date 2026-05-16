@@ -22,6 +22,7 @@ import {
   createBurnHeroInstruction,
   createLockHeroInstruction,
   createUnlockHeroInstruction,
+  createAssignDefensiveHeroInstruction,
   isNullPubkey,
   isTraveling,
   parseAssetV1,
@@ -328,6 +329,26 @@ export function HeroesTab() {
         instructions: [ix],
         invalidateKeys: [["player"]],
         successMessage: "Hero unlocked!",
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        refresh();
+        return r.signature;
+      });
+  };
+
+  const handleAssignDefensive = async (slotIndex: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const ix = createAssignDefensiveHeroInstruction(
+      { owner: publicKey, gameEngine: ge },
+      { slotIndex },
+    );
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Defensive hero assigned!",
         onPhase: reportPhase,
       })
       .then((r) => {
@@ -675,13 +696,24 @@ export function HeroesTab() {
             {/* Actions */}
             <div className="border-t border-border-default pt-3">
               {selected?.type === "locked" ? (
-                <TxButton
-                  onClick={(rp) => handleUnlock((selected as { slot: number }).slot, rp)}
-                  variant="secondary"
-                  className="w-full text-xs"
-                >
-                  Unlock from Slot {(selected as { slot: number }).slot}
-                </TxButton>
+                <div className="space-y-2">
+                  {player.defensiveHeroSlot !== (selected as { slot: number }).slot && (
+                    <TxButton
+                      onClick={(rp) => handleAssignDefensive((selected as { slot: number }).slot, rp)}
+                      variant="secondary"
+                      className="w-full text-xs"
+                    >
+                      Assign as Defender
+                    </TxButton>
+                  )}
+                  <TxButton
+                    onClick={(rp) => handleUnlock((selected as { slot: number }).slot, rp)}
+                    variant="secondary"
+                    className="w-full text-xs"
+                  >
+                    Unlock from Slot {(selected as { slot: number }).slot}
+                  </TxButton>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {lockGate.allowed ? (
