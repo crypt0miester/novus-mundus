@@ -879,9 +879,8 @@ export function ShopTab() {
 
                 <div className="rounded-md border border-amber-900/40 bg-amber-900/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300/90">
                   Purchased NOVI is credited to your{" "}
-                  <span className="font-semibold">Reserved</span> balance — not Locked.
-                  Convert it to Locked NOVI (Dashboard, or Estate &rarr; Vault) before you
-                  can spend it on gameplay.
+                  <span className="font-semibold">Reserved</span> balance.
+                  Convert it to Locked NOVI (Dashboard, or Estate &rarr; Vault)
                 </div>
 
                 <TxButton

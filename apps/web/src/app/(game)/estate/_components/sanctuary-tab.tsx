@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { GemAction } from "@/components/shared/GemAction";
@@ -12,13 +12,17 @@ import { shortenAddress } from "@/lib/utils";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useAccountStore } from "@/lib/store/accounts";
 import {
   isNullPubkey,
   isHeroMeditating,
+  isHeroAtHome,
   createStartMeditationInstruction,
   createClaimMeditationInstruction,
   createSpeedupMeditationInstruction,
+  parseAssetV1,
   getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling,
+  type ParsedAssetV1,
 } from "novus-mundus-sdk";
 
 const SPEEDUP_TIERS = [
@@ -26,16 +30,28 @@ const SPEEDUP_TIERS = [
   { tier: 2, label: "+6 hours", gems: 18_000 },
 ];
 
+/** A hero's template id lives in its NFT attributes — never ask the user. */
+function templateIdOf(asset: ParsedAssetV1 | null): number | null {
+  const raw = asset?.attributes?.["Template"];
+  if (raw == null) return null;
+  const id = parseInt(raw, 10);
+  return Number.isFinite(id) ? id : null;
+}
+
 export function SanctuaryTab() {
   const { data: playerData } = usePlayer();
   const { data: geData } = useGameEngine();
   const player = playerData?.account;
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const transact = useTransact();
 
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
-  const [heroTemplateId, setHeroTemplateId] = useState(0);
+  // Hero NFT assets for the three active slots — drives names + template ids.
+  const [heroAssets, setHeroAssets] = useState<(ParsedAssetV1 | null)[]>([
+    null, null, null,
+  ]);
 
   const meditating = player ? isHeroMeditating(player) : false;
   const meditationStart = player?.meditationStartedAt?.toNumber() ?? 0;
@@ -47,15 +63,45 @@ export function SanctuaryTab() {
   const todName = getTimeOfDayName(tod);
   const meditationBonus = getActivityMultiplier('gathering' as any, tod);
 
-  const heroSlots = useMemo(() => {
-    if (!player) return [];
-    return player.activeHeroes.map((mint, i) => ({
-      slot: i,
-      mint,
-      occupied: !isNullPubkey(mint),
-      isMeditating: meditating && meditatingSlot === i,
-    }));
-  }, [player, meditating, meditatingSlot]);
+  // Keyed on the slot mints so we only refetch when the line-up changes.
+  const heroMintsKey = useMemo(
+    () =>
+      player
+        ? (player.activeHeroes as { toBase58(): string }[])
+            .map((m) => m.toBase58())
+            .join(",")
+        : "",
+    [player],
+  );
+
+  // Pull the locked heroes' NFT assets so we can read each one's template id.
+  useEffect(() => {
+    if (!player || !connection) return;
+    const mints = player.activeHeroes as { toBase58(): string }[];
+    const filled = mints
+      .map((mint, slot) => ({ mint, slot }))
+      .filter((e) => !isNullPubkey(e.mint as never));
+    if (filled.length === 0) {
+      setHeroAssets([null, null, null]);
+      return;
+    }
+    let cancelled = false;
+    connection
+      .getMultipleAccountsInfo(filled.map((e) => e.mint as never))
+      .then((infos) => {
+        if (cancelled) return;
+        const next: (ParsedAssetV1 | null)[] = [null, null, null];
+        filled.forEach((e, i) => {
+          const data = infos[i]?.data;
+          if (data) next[e.slot] = parseAssetV1(data) ?? null;
+        });
+        setHeroAssets(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [heroMintsKey, connection, player]);
 
   const now = Math.floor(Date.now() / 1000);
   const elapsed = meditating ? now - meditationStart : 0;
@@ -64,14 +110,58 @@ export function SanctuaryTab() {
 
   const meditationXpEstimate = meditating ? Math.floor(elapsed / 3600) * 50 : 0;
 
-  const meditatingHeroMint = meditating && meditatingSlot < 3
-    ? player!.activeHeroes[meditatingSlot]
-    : null;
+  const heroSlots = useMemo(() => {
+    if (!player) return [];
+    return (player.activeHeroes as { toBase58(): string }[]).map((mint, i) => ({
+      slot: i,
+      mint,
+      occupied: !isNullPubkey(mint as never),
+      asset: heroAssets[i],
+      isMeditating: meditating && meditatingSlot === i,
+    }));
+  }, [player, heroAssets, meditating, meditatingSlot]);
+
+  const hasLockedHero = heroSlots.some((s) => s.occupied);
+
+  // Some hero templates require meditation in a specific origin city.
+  const heroTemplatesMap = useAccountStore((s) => s.heroTemplates);
+  const cities = useAccountStore((s) => s.cities);
+
+  const cityName = (id: number) => {
+    for (const c of cities.values()) {
+      if (c.account.cityId === id) return c.account.name;
+    }
+    return `City #${id}`;
+  };
+
+  const selectedTemplate = useMemo(() => {
+    if (selectedSlot == null) return null;
+    const tid = templateIdOf(heroAssets[selectedSlot]);
+    if (tid == null) return null;
+    for (const e of heroTemplatesMap.values()) {
+      if (e.account.templateId === tid) return e.account;
+    }
+    return null;
+  }, [selectedSlot, heroAssets, heroTemplatesMap]);
+
+  const meditationCityOk =
+    !selectedTemplate || !player || isHeroAtHome(selectedTemplate, player.currentCity);
+
+  const meditatingHeroMint =
+    meditating && meditatingSlot < 3 ? player!.activeHeroes[meditatingSlot] : null;
+  const meditatingAsset =
+    meditating && meditatingSlot < 3 ? heroAssets[meditatingSlot] : null;
+  const heroLabel = (asset: ParsedAssetV1 | null, mint: { toBase58(): string }) =>
+    asset?.name || shortenAddress(mint.toBase58());
 
   const handleStartMeditation = async (reportPhase: (p: TxPhase) => void) => {
     if (selectedSlot == null || !publicKey) throw new Error("No slot selected");
     const heroMint = player!.activeHeroes[selectedSlot];
     if (isNullPubkey(heroMint)) throw new Error("No hero in this slot");
+    const heroTemplateId = templateIdOf(heroAssets[selectedSlot]);
+    if (heroTemplateId == null) {
+      throw new Error("Hero data still loading — reopen the Sanctuary and retry");
+    }
 
     const ge = client.gameEngine;
     const ix = createStartMeditationInstruction(
@@ -88,6 +178,10 @@ export function SanctuaryTab() {
 
   const handleClaimMeditation = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !meditatingHeroMint) throw new Error("Not meditating");
+    const heroTemplateId = templateIdOf(meditatingAsset);
+    if (heroTemplateId == null) {
+      throw new Error("Hero data still loading — reopen the Sanctuary and retry");
+    }
     const ge = client.gameEngine;
     const ix = createClaimMeditationInstruction({
       owner: publicKey,
@@ -122,6 +216,10 @@ export function SanctuaryTab() {
     if (selectedSlot == null || !publicKey) throw new Error("No slot selected");
     const heroMint = player!.activeHeroes[selectedSlot];
     if (isNullPubkey(heroMint)) throw new Error("No hero in this slot");
+    const heroTemplateId = templateIdOf(heroAssets[selectedSlot]);
+    if (heroTemplateId == null) {
+      throw new Error("Hero data still loading — reopen the Sanctuary and retry");
+    }
     const ge = client.gameEngine;
     const startIx = createStartMeditationInstruction(
       { owner: publicKey, gameEngine: ge, heroMint, heroTemplateId },
@@ -164,8 +262,8 @@ export function SanctuaryTab() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-text-muted">Hero (Slot {meditatingSlot})</div>
-              <div className="font-mono text-sm text-text-primary">
-                {shortenAddress(meditatingHeroMint.toBase58())}
+              <div className="text-sm font-semibold text-text-primary">
+                {heroLabel(meditatingAsset, meditatingHeroMint)}
               </div>
             </div>
             <div className="text-right">
@@ -196,18 +294,6 @@ export function SanctuaryTab() {
 
           {/* Claim */}
           <div className="mt-4">
-            <div className="mb-2 rounded-lg border border-zinc-800 bg-surface/50 p-3">
-              <label className="mb-1 block text-xs text-text-muted">
-                Hero Template ID (same as when minted)
-                <input
-                  type="number"
-                  value={heroTemplateId}
-                  onChange={(e) => setHeroTemplateId(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-24 rounded border border-zinc-700 bg-surface px-2 py-1 text-sm text-text-primary"
-                  min={0}
-                />
-              </label>
-            </div>
             <TxButton onClick={handleClaimMeditation} className="w-full">
               Claim Meditation Rewards
             </TxButton>
@@ -222,80 +308,78 @@ export function SanctuaryTab() {
             Start Meditation
           </h3>
           <p className="mb-4 text-sm text-text-secondary">
-            Lock a hero into meditation to earn XP over time. Requires a Sanctuary building on your estate.
+            Send a locked hero to meditate for passive XP over time. Requires a
+            Sanctuary building on your estate.
           </p>
 
-          {/* Hero Slots */}
-          <div className="mb-4 grid gap-3 md:grid-cols-3">
-            {heroSlots.map((slot) => (
-              <button
-                key={slot.slot}
-                onClick={() => slot.occupied ? setSelectedSlot(slot.slot) : undefined}
-                disabled={!slot.occupied}
-                className={`rounded-lg border p-4 text-left transition-all ${
-                  selectedSlot === slot.slot
-                    ? "border-amber-600 bg-amber-900/20"
-                    : slot.occupied
-                      ? "border-zinc-800 hover:border-zinc-700"
-                      : "border-zinc-900 opacity-40"
-                }`}
-              >
-                <div className="text-xs text-text-muted">Slot {slot.slot}</div>
-                {slot.occupied ? (
-                  <div className="mt-1 font-mono text-sm text-text-primary">
-                    {shortenAddress(slot.mint.toBase58())}
-                  </div>
-                ) : (
-                  <div className="mt-1 text-sm text-text-muted italic">Empty</div>
-                )}
-              </button>
-            ))}
-            {heroSlots.length === 0 && (
-              <p className="col-span-3 text-sm text-text-muted">
-                No hero data available. Lock heroes on the Hero page first.
-              </p>
-            )}
-          </div>
+          {!hasLockedHero ? (
+            <p className="rounded-lg border border-amber-900/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-400">
+              No locked heroes. Lock a hero into an active slot on the Heroes
+              page first — only locked heroes can meditate.
+            </p>
+          ) : (
+            <>
+              {/* Hero Slots */}
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
+                {heroSlots.map((slot) => (
+                  <button
+                    key={slot.slot}
+                    onClick={() => slot.occupied ? setSelectedSlot(slot.slot) : undefined}
+                    disabled={!slot.occupied}
+                    className={`rounded-lg border p-4 text-left transition-all ${
+                      selectedSlot === slot.slot
+                        ? "border-amber-600 bg-amber-900/20"
+                        : slot.occupied
+                          ? "border-zinc-800 hover:border-zinc-700"
+                          : "border-zinc-900 opacity-40"
+                    }`}
+                  >
+                    <div className="text-xs text-text-muted">Slot {slot.slot}</div>
+                    {slot.occupied ? (
+                      <div className="mt-1 text-sm font-semibold text-text-primary">
+                        {heroLabel(slot.asset, slot.mint)}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-sm text-text-muted italic">Empty</div>
+                    )}
+                  </button>
+                ))}
+              </div>
 
-          {/* Template ID + Start */}
-          {selectedSlot != null && heroSlots[selectedSlot]?.occupied && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-zinc-800 bg-surface/50 p-3">
-                <label className="mb-1 block text-xs text-text-muted">
-                  Hero Template ID (from when you minted this hero)
-                  <input
-                    type="number"
-                    value={heroTemplateId}
-                    onChange={(e) => setHeroTemplateId(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-24 rounded border border-zinc-700 bg-surface px-2 py-1 text-sm text-text-primary"
-                    min={0}
-                  />
-                </label>
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-center">
-                  <TxButton onClick={handleStartMeditation} disabled={traveling} className="px-8 py-3 text-lg">
-                    Begin Meditation (Slot {selectedSlot})
-                  </TxButton>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <GemAction
-                    onClick={(rp) => handleMeditateAndSpeedup(1, rp)}
-                    gemCost={3000}
-                    gemBalance={player?.gems?.toNumber?.() ?? 0}
-                  >
-                    Meditate &amp; Speed Up (+1h)
-                  </GemAction>
-                  <GemAction
-                    onClick={(rp) => handleMeditateAndSpeedup(2, rp)}
-                    gemCost={18000}
-                    gemBalance={player?.gems?.toNumber?.() ?? 0}
-                  >
-                    Meditate &amp; Speed Up (+6h)
-                  </GemAction>
-                </div>
-              </div>
-            </div>
+              {/* Start — template is derived from the chosen hero's NFT */}
+              {selectedSlot != null && heroSlots[selectedSlot]?.occupied && (
+                !meditationCityOk && selectedTemplate && player ? (
+                  <p className="rounded-lg border border-amber-900/40 bg-amber-900/10 px-4 py-3 text-sm text-amber-400">
+                    This hero can only meditate in {cityName(selectedTemplate.meditationCityId)} —
+                    you are in {cityName(player.currentCity)}. Travel there first.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex justify-center">
+                      <TxButton onClick={handleStartMeditation} disabled={traveling} className="px-8 py-3 text-lg">
+                        Begin Meditation (Slot {selectedSlot})
+                      </TxButton>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <GemAction
+                        onClick={(rp) => handleMeditateAndSpeedup(1, rp)}
+                        gemCost={3000}
+                        gemBalance={player?.gems?.toNumber?.() ?? 0}
+                      >
+                        Meditate &amp; Speed Up (+1h)
+                      </GemAction>
+                      <GemAction
+                        onClick={(rp) => handleMeditateAndSpeedup(2, rp)}
+                        gemCost={18000}
+                        gemBalance={player?.gems?.toNumber?.() ?? 0}
+                      >
+                        Meditate &amp; Speed Up (+6h)
+                      </GemAction>
+                    </div>
+                  </div>
+                )
+              )}
+            </>
           )}
         </div>
       )}

@@ -6,6 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
+import { useRightPanelStore } from "@/lib/store/right-panel";
 import { cn } from "@/lib/utils";
 import { PRIMARY, SECONDARY } from "./nav-config";
 
@@ -63,6 +64,7 @@ export function TopBar() {
   const { data: playerData, isSuccess } = usePlayer();
   const { data: estateData } = useEstate();
   const player = playerData?.account;
+  const showPanel = useRightPanelStore((s) => s.show);
 
   // Lock checks
   const hasPlayer = !!player;
@@ -102,9 +104,26 @@ export function TopBar() {
 
       {/* Secondary nav (compact, before wallet) */}
       <nav className="hidden lg:flex items-center gap-2 mr-3">
-        {SECONDARY.map((item) => (
-          <NavLink key={item.href} href={item.href} label={item.label} size="secondary" active={isActive(item.href)} locked={!!pageLocked[item.href]} disabled={disabled} />
-        ))}
+        {SECONDARY.map((item) =>
+          item.panel ? (
+            <button
+              key={item.panel}
+              type="button"
+              onClick={() => showPanel(item.label, item.panel!)}
+              disabled={disabled}
+              className={cn(
+                "text-[11px] font-medium whitespace-nowrap transition-colors",
+                disabled
+                  ? "pointer-events-none text-zinc-700"
+                  : "text-text-muted hover:text-text-secondary",
+              )}
+            >
+              {item.label}
+            </button>
+          ) : (
+            <NavLink key={item.href} href={item.href!} label={item.label} size="secondary" active={isActive(item.href!)} locked={!!pageLocked[item.href!]} disabled={disabled} />
+          ),
+        )}
       </nav>
 
       {/* Wallet */}

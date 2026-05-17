@@ -88,6 +88,7 @@ export function useEstateActions() {
       return transact
         .mutateAsync({
           instructions: [ix],
+          invalidateKeys: [["estate"], ["player"]],
           successMessage: `${isUpgrade ? "Upgrading" : "Building"} ${name}!`,
           onPhase: reportPhase,
         })
@@ -108,6 +109,7 @@ export function useEstateActions() {
       return transact
         .mutateAsync({
           instructions: [ix],
+          invalidateKeys: [["estate"], ["player"]],
           successMessage: `${name} construction sped up!`,
           onPhase: reportPhase,
         })
@@ -128,6 +130,7 @@ export function useEstateActions() {
       return transact
         .mutateAsync({
           instructions: [ix],
+          invalidateKeys: [["estate"], ["player"]],
           successMessage: `${name} construction complete!`,
           onPhase: reportPhase,
         })

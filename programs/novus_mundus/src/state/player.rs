@@ -1238,49 +1238,57 @@ pub fn extension_prerequisite_error(ext: u32) -> crate::error::GameError {
     }
 }
 
-pub fn can_unlock_extension(player: &PlayerCore, ext: u32) -> bool {
-    match prerequisite_for_extension(ext) {
-        None => true,
-        Some(prereq) => player.extensions & prereq != 0,
-    }
-}
-
-/// Unlock an extension if eligible; resize, init section bytes, and set bit.
+/// Ensure an extension is unlocked, allocating it and any missing
+/// prerequisite sections.
 ///
+/// Sections are laid out contiguously, so a section's bytes cannot exist
+/// unless every earlier section in the chain does. Rather than erroring when
+/// a prerequisite is missing, this cascades down the chain and allocates the
+/// (empty, zero-initialized) storage for everything before `ext` — so a
+/// feature is never gated behind having *used* an earlier, unrelated feature.
+/// Genuine gameplay gates stay explicit via `require_extension`.
+///
+/// Returns `true` if `ext` itself was newly unlocked, `false` if already set.
 /// Caller must NOT hold any active borrows on `account` when calling.
 pub fn unlock_extension_if_eligible(
     account: &AccountView,
     payer: &AccountView,
     ext: u32,
 ) -> Result<bool, ProgramError> {
-    let (already, new_extensions) = {
+    // Already unlocked — nothing to do.
+    {
         let data = account.try_borrow()?;
         let player = unsafe { PlayerCore::load(&data) };
         if player.extensions & ext != 0 {
             return Ok(false);
         }
-        if !can_unlock_extension(player, ext) {
-            return Err(extension_prerequisite_error(ext).into());
-        }
-        (false, player.extensions | ext)
-    };
-    let _ = already;
+    }
 
-    let new_size = size_for_extensions(new_extensions);
-    resize_player_account(account, payer, new_size)?;
+    let offset = match ext {
+        EXT_RESEARCH  => RESEARCH_OFFSET,
+        EXT_INVENTORY => INVENTORY_OFFSET,
+        EXT_TEAM      => TEAM_OFFSET,
+        EXT_RALLY     => RALLY_OFFSET,
+        EXT_HEROES    => HEROES_OFFSET,
+        EXT_COSMETICS => COSMETICS_OFFSET,
+        EXT_COURT     => COURT_OFFSET,
+        _ => return Err(crate::error::GameError::ExtensionPrerequisiteNotMet.into()),
+    };
+
+    // Cascade: allocate the prerequisite chain first so this section's bytes
+    // sit on top of an already-allocated buffer.
+    if let Some(prereq) = prerequisite_for_extension(ext) {
+        unlock_extension_if_eligible(account, payer, prereq)?;
+    }
+
+    let new_extensions = {
+        let data = account.try_borrow()?;
+        unsafe { PlayerCore::load(&data) }.extensions | ext
+    };
+    resize_player_account(account, payer, size_for_extensions(new_extensions))?;
 
     {
         let mut data = account.try_borrow_mut()?;
-        let offset = match ext {
-            EXT_RESEARCH  => RESEARCH_OFFSET,
-            EXT_INVENTORY => INVENTORY_OFFSET,
-            EXT_TEAM      => TEAM_OFFSET,
-            EXT_RALLY     => RALLY_OFFSET,
-            EXT_HEROES    => HEROES_OFFSET,
-            EXT_COSMETICS => COSMETICS_OFFSET,
-            EXT_COURT     => COURT_OFFSET,
-            _ => return Err(crate::error::GameError::ExtensionPrerequisiteNotMet.into()),
-        };
         unsafe { write_section_init(&mut data, offset, ext); }
         let player = unsafe { PlayerCore::load_mut(&mut data) };
         player.extensions = new_extensions;

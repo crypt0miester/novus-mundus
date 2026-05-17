@@ -16,7 +16,7 @@ use crate::{
     },
     state::{
         is_hero_at_home, location_bonus_for_tier, require_extension, unlock_extension_if_eligible,
-        HeroTemplate, PlayerAccount, EXT_HEROES, EXT_RALLY, NULL_PUBKEY,
+        HeroTemplate, PlayerAccount, EXT_HEROES, NULL_PUBKEY,
     },
     utils::read_u8,
     validation::{require_signer, require_writable, require_owner, require_pda},
@@ -73,7 +73,7 @@ pub fn process(
             return Err(GameError::Unauthorized.into());
         }
 
-        require_extension(player, EXT_RALLY)?;
+        require_extension(player, EXT_HEROES)?;
 
         // Require Sanctuary (Estate Level 8+) to lock heroes
         let estate = load_estate_for_player(estate_account, player, program_id)?;

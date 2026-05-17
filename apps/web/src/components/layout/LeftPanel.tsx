@@ -16,7 +16,6 @@ import { getTierInfo, getCachedTier } from "@/lib/hooks/useTierTheme";
 import { useDomainName } from "@/lib/hooks/useDomainName";
 import { formatNumber } from "@/lib/utils";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
-import { CairnPresence } from "@/components/cairn/CairnPresence";
 import { CairnReport } from "@/components/cairn/CairnReport";
 import {
   createUpdateLockedNoviInstruction,
@@ -39,12 +38,7 @@ export function LeftPanel() {
   const ge = geData?.account;
   const estate = estateData?.account;
 
-  const stamina = useStamina(
-    player?.encounterStamina?.toNumber(),
-    player?.lastStaminaUpdate?.toNumber(),
-    player?.maxEncounterStamina?.toNumber(),
-    player ? 1 / 60 : undefined
-  );
+  const stamina = useStamina(player);
 
   const domain = useDomainName(publicKey);
 
@@ -125,7 +119,8 @@ export function LeftPanel() {
   const maxSlots = plotsOwned * 4;
 
   return (
-    <div className="flex flex-col gap-3 p-3">
+    // Bottom padding keeps the last card clear of the fixed Cairn (CairnPresence).
+    <div className="flex flex-col gap-3 p-3 pb-44">
       {/* Player identity */}
       <div className="rounded-lg border border-border-default bg-surface-raised p-3">
         <div className="flex items-center gap-2">
@@ -230,7 +225,6 @@ export function LeftPanel() {
         </div>
       )}
 
-      <CairnPresence />
       <CairnReport />
     </div>
   );
@@ -246,12 +240,7 @@ export function LeftPanelMobile() {
   const player = playerData?.account;
   const ge = geData?.account;
 
-  const stamina = useStamina(
-    player?.encounterStamina?.toNumber(),
-    player?.lastStaminaUpdate?.toNumber(),
-    player?.maxEncounterStamina?.toNumber(),
-    player ? 1 / 60 : undefined
-  );
+  const stamina = useStamina(player);
 
   const domain = useDomainName(publicKey);
 

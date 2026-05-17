@@ -24,6 +24,8 @@ interface RoundResult {
   reactionMs?: number;
   markerPos?: number;
   fraction: number;
+  /** react: the tap landed during STEADY — round burned at zero. */
+  falseStart?: boolean;
 }
 
 interface Sweep {
@@ -76,9 +78,14 @@ export function ReflexGame({
   const goAtRef = useRef(0);
   const phaseRef = useRef<Phase>("intro");
   phaseRef.current = phase;
+  // Bumped whenever a round is resolved. A false-start tap during STEADY
+  // resolves the round while its `arm` request is still held open server-side;
+  // that stale `arm` then 409s, and this lets runRound() know to ignore it.
+  const epochRef = useRef(0);
 
   // One round: a ready beat, round-start, then arm (held for react).
   const runRound = useCallback(async () => {
+    const epoch = ++epochRef.current;
     try {
       setResult(null);
       setReactionMs(0);
@@ -106,6 +113,9 @@ export function ReflexGame({
         setPhase("sweeping");
       }
     } catch (e) {
+      // A false-start tap resolved this round and started the next one — the
+      // held `arm` for this round then 409s. Stale: a newer round owns the UI.
+      if (epochRef.current !== epoch) return;
       setError(e instanceof Error ? e.message : "the drill was interrupted");
     }
   }, [mode, sendMove]);
@@ -120,9 +130,14 @@ export function ReflexGame({
   const act = useCallback(async () => {
     if (actingRef.current) return;
     const p = phaseRef.current;
-    if (mode === "react" && p !== "go") return;
+    // react: a tap is valid at GO, and also during STEADY — where it is a
+    // false start the server burns at zero. Taps in intro/result are ignored.
+    if (mode === "react" && p !== "go" && p !== "waiting") return;
     if (mode === "precision" && p !== "sweeping") return;
     actingRef.current = true;
+    // A STEADY tap resolves the round now, ahead of its held `arm` — retire
+    // this round's epoch so the doomed `arm` request is ignored when it 409s.
+    if (mode === "react" && p === "waiting") epochRef.current += 1;
     try {
       const res = await sendMove({
         kind: mode === "react" ? "tap" : "release",
@@ -264,6 +279,8 @@ function ReactArena({
   onTap: () => void;
 }) {
   const tag = reactionTag(result?.reactionMs ?? 999);
+  const falseStart =
+    phase === "result" && result?.kind === "reaction" && !!result.falseStart;
   return (
     <button
       type="button"
@@ -272,7 +289,9 @@ function ReactArena({
       className={`flex min-h-[220px] w-full select-none flex-col items-center justify-center rounded-2xl border-2 transition-transform duration-100 ${
         phase === "go"
           ? "scale-[1.015] border-emerald-300 bg-emerald-500 text-emerald-950"
-          : "border-border-default bg-surface-raised"
+          : falseStart
+            ? "border-red-500/70 bg-red-950/30"
+            : "border-border-default bg-surface-raised"
       }`}
     >
       {phase === "intro" && (
@@ -286,7 +305,7 @@ function ReactArena({
             STEADY
           </span>
           <span className="mt-2 text-xs text-text-muted">
-            hold — do not strike yet
+            hold — strike early and the round is lost
           </span>
         </>
       )}
@@ -301,15 +320,26 @@ function ReactArena({
         </>
       )}
       {phase === "result" && result?.kind === "reaction" && (
-        <>
-          <span className="font-display text-6xl font-black tabular-nums text-text-gold">
-            {result.reactionMs}
-            <span className="ml-1 text-2xl text-text-muted">ms</span>
-          </span>
-          <span className={`mt-2 text-sm font-semibold ${tag.tone}`}>
-            {tag.label}
-          </span>
-        </>
+        falseStart ? (
+          <>
+            <span className="font-display text-5xl font-black tracking-wide text-red-400">
+              TOO SOON
+            </span>
+            <span className="mt-2 text-sm font-semibold text-red-400">
+              Struck before the signal — round lost
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-display text-6xl font-black tabular-nums text-text-gold">
+              {result.reactionMs}
+              <span className="ml-1 text-2xl text-text-muted">ms</span>
+            </span>
+            <span className={`mt-2 text-sm font-semibold ${tag.tone}`}>
+              {tag.label}
+            </span>
+          </>
+        )
       )}
       {phase === "done" && (
         <span className="font-display text-xl font-bold text-text-muted">

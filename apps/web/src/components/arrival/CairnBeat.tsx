@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import anime from "animejs/lib/anime.es.js";
+import { animate } from "animejs";
 import { CairnOrb } from "@/components/cairn/CairnOrb";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { cairnBeat } from "@/lib/narrative";
@@ -28,12 +28,11 @@ export function CairnBeat({ onEnter }: CairnBeatProps) {
 
   useEffect(() => {
     if (!orbRef.current) return;
-    anime({
-      targets: orbRef.current,
+    animate(orbRef.current, {
       opacity: [0, 1],
       scale: [0.7, 1],
       duration: ORB_DURATION,
-      easing: "easeOutQuad",
+      ease: "outQuad",
     });
   }, []);
 

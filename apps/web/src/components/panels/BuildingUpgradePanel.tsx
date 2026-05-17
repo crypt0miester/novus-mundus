@@ -12,14 +12,13 @@ import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
 
-/** Renders in the right panel when a building is selected for build/upgrade/speedup. */
-export function BuildingUpgradePanel({
-  buildingId,
-  mode,
-}: {
-  buildingId: number;
-  mode: "detail" | "speedup";
-}) {
+/**
+ * Renders in the right panel when a building is selected. The view follows the
+ * building's live phase: a building under construction shows speed-up / complete,
+ * anything else shows build / upgrade. No mode prop — when a build tx lands and
+ * the slot flips to Building, this panel re-renders straight into speed-up.
+ */
+export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
   const close = useRightPanelStore((s) => s.close);
@@ -69,8 +68,8 @@ export function BuildingUpgradePanel({
 
   if (!config) return null;
 
-  // ── Speedup mode ──
-  if (mode === "speedup" && isConstructing) {
+  // ── Under construction → speed up, or complete once the timer is done ──
+  if (isConstructing) {
     return (
       <div className="flex flex-col gap-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">

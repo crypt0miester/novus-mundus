@@ -38,6 +38,10 @@ export interface BuildingFeatureConfig {
   panelKey?: string;
   /** Whether clicking opens a center feature view (complex features) */
   centerView?: boolean;
+  /** Route to navigate to when clicking an active building — used for features
+   *  that live on another page (e.g. Catacombs → the dungeon). Takes precedence
+   *  over the panel / center view. */
+  route?: string;
   /** Hint text shown on the card for active buildings */
   featureHint?: string;
 }
@@ -63,7 +67,7 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
 
   // Combat
   { id: BuildingId.Arena, name: "Arena", desc: "PvP combat", tier: 3, category: "Combat", primaryFeature: FEATURES.ARENA_JOIN, featureHint: "PvP" },
-  { id: BuildingId.Catacombs, name: "Catacombs", desc: "Dungeon access", tier: 3, category: "Combat", primaryFeature: FEATURES.DUNGEON_ENTER, featureHint: "Dungeon" },
+  { id: BuildingId.Catacombs, name: "Catacombs", desc: "Dungeon access", tier: 3, category: "Combat", primaryFeature: FEATURES.DUNGEON_ENTER, route: "/combat?tab=dungeon", featureHint: "Dungeon" },
 
   // Exploration
   { id: BuildingId.Mine, name: "Mine", desc: buildingFraming(BuildingId.Mine).role, tier: 2, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_MINING, centerView: true, featureHint: "Mine" },

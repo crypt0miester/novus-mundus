@@ -164,7 +164,7 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
   // Reflex — timed Class C games
   [BuildingType.Barracks]: {
     archetype: "reflex",
-    difficulty: { rounds: 4, targetMs: 280, floorMs: 620 },
+    difficulty: { rounds: 12, targetMs: 280, floorMs: 620 },
     flavor: {
       title: "Morning Drill",
       tagline: "React to the sergeant's command — strike on the signal.",

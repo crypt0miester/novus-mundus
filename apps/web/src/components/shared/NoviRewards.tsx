@@ -280,7 +280,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                 <TxButton
                   onClick={handleConvert}
                   disabled={convertNum <= 0 || convertNum > reservedBalance}
-                  className="whitespace-nowrap px-5"
+                  className="w-auto shrink-0 whitespace-nowrap px-5"
                 >
                   Convert
                 </TxButton>
@@ -362,7 +362,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                     disabled={
                       withdrawNum <= 0 || withdrawNum > reservedBalance
                     }
-                    className="whitespace-nowrap px-5"
+                    className="w-auto shrink-0 whitespace-nowrap px-5"
                   >
                     Withdraw
                   </TxButton>

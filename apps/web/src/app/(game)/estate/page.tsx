@@ -17,8 +17,6 @@ import { BuildingGrid } from "./_components/building-grid";
 import { FeatureView, hasCenterView } from "./_components/feature-view";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 import { Arrival } from "@/components/arrival/Arrival";
-import { Chronicle } from "@/components/chronicle/Chronicle";
-import { ChapterBand } from "./_components/chapter-band";
 import { buildingPhase } from "@/lib/narrative";
 import MagicRings from "@/components/shared/animations/MagicRing";
 import { DailyActivityTracker } from "./_components/daily-activity/DailyActivityTracker";
@@ -36,9 +34,6 @@ function EstateContent() {
   const {
     handleCreateEstate,
     handleBuyPlot,
-    handleBuildOrUpgrade,
-    handleBuildingSpeedup,
-    handleCompleteBuilding,
     plotsOwned,
     maxSlots,
     canBuyPlot,
@@ -71,21 +66,13 @@ function EstateContent() {
     (b: BuildingSlot) => b.status === BuildingStatus.Building
   ).length ?? 0;
 
-  // Handle building selection for right panel
+  // Handle building selection for right panel. One handler for every phase —
+  // the panel itself derives build / upgrade / speed-up from the live state.
   const handleSelectBuilding = useCallback(
     (id: number) => {
       const config = BUILDING_FEATURE_MAP.get(id);
       const name = config?.name ?? `Building #${id}`;
-      show(name, "building-detail", { buildingId: id, mode: "detail" });
-    },
-    [show]
-  );
-
-  const handleSpeedupBuilding = useCallback(
-    (id: number) => {
-      const config = BUILDING_FEATURE_MAP.get(id);
-      const name = config?.name ?? `Building #${id}`;
-      show(`Speed Up ${name}`, "building-speedup", { buildingId: id, mode: "speedup" });
+      show(name, "building-detail", { buildingId: id });
     },
     [show]
   );
@@ -162,8 +149,6 @@ function EstateContent() {
         {/* Estate exists */}
         {estateData?.exists && (
           <>
-            <Chronicle />
-            <ChapterBand />
             {/* The holding header — the land, named and counted */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
               <div>
@@ -236,9 +221,9 @@ function EstateContent() {
               <BuildingGrid
                 selectedBuildingId={null}
                 onSelectBuilding={handleSelectBuilding}
-                onSpeedupBuilding={handleSpeedupBuilding}
-                onCompleteBuilding={(id, rp) => handleCompleteBuilding(id, rp)}
                 onOpenFeature={handleOpenFeature}
+                onBuyPlot={handleBuyPlot}
+                nextPlotCost={nextPlotCost}
               />
 
               {/* Game Parameters */}

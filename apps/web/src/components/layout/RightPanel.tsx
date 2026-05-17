@@ -4,13 +4,29 @@ import { useEffect, useCallback, lazy, Suspense, type ComponentType } from "reac
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingUpgradePanel } from "@/components/panels/BuildingUpgradePanel";
 import { ResearchPanel } from "@/components/panels/ResearchDetailPanel";
+import { RallyDetailPanel } from "@/components/panels/RallyDetailPanel";
+import { DailyActivityListPanel } from "@/app/(game)/estate/_components/daily-activity/DailyActivityListPanel";
+import { ChroniclePanel } from "@/components/chronicle/ChroniclePanel";
+import { EncounterDetailPanel } from "@/components/panels/EncounterDetailPanel";
+import { PvpDetailPanel } from "@/components/panels/PvpDetailPanel";
+import { DungeonHeroPanel } from "@/components/panels/DungeonHeroPanel";
+import { DungeonClaimPanel } from "@/components/panels/DungeonClaimPanel";
+import { InventoryPanel } from "@/components/panels/InventoryPanel";
+import { BottomSheet } from "@/components/shared/BottomSheet";
 
 // ── Panel component registry ──
 // Components resolved by contentKey from the store.
 const PANELS: Record<string, ComponentType<any>> = {
   "building-detail": BuildingUpgradePanel,
-  "building-speedup": BuildingUpgradePanel,
   "research": ResearchPanel,
+  "rally-detail": RallyDetailPanel,
+  "daily-activities": DailyActivityListPanel,
+  "chronicle": ChroniclePanel,
+  "encounter-detail": EncounterDetailPanel,
+  "pvp-detail": PvpDetailPanel,
+  "dungeon-hero": DungeonHeroPanel,
+  "dungeon-claim": DungeonClaimPanel,
+  "inventory": InventoryPanel,
 };
 
 /** Register a panel component for a given key. Call at module scope. */
@@ -109,38 +125,9 @@ export function RightPanel() {
       </aside>
 
       {/* ── Mobile: bottom sheet ── */}
-      {open && (
-        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={close}
-          />
-
-          {/* Sheet */}
-          <div className="relative max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-border-default bg-surface-raised animate-in slide-in-from-bottom duration-200">
-            {/* Drag handle + close */}
-            <div className="sticky top-0 z-10 flex items-center justify-center bg-surface-raised pb-2 pt-3">
-              <div className="h-1 w-10 rounded-full bg-zinc-700" />
-              <button
-                onClick={close}
-                className="absolute right-3 top-2.5 rounded-full p-1 text-text-muted hover:text-text-primary"
-              >
-                &#10005;
-              </button>
-            </div>
-            {/* Title */}
-            <div className="px-4 pb-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                {title}
-              </h3>
-            </div>
-            <div className="space-y-4 px-4 pb-6">
-              <PanelContent />
-            </div>
-          </div>
-        </div>
-      )}
+      <BottomSheet open={open} onClose={close} title={title}>
+        <PanelContent />
+      </BottomSheet>
     </>
   );
 }

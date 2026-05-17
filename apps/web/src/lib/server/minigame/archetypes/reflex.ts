@@ -80,8 +80,8 @@ export interface ReflexPresentation {
 /** Cap on the latency subtracted from a reaction — bounds RTT inflation (§15). */
 export const REFLEX_RTT_CAP_MS = 400;
 
-const REACT_DELAY_MIN_MS = 800;
-const REACT_DELAY_SPAN_MS = 2200; // 800-3000ms
+const REACT_DELAY_MIN_MS = 1500;
+const REACT_DELAY_SPAN_MS = 3500; // 1500-5000ms
 
 /** The latency to subtract: the smallest round-trip sample, capped. */
 export function rttEstimate(samples: number[]): number {

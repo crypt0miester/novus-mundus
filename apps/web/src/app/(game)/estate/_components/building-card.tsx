@@ -1,7 +1,5 @@
 "use client";
 
-import { TxButton } from "@/components/shared/TxButton";
-import type { TxPhase } from "@/components/shared/TxButton";
 import { CATEGORY_COLORS, type BuildingFeatureConfig } from "@/lib/config/building-features";
 import { formatTime } from "@/lib/utils";
 import { hasCenterView } from "./feature-view";
@@ -27,16 +25,12 @@ interface BuildingCardProps {
   data: BuildingCardData;
   selected: boolean;
   onClick: () => void;
-  onSpeedup?: () => void;
-  onComplete?: (reportPhase: (p: TxPhase) => void) => Promise<string>;
 }
 
 export function BuildingCard({
   data,
   selected,
   onClick,
-  onSpeedup,
-  onComplete,
 }: BuildingCardProps) {
   const { config, phase, status, level, constructing, remainingSec, ready, lockReason } = data;
   const categoryColor = CATEGORY_COLORS[config.category];
@@ -99,22 +93,8 @@ export function BuildingCard({
                 {config.featureHint ?? "In use"} · still open
               </div>
             )}
-          <div className="mt-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
-            {ready && onComplete ? (
-              <TxButton
-                onClick={(rp) => { rp("sending"); return onComplete(rp); }}
-                className="px-3 py-1 text-[11px]"
-              >
-                Complete
-              </TxButton>
-            ) : onSpeedup ? (
-              <button
-                onClick={(e) => { e.stopPropagation(); onSpeedup(); }}
-                className="rounded border border-amber-700/50 px-2 py-1 text-[11px] font-medium text-amber-600 hover:bg-amber-900/20"
-              >
-                Speed Up
-              </button>
-            ) : null}
+          <div className="mt-2 text-[11px] text-text-muted">
+            {ready ? "Tap to complete" : "Tap to speed up"}
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ import { handleReflexMove } from "@/lib/server/minigame/reflex-session";
 import { loadSession, saveSession } from "@/lib/server/minigame/session";
 
 export const runtime = "nodejs";
-// Reflex `react` rounds hold the GO response open for up to ~3s — give the
+// Reflex `react` rounds hold the GO response open for up to ~5s — give the
 // handler ample headroom over a single round's delay.
 export const maxDuration = 20;
 

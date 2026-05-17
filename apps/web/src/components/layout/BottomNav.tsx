@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
+import { useRightPanelStore } from "@/lib/store/right-panel";
 import { cn } from "@/lib/utils";
 import { PRIMARY, SECONDARY } from "./nav-config";
 
@@ -12,6 +13,7 @@ export function BottomNav() {
   const { data: playerData, isSuccess } = usePlayer();
   const { data: estateData } = useEstate();
   const player = playerData?.account;
+  const showPanel = useRightPanelStore((s) => s.show);
 
   const hasPlayer = !!player;
   const hasEstate = !!estateData?.account;
@@ -39,19 +41,32 @@ export function BottomNav() {
       {/* Secondary row */}
       <nav className="flex items-center justify-center gap-4 px-2 py-1.5 border-b border-zinc-800/40">
         {SECONDARY.map((item) => {
-          const active = isActive(item.href);
-          const locked = !!pageLocked[item.href];
           if (disabled) {
             return (
-              <span key={item.href} className="text-[10px] text-zinc-700">
+              <span key={item.href ?? item.panel} className="text-[10px] text-zinc-700">
                 {item.label}
               </span>
             );
           }
+          // Panel entries open the RightPanel instead of navigating.
+          if (item.panel) {
+            return (
+              <button
+                key={item.panel}
+                type="button"
+                onClick={() => showPanel(item.label, item.panel!)}
+                className="text-[10px] font-medium whitespace-nowrap text-text-muted transition-colors hover:text-text-secondary"
+              >
+                {item.label}
+              </button>
+            );
+          }
+          const active = isActive(item.href!);
+          const locked = !!pageLocked[item.href!];
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href!}
               className={cn(
                 "text-[10px] font-medium transition-colors whitespace-nowrap",
                 active

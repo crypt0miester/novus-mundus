@@ -11,6 +11,7 @@ import { showAllRallies, showRally } from '../show/rally';
 import { showExpeditions } from '../show/expedition';
 import { showReinforcements } from '../show/reinforcement';
 import { showLoot } from '../show/loot';
+import { showDungeon } from '../show/dungeon';
 
 export async function handleShow(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const client = new NovusMundusClient({
@@ -58,11 +59,18 @@ export async function handleShow(ctx: CLIContext, args: ParsedArgs): Promise<voi
       }
       await showLoot(client, ctx, args.extra);
       break;
+    case 'dungeon':
+      if (!args.extra) {
+        log.error('Usage: novus show dungeon <wallet-pubkey>');
+        return;
+      }
+      await showDungeon(client, ctx, args.extra);
+      break;
     default:
       log.error(
         args.target
           ? `Unknown show target: ${args.target}`
-          : 'Usage: novus show <player|team|rally|expedition|reinforcement|loot>'
+          : 'Usage: novus show <player|team|rally|expedition|reinforcement|loot|dungeon>'
       );
   }
 }

@@ -4,6 +4,8 @@ import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useAllCities } from "@/lib/hooks/useAllCities";
+import { useEstate } from "@/lib/hooks/useEstate";
+import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import { useTravelProgress } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -29,7 +31,6 @@ import {
   calculateDistance,
   calculateIntercityTravelTime,
   calculateTeleportCost,
-  fixedPointToFloat,
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
@@ -38,11 +39,28 @@ import {
 
 const CITY_TYPE_LABELS = ["Capital", "Resource", "Combat", "Trade"];
 
+// intercity_teleport requires a Transport Bay (BuildingId.Stables) at this level.
+const TELEPORT_TRANSPORT_BAY_LEVEL = 10;
+
 export function TravelTab() {
   const { data: playerData } = usePlayer();
   const { data: geData } = useGameEngine();
   const { data: cities, isLoading: citiesLoading } = useAllCities();
+  const { data: estateData } = useEstate();
   const travel = useTravelProgress();
+
+  // Teleport needs a Transport Bay building — gate the button on its level.
+  const transportBayLevel = useMemo(() => {
+    const buildings = estateData?.account?.buildings;
+    if (!buildings) return 0;
+    const tb = buildings.find(
+      (b: { buildingType: number; status: number; level: number }) =>
+        b.buildingType === BuildingId.Stables &&
+        (b.status === 2 || b.status === 3),
+    );
+    return tb?.level ?? 0;
+  }, [estateData]);
+  const canTeleport = transportBayLevel >= TELEPORT_TRANSPORT_BAY_LEVEL;
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
@@ -64,10 +82,11 @@ export function TravelTab() {
     const origin = currentCityData.account;
     const dest = destCityData.account;
 
-    const lat1 = fixedPointToFloat(origin.latitude);
-    const long1 = fixedPointToFloat(origin.longitude);
-    const lat2 = fixedPointToFloat(dest.latitude);
-    const long2 = fixedPointToFloat(dest.longitude);
+    // City lat/long are already plain degrees (f64) — no fixed-point decode.
+    const lat1 = origin.latitude;
+    const long1 = origin.longitude;
+    const lat2 = dest.latitude;
+    const long2 = dest.longitude;
 
     const distanceKm = calculateDistance(lat1, long1, lat2, long2);
 
@@ -158,8 +177,8 @@ export function TravelTab() {
       destinationCityId: player.destinationCity,
       originLocation: deriveLocationPda(
         geKey, player.currentCity,
-        toGrid(fixedPointToFloat(originCity.latitude)),
-        toGrid(fixedPointToFloat(originCity.longitude)),
+        toGrid(originCity.latitude),
+        toGrid(originCity.longitude),
       )[0],
       destinationLocation: deriveLocationPda(
         geKey, player.destinationCity, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
@@ -351,10 +370,10 @@ export function TravelTab() {
                     if (origin && !isCurrent) {
                       distKm = Math.round(
                         calculateDistance(
-                          fixedPointToFloat(origin.latitude),
-                          fixedPointToFloat(origin.longitude),
-                          fixedPointToFloat(dest.latitude),
-                          fixedPointToFloat(dest.longitude),
+                          origin.latitude,
+                          origin.longitude,
+                          dest.latitude,
+                          dest.longitude,
                         ),
                       );
                     }
@@ -485,8 +504,8 @@ export function TravelTab() {
                 {/* Landing cell picker — choose where to arrive in the destination city */}
                 <DestinationCellGrid
                   cityId={destCityData.account.cityId}
-                  centerGridLat={toGrid(fixedPointToFloat(destCityData.account.latitude))}
-                  centerGridLong={toGrid(fixedPointToFloat(destCityData.account.longitude))}
+                  centerGridLat={toGrid(destCityData.account.latitude)}
+                  centerGridLong={toGrid(destCityData.account.longitude)}
                   selected={destCell}
                   onSelect={(gridLat, gridLong) => setDestCell({ gridLat, gridLong })}
                 />
@@ -496,9 +515,16 @@ export function TravelTab() {
                   <TxButton onClick={handleIntercityStart} disabled={!destCell} className="w-full py-3 text-base font-bold">
                     Travel
                   </TxButton>
-                  <TxButton onClick={handleTeleport} disabled={!destCell} variant="secondary" className="w-full text-xs">
-                    Teleport (instant, costs NOVI)
-                  </TxButton>
+                  {canTeleport ? (
+                    <TxButton onClick={handleTeleport} disabled={!destCell} variant="secondary" className="w-full text-xs">
+                      Teleport (instant, costs NOVI)
+                    </TxButton>
+                  ) : (
+                    <p className="rounded-lg border border-zinc-800 bg-surface/60 px-3 py-2 text-center text-[11px] text-text-muted">
+                      Teleport needs a Transport Bay building at Lv {TELEPORT_TRANSPORT_BAY_LEVEL}
+                      {transportBayLevel > 0 ? ` — yours is Lv ${transportBayLevel}.` : "."}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <TxButton

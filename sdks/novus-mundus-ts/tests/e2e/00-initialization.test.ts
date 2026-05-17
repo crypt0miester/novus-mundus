@@ -111,7 +111,7 @@ describe('Initialization', () => {
       expect(combat.defensiveUnit2Power.toNumber()).toBe(25);
       expect(combat.defensiveUnit3Power.toNumber()).toBe(60);
       expect(combat.staminaRegenInterval.toNumber()).toBe(300);
-      expect(combat.encounterAttackRangeMeters).toBe(10.0);
+      expect(combat.encounterAttackRangeMeters).toBe(16.0);
       expect(combat.pvpAttackRangeMeters).toBe(15.0);
       expect(combat.baseEncountersPerCity).toBe(25);
       expect(combat.maxEncountersPerCity).toBe(200);

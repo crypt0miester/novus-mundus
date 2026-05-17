@@ -1,0 +1,200 @@
+"use client";
+
+import { useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
+import { createClaimLootInstruction } from "novus-mundus-sdk";
+import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useLoot } from "@/lib/hooks/useLoot";
+import { useTransact } from "@/lib/hooks/useTransact";
+import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useAccountStore } from "@/lib/store/accounts";
+import { GoldNumber } from "@/components/shared/GoldNumber";
+import { TxButton } from "@/components/shared/TxButton";
+import type { TxPhase } from "@/components/shared/TxButton";
+import { Badge } from "@/components/shared/Badge";
+import { WeaponGrid } from "@/components/shared/WeaponGrid";
+
+const RARITY_NAMES = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
+const RARITY_VARIANTS: ("common" | "uncommon" | "rare" | "epic" | "legendary")[] = [
+  "common",
+  "uncommon",
+  "rare",
+  "epic",
+  "legendary",
+];
+
+/**
+ * Inventory — opened in the RightPanel via the `inventory` content key.
+ * Unclaimed loot (claim rewards), equipment, and materials in one column.
+ */
+export function InventoryPanel() {
+  const { data: playerData } = usePlayer();
+  const { data: lootData } = useLoot();
+  const client = useNovusMundusClient();
+  const { publicKey } = useWallet();
+  const transact = useTransact();
+
+  const player = playerData?.account;
+  const lootItems = lootData || [];
+
+  const handleClaimLoot = async (
+    lootPubkey: PublicKey,
+    creator: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createClaimLootInstruction({
+      loot: lootPubkey,
+      gameEngine: client.gameEngine,
+      owner: publicKey,
+      creator,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["loot"]],
+        successMessage: "Loot claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        // useLoot is backed by the zustand store, not react-query — the claimed
+        // loot account is gone on-chain, so drop it from the store directly.
+        useAccountStore.getState().removeLoot(lootPubkey.toBase58());
+        return r.signature;
+      });
+  };
+
+  const handleClaimAll = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || lootItems.length === 0) throw new Error("No loot");
+    const claimed = lootItems.slice(0, 5);
+    const instructions = claimed.map((loot) =>
+      createClaimLootInstruction({
+        loot: loot.pubkey,
+        gameEngine: client.gameEngine,
+        owner: publicKey,
+        creator: loot.account.creator,
+      }),
+    );
+    return transact
+      .mutateAsync({
+        instructions,
+        invalidateKeys: [["player"], ["loot"]],
+        successMessage: `Claimed ${claimed.length} loot drops!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        const store = useAccountStore.getState();
+        for (const loot of claimed) store.removeLoot(loot.pubkey.toBase58());
+        return r.signature;
+      });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Unclaimed loot — the claim-rewards section */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Unclaimed Loot ({lootItems.length})
+          </h3>
+          {lootItems.length > 0 && (
+            <TxButton onClick={handleClaimAll} className="text-[11px] px-2.5 py-1">
+              Claim All
+            </TxButton>
+          )}
+        </div>
+        {lootItems.length === 0 ? (
+          <p className="text-xs text-text-muted">
+            No unclaimed loot. Fight encounters or clear dungeons to earn rewards.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {lootItems.map((loot) => {
+              const rarity = loot.account.sourceRarity;
+              return (
+                <div
+                  key={loot.account.lootId.toString()}
+                  className="rounded-lg border border-border-default bg-surface/60 p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <Badge variant={RARITY_VARIANTS[rarity] || "default"}>
+                      {RARITY_NAMES[rarity] || "Unknown"}
+                    </Badge>
+                    <span className="text-[10px] text-text-muted">
+                      #{loot.account.lootId.toString()}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex gap-4 text-xs">
+                    <span>
+                      <span className="text-text-muted">Cash </span>
+                      <span className="text-text-gold">
+                        ${loot.account.cash.toNumber()}
+                      </span>
+                    </span>
+                    <span>
+                      <span className="text-text-muted">Gems </span>
+                      <span className="text-text-primary">
+                        {loot.account.gems.toNumber()}
+                      </span>
+                    </span>
+                  </div>
+                  <TxButton
+                    onClick={(rp) =>
+                      handleClaimLoot(loot.pubkey, loot.account.creator, rp)
+                    }
+                    variant="secondary"
+                    className="mt-2 w-full text-xs"
+                  >
+                    Claim
+                  </TxButton>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Equipment */}
+      {player && (
+        <div className="border-t border-border-default pt-3">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Equipment
+          </h3>
+          <WeaponGrid
+            melee={player.meleeWeapons?.toNumber?.() ?? 0}
+            ranged={player.rangedWeapons?.toNumber?.() ?? 0}
+            siege={player.siegeWeapons?.toNumber?.() ?? 0}
+            armor={player.armorPieces?.toNumber?.() ?? 0}
+          />
+        </div>
+      )}
+
+      {/* Materials */}
+      {player && (
+        <div className="border-t border-border-default pt-3">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Materials
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[10px] text-text-muted">Fragments</div>
+              <GoldNumber value={player.fragments?.toNumber?.() ?? 0} prefix="◇ " />
+            </div>
+            <div>
+              <div className="text-[10px] text-text-muted">Common</div>
+              <GoldNumber value={player.commonMaterials?.toNumber?.() ?? 0} glow={false} />
+            </div>
+            <div>
+              <div className="text-[10px] text-text-muted">Uncommon</div>
+              <GoldNumber value={player.uncommonMaterials?.toNumber?.() ?? 0} glow={false} />
+            </div>
+            <div>
+              <div className="text-[10px] text-text-muted">Rare</div>
+              <GoldNumber value={player.rareMaterials?.toNumber?.() ?? 0} glow={false} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

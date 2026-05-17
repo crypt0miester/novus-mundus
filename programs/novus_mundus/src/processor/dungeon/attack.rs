@@ -485,8 +485,14 @@ pub fn process_attacks(
             timestamp: now,
         });
 
-        // Check if floor complete
-        if run.current_room >= template.rooms_per_floor {
+        // Killing the final-floor boss ends the run, whatever room index it
+        // occupied — the boss IS the floor's finale, not its last room.
+        let was_boss = run.is_boss;
+        let is_final_floor = run.current_floor >= template.total_floors;
+        let run_complete = was_boss && is_final_floor;
+
+        // Check if the run is over, or this floor is complete
+        if run_complete || run.current_room >= template.rooms_per_floor {
             // Grant floor NOVI
             let floor_novi = crate::helpers::dungeon::calculate_floor_novi(
                 template.base_novi_per_floor,
@@ -495,13 +501,7 @@ pub fn process_attacks(
             );
             run.pending_novi = run.pending_novi.saturating_add(floor_novi);
 
-            // If the killed enemy was the boss AND this is the final floor,
-            // the run is COMPLETED. Otherwise (non-final-floor or non-boss), await
-            // relic selection like before. This unlocks the dungeon victory loop.
-            let was_boss = run.is_boss;
-            let is_final_floor = run.current_floor >= template.total_floors;
-
-            if was_boss && is_final_floor {
+            if run_complete {
                 run.status = DungeonStatus::Completed as u8;
             } else {
                 run.status = DungeonStatus::AwaitingRelic as u8;

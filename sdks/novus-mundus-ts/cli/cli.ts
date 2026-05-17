@@ -154,6 +154,7 @@ Commands:
   show expedition           List active expeditions
   show reinforcement <pk>   Show reinforcements for player
   show loot <pubkey>        Show unclaimed loot for player
+  show dungeon <pubkey>     Show a player's active or last dungeon run
   terrain preview <city-id> Render terrain to terminal
   terrain export <city-id>  Export anchor config to JSON
   terrain set <city-id>     Submit set_terrain instruction

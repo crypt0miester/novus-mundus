@@ -7,7 +7,9 @@ import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { LeftPanel, LeftPanelMobile } from "@/components/layout/LeftPanel";
 import { CairnFloating } from "@/components/cairn/CairnFloating";
+import { CairnPresence } from "@/components/cairn/CairnPresence";
 import { RightPanel } from "@/components/layout/RightPanel";
+import { CombatOutcomeModal } from "@/components/combat/CombatOutcomeModal";
 import { useTransitionStore, exitMessage } from "@/lib/store/transition";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useActWatch } from "@/lib/hooks/useActWatch";
@@ -50,13 +52,17 @@ export default function GameLayout({
       </div>
       {/* 3-column body */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="hidden lg:block lg:w-56 flex-shrink-0 overflow-y-auto border-r border-border-default bg-[var(--nm-bg-bar)]">
+        <aside className="hidden lg:block lg:w-72 flex-shrink-0 overflow-y-auto border-r border-border-default bg-[var(--nm-bg-bar)]">
           <LeftPanel />
         </aside>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
         <RightPanel />
       </div>
+      {/* Desktop: the Cairn rests at the foot of the left sidebar */}
+      <CairnPresence />
       <BottomNav />
+      {/* Centered win/lose breakdown after an attack */}
+      <CombatOutcomeModal />
     </div>
   );
 }

@@ -979,6 +979,57 @@ export function serializeGameCaps(config: GameCaps): Buffer {
   return w.toFullBuffer();
 }
 
+/** Serialize GameplayConfig to raw #[repr(C)] bytes (248 bytes) */
+export function serializeGameplayConfig(config: GameplayConfig): Buffer {
+  const w = new BufferWriter(248);
+  w.writeU32(config.driveByBonusBase);
+  w.writeZeros(4); // _reserved_drive_by
+  w.writeU32(config.attackBaseEffectiveness);
+  w.writeZeros(4); // _reserved_attack
+  w.writeU32(config.armorDamageReductionBps);
+  w.writeU32(config.armorDamageReductionCapBps);
+  w.writeU64(config.vehicleCapacity);
+  w.writeU32(config.abandonRateHappy);
+  w.writeU32(config.abandonRateContent);
+  w.writeU32(config.abandonRateUnhappy);
+  w.writeU32(config.abandonRateMiserable);
+  w.writeU32(config.damageUnit1Percent);
+  w.writeU32(config.damageUnit2Percent);
+  w.writeU32(config.damageUnit3Percent);
+  w.writeU32(config.damageRedistribUnit1ToUnit2);
+  w.writeU32(config.damageRedistribUnit1ToUnit3);
+  w.writeU32(config.damageRedistribUnit3ToUnit1);
+  w.writeU32(config.damageRedistribUnit3ToUnit2);
+  w.writeU32(config.safeboxProtectionPercent);
+  w.writeZeros(4); // padding
+  w.writeU32(config.pvpLootPercentageBase);
+  w.writeU32(config.pvpLootOscillationAmp);
+  w.writeZeros(4); // implicit padding (align i64)
+  w.writeI64(config.newPlayerProtectionDuration);
+  w.writeU64(config.teleportBaseCost);
+  w.writeU64(config.teleportCostPer100km);
+  w.writeU64(config.teamCreationCost);
+  for (const speed of config.themeTravelSpeedsKmh) w.writeF32(speed);
+  w.writeF32(config.intracityTravelSpeedKmh);
+  w.writeU16(config.gemCostPerMinuteSpeedup);
+  w.writeZeros(6); // _padding3 (2) + implicit padding (4)
+  w.writeI64(config.dailyRewardCooldown);
+  w.writeU64(config.dailyCashBase);
+  w.writeU64(config.dailyProduceBase);
+  w.writeU64(config.dailyXpBase);
+  w.writeU32(config.happinessSynchronyMax);
+  w.writeU32(config.levelSynchronyBonusPerLevel);
+  w.writeU32Array(config.reputationSynchronyBonuses);
+  w.writeU8(config.maxEncounterLevelDiff);
+  w.writeZeros(3); // padding
+  w.writeF32(config.lootLevelScalingExp);
+  w.writeU32(config.lootLevelScalingDivisor);
+  w.writeU64(config.healthPerLevel);
+  w.writeU32(config.defensePerLevel);
+  w.writeZeros(4); // padding
+  return w.toFullBuffer();
+}
+
 /** Serialize ArenaConfig to raw #[repr(C)] bytes (136 bytes) */
 export function serializeArenaConfig(config: ArenaConfig): Buffer {
   const w = new BufferWriter(136);

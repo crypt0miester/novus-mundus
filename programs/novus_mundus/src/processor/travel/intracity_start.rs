@@ -8,8 +8,6 @@ use pinocchio::{
 
 use pinocchio_system::instructions::CreateAccount;
 
-use crate::msg;
-
 use crate::{
     emit,
     error::GameError,
@@ -109,13 +107,11 @@ pub fn process(
     // and use unsafe raw pointer access instead. This avoids holding RefCell
     // borrows during CreateAccount CPI which would cause AccountBorrowFailed.
 
-    msg!("INTRA_START: loading accounts");
     { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
     let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
     let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
-    msg!("INTRA_START: accounts loaded ok");
 
     require_owner(current_city_account, program_id)?;
     let city_data = unsafe { CityAccount::load_mut(current_city_account)? };
@@ -237,7 +233,6 @@ pub fn process(
 
     if dest_location_len == 0 {
         // Create new destination location account
-        msg!("INTRA_START: creating dest location (CPI)");
         let lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let bump_seed = [dest_bump];
@@ -258,7 +253,6 @@ pub fn process(
             space: LocationAccount::LEN as u64,
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
-        msg!("INTRA_START: CPI done ok");
 
         let mut dest_location_data = destination_location_account.try_borrow_mut()?;
         let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
@@ -373,9 +367,7 @@ pub fn process(
     }
 
     // Close origin location account (refund rent to owner)
-    msg!("INTRA_START: closing origin");
     close_account(origin_location_account, owner)?;
-    msg!("INTRA_START: close done ok");
 
     // 13. Update Player State
 

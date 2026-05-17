@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import anime from "animejs/lib/anime.es.js";
+import { createTimeline } from "animejs";
 import { useTransitionStore } from "@/lib/store/transition";
 
 const ENTER_MS = 340;
@@ -48,26 +48,25 @@ export function TransitionOverlay() {
     lineTop.style.transform = "scaleX(0)";
     lineBot.style.transform = "scaleX(0)";
 
-    const tl = anime.timeline({ easing: "easeOutQuad" });
+    const tl = createTimeline({ defaults: { ease: "outQuad" } });
 
-    tl.add({
-      targets: overlay,
+    tl.add(overlay, {
       opacity: [0, 1],
       duration: ENTER_MS * 0.6,
     })
       .add(
+        [lineTop, lineBot],
         {
-          targets: [lineTop, lineBot],
           scaleX: [0, 1],
           duration: ENTER_MS,
         },
         0,
       )
       .add(
+        title,
         {
-          targets: title,
           opacity: [0, 1],
-          translateY: [8, 0],
+          y: [8, 0],
           duration: ENTER_MS * 0.7,
         },
         ENTER_MS * 0.3,
@@ -75,8 +74,8 @@ export function TransitionOverlay() {
 
     if (subtitle) {
       tl.add(
+        subtitle,
         {
-          targets: subtitle,
           opacity: [0, 0.7],
           duration: ENTER_MS * 0.6,
         },
@@ -86,17 +85,17 @@ export function TransitionOverlay() {
 
     if (eyebrow) {
       tl.add(
+        eyebrow,
         {
-          targets: eyebrow,
           opacity: [0, 1],
-          translateY: [6, 0],
+          y: [6, 0],
           duration: ENTER_MS * 0.6,
         },
         ENTER_MS * 0.2,
       );
     }
 
-    tl.finished.then(() => advance("holding"));
+    tl.then(() => advance("holding"));
   }, [advance]);
 
   const runHold = useCallback(() => {
@@ -118,31 +117,33 @@ export function TransitionOverlay() {
     const lineBot = lineBotRef.current;
     if (!overlay || !title || !lineTop || !lineBot) return;
 
-    const tl = anime.timeline({ easing: "easeInQuad" });
+    const tl = createTimeline({ defaults: { ease: "inQuad" } });
 
-    tl.add({
-      targets: [subtitle, title, eyebrow].filter(Boolean),
-      opacity: 0,
-      duration: EXIT_MS * 0.5,
-    })
+    tl.add(
+      [subtitle, title, eyebrow].filter(Boolean) as HTMLElement[],
+      {
+        opacity: 0,
+        duration: EXIT_MS * 0.5,
+      },
+    )
       .add(
+        [lineTop, lineBot],
         {
-          targets: [lineTop, lineBot],
           scaleX: 0,
           duration: EXIT_MS * 0.7,
         },
         EXIT_MS * 0.2,
       )
       .add(
+        overlay,
         {
-          targets: overlay,
           opacity: 0,
           duration: EXIT_MS * 0.6,
         },
         EXIT_MS * 0.4,
       );
 
-    tl.finished.then(() => {
+    tl.then(() => {
       if (overlay) overlay.style.display = "none";
       reset();
     });

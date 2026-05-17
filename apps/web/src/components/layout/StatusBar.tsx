@@ -33,12 +33,7 @@ export function StatusBar() {
   const player = playerData?.account;
   const ge = geData?.account;
 
-  const stamina = useStamina(
-    player?.encounterStamina?.toNumber(),
-    player?.lastStaminaUpdate?.toNumber(),
-    player?.maxEncounterStamina?.toNumber(),
-    player ? 1 / 60 : undefined
-  );
+  const stamina = useStamina(player);
 
   const domain = useDomainName(publicKey);
 

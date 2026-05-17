@@ -68,7 +68,7 @@ use crate::{
 /// - [writable] defender_event: (Optional) Defender's EventAccount PDA
 ///
 /// # Instruction Data
-/// - drive_by: bool (1 byte) - True for drive-by attack (requires 10k+ units, 25% damage penalty)
+/// - drive_by: bool (1 byte) - True for an Overrun: a 10k+ host charging for a √φ (~1.27×) damage bonus
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],

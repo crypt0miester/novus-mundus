@@ -6,7 +6,7 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::INTRACITY_WALKING_SPEED_KMH,
+    constants::{INTRACITY_WALKING_SPEED_KMH, MIN_RALLY_PARTICIPANTS},
     error::GameError,
     state::{CityAccount, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus, require_extension, EXT_RALLY},
     logic::location::calculate_intracity_travel_time,
@@ -87,8 +87,9 @@ pub fn process(
         return Err(GameError::RallyNotGathering.into());
     }
 
-    // Can only cancel before gather_at deadline
-    if now >= rally.gather_at {
+    // Past the gather deadline, a viable rally (>= MIN participants) is
+    // committed and must execute. 
+    if now >= rally.gather_at && rally.participant_count >= MIN_RALLY_PARTICIPANTS {
         return Err(GameError::RecruitingPeriodEnded.into());
     }
 

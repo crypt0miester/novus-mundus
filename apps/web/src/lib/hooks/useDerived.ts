@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { usePlayer } from "./usePlayer";
+import { useNow } from "./useNow";
 import { calculateDefensivePower } from "novus-mundus-sdk";
 
 /** Calculate combat power from player defensive units (operatives don't fight on-chain) */
@@ -30,17 +31,24 @@ export function useTravelProgress() {
   const { data } = usePlayer();
   const player = data?.account;
 
+  // An active journey has a positive arrival timestamp; a settled player has
+  // -1 (set by intercity_complete) or 0 — never a real time.
+  const arrival = player ? player.arrivalTime.toNumber() : 0;
+  const inTransit = arrival > 0;
+  // Tick every second while a journey is underway so `pct` stays live.
+  const now = useNow(inTransit);
+
   return useMemo(() => {
-    if (!player || player.arrivalTime.isZero()) {
+    if (!player || arrival <= 0) {
       return { traveling: false, pct: 0, endsAt: 0, startedAt: 0 };
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const arrival = player.arrivalTime.toNumber();
     const departure = player.departureTime.toNumber();
 
     return {
-      traveling: now < arrival,
+      // True for the whole journey — including arrived-but-not-completed,
+      // which is exactly when the "Complete Journey" button must show.
+      traveling: true,
       pct:
         departure > 0
           ? Math.min(100, ((now - departure) / (arrival - departure)) * 100)
@@ -48,7 +56,7 @@ export function useTravelProgress() {
       endsAt: arrival,
       startedAt: departure,
     };
-  }, [player]);
+  }, [player, arrival, now]);
 }
 
 /** Research buffs summary from player BPS fields */

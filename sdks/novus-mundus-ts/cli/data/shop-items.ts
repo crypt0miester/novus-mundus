@@ -90,8 +90,11 @@ export const SHOP_ITEMS: ShopItemData[] = [
     isFeatured: false,
   },
   {
+    // Legacy/broken: item_type 53 has no arm in fulfill_item, so this granted
+    // nothing. item_type is immutable on-chain (update_item can't change it),
+    // so this slot is retired and superseded by item #9 below.
     itemId: 4,
-    name: 'Stamina Refill',
+    name: 'Stamina Refill (legacy)',
     itemType: 53,
     category: 1,
     rarity: 0,
@@ -101,7 +104,7 @@ export const SHOP_ITEMS: ShopItemData[] = [
     maxGlobalStock: 0,
     maxPerPlayer: 0,
     maxPerDay: 10,
-    isActive: true,
+    isActive: false,
     isFeatured: false,
   },
   {
@@ -118,6 +121,70 @@ export const SHOP_ITEMS: ShopItemData[] = [
     maxPerDay: 0,
     isActive: true,
     isFeatured: true,
+  },
+  // Larger gem packs — same itemType (50) as Gem Pack (100), priced with a
+  // bulk discount so buying gems in volume costs fewer txs and less SOL.
+  {
+    itemId: 6,
+    name: 'Gem Pack (1,000)',
+    itemType: 50,
+    category: 1,
+    rarity: 1,
+    quantityPerPurchase: 1000,
+    baseStatsBps: 0,
+    priceSolLamports: Math.floor(LAMPORTS_PER_SOL * 0.09),  // ~10% bulk saving
+    maxGlobalStock: 0,
+    maxPerPlayer: 0,
+    maxPerDay: 0,
+    isActive: true,
+    isFeatured: false,
+  },
+  {
+    itemId: 7,
+    name: 'Gem Pack (10,000)',
+    itemType: 50,
+    category: 1,
+    rarity: 2,
+    quantityPerPurchase: 10000,
+    baseStatsBps: 0,
+    priceSolLamports: Math.floor(LAMPORTS_PER_SOL * 0.8),   // ~20% bulk saving
+    maxGlobalStock: 0,
+    maxPerPlayer: 0,
+    maxPerDay: 0,
+    isActive: true,
+    isFeatured: false,
+  },
+  {
+    itemId: 8,
+    name: 'Gem Pack (100,000)',
+    itemType: 50,
+    category: 1,
+    rarity: 3,
+    quantityPerPurchase: 100000,
+    baseStatsBps: 0,
+    priceSolLamports: Math.floor(LAMPORTS_PER_SOL * 7),     // ~30% bulk saving
+    maxGlobalStock: 0,
+    maxPerPlayer: 0,
+    maxPerDay: 0,
+    isActive: true,
+    isFeatured: true,
+  },
+  {
+    // Working stamina refill — replaces the retired item #4. item_type 60 is
+    // `encounter_stamina` in fulfill_item, so a purchase adds 100 stamina.
+    itemId: 9,
+    name: 'Stamina Refill (100)',
+    itemType: 60,
+    category: 1,
+    rarity: 0,
+    quantityPerPurchase: 100,
+    baseStatsBps: 0,
+    priceSolLamports: Math.floor(LAMPORTS_PER_SOL * 0.005),
+    maxGlobalStock: 0,
+    maxPerPlayer: 0,
+    maxPerDay: 10,
+    isActive: true,
+    isFeatured: false,
   },
 ];
 

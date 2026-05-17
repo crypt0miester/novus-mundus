@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import anime from "animejs/lib/anime.es.js";
+import { animate, stagger } from "animejs";
 
 interface LoadingStep {
   label: string;
@@ -35,13 +35,12 @@ export function LoadingSequence({
 
   // Stagger step entrances
   useEffect(() => {
-    anime({
-      targets: stepsRef.current.filter(Boolean),
-      translateX: [-20, 0],
+    animate(stepsRef.current.filter(Boolean), {
+      x: [-20, 0],
       opacity: [0, 1],
-      delay: anime.stagger(120),
+      delay: stagger(120),
       duration: 400,
-      easing: "easeOutQuad",
+      ease: "outQuad",
     });
   }, []);
 
@@ -53,12 +52,11 @@ export function LoadingSequence({
       if (completedKeys.has(step.key)) {
         const check = el.querySelector(".check");
         if (check) {
-          anime({
-            targets: check,
+          animate(check, {
             scale: [0, 1],
             rotate: ["-45deg", "0deg"],
             duration: 300,
-            easing: "easeOutBack",
+            ease: "outBack",
           });
         }
       }
@@ -68,12 +66,11 @@ export function LoadingSequence({
   // Reveal content when all done
   useEffect(() => {
     if (allDone && containerRef.current) {
-      anime({
-        targets: containerRef.current,
+      animate(containerRef.current, {
         opacity: [1, 0],
-        translateY: [0, -20],
+        y: [0, -20],
         duration: 400,
-        easing: "easeInQuad",
+        ease: "inQuad",
       });
     }
   }, [allDone]);

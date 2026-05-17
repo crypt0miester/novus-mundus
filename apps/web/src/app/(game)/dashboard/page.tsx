@@ -26,6 +26,7 @@ import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSe
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useTransact } from "@/lib/hooks/useTransact";
+import { useRightPanelStore } from "@/lib/store/right-panel";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
@@ -47,12 +48,8 @@ export default function DashboardPage() {
   const travel = useTravelProgress();
   const sub = useSubscriptionStatus();
   const daily = useDailyRewards();
-  const stamina = useStamina(
-    player?.encounterStamina?.toNumber(),
-    player?.lastStaminaUpdate?.toNumber(),
-    player?.maxEncounterStamina?.toNumber(),
-    player ? 1 / 60 : undefined
-  );
+  const stamina = useStamina(player);
+  const showPanel = useRightPanelStore((s) => s.show);
 
   const nowSec = Math.floor(Date.now() / 1000);
   const tod = useMemo(() => getCurrentTimeOfDay(nowSec, 0), [nowSec]);
@@ -96,9 +93,13 @@ export default function DashboardPage() {
                     Collect
                   </Link>
                   {lootCount > 0 && (
-                    <Link href="/inventory" className="accent-border-bright rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
+                    <button
+                      type="button"
+                      onClick={() => showPanel("Inventory", "inventory")}
+                      className="accent-border-bright rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold"
+                    >
                       Claim Loot ({lootCount})
-                    </Link>
+                    </button>
                   )}
                   <Link href="/shop" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
                     Shop
@@ -128,13 +129,14 @@ export default function DashboardPage() {
                     </div>
                   )}
                   {lootCount > 0 && (
-                    <Link
-                      href="/inventory"
+                    <button
+                      type="button"
+                      onClick={() => showPanel("Inventory", "inventory")}
                       className="flex items-center justify-between text-sm text-text-gold hover:opacity-80 sm:gap-2"
                     >
                       <span>{lootCount} unclaimed loot</span>
                       <span>Claim &rarr;</span>
-                    </Link>
+                    </button>
                   )}
                 </div>
               )}

@@ -16,8 +16,7 @@ interface CairnOrbProps {
 /**
  * The Cairn — an origin-unknown stone at the centre of the holding. It casts a
  * shadow in the light theme and throws light in the dark theme (inverted, so it
- * never disappears into the page). Colour tracks the estate's mood; brightness
- * tracks the climb. PLAYER_JOURNEY_GAMEPLAN.md §4.
+ * never disappears into the page). 
  */
 export function CairnOrb({ mood, act, size = 44, className }: CairnOrbProps) {
   return (

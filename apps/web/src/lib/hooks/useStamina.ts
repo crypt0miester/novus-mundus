@@ -1,51 +1,65 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { calculateStaminaRegeneration, type PlayerCore } from "novus-mundus-sdk";
 
 interface StaminaResult {
+  /** Encounter stamina right now, with regeneration applied. */
   current: number;
+  /** Maximum encounter stamina capacity. */
   max: number;
-  regenPerSecond: number;
 }
 
 /**
- * Calculate real-time stamina from on-chain snapshot.
- * The Rust program stores stamina at a point in time and it regens over time.
- * We interpolate client-side for smooth display.
+ * Real-time encounter stamina.
+ *
+ * The program stores a stamina snapshot plus a `lastStaminaUpdate` stamp;
+ * stamina regenerates between updates. This applies the *exact* regen math the
+ * program runs — `calculateStaminaRegeneration` (5-min interval, time-of-day
+ * bonus, hero buff) — and re-evaluates each second, so the value matches what
+ * `attack_encounter` will see after it regenerates on-chain.
+ *
+ * `setCurrent` with an unchanged value is a no-op, so this only re-renders the
+ * caller when stamina actually crosses a regen interval.
  */
 export function useStamina(
-  storedStamina: number | undefined,
-  lastStaminaUpdate: number | undefined,
-  maxStamina: number | undefined,
-  regenRate: number | undefined // per second
+  player: PlayerCore | null | undefined,
 ): StaminaResult {
   const [current, setCurrent] = useState(0);
 
+  const stored = player?.encounterStamina?.toNumber();
+  const lastUpdate = player?.lastStaminaUpdate?.toNumber();
+  const max = player?.maxEncounterStamina?.toNumber();
+  const longitude = player ? (player.currentLong ?? 0) / 10000 : undefined;
+  const heroRegenBps = player?.heroStaminaRegenBps ?? 0;
+
   useEffect(() => {
     if (
-      storedStamina === undefined ||
-      lastStaminaUpdate === undefined ||
-      maxStamina === undefined ||
-      regenRate === undefined
+      stored === undefined ||
+      lastUpdate === undefined ||
+      max === undefined ||
+      longitude === undefined
     ) {
       return;
     }
 
     const update = () => {
       const now = Math.floor(Date.now() / 1000);
-      const elapsed = now - lastStaminaUpdate;
-      const regenerated = elapsed * regenRate;
-      setCurrent(Math.min(maxStamina, Math.floor(storedStamina + regenerated)));
+      const [regenerated] = calculateStaminaRegeneration(
+        stored,
+        max,
+        lastUpdate,
+        now,
+        longitude,
+        heroRegenBps,
+      );
+      setCurrent(regenerated);
     };
 
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [storedStamina, lastStaminaUpdate, maxStamina, regenRate]);
+  }, [stored, lastUpdate, max, longitude, heroRegenBps]);
 
-  return {
-    current,
-    max: maxStamina ?? 0,
-    regenPerSecond: regenRate ?? 0,
-  };
+  return { current, max: max ?? 0 };
 }

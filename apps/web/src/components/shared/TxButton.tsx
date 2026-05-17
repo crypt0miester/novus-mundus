@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import anime from "animejs/lib/anime.es.js";
+import { animate } from "animejs";
 import { cn } from "@/lib/utils";
 
 export type TxPhase =
@@ -50,11 +50,10 @@ export function TxButton({
         setPhase(p);
         // Progress bar for sending phase
         if (p === "sending" && progressRef.current) {
-          anime({
-            targets: progressRef.current,
+          animate(progressRef.current, {
             width: ["0%", "100%"],
             duration: 4000,
-            easing: "easeInOutQuad",
+            ease: "inOutQuad",
           });
         }
       };
@@ -85,7 +84,7 @@ export function TxButton({
       onClick={handleClick}
       disabled={disabled || phase !== "idle"}
       className={cn(
-        "relative overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors w-full",
+        "relative flex items-center justify-center overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors w-full text-center",
         variantClasses[variant],
         disabled && "cursor-not-allowed opacity-50",
         phase === "preparing" && "scale-[0.97]",

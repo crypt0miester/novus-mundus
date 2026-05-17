@@ -42,7 +42,7 @@ export interface AttackPlayerAccounts {
 }
 
 export interface AttackPlayerParams {
-  /** True for drive-by attack (requires 10k+ units, 25% damage penalty) */
+  /** True for an Overrun — a 10k+ host charging for a √φ (~1.27×) damage bonus */
   driveBy: boolean;
 }
 

@@ -5,9 +5,12 @@
  *   novus encounters spawn --city 0 --count 5
  *   novus encounters spawn --city 0 --count 3 --rarity rare
  *   novus encounters spawn --all --count 2
+ *   novus encounters spawn --near <pubkey> --rarity rare
  *   novus encounters status
  *   novus encounters status --city 0
  */
+
+import { PublicKey } from '@solana/web3.js';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { sendWithRetry, log } from '../helpers';
@@ -17,7 +20,9 @@ import {
   createSpawnEncounterInstruction,
   deriveCityPda,
   deserializeCity,
+  derivePlayerPda,
 } from '../../../src/index';
+import { deserializePlayer } from '../../../src/state/player';
 import { EncounterRarity } from '../../../src/instructions/encounter';
 
 const GRID_PRECISION = 10000;
@@ -25,6 +30,14 @@ const CELL_OCCUPIED = 6413;
 const CITY_ENCOUNTER_LIMIT = 6412;
 const WRONG_TIME = 6514;
 const MAX_PLACEMENT_RETRIES = 10;
+
+// Candidate cells for --near spawns, nearest first. One grid cell ≈ 8–11 m, so
+// the player's own cell and its immediate neighbours all sit inside the 16 m
+// encounter attack range — the player can engage without travelling.
+const NEAR_OFFSETS: [number, number][] = [
+  [0, 0], [0, 1], [0, -1], [1, 0], [-1, 0],
+  [1, 1], [-1, 1], [1, -1], [-1, -1],
+];
 
 const RARITY_MAP: Record<string, EncounterRarity> = {
   common: EncounterRarity.Common,
@@ -53,6 +66,7 @@ export async function handleEncounters(ctx: CLIContext, args: ParsedArgs): Promi
 async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const cityFlag = getFlag(args.flags, '--city');
   const allFlag = args.flags.includes('--all');
+  const nearFlag = getFlag(args.flags, '--near');
   const count = parseInt(getFlag(args.flags, '--count') || '1', 10);
   const rarityFlag = (getFlag(args.flags, '--rarity') || 'common').toLowerCase();
 
@@ -62,14 +76,42 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  if (!allFlag && cityFlag === undefined) {
-    log.error('Specify --city <id> or --all');
+  // --near <pubkey>: spawn on the player's own grid cell (or a neighbour) so
+  // the encounter lands inside their 16m attack range — no travel needed.
+  let nearGrid: { lat: number; long: number } | null = null;
+  let nearCityId: number | undefined;
+  if (nearFlag !== undefined) {
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(nearFlag);
+    } catch {
+      log.error(`Invalid --near pubkey: ${nearFlag}`);
+      return;
+    }
+    const [playerPda] = derivePlayerPda(ctx.gameEngine, owner);
+    const info = await ctx.connection.getAccountInfo(playerPda);
+    if (!info) {
+      log.error(`No player account found for ${nearFlag}`);
+      return;
+    }
+    const player = deserializePlayer(info.data);
+    nearCityId = player.currentCity;
+    nearGrid = {
+      lat: Math.round(player.currentLat * GRID_PRECISION),
+      long: Math.round(player.currentLong * GRID_PRECISION),
+    };
+  }
+
+  if (!allFlag && cityFlag === undefined && nearCityId === undefined) {
+    log.error('Specify --city <id>, --all, or --near <pubkey>');
     return;
   }
 
-  const cityIds = allFlag
-    ? CITIES.map(c => c.id)
-    : [parseInt(cityFlag!, 10)];
+  const cityIds = nearCityId !== undefined
+    ? [nearCityId]
+    : allFlag
+      ? CITIES.map(c => c.id)
+      : [parseInt(cityFlag!, 10)];
 
   let totalSpawned = 0;
 
@@ -96,11 +138,17 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
     for (let i = 0; i < count; i++) {
       let placed = false;
+      const attemptCount = nearGrid ? NEAR_OFFSETS.length : MAX_PLACEMENT_RETRIES;
 
-      for (let attempt = 0; attempt < MAX_PLACEMENT_RETRIES; attempt++) {
-        // Random offset within ~50 grid cells around city center
-        const gridLat = baseLat + Math.floor(Math.random() * 100) - 50;
-        const gridLong = baseLong + Math.floor(Math.random() * 100) - 50;
+      for (let attempt = 0; attempt < attemptCount; attempt++) {
+        // --near: walk out from the player's own cell, nearest first;
+        // otherwise a random cell within ~50 grid cells of the city centre.
+        const gridLat = nearGrid
+          ? nearGrid.lat + NEAR_OFFSETS[attempt][0]
+          : baseLat + Math.floor(Math.random() * 100) - 50;
+        const gridLong = nearGrid
+          ? nearGrid.long + NEAR_OFFSETS[attempt][1]
+          : baseLong + Math.floor(Math.random() * 100) - 50;
 
         const ix = createSpawnEncounterInstruction(
           {

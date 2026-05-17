@@ -223,9 +223,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
 
         {phase === "standing" && (
           <button
-            onClick={() =>
-              show(name, "building-detail", { buildingId, mode: "detail" })
-            }
+            onClick={() => show(name, "building-detail", { buildingId })}
             className="shrink-0 rounded-md border border-border-gold bg-surface-raised px-4 py-1.5 text-xs font-semibold text-text-gold transition-colors hover:bg-surface-overlay"
           >
             Upgrade
@@ -233,12 +231,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
         )}
         {phase === "improving" && (
           <button
-            onClick={() =>
-              show(`Speed Up ${name}`, "building-speedup", {
-                buildingId,
-                mode: "speedup",
-              })
-            }
+            onClick={() => show(name, "building-detail", { buildingId })}
             className="shrink-0 rounded-md border border-border-default px-3.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-border-gold hover:text-text-gold"
           >
             Speed up

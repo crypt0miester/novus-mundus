@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import type { RefObject } from "react";
-import anime from "animejs/lib/anime.es.js";
+import { animate, stagger } from "animejs";
 
 interface RevealOptions {
   /** Per-element stagger step, ms. */
@@ -46,13 +46,12 @@ export function useRevealOnMount(
       return;
     }
 
-    anime({
-      targets,
+    animate(targets, {
       opacity: [0, 1],
-      translateY: [translateY, 0],
-      delay: anime.stagger(staggerStep, { start: staggerStart }),
+      y: [translateY, 0],
+      delay: stagger(staggerStep, { start: staggerStart }),
       duration,
-      easing: "easeOutQuad",
+      ease: "outQuad",
     });
   }, [ref, staggerStep, staggerStart, translateY, duration]);
 }

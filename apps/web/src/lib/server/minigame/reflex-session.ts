@@ -104,7 +104,7 @@ export async function handleReflexMove(
     if (puzzle.mode === "react") {
       await sleep(round.goDelayMs ?? 1500); // held open — the secret GO delay
 
-      // The GO was held open for ~1.5s. In that gap the player may have
+      // The GO was held open for up to ~5s. In that gap the player may have
       // false-started (an early tap that already burned this round) or
       // restarted it — re-read the session and abort rather than clobber.
       const fresh = await loadSession(session.id);

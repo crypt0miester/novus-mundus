@@ -22,6 +22,7 @@ import {
   createInitPlayerInstruction,
   createCreateProgressInstruction,
   createCreateEstateInstruction,
+  createBuyPlotInstruction,
   createPurchaseItemInstruction,
   createBuildBuildingInstruction,
   createBuildingSpeedupInstruction,
@@ -41,6 +42,11 @@ import {
 
 // Gem shop item created by `novus init` (100 gems per purchase)
 const GEMS_ITEM_ID = 1;
+
+// Estate building slots: the estate starts with 1 plot; each plot = 4 slots.
+const SLOTS_PER_PLOT = 4;
+const INITIAL_BUILDING_SLOTS = 4;
+const MAX_PLOTS = 5;
 
 export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   // Parse flags
@@ -96,27 +102,34 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
       await createEstateAndBuyGems(ctx, playerKeypair, config.gemPurchases);
     }
 
-    // Step 3: Buildings
-    if (config.buildings.length > 0) {
-      await buildAll(ctx, playerKeypair, config.buildings);
-    }
-
-    // Step 4: Fund NOVI
+    // Step 3: Fund NOVI — must precede buildings, since buying plots to
+    // unlock building slots is paid in locked NOVI.
     if (config.noviAmount > 0) {
       await fundNovi(ctx, playerKeypair, config.noviAmount);
     }
 
-    // Step 5: Hire units
+    // Step 4: Buy plots — the estate ships with 4 slots; richer tiers need
+    // more land before their buildings will fit.
+    if (config.estate && config.buildings.length > INITIAL_BUILDING_SLOTS) {
+      await buyPlots(ctx, playerKeypair, config.buildings.length);
+    }
+
+    // Step 5: Buildings
+    if (config.buildings.length > 0) {
+      await buildAll(ctx, playerKeypair, config.buildings);
+    }
+
+    // Step 6: Hire units
     for (const unit of config.units) {
       await hireUnits(ctx, playerKeypair, unit.type, unit.noviAmount);
     }
 
-    // Step 6: Purchase equipment
+    // Step 7: Purchase equipment
     for (const equip of config.equipment) {
       await purchaseEquipment(ctx, playerKeypair, equip.type, equip.quantity);
     }
 
-    // Step 7: Research
+    // Step 8: Research
     if (config.research.length > 0) {
       await doResearch(ctx, playerKeypair, config.research);
     }
@@ -259,7 +272,7 @@ async function buyGems(ctx: CLIContext, keypair: Keypair, purchases: number): Pr
   log.create(`gems (${purchases} purchases)`);
 }
 
-// Step 3: Buildings
+// Step 5: Buildings
 
 const builtSet = new Map<string, Set<number>>();
 
@@ -377,7 +390,7 @@ async function completeExistingBuilding(
   }
 }
 
-// Step 4: Fund NOVI
+// Step 3: Fund NOVI
 
 async function fundNovi(
   ctx: CLIContext,
@@ -427,7 +440,31 @@ async function fundNovi(
   log.create(`funded ${amount.toLocaleString()} NOVI`);
 }
 
-// Step 5: Hire units
+// Step 4: Buy plots — each plot unlocks 4 more building slots
+
+async function buyPlots(
+  ctx: CLIContext,
+  keypair: Keypair,
+  buildingCount: number,
+): Promise<void> {
+  const plotsNeeded = Math.min(
+    Math.ceil(buildingCount / SLOTS_PER_PLOT),
+    MAX_PLOTS,
+  );
+  const plotsToBuy = plotsNeeded - 1; // the estate already ships with 1 plot
+
+  for (let i = 0; i < plotsToBuy; i++) {
+    const ix = createBuyPlotInstruction({
+      owner: keypair.publicKey,
+      gameEngine: ctx.gameEngine,
+    });
+    await sendWithRetry(ctx, ix, [keypair]);
+  }
+
+  if (plotsToBuy > 0) log.create(`bought ${plotsToBuy} plot(s)`);
+}
+
+// Step 6: Hire units
 
 async function hireUnits(
   ctx: CLIContext,
@@ -443,7 +480,7 @@ async function hireUnits(
   log.create(`units type=${unitType} (${noviAmount} NOVI)`);
 }
 
-// Step 6: Purchase equipment
+// Step 7: Purchase equipment
 
 async function purchaseEquipment(
   ctx: CLIContext,
@@ -459,7 +496,7 @@ async function purchaseEquipment(
   log.create(`equipment type=${equipmentType} qty=${quantity}`);
 }
 
-// Step 7: Research (start + speedup + complete per level)
+// Step 8: Research (start + speedup + complete per level)
 
 async function doResearch(
   ctx: CLIContext,

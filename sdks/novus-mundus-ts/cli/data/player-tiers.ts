@@ -38,11 +38,12 @@ export const PLAYER_TIERS: Record<string, PlayerTierConfig> = {
       BuildingType.Mansion,
       BuildingType.Barracks,
       BuildingType.Market,
+      BuildingType.Academy, // research can't start without an Academy (err 7718)
     ],
     noviAmount: 50_000,
     units: [
       { type: 0, noviAmount: 200 },  // defensive_unit_1
-      { type: 2, noviAmount: 200 },  // operative_unit_1
+      { type: 2, noviAmount: 200 },  // defensive_unit_3
     ],
     equipment: [
       { type: 0, quantity: 50 },   // melee weapons
@@ -60,18 +61,19 @@ export const PLAYER_TIERS: Record<string, PlayerTierConfig> = {
     buildings: [
       BuildingType.Mansion,
       BuildingType.Barracks,
+      BuildingType.Camp, // operative units can't be hired without a Camp (err 7735)
       BuildingType.Market,
       BuildingType.TransportBay,
       BuildingType.Workshop,
       BuildingType.Academy,
       BuildingType.Citadel,
     ],
-    noviAmount: 500_000,
+    noviAmount: 700_000, // covers plot 2 (~100k) plus units/equipment/research
     units: [
       { type: 0, noviAmount: 1000 },  // defensive_unit_1
       { type: 1, noviAmount: 500 },   // defensive_unit_2
-      { type: 2, noviAmount: 1000 },  // operative_unit_1
-      { type: 3, noviAmount: 500 },   // operative_unit_2
+      { type: 2, noviAmount: 1000 },  // defensive_unit_3
+      { type: 3, noviAmount: 500 },   // operative_unit_1
     ],
     equipment: [
       { type: 0, quantity: 50 },   // melee weapons
@@ -111,14 +113,14 @@ export const PLAYER_TIERS: Record<string, PlayerTierConfig> = {
       BuildingType.TransportBay,
       BuildingType.Infirmary,
     ],
-    noviAmount: 5_000_000,
+    noviAmount: 8_000_000, // covers 4 extra plots (~2.84M) plus units/equipment/research
     units: [
       { type: 0, noviAmount: 5000 },  // defensive_unit_1
       { type: 1, noviAmount: 5000 },  // defensive_unit_2
-      { type: 2, noviAmount: 5000 },  // operative_unit_1
-      { type: 3, noviAmount: 5000 },  // operative_unit_2
-      { type: 4, noviAmount: 5000 },  // specialist_unit_1
-      { type: 5, noviAmount: 5000 },  // specialist_unit_2
+      { type: 2, noviAmount: 5000 },  // defensive_unit_3
+      { type: 3, noviAmount: 5000 },  // operative_unit_1
+      { type: 4, noviAmount: 5000 },  // operative_unit_2
+      { type: 5, noviAmount: 5000 },  // operative_unit_3
     ],
     equipment: [
       { type: 0, quantity: 500 },  // melee weapons

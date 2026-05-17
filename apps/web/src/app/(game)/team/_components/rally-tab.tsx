@@ -23,6 +23,8 @@ import {
 } from "@/components/shared/TripleCountInput";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { DomainName } from "@/components/shared/DomainName";
+import { useRightPanelStore } from "@/lib/store/right-panel";
+import { formatTime } from "@/lib/utils";
 import {
   derivePlayerPda,
   deriveRallyPda,
@@ -32,7 +34,6 @@ import {
   isNullPubkey,
   createRallyCreateInstruction,
   createRallyCancelInstruction,
-  createRallyJoinInstruction,
   createRallyLeaveInstruction,
   createRallyExecuteInstruction,
   createRallyProcessReturnInstruction,
@@ -57,6 +58,7 @@ export function RallyTab() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const transact = useTransact();
+  const showPanel = useRightPanelStore((s) => s.show);
   const { data: geData } = useGameEngine();
   const ge = geData?.account;
   const { data: cityEncounters } = useEncounters(player?.currentCity);
@@ -135,44 +137,6 @@ export function RallyTab() {
       cancelled = true;
     };
   }, [teamPubkey?.toBase58(), client, transact.isPending]);
-
-  const handleJoinRally = async (
-    target: { pubkey: PublicKey; account: RallyAccount },
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    if (!teamId) throw new Error("Team not loaded");
-    const geKey = client.gameEngine;
-    const joinHero = rallyHeroSlot < 3 ? lockedHeroes[rallyHeroSlot] : null;
-    const ix = createRallyJoinInstruction(
-      {
-        owner: publicKey,
-        gameEngine: geKey,
-        rally: target.pubkey,
-        rallyCreator: target.account.creator,
-        rallyId: target.account.id.toNumber(),
-        teamId: teamId.toNumber(),
-        rallyCityId: target.account.rallyCity ?? 0,
-      },
-      {
-        defensiveUnit1: rallyUnits[0],
-        defensiveUnit2: rallyUnits[1],
-        defensiveUnit3: rallyUnits[2],
-        meleeWeapons: rallyWeapons[0],
-        rangedWeapons: rallyWeapons[1],
-        siegeWeapons: rallyWeapons[2],
-        heroSlotIndex: joinHero ? rallyHeroSlot : NO_HERO_SLOT,
-        heroMint: joinHero?.mint,
-        heroTemplateId: joinHero?.templateId,
-      },
-    );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["rally"]],
-      successMessage: "Joined rally!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
 
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Wallet not connected");
@@ -288,13 +252,18 @@ export function RallyTab() {
     // Execute is permissionless — derive leader estate from creator
     const [leaderPlayer] = derivePlayerPda(ge, rally.creator);
     const [leaderEstate] = deriveEstatePda(leaderPlayer);
-    // Participant PDAs must be provided; for now empty — a crank typically supplies these
+    // rally_execute needs every RallyParticipant account (4 fixed + N), so
+    // fetch the participant PDAs and pass them, leader first.
+    const parts = await client.fetchRallyParticipants(rallyData.pubkey, rally);
+    const ordered = [...parts].sort(
+      (a, b) => Number(b.account.isLeader) - Number(a.account.isLeader),
+    );
     const ix = createRallyExecuteInstruction({
       gameEngine: ge,
       rally: rallyData.pubkey,
       target: rally.target,
       leaderEstate,
-      rallyParticipants: [],
+      rallyParticipants: ordered.map((p) => p.pubkey),
     });
     return transact.mutateAsync({
       instructions: [ix],
@@ -443,35 +412,50 @@ export function RallyTab() {
           <p className="text-sm text-text-muted">No team rallies are currently gathering.</p>
         ) : (
           <div className="space-y-2">
-            {joinableRallies.map((r) => (
-              <div
-                key={r.pubkey.toBase58()}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm text-text-primary">
-                    <DomainName pubkey={r.account.creator} chars={4} />
-                  </span>
-                  <span className="text-xs text-text-muted">
-                    {TARGET_TYPE[r.account.targetType ?? 0]}
-                  </span>
-                  <span className="text-xs text-text-muted">
-                    {r.account.participantCount ?? 0}/{r.account.maxParticipants ?? 0}
-                  </span>
-                </div>
-                <TxButton
-                  onClick={(rp) => handleJoinRally(r, rp)}
-                  variant="secondary"
-                  disabled={
-                    traveling ||
-                    (rallyUnits.every((n) => n === 0) && rallyWeapons.every((n) => n === 0)) ||
-                    (r.account.participantCount ?? 0) >= (r.account.maxParticipants ?? 0)
+            {joinableRallies.map((r) => {
+              const gatherAt = r.account.gatherAt?.toNumber?.() ?? 0;
+              const joined = r.account.participantCount ?? 0;
+              const max = r.account.maxParticipants ?? 0;
+              const full = joined >= max;
+              return (
+                <button
+                  key={r.pubkey.toBase58()}
+                  onClick={() =>
+                    showPanel("Team Rally", "rally-detail", {
+                      rallyPubkey: r.pubkey.toBase58(),
+                    })
                   }
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-surface-raised/50"
                 >
-                  Join
-                </TxButton>
-              </div>
-            ))}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm text-text-primary">
+                        <DomainName pubkey={r.account.creator} chars={4} />
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        {TARGET_TYPE[r.account.targetType ?? 0]}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
+                      <span>
+                        {joined}/{max} joined
+                      </span>
+                      {gatherAt > 0 && (
+                        <>
+                          <span className="text-zinc-700">·</span>
+                          <span>
+                            Gathers <InlineCountdown to={gatherAt} />
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md border border-zinc-700 px-3 py-1 text-xs font-medium text-text-secondary">
+                    {full ? "Full" : "View"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -657,5 +641,20 @@ export function RallyTab() {
         </div>
       )}
     </div>
+  );
+}
+
+/** A compact, self-ticking countdown for inline use within a row of text. */
+function InlineCountdown({ to }: { to: number }) {
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remaining = Math.max(0, to - now);
+  return (
+    <span className="font-mono tabular-nums text-text-gold">
+      {remaining === 0 ? "ready" : formatTime(remaining, "compact")}
+    </span>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { BUILDING_FEATURES } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
@@ -8,6 +9,7 @@ import { buildingPhase } from "@/lib/narrative";
 import { formatTime } from "@/lib/utils";
 import { BuildingCard, type BuildingCardData, type BuildingStatus as CardStatus } from "./building-card";
 import { hasCenterView } from "./feature-view";
+import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 
 /** Building slots a single plot holds. */
@@ -19,21 +21,24 @@ interface BuildingGridProps {
   /** Currently selected building ID in the right panel */
   selectedBuildingId: number | null;
   onSelectBuilding: (id: number) => void;
-  onSpeedupBuilding: (id: number) => void;
-  onCompleteBuilding: (id: number, reportPhase: (p: TxPhase) => void) => Promise<string>;
   /** Navigation function for center-view features */
   onOpenFeature?: (buildingId: number) => void;
+  /** Buy the next plot — wired to the next claimable "Land Beyond" card. */
+  onBuyPlot: (reportPhase: (p: TxPhase) => void) => Promise<string>;
+  /** NOVI cost of the next plot, for the claim card label. */
+  nextPlotCost: number;
 }
 
 export function BuildingGrid({
   selectedBuildingId,
   onSelectBuilding,
-  onSpeedupBuilding,
-  onCompleteBuilding,
   onOpenFeature,
+  onBuyPlot,
+  nextPlotCost,
 }: BuildingGridProps) {
   const { data: estateData } = useEstate();
   const estate = estateData?.account;
+  const router = useRouter();
 
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
 
@@ -112,26 +117,24 @@ export function BuildingGrid({
       const { phase } = data;
       const usable =
         phase === "standing" || phase === "improving" || phase === "improved";
+      // A usable building whose feature lives on another page navigates there
+      // (e.g. Catacombs → the dungeon), instead of opening an estate panel.
+      if (usable && data.config.route) {
+        router.push(data.config.route);
+        return;
+      }
       // A built building with a feature view → open it. The feature stays
       // usable through an upgrade, so improving and improved route here too.
       if (usable && onOpenFeature && hasCenterView(id)) {
         onOpenFeature(id);
         return;
       }
-      // Under construction or mid-upgrade → the speed-up / complete panel.
-      if (
-        phase === "rising" ||
-        phase === "raised" ||
-        phase === "improving" ||
-        phase === "improved"
-      ) {
-        onSpeedupBuilding(id);
-        return;
-      }
-      // Unbuilt, or standing without a feature → the detail panel.
+      // Everything else — under construction, unbuilt, or standing without a
+      // feature — opens the detail panel. The panel reads the building's live
+      // phase and shows speed-up / complete or build / upgrade accordingly.
       onSelectBuilding(id);
     },
-    [onSelectBuilding, onSpeedupBuilding, onOpenFeature]
+    [onSelectBuilding, onOpenFeature, router]
   );
 
   return (
@@ -167,19 +170,13 @@ export function BuildingGrid({
               {buildings.length}/{SLOTS_PER_PLOT}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {buildings.map((data) => (
               <BuildingCard
                 key={data.config.id}
                 data={data}
                 selected={selectedBuildingId === data.config.id}
                 onClick={() => handleCardClick(data)}
-                onSpeedup={() => onSpeedupBuilding(data.config.id)}
-                onComplete={
-                  data.ready
-                    ? (rp) => onCompleteBuilding(data.config.id, rp)
-                    : undefined
-                }
               />
             ))}
             {Array.from({ length: SLOTS_PER_PLOT - buildings.length }).map(
@@ -202,19 +199,13 @@ export function BuildingGrid({
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Ground to Break
           </h2>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {unbuilt.map((data) => (
               <BuildingCard
                 key={data.config.id}
                 data={data}
                 selected={selectedBuildingId === data.config.id}
                 onClick={() => handleCardClick(data)}
-                onSpeedup={() => onSpeedupBuilding(data.config.id)}
-                onComplete={
-                  data.ready
-                    ? (rp) => onCompleteBuilding(data.config.id, rp)
-                    : undefined
-                }
               />
             ))}
           </div>
@@ -227,20 +218,41 @@ export function BuildingGrid({
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Land Beyond Your Claim
           </h2>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-            {Array.from({ length: MAX_PLOTS - plotsOwned }).map((_, idx) => (
-              <div
-                key={`unclaimed-${idx}`}
-                className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-border-default/40 p-3 text-center opacity-50"
-              >
-                <span className="text-sm font-semibold text-text-muted">
-                  Plot {plotsOwned + idx + 1}
-                </span>
-                <span className="mt-0.5 text-[11px] text-text-muted">
-                  Unclaimed ground
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {Array.from({ length: MAX_PLOTS - plotsOwned }).map((_, idx) => {
+              const plotNumber = plotsOwned + idx + 1;
+              // Plots claim in sequence — only the next one can be bought now.
+              if (idx === 0) {
+                return (
+                  <TxButton
+                    key={`unclaimed-${idx}`}
+                    onClick={onBuyPlot}
+                    variant="secondary"
+                    className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-amber-700/50 bg-amber-900/10 p-3 text-center transition-colors hover:border-amber-600 hover:bg-amber-900/20"
+                  >
+                    <span className="text-sm font-semibold text-text-gold">
+                      Claim Plot {plotNumber}
+                    </span>
+                    <span className="text-[11px] text-text-muted">
+                      Buy Plot · {(nextPlotCost / 1000).toFixed(0)}k NOVI
+                    </span>
+                  </TxButton>
+                );
+              }
+              return (
+                <div
+                  key={`unclaimed-${idx}`}
+                  className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-border-default/40 p-3 text-center opacity-50"
+                >
+                  <span className="text-sm font-semibold text-text-muted">
+                    Plot {plotNumber}
+                  </span>
+                  <span className="mt-0.5 text-[11px] text-text-muted">
+                    Unclaimed ground
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

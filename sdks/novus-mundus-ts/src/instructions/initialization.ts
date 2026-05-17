@@ -530,6 +530,7 @@ export function createBatchCitiesInstruction(
 
 import type {
   GameCaps,
+  GameplayConfig,
   ArenaConfig,
   ExpeditionConfig,
   DungeonConfig,
@@ -540,6 +541,7 @@ import type {
 import {
   UPDATE_FLAGS,
   serializeGameCaps,
+  serializeGameplayConfig,
   serializeArenaConfig,
   serializeExpeditionConfig,
   serializeDungeonConfig,
@@ -557,6 +559,8 @@ export interface UpdateGameConfigAccounts {
 export interface UpdateGameConfigParams {
   /** Game caps (64 bytes) — min_account_age, prize caps, claim intervals */
   capsConfig?: GameCaps;
+  /** Gameplay config (248 bytes) — abandon rates, travel, encounter level gap */
+  gameplayConfig?: GameplayConfig;
   /** Arena PvP config (136 bytes) */
   arenaConfig?: ArenaConfig;
   /** Expedition mining/fishing config (240 bytes) */
@@ -601,6 +605,10 @@ export function createUpdateGameConfigInstruction(
   if (params.capsConfig) {
     updateFlags |= UPDATE_FLAGS.CAPS;
     configBuffers.push(serializeGameCaps(params.capsConfig));
+  }
+  if (params.gameplayConfig) {
+    updateFlags |= UPDATE_FLAGS.GAMEPLAY;
+    configBuffers.push(serializeGameplayConfig(params.gameplayConfig));
   }
   if (params.arenaConfig) {
     updateFlags |= UPDATE_FLAGS.ARENA;

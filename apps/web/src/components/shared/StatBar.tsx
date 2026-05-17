@@ -6,7 +6,8 @@ interface StatBarProps {
   current: number;
   max: number;
   label?: string;
-  color?: "gold" | "green" | "red" | "blue" | "purple" | "tier";
+  /** "health" ramps green → amber → red as the value drops. */
+  color?: "gold" | "green" | "red" | "blue" | "purple" | "tier" | "health";
   size?: "sm" | "md" | "lg";
   showValues?: boolean;
   className?: string;
@@ -20,6 +21,13 @@ const colorMap = {
   purple: "bg-purple-500",
   tier: "bg-[var(--nm-accent)]",
 };
+
+/** Health ramp — green while healthy, amber when worn down, red when critical. */
+function healthClass(pct: number): string {
+  if (pct > 50) return "bg-emerald-500";
+  if (pct > 25) return "bg-amber-500";
+  return "bg-red-500";
+}
 
 const sizeMap = {
   sm: "h-1",
@@ -37,6 +45,7 @@ export function StatBar({
   className,
 }: StatBarProps) {
   const pct = max > 0 ? Math.min(100, (current / max) * 100) : 0;
+  const barClass = color === "health" ? healthClass(pct) : colorMap[color];
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
@@ -63,7 +72,7 @@ export function StatBar({
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-700 ease-out",
-            colorMap[color]
+            barClass
           )}
           style={{ width: `${pct}%` }}
         />
