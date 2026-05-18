@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { ChevronRight } from "lucide-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";

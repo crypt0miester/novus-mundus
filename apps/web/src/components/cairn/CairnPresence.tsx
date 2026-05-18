@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { animate, createSpring, createTimeline, stagger } from "animejs";
 import { CairnOrb } from "./CairnOrb";
 import { useAct } from "@/lib/hooks/useAct";

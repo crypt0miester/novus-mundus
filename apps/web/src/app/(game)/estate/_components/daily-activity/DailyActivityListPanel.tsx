@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { DailyActivityPanel } from "./DailyActivityPanel";
 import {

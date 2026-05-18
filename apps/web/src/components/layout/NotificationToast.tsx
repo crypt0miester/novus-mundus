@@ -22,7 +22,7 @@ export function NotificationToast() {
   const dismiss = useNotifications((s) => s.dismiss);
 
   return (
-    <div className="fixed right-4 top-12 z-[9999] flex flex-col gap-2 md:top-auto md:bottom-14 md:flex-col-reverse">
+    <div className="fixed right-4 top-12 z-[9999] flex flex-col gap-2 md:left-1/2 md:right-auto md:top-auto md:bottom-14 md:-translate-x-1/2 md:flex-col-reverse md:items-center">
       {notifications.map((n) => (
         <ToastItem
           key={n.id}

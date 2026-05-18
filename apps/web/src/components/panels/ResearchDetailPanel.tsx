@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useEstate } from "@/lib/hooks/useEstate";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -13,6 +14,7 @@ import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { GemAction } from "@/components/shared/GemAction";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { useRightPanelStore } from "@/lib/store/right-panel";
+import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import {
   derivePlayerPda,
   deriveResearchPda,
@@ -29,6 +31,7 @@ import {
   isResearchComplete,
   getResearchLevel,
   checkResearchPrerequisites,
+  findBuilding,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
 
@@ -46,6 +49,9 @@ const BUFF_NAMES: Record<number, string> = {
 const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
 
+/** Minimum Academy level to start research, by category (Battle/Economy/Growth). */
+const ACADEMY_REQUIRED: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
+
 /** Standalone research detail panel for the right panel store. */
 export function ResearchPanel({
   researchType,
@@ -53,6 +59,7 @@ export function ResearchPanel({
   researchType: number;
 }) {
   const { data: playerData } = usePlayer();
+  const { data: estateData } = useEstate();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const { connection } = useConnection();
@@ -112,6 +119,16 @@ export function ResearchPanel({
   const buffName = BUFF_NAMES[template.buffType] ?? `Buff #${template.buffType}`;
   const categoryName = CATEGORY_NAMES[template.category] ?? "Unknown";
 
+  // Academy-level gate — research is hard-gated on-chain by the Academy
+  // building level (Battle ≥1, Economy ≥5, Growth ≥10). Surface it like a
+  // prerequisite so the player sees it before clicking Start, not as an
+  // on-chain "building level too low" error after.
+  const academyLevel = estateData?.account
+    ? findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0
+    : 0;
+  const requiredAcademy = ACADEMY_REQUIRED[template.category] ?? 1;
+  const meetsAcademy = academyLevel >= requiredAcademy;
+
   const baseCost = template.baseNoviCost.toNumber();
   const baseTime = template.baseTimeSeconds;
   const nextLevelCost = currentLevel < template.maxLevel
@@ -119,11 +136,26 @@ export function ResearchPanel({
     : 0;
   const hasEnoughNovi = noviBalance >= nextLevelCost;
 
-  const costPreview = Array.from({ length: Math.min(template.maxLevel, 6) }, (_, i) => ({
-    level: i + 1,
-    cost: calculateResearchCost(baseCost, i + 1),
-    timeHours: Math.max(0.1, Math.round((baseTime * Math.pow(1.5, i + 1)) / 360) / 10),
-  }));
+  // Cost preview — a rolling window of up to 6 *upcoming* levels starting at
+  // the next one to research, so a mid-progress node shows what is ahead
+  // rather than levels already completed. Near max level it backs up to keep
+  // a full window in view.
+  const PREVIEW_COUNT = 6;
+  const firstPreviewLevel = Math.max(
+    1,
+    Math.min(currentLevel + 1, template.maxLevel - PREVIEW_COUNT + 1),
+  );
+  const costPreview = Array.from(
+    { length: Math.max(0, Math.min(PREVIEW_COUNT, template.maxLevel - firstPreviewLevel + 1)) },
+    (_, i) => {
+      const level = firstPreviewLevel + i;
+      return {
+        level,
+        cost: calculateResearchCost(baseCost, level),
+        timeHours: Math.max(0.1, Math.round((baseTime * Math.pow(1.5, level)) / 360) / 10),
+      };
+    },
+  );
 
   // Handlers
   const handleStart = async (reportPhase: (p: TxPhase) => void) => {
@@ -170,14 +202,28 @@ export function ResearchPanel({
 
   const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const rt = template.researchType;
     const speedUpSeconds = tier === 2 ? 0 : 3600;
-    const ix = createSpeedUpResearchInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType },
-      { speedUpSeconds },
-    );
+    const instructions = [
+      createSpeedUpResearchInstruction(
+        { owner: publicKey, gameEngine: ge, researchType: rt },
+        { speedUpSeconds },
+      ),
+    ];
+    // Tier 2 ("Instant") finishes the timer outright — claim it in the same
+    // transaction so the player doesn't have to click "Claim Research" after.
+    if (tier === 2) {
+      instructions.push(
+        createCompleteResearchInstruction({
+          payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
+        }),
+      );
+    }
     return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research sped up!", onPhase: reportPhase,
+      instructions, invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: tier === 2 ? `${buffName} completed instantly!` : "Research sped up!",
+      onPhase: reportPhase,
     }).then((r) => r.signature);
   };
 
@@ -238,7 +284,14 @@ export function ResearchPanel({
       {/* Prerequisite warning */}
       {!canMeetPrereqs && (
         <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
-          Requires research #{template.prerequisiteResearch} at level {template.prerequisiteLevel}
+          Requires {BUFF_NAMES[template.prerequisiteResearch] ?? `research #${template.prerequisiteResearch}`} at level {template.prerequisiteLevel}
+        </div>
+      )}
+
+      {/* Academy level gate */}
+      {!meetsAcademy && (
+        <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
+          Academy level {requiredAcademy} required for {categoryName} research.
         </div>
       )}
 
@@ -277,7 +330,7 @@ export function ResearchPanel({
       </div>
 
       {/* Start actions */}
-      {!isAnyActive && canMeetPrereqs && currentLevel < template.maxLevel && (
+      {!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel && (
         <div className="flex flex-col gap-2">
           <TxButton onClick={handleStart} className="w-full" disabled={!hasEnoughNovi}>
             {hasEnoughNovi ? `Start ${buffName} Lv ${currentLevel + 1}` : "Insufficient NOVI"}

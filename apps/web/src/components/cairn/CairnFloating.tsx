@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { animate, createDraggable, type Draggable } from "animejs";
 import { CairnOrb } from "./CairnOrb";
 import { CairnReport } from "./CairnReport";

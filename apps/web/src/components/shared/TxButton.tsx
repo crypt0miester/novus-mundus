@@ -61,7 +61,7 @@ export function TxButton({
       await onClick(reportPhase);
 
       setPhase("confirmed");
-      setTimeout(() => setPhase("idle"), 2000);
+      setTimeout(() => setPhase("idle"), 1000);
     } catch (e) {
       console.error("Transaction failed:", e);
       setPhase("failed");

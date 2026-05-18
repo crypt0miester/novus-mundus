@@ -26,8 +26,20 @@ function EstateContent() {
   const { data: estateData, isSuccess: estateReady } = useEstate();
   const { data: geData } = useGameEngine();
   const show = useRightPanelStore((s) => s.show);
+  const panelOpen = useRightPanelStore((s) => s.open);
+  const panelKey = useRightPanelStore((s) => s.contentKey);
+  const panelBuildingId = useRightPanelStore((s) => s.contentProps.buildingId);
   const player = playerData?.account;
   const estate = estateData?.account;
+
+  // The building card rendered as "selected" mirrors whichever building's
+  // detail panel is currently open in the right panel. Deriving it from the
+  // panel store (rather than tracking it separately) keeps the highlight in
+  // sync when the panel is closed or switched to another building.
+  const selectedBuildingId =
+    panelOpen && panelKey === "building-detail" && typeof panelBuildingId === "number"
+      ? panelBuildingId
+      : null;
 
   const [activeBuilding, setActiveBuilding] = useTabParam("", "building");
 
@@ -219,7 +231,7 @@ function EstateContent() {
             {/* Building grid */}
             <div className="min-h-0 flex-1 overflow-y-auto">
               <BuildingGrid
-                selectedBuildingId={null}
+                selectedBuildingId={selectedBuildingId}
                 onSelectBuilding={handleSelectBuilding}
                 onOpenFeature={handleOpenFeature}
                 onBuyPlot={handleBuyPlot}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRightPanelStore } from "@/lib/store/right-panel";
+import { ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import {
   useDailyActivities,

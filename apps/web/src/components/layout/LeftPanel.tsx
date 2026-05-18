@@ -170,7 +170,7 @@ export function LeftPanel() {
             </span>
             <TxButton
               onClick={handleClaim}
-              className="h-6 px-2 text-[10px] font-semibold leading-none"
+              className="h-6 px-2 text-[10px] font-semibold leading-none w-20"
             >
               Claim
             </TxButton>
@@ -315,47 +315,45 @@ export function LeftPanelMobile() {
 
   return (
     <div className="border-b border-border-default bg-[var(--nm-bg-bar)]">
-      {/* Collapsed bar */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex h-10 w-full items-center gap-3 px-4 text-xs"
-      >
-        <span className="font-medium text-text-primary truncate">
-          {domain || player.name || "Player"}
-        </span>
-        {tierInfo.hasBadge && (
-          <span className="tier-badge text-[9px]">[{tierInfo.badge}]</span>
-        )}
-        <span className="text-text-muted">Lv {player.level}</span>
-        <div className="h-3 w-px bg-border-default" />
-        <span className="text-text-muted">
-          {stamina.current}/{stamina.max}
-        </span>
-        <div className="h-3 w-px bg-border-default" />
-        <span className="text-text-muted">
-          <GoldNumber
-            value={player.lockedNovi.toNumber()}
-            size="sm"
-            format="compact"
-          />
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <WalletMultiButton
-            style={{
-              background: "var(--nm-bg-raised)",
-              border: "1px solid var(--nm-border)",
-              borderRadius: "0.375rem",
-              fontSize: "0.65rem",
-              height: "1.5rem",
-              padding: "0 0.5rem",
-              color: "var(--nm-text-secondary)",
-            }}
-          />
-          <span className="text-text-muted">
-            {expanded ? "\u25B2" : "\u25BC"}
+      <div className="flex h-10 w-full items-center gap-2 px-4 text-xs">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className="font-medium text-text-primary truncate">
+            {domain || player.name || "Player"}
           </span>
-        </div>
-      </button>
+          {tierInfo.hasBadge && (
+            <span className="tier-badge text-[9px]">[{tierInfo.badge}]</span>
+          )}
+          <span className="text-text-muted">Lv {player.level}</span>
+          <span className="text-text-muted">
+            <GoldNumber
+              value={player.lockedNovi.toNumber()}
+              size="sm"
+              format="compact"
+            />
+          </span>
+        </button>
+        <WalletMultiButton
+          style={{
+            background: "var(--nm-bg-raised)",
+            border: "1px solid var(--nm-border)",
+            borderRadius: "0.375rem",
+            fontSize: "0.65rem",
+            height: "1.5rem",
+            padding: "0 0.5rem",
+            color: "var(--nm-text-secondary)",
+          }}
+        />
+        <button
+          onClick={() => setExpanded(!expanded)}
+          aria-label={expanded ? "Collapse details" : "Expand details"}
+          className="flex-shrink-0 text-text-muted"
+        >
+          {expanded ? "\u25B2" : "\u25BC"}
+        </button>
+      </div>
 
       {/* Expanded details */}
       {expanded && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
 import Link from "next/link";

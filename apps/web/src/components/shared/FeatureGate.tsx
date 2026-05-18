@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { useFeatureGate, type MissingRequirement } from "@/lib/hooks/useFeatureGate";
 
 interface FeatureGateProps {
@@ -40,9 +41,10 @@ function LockedCard({ missing }: { missing: MissingRequirement[] }) {
           <Link
             key={m.label}
             href={m.href}
-            className="rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+            className="inline-flex items-center gap-1 rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-1.5 text-xs font-medium text-text-gold transition-colors hover:bg-amber-900/40"
           >
-            {m.label} &rarr;
+            {m.label}
+            <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         ))}
       </div>

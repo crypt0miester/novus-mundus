@@ -95,9 +95,10 @@ export function RightPanel() {
 
   return (
     <>
-      {/* ── Desktop: fixed right sidebar ── */}
-      <aside className="hidden lg:flex lg:w-72 flex-shrink-0 flex-col border-l border-border-default bg-[var(--nm-bg-bar)]">
-        {open ? (
+      {/* ── Desktop: fixed right sidebar — only mounted when something is
+          selected, so an unused panel reclaims its width for the main view ── */}
+      {open && (
+        <aside className="hidden lg:flex lg:w-72 flex-shrink-0 flex-col border-l border-border-default bg-[var(--nm-bg-bar)]">
           <div className="flex flex-1 flex-col overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-default px-4 py-2">
@@ -115,14 +116,8 @@ export function RightPanel() {
               <PanelContent />
             </div>
           </div>
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="text-xs text-text-muted">
-              Select something to view details
-            </p>
-          </div>
-        )}
-      </aside>
+        </aside>
+      )}
 
       {/* ── Mobile: bottom sheet ── */}
       <BottomSheet open={open} onClose={close} title={title}>

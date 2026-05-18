@@ -55,12 +55,12 @@ import { bpsToPercent } from "@/lib/utils";
 const CARAVAN_FRAMING = systemFraming("shop");
 
 const SHOP_CATEGORIES = [
+  { key: "novi", label: "Get NOVI" },
   { key: "items", label: "Wares" },
   { key: "bundles", label: "Caravan Lots" },
   { key: "flash", label: "Passing Trade" },
   { key: "daily", label: "Daily Deals" },
   { key: "events", label: "Events" },
-  { key: "novi", label: "Buy NOVI" },
 ];
 
 const CATEGORY_LABELS: Record<number, string> = {
@@ -131,7 +131,7 @@ export function ShopTab() {
   const shopConfig = shopConfigData?.account;
   const ge = client.gameEngine;
 
-  const [activeTab, setActiveTab] = useState("items");
+  const [activeTab, setActiveTab] = useState("novi");
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [itemQuantities, setItemQuantities] = useState<Record<number, number>>({});
 
@@ -1107,6 +1107,7 @@ export function ShopTab() {
                   })}
                 </div>
               </div>
+              
 
               <DetailPanel open={effectivePackage != null} onClose={() => setSelectedPackage(null)}>
                 <div className="flex items-center justify-between">
@@ -1164,12 +1165,6 @@ export function ShopTab() {
                   Base: {lamportsToSol(gameEngine.noviPurchaseConfig.noviBasePriceLamports.toNumber())} SOL/NOVI
                 </div>
 
-                <div className="rounded-md border border-amber-900/40 bg-amber-900/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300/90">
-                  Purchased NOVI is credited to your{" "}
-                  <span className="font-semibold">Reserved</span> balance.
-                  Convert it to Locked NOVI (Dashboard, or Estate &rarr; Vault)
-                </div>
-
                 <TxButton
                   onClick={handlePurchaseNovi}
                   className="w-full"
@@ -1180,6 +1175,12 @@ export function ShopTab() {
                     : `Buy ${noviPreview ? formatNoviAmount(noviPreview.totalNovi) : "NOVI"}`}
                 </TxButton>
               </DetailPanel>
+
+                <div className="rounded-md border border-amber-900/40 bg-amber-900/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300/90">
+                  Purchased NOVI is credited to your{" "}
+                  <span className="font-semibold">Reserved</span> balance.
+                  Convert it to Locked NOVI (Dashboard, or Estate &rarr; Vault)
+                </div>
             </div>
           )}
         </div>

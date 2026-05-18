@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useEstate } from "@/lib/hooks/useEstate";
 import { useResearchBuffs } from "@/lib/hooks/useDerived";
+import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -24,12 +26,15 @@ import {
   parseResearchProgress,
   isResearching,
   getResearchLevel,
+  findBuilding,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount } from "novus-mundus-sdk";
 
 // Category / buff-type display maps
 const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
+/** Minimum Academy level to start research, by category (Battle/Economy/Growth). */
+const ACADEMY_REQUIRED: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
 const BUFF_NAMES: Record<number, string> = {
   0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",
   4: "Crit Damage", 5: "Rally Capacity", 6: "Encounter Success", 7: "Loot Bonus",
@@ -89,6 +94,7 @@ function useResearchProgress() {
 
 export function ResearchTab() {
   const { data: playerData } = usePlayer();
+  const { data: estateData } = useEstate();
   const player = playerData?.account;
   const buffs = useResearchBuffs();
   const client = useNovusMundusClient();
@@ -100,6 +106,12 @@ export function ResearchTab() {
   const { data: templates, isLoading: templatesLoading } = useResearchTemplates();
   const { data: progressData, isLoading: progressLoading } = useResearchProgress();
   const progress = progressData?.account ?? null;
+
+  // Academy building level — research is hard-gated by it (Battle ≥1,
+  // Economy ≥5, Growth ≥10), so cards below this bar are shown locked.
+  const academyLevel = estateData?.account
+    ? findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0
+    : 0;
 
   // Time-of-day indicator
   const now = Math.floor(Date.now() / 1000);
@@ -224,9 +236,20 @@ export function ResearchTab() {
 
           {/* Research types grid — clicks open right panel */}
           <div className="min-h-0 flex-1 overflow-y-auto space-y-4">
-            {Object.entries(grouped).map(([category, catTemplates]) => (
+            {Object.entries(grouped).map(([category, catTemplates]) => {
+              const catNum = catTemplates[0]?.category ?? 0;
+              const reqAcademy = ACADEMY_REQUIRED[catNum] ?? 1;
+              const catLocked = academyLevel < reqAcademy;
+              return (
               <div key={category}>
-                <h2 className="mb-2 text-sm font-semibold text-text-primary">{category}</h2>
+                <h2 className="mb-2 text-sm font-semibold text-text-primary">
+                  {category}
+                  {catLocked && (
+                    <span className="ml-2 text-xs font-normal text-red-400">
+                      · Requires Academy Lv {reqAcademy}
+                    </span>
+                  )}
+                </h2>
                 <div className="grid gap-3 md:grid-cols-2">
                   {catTemplates.map((t) => {
                     const level = progress ? getResearchLevel(progress, t.researchType) : 0;
@@ -234,6 +257,8 @@ export function ResearchTab() {
                       ? isResearching(progress) && progress.currentResearch === t.researchType
                       : false;
                     const name = BUFF_NAMES[t.buffType] ?? `Research #${t.researchType}`;
+                    const requiredAcademy = ACADEMY_REQUIRED[t.category] ?? 1;
+                    const locked = academyLevel < requiredAcademy;
                     return (
                       <button
                         key={t.researchType}
@@ -241,7 +266,9 @@ export function ResearchTab() {
                         className={`rounded-lg border p-4 text-left transition-all ${
                           isActiveHere
                             ? "border-green-700 bg-green-900/10"
-                            : "border-zinc-800 hover:border-zinc-700"
+                            : locked
+                              ? "border-zinc-800/60 opacity-60 hover:opacity-90"
+                              : "border-zinc-800 hover:border-zinc-700"
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -262,7 +289,8 @@ export function ResearchTab() {
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

@@ -217,7 +217,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     <div
       ref={containerRef}
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-amber-900/40 bg-surface-raised p-6",
+        "@container relative overflow-hidden rounded-2xl border border-amber-900/40 bg-surface-raised p-6",
         className
       )}
     >
@@ -239,8 +239,9 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
       </div>
 
-      {/* Central Display */}
-      <div className="flex items-center justify-center gap-8">
+      {/* Central Display — stacks vertically on a narrow card, side-by-side
+          once the container is wide enough (@sm = 24rem). */}
+      <div className="flex flex-col @sm:flex-row items-center justify-center gap-4 @sm:gap-8">
         {/* Progress Ring */}
         <div className="relative h-32 w-32 flex-shrink-0">
           <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
@@ -278,10 +279,10 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
 
         {/* Numbers */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 items-center text-center @sm:items-start @sm:text-left">
           {/* Main NOVI count */}
           <div ref={numberRef} className="relative">
-            <div className="font-mono text-4xl font-bold tabular-nums text-text-primary">
+            <div className="font-mono text-[clamp(1.5rem,8cqw,2.25rem)] font-bold leading-tight tabular-nums text-text-primary">
               {displayNovi.toLocaleString()}
             </div>
             <div className="text-[10px] text-zinc-500">
