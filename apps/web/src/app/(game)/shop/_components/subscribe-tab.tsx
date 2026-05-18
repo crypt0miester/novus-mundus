@@ -1,61 +1,90 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useSubscriptionStatus } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
-import { InfoGrid } from "@/components/shared/InfoGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
-import { bpsToPercent, bpsToMultiplier, formatNumber } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import {
-  derivePlayerPda,
   createPurchaseSubscriptionInstruction,
   getEffectiveTier,
 } from "novus-mundus-sdk";
+import {
+  Zap,
+  Database,
+  ShoppingCart,
+  Percent,
+  Gift,
+  Users,
+  Swords,
+  Wind,
+  Award,
+  Crown,
+  Check,
+  Sparkles,
+  Clock,
+} from "lucide-react";
 
-const TIERS = [
-  {
-    id: 0,
-    name: "Rookie",
-    price: 0,
-    perks: ["Basic access", "Standard stamina regen"],
-    color: "text-zinc-400",
-  },
-  {
-    id: 1,
-    name: "Expert",
-    price: 500,
-    perks: ["2x stamina regen", "+10% loot bonus", "Daily gem bonus"],
-    color: "text-green-400",
-  },
-  {
-    id: 2,
-    name: "Epic",
-    price: 1500,
-    perks: ["3x stamina regen", "+25% loot bonus", "Daily gem + NOVI bonus", "Flash sale access"],
-    color: "text-fuchsia-400",
-  },
-  {
-    id: 3,
-    name: "Legendary",
-    price: 5000,
-    perks: [
-      "5x stamina regen",
-      "+50% loot bonus",
-      "Max daily rewards",
-      "Exclusive items",
-      "Priority matchmaking",
-    ],
-    color: "text-amber-400",
-  },
+// NOVI price per tier — kept in lockstep with the on-chain purchase flow
+// (paymentType 0 charges Locked NOVI). Pricing/payment selection is wired
+// elsewhere; this drives display + the affordability check only.
+const TIER_PRICE = [0, 500, 1500, 5000];
+
+// Charter accent ramp — a metal ladder (iron → bronze → silver → gold) that
+// matches the Free/Bronze/Silver/Gold names the rest of the app uses.
+const TIER_THEME = [
+  { accent: "#71717a", bright: "#a1a1aa", glow: "rgba(113,113,122,0)" },
+  { accent: "#c87b3e", bright: "#e6a063", glow: "rgba(200,123,62,0.22)" },
+  { accent: "#9aa6b2", bright: "#d4dde6", glow: "rgba(154,166,178,0.22)" },
+  { accent: "#daa520", bright: "#f1af09", glow: "rgba(218,165,32,0.30)" },
 ];
+
+// The middle paid tier carries the "Most Popular" anchor.
+const POPULAR_TIER = 2;
+
+const theme = (i: number) => TIER_THEME[i] ?? TIER_THEME[TIER_THEME.length - 1];
+
+/** BN | number | undefined → number */
+function num(v: unknown): number {
+  if (v && typeof (v as { toNumber?: () => number }).toNumber === "function") {
+    return (v as { toNumber: () => number }).toNumber();
+  }
+  return Number(v ?? 0);
+}
+
+/** 1 → "1×", 2.5 → "2.5×" */
+function asMultiplier(r: number): string {
+  return Number.isInteger(r) ? `${r}×` : `${r.toFixed(1)}×`;
+}
+
+interface PerkRowProps {
+  icon: typeof Zap;
+  color: string;
+  strong?: boolean;
+  children: ReactNode;
+}
+
+function PerkRow({ icon: Icon, color, strong, children }: PerkRowProps) {
+  return (
+    <li className="flex items-start gap-2.5 text-sm leading-snug">
+      <span
+        className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded"
+        style={strong ? { background: `${color}26`, color } : { color: "#52525b" }}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className={strong ? "text-text-primary" : "text-text-secondary"}>
+        {children}
+      </span>
+    </li>
+  );
+}
 
 export function SubscribeTab() {
   const { data: playerData } = usePlayer();
@@ -72,7 +101,12 @@ export function SubscribeTab() {
     return getEffectiveTier(player, nowSec);
   }, [player, nowSec]);
 
-  const noviBalance = player?.lockedNovi?.toNumber?.() ?? 0;
+  const noviBalance = num(player?.lockedNovi);
+  const tiers = geData?.account?.subscriptionTiers ?? [];
+  const npc = geData?.account?.noviPurchaseConfig;
+  const baseTier = tiers[0];
+
+  const tierName = (i: number) => tiers[i]?.name ?? `Tier ${i}`;
 
   const handlePurchase = async (tierId: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -88,13 +122,26 @@ export function SubscribeTab() {
       },
       { paymentType: 0, tier: tierId }
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: `${TIERS[tierId]?.name} charter held.`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: `${tierName(tierId)} charter held.`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
+
+  // ─── Current-charter framing ───────────────────────────────────────────
+  const curTheme = theme(effectiveTier);
+  const cur = tiers[effectiveTier];
+  const curGen = num(cur?.generationMultiplier);
+  const baseGen = num(baseTier?.generationMultiplier);
+  const curGenRatio = baseGen > 0 ? curGen / baseGen : null;
+  const daysLeft = sub.active && sub.expiresAt > 0
+    ? (sub.expiresAt - nowSec) / 86_400
+    : null;
+  const expiringSoon = daysLeft != null && daysLeft < 3;
 
   return (
     <div className="space-y-6">
@@ -102,118 +149,302 @@ export function SubscribeTab() {
         <h2 className="font-display text-lg font-semibold text-text-primary">
           A Patron&apos;s Charter
         </h2>
-        <p className="mt-1 text-xs text-text-muted">
-          A charter is a standing arrangement with a patron. Each tier sets what
-          it grants and what it costs. The terms are listed below.
+        <p className="mt-1 max-w-prose text-xs text-text-muted">
+          A charter is a standing arrangement with a patron — it multiplies your
+          NOVI generator, widens your vault, and grants a signing bounty the
+          moment it is sealed. Higher charters compound everything below.
         </p>
       </div>
 
-      {/* Current Status */}
-      <div className="card accent-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs text-text-muted">Current Charter</div>
-            <div className={`text-lg font-bold ${TIERS[sub.tier]?.color || "text-zinc-400"}`}>
-              {sub.tierName}
+      {/* ─── Current charter ─── */}
+      <div
+        className="rounded-xl border bg-surface-raised p-4"
+        style={{ borderColor: curTheme.accent }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Crown className="h-5 w-5" style={{ color: curTheme.bright }} />
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">
+                Current Charter
+              </div>
+              <div
+                className="text-lg font-bold leading-tight"
+                style={{ color: curTheme.bright }}
+              >
+                {tierName(effectiveTier)}
+              </div>
             </div>
           </div>
           {sub.active && sub.expiresAt > 0 && (
             <div className="text-right">
-              <div className="text-xs text-text-muted">Expires</div>
+              <div
+                className={`flex items-center justify-end gap-1 text-[10px] uppercase tracking-wider ${
+                  expiringSoon ? "text-amber-400" : "text-text-muted"
+                }`}
+              >
+                {expiringSoon && <Clock className="h-3 w-3 animate-pulse" />}
+                {expiringSoon ? "Lapses soon" : "Expires"}
+              </div>
               <GoldCountdown endsAt={sub.expiresAt} format="full" />
             </div>
           )}
         </div>
-        <div className="mt-3 text-xs text-text-muted">
-          <span>Effective charter: </span>
-          <span className={TIERS[effectiveTier]?.color || "text-zinc-400"}>
-            {TIERS[effectiveTier]?.name || "Unknown"}
-          </span>
-        </div>
+
+        {/* Downgrade preview — loss aversion */}
+        {effectiveTier > 0 && curGenRatio != null && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg bg-surface/60 px-3 py-2 text-[11px] text-text-muted">
+            <Clock className="mt-px h-3.5 w-3.5 shrink-0 text-amber-500/80" />
+            <span>
+              {expiringSoon ? "Renew before it lapses — " : "If this charter lapses, "}
+              your generator drops{" "}
+              <span className="font-semibold text-text-secondary">
+                {asMultiplier(curGenRatio)} → 1×
+              </span>{" "}
+              and your vault shrinks to{" "}
+              <span className="font-semibold text-text-secondary">
+                {formatNumber(num(baseTier?.maxLockedNovi))} NOVI
+              </span>
+              .
+            </span>
+          </div>
+        )}
+        {effectiveTier === 0 && (
+          <p className="mt-3 text-[11px] text-text-muted">
+            You hold the free charter. Every paid charter below multiplies your
+            NOVI generator and pays a signing bounty up front.
+          </p>
+        )}
       </div>
 
-      {/* Tier Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {TIERS.map((tier) => {
-          const isCurrent = sub.tier === tier.id && sub.active;
+      {/* ─── Tier ladder (paid charters) ─── */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {tiers.slice(1).map((t) => {
+          const idx = t.tierIndex ?? tiers.indexOf(t);
+          const th = theme(idx);
+          const isCurrent = sub.tier === idx && sub.active;
+          const isPopular = idx === POPULAR_TIER;
+          const price = TIER_PRICE[idx] ?? 0;
+          const durationDays = t.durationDays ?? 0;
+          const perDay = durationDays > 0 ? price / durationDays : 0;
+
+          // Real perks, derived from on-chain config
+          const gen = num(t.generationMultiplier);
+          const genRatio = baseGen > 0 ? gen / baseGen : null;
+          const perHour = gen * 12;
+          const cap = num(t.maxLockedNovi);
+          const dailyCap = num(npc?.noviSubDailyCap?.[idx]) / 10;
+          const buyBonusBps = npc?.noviSubBonusBps?.[idx] ?? 0;
+          const dr = num(t.dailyRewardMultiplier);
+          const dr0 = num(baseTier?.dailyRewardMultiplier);
+          const drRatio = dr0 > 0 ? dr / dr0 : null;
+          const team = t.maxTeamMembers ?? 0;
+          const rally = t.rallyCaps?.maxRallySize ?? 0;
+          const travelBps = t.travelSpeedBonusBps ?? 0;
+
+          // Signing grant summary
+          const grantNovi = num(t.novi);
+          const grantCash = num(t.cash);
+          const troops =
+            num(t.du1) + num(t.du2) + num(t.du3) +
+            num(t.op1) + num(t.op2) + num(t.op3);
+          const gear =
+            num(t.meleeWeapons) + num(t.rangedWeapons) +
+            num(t.siegeWeapons) + num(t.armor);
+          const grantParts: string[] = [];
+          if (grantNovi) grantParts.push(`${formatNumber(grantNovi)} NOVI`);
+          if (grantCash) grantParts.push(`${formatNumber(grantCash)} cash`);
+          if (troops) grantParts.push(`${formatNumber(troops)} troops`);
+          if (gear) grantParts.push(`${formatNumber(gear)} gear`);
+
+          // Breakeven — does the extra generation pay back the charter?
+          const extraGenPerDay = genRatio ? (gen - baseGen) * 12 * 24 : 0;
+          let breakeven: string | null = null;
+          if (price > 0 && grantNovi >= price) {
+            breakeven = "Signing bounty alone covers the charter";
+          } else if (price > 0 && extraGenPerDay > 0) {
+            const days = Math.max(0, price - grantNovi) / extraGenPerDay;
+            breakeven =
+              days < 1
+                ? "Extra generation repays the charter in under a day"
+                : `Extra generation repays the charter in ~${Math.ceil(days)} days`;
+          }
+
+          const affordGap = price - noviBalance;
+
           return (
             <div
-              key={tier.id}
-              className={`card ${
-                isCurrent ? "accent-border-bright" : ""
+              key={idx}
+              className={`relative flex flex-col rounded-xl border bg-surface-raised p-5 transition-transform ${
+                isPopular ? "md:-translate-y-3" : ""
               }`}
+              style={{
+                borderColor: th.accent,
+                boxShadow:
+                  isPopular || isCurrent ? `0 8px 36px ${th.glow}` : undefined,
+              }}
             >
-              <div className="flex items-center justify-between">
-                <div className={`text-lg font-bold ${tier.color}`}>{tier.name}</div>
-                {tier.price > 0 && (
-                  <div className="text-sm text-text-gold">
-                    ✦ {tier.price}/mo
-                    {sub.tier > 0 && tier.id > sub.tier && (
-                      <span className="ml-2 text-xs text-green-400">
-                        +{(tier.price - TIERS[sub.tier].price).toLocaleString()} from current
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-              <ul className="mt-3 space-y-1">
-                {tier.perks.map((perk) => (
-                  <li key={perk} className="flex items-center gap-2 text-sm text-text-secondary">
-                    <span className="text-amber-400">●</span>
-                    {perk}
-                  </li>
-                ))}
-              </ul>
-              {tier.price > 0 && !isCurrent && (
-                <div className="mt-4">
-                  <TxButton
-                    onClick={(reportPhase) => handlePurchase(tier.id, reportPhase)}
-                    variant={tier.id >= 2 ? "primary" : "secondary"}
-                    className="w-full"
-                  >
-                    {sub.tier < tier.id ? "Move to this charter" : "Hold this charter"}
-                  </TxButton>
-                  {tier.price > noviBalance && (
-                    <p className="mt-1 text-center text-[11px] text-red-400">
-                      Need {(tier.price - noviBalance).toLocaleString()} more NOVI
-                    </p>
-                  )}
+              {isPopular && !isCurrent && (
+                <div
+                  className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-black"
+                  style={{ background: th.bright }}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Most Popular
                 </div>
               )}
               {isCurrent && (
-                <div className="mt-4 text-center text-xs text-amber-400">Held</div>
+                <div
+                  className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
+                  style={{ background: `${th.accent}33`, color: th.bright }}
+                >
+                  <Check className="h-3 w-3" />
+                  Held
+                </div>
               )}
+
+              {/* Name + price */}
+              <div className="flex items-start justify-between">
+                <div
+                  className="text-xl font-bold"
+                  style={{ color: th.bright }}
+                >
+                  {t.name}
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-text-gold">
+                    ✦ {price.toLocaleString()}
+                  </div>
+                  {durationDays > 0 && (
+                    <div className="text-[10px] text-text-muted">
+                      ≈ ✦{perDay.toFixed(perDay < 10 ? 1 : 0)}/day ·{" "}
+                      {durationDays}-day
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Headline — generation multiplier */}
+              <div
+                className="mt-4 rounded-lg px-3 py-3 text-center"
+                style={{ background: `${th.accent}1a` }}
+              >
+                <div
+                  className="font-mono text-4xl font-bold leading-none tabular-nums"
+                  style={{ color: th.bright }}
+                >
+                  {genRatio != null
+                    ? asMultiplier(genRatio)
+                    : perHour.toLocaleString()}
+                </div>
+                <div className="mt-1 text-[10px] uppercase tracking-wider text-text-muted">
+                  NOVI Generation
+                </div>
+                <div className="text-[10px] text-text-muted">
+                  ≈ {perHour.toLocaleString()}/hr · {gen}/5m
+                </div>
+              </div>
+
+              {/* Perks */}
+              <ul className="mt-4 flex-1 space-y-2">
+                <PerkRow icon={Database} color={th.bright} strong>
+                  Vault holds{" "}
+                  <span className="font-semibold text-text-gold">
+                    {formatNumber(cap)} NOVI
+                  </span>{" "}
+                  before it fills
+                </PerkRow>
+                {dailyCap > 0 && (
+                  <PerkRow icon={ShoppingCart} color={th.bright} strong>
+                    Buy up to{" "}
+                    <span className="font-semibold text-text-gold">
+                      {dailyCap.toLocaleString()} NOVI
+                    </span>{" "}
+                    every day
+                  </PerkRow>
+                )}
+                {buyBonusBps > 0 && (
+                  <PerkRow icon={Percent} color={th.bright}>
+                    +{(buyBonusBps / 100).toFixed(0)}% bonus NOVI on every
+                    purchase
+                  </PerkRow>
+                )}
+                {drRatio != null && drRatio > 1 && (
+                  <PerkRow icon={Gift} color={th.bright}>
+                    {asMultiplier(drRatio)} daily rewards
+                  </PerkRow>
+                )}
+                {grantParts.length > 0 && (
+                  <PerkRow icon={Award} color={th.bright} strong>
+                    Signing bounty:{" "}
+                    <span className="text-text-secondary">
+                      {grantParts.join(" · ")}
+                    </span>
+                  </PerkRow>
+                )}
+                {team > 0 && (
+                  <PerkRow icon={Users} color={th.bright}>
+                    Command a team of up to {team}
+                  </PerkRow>
+                )}
+                {rally > 0 && (
+                  <PerkRow icon={Swords} color={th.bright}>
+                    Lead rallies up to {rally} strong
+                  </PerkRow>
+                )}
+                {travelBps > 0 && (
+                  <PerkRow icon={Wind} color={th.bright}>
+                    +{(travelBps / 100).toFixed(0)}% travel speed
+                  </PerkRow>
+                )}
+              </ul>
+
+              {/* Breakeven callout */}
+              {breakeven && (
+                <div
+                  className="mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium"
+                  style={{ background: `${th.accent}1a`, color: th.bright }}
+                >
+                  <Zap className="h-3.5 w-3.5 shrink-0" />
+                  {breakeven}
+                </div>
+              )}
+
+              {/* Action */}
+              <div className="mt-4">
+                {isCurrent ? (
+                  <div
+                    className="rounded-lg border py-2.5 text-center text-xs font-semibold uppercase tracking-wider"
+                    style={{ borderColor: th.accent, color: th.bright }}
+                  >
+                    Charter Held
+                  </div>
+                ) : (
+                  <>
+                    <TxButton
+                      onClick={(reportPhase) => handlePurchase(idx, reportPhase)}
+                      variant={isPopular ? "primary" : "secondary"}
+                      className="w-full"
+                    >
+                      {sub.tier < idx ? "Move to this charter" : "Hold this charter"}
+                    </TxButton>
+                    {affordGap > 0 ? (
+                      <p className="mt-1.5 text-center text-[11px] text-red-400">
+                        Need ✦{affordGap.toLocaleString()} more NOVI
+                      </p>
+                    ) : sub.tier > 0 && idx > sub.tier ? (
+                      <p className="mt-1.5 text-center text-[11px] text-text-muted">
+                        +✦{(price - (TIER_PRICE[sub.tier] ?? 0)).toLocaleString()}{" "}
+                        over your current charter
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
-
-      {/* Game Parameters */}
-      {geData?.account && (() => {
-        const tiers = geData.account.subscriptionTiers;
-        return (
-          <GameInfoPanel>
-            <div className="space-y-3">
-              {tiers.map((t) => (
-                <div key={t.tierIndex}>
-                  <div className="mb-1 text-xs font-semibold text-zinc-400">{t.name} (Tier {t.tierIndex})</div>
-                  <InfoGrid items={[
-                    { label: "Cost", value: `$${(t.costInUsdCents?.toNumber?.() ?? 0) / 100}` },
-                    { label: "Duration", value: `${t.durationDays ?? 0}d` },
-                    { label: "Gen Multiplier", value: bpsToMultiplier(t.generationMultiplier?.toNumber?.() ?? 0) },
-                    { label: "Max Locked NOVI", value: formatNumber(t.maxLockedNovi?.toNumber?.() ?? 0) },
-                    { label: "Daily Reward Mult", value: bpsToMultiplier(t.dailyRewardMultiplier?.toNumber?.() ?? 0) },
-                    { label: "Bonus Units", value: `DU: ${t.du1?.toNumber?.() ?? 0}/${t.du2?.toNumber?.() ?? 0}/${t.du3?.toNumber?.() ?? 0}` },
-                    { label: "Rally Cap", value: String(t.rallyCaps?.maxRallySize ?? 0) },
-                    { label: "Team Size", value: String(t.maxTeamMembers ?? 0) },
-                    { label: "Travel Speed", value: bpsToPercent(t.travelSpeedBonusBps ?? 0), suffix: "bonus" },
-                  ]} />
-                </div>
-              ))}
-            </div>
-          </GameInfoPanel>
-        );
-      })()}
     </div>
   );
 }
