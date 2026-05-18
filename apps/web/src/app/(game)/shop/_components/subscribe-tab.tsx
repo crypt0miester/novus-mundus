@@ -41,8 +41,9 @@ const TIER_THEME = [
   { accent: "#daa520", bright: "#f1af09", glow: "rgba(218,165,32,0.30)" },
 ];
 
-// The middle paid tier carries the "Most Popular" anchor.
-const POPULAR_TIER = 2;
+// Fallback featured tier for a player with no charter — the middle paid tier
+// is the classic decoy anchor (don't push a brand-new player to the top tier).
+const ANCHOR_TIER = 2;
 
 const theme = (i: number) => TIER_THEME[i] ?? TIER_THEME[TIER_THEME.length - 1];
 
@@ -112,6 +113,13 @@ export function SubscribeTab() {
   const baseTier = tiers[0];
   // SOL/USD rate (USD cents per 1 SOL) — drives the live charter price.
   const usdPriceCents = num(geData?.account?.usdPriceCents);
+
+  // The featured tier follows the player up the ladder: always their realistic
+  // next purchase (current + 1), floored at the anchor tier for new players.
+  const recommendedTier = Math.min(
+    tiers.length - 1,
+    Math.max(effectiveTier + 1, ANCHOR_TIER)
+  );
 
   const tierName = (i: number) => tiers[i]?.name ?? `Tier ${i}`;
 
@@ -229,8 +237,10 @@ export function SubscribeTab() {
         {tiers.slice(1).map((t) => {
           const idx = t.tierIndex ?? tiers.indexOf(t);
           const th = theme(idx);
-          const isCurrent = sub.tier === idx && sub.active;
-          const isPopular = idx === POPULAR_TIER;
+          const isCurrent = sub.active && idx === effectiveTier;
+          const isRecommended = idx === recommendedTier && !isCurrent;
+          // The chain rejects buying a tier below your active charter.
+          const isLocked = sub.active && idx < effectiveTier;
           const durationDays = t.durationDays ?? 0;
 
           // Live cost — USD-denominated, settled in SOL at the chain rate
@@ -238,10 +248,14 @@ export function SubscribeTab() {
           const costLamports = solCostLamports(costUsdCents, usdPriceCents);
           const priceKnown = costLamports > 0;
           const curTierCost =
-            sub.tier > 0
-              ? solCostLamports(num(tiers[sub.tier]?.costInUsdCents), usdPriceCents)
+            effectiveTier > 0
+              ? solCostLamports(
+                  num(tiers[effectiveTier]?.costInUsdCents),
+                  usdPriceCents
+                )
               : 0;
-          const upgradeDelta = idx > sub.tier ? costLamports - curTierCost : 0;
+          const upgradeDelta =
+            idx > effectiveTier ? costLamports - curTierCost : 0;
 
           // Real perks, derived from on-chain config
           const gen = num(t.generationMultiplier);
@@ -276,21 +290,23 @@ export function SubscribeTab() {
             <div
               key={idx}
               className={`relative flex flex-col rounded-xl border bg-surface-raised p-5 transition-transform ${
-                isPopular ? "md:-translate-y-3" : ""
-              }`}
+                isRecommended ? "md:-translate-y-3" : ""
+              } ${isLocked ? "opacity-60" : ""}`}
               style={{
                 borderColor: th.accent,
                 boxShadow:
-                  isPopular || isCurrent ? `0 8px 36px ${th.glow}` : undefined,
+                  isRecommended || isCurrent
+                    ? `0 8px 36px ${th.glow}`
+                    : undefined,
               }}
             >
-              {isPopular && !isCurrent && (
+              {isRecommended && (
                 <div
                   className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-black"
                   style={{ background: th.bright }}
                 >
                   <Sparkles className="h-3 w-3" />
-                  Most Popular
+                  {effectiveTier === 0 ? "Most Popular" : "Your Next Step"}
                 </div>
               )}
               {isCurrent && (
@@ -411,16 +427,20 @@ export function SubscribeTab() {
                   >
                     Charter Held
                   </div>
+                ) : isLocked ? (
+                  <div className="rounded-lg border border-zinc-800 bg-surface py-2.5 text-center text-[11px] text-text-muted">
+                    Available once your current charter ends
+                  </div>
                 ) : (
                   <>
                     <TxButton
                       onClick={(reportPhase) => handlePurchase(idx, reportPhase)}
-                      variant={isPopular ? "primary" : "secondary"}
+                      variant={isRecommended ? "primary" : "secondary"}
                       className="w-full"
                     >
-                      {sub.tier < idx ? "Move to this charter" : "Hold this charter"}
+                      Move to this charter
                     </TxButton>
-                    {sub.tier > 0 && idx > sub.tier && upgradeDelta > 0 && (
+                    {effectiveTier > 0 && upgradeDelta > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
                         +{formatLamportsAsSol(upgradeDelta)} over your current
                         charter
