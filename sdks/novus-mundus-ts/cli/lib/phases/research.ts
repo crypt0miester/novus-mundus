@@ -17,6 +17,8 @@ import {
   createUpdateTemplateInstruction,
   deriveResearchTemplatePda,
   parseResearchTemplate,
+  RESEARCH_CATEGORY_NAMES,
+  getResearchName,
 } from '../../../src/index';
 import { RESEARCH_TEMPLATES } from '../../data/research';
 import {
@@ -111,13 +113,6 @@ export async function statusResearch(ctx: CLIContext): Promise<string> {
   return `${count} templates`;
 }
 
-const CATEGORY_NAMES = ['Battle', 'Economy', 'Growth'];
-
-const RESEARCH_NAMES: Record<number, string> = {};
-for (const t of RESEARCH_TEMPLATES) {
-  RESEARCH_NAMES[t.researchType] = t.name;
-}
-
 export async function detailResearch(ctx: CLIContext): Promise<string> {
   const lines: string[] = [];
   lines.push(section(`Research Templates — Kingdom ${ctx.kingdomId}`));
@@ -146,8 +141,8 @@ export async function detailResearch(ctx: CLIContext): Promise<string> {
 
       rows.push([
         String(data.researchType),
-        RESEARCH_NAMES[data.researchType] || 'Research #' + data.researchType,
-        CATEGORY_NAMES[data.category] ?? String(data.category),
+        getResearchName(data.researchType),
+        RESEARCH_CATEGORY_NAMES[data.category] ?? String(data.category),
         String(data.maxLevel),
         formatDuration(data.baseTimeSeconds),
         formatNum(data.baseNoviCost),

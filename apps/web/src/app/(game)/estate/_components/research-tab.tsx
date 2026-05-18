@@ -27,25 +27,16 @@ import {
   isResearching,
   getResearchLevel,
   findBuilding,
+  getResearchName,
+  getResearchNode,
+  getResearchCategoryName,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount } from "novus-mundus-sdk";
 
-// Category / buff-type display maps
-const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
+// Category icons are UI-only; node names/descriptions come from the SDK catalog.
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
 /** Minimum Academy level to start research, by category (Battle/Economy/Growth). */
 const ACADEMY_REQUIRED: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
-const BUFF_NAMES: Record<number, string> = {
-  0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",
-  4: "Crit Damage", 5: "Rally Capacity", 6: "Encounter Success", 7: "Loot Bonus",
-  8: "Training Speed", 9: "Ambush Damage",
-  10: "Production", 11: "Resource Cap", 12: "Market Tax", 13: "Trade Speed",
-  14: "Mining Output", 15: "Cash Gen", 16: "Build Speed", 17: "Upkeep Reduction",
-  18: "Black Market", 19: "Tax Collection",
-  20: "Daily Rewards", 21: "Mining Ops", 22: "Fishing", 23: "Loot Magnetism",
-  24: "Reputation", 25: "Stamina", 26: "Streak Bonus", 27: "Fragment Discovery",
-  28: "Gem Prospecting", 29: "Collection Mastery", 30: "Travel Speed",
-};
 
 // ─── Fetch all initialized research templates (types 0-29) ──
 function useResearchTemplates() {
@@ -134,7 +125,7 @@ export function ResearchTab() {
     if (!templates) return {};
     const map: Record<string, ResearchTemplateAccount[]> = {};
     for (const t of templates) {
-      const cat = CATEGORY_NAMES[t.category] ?? "Other";
+      const cat = getResearchCategoryName(t.category);
       (map[cat] ??= []).push(t);
     }
     return map;
@@ -156,8 +147,7 @@ export function ResearchTab() {
 
   const handleSelectResearch = useCallback(
     (researchType: number) => {
-      const name = BUFF_NAMES[researchType] ?? `Research #${researchType}`;
-      show(`${name} Research`, "research", { researchType });
+      show(`${getResearchName(researchType)} Research`, "research", { researchType });
     },
     [show]
   );
@@ -256,7 +246,8 @@ export function ResearchTab() {
                     const isActiveHere = progress
                       ? isResearching(progress) && progress.currentResearch === t.researchType
                       : false;
-                    const name = BUFF_NAMES[t.buffType] ?? `Research #${t.researchType}`;
+                    const name = getResearchName(t.researchType);
+                    const description = getResearchNode(t.researchType)?.description;
                     const requiredAcademy = ACADEMY_REQUIRED[t.category] ?? 1;
                     const locked = academyLevel < requiredAcademy;
                     return (
@@ -278,7 +269,12 @@ export function ResearchTab() {
                               <div className="text-sm font-semibold text-text-primary">{name}</div>
                               <span className="text-[11px] text-text-gold">Lv {level}/{t.maxLevel}</span>
                             </div>
-                            <div className="text-xs text-text-muted">
+                            {description && (
+                              <div className="mt-0.5 text-[11px] leading-tight text-text-muted/80">
+                                {description}
+                              </div>
+                            )}
+                            <div className="mt-1 text-xs text-text-muted">
                               +{(t.buffPerLevelBps / 100).toFixed(1)}%/lv
                               {isActiveHere && <span className="ml-2 text-green-400">Researching...</span>}
                             </div>

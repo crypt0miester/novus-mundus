@@ -40,6 +40,9 @@ export * from './state/hero';
 export * from './state/progression';
 export * from './state/router';
 
+// Static catalog / metadata exports
+export * from './data/research-catalog';
+
 // Utility exports (instruction helpers)
 export * from './utils/serialize';
 export * from './utils/token';

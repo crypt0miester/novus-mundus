@@ -52,7 +52,7 @@ pub enum ResearchBuffType {
     LootMagnetism = 23,
     ReputationMastery = 24,
     StaminaVitality = 25,
-    SynchronyyStreak = 26,
+    LuckyStreak = 26,
     FragmentDiscovery = 27,
     GemProspecting = 28,
     CollectionMastery = 29,

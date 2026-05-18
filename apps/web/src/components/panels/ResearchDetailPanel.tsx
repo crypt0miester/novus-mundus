@@ -32,21 +32,13 @@ import {
   getResearchLevel,
   checkResearchPrerequisites,
   findBuilding,
+  getResearchName,
+  getResearchNode,
+  getResearchCategoryName,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
 
-const BUFF_NAMES: Record<number, string> = {
-  0: "Attack Power", 1: "Defense Power", 2: "Unit Capacity", 3: "Crit Chance",
-  4: "Crit Damage", 5: "Rally Capacity", 6: "Encounter Success", 7: "Loot Bonus",
-  8: "Training Speed", 9: "Ambush Damage",
-  10: "Production", 11: "Resource Cap", 12: "Market Tax", 13: "Trade Speed",
-  14: "Mining Output", 15: "Cash Gen", 16: "Build Speed", 17: "Upkeep Reduction",
-  18: "Black Market", 19: "Tax Collection",
-  20: "Daily Rewards", 21: "Mining Ops", 22: "Fishing", 23: "Loot Magnetism",
-  24: "Reputation", 25: "Stamina", 26: "Streak Bonus", 27: "Fragment Discovery",
-  28: "Gem Prospecting", 29: "Collection Mastery", 30: "Travel Speed",
-};
-const CATEGORY_NAMES: Record<number, string> = { 0: "Battle", 1: "Economy", 2: "Growth" };
+// Category icons are UI-only; node names/descriptions come from the SDK catalog.
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
 
 /** Minimum Academy level to start research, by category (Battle/Economy/Growth). */
@@ -116,8 +108,9 @@ export function ResearchPanel({
   const remainingSeconds = isActiveForThis && progress
     ? Math.max(0, progress.completesAt.toNumber() - nowSec)
     : 0;
-  const buffName = BUFF_NAMES[template.buffType] ?? `Buff #${template.buffType}`;
-  const categoryName = CATEGORY_NAMES[template.category] ?? "Unknown";
+  const buffName = getResearchName(template.researchType);
+  const categoryName = getResearchCategoryName(template.category);
+  const description = getResearchNode(template.researchType)?.description;
 
   // Academy-level gate — research is hard-gated on-chain by the Academy
   // building level (Battle ≥1, Economy ≥5, Growth ≥10). Surface it like a
@@ -262,6 +255,11 @@ export function ResearchPanel({
         </div>
       </div>
 
+      {/* Description */}
+      {description && (
+        <div className="-mt-1 text-xs leading-snug text-text-muted">{description}</div>
+      )}
+
       {/* NOVI balance */}
       <div className="rounded-lg bg-surface/60 px-3 py-2">
         <div className="flex items-center justify-between text-xs">
@@ -284,7 +282,7 @@ export function ResearchPanel({
       {/* Prerequisite warning */}
       {!canMeetPrereqs && (
         <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
-          Requires {BUFF_NAMES[template.prerequisiteResearch] ?? `research #${template.prerequisiteResearch}`} at level {template.prerequisiteLevel}
+          Requires {getResearchName(template.prerequisiteResearch)} at level {template.prerequisiteLevel}
         </div>
       )}
 
