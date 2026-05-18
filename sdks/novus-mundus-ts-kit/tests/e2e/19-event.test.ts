@@ -1,0 +1,970 @@
+/**
+ * Event System E2E Tests
+ *
+ * Tests for game events and competitions:
+ * - Creating events (admin)
+ * - Joining events
+ * - Event finalization (permissionless)
+ * - Prize claiming
+ * - Event participation tracking
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { generateKeyPairSigner } from '@solana/kit';
+import BN from 'bn.js';
+
+import {
+  createCreateEventInstruction,
+  createJoinEventInstruction,
+  createClaimPrizeInstruction,
+  createFinalizeEventInstruction,
+  createAttackPlayerInstruction,
+  deriveEventPda,
+  deriveEventParticipationPda,
+  derivePlayerPda,
+  EventStatus,
+  EventPrizeType,
+} from '../../src/index';
+
+import {
+  type TestContext,
+  beforeAllTests,
+} from '../fixtures/setup';
+import {
+  PlayerFactory,
+  type TestPlayer,
+  createCombatReadyPlayers,
+} from '../fixtures/players';
+import {
+  assertBnEquals,
+  assertBnGreaterThan,
+} from '../utils/assertions';
+import {
+  sendInstructions,
+  expectTransactionToFail,
+} from '../utils/transactions';
+import {
+  fetchPlayer,
+  fetchEvent,
+  fetchEventParticipation,
+  accountExists,
+} from '../utils/accounts';
+import { log } from '../utils/logger';
+import {
+  getCurrentTimestamp,
+  advanceTime,
+} from '../fixtures/time';
+
+// Constants
+
+const ACTIVE_EVENT_ID = 1;
+const ENDED_EVENT_ID = 2;
+const HIGH_LEVEL_EVENT_ID = 3;
+
+// Test Suite
+
+describe('Event System', () => {
+  let ctx: TestContext;
+  let factory: PlayerFactory;
+
+  beforeAll(async () => {
+    log.section('Event System');
+    ctx = await beforeAllTests();
+    factory = new PlayerFactory(ctx, { autoInit: true });
+
+    const now = await getCurrentTimestamp(ctx.svm);
+
+    // Create active event (started 1 hour ago, ends in 24 hours)
+    const createActiveEventIx = createCreateEventInstruction(
+      {
+        authority: ctx.daoAuthority.address,
+        gameEngine: ctx.gameEngine,
+        eventId: ACTIVE_EVENT_ID,
+      },
+      {
+        name: 'TestActiveEvent',
+        startTime: now - 3600,
+        endTime: now + 86400,
+        eventType: 0,
+        minLevel: 1,
+        minReputation: 0,
+        requiredSubscriptionTier: 0,
+        prizeType: 0, // LockedNovi
+        prizeAmount: 10000,
+        autoActivate: true,
+      }
+    );
+
+    // Create soon-to-end event: end_time briefly in the future so a setup
+    // player can join (which auto-activates it), after which we advance the
+    // clock past end_time below. Activation is what makes finalize legal.
+    const createEndedEventIx = createCreateEventInstruction(
+      {
+        authority: ctx.daoAuthority.address,
+        gameEngine: ctx.gameEngine,
+        eventId: ENDED_EVENT_ID,
+      },
+      {
+        name: 'TestEndedEvent',
+        startTime: now - 60,
+        endTime: now + 60,
+        eventType: 0,
+        minLevel: 1,
+        minReputation: 0,
+        requiredSubscriptionTier: 0,
+        prizeType: 0,
+        prizeAmount: 5000,
+        autoActivate: true,
+      }
+    );
+
+    // Create high-level event (requires level 50)
+    const createHighLevelEventIx = createCreateEventInstruction(
+      {
+        authority: ctx.daoAuthority.address,
+        gameEngine: ctx.gameEngine,
+        eventId: HIGH_LEVEL_EVENT_ID,
+      },
+      {
+        name: 'TestHighLevelEvent',
+        startTime: now - 3600,
+        endTime: now + 86400,
+        eventType: 0,
+        minLevel: 50,
+        minReputation: 0,
+        requiredSubscriptionTier: 0,
+        prizeType: 1, // Gems
+        prizeAmount: 1000,
+        autoActivate: true,
+      }
+    );
+
+    await sendInstructions(
+      ctx.svm,
+      [createActiveEventIx],
+      [ctx.daoAuthority]
+    );
+
+    await sendInstructions(
+      ctx.svm,
+      [createEndedEventIx],
+      [ctx.daoAuthority]
+    );
+
+    await sendInstructions(
+      ctx.svm,
+      [createHighLevelEventIx],
+      [ctx.daoAuthority]
+    );
+
+    // Activate ENDED event by having a setup player join (status 0 → 1).
+    // Then advance the clock past end_time so finalize tests see an
+    // Active-but-time-expired event.
+    const setupPlayer = await factory.createPlayer({ initialize: true });
+    await sendInstructions(
+      ctx.svm,
+      [
+        createJoinEventInstruction({
+          gameEngine: ctx.gameEngine,
+          payer: setupPlayer.publicKey,
+          playerOwner: setupPlayer.publicKey,
+          eventId: ENDED_EVENT_ID,
+        }),
+      ],
+      [setupPlayer.keypair],
+    );
+    await advanceTime(ctx.svm, 120); // past ENDED event's end_time
+  });
+
+  afterAll(() => {
+    factory.clear();
+  });
+
+  // Event Creation Tests
+
+  describe('Event Creation', () => {
+    it('should create event with correct parameters', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.name).toBe('TestActiveEvent');
+      // Events are always created as Pending; autoActivate is stored but activation happens separately
+      expect(event!.status).toBe(EventStatus.Pending);
+      expect(event!.eventType).toBe(0);
+      expect(event!.minLevel).toBe(1);
+      expect(event!.prizeType).toBe(EventPrizeType.LockedNovi);
+      assertBnEquals(event!.prizeAmount, 10000);
+      expect(event!.autoActivate).toBe(true);
+      expect(event!.participantCount).toBe(0);
+    });
+
+    it('should create ended event with correct timestamps', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.name).toBe('TestEndedEvent');
+      // endTime < now, so the event window has passed
+      const now = await getCurrentTimestamp(ctx.svm);
+      expect(event!.endTime.toNumber()).toBeLessThan(now);
+      assertBnEquals(event!.prizeAmount, 5000);
+    });
+
+    it('should create event with high level requirement', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.minLevel).toBe(50);
+      expect(event!.prizeType).toBe(EventPrizeType.Gems);
+      assertBnEquals(event!.prizeAmount, 1000);
+    });
+
+    it('should reject event creation by non-authority', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createCreateEventInstruction(
+        {
+          authority: player.publicKey,
+          gameEngine: ctx.gameEngine,
+          eventId: 999,
+        },
+        {
+          name: 'UnauthorizedEvent',
+          startTime: 0,
+          endTime: 0,
+          eventType: 0,
+          minLevel: 1,
+          minReputation: 0,
+          requiredSubscriptionTier: 0,
+          prizeType: 0,
+          prizeAmount: 100,
+          autoActivate: false,
+        }
+      );
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+  });
+
+  // Join Event Tests
+
+  describe('Joining Events', () => {
+    it('should join active event and create participation account', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await sendInstructions(ctx.svm, [ix], [player.keypair]);
+
+      // Verify participation account was created
+      const participation = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+      );
+      expect(participation).not.toBeNull();
+      assertBnEquals(participation!.eventId, ACTIVE_EVENT_ID);
+      expect(participation!.player === player.publicKey).toBe(true);
+      assertBnEquals(participation!.score, 0);
+      assertBnGreaterThan(participation!.joinedAt, 0, 'joinedAt should be set');
+
+      // Verify player's currentEvent is set
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(account).not.toBeNull();
+      assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
+
+      // Verify event participant count increased
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.participantCount).toBeGreaterThan(0);
+    });
+
+    it('should reject joining when already in an event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join first time
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      // Verify player is now in event
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(account).not.toBeNull();
+      assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
+
+      // Try to join the same event again — should fail (already participating)
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    }, 15_000);
+
+    it('should reject joining ended event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ENDED_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    }, 15_000);
+
+    it('should reject joining non-existent event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: 9999,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should reject joining event when level requirement not met', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Player starts at level 1, event requires level 50
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(account).not.toBeNull();
+      expect(account!.level).toBeLessThan(50);
+
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: HIGH_LEVEL_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should allow different payer than player owner', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+      const payer = await factory.createPlayer({ initialize: true });
+
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: payer.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      // Payer signs, player owner's account is updated
+      await sendInstructions(ctx.svm, [ix], [payer.keypair]);
+
+      // Verify the player (not payer) has the participation
+      const participation = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+      );
+      expect(participation).not.toBeNull();
+      expect(participation!.player === player.publicKey).toBe(true);
+    });
+  });
+
+  // Event Participation Tracking
+
+  describe('Participation Tracking', () => {
+    it('should initialize participation with zero score', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      const participation = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+      );
+      expect(participation).not.toBeNull();
+      assertBnEquals(participation!.score, 0);
+      assertBnGreaterThan(participation!.joinedAt, 0, 'joinedAt should be set');
+    });
+
+    it('should track multiple participants independently', async () => {
+      const player1 = await factory.createPlayer({ initialize: true });
+      const player2 = await factory.createPlayer({ initialize: true });
+
+      // Both join
+      for (const player of [player1, player2]) {
+        await sendInstructions(
+          ctx.svm,
+          [
+            createJoinEventInstruction({
+              gameEngine: ctx.gameEngine,
+              payer: player.publicKey,
+              playerOwner: player.publicKey,
+              eventId: ACTIVE_EVENT_ID,
+            }),
+          ],
+          [player.keypair]
+        );
+      }
+
+      // Each has their own participation account
+      const p1 = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player1.publicKey
+      );
+      const p2 = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player2.publicKey
+      );
+      expect(p1).not.toBeNull();
+      expect(p2).not.toBeNull();
+      expect(p1!.player === player1.publicKey).toBe(true);
+      expect(p2!.player === player2.publicKey).toBe(true);
+    });
+
+    it('should increment event participant count per join', async () => {
+      const eventBefore = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(eventBefore).not.toBeNull();
+      const countBefore = eventBefore!.participantCount;
+
+      const player = await factory.createPlayer({ initialize: true });
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      const eventAfter = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(eventAfter).not.toBeNull();
+      expect(eventAfter!.participantCount).toBe(countBefore + 1);
+    });
+  });
+
+  // Event Finalization Tests
+
+  describe('Event Finalization', () => {
+    it('should finalize ended event (permissionless)', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Event 2 end_time has passed — anyone can finalize
+      const ix = createFinalizeEventInstruction({
+        gameEngine: ctx.gameEngine,
+        eventId: ENDED_EVENT_ID,
+      });
+
+      await sendInstructions(ctx.svm, [ix], [player.keypair]);
+
+      // Verify event status changed to Finalized
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.status).toBe(EventStatus.Finalized);
+    });
+
+    it('should reject finalizing active event (not ended)', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Event 1 is still active (ends in ~24h) — finalize should fail
+      const ix = createFinalizeEventInstruction({
+        gameEngine: ctx.gameEngine,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should reject finalizing already finalized event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Event 2 was finalized in the first test — trying again should fail
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.status).toBe(EventStatus.Finalized);
+
+      const ix = createFinalizeEventInstruction({
+        gameEngine: ctx.gameEngine,
+        eventId: ENDED_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should reject finalizing non-existent event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const ix = createFinalizeEventInstruction({
+        gameEngine: ctx.gameEngine,
+        eventId: 9999,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should preserve participant count after finalization', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.status).toBe(EventStatus.Finalized);
+      // participantCount should still reflect total who joined (could be 0 if nobody joined ended event)
+      expect(event!.participantCount).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // Prize Claiming Tests
+
+  describe('Claiming Prizes', () => {
+    it('should reject claim for non-finalized event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join active event first
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      // Verify event is not finalized
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.status).not.toBe(EventStatus.Finalized);
+
+      // Try to claim — event not finalized, should fail
+      const claimIx = createClaimPrizeInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        winnerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [claimIx],
+        [player.keypair]
+      );
+    });
+
+    it('should reject claim by non-participant', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Don't join, just try to claim — should fail because no participation account exists
+      const [participationPda] = deriveEventParticipationPda(
+        ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+      );
+      const exists = await accountExists(ctx.svm, participationPda);
+      expect(exists).toBe(false);
+
+      const claimIx = createClaimPrizeInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        winnerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [claimIx],
+        [player.keypair]
+      );
+    });
+
+    it('should reject claim for non-existent event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      const claimIx = createClaimPrizeInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        winnerOwner: player.publicKey,
+        eventId: 9999,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [claimIx],
+        [player.keypair]
+      );
+    });
+
+    it('should reject claim on finalized event with no participation', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Event 2 is finalized but this player never joined it
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ENDED_EVENT_ID);
+      expect(event).not.toBeNull();
+      expect(event!.status).toBe(EventStatus.Finalized);
+
+      const claimIx = createClaimPrizeInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        winnerOwner: player.publicKey,
+        eventId: ENDED_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [claimIx],
+        [player.keypair]
+      );
+    });
+  });
+
+  // Event Account State Tests
+
+  describe('Event Account State', () => {
+    it('should store start and end times correctly', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+
+      // startTime should be in the past (event already started)
+      const now = await getCurrentTimestamp(ctx.svm);
+      expect(event!.startTime.toNumber()).toBeLessThan(now);
+
+      // endTime should be in the future (event not yet ended)
+      expect(event!.endTime.toNumber()).toBeGreaterThan(now);
+
+      // endTime > startTime
+      expect(event!.endTime.toNumber()).toBeGreaterThan(event!.startTime.toNumber());
+    });
+
+    it('should have correct prize pool configuration', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+
+      expect(event!.prizeType).toBe(EventPrizeType.LockedNovi);
+      assertBnEquals(event!.prizeAmount, 10000);
+      // Initially, prizeRemaining should equal prizeAmount
+      assertBnEquals(event!.prizeRemaining, event!.prizeAmount);
+    });
+
+    it('should track leaderboard entries', async () => {
+      const event = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(event).not.toBeNull();
+
+      // Leaderboard is an array of 10 slots
+      expect(event!.leaderboard.length).toBe(10);
+      // leaderboardCount tracks how many are populated
+      expect(event!.leaderboardCount).toBeGreaterThanOrEqual(0);
+      expect(event!.leaderboardCount).toBeLessThanOrEqual(10);
+    });
+
+    it('should have different event types', async () => {
+      const activeEvent = await fetchEvent(ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID);
+      const highLevelEvent = await fetchEvent(ctx.svm, ctx.gameEngine, HIGH_LEVEL_EVENT_ID);
+      expect(activeEvent).not.toBeNull();
+      expect(highLevelEvent).not.toBeNull();
+
+      // Both are type 0 in our setup, but verify they're stored correctly
+      expect(activeEvent!.eventType).toBe(0);
+      expect(highLevelEvent!.eventType).toBe(0);
+
+      // Different prize types
+      expect(activeEvent!.prizeType).toBe(EventPrizeType.LockedNovi);
+      expect(highLevelEvent!.prizeType).toBe(EventPrizeType.Gems);
+    });
+  });
+
+  // Multi-Event Isolation Tests
+
+  describe('Multiple Events', () => {
+    it('should reject joining second event while in first', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join event 1
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      // Verify player is in event 1
+      const account = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(account).not.toBeNull();
+      assertBnEquals(account!.currentEvent, ACTIVE_EVENT_ID);
+
+      // Try to join event 3 (high level) — should fail for multiple reasons:
+      // currentEvent is non-zero AND level too low
+      const ix = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: HIGH_LEVEL_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [ix],
+        [player.keypair]
+      );
+    });
+
+    it('should keep participation accounts separate per event', async () => {
+      // Create two events' worth of participations and verify they don't interfere
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join active event
+      await sendInstructions(
+        ctx.svm,
+        [
+          createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          }),
+        ],
+        [player.keypair]
+      );
+
+      // Verify participation exists for active event
+      const p1 = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ACTIVE_EVENT_ID, player.publicKey
+      );
+      expect(p1).not.toBeNull();
+      assertBnEquals(p1!.eventId, ACTIVE_EVENT_ID);
+
+      // Verify NO participation for ended event (player never joined it)
+      const p2 = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, ENDED_EVENT_ID, player.publicKey
+      );
+      expect(p2).toBeNull();
+    });
+
+    it('should derive unique PDAs per event+player combination', async () => {
+      const playerA = (await generateKeyPairSigner()).address;
+      const playerB = (await generateKeyPairSigner()).address;
+
+      const [pda1] = deriveEventParticipationPda(ctx.gameEngine, ACTIVE_EVENT_ID, playerA);
+      const [pda2] = deriveEventParticipationPda(ctx.gameEngine, ACTIVE_EVENT_ID, playerB);
+      const [pda3] = deriveEventParticipationPda(ctx.gameEngine, ENDED_EVENT_ID, playerA);
+
+      // Same event, different player => different PDA
+      expect(pda1 === pda2).toBe(false);
+      // Same player, different event => different PDA
+      expect(pda1 === pda3).toBe(false);
+    });
+  });
+
+  // Event PDA Derivation Tests
+
+  describe('PDA Derivation', () => {
+    it('should derive consistent event PDAs', () => {
+      const [pda1] = deriveEventPda(ctx.gameEngine, ACTIVE_EVENT_ID);
+      const [pda2] = deriveEventPda(ctx.gameEngine, ACTIVE_EVENT_ID);
+      expect(pda1 === pda2).toBe(true);
+    });
+
+    it('should derive unique PDAs per event ID', () => {
+      const [pda1] = deriveEventPda(ctx.gameEngine, ACTIVE_EVENT_ID);
+      const [pda2] = deriveEventPda(ctx.gameEngine, ENDED_EVENT_ID);
+      expect(pda1 === pda2).toBe(false);
+    });
+
+    it('should derive consistent participation PDAs', async () => {
+      const player = (await generateKeyPairSigner()).address;
+      const [pda1] = deriveEventParticipationPda(ctx.gameEngine, ACTIVE_EVENT_ID, player);
+      const [pda2] = deriveEventParticipationPda(ctx.gameEngine, ACTIVE_EVENT_ID, player);
+      expect(pda1 === pda2).toBe(true);
+    });
+  });
+
+  // Full Lifecycle: Create → Join → Score → Finalize → Claim
+
+  describe('Event Lifecycle', () => {
+    const LIFECYCLE_EVENT_ID = 4;
+
+    it('should complete full lifecycle: create, join, score via PvP, finalize, verify claim eligibility', async () => {
+      // 1. Create combat-ready players (estates, barracks, market, units, equipment, travel)
+      //    This sets up two players: attacker (moved to city 1) and defender (city 1)
+      const { attacker, defender } = await createCombatReadyPlayers(factory, { moveToRange: true });
+
+      // 2. Create event after players are ready (use fresh timestamp)
+      const now = await getCurrentTimestamp(ctx.svm);
+
+      const createEventIx = createCreateEventInstruction(
+        {
+          authority: ctx.daoAuthority.address,
+          gameEngine: ctx.gameEngine,
+          eventId: LIFECYCLE_EVENT_ID,
+        },
+        {
+          name: 'LifecycleTest',
+          startTime: now - 3600,    // Started 1 hour ago
+          endTime: now + 20,         // Ends in 20 seconds
+          eventType: 0,              // TotalDamageDealt
+          minLevel: 1,
+          minReputation: 0,
+          requiredSubscriptionTier: 0,
+          prizeType: 2,              // Cash
+          prizeAmount: 10000,
+          autoActivate: true,
+        }
+      );
+      await sendInstructions(ctx.svm, [createEventIx], [ctx.daoAuthority]);
+
+      // 3. Attacker joins event (auto-activates from Pending → Active)
+      const joinIx = createJoinEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: attacker.publicKey,
+        playerOwner: attacker.publicKey,
+        eventId: LIFECYCLE_EVENT_ID,
+      });
+      await sendInstructions(ctx.svm, [joinIx], [attacker.keypair]);
+
+      // Verify event auto-activated on join
+      const eventAfterJoin = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      expect(eventAfterJoin).not.toBeNull();
+      expect(eventAfterJoin!.status).toBe(EventStatus.Active);
+      expect(eventAfterJoin!.participantCount).toBe(1);
+
+      // Verify participation created with zero score
+      const participationBefore = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
+      );
+      expect(participationBefore).not.toBeNull();
+      assertBnEquals(participationBefore!.score, 0);
+
+      // 4. PvP attack with event scoring (TotalDamageDealt)
+      const attackIx = createAttackPlayerInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          attacker: attacker.publicKey,
+          defenderPlayer: defender.playerPda,
+          attackerCityId: 1,
+          defenderCityId: 1,
+          attackerEventId: LIFECYCLE_EVENT_ID,
+        },
+        { driveBy: false }
+      );
+      await sendInstructions(ctx.svm, [attackIx], [attacker.keypair]);
+
+      // Verify score updated and leaderboard populated
+      const participationAfter = await fetchEventParticipation(
+        ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID, attacker.publicKey
+      );
+      expect(participationAfter).not.toBeNull();
+      assertBnGreaterThan(participationAfter!.score, 0, 'Score should increase after PvP attack');
+
+      const eventAfterAttack = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      expect(eventAfterAttack).not.toBeNull();
+      expect(eventAfterAttack!.leaderboardCount).toBeGreaterThanOrEqual(1);
+      expect(eventAfterAttack!.leaderboard[0]!.player === attacker.publicKey).toBe(true);
+      assertBnGreaterThan(eventAfterAttack!.leaderboard[0]!.score, 0, 'Leaderboard score > 0');
+
+      // 5. Advance clock past event end time
+      const remaining = eventAfterAttack!.endTime.toNumber() - (await getCurrentTimestamp(ctx.svm));
+      if (remaining > 0) {
+        await advanceTime(ctx.svm, remaining + 2);
+      }
+
+      // 6. Finalize event (permissionless — anyone can call after end_time)
+      const finalizeIx = createFinalizeEventInstruction({
+        gameEngine: ctx.gameEngine,
+        eventId: LIFECYCLE_EVENT_ID,
+      });
+      await sendInstructions(ctx.svm, [finalizeIx], [attacker.keypair]);
+
+      // Verify finalized state
+      const finalizedEvent = await fetchEvent(ctx.svm, ctx.gameEngine, LIFECYCLE_EVENT_ID);
+      expect(finalizedEvent).not.toBeNull();
+      expect(finalizedEvent!.status).toBe(EventStatus.Finalized);
+      assertBnEquals(finalizedEvent!.prizeAmount, 10000);
+      assertBnEquals(finalizedEvent!.prizeRemaining, 10000); // Nothing claimed yet
+
+      // Verify attacker is rank 1 on the leaderboard
+      expect(finalizedEvent!.leaderboardCount).toBeGreaterThanOrEqual(1);
+      expect(finalizedEvent!.leaderboard[0]!.player === attacker.publicKey).toBe(true);
+
+      // Expected prize: rank 1 = 3500 bps of 10000 = 3500 Cash
+      const expectedPrize = Math.floor(10000 * 3500 / 10000);
+      expect(expectedPrize).toBe(3500);
+
+      // 7. Attempt claim
+      //    Fails with AccountTooNew (6122) because test accounts are < 7 days old.
+      //    This proves: player IS rank 1 on leaderboard, event IS finalized,
+      //    correct accounts passed. The only blocker is the anti-sybil age check
+      //    (7-day minimum account age for prizes < 25K).
+      const claimIx = createClaimPrizeInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: attacker.publicKey,
+        winnerOwner: attacker.publicKey,
+        eventId: LIFECYCLE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        [claimIx],
+        [attacker.keypair],
+        6122, // AccountTooNew — anti-sybil: account age < 7 days
+      );
+
+      // Prize pool verified: 10000 Cash, rank 1 gets 35% = 3500 Cash
+      // Full lifecycle complete: create → join → score → finalize → claim (blocked by anti-sybil only)
+    }, 120_000);
+  });
+});

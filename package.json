@@ -3,7 +3,7 @@
   "packageManager": "bun@1.2.10",
   "workspaces": [
     "apps/*",
-    "sdks/novus-mundus-ts"
+    "sdks/*"
   ],
   "scripts": {
     "dev": "turbo dev",
