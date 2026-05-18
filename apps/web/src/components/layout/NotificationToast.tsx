@@ -59,7 +59,7 @@ function ToastItem({
     <div
       role="button"
       tabIndex={0}
-      className={`flex max-w-sm cursor-pointer items-start gap-3 rounded-lg border border-border-default border-l-4 bg-[var(--nm-bg-raised)] p-3 ${typeBorder[type]}`}
+      className={`flex w-[calc(100vw-2rem)] max-w-sm cursor-pointer items-start gap-3 rounded-lg border border-border-default border-l-4 bg-[var(--nm-bg-raised)] p-3 md:w-80 ${typeBorder[type]}`}
       onClick={() => onDismiss(id)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onDismiss(id); }}
     >

@@ -91,8 +91,8 @@ export function MineTab() {
       {!gate.allowed && gate.missing.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {gate.missing.map((m) => (
-            <Link key={m.label} href={m.href} className="rounded-md border border-amber-800/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-text-gold hover:bg-amber-900/40">
-              {m.label} &rarr;
+            <Link key={m.label} href={m.href} className="inline-flex items-center gap-1 rounded-md border border-amber-800/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-text-gold hover:bg-amber-900/40">
+              {m.label}<ChevronRight className="h-3.5 w-3.5" />
             </Link>
           ))}
         </div>

@@ -680,9 +680,9 @@ export function HeroesTab() {
                           </p>
                           <Link
                             href={m.href}
-                            className="mt-1 inline-block rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
                           >
-                            {m.label} &rarr;
+                            {m.label}<ChevronRight className="h-3 w-3" />
                           </Link>
                         </div>
                       ))}
@@ -779,9 +779,9 @@ export function HeroesTab() {
                           </p>
                           <Link
                             href={m.href}
-                            className="mt-1 inline-block rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
                           >
-                            {m.label} &rarr;
+                            {m.label}<ChevronRight className="h-3 w-3" />
                           </Link>
                         </div>
                       ))}

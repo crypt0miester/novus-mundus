@@ -120,22 +120,7 @@ export function VaultTab() {
   return (
     <div className="space-y-4">
       <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Vault).line}</p>
-
-      {/* §6.8 — the two NOVIs, kept distinct and never summed. Locked NOVI is the
-          fuel that runs the holding; Reserved NOVI is earned treasure that vests. */}
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Locked NOVI &mdash; the holding&rsquo;s fuel
-        </h3>
-        <NoviGenerator />
-      </div>
-      <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Reserved NOVI &mdash; treasure that vests
-        </h3>
-        <NoviRewards />
-      </div>
-
+      
       {/* Vault transfer — cash sheltered behind the locked door. */}
       <FeatureGate feature={FEATURES.VAULT_TRANSFER}>
         <div className="card">

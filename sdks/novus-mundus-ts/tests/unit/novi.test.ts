@@ -381,14 +381,14 @@ describe('Package Helpers', () => {
 
     it('should have correct indices', () => {
       for (let i = 0; i < NOVI_PACKAGE_TIERS.length; i++) {
-        expect(NOVI_PACKAGE_TIERS[i].index).toBe(i);
+        expect(NOVI_PACKAGE_TIERS[i]!.index).toBe(i);
       }
     });
 
     it('should have increasing NOVI amounts', () => {
       for (let i = 1; i < NOVI_PACKAGE_TIERS.length; i++) {
-        expect(NOVI_PACKAGE_TIERS[i].noviAmount).toBeGreaterThan(
-          NOVI_PACKAGE_TIERS[i - 1].noviAmount
+        expect(NOVI_PACKAGE_TIERS[i]!.noviAmount).toBeGreaterThan(
+          NOVI_PACKAGE_TIERS[i - 1]!.noviAmount
         );
       }
     });

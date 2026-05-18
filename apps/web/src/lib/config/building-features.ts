@@ -81,6 +81,25 @@ export const BUILDING_FEATURE_MAP = new Map(
   BUILDING_FEATURES.map((b) => [b.id, b])
 );
 
+/** URL-safe slug for a building — its lowercased name (e.g. 14 → "mine"). */
+export function buildingSlug(id: number): string {
+  return BUILDING_FEATURE_MAP.get(id)?.name.toLowerCase() ?? String(id);
+}
+
+/**
+ * Resolve a `?building=` param back to a building ID. Accepts the slug
+ * ("mine") and, for backward compatibility, a raw numeric ID ("14").
+ * Returns null when it matches nothing.
+ */
+export function buildingIdFromSlug(slug: string): number | null {
+  if (!slug) return null;
+  const key = slug.toLowerCase();
+  const match = BUILDING_FEATURES.find((b) => b.name.toLowerCase() === key);
+  if (match) return match.id;
+  const num = Number(slug);
+  return Number.isInteger(num) && BUILDING_FEATURE_MAP.has(num) ? num : null;
+}
+
 /** Get all buildings grouped by category, in category order */
 export function getBuildingsByCategory(): [BuildingCategory, BuildingFeatureConfig[]][] {
   const map = new Map<BuildingCategory, BuildingFeatureConfig[]>();

@@ -278,9 +278,10 @@ export function CairnFloating() {
                   show("The Chronicle", "chronicle");
                   closePopover();
                 }}
-                className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
+                className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
               >
-                the climb →
+                the climb
+                <ChevronRight className="h-3 w-3" />
               </button>
             </div>
           </div>

@@ -71,12 +71,12 @@ describe('Terrain', () => {
 
       // Verify individual anchors
       for (let i = 0; i < NYC_TERRAIN.anchors.length; i++) {
-        expect(city!.anchors[i].x).toBe(NYC_TERRAIN.anchors[i].x);
-        expect(city!.anchors[i].y).toBe(NYC_TERRAIN.anchors[i].y);
-        expect(city!.anchors[i].mass).toBe(NYC_TERRAIN.anchors[i].mass);
-        expect(city!.anchors[i].lift).toBe(NYC_TERRAIN.anchors[i].lift);
-        expect(city!.anchors[i].pushX).toBe(NYC_TERRAIN.anchors[i].pushX);
-        expect(city!.anchors[i].pushY).toBe(NYC_TERRAIN.anchors[i].pushY);
+        expect(city!.anchors[i]!.x).toBe(NYC_TERRAIN.anchors[i]!.x);
+        expect(city!.anchors[i]!.y).toBe(NYC_TERRAIN.anchors[i]!.y);
+        expect(city!.anchors[i]!.mass).toBe(NYC_TERRAIN.anchors[i]!.mass);
+        expect(city!.anchors[i]!.lift).toBe(NYC_TERRAIN.anchors[i]!.lift);
+        expect(city!.anchors[i]!.pushX).toBe(NYC_TERRAIN.anchors[i]!.pushX);
+        expect(city!.anchors[i]!.pushY).toBe(NYC_TERRAIN.anchors[i]!.pushY);
       }
     });
 
@@ -203,19 +203,19 @@ describe('Terrain', () => {
       expect(city!.anchors.length).toBe(5);
 
       // Original anchors are unchanged
-      expect(city!.anchors[0].x).toBe(0);
-      expect(city!.anchors[0].y).toBe(0);
-      expect(city!.anchors[1].x).toBe(-2000);
-      expect(city!.anchors[2].x).toBe(2000);
+      expect(city!.anchors[0]!.x).toBe(0);
+      expect(city!.anchors[0]!.y).toBe(0);
+      expect(city!.anchors[1]!.x).toBe(-2000);
+      expect(city!.anchors[2]!.x).toBe(2000);
 
       // New anchors are appended
-      expect(city!.anchors[3].x).toBe(-3000);
-      expect(city!.anchors[3].y).toBe(-2000);
-      expect(city!.anchors[3].mass).toBe(210);
-      expect(city!.anchors[3].pushX).toBe(1);
-      expect(city!.anchors[4].x).toBe(3000);
-      expect(city!.anchors[4].y).toBe(2000);
-      expect(city!.anchors[4].pushY).toBe(-1);
+      expect(city!.anchors[3]!.x).toBe(-3000);
+      expect(city!.anchors[3]!.y).toBe(-2000);
+      expect(city!.anchors[3]!.mass).toBe(210);
+      expect(city!.anchors[3]!.pushX).toBe(1);
+      expect(city!.anchors[4]!.x).toBe(3000);
+      expect(city!.anchors[4]!.y).toBe(2000);
+      expect(city!.anchors[4]!.pushY).toBe(-1);
 
       // Header fields are unchanged
       expect(city!.terrainSeed).toBe(BASE_TERRAIN.seed);
@@ -237,8 +237,8 @@ describe('Terrain', () => {
 
       const city = await fetchCity(ctx.svm, ctx.gameEngine, TEST_CITY_ID);
       expect(city!.anchorCount).toBe(6); // 5 + 1
-      expect(city!.anchors[5].x).toBe(1500);
-      expect(city!.anchors[5].y).toBe(1500);
+      expect(city!.anchors[5]!.x).toBe(1500);
+      expect(city!.anchors[5]!.y).toBe(1500);
     });
 
     it('should reject append on city without terrain', async () => {

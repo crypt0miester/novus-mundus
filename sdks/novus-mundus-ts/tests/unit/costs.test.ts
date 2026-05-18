@@ -26,7 +26,6 @@ import {
 import {
   PHI,
   PHI_SQUARED,
-  GOLDEN_ROOT,
   NOVI_BASE_MULTIPLIER,
   NOVI_GOLDEN_MULTIPLIER,
 } from '../../src/calculators/constants';
@@ -131,18 +130,18 @@ describe('calculateCumulativeUpgradeCost', () => {
 // Research Cost Tests
 
 describe('calculateResearchCost', () => {
-  it('should return baseCost * GOLDEN_ROOT^0 = baseCost at level 0', () => {
+  it('should return baseCost at level 0', () => {
     expect(calculateResearchCost(100, 0)).toBe(100);
   });
 
-  it('should scale by GOLDEN_ROOT at level 1', () => {
-    const cost = calculateResearchCost(100, 1);
-    expect(cost).toBe(Math.floor(100 * GOLDEN_ROOT));
+  it('should scale by ×1.25 at level 1 (matches on-chain exp_growth(_, 5, 4, _))', () => {
+    // floor(100 * 5 / 4) = 125
+    expect(calculateResearchCost(100, 1)).toBe(125);
   });
 
-  it('should scale by GOLDEN_ROOT^2 at level 2', () => {
-    const cost = calculateResearchCost(100, 2);
-    expect(cost).toBe(Math.floor(100 * Math.pow(GOLDEN_ROOT, 2)));
+  it('should compound ×1.25 with per-step flooring at level 2', () => {
+    // floor(floor(100*1.25) * 1.25) = floor(125 * 1.25) = 156
+    expect(calculateResearchCost(100, 2)).toBe(156);
   });
 
   it('should increase with research level', () => {
@@ -151,11 +150,6 @@ describe('calculateResearchCost', () => {
     const cost5 = calculateResearchCost(100, 5);
     expect(cost1).toBeGreaterThan(cost0);
     expect(cost5).toBeGreaterThan(cost1);
-  });
-
-  it('should accept custom scaling factor', () => {
-    // baseCost * 2^3 = 100 * 8 = 800
-    expect(calculateResearchCost(100, 3, 2.0)).toBe(800);
   });
 
   it('should handle baseCost of 0', () => {
@@ -253,7 +247,7 @@ describe('calculateTotalHiringCost', () => {
     let manualTotal = 0;
     const costArr = [10, 25, 60, 15, 35, 80];
     for (let i = 0; i < 6; i++) {
-      manualTotal += calculateHiringCost(costArr[i], 1, ts, lng);
+      manualTotal += calculateHiringCost(costArr[i]!, 1, ts, lng);
     }
 
     expect(total).toBe(manualTotal);
@@ -631,12 +625,12 @@ describe('Cost Mathematical Properties', () => {
     }
   });
 
-  it('research cost should use GOLDEN_ROOT scaling', () => {
+  it('research cost should compound ×1.25 per level, flooring each step', () => {
     const baseCost = 500;
+    let expected = baseCost;
     for (let level = 0; level <= 5; level++) {
-      const cost = calculateResearchCost(baseCost, level);
-      const expected = Math.floor(baseCost * Math.pow(GOLDEN_ROOT, level));
-      expect(cost).toBe(expected);
+      expect(calculateResearchCost(baseCost, level)).toBe(expected);
+      expected = Math.floor((expected * 5) / 4);
     }
   });
 

@@ -94,8 +94,8 @@ function buildView(events: NonNullable<ReturnType<typeof useCombatOutcome.getSta
     sub = `${RARITY[num(defeated.encounterType)] ?? "Encounter"} · Level ${num(defeated.level)}`;
     const cash = num(defeated.lootCash);
     const novi = num(defeated.lootNovi);
-    if (cash > 0) rows.push({ label: "Loot — cash", value: `$${fmt(cash)}` });
-    if (novi > 0) rows.push({ label: "Loot — NOVI", value: fmt(novi) });
+    if (cash > 0) rows.push({ label: "Loot · cash", value: `$${fmt(cash)}` });
+    if (novi > 0) rows.push({ label: "Loot · NOVI", value: fmt(novi) });
     if (cash > 0 || novi > 0) hint = "Unclaimed loot is waiting in your Inventory.";
   } else {
     tone = "survive";

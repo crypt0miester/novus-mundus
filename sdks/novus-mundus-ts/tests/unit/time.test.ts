@@ -451,15 +451,15 @@ describe('getTimeRange', () => {
     ];
 
     for (let i = 0; i < ranges.length - 1; i++) {
-      const endOfCurrent = ranges[i].split('-')[1];
-      const startOfNext = ranges[i + 1].split('-')[0];
+      const endOfCurrent = ranges[i]!.split('-')[1];
+      const startOfNext = ranges[i + 1]!.split('-')[0];
       expect(endOfCurrent).toBe(startOfNext);
     }
 
     // First starts at 00:00
-    expect(ranges[0].split('-')[0]).toBe('00:00');
+    expect(ranges[0]!.split('-')[0]).toBe('00:00');
     // Last ends at 00:00 (midnight wrap)
-    expect(ranges[ranges.length - 1].split('-')[1]).toBe('00:00');
+    expect(ranges[ranges.length - 1]!.split('-')[1]).toBe('00:00');
   });
 
   it('should return Unknown for invalid period', () => {

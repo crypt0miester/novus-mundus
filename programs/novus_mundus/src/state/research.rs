@@ -112,10 +112,10 @@ impl ResearchTemplate {
 
     /// Calculate NOVI cost for a specific level (no u128!)
     pub fn calculate_novi_cost(&self, level: u8) -> u64 {
-        // Cost = base_cost * (1.8 ^ level)
+        // Cost = base_cost * (1.25 ^ level)
         // Using exp_growth with interleaved multiply/divide to stay in u64
-        // 1.8 = 18/10
-        exp_growth(self.base_novi_cost, 18, 10, level as u32).unwrap_or(u64::MAX)
+        // 1.25 = 5/4
+        exp_growth(self.base_novi_cost, 5, 4, level as u32).unwrap_or(u64::MAX)
     }
 
     /// Calculate time in seconds for a specific level (no i128!)

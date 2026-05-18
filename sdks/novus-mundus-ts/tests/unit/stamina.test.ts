@@ -153,7 +153,7 @@ describe('hasEnoughStamina', () => {
 
   it('should check correct cost for each encounter type', () => {
     for (let type = 0; type <= 5; type++) {
-      const cost = ENCOUNTER_STAMINA_COSTS[type];
+      const cost = ENCOUNTER_STAMINA_COSTS[type]!;
       expect(hasEnoughStamina(cost, type)).toBe(true);
       expect(hasEnoughStamina(cost - 1, type)).toBe(false);
     }
@@ -221,7 +221,7 @@ describe('consumeStamina', () => {
 
   it('should use correct cost for each encounter type', () => {
     for (let type = 0; type <= 5; type++) {
-      const cost = ENCOUNTER_STAMINA_COSTS[type];
+      const cost = ENCOUNTER_STAMINA_COSTS[type]!;
       const [remaining, success] = consumeStamina(cost, type);
       expect(success).toBe(true);
       expect(remaining).toBe(0);

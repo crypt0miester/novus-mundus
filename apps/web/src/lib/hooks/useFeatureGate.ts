@@ -332,7 +332,7 @@ function evaluateReq(
       return {
         label: `Research ${flagName}`,
         detail: `Requires ${flagName} research to be completed`,
-        href: "/estate?tab=research",
+        href: "/estate?tab=academy",
         narrative:
           "The work is known, but the knowing of it is not. The Academy must dig it back to the light before the holding can put it to use.",
       };

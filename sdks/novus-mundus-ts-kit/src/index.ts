@@ -88,5 +88,8 @@ export * from './subscriptions/index';
 // Validation exports
 export * from './validation/index';
 
+// RPC helper exports
+export * from './rpc';
+
 // Client exports
 export * from './client';

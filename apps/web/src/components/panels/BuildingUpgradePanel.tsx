@@ -140,7 +140,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       {/* Build / Upgrade detail */}
       <div>
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          {isUpgrade ? "Upgrade" : "Build"} — {config.name}
+          {isUpgrade ? "Upgrade" : "Build"}: {config.name}
         </h3>
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div>

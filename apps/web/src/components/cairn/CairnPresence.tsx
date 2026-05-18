@@ -244,9 +244,10 @@ export function CairnPresence() {
           <button
             type="button"
             onClick={() => show("The Chronicle", "chronicle")}
-            className="pointer-events-auto text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
+            className="pointer-events-auto inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
           >
-            the climb →
+            the climb
+            <ChevronRight className="h-3 w-3" />
           </button>
         </div>
         {/* The tail, pointing down at the stone below. */}

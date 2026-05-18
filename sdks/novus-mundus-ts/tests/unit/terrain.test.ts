@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import {
   terrainElevation,
   isPassable,
@@ -283,10 +283,10 @@ describe('serialization', () => {
     const t = makeTerrain([{ x: -1234, y: 5678, mass: 200, lift: 45, pushX: -3, pushY: 7, moisture: 100 }]);
     const buf = serializeTerrain(t);
     const parsed = deserializeTerrain(buf, 0);
-    expect(parsed.anchors[0].x).toBe(-1234);
-    expect(parsed.anchors[0].y).toBe(5678);
-    expect(parsed.anchors[0].pushX).toBe(-3);
-    expect(parsed.anchors[0].pushY).toBe(7);
+    expect(parsed.anchors[0]!.x).toBe(-1234);
+    expect(parsed.anchors[0]!.y).toBe(5678);
+    expect(parsed.anchors[0]!.pushX).toBe(-3);
+    expect(parsed.anchors[0]!.pushY).toBe(7);
   });
 });
 

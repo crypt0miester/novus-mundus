@@ -62,9 +62,10 @@ export function GemAction({
         </div>
         <Link
           href="/shop"
-          className="mt-0.5 rounded-md bg-amber-900/20 px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+          className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-amber-900/20 px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
         >
-          Get Gems →
+          Get Gems
+          <ChevronRight className="h-3.5 w-3.5" />
         </Link>
       </div>
     );

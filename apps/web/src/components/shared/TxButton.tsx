@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { animate } from "animejs";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type TxPhase =
@@ -20,11 +21,14 @@ interface TxButtonProps {
   className?: string;
 }
 
+// Text shown for phases that swap the button label. The "working" phases
+// (preparing, signing, sending) are not here — they keep the action label +
+// a spinner so the button stays stable; see the render below.
 const phaseLabels: Record<TxPhase, string> = {
   idle: "",
-  preparing: "Preparing...",
-  signing: "Sign in wallet...",
-  sending: "Confirming...",
+  preparing: "",
+  signing: "",
+  sending: "",
   confirmed: "Success!",
   failed: "Failed",
 };
@@ -78,6 +82,10 @@ export function TxButton({
       "bg-red-900/50 text-red-400 hover:bg-red-900/70 border border-red-800",
   };
 
+  // A tx is in flight — keep the action label, just add a spinner.
+  const isWorking =
+    phase === "preparing" || phase === "signing" || phase === "sending";
+
   return (
     <button
       ref={btnRef}
@@ -101,9 +109,16 @@ export function TxButton({
         style={{ width: "0%" }}
       />
 
-      {/* Label */}
+      {/* Spinner — while a tx is in flight it just joins the button's own
+          flex layout, so the action label/content keeps its exact placement
+          (the button never swaps to a "Confirming..." text). */}
+      {isWorking && (
+        <Loader2 className="relative z-10 h-4 w-4 shrink-0 animate-spin" />
+      )}
+
+      {/* Label — kept through the working phases; only outcomes swap text. */}
       <span className="relative z-10 contents">
-        {phase === "idle" ? children : phaseLabels[phase]}
+        {phase === "idle" || isWorking ? children : phaseLabels[phase]}
       </span>
     </button>
   );

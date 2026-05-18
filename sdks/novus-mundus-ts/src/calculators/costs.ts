@@ -7,7 +7,6 @@
 import {
   PHI,
   PHI_SQUARED,
-  GOLDEN_ROOT,
   applyBps,
   applyBpsPenalty,
   NOVI_BASE_MULTIPLIER,
@@ -188,19 +187,27 @@ export function calculateCumulativeUpgradeCost(
 }
 
 /**
- * Calculate research cost.
+ * NOVI cost to research a node at a given level.
  *
- * @param baseCost - Base cost for this research
- * @param researchLevel - Current research level
- * @param scalingFactor - Scaling factor per level (default √φ = 1.272)
- * @returns Cost to research next level
+ * Mirrors the on-chain `ResearchTemplate::calculate_novi_cost` exactly —
+ * `exp_growth(baseCost, 5, 4, level)`: baseCost compounded by ×1.25 per
+ * level, floored at every step (matching the program's integer math). Using
+ * a different factor here would let the UI show a cost lower than the chain
+ * actually charges, producing a false "you can afford it".
+ *
+ * @param baseCost - Template base NOVI cost (level-1 base)
+ * @param researchLevel - Target research level
+ * @returns Cost to research that level
  */
 export function calculateResearchCost(
   baseCost: number,
   researchLevel: number,
-  scalingFactor: number = GOLDEN_ROOT
 ): number {
-  return Math.floor(baseCost * Math.pow(scalingFactor, researchLevel));
+  let cost = Math.floor(baseCost);
+  for (let i = 0; i < researchLevel; i++) {
+    cost = Math.floor((cost * 5) / 4);
+  }
+  return cost;
 }
 
 // NOVI Costs

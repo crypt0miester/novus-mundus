@@ -15,7 +15,7 @@ import { bpsToPercent } from "@/lib/utils";
 import { getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling, findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
 import { BuildingGrid } from "./_components/building-grid";
 import { FeatureView, hasCenterView } from "./_components/feature-view";
-import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
+import { BUILDING_FEATURE_MAP, buildingSlug, buildingIdFromSlug } from "@/lib/config/building-features";
 import { Arrival } from "@/components/arrival/Arrival";
 import { buildingPhase } from "@/lib/narrative";
 import MagicRings from "@/components/shared/animations/MagicRing";
@@ -91,7 +91,8 @@ function EstateContent() {
 
   const handleOpenFeature = useCallback(
     (buildingId: number) => {
-      setActiveBuilding(String(buildingId));
+      // Use a readable slug in the URL (?building=mine), not a raw id.
+      setActiveBuilding(buildingSlug(buildingId));
     },
     [setActiveBuilding]
   );
@@ -126,13 +127,15 @@ function EstateContent() {
   }
 
   // If a building feature view is active and the building is usable, show it.
-  if (activeBuilding && hasCenterView(Number(activeBuilding))) {
-    const slot = estate ? findBuilding(estate, Number(activeBuilding)) : null;
+  // The ?building= param carries a readable slug ("mine") — resolve it to an id.
+  const activeBuildingId = buildingIdFromSlug(activeBuilding);
+  if (activeBuildingId !== null && hasCenterView(activeBuildingId)) {
+    const slot = estate ? findBuilding(estate, activeBuildingId) : null;
     const phase = buildingPhase(slot, now);
     if (phase === "standing" || phase === "improving" || phase === "improved") {
       return (
         <PageTransition>
-          <FeatureView buildingId={Number(activeBuilding)} />
+          <FeatureView buildingId={activeBuildingId} />
         </PageTransition>
       );
     }

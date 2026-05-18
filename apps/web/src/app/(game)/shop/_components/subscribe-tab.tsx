@@ -164,8 +164,8 @@ export function SubscribeTab() {
         <h2 className="font-display text-lg font-semibold text-text-primary">
           A Patron&apos;s Charter
         </h2>
-        <p className="mt-1 max-w-prose text-xs text-text-muted">
-          A charter is a standing arrangement with a patron — it multiplies your
+        <p className="mt-1 text-xs text-text-muted">
+          A charter is a standing arrangement with a patron, it multiplies your
           NOVI generator, widens your vault, and grants a signing bounty the
           moment it is sealed. Higher charters compound everything below.
         </p>
@@ -214,7 +214,7 @@ export function SubscribeTab() {
               {expiringSoon ? "Renew before it lapses — " : "If this charter lapses, "}
               your generator drops{" "}
               <span className="font-semibold text-text-secondary">
-                {asMultiplier(curGenRatio)} → 1×
+                {asMultiplier(curGenRatio)} to 1×
               </span>{" "}
               and your vault shrinks to{" "}
               <span className="font-semibold text-text-secondary">

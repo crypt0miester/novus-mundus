@@ -136,7 +136,7 @@ export default function DashboardPage() {
                       className="flex items-center justify-between text-sm text-text-gold hover:opacity-80 sm:gap-2"
                     >
                       <span>{lootCount} unclaimed loot</span>
-                      <span>Claim &rarr;</span>
+                      <span className="inline-flex items-center gap-0.5">Claim<ChevronRight className="h-3.5 w-3.5" /></span>
                     </button>
                   )}
                 </div>

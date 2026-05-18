@@ -82,7 +82,7 @@ export function DailyActivityTracker() {
                   )}`
                 : `${WINDOW_GLYPH[cw]} ${WINDOW_LABEL[cw]}`}
           </span>
-          <span className="font-semibold text-text-gold">tap →</span>
+          <span className="inline-flex items-center gap-0.5 font-semibold text-text-gold">tap<ChevronRight className="h-3 w-3" /></span>
         </span>
       </div>
     </button>

@@ -15,7 +15,7 @@ export interface Anchor {
   lift: number;     // u8 — buoyancy (0=none, 255=max)
   pushX: number;    // i8 — directional pressure x
   pushY: number;    // i8 — directional pressure y
-  moisture: number; // u8 — 0=arid, 255=lush
+  moisture?: number; // u8 — 0=arid, 255=lush; defaults to 128 when absent
 }
 
 /** Terrain config from CityAccount. */
@@ -57,18 +57,20 @@ export const GRID_PRECISION = 10_000;
 export function terrainElevation(terrain: CityTerrain, ox: number, oy: number): number {
   const { anchors, seed } = terrain;
   if (anchors.length < 2) {
-    if (anchors.length === 1) return buoyancy(anchors[0].mass, anchors[0].lift);
-    return 128;
+    const only = anchors[0];
+    return only ? buoyancy(only.mass, only.lift) : 128;
   }
 
   const [ni, si, dn, ds] = twoNearest(anchors, ox, oy);
+  const an = anchors[ni]!;
+  const as = anchors[si]!;
   // Blend buoyancy between nearest two anchors for smooth boundaries
-  const b1 = buoyancy(anchors[ni].mass, anchors[ni].lift);
-  const b2 = buoyancy(anchors[si].mass, anchors[si].lift);
+  const b1 = buoyancy(an.mass, an.lift);
+  const b2 = buoyancy(as.mass, as.lift);
   const total = dn + ds;
   const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
   const base = b1 + (((b2 - b1) * t / 256) | 0);
-  const pressure = pressureEffect(anchors[ni], anchors[si], dn, ds);
+  const pressure = pressureEffect(an, as, dn, ds);
   const texture = ((noise(seed, ox, oy) - 128) / 4) | 0;
 
   return clamp(base + pressure + texture, 0, 255);
@@ -78,11 +80,11 @@ export function terrainElevation(terrain: CityTerrain, ox: number, oy: number): 
 export function terrainMoisture(terrain: CityTerrain, ox: number, oy: number): number {
   const { anchors } = terrain;
   if (anchors.length < 2) {
-    return anchors.length === 1 ? (anchors[0].moisture ?? 128) : 128;
+    return anchors[0]?.moisture ?? 128;
   }
   const [ni, si, dn, ds] = twoNearest(anchors, ox, oy);
-  const m1 = anchors[ni].moisture ?? 128;
-  const m2 = anchors[si].moisture ?? 128;
+  const m1 = anchors[ni]!.moisture ?? 128;
+  const m2 = anchors[si]!.moisture ?? 128;
   const total = dn + ds;
   const t = total > 0 ? ((dn * 256 / total) | 0) : 0;
   return clamp(m1 + (((m2 - m1) * t / 256) | 0), 0, 255);
@@ -206,7 +208,7 @@ export function serializeTerrain(terrain: CityTerrain): Buffer {
   buf.writeUInt8(terrain.version ?? 0, 8);
 
   for (let i = 0; i < terrain.anchors.length; i++) {
-    const a = terrain.anchors[i];
+    const a = terrain.anchors[i]!;
     const off = TERRAIN_HEADER_SIZE + i * ANCHOR_SIZE;
     buf.writeInt16LE(a.x, off);
     buf.writeInt16LE(a.y, off + 2);
@@ -337,8 +339,9 @@ function twoNearest(
   let secondIdx = 0, secondD = Number.MAX_SAFE_INTEGER;
 
   for (let i = 0; i < anchors.length; i++) {
-    const dx = ox - anchors[i].x;
-    const dy = oy - anchors[i].y;
+    const a = anchors[i]!;
+    const dx = ox - a.x;
+    const dy = oy - a.y;
     const d = dx * dx + dy * dy;
     if (d < bestD) {
       secondD = bestD; secondIdx = bestIdx;
