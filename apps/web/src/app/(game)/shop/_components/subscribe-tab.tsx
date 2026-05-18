@@ -421,12 +421,25 @@ export function SubscribeTab() {
               {/* Action */}
               <div className="mt-4">
                 {isCurrent ? (
-                  <div
-                    className="rounded-lg border py-2.5 text-center text-xs font-semibold uppercase tracking-wider"
-                    style={{ borderColor: th.accent, color: th.bright }}
-                  >
-                    Charter Held
-                  </div>
+                  <>
+                    <TxButton
+                      onClick={(reportPhase) => handlePurchase(idx, reportPhase)}
+                      variant="secondary"
+                      className="w-full"
+                    >
+                      {durationDays > 0
+                        ? `Extend charter +${durationDays}d`
+                        : "Extend charter"}
+                    </TxButton>
+                    {sub.expiresAt > 0 && durationDays > 0 && (
+                      <p className="mt-1.5 text-center text-[11px] text-text-muted">
+                        Stacks onto your term — new expiry{" "}
+                        {new Date(
+                          (sub.expiresAt + durationDays * 86_400) * 1000,
+                        ).toLocaleDateString()}
+                      </p>
+                    )}
+                  </>
                 ) : isLocked ? (
                   <div className="rounded-lg border border-zinc-800 bg-surface py-2.5 text-center text-[11px] text-text-muted">
                     Available once your current charter ends
