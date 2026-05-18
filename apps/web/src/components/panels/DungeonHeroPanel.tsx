@@ -1,15 +1,9 @@
 "use client";
 
+import { getBuffStatByAttrKey } from "novus-mundus-sdk";
 import { useUnlockedHeroes } from "@/lib/hooks/useUnlockedHeroes";
 import { useDungeonHeroStore } from "@/lib/store/dungeon-hero";
 import { useRightPanelStore } from "@/lib/store/right-panel";
-
-const BUFF_LABELS: Record<string, string> = {
-  Attack: "ATK", Defense: "DEF", Economy: "ECO", XPGain: "XP",
-  Training: "TRN", Rally: "RLY", Crit: "CRT", Synchrony: "SYN",
-  Storage: "STO", Weapon: "WPN", Stamina: "STA", Produce: "PRD",
-  Units: "UNT", Encounter: "ENC", Loot: "LT", Armor: "ARM",
-};
 
 /** Asset attributes that aren't buffs — excluded from the buff chips. */
 const META_ATTRS = new Set(["Template", "Serial", "Origin", "Level", "XP"]);
@@ -76,7 +70,7 @@ export function DungeonHeroPanel() {
                     key={k}
                     className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted"
                   >
-                    {BUFF_LABELS[k] ?? k} {v}
+                    {getBuffStatByAttrKey(k)?.abbr ?? k} {v}
                   </span>
                 ))}
               </div>

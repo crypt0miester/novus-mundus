@@ -102,8 +102,8 @@ pub fn safe_add(a: u64, b: u64) -> Option<u64> {
 ///
 /// # Example
 /// ```ignore
-/// exp_growth(10, 3, 2, 5) // 10 × 1.5^5 ≈ 75
-/// exp_growth(10, 18, 10, 3) // 10 × 1.8^3 ≈ 58
+/// exp_growth(10, 3, 2, 5) // 10 × 1.5^5, interleaved integer math = 73
+/// exp_growth(10, 18, 10, 3) // 10 × 1.8^3, interleaved integer math = 57
 /// ```
 #[inline]
 pub fn exp_growth(base: u64, numerator: u64, denominator: u64, iterations: u32) -> Option<u64> {
@@ -221,8 +221,7 @@ mod tests {
         assert!(result.is_some());
         // 10^13 × 1.375 × 1.272 × 1.5 ≈ 2.62 × 10^13
         let value = result.unwrap();
-        assert!(value > 2_000_000_000_000);
-        assert!(value < 3_000_000_000_000);
+        assert_eq!(value, 26_235_000_000_000);
     }
 
     #[test]
@@ -235,11 +234,12 @@ mod tests {
 
     #[test]
     fn test_exp_growth() {
-        // 10 × 1.5^5 = 10 × 7.59375 ≈ 75
+        // 10 × 1.5^5: each step floors (15, 22, 33, 49, 73) — interleaved
+        // integer math, so the real 75.9 lands at 73.
         let result = exp_growth(10, 3, 2, 5);
-        assert_eq!(result, Some(75));
+        assert_eq!(result, Some(73));
 
-        // 100 × 1.8^3 = 100 × 5.832 ≈ 583
+        // 100 × 1.8^3 = 100 × 5.832 → 583 (steps divide cleanly)
         let result = exp_growth(100, 18, 10, 3);
         assert_eq!(result, Some(583));
     }

@@ -6,9 +6,10 @@ import { useWorldCities, useCitizenStatus } from "@/lib/hooks/world";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { Badge } from "@/components/shared/Badge";
 import { cn } from "@/lib/utils";
+import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 
-const CITY_TYPE_LABELS = ["Capital", "Trade", "Combat", "Resource"] as const;
-const CITY_TYPE_VARIANTS = ["legendary", "gold", "danger", "success"] as const;
+// Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
+const CITY_TYPE_VARIANTS = ["legendary", "success", "danger", "gold"] as const;
 
 export function CityBrowser() {
   const { data: cities, isLoading } = useWorldCities();
@@ -56,7 +57,7 @@ export function CityBrowser() {
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     <Badge variant={CITY_TYPE_VARIANTS[typeIndex] as any}>
-                      {CITY_TYPE_LABELS[typeIndex]}
+                      {CITY_TYPE_NAMES[typeIndex]}
                     </Badge>
                     {isCurrentCity && (
                       <span className="text-[10px] font-semibold text-text-gold">

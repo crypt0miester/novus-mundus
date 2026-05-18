@@ -411,7 +411,7 @@ fn create_default_game_engine(
             reputation_synchrony_bonuses: [0, 300, 500, 800, 1000], // [0%, 3%, 5%, 8%, 10%]
 
             // Encounter level system
-            max_encounter_level_diff: 10,               // Can attack ±10 levels
+            max_encounter_level_diff: 30,               // Can attack ±30 levels
             _padding4: [0; 3],
 
             // Loot scaling

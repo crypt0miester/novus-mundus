@@ -142,7 +142,7 @@ export enum GameError {
   InvalidCityId = 6428,
   WrongCity = 6429,
 
-  // Encounter Errors (6500-6514)
+  // Encounter Errors (6500-6515)
   EncounterNotFound = 6500,
   EncounterDead = 6501,
   EncounterDespawned = 6502,
@@ -158,6 +158,7 @@ export enum GameError {
   NotSelectedForRandomEncounter = 6512,
   InsufficientStamina = 6513,
   WrongTimeForEncounter = 6514,
+  EncounterStillActive = 6515,
 
   // Event Errors (6600-6612)
   EventNotFound = 6600,
@@ -627,6 +628,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.NotSelectedForRandomEncounter]: 'Not selected for random encounter',
   [GameError.InsufficientStamina]: 'Insufficient stamina',
   [GameError.WrongTimeForEncounter]: 'Wrong time for this encounter',
+  [GameError.EncounterStillActive]: 'Encounter cannot be cleaned up yet (still within the despawn grace window)',
 
   // Event Errors
   [GameError.EventNotFound]: 'Event not found',

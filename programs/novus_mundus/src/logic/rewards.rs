@@ -520,22 +520,25 @@ mod tests {
         let high_level = calculate_fragment_amount(20, 2, 0, 1.0);
         assert!(high_level > low_level);
 
-        // Time-of-day bonus: φ multiplier should increase drops
-        let baseline = calculate_fragment_amount(10, 2, 0, 1.0);
-        let with_phi = calculate_fragment_amount(10, 2, 0, 1.618);
+        // Time-of-day bonus: φ multiplier should increase drops.
+        // Uses a high level + rarity so the amounts are large enough that
+        // integer truncation in chain_bp doesn't distort the ratio.
+        let baseline = calculate_fragment_amount(80, 4, 0, 1.0);
+        let with_phi = calculate_fragment_amount(80, 4, 0, 1.618);
         assert!(with_phi > baseline);
-        // Should be approximately 1.618x
+        // Should be approximately 1.618x (φ)
         let ratio = with_phi as f64 / baseline as f64;
         assert!(ratio > 1.5 && ratio < 1.7);
     }
 
     #[test]
     fn test_gem_amount_time_bonus() {
-        // Gems should also benefit from time-of-day bonus
-        let baseline = calculate_gem_amount(20, 2, 0, 1.0);
-        let with_phi = calculate_gem_amount(20, 2, 0, 1.618);
+        // Gems should also benefit from time-of-day bonus.
+        // High level + rarity keeps amounts large enough for a meaningful ratio.
+        let baseline = calculate_gem_amount(100, 4, 0, 1.0);
+        let with_phi = calculate_gem_amount(100, 4, 0, 1.618);
         assert!(with_phi > baseline);
-        // Should be approximately 1.618x
+        // Should be approximately 1.618x (φ)
         let ratio = with_phi as f64 / baseline as f64;
         assert!(ratio > 1.5 && ratio < 1.7);
     }

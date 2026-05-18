@@ -75,3 +75,73 @@ export function useFlashSales() {
     isSuccess: flashSales.size > 0 || (active && !loading),
   };
 }
+
+export function useDailyDeals() {
+  const dailyDeals = useAccountStore((s) => s.dailyDeals);
+  const loading = useAccountStore((s) => s.loading);
+  const active = useAccountStore((s) => s.subscriptionActive);
+
+  const data = useMemo(
+    () => Array.from(dailyDeals.values()).sort((a, b) => a.slot - b.slot),
+    [dailyDeals]
+  );
+
+  return {
+    data,
+    isLoading: !active || loading,
+    isSuccess: dailyDeals.size > 0 || (active && !loading),
+  };
+}
+
+export function useWeeklySale() {
+  const entry = useAccountStore((s) => s.weeklySale);
+  const loading = useAccountStore((s) => s.loading);
+  const active = useAccountStore((s) => s.subscriptionActive);
+
+  return {
+    data: entry ? { pubkey: entry.pubkey, account: entry.account } : null,
+    isLoading: !active || loading,
+    isSuccess: !!entry || (active && !loading),
+  };
+}
+
+export function useSeasonalSale() {
+  const entry = useAccountStore((s) => s.seasonalSale);
+  const loading = useAccountStore((s) => s.loading);
+  const active = useAccountStore((s) => s.subscriptionActive);
+
+  return {
+    data: entry ? { pubkey: entry.pubkey, account: entry.account } : null,
+    isLoading: !active || loading,
+    isSuccess: !!entry || (active && !loading),
+  };
+}
+
+export function useDaoPromotions() {
+  const daoPromotions = useAccountStore((s) => s.daoPromotions);
+  const loading = useAccountStore((s) => s.loading);
+  const active = useAccountStore((s) => s.subscriptionActive);
+
+  const data = useMemo(
+    () => Array.from(daoPromotions.values()),
+    [daoPromotions]
+  );
+
+  return {
+    data,
+    isLoading: !active || loading,
+    isSuccess: daoPromotions.size > 0 || (active && !loading),
+  };
+}
+
+/** The current player's purchase record for a given item, or null if none. */
+export function usePlayerPurchase(itemId: number | null) {
+  const playerPurchases = useAccountStore((s) => s.playerPurchases);
+  return useMemo(() => {
+    if (itemId == null) return null;
+    for (const e of playerPurchases.values()) {
+      if (e.itemId === itemId) return e.account;
+    }
+    return null;
+  }, [playerPurchases, itemId]);
+}

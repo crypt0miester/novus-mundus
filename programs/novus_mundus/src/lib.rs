@@ -144,6 +144,7 @@ pub fn process_instruction(
         // Encounter Management (70-79)
         70 => { msg!("spawn encounter"); processor::encounter::spawn::process(program_id, accounts, instruction_data) }
         71 => { msg!("claim loot"); processor::loot::claim::process(program_id, accounts, instruction_data) }
+        72 => { msg!("cleanup encounter"); processor::encounter::cleanup::process(program_id, accounts, instruction_data) }
 
         // Event System (80-89)
         80 => { msg!("create event"); processor::event::create::process(program_id, accounts, instruction_data) }

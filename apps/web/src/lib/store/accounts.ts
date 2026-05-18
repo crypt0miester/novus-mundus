@@ -63,6 +63,12 @@ interface BundleEntry extends AccountEntry<BundleAccount> {
 interface FlashSaleEntry extends AccountEntry<FlashSaleAccount> {
   saleId: number;
 }
+interface DailyDealEntry extends AccountEntry<DailyDealAccount> {
+  slot: number;
+}
+interface PlayerPurchaseEntry extends AccountEntry<PlayerPurchaseAccount> {
+  itemId: number;
+}
 
 interface AccountsState {
   // Core accounts (nullable until loaded)
@@ -90,6 +96,8 @@ interface AccountsState {
   shopItems: Map<string, ShopItemEntry>;
   bundles: Map<string, BundleEntry>;
   flashSales: Map<string, FlashSaleEntry>;
+  dailyDeals: Map<string, DailyDealEntry>;
+  playerPurchases: Map<string, PlayerPurchaseEntry>;
   locations: Map<string, AccountEntry<LocationAccount>>;
   researchTemplates: Map<string, AccountEntry<ResearchTemplateAccount>>;
   heroTemplates: Map<string, AccountEntry<HeroTemplateAccount>>;
@@ -106,13 +114,11 @@ interface AccountsState {
   rally: AccountEntry<RallyAccount> | null;
   reinforcement: AccountEntry<ReinforcementAccount> | null;
   dungeonRun: AccountEntry<DungeonRunAccount> | null;
-  dailyDeal: AccountEntry<DailyDealAccount> | null;
   shopConfig: AccountEntry<ShopConfigAccount> | null;
   estate: AccountEntry<EstateAccount> | null;
   researchProgress: AccountEntry<ResearchProgressAccount> | null;
   weeklySale: AccountEntry<WeeklySaleAccount> | null;
   seasonalSale: AccountEntry<SeasonalSaleAccount> | null;
-  playerPurchase: AccountEntry<PlayerPurchaseAccount> | null;
 
   // Lifecycle
   loading: boolean;
@@ -136,13 +142,12 @@ interface AccountsState {
   setRally: (pubkey: PublicKey, account: RallyAccount) => void;
   setReinforcement: (pubkey: PublicKey, account: ReinforcementAccount) => void;
   setDungeonRun: (pubkey: PublicKey, account: DungeonRunAccount) => void;
-  setDailyDeal: (pubkey: PublicKey, account: DailyDealAccount) => void;
   setShopConfig: (pubkey: PublicKey, account: ShopConfigAccount) => void;
   setEstate: (pubkey: PublicKey, account: EstateAccount) => void;
   setResearchProgress: (pubkey: PublicKey, account: ResearchProgressAccount) => void;
   setWeeklySale: (pubkey: PublicKey, account: WeeklySaleAccount) => void;
   setSeasonalSale: (pubkey: PublicKey, account: SeasonalSaleAccount) => void;
-  setPlayerPurchase: (pubkey: PublicKey, account: PlayerPurchaseAccount) => void;
+  upsertPlayerPurchase: (pubkey: PublicKey, account: PlayerPurchaseAccount, itemId?: number) => void;
 
   // Actions — collections
   upsertCity: (pubkey: PublicKey, account: CityAccount) => void;
@@ -174,9 +179,12 @@ interface AccountsState {
   upsertShopItem: (pubkey: PublicKey, account: ShopItemAccount, itemId?: number) => void;
   upsertBundle: (pubkey: PublicKey, account: BundleAccount, bundleId?: number) => void;
   upsertFlashSale: (pubkey: PublicKey, account: FlashSaleAccount, saleId?: number) => void;
+  upsertDailyDeal: (pubkey: PublicKey, account: DailyDealAccount, slot?: number) => void;
   // Bulk replace (for refetch after WS detects new entries)
   replaceAllBundles: (entries: BundleEntry[]) => void;
   replaceAllFlashSales: (entries: FlashSaleEntry[]) => void;
+  replaceAllDailyDeals: (entries: DailyDealEntry[]) => void;
+  replaceAllPlayerPurchases: (entries: PlayerPurchaseEntry[]) => void;
 
   setSubscriptionActive: (active: boolean) => void;
   reset: () => void;
@@ -221,6 +229,8 @@ const initialState = {
   shopItems: new Map() as Map<string, ShopItemEntry>,
   bundles: new Map() as Map<string, BundleEntry>,
   flashSales: new Map() as Map<string, FlashSaleEntry>,
+  dailyDeals: new Map() as Map<string, DailyDealEntry>,
+  playerPurchases: new Map() as Map<string, PlayerPurchaseEntry>,
   locations: new Map() as Map<string, AccountEntry<LocationAccount>>,
   researchTemplates: new Map() as Map<string, AccountEntry<ResearchTemplateAccount>>,
   heroTemplates: new Map() as Map<string, AccountEntry<HeroTemplateAccount>>,
@@ -235,13 +245,11 @@ const initialState = {
   rally: null,
   reinforcement: null,
   dungeonRun: null,
-  dailyDeal: null,
   shopConfig: null,
   estate: null,
   researchProgress: null,
   weeklySale: null,
   seasonalSale: null,
-  playerPurchase: null,
   loading: false,
   subscriptionActive: false,
   myPlayerPda: null,
@@ -267,13 +275,20 @@ export const useAccountStore = create<AccountsState>()(
     setRally: (pubkey, account) => set({ rally: { pubkey, account } }),
     setReinforcement: (pubkey, account) => set({ reinforcement: { pubkey, account } }),
     setDungeonRun: (pubkey, account) => set({ dungeonRun: { pubkey, account } }),
-    setDailyDeal: (pubkey, account) => set({ dailyDeal: { pubkey, account } }),
     setShopConfig: (pubkey, account) => set({ shopConfig: { pubkey, account } }),
     setEstate: (pubkey, account) => set({ estate: { pubkey, account } }),
     setResearchProgress: (pubkey, account) => set({ researchProgress: { pubkey, account } }),
     setWeeklySale: (pubkey, account) => set({ weeklySale: { pubkey, account } }),
     setSeasonalSale: (pubkey, account) => set({ seasonalSale: { pubkey, account } }),
-    setPlayerPurchase: (pubkey, account) => set({ playerPurchase: { pubkey, account } }),
+    upsertPlayerPurchase: (pubkey, account, itemId?) =>
+      set((s) => {
+        const key = pubkey.toBase58();
+        const next = new Map(s.playerPurchases);
+        const existing = s.playerPurchases.get(key);
+        const id = itemId ?? existing?.itemId ?? -1;
+        next.set(key, { pubkey, account, itemId: id });
+        return { playerPurchases: next };
+      }),
 
     // Collections
     upsertCity: (pubkey, account) => set((s) => ({ cities: upsertMap(s.cities, pubkey, account) })),
@@ -334,6 +349,17 @@ export const useAccountStore = create<AccountsState>()(
         return { flashSales: next };
       }),
 
+    // DailyDeal: slot is PDA-derived, not in account data
+    upsertDailyDeal: (pubkey, account, slot?) =>
+      set((s) => {
+        const key = pubkey.toBase58();
+        const next = new Map(s.dailyDeals);
+        const existing = s.dailyDeals.get(key);
+        const id = slot ?? existing?.slot ?? -1;
+        next.set(key, { pubkey, account, slot: id });
+        return { dailyDeals: next };
+      }),
+
     // Bulk replace after refetch (to pick up IDs for new entries)
     replaceAllBundles: (entries) =>
       set(() => {
@@ -347,6 +373,20 @@ export const useAccountStore = create<AccountsState>()(
         const next = new Map<string, FlashSaleEntry>();
         for (const e of entries) next.set(e.pubkey.toBase58(), e);
         return { flashSales: next };
+      }),
+
+    replaceAllDailyDeals: (entries) =>
+      set(() => {
+        const next = new Map<string, DailyDealEntry>();
+        for (const e of entries) next.set(e.pubkey.toBase58(), e);
+        return { dailyDeals: next };
+      }),
+
+    replaceAllPlayerPurchases: (entries) =>
+      set(() => {
+        const next = new Map<string, PlayerPurchaseEntry>();
+        for (const e of entries) next.set(e.pubkey.toBase58(), e);
+        return { playerPurchases: next };
       }),
 
     setSubscriptionActive: (active) => set({ subscriptionActive: active }),
@@ -371,6 +411,8 @@ export const useAccountStore = create<AccountsState>()(
       shopItems: new Map(),
       bundles: new Map(),
       flashSales: new Map(),
+      dailyDeals: new Map(),
+      playerPurchases: new Map(),
       locations: new Map(),
       researchTemplates: new Map(),
       heroTemplates: new Map(),

@@ -44,24 +44,25 @@ describe('xpRequiredForLevel', () => {
     expect(xpRequiredForLevel(2)).toBe(100);
   });
 
-  it('should return 250 for level 3', () => {
-    // 100 * 2.5^(3-2) = 100 * 2.5 = 250
-    expect(xpRequiredForLevel(3)).toBe(250);
+  it('should return 161 for level 3', () => {
+    // 100 * φ^(3-2) = 100 * 1.618 = 161 (floored)
+    expect(xpRequiredForLevel(3)).toBe(161);
   });
 
-  it('should return 625 for level 4', () => {
-    // 100 * 2.5^(4-2) = 100 * 6.25 = 625
-    expect(xpRequiredForLevel(4)).toBe(625);
+  it('should return 261 for level 4', () => {
+    // 100 * φ^(4-2) = 100 * 2.618 = 261 (floored)
+    expect(xpRequiredForLevel(4)).toBe(261);
   });
 
-  it('should return 1562 for level 5', () => {
-    // 100 * 2.5^(5-2) = 100 * 15.625 = 1562 (floored)
-    expect(xpRequiredForLevel(5)).toBe(1562);
+  it('should return 423 for level 5', () => {
+    // 100 * φ^(5-2) = 100 * 4.236 = 423 (floored)
+    expect(xpRequiredForLevel(5)).toBe(423);
   });
 
-  it('should follow exponential curve: 100 * 2.5^(level-2)', () => {
+  it('should follow exponential curve: 100 * φ^(level-2)', () => {
+    const PHI = 1.618033988749895;
     for (let level = 2; level <= 10; level++) {
-      const expected = Math.floor(100 * Math.pow(2.5, level - 2));
+      const expected = Math.floor(100 * Math.pow(PHI, level - 2));
       expect(xpRequiredForLevel(level)).toBe(expected);
     }
   });
@@ -96,8 +97,8 @@ describe('xpToNextLevel', () => {
     expect(xpToNextLevel(1)).toBe(100);
   });
 
-  it('should return 250 for level 2', () => {
-    expect(xpToNextLevel(2)).toBe(250);
+  it('should return 161 for level 2', () => {
+    expect(xpToNextLevel(2)).toBe(161);
   });
 
   it('should increase with level', () => {
@@ -126,14 +127,14 @@ describe('cumulativeXpForLevel', () => {
     expect(cumulativeXpForLevel(2)).toBe(100);
   });
 
-  it('should return 350 for level 3', () => {
-    // 100 + 250 = 350
-    expect(cumulativeXpForLevel(3)).toBe(350);
+  it('should return 261 for level 3', () => {
+    // 100 + 161 = 261
+    expect(cumulativeXpForLevel(3)).toBe(261);
   });
 
-  it('should return 975 for level 4', () => {
-    // 100 + 250 + 625 = 975
-    expect(cumulativeXpForLevel(4)).toBe(975);
+  it('should return 522 for level 4', () => {
+    // 100 + 161 + 261 = 522
+    expect(cumulativeXpForLevel(4)).toBe(522);
   });
 
   it('should equal sum of individual level requirements', () => {
@@ -171,13 +172,13 @@ describe('levelFromXp', () => {
     expect(levelFromXp(100)).toBe(2);
   });
 
-  it('should return level 3 for exactly 350 XP', () => {
-    // cumulative for level 3 = 350
-    expect(levelFromXp(350)).toBe(3);
+  it('should return level 3 for exactly 261 XP', () => {
+    // cumulative for level 3 = 261
+    expect(levelFromXp(261)).toBe(3);
   });
 
-  it('should return level 2 for 349 XP', () => {
-    expect(levelFromXp(349)).toBe(2);
+  it('should return level 2 for 260 XP', () => {
+    expect(levelFromXp(260)).toBe(2);
   });
 
   it('should be inverse of cumulativeXpForLevel', () => {
@@ -225,8 +226,9 @@ describe('levelAndOverflowFromXp', () => {
     expect(overflow).toBe(50);
   });
 
-  it('should return [3, 0] for exactly 350 XP', () => {
-    const [level, overflow] = levelAndOverflowFromXp(350);
+  it('should return [3, 0] for exactly 261 XP', () => {
+    // cumulative for level 3 = 100 + 161 = 261
+    const [level, overflow] = levelAndOverflowFromXp(261);
     expect(level).toBe(3);
     expect(overflow).toBe(0);
   });
@@ -277,16 +279,16 @@ describe('simulateGrantXp', () => {
   });
 
   it('should handle multi-level-up', () => {
-    // Level 1, 0 XP, grant 350 (cumulative for level 3) => level 3
-    const [level, xp, levelsGained] = simulateGrantXp(1, 0, 350);
+    // Level 1, 0 XP, grant 261 (cumulative for level 3) => level 3
+    const [level, xp, levelsGained] = simulateGrantXp(1, 0, 261);
     expect(level).toBe(3);
     expect(xp).toBe(0);
     expect(levelsGained).toBe(2);
   });
 
   it('should handle multi-level-up with overflow', () => {
-    // Level 1, 0 XP, grant 400 => level 3 with 50 overflow
-    const [level, xp, levelsGained] = simulateGrantXp(1, 0, 400);
+    // Level 1, 0 XP, grant 311 => level 3 (cumulative 261) with 50 overflow
+    const [level, xp, levelsGained] = simulateGrantXp(1, 0, 311);
     expect(level).toBe(3);
     expect(xp).toBe(50);
     expect(levelsGained).toBe(2);
@@ -398,8 +400,8 @@ describe('levelProgressPercent', () => {
   });
 
   it('should handle level 2 correctly', () => {
-    // Level 2 needs 250 XP for level 3
-    const percent = levelProgressPercent(2, 125);
+    // Level 2 needs 161 XP for level 3; 81/161 ≈ 50%
+    const percent = levelProgressPercent(2, 81);
     expect(percent).toBe(50);
   });
 
@@ -429,8 +431,8 @@ describe('xpRemainingToNextLevel', () => {
   });
 
   it('should handle level 2', () => {
-    // Level 2 needs 250 for level 3
-    expect(xpRemainingToNextLevel(2, 100)).toBe(150);
+    // Level 2 needs 161 for level 3
+    expect(xpRemainingToNextLevel(2, 100)).toBe(61);
   });
 });
 
@@ -452,7 +454,7 @@ describe('formatLevelProgress', () => {
   });
 
   it('should use locale formatting for large numbers', () => {
-    // Level 5 needs 1562 XP; grant 1000
+    // Level 5 needs 423 XP; grant 1000 (progress caps at 100%)
     const result = formatLevelProgress(5, 1000);
     expect(result).toContain('XP');
     // Percentage should be present
@@ -540,13 +542,13 @@ describe('estimateXpPerHour', () => {
 // Mathematical Properties
 
 describe('Progression Mathematical Properties', () => {
-  it('XP curve should be exponential (ratio between levels is constant 2.5)', () => {
-    for (let level = 3; level <= 8; level++) {
+  it('XP curve should be exponential (ratio between levels is constant φ ≈ 1.618)', () => {
+    for (let level = 4; level <= 8; level++) {
       const xpCurrent = xpRequiredForLevel(level);
       const xpPrev = xpRequiredForLevel(level - 1);
-      // Ratio should be approximately 2.5 (may differ by 1 due to flooring)
+      // Ratio should be approximately φ (may differ slightly due to flooring)
       const ratio = xpCurrent / xpPrev;
-      expect(ratio).toBeCloseTo(2.5, 1);
+      expect(ratio).toBeCloseTo(1.618, 1);
     }
   });
 

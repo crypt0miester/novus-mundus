@@ -19,6 +19,7 @@ import type {
   Commitment,
   SendOptions,
   AddressLookupTableAccount,
+  AccountInfo,
 } from '@solana/web3.js';
 import BN from 'bn.js';
 import { PROGRAM_ID } from './program';
@@ -40,6 +41,8 @@ import {
   deriveShopItemPda,
   deriveBundlePda,
   deriveFlashSalePda,
+  deriveDailyDealPda,
+  derivePlayerPurchaseIndex,
 } from './pda';
 import { parseGameEngine } from './state/game-engine';
 import type { GameEngine } from './state/game-engine';
@@ -65,8 +68,8 @@ import { parseUser } from './state/user';
 import type { UserAccount } from './state/user';
 import { parseArenaSeason, parseArenaParticipant } from './state/arena';
 import type { ArenaSeasonAccount, ArenaParticipantAccount } from './state/arena';
-import { parseShopConfig, parseShopItem, parseBundle, parseFlashSale } from './state/shop';
-import type { ShopConfigAccount, ShopItemAccount, BundleAccount, FlashSaleAccount } from './state/shop';
+import { parseShopConfig, parseShopItem, parseBundle, parseFlashSale, parseDailyDeal, parseWeeklySale, parseSeasonalSale, parseDaoPromotion, parsePlayerPurchase } from './state/shop';
+import type { ShopConfigAccount, ShopItemAccount, BundleAccount, FlashSaleAccount, DailyDealAccount, WeeklySaleAccount, SeasonalSaleAccount, DAOPromotionAccount, PlayerPurchaseAccount } from './state/shop';
 import { SHOP_ITEM_ACCOUNT_SIZE, BUNDLE_ACCOUNT_SIZE, FLASH_SALE_ACCOUNT_SIZE } from './state/shop';
 import { parseEventsFromLogs } from './events/index';
 import type { NovusMundusEvent } from './events/index';
@@ -529,6 +532,88 @@ export class NovusMundusClient {
       }
     }
     return results;
+  }
+
+  /**
+   * Fetch all daily deal slots. Daily deals occupy a fixed set of slots
+   * (0, 1, 2) — derive each PDA and batch fetch.
+   */
+  async fetchAllDailyDeals(): Promise<(BulkFetchResult<DailyDealAccount> & { slot: number })[]> {
+    const slots = [0, 1, 2];
+    const entries = slots.map((slot) => ({
+      slot,
+      pubkey: deriveDailyDealPda(this.gameEngine, slot)[0],
+    }));
+
+    const infos = await this.connection.getMultipleAccountsInfo(
+      entries.map((e) => e.pubkey),
+      this.commitment,
+    );
+
+    const results: (BulkFetchResult<DailyDealAccount> & { slot: number })[] = [];
+    for (let i = 0; i < infos.length; i++) {
+      const entry = entries[i];
+      if (infos[i] && entry) {
+        const parsed = parseDailyDeal(infos[i]!);
+        if (parsed) {
+          results.push({ pubkey: entry.pubkey, account: parsed, slot: entry.slot });
+        }
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Fetch every account of a given AccountKey via the discriminator filter.
+   */
+  private async fetchAllByKey<T extends object>(
+    key: AccountKey,
+    parse: (account: AccountInfo<Buffer>) => T | null,
+  ): Promise<BulkFetchResult<T>[]> {
+    const keyByte = bs58.encode(Buffer.from([key]));
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [{ memcmp: { offset: 0, bytes: keyByte } }],
+    });
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parse(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<T> => r !== null);
+  }
+
+  /** Fetch all weekly sales. */
+  fetchAllWeeklySales(): Promise<BulkFetchResult<WeeklySaleAccount>[]> {
+    return this.fetchAllByKey(AccountKey.WeeklySale, parseWeeklySale);
+  }
+
+  /** Fetch all seasonal sales. */
+  fetchAllSeasonalSales(): Promise<BulkFetchResult<SeasonalSaleAccount>[]> {
+    return this.fetchAllByKey(AccountKey.SeasonalSale, parseSeasonalSale);
+  }
+
+  /** Fetch all DAO promotions. */
+  fetchAllDaoPromotions(): Promise<BulkFetchResult<DAOPromotionAccount>[]> {
+    return this.fetchAllByKey(AccountKey.DaoPromotion, parseDaoPromotion);
+  }
+
+  /**
+   * Fetch a wallet's per-item purchase records. There is one PlayerPurchase
+   * account per (buyer, itemId); itemId is resolved via the PDA reverse-lookup
+   * — pass a precomputed one (derivePlayerPurchaseIndex) to avoid rebuilding it.
+   */
+  async fetchPlayerPurchases(
+    wallet: PublicKey,
+    pdaToId: Map<string, number> = derivePlayerPurchaseIndex(wallet),
+  ): Promise<(BulkFetchResult<PlayerPurchaseAccount> & { itemId: number })[]> {
+    const accounts = await this.fetchAllByKey(AccountKey.PlayerPurchase, parsePlayerPurchase);
+    return accounts
+      .map(({ pubkey, account }) => {
+        const itemId = pdaToId.get(pubkey.toBase58());
+        return itemId !== undefined ? { pubkey, account, itemId } : null;
+      })
+      .filter((r): r is BulkFetchResult<PlayerPurchaseAccount> & { itemId: number } => r !== null);
   }
 
   /**

@@ -1,12 +1,22 @@
 /**
- * City Data — 33 cities matching Rust INITIAL_CITIES constants
+ * City Data — the 24 canonical Novus Mundus settlements (see docs/WORLD_LORE.md §XI).
+ *
+ * Each settlement sits on the ruins of an old-world city; the real-world city
+ * (the lore "Old Name") supplies the coordinates.
+ *
+ * LEGACY_CITIES preserves the previous placeholder set (real-world names) so
+ * nothing that still references it breaks.
  */
 
+/**
+ * City type classification — values MUST match the on-chain `CityType` enum in
+ * programs/novus_mundus/src/state/city.rs.
+ */
 export enum CityType {
   Capital = 0,
-  Trade = 1,
+  Resource = 1,
   Combat = 2,
-  Resource = 3,
+  Trade = 3,
 }
 
 export interface CityData {
@@ -19,6 +29,54 @@ export interface CityData {
 }
 
 export const CITIES: CityData[] = [
+  // Ashenmere — the central heartland
+  { id: 0,  name: 'Valdenmoor',  lat: 51.5074,  lon: -0.1278,   radiusKm: 52, type: CityType.Capital },  // Old: London
+  { id: 1,  name: 'Coranthas',   lat: 48.8566,  lon: 2.3522,    radiusKm: 45, type: CityType.Capital },  // Old: Paris
+  { id: 2,  name: 'Solterrae',   lat: 41.9028,  lon: 12.4964,   radiusKm: 40, type: CityType.Capital },  // Old: Rome
+  { id: 3,  name: 'Kael Mora',   lat: 37.9838,  lon: 23.7275,   radiusKm: 35, type: CityType.Combat },   // Old: Athens
+  { id: 4,  name: 'Thornmark',   lat: 52.5200,  lon: 13.4050,   radiusKm: 40, type: CityType.Trade },    // Old: Berlin
+
+  // Duskfeld — the cold north
+  { id: 5,  name: 'Vraenholdt',  lat: 55.7558,  lon: 37.6173,   radiusKm: 50, type: CityType.Combat },   // Old: Moscow
+  { id: 6,  name: 'Kaelindra',   lat: 41.0082,  lon: 28.9784,   radiusKm: 45, type: CityType.Trade },    // Old: Istanbul
+
+  // Sunward Reach — the arid south and east
+  { id: 7,  name: 'Auren Khet',  lat: 30.0444,  lon: 31.2357,   radiusKm: 50, type: CityType.Resource }, // Old: Cairo
+  { id: 8,  name: 'Solvaran',    lat: 25.2048,  lon: 55.2708,   radiusKm: 45, type: CityType.Trade },    // Old: Dubai
+  { id: 9,  name: 'Korthain',    lat: 33.3152,  lon: 44.3661,   radiusKm: 40, type: CityType.Combat },   // Old: Baghdad
+  { id: 10, name: 'Duskara',     lat: 6.5244,   lon: 3.3792,    radiusKm: 45, type: CityType.Resource }, // Old: Lagos
+
+  // Stormbreak Isles — eastern archipelago
+  { id: 11, name: 'Shirevane',   lat: 35.6762,  lon: 139.6503,  radiusKm: 55, type: CityType.Capital },  // Old: Tokyo
+  { id: 12, name: 'Drenmire',    lat: 39.9042,  lon: 116.4074,  radiusKm: 50, type: CityType.Capital },  // Old: Beijing
+  { id: 13, name: 'Pelagora',    lat: 31.2304,  lon: 121.4737,  radiusKm: 48, type: CityType.Trade },    // Old: Shanghai
+  { id: 14, name: 'Aelthis',     lat: 37.5665,  lon: 126.9780,  radiusKm: 45, type: CityType.Capital },  // Old: Seoul
+
+  // Jade Straits — tropical trade corridor
+  { id: 15, name: 'Lyssandor',   lat: 1.3521,   lon: 103.8198,  radiusKm: 35, type: CityType.Trade },    // Old: Singapore
+  { id: 16, name: 'Maravhen',    lat: 19.0760,  lon: 72.8777,   radiusKm: 50, type: CityType.Trade },    // Old: Mumbai
+
+  // Ironmarch — the western continent
+  { id: 17, name: 'Ashenveil',   lat: 40.7128,  lon: -74.0060,  radiusKm: 50, type: CityType.Trade },    // Old: New York
+  { id: 18, name: 'Eldrath',     lat: 34.0522,  lon: -118.2437, radiusKm: 55, type: CityType.Capital },  // Old: Los Angeles
+  { id: 19, name: 'Tonalca',     lat: 19.4326,  lon: -99.1332,  radiusKm: 50, type: CityType.Resource }, // Old: Mexico City
+
+  // Greenvast — the southern reaches
+  { id: 20, name: 'Verador',     lat: -23.5505, lon: -46.6333,  radiusKm: 50, type: CityType.Trade },    // Old: Sao Paulo
+  { id: 21, name: 'Mirethane',   lat: -33.8688, lon: 151.2093,  radiusKm: 45, type: CityType.Capital },  // Old: Sydney
+  { id: 22, name: 'Grimhollow',  lat: -26.2041, lon: 28.0473,   radiusKm: 45, type: CityType.Resource }, // Old: Johannesburg
+  { id: 23, name: 'Seralune',    lat: -22.9068, lon: -43.1729,  radiusKm: 42, type: CityType.Capital },  // Old: Rio de Janeiro
+];
+
+/**
+ * LEGACY placeholder cities — real-world names, kept for reference and any
+ * tooling that still expects the old set. Do NOT use for new seeding.
+ *
+ * Note: the `type` values below were authored before the CityType enum was
+ * corrected, so they now reflect each city's intended classification rather
+ * than the (buggy) bytes that may have been written on-chain previously.
+ */
+export const LEGACY_CITIES: CityData[] = [
   // City 0: Default spawn city
   { id: 0,  name: 'New York',       lat: 40.7128,   lon: -74.0060,   radiusKm: 50, type: CityType.Capital },
 

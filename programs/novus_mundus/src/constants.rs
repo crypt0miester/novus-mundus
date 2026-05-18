@@ -114,6 +114,13 @@ pub const TREASURY_REQUEST_SEED: &[u8] = b"treasury_request";
 pub const LOCATION_SEED: &[u8] = b"location";
 pub const RALLY_SEED: &[u8] = b"rally";
 pub const ENCOUNTER_SEED: &[u8] = b"encounter";
+
+/// Grace period (seconds) after `despawn_at` before an encounter account can be
+/// cleaned up. The encounter is unattackable from `despawn_at` onward; the extra
+/// hour lets any rally created before despawn finish executing before its
+/// `target` account is closed (a rally created after despawn is the caller's
+/// problem — rally `create` does not validate its encounter target).
+pub const ENCOUNTER_CLEANUP_GRACE: i64 = 3_600;
 pub const EVENT_SEED: &[u8] = b"event";
 pub const EVENT_PARTICIPATION_SEED: &[u8] = b"event_participation";
 pub const PROGRESSION_SEED: &[u8] = b"progression";

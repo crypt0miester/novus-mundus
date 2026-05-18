@@ -144,3 +144,34 @@ impl Event for EncounterDefeated {
         offset
     }
 }
+
+/// Emitted when a terminal encounter account is cleaned up (closed + rent reclaimed)
+pub struct EncounterCleanedUp {
+    /// Encounter account pubkey that was closed
+    pub encounter: Address,
+    /// City the encounter belonged to
+    pub city_id: u16,
+    /// Encounter rarity
+    pub rarity: u8,
+    /// True if the encounter had been killed (health == 0); false if it expired by time only
+    pub was_killed: bool,
+    /// Account that received the reclaimed rent
+    pub rent_recipient: Address,
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for EncounterCleanedUp {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:EncounterCleanedUp");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.encounter.pack(&mut buf[offset..]);
+        offset += self.city_id.pack(&mut buf[offset..]);
+        offset += self.rarity.pack(&mut buf[offset..]);
+        offset += self.was_killed.pack(&mut buf[offset..]);
+        offset += self.rent_recipient.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}

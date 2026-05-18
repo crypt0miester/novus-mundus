@@ -537,7 +537,8 @@ function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
   const heroUnitCapacityBps = reader.readU16();
   const blessedHeroBonusBps = reader.readU16();
   const slotLocationBonus = reader.readU16Array(3);
-  reader.skip(2);
+  // _pad_bonus[2] + 4 bytes implicit padding that 8-byte-aligns the i64 below.
+  reader.skip(6);
   const meditationStartedAt = reader.readI64();
   // remaining 4 bytes _reserved + 4 bytes tail padding
   return {

@@ -397,6 +397,22 @@ export function derivePlayerPurchasePda(
   );
 }
 
+/**
+ * Build a reverse lookup (PlayerPurchase PDA base58 -> itemId) for a wallet,
+ * covering item ids 0..maxItemId. PlayerPurchase accounts store no itemId, so
+ * this map is how a fetched account is matched back to its item.
+ */
+export function derivePlayerPurchaseIndex(
+  wallet: PublicKey,
+  maxItemId: number = 200
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (let i = 0; i < maxItemId; i++) {
+    map.set(derivePlayerPurchasePda(wallet, i)[0].toBase58(), i);
+  }
+  return map;
+}
+
 /** Derive Inventory PDA */
 export function deriveInventoryPda(player: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(

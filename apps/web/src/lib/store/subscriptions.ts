@@ -4,8 +4,11 @@ import {
   GameSubscriptionManager,
   AccountKey,
   derivePlayerPda,
+  derivePlayerPurchaseIndex,
   subscribeToGameLogs,
   parseEventsFromLogs,
+  isWeeklySaleActive,
+  isSeasonalSaleActive,
   type PlayerCore,
   type UserAccount,
   type GameEngine,
@@ -85,6 +88,10 @@ export function startGameSubscriptions(
   // ── 1. Initial RPC fetch for core accounts ──────────────────
   store().setLoading(true);
 
+  // Reverse lookup for this wallet's PlayerPurchase PDAs — reused by both the
+  // initial fetch and the WS handler so the PDA set is derived only once.
+  const playerPurchasePdaToId = derivePlayerPurchaseIndex(wallet);
+
   Promise.all([
     client.fetchGameEngine(),
     client.fetchPlayer(wallet),
@@ -94,9 +101,14 @@ export function startGameSubscriptions(
     client.fetchAllShopItems(),
     client.fetchAllBundles(),
     client.fetchAllFlashSales(),
+    client.fetchAllDailyDeals(),
+    client.fetchAllWeeklySales(),
+    client.fetchAllSeasonalSales(),
+    client.fetchAllDaoPromotions(),
+    client.fetchPlayerPurchases(wallet, playerPurchasePdaToId),
     client.fetchAllHeroTemplates(),
   ])
-    .then(([ge, player, user, cities, shopConfig, shopItems, bundles, flashSales, heroTemplates]) => {
+    .then(([ge, player, user, cities, shopConfig, shopItems, bundles, flashSales, dailyDeals, weeklySales, seasonalSales, daoPromotions, playerPurchases, heroTemplates]) => {
       if (ge.account) {
         console.log(ge)
         store().setGameEngine(ge.pubkey, ge.account);}
@@ -115,6 +127,20 @@ export function startGameSubscriptions(
       }
       for (const sale of flashSales) {
         store().upsertFlashSale(sale.pubkey, sale.account, sale.saleId);
+      }
+      for (const deal of dailyDeals) {
+        store().upsertDailyDeal(deal.pubkey, deal.account, deal.slot);
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      const activeWeekly = weeklySales.find((w) => isWeeklySaleActive(w.account, nowSec)) ?? weeklySales[0];
+      if (activeWeekly) store().setWeeklySale(activeWeekly.pubkey, activeWeekly.account);
+      const activeSeasonal = seasonalSales.find((s) => isSeasonalSaleActive(s.account, nowSec)) ?? seasonalSales[0];
+      if (activeSeasonal) store().setSeasonalSale(activeSeasonal.pubkey, activeSeasonal.account);
+      for (const promo of daoPromotions) {
+        store().upsertDaoPromotion(promo.pubkey, promo.account);
+      }
+      for (const pp of playerPurchases) {
+        store().upsertPlayerPurchase(pp.pubkey, pp.account, pp.itemId);
       }
       for (const t of heroTemplates) {
         store().upsertHeroTemplate(t.pubkey, t.account);
@@ -342,9 +368,17 @@ export function startGameSubscriptions(
     }
   });
 
-  // DailyDeal: unfiltered (singleton global shop deal)
+  // DailyDeal: if new entry (not in Map), refetch all slots to resolve slot index
   manager.on(AccountKey.DailyDeal, (account: DailyDealAccount, pubkey) => {
-    store().setDailyDeal(pubkey, account);
+    const isNew = !store().dailyDeals.has(pubkey.toBase58());
+    store().upsertDailyDeal(pubkey, account);
+    if (isNew) {
+      client.fetchAllDailyDeals().then((results) => {
+        store().replaceAllDailyDeals(
+          results.map((r) => ({ pubkey: r.pubkey, account: r.account, slot: r.slot }))
+        );
+      }).catch(() => {});
+    }
   });
   // WeeklySale: unfiltered (global shop)
   manager.on(AccountKey.WeeklySale, (account: WeeklySaleAccount, pubkey) => {
@@ -362,9 +396,11 @@ export function startGameSubscriptions(
   manager.on(AccountKey.AllowedToken, (account: AllowedTokenAccount, pubkey) => {
     store().upsertAllowedToken(pubkey, account);
   });
-  // PlayerPurchase: only the current player's
+  // PlayerPurchase: resolve itemId from the precomputed map; ignore other players'.
   manager.on(AccountKey.PlayerPurchase, (account: PlayerPurchaseAccount, pubkey) => {
-    store().setPlayerPurchase(pubkey, account);
+    const itemId = playerPurchasePdaToId.get(pubkey.toBase58());
+    if (itemId === undefined) return;
+    store().upsertPlayerPurchase(pubkey, account, itemId);
   });
 
   // ── Estate / Location / Research / Hero ──────────────────────

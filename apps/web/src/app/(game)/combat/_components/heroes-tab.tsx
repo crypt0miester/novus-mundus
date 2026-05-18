@@ -28,7 +28,12 @@ import {
   isTraveling,
   parseAssetV1,
   getActiveBuffs,
+  getBuffStatMeta,
+  getBuffStatByAttrKey,
   canMintHero,
+  HERO_TIER_NAMES,
+  HERO_TYPE_NAMES,
+  HERO_CATEGORY_NAMES,
   type ParsedAssetV1,
   type HeroTemplateAccount,
 } from "novus-mundus-sdk";
@@ -60,8 +65,6 @@ function heroLevelCap(sanctuaryLevel: number): number {
   if (sanctuaryLevel <= 14) return 50;
   return 100;
 }
-
-const TIER_NAMES = ["Common", "Rare", "Epic", "Legendary", "Mythic"] as const;
 
 function tierFromMintCost(lamports: number): number {
   if (lamports >= 10_000_000_000) return 4;
@@ -95,19 +98,6 @@ type Selection =
   | { type: "unlocked"; hero: HeroData }
   | { type: "template"; info: TemplateInfo }
   | null;
-
-const STAT_NAMES: Record<number, string> = {
-  1: "ATK", 2: "DEF", 3: "ECO", 4: "XP", 5: "TRN", 6: "RLY",
-  7: "CRT", 8: "SYN", 9: "STO", 10: "WPN", 11: "STA", 12: "PRD",
-  13: "UNT", 14: "ENC", 15: "LT", 16: "ARM",
-};
-
-const BUFF_LABELS: Record<string, string> = {
-  Attack: "ATK", Defense: "DEF", Economy: "ECO", XPGain: "XP",
-  Training: "TRN", Rally: "RLY", Crit: "CRT", Synchrony: "SYN",
-  Storage: "STO", Weapon: "WPN", Stamina: "STA", Produce: "PRD",
-  Units: "UNT", Encounter: "ENC", Loot: "LT", Armor: "ARM",
-};
 
 const IGNORED_ATTRS = new Set(["Template", "Serial", "Origin"]);
 
@@ -246,14 +236,33 @@ export function HeroesTab() {
       setUnlockedHeroes(unlocked);
       setLoading(false);
 
-      if (typeof window !== "undefined" && window.innerWidth >= 1024 && !selected) {
-        const firstLocked = locked.findIndex((h) => h !== null);
-        if (firstLocked >= 0 && locked[firstLocked]) {
-          setSelected({ type: "locked", slot: firstLocked, hero: locked[firstLocked] });
-        } else if (unlocked.length > 0) {
-          setSelected({ type: "unlocked", hero: unlocked[0] });
+      // Keep the detail-panel selection pointed at the freshly-fetched NFT
+      // data. Level-up / lock / unlock mutate NFT attributes, so the
+      // previously selected HeroData object is stale after a refetch.
+      setSelected((prev) => {
+        if (!prev) {
+          // Initial auto-select on desktop.
+          if (typeof window === "undefined" || window.innerWidth < 1024) return prev;
+          const firstLocked = locked.findIndex((h) => h !== null);
+          if (firstLocked >= 0 && locked[firstLocked]) {
+            return { type: "locked", slot: firstLocked, hero: locked[firstLocked]! };
+          }
+          if (unlocked.length > 0) return { type: "unlocked", hero: unlocked[0] };
+          return prev;
         }
-      }
+        if (prev.type === "template") return prev;
+
+        // Re-resolve the selected hero by address — it may have moved between
+        // the locked slots and the wallet (lock/unlock), or be gone (burn).
+        const addr = prev.hero.address;
+        const lockedSlot = locked.findIndex((h) => h?.address.equals(addr));
+        if (lockedSlot >= 0 && locked[lockedSlot]) {
+          return { type: "locked", slot: lockedSlot, hero: locked[lockedSlot]! };
+        }
+        const unlockedHero = unlocked.find((h) => h.address.equals(addr));
+        if (unlockedHero) return { type: "unlocked", hero: unlockedHero };
+        return null;
+      });
     });
   }, [player, connection, publicKey, refreshKey]);
 
@@ -578,7 +587,7 @@ export function HeroesTab() {
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {buffs.map((b) => (
                           <span key={b.stat} className="rounded bg-surface px-1 py-0.5 text-[10px] text-text-muted">
-                            {STAT_NAMES[b.stat] || "?"}{" "}
+                            {getBuffStatMeta(b.stat)?.abbr ?? "?"}{" "}
                             <span className="font-mono text-text-secondary">{b.baseBps}</span>
                           </span>
                         ))}
@@ -629,7 +638,7 @@ export function HeroesTab() {
                 <div className="space-y-1">
                   {selectedBuffs.map(([key, value]) => (
                     <div key={key} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                      <span className="text-xs text-text-secondary">{BUFF_LABELS[key] || key}</span>
+                      <span className="text-xs text-text-secondary">{getBuffStatByAttrKey(key)?.name ?? key}</span>
                       <span className="font-mono text-xs font-semibold text-text-primary">{value}</span>
                     </div>
                   ))}
@@ -815,7 +824,7 @@ export function HeroesTab() {
                 <div>
                   <div className="text-base font-semibold text-text-primary">{t.account.name}</div>
                   <div className="text-[10px] text-text-muted">
-                    Template #{t.account.templateId} · {TIER_NAMES[tier]}
+                    Template #{t.account.templateId} · {HERO_TIER_NAMES[tier]}
                   </div>
                 </div>
                 {t.minted && (
@@ -830,6 +839,18 @@ export function HeroesTab() {
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-muted">Mint cost</span>
                   <span className="font-mono text-text-primary">{costSol} SOL</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-text-muted">Type</span>
+                  <span className="text-text-secondary">
+                    {HERO_TYPE_NAMES[t.account.heroType] ?? "Unknown"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-text-muted">Category</span>
+                  <span className="text-text-secondary">
+                    {HERO_CATEGORY_NAMES[t.account.category] ?? "Unknown"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-muted">Supply</span>
@@ -860,7 +881,7 @@ export function HeroesTab() {
                   <div className="space-y-1">
                     {buffs.map((b) => (
                       <div key={b.stat} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                        <span className="text-xs text-text-secondary">{STAT_NAMES[b.stat] || `Stat ${b.stat}`}</span>
+                        <span className="text-xs text-text-secondary">{getBuffStatMeta(b.stat)?.name ?? `Stat ${b.stat}`}</span>
                         <span className="font-mono text-xs font-semibold text-text-primary">
                           +{(b.baseBps / 100).toFixed(1)}%
                         </span>

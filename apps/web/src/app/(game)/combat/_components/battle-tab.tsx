@@ -111,7 +111,7 @@ export function BattleTab() {
   // player.level| exceeds maxEncounterLevelDiff (attack_encounter.rs), and
   // travelling there first does not help. Surface it before either.
   const maxLevelDiff =
-    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 10;
+    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
   const encounterLevels = useMemo(() => {
     const lvl = player?.level ?? 0;
     return encounters.map((enc) => {

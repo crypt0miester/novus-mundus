@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { usePlayer } from "./usePlayer";
 import { useNow } from "./useNow";
-import { calculateDefensivePower } from "novus-mundus-sdk";
+import { calculateDefensivePower, BuffStat, getBuffStatMeta } from "novus-mundus-sdk";
 
 /** Calculate combat power from player defensive units (operatives don't fight on-chain) */
 export function useCombatPower() {
@@ -96,18 +96,17 @@ export function useHeroBuffs() {
     if (!player) return [];
 
     const buffs: { label: string; bps: number }[] = [];
-    if (player.heroAttackBps > 0)
-      buffs.push({ label: "Attack", bps: player.heroAttackBps });
-    if (player.heroDefenseBps > 0)
-      buffs.push({ label: "Defense", bps: player.heroDefenseBps });
-    if (player.heroEconomyBps > 0)
-      buffs.push({ label: "Economy", bps: player.heroEconomyBps });
-    if (player.heroXpGainBps > 0)
-      buffs.push({ label: "XP Gain", bps: player.heroXpGainBps });
-    if (player.heroCritChanceBps > 0)
-      buffs.push({ label: "Crit Chance", bps: player.heroCritChanceBps });
-    if (player.heroLootBonusBps > 0)
-      buffs.push({ label: "Loot Bonus", bps: player.heroLootBonusBps });
+    const add = (stat: BuffStat, bps: number) => {
+      if (bps > 0) {
+        buffs.push({ label: getBuffStatMeta(stat)?.name ?? `Stat ${stat}`, bps });
+      }
+    };
+    add(BuffStat.AttackPower, player.heroAttackBps);
+    add(BuffStat.DefensePower, player.heroDefenseBps);
+    add(BuffStat.CashCollectionRate, player.heroEconomyBps);
+    add(BuffStat.XpGain, player.heroXpGainBps);
+    add(BuffStat.CriticalHitChance, player.heroCritChanceBps);
+    add(BuffStat.LootBonus, player.heroLootBonusBps);
 
     return buffs;
   }, [player]);

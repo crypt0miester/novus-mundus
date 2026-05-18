@@ -12,7 +12,8 @@
     }
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node && bun run build:types",
+    "build:types": "tsc -p tsconfig.build.json || true",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:e2e": "bun test tests/e2e/",

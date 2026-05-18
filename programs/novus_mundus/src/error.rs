@@ -161,6 +161,7 @@ pub enum GameError {
     NotSelectedForRandomEncounter = 6512,
     InsufficientStamina = 6513,
     WrongTimeForEncounter = 6514,       // Legendary/Epic can only spawn at specific times
+    EncounterStillActive = 6515,        // cleanup attempted before despawn_at + cleanup grace period
 
     // Event Errors (600-699)
     EventNotFound = 6600,

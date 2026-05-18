@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
-import { useShopConfig, useShopItems, useBundles, useFlashSales } from "@/lib/hooks/useShop";
+import { useShopConfig, useShopItems, useBundles, useFlashSales, useDailyDeals, useWeeklySale, useSeasonalSale, useDaoPromotions, usePlayerPurchase } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -27,6 +27,10 @@ import {
   FlashSaleStatus,
   isItemAvailable,
   isFlashSaleActive,
+  isWeeklySaleActive,
+  isSeasonalSaleActive,
+  isDaoPromotionActive,
+  applyBpsPenalty,
   getShopItemName,
   getItemTypeInfo,
   calculateNoviPurchasePreview,
@@ -54,6 +58,8 @@ const SHOP_CATEGORIES = [
   { key: "items", label: "Wares" },
   { key: "bundles", label: "Caravan Lots" },
   { key: "flash", label: "Passing Trade" },
+  { key: "daily", label: "Daily Deals" },
+  { key: "events", label: "Events" },
   { key: "novi", label: "Buy NOVI" },
 ];
 
@@ -111,6 +117,10 @@ export function ShopTab() {
   const { data: items, isSuccess: itemsReady } = useShopItems();
   const { data: bundles, isSuccess: bundlesReady } = useBundles();
   const { data: flashSales, isSuccess: flashSalesReady } = useFlashSales();
+  const { data: dailyDeals, isSuccess: dailyDealsReady } = useDailyDeals();
+  const { data: weeklySaleData } = useWeeklySale();
+  const { data: seasonalSaleData } = useSeasonalSale();
+  const { data: daoPromotions } = useDaoPromotions();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
@@ -130,6 +140,7 @@ export function ShopTab() {
   const [selectedItem, setSelectedItem] = useState<number | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<number | null>(null);
   const [selectedSale, setSelectedSale] = useState<number | null>(null);
+  const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
   const effectivePackage = selectedPackage ?? (isDesktop ? 0 : null);
 
   // Build reverse-lookup maps: pubkey -> numeric ID
@@ -244,6 +255,26 @@ export function ShopTab() {
     }).then((r) => r.signature);
   };
 
+  const handlePurchaseDailyDeal = async (itemId: number, slot: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !gameEngine) throw new Error("Not ready");
+    const ix = createPurchaseItemInstruction(
+      {
+        buyer: publicKey,
+        gameEngine: ge,
+        itemId,
+        treasury: gameEngine.treasuryWallet,
+      },
+      // discountFlags bit 0 = apply daily deal; dailyDealSlot selects which slot.
+      { quantity: 1, discountFlags: 1, dailyDealSlot: slot },
+    );
+    return transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"]],
+      successMessage: "Daily deal claimed!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
   const handlePurchaseNovi = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !gameEngine || effectivePackage == null) throw new Error("Not ready");
     const noviConfig = gameEngine.noviPurchaseConfig;
@@ -296,10 +327,25 @@ export function ShopTab() {
       );
   }, [flashSales, saleIdMap, nowSec]);
 
+  // Daily deals: resolve each slot's discounted shop item; keep only configured slots.
+  const activeDailyDeals = useMemo(() => {
+    return dailyDeals
+      .map((d) => ({
+        slot: d.slot,
+        account: d.account,
+        item: activeItems.find((i) => i.itemId === d.account.itemId) ?? null,
+      }))
+      .filter((d): d is typeof d & { item: NonNullable<typeof d.item> } =>
+        d.slot >= 0 && d.account.discountBps > 0 && d.item !== null,
+      );
+  }, [dailyDeals, activeItems]);
+
   // On desktop, default to first entry so the sidebar is always populated
   const effectiveItem = selectedItem ?? (isDesktop && activeItems.length > 0 ? activeItems[0].itemId : null);
   const effectiveBundle = selectedBundle ?? (isDesktop && activeBundles.length > 0 ? activeBundles[0].bundleId : null);
   const effectiveSale = selectedSale ?? (isDesktop && activeFlashSales.length > 0 ? activeFlashSales[0].saleId : null);
+  const effectiveDeal = selectedDeal ?? (isDesktop && activeDailyDeals.length > 0 ? activeDailyDeals[0].slot : null);
+  const itemPurchase = usePlayerPurchase(effectiveItem);
 
   return (
     <div className="space-y-6">
@@ -353,7 +399,9 @@ export function ShopTab() {
         tabs={SHOP_CATEGORIES.map((cat) => ({
           key: cat.key,
           label: cat.label,
-          badge: cat.key === "flash" && activeFlashSales.length > 0,
+          badge:
+            (cat.key === "flash" && activeFlashSales.length > 0) ||
+            (cat.key === "daily" && activeDailyDeals.length > 0),
         }))}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -420,6 +468,11 @@ export function ShopTab() {
               const hasDiscount = discountedLamports < baseLamports;
               const qty = itemQuantities[effectiveItem] ?? 1;
               const unitPrice = hasDiscount ? discountedLamports : baseLamports;
+              const dayNow = Math.floor(nowSec / 86400);
+              const lifetimeBought = itemPurchase ? itemPurchase.lifetimePurchased.toNumber() : 0;
+              const todayBought = itemPurchase && itemPurchase.lastPurchaseDay.toNumber() === dayNow
+                ? itemPurchase.purchasedToday.toNumber()
+                : 0;
 
               return (
                 <>
@@ -443,14 +496,18 @@ export function ShopTab() {
                   <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
                     {a.maxPerPlayer > 0 && (
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">Limit per player</span>
-                        <span className="text-text-muted">{a.maxPerPlayer}</span>
+                        <span className="text-zinc-500">Bought (per player)</span>
+                        <span className={`text-text-muted ${lifetimeBought >= a.maxPerPlayer ? "text-red-400" : ""}`}>
+                          {lifetimeBought}/{a.maxPerPlayer}
+                        </span>
                       </div>
                     )}
                     {a.maxPerDay > 0 && (
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">Daily limit</span>
-                        <span className="text-text-muted">{a.maxPerDay}</span>
+                        <span className="text-zinc-500">Bought today</span>
+                        <span className={`text-text-muted ${todayBought >= a.maxPerDay ? "text-red-400" : ""}`}>
+                          {todayBought}/{a.maxPerDay}
+                        </span>
                       </div>
                     )}
                     {!a.maxGlobalStock.eqn(0) && (
@@ -713,6 +770,236 @@ export function ShopTab() {
               );
             })()}
           </DetailPanel>
+        </div>
+      )}
+
+      {/* Daily Deals Tab */}
+      {activeTab === "daily" && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {!dailyDealsReady ? (
+              <div className="card"><p className="text-sm text-text-muted">Loading daily deals...</p></div>
+            ) : activeDailyDeals.length === 0 ? (
+              <div className="card"><p className="text-sm text-text-muted">No deals on the table today. Check back tomorrow.</p></div>
+            ) : (
+              <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+                {activeDailyDeals.map((deal) => {
+                  const a = deal.item.account;
+                  const isSelected = effectiveDeal === deal.slot;
+                  const base = a.priceSolLamports.toNumber();
+                  const dealLamports = applyBpsPenalty(base, deal.account.discountBps);
+                  const discountPct = (deal.account.discountBps / 100).toFixed(0);
+                  return (
+                    <button
+                      key={deal.slot}
+                      onClick={() => setSelectedDeal(deal.slot)}
+                      className={`rounded-lg border p-3 text-left transition-all ${
+                        isSelected
+                          ? "border-amber-600 bg-amber-900/20 ring-1 ring-amber-600/30"
+                          : "border-amber-800/40 hover:border-amber-700/60"
+                      }`}
+                    >
+                      <span className="text-[10px] font-semibold uppercase text-green-400">−{discountPct}% today</span>
+                      <div className="text-sm font-semibold text-text-primary truncate">
+                        {getShopItemName(a.itemType, a.quantityPerPurchase)}
+                      </div>
+                      <div className="mt-1 text-xs">
+                        <span className="text-text-muted line-through mr-1">{lamportsToSol(base)}</span>
+                        <span className="text-text-gold">{lamportsToSol(dealLamports)} SOL</span>
+                      </div>
+                      {!a.maxGlobalStock.eqn(0) && a.currentGlobalStock.eqn(0) && (
+                        <div className="text-[10px] text-red-400">Sold Out</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DetailPanel open={effectiveDeal != null} onClose={() => setSelectedDeal(null)}>
+            {effectiveDeal != null && (() => {
+              const deal = activeDailyDeals.find((d) => d.slot === effectiveDeal);
+              if (!deal) return null;
+              const a = deal.item.account;
+              const base = a.priceSolLamports.toNumber();
+              const dealLamports = applyBpsPenalty(base, deal.account.discountBps);
+              const discountPct = (deal.account.discountBps / 100).toFixed(0);
+              const hasStock = a.maxGlobalStock.eqn(0) || a.currentGlobalStock.gtn(0);
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">Daily Deal</h3>
+                    <button onClick={() => setSelectedDeal(null)} className="hidden rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary lg:block">Close</button>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold uppercase ${RARITY_COLORS[a.rarity] ?? "text-zinc-400"}`}>
+                        {RARITY_LABELS[a.rarity] ?? "Unknown"}
+                      </span>
+                      <span className="text-xs text-text-muted">{CATEGORY_LABELS[a.category] ?? "Unknown"}</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-text-primary">
+                      {getShopItemName(a.itemType, a.quantityPerPurchase)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Deal discount</span>
+                      <span className="text-green-400">−{discountPct}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Claimed today</span>
+                      <span className="text-text-muted">{deal.account.purchasesToday.toString()}</span>
+                    </div>
+                    {!a.maxGlobalStock.eqn(0) && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Stock</span>
+                        <span className={`text-text-muted ${a.currentGlobalStock.eqn(0) ? "text-red-400" : ""}`}>
+                          {a.currentGlobalStock.toString()}/{a.maxGlobalStock.toString()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg bg-surface/60 px-3 py-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Price</span>
+                      <span>
+                        <span className="text-text-muted line-through mr-1">{lamportsToSol(base)}</span>
+                        <span className="text-green-400">{lamportsToSol(dealLamports)} SOL</span>
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[10px] text-zinc-500">
+                      Subscription and time-of-day discounts may stack — final price is settled on-chain.
+                    </p>
+                  </div>
+
+                  <TxButton
+                    onClick={(rp) => handlePurchaseDailyDeal(deal.item.itemId, deal.slot, rp)}
+                    className="w-full"
+                    disabled={!hasStock}
+                  >
+                    {hasStock ? `Claim deal for ${lamportsToSol(dealLamports)} SOL` : "Sold Out"}
+                  </TxButton>
+                </>
+              );
+            })()}
+          </DetailPanel>
+        </div>
+      )}
+
+      {/* Events Tab */}
+      {activeTab === "events" && (
+        <div className="space-y-4">
+          {(() => {
+            const weekly =
+              weeklySaleData && isWeeklySaleActive(weeklySaleData.account, nowSec)
+                ? weeklySaleData.account
+                : null;
+            const seasonal =
+              seasonalSaleData && isSeasonalSaleActive(seasonalSaleData.account, nowSec)
+                ? seasonalSaleData.account
+                : null;
+            const promos = daoPromotions.filter((p) => isDaoPromotionActive(p.account, nowSec));
+
+            if (!weekly && !seasonal && promos.length === 0) {
+              return (
+                <div className="card">
+                  <p className="text-sm text-text-muted">
+                    No sitewide events running right now. The caravan keeps its usual prices.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <>
+                {weekly && (
+                  <div className="card accent-border">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-text-primary">Weekly Sale</h3>
+                      <GoldCountdown endsAt={weekly.endsAt.toNumber()} startedAt={weekly.startsAt.toNumber()} format="compact" size="sm" />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {weekly.categoryDiscounts.map((bps, i) =>
+                        bps > 0 ? (
+                          <div key={i} className="rounded bg-surface/60 px-2 py-1.5 text-center">
+                            <div className="text-[10px] text-text-muted">{CATEGORY_LABELS[i] ?? `Category ${i}`}</div>
+                            <div className="text-sm font-semibold text-green-400">−{bpsToPercent(bps)}</div>
+                          </div>
+                        ) : null,
+                      )}
+                    </div>
+                    {weekly.bonusValueBps > 0 && (
+                      <p className="mt-2 text-[11px] text-text-muted">
+                        Themed bonus: +{bpsToPercent(weekly.bonusValueBps)}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {seasonal && (
+                  <div className="card accent-border">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-text-primary">{seasonal.name || "Seasonal Sale"}</h3>
+                      <GoldCountdown endsAt={seasonal.endsAt.toNumber()} startedAt={seasonal.startsAt.toNumber()} format="compact" size="sm" />
+                    </div>
+                    <div className="mt-2 space-y-1 text-xs">
+                      {seasonal.globalDiscountBps > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-text-muted">Storewide discount</span>
+                          <span className="text-green-400">−{bpsToPercent(seasonal.globalDiscountBps)}</span>
+                        </div>
+                      )}
+                      {seasonal.featuredCount > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-text-muted">Featured items</span>
+                          <span className="text-text-secondary">{seasonal.featuredCount}</span>
+                        </div>
+                      )}
+                      {seasonal.exclusiveCosmeticId > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-text-muted">Exclusive cosmetic</span>
+                          <span className="text-text-secondary">#{seasonal.exclusiveCosmeticId}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {promos.map((p) => {
+                  const d = p.account;
+                  const rows = ([
+                    ["Storewide", d.globalDiscountBps],
+                    ["Equipment", d.equipmentDiscountBps],
+                    ["Consumables", d.consumableDiscountBps],
+                    ["Materials", d.materialDiscountBps],
+                    ["Cosmetics", d.cosmeticDiscountBps],
+                  ] as [string, number][]).filter(([, bps]) => bps > 0);
+                  return (
+                    <div key={p.pubkey.toBase58()} className="card accent-border">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-text-primary">{d.title || "DAO Promotion"}</h3>
+                        <GoldCountdown endsAt={d.endsAt.toNumber()} startedAt={d.startsAt.toNumber()} format="compact" size="sm" />
+                      </div>
+                      <p className="text-[10px] uppercase tracking-wider text-text-muted">Community promotion</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {rows.map(([label, bps]) => (
+                          <div key={label} className="rounded bg-surface/60 px-2 py-1.5 text-center">
+                            <div className="text-[10px] text-text-muted">{label}</div>
+                            <div className="text-sm font-semibold text-green-400">−{bpsToPercent(bps)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
       )}
 

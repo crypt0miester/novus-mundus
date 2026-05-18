@@ -192,6 +192,7 @@ export const DISCRIMINATORS = {
   // Encounter Management (70-79)
   ENCOUNTER_SPAWN: 70,
   LOOT_CLAIM: 71,
+  ENCOUNTER_CLEANUP: 72,
 
   // Event System (80-89)
   EVENT_CREATE: 80,

@@ -83,7 +83,7 @@ export function EncounterDetailPanel({
       : 0;
 
   const maxLevelDiff =
-    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 10;
+    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
 
   const dist = useMemo(() => {
     if (!player || !encounter) return null;

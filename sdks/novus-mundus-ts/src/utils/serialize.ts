@@ -89,7 +89,7 @@ export class BufferWriter {
       bn = value;
     }
     const bytes = bn.toArrayLike(Buffer, 'le', 8);
-    bytes.copy(this.buffer, this.offset);
+    bytes.copy(this.buffer as Uint8Array, this.offset);
     this.offset += 8;
     return this;
   }
@@ -109,7 +109,7 @@ export class BufferWriter {
       bn = bn.add(new BN(1).shln(64));
     }
     const bytes = bn.toArrayLike(Buffer, 'le', 8);
-    bytes.copy(this.buffer, this.offset);
+    bytes.copy(this.buffer as Uint8Array, this.offset);
     this.offset += 8;
     return this;
   }
@@ -138,7 +138,7 @@ export class BufferWriter {
   /** Write PublicKey (32 bytes) */
   writePubkey(value: PublicKey): this {
     const bytes = value.toBuffer();
-    bytes.copy(this.buffer, this.offset);
+    bytes.copy(this.buffer as Uint8Array, this.offset);
     this.offset += 32;
     return this;
   }
@@ -146,7 +146,7 @@ export class BufferWriter {
   /** Write raw bytes */
   writeBytes(bytes: Buffer | Uint8Array): this {
     const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
-    buf.copy(this.buffer, this.offset);
+    buf.copy(this.buffer as Uint8Array, this.offset);
     this.offset += bytes.length;
     return this;
   }
@@ -155,7 +155,7 @@ export class BufferWriter {
   writeString(value: string, maxLength: number): this {
     const bytes = Buffer.from(value, 'utf8');
     const toWrite = Math.min(bytes.length, maxLength);
-    bytes.copy(this.buffer, this.offset, 0, toWrite);
+    bytes.copy(this.buffer as Uint8Array, this.offset, 0, toWrite);
     // Zero-pad remaining
     this.buffer.fill(0, this.offset + toWrite, this.offset + maxLength);
     this.offset += maxLength;
@@ -223,5 +223,5 @@ export function createInstructionData(discriminator: number, data?: Buffer): Buf
     return discriminatorBuf;
   }
 
-  return Buffer.concat([discriminatorBuf, data]);
+  return Buffer.concat([discriminatorBuf, data] as Uint8Array[]);
 }

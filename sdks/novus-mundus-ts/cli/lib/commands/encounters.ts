@@ -8,6 +8,8 @@
  *   novus encounters spawn --near <pubkey> --rarity rare
  *   novus encounters status
  *   novus encounters status --city 0
+ *   novus encounters cleanup --city 0
+ *   novus encounters cleanup --all
  */
 
 import { PublicKey } from '@solana/web3.js';
@@ -18,12 +20,20 @@ import { CITIES } from '../../data/cities';
 
 import {
   createSpawnEncounterInstruction,
+  createCleanupEncounterInstruction,
   deriveCityPda,
+  deriveEncounterPda,
+  deriveLocationPda,
   deserializeCity,
+  deserializeLocation,
   derivePlayerPda,
+  NovusMundusClient,
 } from '../../../src/index';
 import { deserializePlayer } from '../../../src/state/player';
 import { EncounterRarity } from '../../../src/instructions/encounter';
+
+/** Grace period (seconds) after despawn_at before an encounter can be cleaned up. */
+const CLEANUP_GRACE_SECONDS = 3600;
 
 const GRID_PRECISION = 10000;
 const CELL_OCCUPIED = 6413;
@@ -55,9 +65,12 @@ export async function handleEncounters(ctx: CLIContext, args: ParsedArgs): Promi
     case 'status':
       await handleStatus(ctx, args);
       break;
+    case 'cleanup':
+      await handleCleanup(ctx, args);
+      break;
     default:
       log.error(`Unknown subcommand: ${args.target || '(none)'}`);
-      log.info('  Usage: novus encounters <spawn|status> [options]');
+      log.info('  Usage: novus encounters <spawn|status|cleanup> [options]');
   }
 }
 
@@ -241,6 +254,99 @@ async function handleStatus(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   }
 
   log.info(`\n  Total: ${totalSpawned} spawned, ${totalActive} active across ${citiesChecked} cities`);
+}
+
+// cleanup
+
+/**
+ * Close terminal encounters (despawned past the grace window, killed or not),
+ * reclaiming rent and decrementing the city's active-encounter counter.
+ *
+ * An encounter is eligible once `now >= despawn_at + 1h`. Rent for the encounter
+ * account is routed on-chain to the spawn payer when its grid cell is still
+ * open, otherwise it falls back to the kingdom authority — this CLI inspects the
+ * cell and passes the matching recipient.
+ */
+async function handleCleanup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const cityFlag = getFlag(args.flags, '--city');
+  const allFlag = args.flags.includes('--all');
+
+  if (!allFlag && cityFlag === undefined) {
+    log.error('Specify --city <id> or --all');
+    return;
+  }
+
+  const cityIds = allFlag ? CITIES.map(c => c.id) : [parseInt(cityFlag!, 10)];
+  const now = Math.floor(Date.now() / 1000);
+
+  const client = new NovusMundusClient({
+    connection: ctx.connection,
+    gameEngine: ctx.gameEngine,
+    kingdomId: ctx.kingdomId,
+  });
+
+  let totalCleaned = 0;
+  let totalPending = 0;
+
+  for (const cityId of cityIds) {
+    const city = CITIES.find(c => c.id === cityId);
+    if (!city) {
+      log.error(`City ${cityId} not found`);
+      continue;
+    }
+
+    // fetchEncountersInCity returns despawned + dead encounters (no aliveOnly).
+    const encounters = await client.fetchEncountersInCity(cityId);
+    let cityCleaned = 0;
+
+    for (const { account: enc } of encounters) {
+      if (now < enc.despawnAt.toNumber() + CLEANUP_GRACE_SECONDS) {
+        totalPending++;
+        continue; // still within the grace window
+      }
+
+      const encounterIndex = enc.id.toNumber();
+      const gridLat = Math.round(enc.locationLat * GRID_PRECISION);
+      const gridLong = Math.round(enc.locationLong * GRID_PRECISION);
+
+      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+      const [locationPda] = deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
+
+      // Route rent: cell still held by this encounter -> its creator; cell
+      // closed or reused by a newer encounter -> kingdom (DAO) authority.
+      let rentRecipient = ctx.daoAuthority.publicKey;
+      const locInfo = await ctx.connection.getAccountInfo(locationPda);
+      if (locInfo && locInfo.data.length > 0) {
+        const loc = deserializeLocation(locInfo.data);
+        if (loc.occupant.equals(encounterPda)) {
+          rentRecipient = loc.locationCreator;
+        }
+      }
+
+      const ix = createCleanupEncounterInstruction({
+        gameEngine: ctx.gameEngine,
+        cityId,
+        encounterIndex,
+        gridLat,
+        gridLong,
+        rentRecipient,
+      });
+
+      try {
+        await sendWithRetry(ctx, ix, [ctx.daoAuthority], 1);
+        cityCleaned++;
+        totalCleaned++;
+      } catch (e: any) {
+        log.error(`Failed to clean encounter #${encounterIndex} in ${city.name}: ${e.message}`);
+      }
+    }
+
+    if (cityCleaned > 0) {
+      log.create(`${cityCleaned} encounter(s) cleaned up in ${city.name} (city ${cityId})`);
+    }
+  }
+
+  log.info(`\nDone — ${totalCleaned} cleaned, ${totalPending} still within grace window.`);
 }
 
 // helpers

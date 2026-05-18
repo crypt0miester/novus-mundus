@@ -22,8 +22,8 @@ use crate::constants::{PHI, GOLDEN_ROOT};
 /// - Level 1: 1.272x (√φ)
 /// - Level 2: 1.618x (φ)
 /// - Level 4: 2.618x (φ²)
-/// - Level 10: ~10.86x
-/// - Level 50: ~362,000x (will be capped in practice)
+/// - Level 10: ~11.09x (= φ⁵, since (√φ)^10 = φ⁵)
+/// - Level 50: ~167,761x (will be capped in practice)
 ///
 /// # Arguments
 /// * `n` - Power (typically hero level)
@@ -144,8 +144,8 @@ mod tests {
         let level2 = calculate_buff_at_level(base, 2);
         assert_eq!(level2, 1618); // 1000 × 1.618
 
-        // Level 10: base × (√φ)^10 ≈ 10.86
+        // Level 10: base × (√φ)^10 = base × φ⁵ ≈ 11.09
         let level10 = calculate_buff_at_level(base, 10);
-        assert!(level10 > 10000 && level10 < 11000);
+        assert_eq!(level10, 11090); // 1000 × 11.0901699...
     }
 }

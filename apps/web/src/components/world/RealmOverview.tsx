@@ -11,6 +11,7 @@ import {
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import { TeamCard } from "@/components/shared/TeamCard";
+import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 
 export function RealmOverview() {
   const { data: players, isLoading: playersLoading } = useWorldPlayers();
@@ -150,7 +151,7 @@ export function RealmOverview() {
                 <div>
                   <div className="text-sm font-semibold text-text-primary">{c.account.name}</div>
                   <div className="text-xs text-text-muted">
-                    {["Capital", "Trade", "Combat", "Resource"][c.account.cityType]}
+                    {CITY_TYPE_NAMES[c.account.cityType]}
                   </div>
                 </div>
                 <div className="text-right">

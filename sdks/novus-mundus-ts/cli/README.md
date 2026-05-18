@@ -207,6 +207,8 @@ novus encounters spawn --city 0 --count 5
 novus encounters spawn --all --count 2 --rarity rare
 novus encounters status
 novus encounters status --city 0
+novus encounters cleanup --city 0
+novus encounters cleanup --all
 ```
 
 **`spawn` flags:**
@@ -220,6 +222,8 @@ novus encounters status --city 0
 Uses DAO auto-spawn (no NOVI cost). Encounter index auto-increments per city.
 
 **`status`** shows a table with city name, total spawned, active encounters, and player count. Without `--city`, only cities with encounters are shown.
+
+**`cleanup`** closes terminal encounters — those past `despawn_at + 1h` (the grace window), whether killed or just expired. It closes the `EncounterAccount`, reclaims rent, decrements the city's active-encounter counter and releases the encounter's grid cell. Rent goes to the original spawn payer when the cell is still open, otherwise to the kingdom authority. Requires `--city <id>` or `--all`. Run it periodically — the active-encounter counter is only decremented here, so without sweeping, cities eventually stop spawning.
 
 ---
 

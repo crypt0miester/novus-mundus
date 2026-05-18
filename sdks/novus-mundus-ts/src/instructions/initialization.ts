@@ -438,7 +438,7 @@ export interface CityInfo {
   lon: number;
   /** Radius in km */
   radiusKm: number;
-  /** City type: 0=Capital, 1=Trade, 2=Combat, 3=Resource */
+  /** City type: 0=Capital, 1=Resource, 2=Combat, 3=Trade */
   cityType: number;
 }
 

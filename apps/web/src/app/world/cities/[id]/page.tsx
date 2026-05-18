@@ -13,9 +13,10 @@ import { Badge } from "@/components/shared/Badge";
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { cn } from "@/lib/utils";
+import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 
-const CITY_TYPE_LABELS = ["Capital", "Trade", "Combat", "Resource"] as const;
-const CITY_TYPE_VARIANTS = ["legendary", "gold", "danger", "success"] as const;
+// Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
+const CITY_TYPE_VARIANTS = ["legendary", "success", "danger", "gold"] as const;
 
 export default function CityRosterPage({
   params,
@@ -135,7 +136,7 @@ export default function CityRosterPage({
               </h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge variant={CITY_TYPE_VARIANTS[typeIndex] as any}>
-                  {CITY_TYPE_LABELS[typeIndex]}
+                  {CITY_TYPE_NAMES[typeIndex]}
                 </Badge>
                 {isCurrentCity && (
                   <Badge variant="success">You are here</Badge>

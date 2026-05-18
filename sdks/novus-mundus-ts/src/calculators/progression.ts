@@ -9,20 +9,23 @@ import { applyBpsBonus } from './constants';
 
 // XP Requirements
 
+/** Golden ratio φ — XP curve growth base (matches on-chain `constants::PHI`). */
+const PHI = 1.618033988749895;
+
 /**
- * XP required to reach a specific level (cumulative from level 1).
+ * XP required to advance *into* a level (the per-level cost, not cumulative).
  *
- * Formula: 100 * 2.5^(level-2) for each level
+ * Formula: 100 * φ^(level-2), φ ≈ 1.618
  *
  * @param level - Target level
- * @returns Total XP required to reach that level
+ * @returns XP needed to go from `level - 1` to `level`
  *
  * @example
  * ```ts
  * xpRequiredForLevel(1);  // 0
  * xpRequiredForLevel(2);  // 100
- * xpRequiredForLevel(3);  // 350 (100 + 250)
- * xpRequiredForLevel(4);  // 975 (100 + 250 + 625)
+ * xpRequiredForLevel(3);  // 161
+ * xpRequiredForLevel(4);  // 261
  * ```
  */
 export function xpRequiredForLevel(level: number): number {
@@ -30,12 +33,11 @@ export function xpRequiredForLevel(level: number): number {
     return 0;
   }
 
-  // Exponential formula: 100 * 2.5^(level-2)
+  // Exponential formula: 100 * φ^(level-2)
   const base = 100;
-  const multiplier = 2.5;
   const exponent = level - 2;
 
-  return Math.floor(base * Math.pow(multiplier, exponent));
+  return Math.floor(base * Math.pow(PHI, exponent));
 }
 
 /**

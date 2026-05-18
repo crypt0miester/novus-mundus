@@ -12,7 +12,7 @@
 /// - Economic activities (hiring, collecting) peak at Midday
 /// - Attacking is strongest at DeepNight (stealth advantage)
 /// - Defending is strongest at Midday (full alertness)
-/// - Golden Hours (Dawn/Dusk) have special φ² bonuses for collection
+/// - Golden Hours (Dawn/Dusk) give φ² spawn weight to rare encounters
 /// - Rare encounters spawn at golden hours, Legendary at midnight
 
 use crate::constants::{PHI, GOLDEN_ROOT, PHI_SQUARED, PHI_INVERSE, PHI_SQUARED_INVERSE, PHI_CUBED_INVERSE};
@@ -146,9 +146,10 @@ pub fn calculate_local_time(timestamp: i64, longitude: f64) -> i64 {
     // Normalize to 0-999 range (fraction of day)
     let global_time = (cycle_position * TIME_PRECISION) / CYCLE_LENGTH;
 
-    // Longitude offset: -180° to +180° maps to -500 to +500
-    // This means 180° east is 12 hours ahead, 180° west is 12 hours behind
-    let longitude_offset = ((longitude + 180.0) / 360.0 * TIME_PRECISION as f64) as i64;
+    // Longitude offset: -180° to +180° maps to -500 to +500.
+    // This means 180° east is 12 hours ahead, 180° west is 12 hours behind,
+    // and longitude 0 (Greenwich) keeps UTC — no offset.
+    let longitude_offset = (longitude / 360.0 * TIME_PRECISION as f64) as i64;
 
     // Calculate local time with wraparound
     (global_time + longitude_offset).rem_euclid(TIME_PRECISION)
@@ -392,9 +393,9 @@ mod tests {
         let time_london = get_time_of_day(timestamp, 0.0);
         assert_eq!(time_london, TimeOfDay::Morning);
 
-        // At longitude 180 (12 hours ahead), it's Evening (6pm local)
-        let time_tokyo = get_time_of_day(timestamp, 135.0);
-        assert_eq!(time_tokyo, TimeOfDay::Dusk);
+        // At longitude 180 (12 hours ahead), it's Dusk (6pm local)
+        let time_far_east = get_time_of_day(timestamp, 180.0);
+        assert_eq!(time_far_east, TimeOfDay::Dusk);
     }
 
     #[test]
@@ -416,9 +417,9 @@ mod tests {
         let defend_day = get_time_multiplier(TimeOfDay::Midday, ActivityType::Defending);
         assert!((defend_day - PHI).abs() < 0.0001);
 
-        // Collection at dawn (golden hour) should give φ² bonus
-        let collect_dawn = get_time_multiplier(TimeOfDay::Dawn, ActivityType::Collecting);
-        assert!((collect_dawn - PHI_SQUARED).abs() < 0.0001);
+        // Collection at deep night should give a 1/φ penalty (golden-ratio family)
+        let collect_night = get_time_multiplier(TimeOfDay::DeepNight, ActivityType::Collecting);
+        assert!((collect_night - PHI_INVERSE).abs() < 0.0001);
     }
 
     #[test]

@@ -4,23 +4,25 @@ use crate::{
     logic::{get_time_of_day, get_time_multiplier, ActivityType, safe_math::apply_bp},
 };
 
-/// XP required for each level (exponential growth)
+/// XP required to advance *into* `level` (the per-level cost, deducted on level-up).
+///
+/// Growth base is the golden ratio φ ≈ 1.618 — matching the rest of the
+/// deterministic progression math, and keeping mid/late levels reachable for a
+/// steady free player (a ×2.5 base put level 21 at ~6 billion cumulative XP).
 /// Level 1->2: 100 XP
-/// Level 2->3: 250 XP
-/// Level 3->4: 500 XP
-/// Level 4->5: 1000 XP
-/// etc.
+/// Level 2->3: 161 XP
+/// Level 3->4: 261 XP
+/// Level 4->5: 423 XP
 pub fn xp_required_for_level(level: u8) -> u64 {
     if level == 0 || level == 1 {
         return 0;
     }
 
-    // Exponential formula: 100 * 2.5^(level-2)
+    // Exponential formula: 100 * φ^(level-2)
     let base: f64 = 100.0;
-    let multiplier: f64 = 2.5;
     let exponent = (level as f64) - 2.0;
 
-    (base * libm::pow(multiplier, exponent)) as u64
+    (base * libm::pow(crate::constants::PHI, exponent)) as u64
 }
 
 /// Grant XP to player with time-of-day bonus and handle level-ups
@@ -182,10 +184,11 @@ mod tests {
 
     #[test]
     fn test_xp_required() {
+        // 100 * φ^(level-2)
         assert_eq!(xp_required_for_level(1), 0);
         assert_eq!(xp_required_for_level(2), 100);
-        assert_eq!(xp_required_for_level(3), 250);
-        assert_eq!(xp_required_for_level(4), 625);
+        assert_eq!(xp_required_for_level(3), 161);
+        assert_eq!(xp_required_for_level(4), 261);
     }
 
 }

@@ -11,12 +11,13 @@ import {
 } from "@/lib/hooks/world";
 import styles from "./RealmMap.module.css";
 
-/* City type → label + accent color (index clamped to 0-3). */
+/* City type → label + accent color. Index must match the on-chain
+ * CityType enum: Capital=0, Resource=1, Combat=2, Trade=3. */
 const TYPE_META = [
   { label: "Capital", color: "#f4c95d" },
-  { label: "Trade", color: "#3ad6c4" },
-  { label: "Combat", color: "#ff6b6b" },
   { label: "Resource", color: "#5fd98a" },
+  { label: "Combat", color: "#ff6b6b" },
+  { label: "Trade", color: "#3ad6c4" },
 ] as const;
 
 const THEMES = ["Medieval", "Cyberpunk", "Sci-Fi", "Modern", "Post-Apocalyptic"];
