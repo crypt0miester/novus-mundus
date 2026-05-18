@@ -210,6 +210,57 @@ export function calculateResearchCost(
   return cost;
 }
 
+// Building Costs
+
+/**
+ * NOVI cost of a building action at `level` — mirrors the on-chain
+ * BuildingTemplate per-step integer-floor formula exactly.
+ *
+ * `level = 0` -> base cost (a new build). An upgrade from level L pays
+ * `base x (costGrowthBps / 10_000)^L`, flooring after every step. BigInt is
+ * used for the intermediate product so high levels stay precise.
+ *
+ * @param baseCost - Template base NOVI cost
+ * @param level - Building's current level (0 for a fresh build)
+ * @param costGrowthBps - Per-level growth in bps of 10_000 (26_180 = x2.618)
+ * @returns NOVI cost
+ */
+export function calculateBuildingCost(
+  baseCost: number,
+  level: number,
+  costGrowthBps: number = 26180
+): number {
+  let cost = BigInt(Math.trunc(baseCost));
+  const num = BigInt(Math.trunc(costGrowthBps));
+  for (let i = 0; i < level; i++) {
+    cost = (cost * num) / 10000n;
+  }
+  return Number(cost);
+}
+
+/**
+ * Construction time in seconds for a building action at `level`.
+ * Time scales once per 5 levels (slower than cost).
+ *
+ * @param baseSeconds - Template base construction time
+ * @param level - Building's current level (0 for a fresh build)
+ * @param timeGrowthBps - Per-(level/5) growth in bps of 10_000
+ * @returns Construction time in seconds
+ */
+export function calculateBuildingTime(
+  baseSeconds: number,
+  level: number,
+  timeGrowthBps: number = 26180
+): number {
+  let time = BigInt(Math.trunc(baseSeconds));
+  const num = BigInt(Math.trunc(timeGrowthBps));
+  const steps = Math.floor(level / 5);
+  for (let i = 0; i < steps; i++) {
+    time = (time * num) / 10000n;
+  }
+  return Number(time);
+}
+
 // NOVI Costs
 
 /**

@@ -15,12 +15,14 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
+import type BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
+  deriveBuildingTemplatePda,
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 import { BuildingType } from '../types/enums';
@@ -108,6 +110,8 @@ export function createBuildBuildingInstruction(
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
+  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -115,10 +119,11 @@ export function createBuildBuildingInstruction(
     { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
   const writer = new BufferWriter(1);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
+  writer.writeU8(params.buildingType);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_BUILD, writer.toBuffer());
 
@@ -159,6 +164,8 @@ export function createUpgradeBuildingInstruction(
   // Token account is owned by PlayerAccount PDA
   const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
+  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -166,10 +173,11 @@ export function createUpgradeBuildingInstruction(
     { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
   const writer = new BufferWriter(1);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
+  writer.writeU8(params.buildingType);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_UPGRADE, writer.toBuffer());
 
@@ -576,4 +584,147 @@ export function createRecoverTroopsInstruction(
     programId: PROGRAM_ID,
     data,
   });
+}
+
+// Initialize Building Template (DAO)
+
+export interface InitializeBuildingTemplateAccounts {
+  /** DAO authority (signer + payer) */
+  daoAuthority: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+}
+
+export interface InitializeBuildingTemplateParams {
+  /** BuildingType discriminant (0-18) */
+  buildingType: BuildingType | number;
+  /** Tier 1-3 (informational) */
+  tier: number;
+  /** Max upgrade level */
+  maxLevel: number;
+  /** Base construction time in seconds (a level-0 build) */
+  baseTimeSeconds: number;
+  /** Base NOVI cost (a level-0 build) */
+  baseNoviCost: BN | number | bigint;
+  /** Per-level cost growth, in bps of 10_000 (26_180 = x2.618) */
+  costGrowthBps: number;
+  /** Per-(level/5) time growth, in bps of 10_000 */
+  timeGrowthBps: number;
+}
+
+/**
+ * Initialize a building template (DAO only).
+ *
+ * Rust account order: [dao_authority, building_template, game_engine, system_program]
+ * Rust instruction data: 19 bytes
+ */
+export function createInitializeBuildingTemplateInstruction(
+  accounts: InitializeBuildingTemplateAccounts,
+  params: InitializeBuildingTemplateParams
+): TransactionInstruction {
+  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+  ];
+
+  // 19 bytes: building_type u8, tier u8, max_level u8, base_time_seconds u32,
+  //           base_novi_cost u64, cost_growth_bps u16, time_growth_bps u16
+  const writer = new BufferWriter(19);
+  writer.writeU8(params.buildingType);
+  writer.writeU8(params.tier);
+  writer.writeU8(params.maxLevel);
+  writer.writeU32(params.baseTimeSeconds);
+  writer.writeU64(params.baseNoviCost);
+  writer.writeU16(params.costGrowthBps);
+  writer.writeU16(params.timeGrowthBps);
+
+  const data = createInstructionData(DISCRIMINATORS.ESTATE_INIT_BUILDING_TEMPLATE, writer.toBuffer());
+
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
+}
+
+// Update Building Template (DAO)
+
+export interface UpdateBuildingTemplateAccounts {
+  /** DAO authority (signer) */
+  daoAuthority: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+  /** Building type whose template is being updated */
+  buildingType: BuildingType | number;
+}
+
+export type UpdateBuildingTemplateParams =
+  | { field: 'baseTimeSeconds'; value: number }
+  | { field: 'baseNoviCost'; value: BN | number | bigint }
+  | { field: 'costGrowthBps'; value: number }
+  | { field: 'timeGrowthBps'; value: number }
+  | { field: 'isActive'; value: boolean }
+  | { field: 'maxLevel'; value: number }
+  | { field: 'tier'; value: number };
+
+/**
+ * Update one field of a building template (DAO only).
+ *
+ * Rust account order: [dao_authority, building_template, game_engine].
+ * Instruction data: [field_selector: u8, value...].
+ */
+export function createUpdateBuildingTemplateInstruction(
+  accounts: UpdateBuildingTemplateAccounts,
+  params: UpdateBuildingTemplateParams
+): TransactionInstruction {
+  const [buildingTemplate] = deriveBuildingTemplatePda(accounts.buildingType);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+  ];
+
+  let writer: BufferWriter;
+  switch (params.field) {
+    case 'baseTimeSeconds':
+      writer = new BufferWriter(5);
+      writer.writeU8(0);
+      writer.writeU32(params.value);
+      break;
+    case 'baseNoviCost':
+      writer = new BufferWriter(9);
+      writer.writeU8(1);
+      writer.writeU64(params.value);
+      break;
+    case 'costGrowthBps':
+      writer = new BufferWriter(3);
+      writer.writeU8(2);
+      writer.writeU16(params.value);
+      break;
+    case 'timeGrowthBps':
+      writer = new BufferWriter(3);
+      writer.writeU8(3);
+      writer.writeU16(params.value);
+      break;
+    case 'isActive':
+      writer = new BufferWriter(2);
+      writer.writeU8(4);
+      writer.writeU8(params.value ? 1 : 0);
+      break;
+    case 'maxLevel':
+      writer = new BufferWriter(2);
+      writer.writeU8(5);
+      writer.writeU8(params.value);
+      break;
+    case 'tier':
+      writer = new BufferWriter(2);
+      writer.writeU8(6);
+      writer.writeU8(params.value);
+      break;
+  }
+
+  const data = createInstructionData(DISCRIMINATORS.ESTATE_UPDATE_BUILDING_TEMPLATE, writer!.toBuffer());
+
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }

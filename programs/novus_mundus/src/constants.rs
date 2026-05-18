@@ -127,6 +127,7 @@ pub const PROGRESSION_SEED: &[u8] = b"progression";
 pub const LOOT_SEED: &[u8] = b"loot";
 pub const RESEARCH_SEED: &[u8] = b"research";
 pub const RESEARCH_TEMPLATE_SEED: &[u8] = b"research_template";
+pub const BUILDING_TEMPLATE_SEED: &[u8] = b"building_template";
 pub const HERO_TEMPLATE_SEED: &[u8] = b"hero_template";
 pub const HERO_COLLECTION_SEED: &[u8] = b"hero_collection";
 pub const HERO_MINT_RECEIPT_SEED: &[u8] = b"hero_mint_receipt";

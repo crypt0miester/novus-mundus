@@ -9,6 +9,7 @@ import { initEngine, statusEngine } from '../phases/engine';
 import { initCities } from '../phases/cities';
 import { initHeroes } from '../phases/heroes';
 import { initResearch } from '../phases/research';
+import { initBuildings } from '../phases/buildings';
 import { initSubscriptions } from '../phases/subscriptions';
 import { initShop } from '../phases/shop';
 import { initDungeons } from '../phases/dungeons';
@@ -27,6 +28,7 @@ const PHASES: Phase[] = [
   { name: 'Cities',        key: 'cities',        fn: initCities },
   { name: 'Heroes',        key: 'heroes',        fn: initHeroes },
   { name: 'Research',      key: 'research',      fn: initResearch },
+  { name: 'Buildings',     key: 'buildings',     fn: initBuildings },
   { name: 'Subscriptions', key: 'subscriptions', fn: initSubscriptions },
   { name: 'Shop',          key: 'shop',          fn: initShop },
   { name: 'Dungeons',      key: 'dungeons',      fn: initDungeons },

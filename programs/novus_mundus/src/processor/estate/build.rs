@@ -8,7 +8,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot},
+    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot, BuildingTemplate, AccountKey},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_owner},
@@ -44,6 +44,7 @@ pub fn process(
         player_token_account,
         novi_mint,
         _token_program,
+        building_template,
     ]);
 
     // 2. Validate Accounts
@@ -61,6 +62,7 @@ pub fn process(
     // Program-ownership gate (precedes the unsafe ::load calls below).
     require_owner(player_account, program_id)?;
     require_owner(estate_account, program_id)?;
+    require_owner(building_template, program_id)?;
 
     // 3. Parse Instruction Data
     if instruction_data.is_empty() {
@@ -70,7 +72,7 @@ pub fn process(
         .ok_or(ProgramError::InvalidInstructionData)?;
 
     // 4. Validate preconditions (scoped borrow - dropped before CPI)
-    let (base_cost, slot_index, player_ge, player_bump, player_name) = {
+    let (base_cost, construction_time, slot_index, player_ge, player_bump, player_name) = {
         let player_data_ref = player_account.try_borrow()?;
         let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
@@ -100,20 +102,27 @@ pub fn process(
         let slot_index = estate_data.find_empty_slot()
             .ok_or(GameError::BuildingSlotFull)?;
 
-        // 9. Calculate cost (base cost for level 1)
-        let base_cost = match building_type.tier() {
-            1 => 10_000u64,    // Tier 1: 1k NOVI
-            2 => 20_000u64,    // Tier 2: 2k NOVI
-            3 => 30_000u64,   // Tier 3: 3k NOVI
-            _ => 50_000u64,
-        };
+        // 9. Load the building template — cost & time come from on-chain config.
+        //    Verify it is a genuine BuildingTemplate at the PDA for this type.
+        let template_data_ref = building_template.try_borrow()?;
+        AccountKey::validate(&template_data_ref, AccountKey::BuildingTemplate)?;
+        let template = unsafe { BuildingTemplate::load(&template_data_ref) };
+        let (expected_template, _) = BuildingTemplate::derive_pda(building_type as u8);
+        if building_template.address() != &expected_template {
+            return Err(ProgramError::InvalidSeeds);
+        }
+        if !template.is_active {
+            return Err(GameError::InvalidParameter.into());
+        }
+        let base_cost = template.calculate_construction_cost(0);
+        let construction_time = template.calculate_construction_time(0);
 
         // 10. Check player has enough balance
         if player_data.locked_novi < base_cost {
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        (base_cost, slot_index, player_data.game_engine, player_data.bump, player_data.name)
+        (base_cost, construction_time, slot_index, player_data.game_engine, player_data.bump, player_data.name)
     }; // borrows dropped here
 
     // 11. Burn NOVI tokens (CPI - requires no active borrows)
@@ -132,13 +141,6 @@ pub fn process(
     // 12. Update player and estate state (re-borrow after CPI)
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
-
-    let construction_time = match building_type.tier() {
-        1 => 4 * 3600i64,    // Tier 1: 4 hours
-        2 => 12 * 3600i64,   // Tier 2: 12 hours
-        3 => 24 * 3600i64,   // Tier 3: 24 hours
-        _ => 4 * 3600i64,
-    };
 
     {
         let mut player_data_ref = player_account.try_borrow_mut()?;

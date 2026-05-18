@@ -263,6 +263,16 @@ export function deriveResearchTemplatePda(
   );
 }
 
+/** Derive Building Template PDA (one per BuildingType) */
+export function deriveBuildingTemplatePda(
+  buildingType: number
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.BUILDING_TEMPLATE, u8(buildingType)],
+    PROGRAM_ID
+  );
+}
+
 /** Derive Research Progress PDA */
 export function deriveResearchPda(player: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(

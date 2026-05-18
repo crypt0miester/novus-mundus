@@ -397,58 +397,8 @@ impl BuildingSlot {
         now >= self.construction_ends
     }
 
-    /// Calculate NOVI cost for next level (φ² scaling)
-    pub fn calculate_upgrade_cost(&self) -> u64 {
-        let base_cost = self.get_base_construction_cost();
-        let level = self.level as u32;
-
-        // Cost = base × φ^(2×level) = base × (φ²)^level
-        // Using integer approximation: multiply by 2618, divide by 1000 per level
-        let mut cost = base_cost;
-        for _ in 0..level {
-            cost = cost.saturating_mul(2618) / 1000;
-        }
-        cost
-    }
-
-    /// Get base construction cost for building type
-    fn get_base_construction_cost(&self) -> u64 {
-        match BuildingType::from_u8(self.building_type) {
-            Some(bt) => match bt.tier() {
-                1 => 10_000u64,    // Tier 1: 1k NOVI
-                2 => 20_000u64,    // Tier 2: 2k NOVI
-                3 => 30_000u64,   // Tier 3: 3k NOVI
-                _ => 50_000u64,
-            },
-            None => 10_000,
-        }
-    }
-
-    /// Calculate construction time in seconds (φ² scaling per level)
-    pub fn calculate_construction_time(&self) -> i64 {
-        let base_time = self.get_base_construction_time();
-        let level = self.level as i64;
-
-        // Time = base × (φ²)^(level/5) - slower scaling than cost
-        // Using integer approximation
-        let mut time = base_time;
-        for _ in 0..(level / 5) {
-            time = time.saturating_mul(2618) / 1000;
-        }
-        time
-    }
-
-    fn get_base_construction_time(&self) -> i64 {
-        match BuildingType::from_u8(self.building_type) {
-            Some(bt) => match bt.tier() {
-                1 => 4 * 3600,    // Tier 1: 4 hours base
-                2 => 12 * 3600,   // Tier 2: 12 hours base
-                3 => 24 * 3600,   // Tier 3: 24 hours base
-                _ => 4 * 3600,
-            },
-            None => 4 * 3600,
-        }
-    }
+    // Build/upgrade cost and time are read from the on-chain BuildingTemplate
+    // config account (see state/building_template.rs), not derived here.
 
     /// Calculate mastery XP needed for next level
     pub fn mastery_xp_for_next_level(&self) -> u32 {

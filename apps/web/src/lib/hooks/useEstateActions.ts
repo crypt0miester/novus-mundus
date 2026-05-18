@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useCallback } from "react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "./usePlayer";
 import { useEstate } from "./useEstate";
-import { useGameEngine } from "./useGameEngine";
 import { useTransact } from "./useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -15,9 +15,13 @@ import {
   createBuildingSpeedupInstruction,
   createCompleteBuildingInstruction,
   createBuyPlotInstruction,
-  calculateUpgradeCost,
+  deriveBuildingTemplatePda,
+  parseBuildingTemplate,
+  calculateBuildingCost,
+  calculateBuildingTime,
   findBuilding,
   BuildingStatus,
+  type BuildingTemplateAccount,
 } from "novus-mundus-sdk";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 
@@ -28,11 +32,14 @@ import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
  */
 const PLOT_COSTS = [0, 100_000, 261_800, 685_400, 1_794_400];
 
+/** All 19 building type ids (BuildingType enum is dense 0-18). */
+const BUILDING_TYPE_IDS = Array.from({ length: 19 }, (_, i) => i);
+
 export function useEstateActions() {
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
-  const { data: geData } = useGameEngine();
   const client = useNovusMundusClient();
   const transact = useTransact();
 
@@ -41,6 +48,24 @@ export function useEstateActions() {
   const maxSlots = plotsOwned * 4;
   const canBuyPlot = plotsOwned < 5;
   const nextPlotCost = canBuyPlot ? PLOT_COSTS[plotsOwned] ?? 0 : 0;
+
+  // Building cost/time config is read live from the on-chain BuildingTemplate
+  // PDAs (one per type), so the panel always shows what the tx will charge.
+  const { data: buildingTemplates } = useQuery({
+    queryKey: ["building-templates"],
+    queryFn: async () => {
+      const pdas = BUILDING_TYPE_IDS.map((id) => deriveBuildingTemplatePda(id)[0]);
+      const infos = await connection.getMultipleAccountsInfo(pdas);
+      const map = new Map<number, BuildingTemplateAccount>();
+      infos.forEach((info, i) => {
+        if (!info) return;
+        const parsed = parseBuildingTemplate(info);
+        if (parsed) map.set(BUILDING_TYPE_IDS[i]!, parsed);
+      });
+      return map;
+    },
+    staleTime: 300_000,
+  });
 
   const handleCreateEstate = useCallback(
     async (reportPhase: (p: TxPhase) => void) => {
@@ -61,7 +86,7 @@ export function useEstateActions() {
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact]
+    [publicKey, client, transact, playerData]
   );
 
   const handleBuildOrUpgrade = useCallback(
@@ -156,37 +181,60 @@ export function useEstateActions() {
     [publicKey, client, transact, plotsOwned]
   );
 
-  /** Get build cost info for a given building type */
+  /**
+   * Cost & time of the NEXT action on a building (build if empty, upgrade if
+   * active), derived from the on-chain BuildingTemplate. Returns null while
+   * the templates are still loading.
+   */
   const getBuildCostInfo = useCallback(
     (buildingType: number) => {
-      const config = BUILDING_FEATURE_MAP.get(buildingType);
-      if (!config) return null;
-      const tier = config.tier;
-      const baseCost = tier === 1 ? 1_000 : tier === 2 ? 2_000 : 3_000;
-      const baseTimeHours = tier === 1 ? 4 : tier === 2 ? 12 : 24;
+      const t = buildingTemplates?.get(buildingType);
+      if (!t) return null;
       const slot = estate ? findBuilding(estate, buildingType) : null;
       const isUpgrade = slot?.status === BuildingStatus.Active;
-      const actualCost = isUpgrade
-        ? calculateUpgradeCost(baseCost, slot!.level, 2.618)
-        : baseCost;
-      return { baseCost: actualCost, baseTimeHours, tier, isUpgrade, level: slot?.level ?? 0 };
+      const level = isUpgrade ? slot!.level : 0;
+      const base = t.baseNoviCost.toNumber();
+      return {
+        baseCost: calculateBuildingCost(base, level, t.costGrowthBps),
+        baseTimeHours:
+          calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
+        tier: t.tier,
+        isUpgrade,
+        level,
+        maxLevel: t.maxLevel,
+        atMaxLevel: isUpgrade && level >= t.maxLevel,
+      };
     },
-    [estate]
+    [buildingTemplates, estate]
   );
 
-  /** Get upgrade cost preview for a building */
+  /**
+   * A rolling window of up to 6 upcoming actions for a building, each entry's
+   * `level` being the level the action is performed *from* (0 = the build).
+   */
   const getUpgradeCostPreview = useCallback(
     (buildingType: number) => {
-      const config = BUILDING_FEATURE_MAP.get(buildingType);
-      if (!config) return null;
-      const tier = config.tier;
-      const baseCost = tier === 1 ? 1_000 : tier === 2 ? 2_000 : 3_000;
-      return [1, 2, 3, 4, 5].map((lvl) => ({
-        level: lvl,
-        cost: calculateUpgradeCost(baseCost, lvl, 2.618),
-      }));
+      const t = buildingTemplates?.get(buildingType);
+      if (!t) return null;
+      const slot = estate ? findBuilding(estate, buildingType) : null;
+      const curLevel = slot?.level ?? 0;
+      const base = t.baseNoviCost.toNumber();
+      const COUNT = 6;
+      const start = Math.max(0, Math.min(curLevel, t.maxLevel - COUNT + 1));
+      const out: { level: number; cost: number; timeHours: number }[] = [];
+      for (let i = 0; i < COUNT; i++) {
+        const level = start + i;
+        if (level > t.maxLevel) break;
+        out.push({
+          level,
+          cost: calculateBuildingCost(base, level, t.costGrowthBps),
+          timeHours:
+            calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
+        });
+      }
+      return out;
     },
-    []
+    [buildingTemplates, estate]
   );
 
   return {

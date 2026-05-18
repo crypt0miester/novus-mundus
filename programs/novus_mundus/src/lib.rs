@@ -225,6 +225,8 @@ pub fn process_instruction(
         167 => { msg!("convert materials"); processor::estate::convert_materials::process(program_id, accounts, instruction_data) }
         168 => { msg!("speedup estate"); processor::estate::speedup::process(program_id, accounts, instruction_data) }
         169 => { msg!("recover troops"); processor::estate::recover_troops::process(program_id, accounts, instruction_data) }
+        170 => { msg!("init building template"); processor::estate::initialize_building_template::process(program_id, accounts, instruction_data) }
+        171 => { msg!("update building template"); processor::estate::update_building_template::process(program_id, accounts, instruction_data) }
 
         // Forge System (180-189) - Staged Tempering
         180 => { msg!("init forge"); processor::forge::initialize::process(program_id, accounts, instruction_data) }

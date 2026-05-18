@@ -14,6 +14,7 @@ pub mod hero;
 pub mod shop;
 pub mod inventory;
 pub mod estate;
+pub mod building_template;
 pub mod expedition;
 pub mod arena;
 pub mod dungeon;
@@ -111,6 +112,9 @@ pub enum AccountKey {
 
     // Sanctuary
     SanctuaryMeditation = 48,
+
+    // Estate building config
+    BuildingTemplate = 49,
 }
 
 impl AccountKey {
@@ -181,6 +185,7 @@ impl AccountKey {
             46 => Some(Self::ForgeSession),
             47 => Some(Self::NameRecord),
             48 => Some(Self::SanctuaryMeditation),
+            49 => Some(Self::BuildingTemplate),
             _ => None,
         }
     }
@@ -289,6 +294,7 @@ pub use hero::*;
 pub use shop::*;
 pub use inventory::*;
 pub use estate::*;
+pub use building_template::*;
 pub use expedition::*;
 pub use arena::*;
 pub use dungeon::*;

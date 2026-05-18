@@ -25,6 +25,7 @@ import { deserializeEstate, type EstateAccount } from './estate';
 import { deserializeLocation, type LocationAccount } from './location';
 import { deserializeResearchTemplate, deserializeResearchProgress, type ResearchTemplateAccount, type ResearchProgressAccount } from './research';
 import { deserializeHeroTemplate, type HeroTemplateAccount } from './hero';
+import { deserializeBuildingTemplate, type BuildingTemplateAccount } from './building-template';
 
 // Routed Account Types
 
@@ -70,7 +71,8 @@ export type RoutedAccount =
   | { key: AccountKey.Location; account: LocationAccount }
   | { key: AccountKey.ResearchTemplate; account: ResearchTemplateAccount }
   | { key: AccountKey.ResearchProgress; account: ResearchProgressAccount }
-  | { key: AccountKey.HeroTemplate; account: HeroTemplateAccount };
+  | { key: AccountKey.HeroTemplate; account: HeroTemplateAccount }
+  | { key: AccountKey.BuildingTemplate; account: BuildingTemplateAccount };
 
 // Router
 
@@ -172,6 +174,8 @@ export function deserializeAnyAccount(data: Uint8Array | Buffer): RoutedAccount 
       return { key, account: deserializeResearchTemplate(data) };
     case AccountKey.ResearchProgress:
       return { key, account: deserializeResearchProgress(data) };
+    case AccountKey.BuildingTemplate:
+      return { key, account: deserializeBuildingTemplate(data) };
     case AccountKey.HeroTemplate:
       return { key, account: deserializeHeroTemplate(data) };
     default:

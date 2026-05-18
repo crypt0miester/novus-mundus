@@ -82,6 +82,7 @@ export const SEEDS = {
   // Research system
   RESEARCH: Buffer.from('research'),
   RESEARCH_TEMPLATE: Buffer.from('research_template'),
+  BUILDING_TEMPLATE: Buffer.from('building_template'),
 
   // Hero system
   HERO_TEMPLATE: Buffer.from('hero_template'),
@@ -273,6 +274,8 @@ export const DISCRIMINATORS = {
   ESTATE_CONVERT_MATERIALS: 167,
   ESTATE_SPEEDUP: 168,
   ESTATE_RECOVER_TROOPS: 169,
+  ESTATE_INIT_BUILDING_TEMPLATE: 170,
+  ESTATE_UPDATE_BUILDING_TEMPLATE: 171,
 
   // Forge System (180-189)
   FORGE_INITIALIZE: 180,

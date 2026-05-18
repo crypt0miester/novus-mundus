@@ -36,6 +36,7 @@ export * from './state/dungeon';
 export * from './state/estate';
 export * from './state/location';
 export * from './state/research';
+export * from './state/building-template';
 export * from './state/hero';
 export * from './state/progression';
 export * from './state/router';

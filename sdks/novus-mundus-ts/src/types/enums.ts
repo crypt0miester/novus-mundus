@@ -59,6 +59,7 @@ export enum AccountKey {
   ForgeSession = 46,
   NameRecord = 47,
   SanctuaryMeditation = 48,
+  BuildingTemplate = 49,
 }
 
 // Subscription Tiers

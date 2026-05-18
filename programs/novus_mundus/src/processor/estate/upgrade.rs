@@ -8,7 +8,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus},
+    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingTemplate, AccountKey},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_owner},
@@ -44,6 +44,7 @@ pub fn process(
         player_token_account,
         novi_mint,
         _token_program,
+        building_template,
     ]);
 
     // 2. Validate Accounts
@@ -61,6 +62,7 @@ pub fn process(
     // Program-ownership gate (precedes the unsafe ::load calls below).
     require_owner(player_account, program_id)?;
     require_owner(estate_account, program_id)?;
+    require_owner(building_template, program_id)?;
 
     // 3. Parse Instruction Data
     if instruction_data.is_empty() {
@@ -70,7 +72,7 @@ pub fn process(
         .ok_or(ProgramError::InvalidInstructionData)?;
 
     // 4. Phase 1: Validate and capture values (scoped borrow, dropped before CPI)
-    let (upgrade_cost, player_ge, player_bump, player_name) = {
+    let (upgrade_cost, construction_time, player_ge, player_bump, player_name) = {
         let player_data_ref = player_account.try_borrow()?;
         let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
@@ -94,21 +96,34 @@ pub fn process(
             return Err(GameError::BuildingUnderConstruction.into());
         }
 
-        // 8. Check max level not reached
-        const MAX_BUILDING_LEVEL: u8 = 20;
-        if building.level >= MAX_BUILDING_LEVEL {
+        // 8. Load the building template — cost, time & level cap from on-chain
+        //    config. Verify it is a genuine template at the PDA for this type.
+        let template_data_ref = building_template.try_borrow()?;
+        AccountKey::validate(&template_data_ref, AccountKey::BuildingTemplate)?;
+        let template = unsafe { BuildingTemplate::load(&template_data_ref) };
+        let (expected_template, _) = BuildingTemplate::derive_pda(building_type as u8);
+        if building_template.address() != &expected_template {
+            return Err(ProgramError::InvalidSeeds);
+        }
+        if !template.is_active {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        // 9. Check max level not reached
+        if building.level >= template.max_level {
             return Err(GameError::ExceedsMaxCap.into());
         }
 
-        // 9. Calculate upgrade cost (φ² scaling)
-        let upgrade_cost = building.calculate_upgrade_cost();
+        // 10. Calculate upgrade cost & time from the building's current level
+        let upgrade_cost = template.calculate_construction_cost(building.level);
+        let construction_time = template.calculate_construction_time(building.level);
 
-        // 10. Check player has enough balance
+        // 11. Check player has enough balance
         if player_data.locked_novi < upgrade_cost {
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        (upgrade_cost, player_data.game_engine, player_data.bump, player_data.name)
+        (upgrade_cost, construction_time, player_data.game_engine, player_data.bump, player_data.name)
     }; // borrows dropped
 
     // 11. Burn NOVI tokens (CPI - no active borrows)
@@ -139,7 +154,6 @@ pub fn process(
     // 14. Get current time and calculate construction end
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
-    let construction_time = building.calculate_construction_time();
 
     // 15. Start upgrade (building remains usable at current level)
     let from_level = building.level;

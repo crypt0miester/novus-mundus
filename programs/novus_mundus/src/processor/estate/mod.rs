@@ -20,3 +20,5 @@ pub mod daily_activity;
 pub mod convert_materials;
 pub mod speedup;
 pub mod recover_troops;
+pub mod initialize_building_template;
+pub mod update_building_template;

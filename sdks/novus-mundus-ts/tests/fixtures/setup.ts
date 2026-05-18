@@ -27,16 +27,19 @@ import {
   createCreateCollectionInstruction,
   createCreateTemplateInstruction,
   createInitializeTemplateInstruction,
+  createInitializeBuildingTemplateInstruction,
   createInitializeConfigInstruction,
   createCreateItemInstruction,
   deriveGameEnginePda,
   deriveHeroCollectionPda,
   deriveHeroTemplatePda,
   deriveResearchTemplatePda,
+  deriveBuildingTemplatePda,
   deriveCityPda,
   deriveShopConfigPda,
   deriveShopItemPda,
 } from '../../src/index';
+import { BUILDING_TEMPLATES } from '../../cli/data/buildings';
 
 // Configuration
 
@@ -62,6 +65,7 @@ export interface TestContext {
   cities: Map<number, PublicKey>;
   heroTemplates: Map<number, PublicKey>;
   researchTemplates: Map<number, PublicKey>;
+  buildingTemplates: Map<number, PublicKey>;
   shopConfig: PublicKey;
   initialized: boolean;
 }
@@ -703,6 +707,33 @@ async function setupResearchTemplates(ctx: TestContext): Promise<void> {
   }
 }
 
+async function setupBuildingTemplates(ctx: TestContext): Promise<void> {
+  for (const template of BUILDING_TEMPLATES) {
+    const [templatePda] = deriveBuildingTemplatePda(template.buildingType);
+    ctx.buildingTemplates.set(template.buildingType, templatePda);
+
+    if (await accountExists(ctx.svm, templatePda)) continue;
+
+    const ix = createInitializeBuildingTemplateInstruction(
+      {
+        daoAuthority: ctx.daoAuthority.publicKey,
+        gameEngine: ctx.gameEngine,
+      },
+      template
+    );
+
+    const tx = new Transaction().add(ix);
+    try {
+      await sendTx(ctx.svm, tx, [ctx.daoAuthority], ctx.config);
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (!msg.includes('already in use')) {
+        console.error(`[setup] Building template ${template.buildingType} FAILED:`, msg);
+      }
+    }
+  }
+}
+
 // Main Setup
 
 /** Default kingdom ID for tests */
@@ -738,6 +769,7 @@ export async function setupTestContext(
     cities: new Map(),
     heroTemplates: new Map(),
     researchTemplates: new Map(),
+    buildingTemplates: new Map(),
     shopConfig,
     initialized: false,
   };
@@ -761,6 +793,7 @@ export async function setupTestContext(
     await setupHeroCollection(ctx);
     await setupHeroTemplates(ctx);
     await setupResearchTemplates(ctx);
+    await setupBuildingTemplates(ctx);
     await setupTestGemsItem(ctx);
     await setupTestFragmentsItem(ctx);
     await setupTestMaterialsItem(ctx);
