@@ -590,6 +590,24 @@ SIWS login and co-signed instructions (dungeon enter, expedition strike, arena m
 
 Open `/world` to see the realm map. Point `NEXT_PUBLIC_RPC_URL` at devnet to run against a deployed kingdom instead.
 
+### 6. Smoke-test for DOM-nesting bugs (optional)
+
+The web client has a Playwright smoke test that walks every route and fails on
+invalid DOM nesting — e.g. a `<button>` inside a `<button>` — which `tsc` and
+linting cannot catch (they only surface in React's resolved render tree).
+
+It runs against the live app, so the **full stack from steps 1–5 must be up**
+(validator + `novus init all` + `bun dev`).
+
+```bash
+cd apps/web
+bunx playwright install chromium   # one-time: download the browser
+bun run test:smoke                 # walks all routes, fails on nesting/hydration errors
+```
+
+The dev server from step 5 is reused if already running; otherwise Playwright
+starts one. Override the target with `SMOKE_BASE_URL` (e.g. a deployed preview).
+
 ---
 
 ## Getting Started

@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "playwright test"
   },
   "dependencies": {
     "@noble/hashes": "2.0.1",
@@ -36,8 +37,9 @@
     "zustand": "5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "4.1.18",
-    "@types/node": "22.0.0",
+    "@types/node": "22",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@types/three": "0.184.1",

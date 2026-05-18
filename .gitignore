@@ -18,3 +18,8 @@ sdks/novus-mundus-ts/terrain-builder/src/town/assets
 sdks/pyth-sdk-rs
 sdks/sb-on-demand-examples
 sdks/mpl-core
+# Playwright (web smoke tests)
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/.last-run.json
