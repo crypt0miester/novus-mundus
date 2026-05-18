@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useEstateActions } from "@/lib/hooks/useEstateActions";
@@ -59,8 +59,14 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
   const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
 
-  const costInfo = getBuildCostInfo(buildingId);
-  const costPreview = getUpgradeCostPreview(buildingId);
+  const costInfo = useMemo(
+    () => getBuildCostInfo(buildingId),
+    [getBuildCostInfo, buildingId]
+  );
+  const costPreview = useMemo(
+    () => getUpgradeCostPreview(buildingId),
+    [getUpgradeCostPreview, buildingId]
+  );
 
   if (!config) return null;
 

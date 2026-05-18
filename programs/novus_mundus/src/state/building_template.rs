@@ -1,9 +1,12 @@
 use pinocchio::{
+    AccountView,
     Address,
     error::ProgramError,
 };
 use crate::constants::BUILDING_TEMPLATE_SEED;
+use crate::error::GameError;
 use crate::logic::safe_math::exp_growth;
+use crate::state::AccountKey;
 
 /// Building Template — DAO-controlled cost/time configuration for one
 /// `BuildingType`. One PDA per building type (seed `building_template` + the
@@ -87,6 +90,34 @@ impl BuildingTemplate {
             (level / 5) as u32,
         ).unwrap_or(i64::MAX as u64);
         time.min(i64::MAX as u64) as i64
+    }
+
+    /// Borrow, validate, and resolve the cost/time of an action at `level`.
+    ///
+    /// Confirms the account is a BuildingTemplate at the canonical PDA for
+    /// `building_type` (via the stored bump — no `find_program_address`) and is
+    /// active. The caller is expected to have already checked program ownership.
+    /// Returns `(novi_cost, time_seconds, max_level)`.
+    pub fn resolve(
+        account: &AccountView,
+        building_type: u8,
+        level: u8,
+    ) -> Result<(u64, i64, u8), ProgramError> {
+        let data = account.try_borrow()?;
+        AccountKey::validate(&data, AccountKey::BuildingTemplate)?;
+        let template = unsafe { Self::load(&data) };
+        let expected = Self::create_pda(building_type, template.bump)?;
+        if account.address() != &expected {
+            return Err(ProgramError::InvalidSeeds);
+        }
+        if !template.is_active {
+            return Err(GameError::InvalidParameter.into());
+        }
+        Ok((
+            template.calculate_construction_cost(level),
+            template.calculate_construction_time(level),
+            template.max_level,
+        ))
     }
 }
 

@@ -8,7 +8,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingTemplate, AccountKey},
+    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingTemplate},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_owner},
@@ -96,27 +96,14 @@ pub fn process(
             return Err(GameError::BuildingUnderConstruction.into());
         }
 
-        // 8. Load the building template — cost, time & level cap from on-chain
-        //    config. Verify it is a genuine template at the PDA for this type.
-        let template_data_ref = building_template.try_borrow()?;
-        AccountKey::validate(&template_data_ref, AccountKey::BuildingTemplate)?;
-        let template = unsafe { BuildingTemplate::load(&template_data_ref) };
-        let (expected_template, _) = BuildingTemplate::derive_pda(building_type as u8);
-        if building_template.address() != &expected_template {
-            return Err(ProgramError::InvalidSeeds);
-        }
-        if !template.is_active {
-            return Err(GameError::InvalidParameter.into());
-        }
+        // 8. Cost, time & level cap come from the on-chain BuildingTemplate.
+        let (upgrade_cost, construction_time, max_level) =
+            BuildingTemplate::resolve(building_template, building_type as u8, building.level)?;
 
         // 9. Check max level not reached
-        if building.level >= template.max_level {
+        if building.level >= max_level {
             return Err(GameError::ExceedsMaxCap.into());
         }
-
-        // 10. Calculate upgrade cost & time from the building's current level
-        let upgrade_cost = template.calculate_construction_cost(building.level);
-        let construction_time = template.calculate_construction_time(building.level);
 
         // 11. Check player has enough balance
         if player_data.locked_novi < upgrade_cost {

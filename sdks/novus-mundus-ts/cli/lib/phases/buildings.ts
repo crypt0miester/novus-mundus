@@ -8,7 +8,6 @@
 import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
-  accountExists,
   createOrUpdate,
   updateOnly,
   newStats,
@@ -93,11 +92,9 @@ export async function updateBuildings(ctx: CLIContext): Promise<PhaseStats> {
 }
 
 export async function statusBuildings(ctx: CLIContext): Promise<string> {
-  let count = 0;
-  for (const t of BUILDING_TEMPLATES) {
-    const [pda] = deriveBuildingTemplatePda(t.buildingType);
-    if (await accountExists(ctx.connection, pda)) count++;
-  }
+  const pdas = BUILDING_TEMPLATES.map((t) => deriveBuildingTemplatePda(t.buildingType)[0]);
+  const infos = await ctx.connection.getMultipleAccountsInfo(pdas);
+  const count = infos.filter((i) => i !== null).length;
   return `${count}/${BUILDING_TEMPLATES.length} templates`;
 }
 
@@ -108,18 +105,19 @@ export async function detailBuildings(ctx: CLIContext): Promise<string> {
   const lines: string[] = [];
   lines.push(section(`Building Templates — Kingdom ${ctx.kingdomId}`));
 
+  const pdas = BUILDING_TEMPLATES.map((t) => deriveBuildingTemplatePda(t.buildingType)[0]);
+  const infos = await ctx.connection.getMultipleAccountsInfo(pdas);
   const rows: string[][] = [];
 
-  for (const t of BUILDING_TEMPLATES) {
-    const [pda] = deriveBuildingTemplatePda(t.buildingType);
-    const info = await ctx.connection.getAccountInfo(pda);
+  BUILDING_TEMPLATES.forEach((t, i) => {
+    const info = infos[i];
 
     if (!info) {
       rows.push([
         String(t.buildingType), BUILDING_NAMES[t.buildingType] ?? '?',
         String(t.tier), '', '', '', dim('missing'),
       ]);
-      continue;
+      return;
     }
 
     try {
@@ -139,7 +137,7 @@ export async function detailBuildings(ctx: CLIContext): Promise<string> {
         String(t.buildingType), red('BAD DATA'), '', '', '', '', red('BAD DATA'),
       ]);
     }
-  }
+  });
 
   lines.push(table(
     [

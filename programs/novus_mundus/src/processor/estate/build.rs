@@ -8,7 +8,7 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot, BuildingTemplate, AccountKey},
+    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot, BuildingTemplate},
     constants::PLAYER_SEED,
     helpers::burn_tokens,
     validation::{require_signer, require_writable, require_owner},
@@ -102,20 +102,9 @@ pub fn process(
         let slot_index = estate_data.find_empty_slot()
             .ok_or(GameError::BuildingSlotFull)?;
 
-        // 9. Load the building template — cost & time come from on-chain config.
-        //    Verify it is a genuine BuildingTemplate at the PDA for this type.
-        let template_data_ref = building_template.try_borrow()?;
-        AccountKey::validate(&template_data_ref, AccountKey::BuildingTemplate)?;
-        let template = unsafe { BuildingTemplate::load(&template_data_ref) };
-        let (expected_template, _) = BuildingTemplate::derive_pda(building_type as u8);
-        if building_template.address() != &expected_template {
-            return Err(ProgramError::InvalidSeeds);
-        }
-        if !template.is_active {
-            return Err(GameError::InvalidParameter.into());
-        }
-        let base_cost = template.calculate_construction_cost(0);
-        let construction_time = template.calculate_construction_time(0);
+        // 9. Cost & time come from the on-chain BuildingTemplate config.
+        let (base_cost, construction_time, _) =
+            BuildingTemplate::resolve(building_template, building_type as u8, 0)?;
 
         // 10. Check player has enough balance
         if player_data.locked_novi < base_cost {
