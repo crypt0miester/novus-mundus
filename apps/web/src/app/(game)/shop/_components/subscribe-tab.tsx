@@ -14,9 +14,9 @@ import { formatNumber } from "@/lib/utils";
 import {
   createPurchaseSubscriptionInstruction,
   getEffectiveTier,
+  formatLamportsAsSol,
 } from "novus-mundus-sdk";
 import {
-  Zap,
   Database,
   ShoppingCart,
   Percent,
@@ -29,12 +29,8 @@ import {
   Check,
   Sparkles,
   Clock,
+  type LucideIcon,
 } from "lucide-react";
-
-// NOVI price per tier — kept in lockstep with the on-chain purchase flow
-// (paymentType 0 charges Locked NOVI). Pricing/payment selection is wired
-// elsewhere; this drives display + the affordability check only.
-const TIER_PRICE = [0, 500, 1500, 5000];
 
 // Charter accent ramp — a metal ladder (iron → bronze → silver → gold) that
 // matches the Free/Bronze/Silver/Gold names the rest of the app uses.
@@ -63,8 +59,18 @@ function asMultiplier(r: number): string {
   return Number.isInteger(r) ? `${r}×` : `${r.toFixed(1)}×`;
 }
 
+/**
+ * SOL cost of a charter, in lamports — mirrors the on-chain purchase formula
+ * (subscription/purchase.rs): sol_cost = cost_in_usd_cents × 1e9 ÷ usd_price_cents.
+ * The price is USD-denominated but settled in SOL at the live SOL/USD rate.
+ */
+function solCostLamports(costUsdCents: number, usdPriceCents: number): number {
+  if (usdPriceCents <= 0 || costUsdCents <= 0) return 0;
+  return Math.floor((costUsdCents * 1_000_000_000) / usdPriceCents);
+}
+
 interface PerkRowProps {
-  icon: typeof Zap;
+  icon: LucideIcon;
   color: string;
   strong?: boolean;
   children: ReactNode;
@@ -101,10 +107,11 @@ export function SubscribeTab() {
     return getEffectiveTier(player, nowSec);
   }, [player, nowSec]);
 
-  const noviBalance = num(player?.lockedNovi);
   const tiers = geData?.account?.subscriptionTiers ?? [];
   const npc = geData?.account?.noviPurchaseConfig;
   const baseTier = tiers[0];
+  // SOL/USD rate (USD cents per 1 SOL) — drives the live charter price.
+  const usdPriceCents = num(geData?.account?.usdPriceCents);
 
   const tierName = (i: number) => tiers[i]?.name ?? `Tier ${i}`;
 
@@ -224,9 +231,17 @@ export function SubscribeTab() {
           const th = theme(idx);
           const isCurrent = sub.tier === idx && sub.active;
           const isPopular = idx === POPULAR_TIER;
-          const price = TIER_PRICE[idx] ?? 0;
           const durationDays = t.durationDays ?? 0;
-          const perDay = durationDays > 0 ? price / durationDays : 0;
+
+          // Live cost — USD-denominated, settled in SOL at the chain rate
+          const costUsdCents = num(t.costInUsdCents);
+          const costLamports = solCostLamports(costUsdCents, usdPriceCents);
+          const priceKnown = costLamports > 0;
+          const curTierCost =
+            sub.tier > 0
+              ? solCostLamports(num(tiers[sub.tier]?.costInUsdCents), usdPriceCents)
+              : 0;
+          const upgradeDelta = idx > sub.tier ? costLamports - curTierCost : 0;
 
           // Real perks, derived from on-chain config
           const gen = num(t.generationMultiplier);
@@ -256,19 +271,6 @@ export function SubscribeTab() {
           if (grantCash) grantParts.push(`${formatNumber(grantCash)} cash`);
           if (troops) grantParts.push(`${formatNumber(troops)} troops`);
           if (gear) grantParts.push(`${formatNumber(gear)} gear`);
-
-          // Breakeven — does the extra generation pay back the charter?
-          const extraGenPerDay = genRatio ? (gen - baseGen) * 12 * 24 : 0;
-          let breakeven: string | null = null;
-          if (price > 0 && extraGenPerDay > 0) {
-            const days = Math.max(0, price - grantNovi) / extraGenPerDay;
-            breakeven =
-              days < 1
-                ? "Extra generation repays the charter in under a day"
-                : `Extra generation repays the charter in ~${Math.ceil(days)} days`;
-          }
-
-          const affordGap = price - noviBalance;
 
           return (
             <div
@@ -306,15 +308,21 @@ export function SubscribeTab() {
                 {t.name}
               </div>
 
-              {/* Cost */}
+              {/* Cost — live, from chain (USD price settled in SOL) */}
               <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-3xl font-bold leading-none text-text-gold">
-                  ✦{price.toLocaleString()}
-                </span>
-                {durationDays > 0 && (
-                  <span className="text-[11px] text-text-muted">
-                    ✦{perDay.toFixed(perDay < 10 ? 1 : 0)}/day · {durationDays}-day
-                    charter
+                {priceKnown ? (
+                  <>
+                    <span className="text-3xl font-bold leading-none text-text-gold">
+                      {formatLamportsAsSol(costLamports)}
+                    </span>
+                    <span className="text-[11px] text-text-muted">
+                      ≈ ${(costUsdCents / 100).toLocaleString()}
+                      {durationDays > 0 && ` · ${durationDays}-day charter`}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm text-text-muted">
+                    Price unavailable
                   </span>
                 )}
               </div>
@@ -394,17 +402,6 @@ export function SubscribeTab() {
                 )}
               </ul>
 
-              {/* Breakeven callout */}
-              {breakeven && (
-                <div
-                  className="mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium"
-                  style={{ background: `${th.accent}1a`, color: th.bright }}
-                >
-                  <Zap className="h-3.5 w-3.5 shrink-0" />
-                  {breakeven}
-                </div>
-              )}
-
               {/* Action */}
               <div className="mt-4">
                 {isCurrent ? (
@@ -423,16 +420,12 @@ export function SubscribeTab() {
                     >
                       {sub.tier < idx ? "Move to this charter" : "Hold this charter"}
                     </TxButton>
-                    {affordGap > 0 ? (
-                      <p className="mt-1.5 text-center text-[11px] text-red-400">
-                        Need ✦{affordGap.toLocaleString()} more NOVI
-                      </p>
-                    ) : sub.tier > 0 && idx > sub.tier ? (
+                    {sub.tier > 0 && idx > sub.tier && upgradeDelta > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
-                        +✦{(price - (TIER_PRICE[sub.tier] ?? 0)).toLocaleString()}{" "}
-                        over your current charter
+                        +{formatLamportsAsSol(upgradeDelta)} over your current
+                        charter
                       </p>
-                    ) : null}
+                    )}
                   </>
                 )}
               </div>
