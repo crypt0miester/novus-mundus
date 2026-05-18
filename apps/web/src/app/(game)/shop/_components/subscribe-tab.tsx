@@ -260,9 +260,7 @@ export function SubscribeTab() {
           // Breakeven — does the extra generation pay back the charter?
           const extraGenPerDay = genRatio ? (gen - baseGen) * 12 * 24 : 0;
           let breakeven: string | null = null;
-          if (price > 0 && grantNovi >= price) {
-            breakeven = "Signing bounty alone covers the charter";
-          } else if (price > 0 && extraGenPerDay > 0) {
+          if (price > 0 && extraGenPerDay > 0) {
             const days = Math.max(0, price - grantNovi) / extraGenPerDay;
             breakeven =
               days < 1
@@ -303,25 +301,22 @@ export function SubscribeTab() {
                 </div>
               )}
 
-              {/* Name + price */}
-              <div className="flex items-start justify-between">
-                <div
-                  className="text-xl font-bold"
-                  style={{ color: th.bright }}
-                >
-                  {t.name}
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-text-gold">
-                    ✦ {price.toLocaleString()}
-                  </div>
-                  {durationDays > 0 && (
-                    <div className="text-[10px] text-text-muted">
-                      ≈ ✦{perDay.toFixed(perDay < 10 ? 1 : 0)}/day ·{" "}
-                      {durationDays}-day
-                    </div>
-                  )}
-                </div>
+              {/* Name */}
+              <div className="text-xl font-bold" style={{ color: th.bright }}>
+                {t.name}
+              </div>
+
+              {/* Cost */}
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-3xl font-bold leading-none text-text-gold">
+                  ✦{price.toLocaleString()}
+                </span>
+                {durationDays > 0 && (
+                  <span className="text-[11px] text-text-muted">
+                    ✦{perDay.toFixed(perDay < 10 ? 1 : 0)}/day · {durationDays}-day
+                    charter
+                  </span>
+                )}
               </div>
 
               {/* Headline — generation multiplier */}
@@ -376,7 +371,7 @@ export function SubscribeTab() {
                 )}
                 {grantParts.length > 0 && (
                   <PerkRow icon={Award} color={th.bright} strong>
-                    Signing bounty:{" "}
+                    Bonus:{" "}
                     <span className="text-text-secondary">
                       {grantParts.join(" · ")}
                     </span>
