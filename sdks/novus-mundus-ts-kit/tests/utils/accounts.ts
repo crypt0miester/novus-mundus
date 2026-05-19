@@ -6,7 +6,6 @@
  */
 
 import { type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 import { type LiteSVM } from '../fixtures/svm';
 
@@ -153,7 +152,7 @@ export async function fetchPlayerByOwner(
   gameEngine: Address,
   owner: Address,
 ): Promise<PlayerAccount | null> {
-  const [playerPda] = derivePlayerPda(gameEngine, owner);
+  const [playerPda] = await derivePlayerPda(gameEngine, owner);
   return fetchPlayer(svm, playerPda);
 }
 
@@ -188,7 +187,7 @@ export async function fetchTeamById(
   gameEngine: Address,
   teamId: number,
 ): Promise<TeamAccount | null> {
-  const [teamPda] = deriveTeamPda(gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(gameEngine, teamId);
   return fetchTeam(svm, teamPda);
 }
 
@@ -197,7 +196,7 @@ export async function fetchTeamMemberSlot(
   team: Address,
   slotIndex: number,
 ): Promise<TeamMemberSlot | null> {
-  const [slotPda] = deriveTeamSlotPda(team, slotIndex);
+  const [slotPda] = await deriveTeamSlotPda(team, slotIndex);
   const info = await fetchAccount(svm, slotPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamMemberSlot(info.data);
@@ -208,7 +207,7 @@ export async function fetchTeamInvite(
   team: Address,
   invitee: Address,
 ): Promise<TeamInviteAccount | null> {
-  const [invitePda] = deriveTeamInvitePda(team, invitee);
+  const [invitePda] = await deriveTeamInvitePda(team, invitee);
   const info = await fetchAccount(svm, invitePda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamInvite(info.data);
@@ -219,7 +218,7 @@ export async function fetchTreasuryRequest(
   team: Address,
   requester: Address,
 ): Promise<TreasuryRequest | null> {
-  const [requestPda] = deriveTreasuryRequestPda(team, requester);
+  const [requestPda] = await deriveTreasuryRequestPda(team, requester);
   const info = await fetchAccount(svm, requestPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTreasuryRequest(info.data);
@@ -242,7 +241,7 @@ export async function fetchRallyByCreator(
   creator: Address,
   rallyId: number,
 ): Promise<RallyAccount | null> {
-  const [rallyPda] = deriveRallyPda(gameEngine, creator, rallyId);
+  const [rallyPda] = await deriveRallyPda(gameEngine, creator, rallyId);
   return fetchRally(svm, rallyPda);
 }
 
@@ -253,7 +252,7 @@ export async function fetchRallyParticipant(
   rallyId: number | bigint,
   participant: Address,
 ): Promise<RallyParticipant | null> {
-  const [participantPda] = deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, participant);
+  const [participantPda] = await deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, participant);
   const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeRallyParticipant(info.data);
@@ -267,7 +266,7 @@ export async function fetchReinforcement(
   sender: Address,
   receiver: Address,
 ): Promise<ReinforcementAccount | null> {
-  const [reinforcementPda] = deriveReinforcementPda(gameEngine, sender, receiver);
+  const [reinforcementPda] = await deriveReinforcementPda(gameEngine, sender, receiver);
   const info = await fetchAccount(svm, reinforcementPda);
   if (!info || info.data.length === 0) return null;
   return deserializeReinforcement(info.data);
@@ -290,7 +289,7 @@ export async function fetchEncounterByCity(
   cityId: number,
   encounterId: number,
 ): Promise<EncounterAccount | null> {
-  const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterId);
+  const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterId);
   return fetchEncounter(svm, encounterPda);
 }
 
@@ -300,7 +299,7 @@ export async function fetchExpedition(
   svm: LiteSVM,
   owner: Address,
 ): Promise<ExpeditionAccount | null> {
-  const [expeditionPda] = deriveExpeditionPda(owner);
+  const [expeditionPda] = await deriveExpeditionPda(owner);
   const info = await fetchAccount(svm, expeditionPda);
   if (!info || info.data.length === 0) return null;
   return deserializeExpedition(info.data);
@@ -313,7 +312,7 @@ export async function fetchArenaSeason(
   gameEngine: Address,
   seasonId: number,
 ): Promise<ArenaSeasonAccount | null> {
-  const [seasonPda] = deriveArenaSeasonPda(gameEngine, seasonId);
+  const [seasonPda] = await deriveArenaSeasonPda(gameEngine, seasonId);
   const info = await fetchAccount(svm, seasonPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaSeason(info.data);
@@ -325,7 +324,7 @@ export async function fetchArenaParticipant(
   seasonId: number,
   ownerOrPlayerPda: Address,
 ): Promise<ArenaParticipantAccount | null> {
-  const [participantPda] = deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
+  const [participantPda] = await deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
   const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaParticipant(info.data);
@@ -338,7 +337,7 @@ export async function fetchLoot(
   playerPda: Address,
   lootId: number | bigint,
 ): Promise<LootAccount | null> {
-  const [lootPda] = deriveLootPda(playerPda, lootId);
+  const [lootPda] = await deriveLootPda(playerPda, lootId);
   const info = await fetchAccount(svm, lootPda);
   if (!info || info.data.length === 0) return null;
   return deserializeLoot(info.data);
@@ -351,7 +350,7 @@ export async function fetchEvent(
   gameEngine: Address,
   eventId: number,
 ): Promise<EventAccount | null> {
-  const [eventPda] = deriveEventPda(gameEngine, eventId);
+  const [eventPda] = await deriveEventPda(gameEngine, eventId);
   const info = await fetchAccount(svm, eventPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEvent(info.data);
@@ -363,7 +362,7 @@ export async function fetchEventParticipation(
   eventId: number,
   playerOwner: Address,
 ): Promise<EventParticipation | null> {
-  const [participationPda] = deriveEventParticipationPda(gameEngine, eventId, playerOwner);
+  const [participationPda] = await deriveEventParticipationPda(gameEngine, eventId, playerOwner);
   const info = await fetchAccount(svm, participationPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEventParticipation(info.data);
@@ -377,7 +376,7 @@ export async function fetchCastleRaw(
   cityId: number,
   castleId: number,
 ): Promise<RawAccount | null> {
-  const [castlePda] = deriveCastlePda(gameEngine, cityId, castleId);
+  const [castlePda] = await deriveCastlePda(gameEngine, cityId, castleId);
   return fetchAccount(svm, castlePda);
 }
 
@@ -387,7 +386,7 @@ export async function fetchDungeonRunRaw(
   svm: LiteSVM,
   player: Address,
 ): Promise<RawAccount | null> {
-  const [runPda] = deriveDungeonRunPda(player);
+  const [runPda] = await deriveDungeonRunPda(player);
   return fetchAccount(svm, runPda);
 }
 
@@ -397,7 +396,7 @@ export async function fetchEstateRaw(
   svm: LiteSVM,
   playerPda: Address,
 ): Promise<RawAccount | null> {
-  const [estatePda] = deriveEstatePda(playerPda);
+  const [estatePda] = await deriveEstatePda(playerPda);
   return fetchAccount(svm, estatePda);
 }
 
@@ -407,7 +406,7 @@ export async function fetchGameEngine(
   svm: LiteSVM,
   kingdomId: number,
 ): Promise<GameEngineAccount | null> {
-  const [gameEnginePda] = deriveGameEnginePda(kingdomId);
+  const [gameEnginePda] = await deriveGameEnginePda(kingdomId);
   const info = await fetchAccount(svm, gameEnginePda);
   if (!info || info.data.length === 0) return null;
   return deserializeGameEngine(info.data);
@@ -418,7 +417,7 @@ export async function fetchCity(
   gameEngine: Address,
   cityId: number,
 ): Promise<CityAccount | null> {
-  const [cityPda] = deriveCityPda(gameEngine, cityId);
+  const [cityPda] = await deriveCityPda(gameEngine, cityId);
   const info = await fetchAccount(svm, cityPda);
   if (!info || info.data.length === 0) return null;
   return deserializeCity(info.data);
@@ -428,7 +427,7 @@ export async function fetchShopConfig(
   svm: LiteSVM,
   gameEngine: Address,
 ): Promise<ShopConfigAccount | null> {
-  const [shopConfigPda] = deriveShopConfigPda(gameEngine);
+  const [shopConfigPda] = await deriveShopConfigPda(gameEngine);
   const info = await fetchAccount(svm, shopConfigPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopConfig(info.data);
@@ -439,7 +438,7 @@ export async function fetchShopItem(
   gameEngine: Address,
   itemId: number,
 ): Promise<ShopItemAccount | null> {
-  const [shopItemPda] = deriveShopItemPda(gameEngine, itemId);
+  const [shopItemPda] = await deriveShopItemPda(gameEngine, itemId);
   const info = await fetchAccount(svm, shopItemPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopItem(info.data);
@@ -469,8 +468,8 @@ export function diffPlayerSnapshots(
     const beforeVal = before.data[key];
     const afterVal = after.data[key];
 
-    if (beforeVal instanceof BN && afterVal instanceof BN) {
-      if (!beforeVal.eq(afterVal)) {
+    if (typeof beforeVal === 'bigint' && typeof afterVal === 'bigint') {
+      if (beforeVal !== afterVal) {
         changes[key] = { before: beforeVal, after: afterVal };
       }
     } else if (beforeVal !== afterVal) {

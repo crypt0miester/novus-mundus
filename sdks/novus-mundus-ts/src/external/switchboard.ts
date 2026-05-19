@@ -1,7 +1,11 @@
 /**
- * Switchboard Oracle Helpers
+ * Switchboard On-Demand oracle helpers.
  *
- * Utilities for working with Switchboard price oracles on Solana.
+ * Mirrors the on-chain `p-switchboard` reader: parses a `PullFeedAccountData`
+ * account and resolves a price via the `get_value` algorithm (median over the
+ * fresh oracle submissions, with a minimum-samples requirement).
+ *
+ * Values are `i128` fixed-point scaled by `10^18` (`PRECISION = 18`).
  */
 
 import { PublicKey } from '@solana/web3.js';
@@ -9,297 +13,233 @@ import type { Connection } from '@solana/web3.js';
 
 // Program IDs
 
-/** Switchboard V2 Program ID (Mainnet) */
-export const SWITCHBOARD_V2_PROGRAM_ID = new PublicKey(
-  'SW1TCH7qEPTdLsDHRgPuMQjbQxKdH2aBStViMFnt64f'
-);
-
-/** Switchboard V2 Program ID (Devnet) */
-export const SWITCHBOARD_V2_PROGRAM_ID_DEVNET = new PublicKey(
-  '2TfB33aLaneQb5TNVwyDz3jSZXS6jdW2ARw1Dgf84XCG'
-);
-
-/** Switchboard On-Demand Program ID (Mainnet) */
+/** Switchboard On-Demand program (mainnet). */
 export const SWITCHBOARD_ON_DEMAND_PROGRAM_ID = new PublicKey(
   'SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv'
 );
 
-// Aggregator Data Types
+/** Switchboard On-Demand program (devnet). */
+export const SWITCHBOARD_ON_DEMAND_PROGRAM_ID_DEVNET = new PublicKey(
+  'Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2'
+);
 
-/** Switchboard aggregator result */
-export interface SwitchboardAggregatorResult {
-  /** Median value from oracles */
-  value: number;
-  /** Standard deviation */
-  stdDev: number;
-  /** Mean value */
-  mean: number;
-  /** Number of oracle responses */
-  numSuccess: number;
-  /** Number of oracle errors */
-  numError: number;
-  /** Last updated timestamp (Unix seconds) */
-  timestamp: number;
-  /** Last updated slot */
-  slot: number;
+/** Switchboard On-Demand fixed-point precision (values scaled by 10^18). */
+export const SWITCHBOARD_PRECISION = 18;
+
+/** `PullFeedAccountData` Anchor discriminator. */
+const PULL_FEED_DISCRIMINATOR = Buffer.from([
+  196, 27, 108, 196, 10, 215, 219, 40,
+]);
+
+// Layout offsets (into account data, including the 8-byte discriminator),
+// derived from `PullFeedAccountData` in switchboard-on-demand v0.11.3.
+const OFF_SUBMISSIONS = 8;
+const NUM_SUBMISSIONS = 32;
+const SUBMISSION_SIZE = 64;
+const SUB_OFF_SLOT = 32;
+const SUB_OFF_VALUE = 48;
+const OFF_MIN_RESPONSES = 2176;
+const OFF_MIN_SAMPLE_SIZE = 2215;
+const OFF_LAST_UPDATE_TS = 2216;
+const OFF_RESULT_VALUE = 2264;
+const OFF_RESULT_STD_DEV = 2280;
+const OFF_RESULT_NUM_SAMPLES = 2360;
+const OFF_RESULT_SLOT = 2368;
+const OFF_MAX_STALENESS = 2392;
+const MIN_PULL_FEED_LEN = 3208;
+
+// Types
+
+/** One oracle submission from the feed's ring buffer. */
+export interface SwitchboardSubmission {
+  /** Slot at which the value was signed (`0` => empty/uninitialised). */
+  slot: bigint;
+  /** Submitted value (`i128`, scaled by 10^18). */
+  value: bigint;
 }
 
-/** Switchboard aggregator configuration */
-export interface SwitchboardAggregatorConfig {
-  /** Minimum number of oracle responses required */
-  minOracleResults: number;
-  /** Minimum update delay in seconds */
-  minUpdateDelaySeconds: number;
-  /** Variance threshold for acceptable results */
-  varianceThreshold: number;
+/** Parsed `PullFeedAccountData` (the fields needed to resolve a price). */
+export interface SwitchboardFeed {
+  /** Non-empty oracle submissions, in ring-buffer order. */
+  submissions: SwitchboardSubmission[];
+  /** `CurrentResult.value` — on-chain aggregated median (`i128`, 10^18). */
+  resultValue: bigint;
+  /** `CurrentResult.std_dev` — std deviation of the aggregated result. */
+  resultStdDev: bigint;
+  /** `CurrentResult.slot` — slot the aggregated result was signed at. */
+  resultSlot: bigint;
+  /** `CurrentResult.num_samples` — submissions behind the aggregated result. */
+  resultNumSamples: number;
+  /** Feed's configured minimum sample size. */
+  minSampleSize: number;
+  /** Feed's configured minimum oracle responses. */
+  minResponses: number;
+  /** Feed's own staleness bound, in slots. */
+  maxStaleness: number;
+  /** Unix timestamp of the last feed update. */
+  lastUpdateTimestamp: number;
 }
 
-// Aggregator Parsing Functions
+// i128 reader
+
+/** Read a little-endian signed 128-bit integer from a Buffer. */
+function readI128(data: Buffer, offset: number): bigint {
+  const low = data.readBigUInt64LE(offset);
+  const high = data.readBigInt64LE(offset + 8);
+  return (high << 64n) | low;
+}
+
+// Parsing
 
 /**
- * Parse Switchboard aggregator account data (V2).
+ * Parse a Switchboard `PullFeedAccountData` account.
  *
- * @param data - Raw account data buffer
- * @returns Parsed aggregator result or null if invalid
+ * @param data - Raw account data (including the 8-byte discriminator)
+ * @returns Parsed feed, or `null` if the data is not a pull feed
  */
-export function parseSwitchboardAggregator(data: Buffer): SwitchboardAggregatorResult | null {
-  if (data.length < 2104) {
-    return null;
+export function parseSwitchboardFeed(data: Buffer): SwitchboardFeed | null {
+  if (data.length < MIN_PULL_FEED_LEN) return null;
+  if (!data.subarray(0, 8).equals(PULL_FEED_DISCRIMINATOR)) return null;
+
+  // submissions: take_while(slot != 0)
+  const submissions: SwitchboardSubmission[] = [];
+  for (let i = 0; i < NUM_SUBMISSIONS; i++) {
+    const base = OFF_SUBMISSIONS + i * SUBMISSION_SIZE;
+    const slot = data.readBigUInt64LE(base + SUB_OFF_SLOT);
+    if (slot === 0n) break;
+    submissions.push({ slot, value: readI128(data, base + SUB_OFF_VALUE) });
   }
-
-  // Switchboard V2 Aggregator layout:
-  // Discriminator: 8 bytes
-  // Various config fields...
-  // Latest confirmed result at offset 584
-
-  // Check discriminator (varies by account type)
-  // For aggregator accounts, we check the data length and structure
-
-  // Latest confirmed round result offset
-  const resultOffset = 584;
-
-  if (data.length < resultOffset + 96) {
-    return null;
-  }
-
-  // Parse SwitchboardDecimal at result offset
-  // SwitchboardDecimal: mantissa (i128, 16 bytes) + scale (u32, 4 bytes)
-  const mantissa = data.readBigInt64LE(resultOffset);
-  const scale = data.readUInt32LE(resultOffset + 16);
-
-  // Convert to decimal
-  const value = Number(mantissa) * Math.pow(10, -scale);
-
-  // Standard deviation at offset + 20
-  const stdDevMantissa = data.readBigInt64LE(resultOffset + 20);
-  const stdDevScale = data.readUInt32LE(resultOffset + 36);
-  const stdDev = Number(stdDevMantissa) * Math.pow(10, -stdDevScale);
-
-  // Mean at offset + 40
-  const meanMantissa = data.readBigInt64LE(resultOffset + 40);
-  const meanScale = data.readUInt32LE(resultOffset + 56);
-  const mean = Number(meanMantissa) * Math.pow(10, -meanScale);
-
-  // Success/error counts at offset + 60
-  const numSuccess = data.readUInt32LE(resultOffset + 60);
-  const numError = data.readUInt32LE(resultOffset + 64);
-
-  // Timestamp at offset + 72
-  const timestamp = Number(data.readBigInt64LE(resultOffset + 72));
-
-  // Slot at offset + 80
-  const slot = Number(data.readBigUInt64LE(resultOffset + 80));
 
   return {
-    value,
-    stdDev,
-    mean,
-    numSuccess,
-    numError,
-    timestamp,
-    slot,
+    submissions,
+    resultValue: readI128(data, OFF_RESULT_VALUE),
+    resultStdDev: readI128(data, OFF_RESULT_STD_DEV),
+    resultSlot: data.readBigUInt64LE(OFF_RESULT_SLOT),
+    resultNumSamples: data[OFF_RESULT_NUM_SAMPLES]!,
+    minSampleSize: data[OFF_MIN_SAMPLE_SIZE]!,
+    minResponses: data.readUInt32LE(OFF_MIN_RESPONSES),
+    maxStaleness: data.readUInt32LE(OFF_MAX_STALENESS),
+    lastUpdateTimestamp: Number(data.readBigInt64LE(OFF_LAST_UPDATE_TS)),
   };
 }
 
-/**
- * Parse Switchboard On-Demand feed data.
- *
- * @param data - Raw account data buffer
- * @returns Parsed result or null if invalid
- */
-export function parseSwitchboardOnDemand(data: Buffer): SwitchboardAggregatorResult | null {
-  // Switchboard On-Demand has a different layout
-  // This is a simplified parser for the common fields
+// Price resolution (mirrors `PullFeedAccountData::get_value`)
 
-  if (data.length < 200) {
-    return null;
-  }
-
-  // On-Demand feed layout (simplified):
-  // Discriminator: 8 bytes
-  // Gateway: 32 bytes (offset 8)
-  // Queue: 32 bytes (offset 40)
-  // Feed hash: 32 bytes (offset 72)
-  // Result: at offset 104
-
-  const resultOffset = 104;
-
-  if (data.length < resultOffset + 48) {
-    return null;
-  }
-
-  // Value (i128 as two i64s)
-  const valueLow = data.readBigInt64LE(resultOffset);
-  const value = Number(valueLow) / 1e9; // Typically stored with 9 decimals
-
-  // Standard deviation
-  const stdDevLow = data.readBigInt64LE(resultOffset + 16);
-  const stdDev = Number(stdDevLow) / 1e9;
-
-  // Timestamp
-  const timestamp = Number(data.readBigInt64LE(resultOffset + 32));
-
-  // Slot
-  const slot = Number(data.readBigUInt64LE(resultOffset + 40));
-
-  return {
-    value,
-    stdDev,
-    mean: value, // On-Demand doesn't separate mean
-    numSuccess: 1, // Single result
-    numError: 0,
-    timestamp,
-    slot,
-  };
-}
-
-// Price Validation Functions
-
-/**
- * Check if Switchboard result is stale.
- *
- * @param result - Switchboard aggregator result
- * @param currentSlot - Current Solana slot
- * @param maxStalenessSlots - Maximum allowed age in slots
- * @returns true if result is stale
- */
-export function isSwitchboardStale(
-  result: SwitchboardAggregatorResult,
-  currentTimestamp: number,
-  maxStalenessSeconds: number = 60
-): boolean {
-  return currentTimestamp - result.timestamp > maxStalenessSeconds;
+export interface SwitchboardValueOptions {
+  /** Current Solana slot. */
+  clockSlot: bigint;
+  /** Maximum submission age, in slots. */
+  maxStaleness: bigint;
+  /** Minimum number of fresh submissions required. */
+  minSamples: number;
+  /** Reject a non-positive median. Defaults to `true`. */
+  onlyPositive?: boolean;
 }
 
 /**
- * Check if Switchboard result has sufficient oracle responses.
+ * Resolve the feed value: the lower-bound median of the oracle submissions
+ * made within the last `maxStaleness` slots.
  *
- * @param result - Switchboard aggregator result
- * @param minResponses - Minimum required responses
- * @returns true if sufficient responses
+ * Faithful port of `PullFeedAccountData::get_value`.
+ *
+ * @returns the median (`i128`, scaled by 10^18), or `null` on failure
+ *   (too few fresh samples, or a non-positive median when `onlyPositive`).
  */
-export function hasSufficientResponses(
-  result: SwitchboardAggregatorResult,
-  minResponses: number = 3
-): boolean {
-  return result.numSuccess >= minResponses;
+export function getSwitchboardValue(
+  feed: SwitchboardFeed,
+  opts: SwitchboardValueOptions
+): bigint | null {
+  const onlyPositive = opts.onlyPositive ?? true;
+  const minValidSlot =
+    opts.clockSlot > opts.maxStaleness ? opts.clockSlot - opts.maxStaleness : 0n;
+
+  const fresh = feed.submissions
+    .filter((s) => s.slot >= minValidSlot)
+    .map((s) => s.value);
+
+  if (fresh.length === 0 || fresh.length < opts.minSamples) return null;
+
+  // lower_bound_median: sort ascending, take element at len / 2.
+  fresh.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const median = fresh[Math.floor(fresh.length / 2)]!;
+
+  if (onlyPositive && median <= 0n) return null;
+  return median;
 }
 
-/**
- * Check if Switchboard result variance is acceptable.
- *
- * @param result - Switchboard aggregator result
- * @param maxVarianceBps - Maximum variance as basis points of value
- * @returns true if variance is acceptable
- */
+/** Convert a 10^18-scaled `i128` value to a human-readable decimal. */
+export function switchboardValueToDecimal(value: bigint): number {
+  return Number(value) / Math.pow(10, SWITCHBOARD_PRECISION);
+}
+
+// Validation
+
+/** Whether the std deviation is within `maxStdDevBps` of `resultValue`. */
 export function isVarianceAcceptable(
-  result: SwitchboardAggregatorResult,
-  maxVarianceBps: number = 100 // 1% default
+  feed: SwitchboardFeed,
+  maxStdDevBps = 100
 ): boolean {
-  if (result.value === 0) return false;
-
-  const varianceBps = (result.stdDev / Math.abs(result.value)) * 10000;
-  return varianceBps <= maxVarianceBps;
+  if (maxStdDevBps === 0) return true;
+  if (feed.resultValue <= 0n) return false;
+  const stdDevAbs =
+    feed.resultStdDev < 0n ? -feed.resultStdDev : feed.resultStdDev;
+  const bps = (stdDevAbs * 10000n) / feed.resultValue;
+  return bps <= BigInt(maxStdDevBps);
 }
 
 /**
- * Validate Switchboard result for use in transactions.
+ * Validate a Switchboard feed for use in a transaction.
  *
- * @param result - Switchboard aggregator result
- * @param currentTimestamp - Current Unix timestamp
- * @param maxStalenessSeconds - Maximum age in seconds
- * @param minResponses - Minimum oracle responses
- * @param maxVarianceBps - Maximum variance in basis points
- * @returns Validation result with error message if invalid
+ * Mirrors the on-chain checks: enough fresh samples via `get_value`
+ * (`minSamples` defaults to the feed's own `minSampleSize`, floored to 1),
+ * a positive value, and the variance gate.
  */
-export function validateSwitchboardResult(
-  result: SwitchboardAggregatorResult,
-  currentTimestamp: number,
-  maxStalenessSeconds: number = 60,
-  minResponses: number = 3,
-  maxVarianceBps: number = 100
-): { valid: boolean; error?: string } {
-  if (isSwitchboardStale(result, currentTimestamp, maxStalenessSeconds)) {
-    return { valid: false, error: 'Oracle result is stale' };
+export function validateSwitchboardFeed(
+  feed: SwitchboardFeed,
+  clockSlot: bigint,
+  maxStalenessSlots: bigint,
+  maxStdDevBps = 100,
+  minSamples?: number
+): { valid: boolean; error?: string; value?: bigint } {
+  const samples = minSamples ?? Math.max(feed.minSampleSize, 1);
+  const value = getSwitchboardValue(feed, {
+    clockSlot,
+    maxStaleness: maxStalenessSlots,
+    minSamples: samples,
+    onlyPositive: true,
+  });
+  if (value === null) {
+    return { valid: false, error: 'Insufficient fresh oracle samples' };
   }
-
-  if (!hasSufficientResponses(result, minResponses)) {
-    return { valid: false, error: 'Insufficient oracle responses' };
-  }
-
-  if (!isVarianceAcceptable(result, maxVarianceBps)) {
+  if (!isVarianceAcceptable(feed, maxStdDevBps)) {
     return { valid: false, error: 'Oracle variance too high' };
   }
-
-  if (result.value <= 0) {
-    return { valid: false, error: 'Invalid price value' };
-  }
-
-  return { valid: true };
+  return { valid: true, value };
 }
 
-// Fetch Functions
+// Fetch
 
-/**
- * Fetch and parse Switchboard aggregator data from the network.
- *
- * @param connection - Solana connection
- * @param aggregatorAddress - Switchboard aggregator address
- * @param isOnDemand - Whether this is an On-Demand feed
- * @returns Parsed result or null if unavailable
- */
-export async function fetchSwitchboardResult(
+/** Fetch and parse a Switchboard On-Demand `PullFeedAccountData` account. */
+export async function fetchSwitchboardFeed(
   connection: Connection,
-  aggregatorAddress: PublicKey,
-  isOnDemand: boolean = false
-): Promise<SwitchboardAggregatorResult | null> {
-  const accountInfo = await connection.getAccountInfo(aggregatorAddress);
-
-  if (!accountInfo || !accountInfo.data) {
-    return null;
-  }
-
-  const buffer = Buffer.from(accountInfo.data);
-
-  return isOnDemand
-    ? parseSwitchboardOnDemand(buffer)
-    : parseSwitchboardAggregator(buffer);
+  feedAddress: PublicKey
+): Promise<SwitchboardFeed | null> {
+  const accountInfo = await connection.getAccountInfo(feedAddress);
+  if (!accountInfo || !accountInfo.data) return null;
+  return parseSwitchboardFeed(Buffer.from(accountInfo.data));
 }
 
 /**
- * Fetch USD price from Switchboard feed.
+ * Fetch the USD price from a Switchboard feed.
  *
- * @param connection - Solana connection
- * @param aggregatorAddress - Switchboard aggregator address
- * @param isOnDemand - Whether this is an On-Demand feed
- * @returns Price in USD or null if unavailable
+ * Uses the on-chain aggregated `CurrentResult.value`; for the staleness- and
+ * sample-checked path use {@link fetchSwitchboardFeed} + {@link getSwitchboardValue}.
  */
 export async function fetchSwitchboardPrice(
   connection: Connection,
-  aggregatorAddress: PublicKey,
-  isOnDemand: boolean = false
+  feedAddress: PublicKey
 ): Promise<number | null> {
-  const result = await fetchSwitchboardResult(connection, aggregatorAddress, isOnDemand);
-
-  return result?.value ?? null;
+  const feed = await fetchSwitchboardFeed(connection, feedAddress);
+  if (!feed || feed.resultValue <= 0n) return null;
+  return switchboardValueToDecimal(feed.resultValue);
 }

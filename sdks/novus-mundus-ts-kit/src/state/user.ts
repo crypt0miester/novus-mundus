@@ -6,8 +6,7 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u32, u64, i64, pubkey } from '../utils/codec';
 
 // User Account Interface
 
@@ -19,70 +18,54 @@ export interface UserAccount {
   /** PDA bump */
   bump: number;
   /** Reserved NOVI balance (withdrawable) */
-  reservedNovi: BN;
+  reservedNovi: bigint;
   /** Timestamp when reserved NOVI was earned */
-  reservedNoviEarnedAt: BN;
+  reservedNoviEarnedAt: bigint;
   /** Total events participated in */
-  totalEventsParticipated: BN;
+  totalEventsParticipated: bigint;
   /** Total events won */
-  totalEventsWon: BN;
+  totalEventsWon: bigint;
   /** Total reserved NOVI earned (lifetime) */
-  totalReservedEarned: BN;
+  totalReservedEarned: bigint;
   /** Last withdrawal timestamp */
-  lastWithdrawal: BN;
+  lastWithdrawal: bigint;
   /** NOVI purchase streak (consecutive days) */
   noviPurchaseStreak: number;
   /** Last NOVI purchase day (day number since epoch) */
   noviLastPurchaseDay: number;
   /** NOVI purchased today (with 1 decimal) */
-  noviPurchasedToday: BN;
+  noviPurchasedToday: bigint;
 }
 
 /** UserAccount size in bytes (repr(C) with account_key discriminator) */
 export const USER_ACCOUNT_SIZE = 152;
 
+// Codec
+
+/** UserAccount `#[repr(C)]` codec */
+const userCodec = reprC<UserAccount>([
+  pad(1), // account_key discriminator
+  ['owner', pubkey],
+  ['player', pubkey],
+  ['bump', u8],
+  pad(7), // _padding1
+  ['reservedNovi', u64],
+  ['reservedNoviEarnedAt', i64],
+  ['totalEventsParticipated', u64],
+  ['totalEventsWon', u64],
+  ['totalReservedEarned', u64],
+  ['lastWithdrawal', i64],
+  ['noviPurchaseStreak', u16],
+  ['noviLastPurchaseDay', u32],
+  ['noviPurchasedToday', u64],
+  pad(2), // _padding2
+], USER_ACCOUNT_SIZE);
+
 // Deserialization
 
 /** Deserialize UserAccount from raw bytes */
-export function deserializeUser(data: Uint8Array | Buffer): UserAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const owner = reader.readPubkey();                 // offset 1   (32 bytes)
-  const player = reader.readPubkey();                // offset 33  (32 bytes)
-  const bump = reader.readU8();                      // offset 65  (1 byte)
-  reader.skip(7); // _padding1                       // offset 66  (7 bytes)
-  reader.skip(7); // implicit padding for u64 align  // offset 73  (7 bytes → offset 80)
-
-  const reservedNovi = reader.readU64();             // offset 80  (8 bytes)
-  const reservedNoviEarnedAt = reader.readI64();     // offset 88  (8 bytes)
-  const totalEventsParticipated = reader.readU64();  // offset 96  (8 bytes)
-  const totalEventsWon = reader.readU64();           // offset 104 (8 bytes)
-  const totalReservedEarned = reader.readU64();      // offset 112 (8 bytes)
-  const lastWithdrawal = reader.readI64();           // offset 120 (8 bytes)
-
-  // NOVI purchase tracking
-  const noviPurchaseStreak = reader.readU16();       // offset 128 (2 bytes)
-  reader.skip(2); // implicit padding for u32 align  // offset 130 (2 bytes)
-  const noviLastPurchaseDay = reader.readU32();      // offset 132 (4 bytes)
-  const noviPurchasedToday = reader.readU64();       // offset 136 (8 bytes)
-  reader.skip(2); // _padding2                       // offset 144 (2 bytes)
-  reader.skip(6); // struct trailing padding (align 8) // offset 146 (6 bytes → offset 152)
-
-  return {
-    owner,
-    player,
-    bump,
-    reservedNovi,
-    reservedNoviEarnedAt,
-    totalEventsParticipated,
-    totalEventsWon,
-    totalReservedEarned,
-    lastWithdrawal,
-    noviPurchaseStreak,
-    noviLastPurchaseDay,
-    noviPurchasedToday,
-  };
+export function deserializeUser(data: Uint8Array): UserAccount {
+  return userCodec.decode(data);
 }
 
 /** Parse UserAccount from account info */

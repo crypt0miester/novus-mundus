@@ -509,7 +509,7 @@ describe('Subscription System', () => {
   describe('Subscription Payments', () => {
     it('should deduct SOL for purchase', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const balanceBefore = await ctx.svm.getBalance(player.publicKey);
+      const balanceBefore = (await ctx.svm.getBalance(player.publicKey))!;
 
       // Expert tier costs $10 in SOL
       await sendTransaction(
@@ -518,7 +518,7 @@ describe('Subscription System', () => {
         [player.keypair]
       );
 
-      const balanceAfter = await ctx.svm.getBalance(player.publicKey);
+      const balanceAfter = (await ctx.svm.getBalance(player.publicKey))!;
       // SOL balance should decrease (subscription cost + tx fees)
       expect(balanceAfter).toBeLessThan(balanceBefore);
       // Should decrease by more than just tx fees (subscription has real cost)
@@ -528,7 +528,7 @@ describe('Subscription System', () => {
 
     it('should charge SOL for Rookie tier', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const balanceBefore = await ctx.svm.getBalance(player.publicKey);
+      const balanceBefore = (await ctx.svm.getBalance(player.publicKey))!;
 
       // Rookie tier costs $5 — SOL is deducted
       await sendTransaction(
@@ -537,7 +537,7 @@ describe('Subscription System', () => {
         [player.keypair]
       );
 
-      const balanceAfter = await ctx.svm.getBalance(player.publicKey);
+      const balanceAfter = (await ctx.svm.getBalance(player.publicKey))!;
       // SOL balance should decrease (subscription cost + tx fees)
       const decrease = balanceBefore - balanceAfter;
       expect(decrease).toBeGreaterThan(100_000); // More than just tx fees
@@ -547,8 +547,8 @@ describe('Subscription System', () => {
       const player1 = await factory.createPlayer({ initialize: true });
       const player2 = await factory.createPlayer({ initialize: true });
 
-      const balance1Before = await ctx.svm.getBalance(player1.publicKey);
-      const balance2Before = await ctx.svm.getBalance(player2.publicKey);
+      const balance1Before = (await ctx.svm.getBalance(player1.publicKey))!;
+      const balance2Before = (await ctx.svm.getBalance(player2.publicKey))!;
 
       // Player1 buys Expert ($10)
       await sendTransaction(
@@ -564,8 +564,8 @@ describe('Subscription System', () => {
         [player2.keypair]
       );
 
-      const balance1After = await ctx.svm.getBalance(player1.publicKey);
-      const balance2After = await ctx.svm.getBalance(player2.publicKey);
+      const balance1After = (await ctx.svm.getBalance(player1.publicKey))!;
+      const balance2After = (await ctx.svm.getBalance(player2.publicKey))!;
 
       const cost1 = balance1Before - balance1After;
       const cost2 = balance2Before - balance2After;

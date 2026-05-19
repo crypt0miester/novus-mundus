@@ -203,7 +203,7 @@ async function terrainSet(ctx: CliContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const ix = createSetTerrainInstruction(
+  const ix = await createSetTerrainInstruction(
     { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
     { cityId, terrain: preset.terrain },
   );
@@ -235,7 +235,7 @@ async function terrainAdd(ctx: CliContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const ix = createAppendTerrainInstruction(
+  const ix = await createAppendTerrainInstruction(
     { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
     { cityId, anchors: newAnchors },
   );

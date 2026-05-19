@@ -7,8 +7,7 @@
  * Size: 96 bytes (repr(C) layout)
  */
 
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, struct, pad, u8, u16, u32, u64, bool, fixedString, array } from '../utils/codec';
 
 // Buff Config
 
@@ -24,7 +23,7 @@ export interface HeroTemplateAccount {
   name: string;
   heroType: number;
   category: number;
-  mintCostSol: BN;
+  mintCostSol: bigint;
   supplyCap: number;
   mintedCount: number;
   enabled: boolean;
@@ -38,61 +37,39 @@ export interface HeroTemplateAccount {
 /** HeroTemplate size in bytes (repr(C) layout with alignment padding) */
 export const HERO_TEMPLATE_SIZE = 96;
 
+// Codec
+
+/** HeroBuffConfig `#[repr(C)]` codec (6 bytes) */
+const heroBuffConfig = struct<HeroBuffConfig>([
+  ['stat', u8],
+  ['baseBps', u16],
+  pad(2), // _reserved
+]);
+
+/** HeroTemplate `#[repr(C)]` codec */
+const heroTemplateCodec = reprC<HeroTemplateAccount>([
+  pad(1), // account_key discriminator
+  ['templateId', u16],
+  ['name', fixedString(32)],
+  ['heroType', u8],
+  ['category', u8],
+  ['mintCostSol', u64],
+  ['supplyCap', u32],
+  ['mintedCount', u32],
+  ['enabled', bool],
+  ['eventExclusive', bool],
+  ['requiredPlayerLevel', u8],
+  ['meditationCityId', u16],
+  ['buffs', array(heroBuffConfig, 4)],
+  ['bump', u8],
+  pad(3), // _padding
+], HERO_TEMPLATE_SIZE);
+
 // Deserialization
 
-/** Deserialize a single HeroBuffConfig (6 bytes in repr(C) layout) */
-function deserializeHeroBuffConfig(reader: BufferReader): HeroBuffConfig {
-  const stat = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment
-  const baseBps = reader.readU16();
-  reader.skip(2); // _reserved
-  return { stat, baseBps };
-}
-
 /** Deserialize HeroTemplate from raw bytes */
-export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplateAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  reader.skip(1); // implicit padding for u16 alignment (offset 1 -> 2)
-  const templateId = reader.readU16();
-  const name = reader.readString(32);
-  const heroType = reader.readU8();
-  const category = reader.readU8();
-  reader.skip(2); // implicit padding for u64 alignment (offset 38 -> 40)
-  const mintCostSol = reader.readU64();
-  const supplyCap = reader.readU32();
-  const mintedCount = reader.readU32();
-  const enabled = reader.readBool();
-  const eventExclusive = reader.readBool();
-  const requiredPlayerLevel = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment (offset 59 -> 60)
-  const meditationCityId = reader.readU16();
-
-  // buffs: [HeroBuffConfig; 4] - each is 6 bytes in repr(C)
-  const buffs: HeroBuffConfig[] = [];
-  for (let i = 0; i < 4; i++) {
-    buffs.push(deserializeHeroBuffConfig(reader));
-  }
-
-  const bump = reader.readU8();
-  reader.skip(3); // _padding
-
-  return {
-    templateId,
-    name,
-    heroType,
-    category,
-    mintCostSol,
-    supplyCap,
-    mintedCount,
-    enabled,
-    eventExclusive,
-    requiredPlayerLevel,
-    meditationCityId,
-    buffs,
-    bump,
-  };
+export function deserializeHeroTemplate(data: Uint8Array): HeroTemplateAccount {
+  return heroTemplateCodec.decode(data);
 }
 
 /** Parse HeroTemplate from account info */

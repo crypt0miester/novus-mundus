@@ -67,7 +67,7 @@ export async function crankArena(ctx: CLIContext): Promise<PhaseStats> {
       continue;
     }
 
-    const ix = createCloseSeasonInstruction({
+    const ix = await createCloseSeasonInstruction({
       seasonAuthority: authority,
       gameEngine: ctx.gameEngine,
       seasonId,

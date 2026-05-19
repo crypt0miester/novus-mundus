@@ -103,6 +103,7 @@ export const SEEDS = {
   // Estate system
   ESTATE: enc('estate'),
   CRAFTED_EQUIPMENT: enc('crafted_equipment'),
+  BUILDING_TEMPLATE: enc('building_template'),
 
   // Expedition system
   EXPEDITION: enc('expedition'),
@@ -272,6 +273,8 @@ export const DISCRIMINATORS = {
   ESTATE_CONVERT_MATERIALS: 167,
   ESTATE_SPEEDUP: 168,
   ESTATE_RECOVER_TROOPS: 169,
+  ESTATE_INIT_BUILDING_TEMPLATE: 170,
+  ESTATE_UPDATE_BUILDING_TEMPLATE: 171,
 
   // Forge System (180-189)
   FORGE_INITIALIZE: 180,

@@ -6,7 +6,6 @@
 
 import { expect } from 'bun:test';
 import { type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 import type {
   PlayerAccount,
@@ -15,99 +14,99 @@ import type {
 } from '../../src/index';
 import { isNullPubkey } from '../../src/utils/deserialize';
 
-// BN Assertions
+// bigint Assertions
 
 /**
- * Assert that a BN equals an expected value.
+ * Assert that a bigint equals an expected value.
  */
 export function assertBnEquals(
-  actual: BN,
-  expected: BN | number | bigint,
+  actual: bigint,
+  expected: bigint | number,
   message?: string
 ): void {
-  const expectedBn = new BN(expected.toString());
+  const expectedBn = BigInt(expected);
   const msg = message || `Expected ${actual.toString()} to equal ${expectedBn.toString()}`;
-  expect(actual.eq(expectedBn)).toBe(true);
+  expect(actual === expectedBn).toBe(true);
 }
 
 /**
- * Assert that a BN is greater than a value.
+ * Assert that a bigint is greater than a value.
  */
 export function assertBnGreaterThan(
-  actual: BN,
-  minimum: BN | number | bigint,
+  actual: bigint,
+  minimum: bigint | number,
   message?: string
 ): void {
-  const minBn = new BN(minimum.toString());
+  const minBn = BigInt(minimum);
   const msg = message || `Expected ${actual.toString()} > ${minBn.toString()}`;
-  expect(actual.gt(minBn)).toBe(true);
+  expect(actual > minBn).toBe(true);
 }
 
 /**
- * Assert that a BN is greater than or equal to a value.
+ * Assert that a bigint is greater than or equal to a value.
  */
 export function assertBnGreaterThanOrEqual(
-  actual: BN,
-  minimum: BN | number | bigint,
+  actual: bigint,
+  minimum: bigint | number,
   message?: string
 ): void {
-  const minBn = new BN(minimum.toString());
+  const minBn = BigInt(minimum);
   const msg = message || `Expected ${actual.toString()} >= ${minBn.toString()}`;
-  expect(actual.gte(minBn)).toBe(true);
+  expect(actual >= minBn).toBe(true);
 }
 
 /**
- * Assert that a BN is less than a value.
+ * Assert that a bigint is less than a value.
  */
 export function assertBnLessThan(
-  actual: BN,
-  maximum: BN | number | bigint,
+  actual: bigint,
+  maximum: bigint | number,
   message?: string
 ): void {
-  const maxBn = new BN(maximum.toString());
+  const maxBn = BigInt(maximum);
   const msg = message || `Expected ${actual.toString()} < ${maxBn.toString()}`;
-  expect(actual.lt(maxBn)).toBe(true);
+  expect(actual < maxBn).toBe(true);
 }
 
 /**
- * Assert that a BN is less than or equal to a value.
+ * Assert that a bigint is less than or equal to a value.
  */
 export function assertBnLessThanOrEqual(
-  actual: BN,
-  maximum: BN | number | bigint,
+  actual: bigint,
+  maximum: bigint | number,
   message?: string
 ): void {
-  const maxBn = new BN(maximum.toString());
+  const maxBn = BigInt(maximum);
   const msg = message || `Expected ${actual.toString()} <= ${maxBn.toString()}`;
-  expect(actual.lte(maxBn)).toBe(true);
+  expect(actual <= maxBn).toBe(true);
 }
 
 /**
- * Assert that a BN is within a range.
+ * Assert that a bigint is within a range.
  */
 export function assertBnInRange(
-  actual: BN,
-  min: BN | number | bigint,
-  max: BN | number | bigint,
+  actual: bigint,
+  min: bigint | number,
+  max: bigint | number,
   message?: string
 ): void {
-  const minBn = new BN(min.toString());
-  const maxBn = new BN(max.toString());
-  expect(actual.gte(minBn) && actual.lte(maxBn)).toBe(true);
+  const minBn = BigInt(min);
+  const maxBn = BigInt(max);
+  expect(actual >= minBn && actual <= maxBn).toBe(true);
 }
 
 /**
- * Assert that a BN is zero.
+ * Assert that a bigint is zero.
  */
-export function assertBnZero(actual: BN, message?: string): void {
-  expect(actual.isZero()).toBe(true);
+export function assertBnZero(actual: bigint, message?: string): void {
+  expect(actual === 0n).toBe(true);
 }
 
 /**
- * Assert that a BN is not zero.
+ * Assert that a bigint is not zero.
  */
-export function assertBnNotZero(actual: BN, message?: string): void {
-  expect(actual.isZero()).toBe(false);
+export function assertBnNotZero(actual: bigint, message?: string): void {
+  expect(actual === 0n).toBe(false);
 }
 
 // PublicKey Assertions
@@ -145,20 +144,20 @@ export function assertPubkeyNotNull(actual: Address, message?: string): void {
 export function assertPlayerHasResources(
   player: PlayerAccount,
   resources: {
-    lockedNovi?: BN | number;
-    cashOnHand?: BN | number;
-    cashInVault?: BN | number;
-    defensiveUnit1?: BN | number;
-    defensiveUnit2?: BN | number;
-    defensiveUnit3?: BN | number;
-    operativeUnit1?: BN | number;
-    operativeUnit2?: BN | number;
-    operativeUnit3?: BN | number;
-    meleeWeapons?: BN | number;
-    rangedWeapons?: BN | number;
-    siegeWeapons?: BN | number;
-    armorPieces?: BN | number;
-    produce?: BN | number;
+    lockedNovi?: bigint | number;
+    cashOnHand?: bigint | number;
+    cashInVault?: bigint | number;
+    defensiveUnit1?: bigint | number;
+    defensiveUnit2?: bigint | number;
+    defensiveUnit3?: bigint | number;
+    operativeUnit1?: bigint | number;
+    operativeUnit2?: bigint | number;
+    operativeUnit3?: bigint | number;
+    meleeWeapons?: bigint | number;
+    rangedWeapons?: bigint | number;
+    siegeWeapons?: bigint | number;
+    armorPieces?: bigint | number;
+    produce?: bigint | number;
   }
 ): void {
   if (resources.lockedNovi !== undefined) {
@@ -227,14 +226,14 @@ export function assertPlayerLocation(
  * Assert player is currently traveling.
  */
 export function assertPlayerTraveling(player: PlayerAccount): void {
-  expect(player.arrivalTime.toNumber()).not.toBe(-1);
+  expect(Number(player.arrivalTime)).not.toBe(-1);
 }
 
 /**
  * Assert player is not traveling.
  */
 export function assertPlayerNotTraveling(player: PlayerAccount): void {
-  expect(player.arrivalTime.toNumber()).toBe(-1);
+  expect(Number(player.arrivalTime)).toBe(-1);
 }
 
 /**
@@ -244,7 +243,7 @@ export function assertPlayerProtected(
   player: PlayerAccount,
   currentTime: number
 ): void {
-  expect(player.newPlayerProtectionUntil.toNumber()).toBeGreaterThan(currentTime);
+  expect(Number(player.newPlayerProtectionUntil)).toBeGreaterThan(currentTime);
 }
 
 /**
@@ -254,7 +253,7 @@ export function assertPlayerNotProtected(
   player: PlayerAccount,
   currentTime: number
 ): void {
-  expect(player.newPlayerProtectionUntil.toNumber()).toBeLessThanOrEqual(currentTime);
+  expect(Number(player.newPlayerProtectionUntil)).toBeLessThanOrEqual(currentTime);
 }
 
 /**
@@ -291,7 +290,7 @@ export function assertPlayerSubscription(
   currentTime: number
 ): void {
   expect(player.subscriptionTier).toBe(tier);
-  const active = player.subscriptionEnd.toNumber() > currentTime;
+  const active = Number(player.subscriptionEnd) > currentTime;
   expect(active).toBe(isActive);
 }
 
@@ -327,7 +326,7 @@ export function assertTeamDisbanded(team: TeamAccount): void {
  */
 export function assertTeamTreasury(
   team: TeamAccount,
-  expectedBalance: BN | number
+  expectedBalance: bigint | number
 ): void {
   assertBnEquals(team.treasury, expectedBalance);
 }
@@ -337,7 +336,7 @@ export function assertTeamTreasury(
  */
 export function assertTeamTreasuryMinimum(
   team: TeamAccount,
-  minimum: BN | number
+  minimum: bigint | number
 ): void {
   assertBnGreaterThanOrEqual(team.treasury, minimum);
 }
@@ -367,14 +366,14 @@ export function assertTeamMemberSlot(
 // Combat Result Assertions
 
 export interface CombatResultSnapshot {
-  attackerNoviPre: BN;
-  attackerNoviPost: BN;
-  attackerUnitsPre: BN;
-  attackerUnitsPost: BN;
-  defenderNoviPre: BN;
-  defenderNoviPost: BN;
-  defenderUnitsPre: BN;
-  defenderUnitsPost: BN;
+  attackerNoviPre: bigint;
+  attackerNoviPost: bigint;
+  attackerUnitsPre: bigint;
+  attackerUnitsPost: bigint;
+  defenderNoviPre: bigint;
+  defenderNoviPost: bigint;
+  defenderUnitsPre: bigint;
+  defenderUnitsPost: bigint;
 }
 
 /**
@@ -382,9 +381,9 @@ export interface CombatResultSnapshot {
  */
 export function assertAttackerWon(snapshot: CombatResultSnapshot): void {
   // Attacker should have consumed NOVI
-  expect(snapshot.attackerNoviPost.lt(snapshot.attackerNoviPre)).toBe(true);
+  expect(snapshot.attackerNoviPost < snapshot.attackerNoviPre).toBe(true);
   // Defender should have lost resources or units
-  const defenderLostUnits = snapshot.defenderUnitsPost.lt(snapshot.defenderUnitsPre);
+  const defenderLostUnits = snapshot.defenderUnitsPost < snapshot.defenderUnitsPre;
   expect(defenderLostUnits).toBe(true);
 }
 
@@ -393,9 +392,9 @@ export function assertAttackerWon(snapshot: CombatResultSnapshot): void {
  */
 export function assertDefenderWon(snapshot: CombatResultSnapshot): void {
   // Attacker should have consumed NOVI
-  expect(snapshot.attackerNoviPost.lt(snapshot.attackerNoviPre)).toBe(true);
+  expect(snapshot.attackerNoviPost < snapshot.attackerNoviPre).toBe(true);
   // Attacker should have lost operatives
-  expect(snapshot.attackerUnitsPost.lt(snapshot.attackerUnitsPre)).toBe(true);
+  expect(snapshot.attackerUnitsPost < snapshot.attackerUnitsPre).toBe(true);
   // Defender should not have lost significant resources
 }
 
@@ -405,36 +404,37 @@ export function assertDefenderWon(snapshot: CombatResultSnapshot): void {
  * Assert resources changed by expected amounts.
  */
 export function assertResourceChanged(
-  pre: BN,
-  post: BN,
-  expectedChange: BN | number,
+  pre: bigint,
+  post: bigint,
+  expectedChange: bigint | number,
   tolerance: number = 0
 ): void {
-  const actualChange = post.sub(pre);
-  const expected = new BN(expectedChange.toString());
-  const diff = actualChange.sub(expected).abs().toNumber();
+  const actualChange = (post - pre);
+  const expected = BigInt(expectedChange);
+  const rawDiff = (actualChange - expected);
+  const diff = Number(rawDiff < 0n ? -rawDiff : rawDiff);
   expect(diff).toBeLessThanOrEqual(tolerance);
 }
 
 /**
  * Assert resources increased.
  */
-export function assertResourceIncreased(pre: BN, post: BN): void {
-  expect(post.gt(pre)).toBe(true);
+export function assertResourceIncreased(pre: bigint, post: bigint): void {
+  expect(post > pre).toBe(true);
 }
 
 /**
  * Assert resources decreased.
  */
-export function assertResourceDecreased(pre: BN, post: BN): void {
-  expect(post.lt(pre)).toBe(true);
+export function assertResourceDecreased(pre: bigint, post: bigint): void {
+  expect(post < pre).toBe(true);
 }
 
 /**
  * Assert resources unchanged.
  */
-export function assertResourceUnchanged(pre: BN, post: BN): void {
-  expect(post.eq(pre)).toBe(true);
+export function assertResourceUnchanged(pre: bigint, post: bigint): void {
+  expect(post === pre).toBe(true);
 }
 
 // Transaction Assertions

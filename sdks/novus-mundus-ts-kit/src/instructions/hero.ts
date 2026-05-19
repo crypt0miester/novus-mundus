@@ -12,10 +12,10 @@
 
 import type { Address, Instruction } from '@solana/kit';
 import { address } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, packedStruct, u8, u16, u32, u64, bool, fixedString, array, pad } from '../utils/codec';
 import {
   derivePlayerPda,
   deriveHeroTemplatePda,
@@ -51,7 +51,7 @@ export interface CreateTemplateParams {
   /** Hero category */
   category: number;
   /** Mint cost in SOL lamports */
-  mintCostSol: BN | number | bigint;
+  mintCostSol: bigint | number;
   /** Supply cap (0=unlimited) */
   supplyCap: number;
   /** Is template enabled */
@@ -91,11 +91,50 @@ export interface CreateTemplateParams {
  * - [51..53] meditation_city_id: u16
  * - [53..73] buffs: 4 × BuffConfig (5 bytes each)
  */
-export function createCreateTemplateInstruction(
+interface TemplateBuff {
+  stat: number;
+  baseBps: number;
+}
+
+/** A single BuffConfig entry: stat (u8), base_bps (u16), reserved (2 bytes). */
+const templateBuff = packedStruct<TemplateBuff>([
+  ['stat', u8],
+  ['baseBps', u16],
+  pad(2),
+], 5);
+
+/** CreateTemplate args: 73-byte fixed instruction data. */
+const createTemplateArgs = packed<{
+  templateId: number;
+  name: string;
+  heroType: number;
+  category: number;
+  mintCostSol: bigint;
+  supplyCap: number;
+  enabled: boolean;
+  eventExclusive: boolean;
+  requiredPlayerLevel: number;
+  meditationCityId: number;
+  buffs: TemplateBuff[];
+}>([
+  ['templateId', u16],
+  ['name', fixedString(32)],
+  ['heroType', u8],
+  ['category', u8],
+  ['mintCostSol', u64],
+  ['supplyCap', u32],
+  ['enabled', bool],
+  ['eventExclusive', bool],
+  ['requiredPlayerLevel', u8],
+  ['meditationCityId', u16],
+  ['buffs', array(templateBuff, 4)],
+], 73);
+
+export async function createCreateTemplateInstruction(
   accounts: CreateTemplateAccounts,
   params: CreateTemplateParams
-): Instruction {
-  const [template] = deriveHeroTemplatePda(params.templateId);
+): Promise<Instruction> {
+  const [template] = await deriveHeroTemplatePda(params.templateId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -104,50 +143,29 @@ export function createCreateTemplateInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: 73 bytes fixed
-  const writer = new BufferWriter(73);
-
-  // [0..2] template_id: u16
-  writer.writeU16(params.templateId);
-
-  // [2..34] name: [u8; 32] - fixed size, padded with zeros
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
-  writer.writeBytes(nameBytes);
-  writer.writeZeros(32 - nameBytes.length);
-
-  // [34] hero_type: u8
-  writer.writeU8(params.heroType);
-
-  // [35] category: u8
-  writer.writeU8(params.category);
-
-  // [36..44] mint_cost_sol: u64
-  writer.writeU64(params.mintCostSol);
-
-  // [44..48] supply_cap: u32
-  writer.writeU32(params.supplyCap);
-
-  // [48] enabled: bool
-  writer.writeBool(params.enabled);
-
-  // [49] event_exclusive: bool
-  writer.writeBool(params.eventExclusive);
-
-  // [50] required_player_level: u8
-  writer.writeU8(params.requiredPlayerLevel);
-
-  // [51..53] meditation_city_id: u16
-  writer.writeU16(params.meditationCityId);
-
-  // [53..73] buffs: 4 × BuffConfig (5 bytes each: stat u8, base_bps u16, reserved 2 bytes)
+  // Instruction data: 73 bytes fixed. Buffs: 4 × BuffConfig, missing slots zeroed.
+  const buffs: TemplateBuff[] = [];
   for (let i = 0; i < 4; i++) {
     const buff = params.buffs[i] || { stat: 0, baseBps: 0 };
-    writer.writeU8(buff.stat);
-    writer.writeU16(buff.baseBps);
-    writer.writeU16(0); // reserved
+    buffs.push({ stat: buff.stat, baseBps: buff.baseBps });
   }
 
-  const data = createInstructionData(DISCRIMINATORS.HERO_CREATE_TEMPLATE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_CREATE_TEMPLATE,
+    createTemplateArgs.encode({
+      templateId: params.templateId,
+      name: params.name,
+      heroType: params.heroType,
+      category: params.category,
+      mintCostSol: BigInt(params.mintCostSol),
+      supplyCap: params.supplyCap,
+      enabled: params.enabled,
+      eventExclusive: params.eventExclusive,
+      requiredPlayerLevel: params.requiredPlayerLevel,
+      meditationCityId: params.meditationCityId,
+      buffs,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -177,10 +195,10 @@ export interface CreateCollectionAccounts {
  *
  * On-chain data: None (name/uri hardcoded)
  */
-export function createCreateCollectionInstruction(
+export async function createCreateCollectionInstruction(
   accounts: CreateCollectionAccounts
-): Instruction {
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -214,6 +232,9 @@ export interface MintHeroParams {
   templateId: number;
 }
 
+/** MintHero args: template_id (u16). */
+const mintHeroArgs = packed<{ templateId: number }>([['templateId', u16]], 2);
+
 /** ~55,000 CU */
 /**
  * Mint a hero NFT.
@@ -236,15 +257,15 @@ export interface MintHeroParams {
  * 10. [writable] mint_receipt: HeroMintReceipt PDA (0-byte, created on mint)
  * 11. [] estate_account: EstateAccount PDA (for sanctuary bonus)
  */
-export function createMintHeroInstruction(
+export async function createMintHeroInstruction(
   accounts: MintHeroAccounts,
   params: MintHeroParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.minter);
-  const [template] = deriveHeroTemplatePda(params.templateId);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
-  const [estateAccount] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.minter);
+  const [template] = await deriveHeroTemplatePda(params.templateId);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [mintReceipt] = await deriveHeroMintReceiptPda(player, params.templateId);
+  const [estateAccount] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.minter, isSigner: true, isWritable: true },
@@ -261,10 +282,10 @@ export function createMintHeroInstruction(
     { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
-  writer.writeU16(params.templateId);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_MINT, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_MINT,
+    mintHeroArgs.encode({ templateId: params.templateId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -289,6 +310,9 @@ export interface LockHeroParams {
   slotIndex: number;
 }
 
+/** Shared single-byte args: slot_index (u8). Used by lock/unlock/assign-defensive. */
+const slotIndexArgs = packed<{ slotIndex: number }>([['slotIndex', u8]], 1);
+
 /** ~20,000 CU */
 /**
  * Lock a hero to the player account.
@@ -310,12 +334,12 @@ export interface LockHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createLockHeroInstruction(
+export async function createLockHeroInstruction(
   accounts: LockHeroAccounts,
   params: LockHeroParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -328,11 +352,10 @@ export function createLockHeroInstruction(
     { pubkey: accounts.estateAccount, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_LOCK, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_LOCK,
+    slotIndexArgs.encode({ slotIndex: params.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -377,12 +400,12 @@ export interface UnlockHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createUnlockHeroInstruction(
+export async function createUnlockHeroInstruction(
   accounts: UnlockHeroAccounts,
   params: UnlockHeroParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -395,11 +418,10 @@ export function createUnlockHeroInstruction(
     { pubkey: accounts.estateAccount, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_UNLOCK, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_UNLOCK,
+    slotIndexArgs.encode({ slotIndex: params.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -447,11 +469,11 @@ export interface LevelUpHeroAccounts {
  *
  * On-chain data: None (always levels up by 1)
  */
-export function createLevelUpHeroInstruction(
+export async function createLevelUpHeroInstruction(
   accounts: LevelUpHeroAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Clock sysvar
   const CLOCK_SYSVAR = address('SysvarC1ock11111111111111111111111111111111');
@@ -502,22 +524,21 @@ export interface AssignDefensiveHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createAssignDefensiveHeroInstruction(
+export async function createAssignDefensiveHeroInstruction(
   accounts: AssignDefensiveHeroAccounts,
   params: AssignDefensiveHeroParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE,
+    slotIndexArgs.encode({ slotIndex: params.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -537,6 +558,9 @@ export interface BurnHeroParams {
   /** Template ID of the hero being burned */
   templateId: number;
 }
+
+/** BurnHero args: template_id (u16). */
+const burnHeroArgs = packed<{ templateId: number }>([['templateId', u16]], 2);
 
 /** ~30,000 CU */
 /**
@@ -561,14 +585,14 @@ export interface BurnHeroParams {
  * On-chain data (2 bytes):
  * - [0..2] template_id: u16 (little-endian)
  */
-export function createBurnHeroInstruction(
+export async function createBurnHeroInstruction(
   accounts: BurnHeroAccounts,
   params: BurnHeroParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveHeroTemplatePda(params.templateId);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveHeroTemplatePda(params.templateId);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [mintReceipt] = await deriveHeroMintReceiptPda(player, params.templateId);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -581,10 +605,10 @@ export function createBurnHeroInstruction(
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
-  writer.writeU16(params.templateId);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_BURN, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_BURN,
+    burnHeroArgs.encode({ templateId: params.templateId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -605,6 +629,12 @@ export interface UpdateSupplyCapParams {
   newSupplyCap: number;
 }
 
+/** UpdateSupplyCap args: template_id (u16), new_supply_cap (u32). */
+const updateSupplyCapArgs = packed<{ templateId: number; newSupplyCap: number }>([
+  ['templateId', u16],
+  ['newSupplyCap', u32],
+], 6);
+
 /** ~5,000 CU */
 /**
  * Update a hero template's supply cap.
@@ -620,11 +650,11 @@ export interface UpdateSupplyCapParams {
  * - [0..2] template_id: u16 (little-endian)
  * - [2..6] new_supply_cap: u32 (little-endian)
  */
-export function createUpdateSupplyCapInstruction(
+export async function createUpdateSupplyCapInstruction(
   accounts: UpdateSupplyCapAccounts,
   params: UpdateSupplyCapParams
-): Instruction {
-  const [template] = deriveHeroTemplatePda(params.templateId);
+): Promise<Instruction> {
+  const [template] = await deriveHeroTemplatePda(params.templateId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
@@ -632,11 +662,13 @@ export function createUpdateSupplyCapInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(6);
-  writer.writeU16(params.templateId);
-  writer.writeU32(params.newSupplyCap);
-
-  const data = createInstructionData(DISCRIMINATORS.HERO_UPDATE_SUPPLY_CAP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HERO_UPDATE_SUPPLY_CAP,
+    updateSupplyCapArgs.encode({
+      templateId: params.templateId,
+      newSupplyCap: params.newSupplyCap,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

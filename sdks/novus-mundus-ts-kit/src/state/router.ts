@@ -82,7 +82,7 @@ export type RoutedAccount =
  * @returns Discriminated union of { key, account }
  * @throws Error if account key is unknown or deserialization fails
  */
-export function deserializeAnyAccount(data: Uint8Array | Buffer): RoutedAccount {
+export function deserializeAnyAccount(data: Uint8Array): RoutedAccount {
   if (data.length === 0) {
     throw new Error('Empty account data');
   }
@@ -182,7 +182,7 @@ export function deserializeAnyAccount(data: Uint8Array | Buffer): RoutedAccount 
 /**
  * Try to deserialize any account, returning null instead of throwing.
  */
-export function tryDeserializeAnyAccount(data: Uint8Array | Buffer): RoutedAccount | null {
+export function tryDeserializeAnyAccount(data: Uint8Array): RoutedAccount | null {
   try {
     return deserializeAnyAccount(data);
   } catch {
@@ -193,7 +193,7 @@ export function tryDeserializeAnyAccount(data: Uint8Array | Buffer): RoutedAccou
 /**
  * Read the AccountKey from raw bytes without full deserialization.
  */
-export function readAccountKey(data: Uint8Array | Buffer): AccountKey {
+export function readAccountKey(data: Uint8Array): AccountKey {
   if (data.length === 0) {
     throw new Error('Empty account data');
   }

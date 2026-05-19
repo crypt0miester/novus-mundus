@@ -13,7 +13,6 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -57,7 +56,7 @@ const HERO_TEMPLATES = [
     name: 'Warrior',
     heroType: 0, // Common
     category: 0, // Melee
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10), // 0.1 SOL
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10), // 0.1 SOL
     supplyCap: 0, // unlimited
     enabled: true,
     eventExclusive: false,
@@ -73,7 +72,7 @@ const HERO_TEMPLATES = [
     name: 'Archer',
     heroType: 0, // Common
     category: 1, // Ranged
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10),
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -89,7 +88,7 @@ const HERO_TEMPLATES = [
     name: 'Mage',
     heroType: 0, // Common
     category: 2, // Magic
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10),
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -109,7 +108,7 @@ const HERO_TEMPLATES = [
     baseDefense: 100,
     baseHealth: 1200,
     baseCritBps: 700, // 7%
-    mintPriceLamports: new BN(LAMPORTS_PER_SOL / 2), // 0.5 SOL
+    mintPriceLamports: BigInt(LAMPORTS_PER_SOL / 2), // 0.5 SOL
     maxSupply: 1000,
     minPlayerLevel: 5,
     requiredEventId: 0,
@@ -125,7 +124,7 @@ const RESEARCH_TEMPLATES = [
     category: 0, // Battle
     maxLevel: 10,
     baseTimeSeconds: 300, // 5 minutes
-    baseCost: new BN(100), // 10 NOVI
+    baseCost: 100n, // 10 NOVI
     buffType: 0, // Attack
     buffPerLevelBps: 200, // +2% per level
     prerequisiteType: -1, // None
@@ -137,7 +136,7 @@ const RESEARCH_TEMPLATES = [
     category: 0, // Battle
     maxLevel: 10,
     baseTimeSeconds: 600, // 10 minutes
-    baseCost: new BN(200),
+    baseCost: 200n,
     buffType: 1, // Defense
     buffPerLevelBps: 200,
     prerequisiteType: 0, // Requires Attack I
@@ -149,7 +148,7 @@ const RESEARCH_TEMPLATES = [
     category: 1, // Economy
     maxLevel: 10,
     baseTimeSeconds: 300,
-    baseCost: new BN(100),
+    baseCost: 100n,
     buffType: 4, // Resource Rate
     buffPerLevelBps: 300, // +3% per level
     prerequisiteType: -1,
@@ -161,7 +160,7 @@ const RESEARCH_TEMPLATES = [
     category: 1, // Economy
     maxLevel: 10,
     baseTimeSeconds: 450,
-    baseCost: new BN(150),
+    baseCost: 150n,
     buffType: 5, // Capacity
     buffPerLevelBps: 500, // +5% per level
     prerequisiteType: 2, // Requires Resource I
@@ -173,7 +172,7 @@ const RESEARCH_TEMPLATES = [
     category: 2, // Growth
     maxLevel: 10,
     baseTimeSeconds: 600,
-    baseCost: new BN(200),
+    baseCost: 200n,
     buffType: 6, // XP Rate
     buffPerLevelBps: 200, // +2% per level
     prerequisiteType: -1,
@@ -244,7 +243,7 @@ async function setupGameEngine(
 ): Promise<void> {
   console.log('\n=== Phase 1: Game Engine ===');
 
-  const [gameEnginePda] = deriveGameEnginePda();
+  const [gameEnginePda] = await deriveGameEnginePda();
 
   // Check if already initialized
   const info = await connection.getAccountInfo(gameEnginePda);
@@ -253,7 +252,7 @@ async function setupGameEngine(
     return;
   }
 
-  const ix = createInitGameEngineInstruction({
+  const ix = await createInitGameEngineInstruction({
     authority: daoAuthority.publicKey,
     treasuryWallet: treasury,
   });
@@ -268,7 +267,7 @@ async function setupHeroCollection(
 ): Promise<void> {
   console.log('\n=== Phase 2: Hero Collection ===');
 
-  const [heroCollectionPda] = deriveHeroCollectionPda();
+  const [heroCollectionPda] = await deriveHeroCollectionPda();
 
   // Check if already initialized
   const info = await connection.getAccountInfo(heroCollectionPda);
@@ -277,8 +276,8 @@ async function setupHeroCollection(
     return;
   }
 
-  const [gameEnginePda] = deriveGameEnginePda();
-  const ix = createCreateCollectionInstruction({
+  const [gameEnginePda] = await deriveGameEnginePda();
+  const ix = await createCreateCollectionInstruction({
     daoAuthority: daoAuthority.publicKey,
     gameEngine: gameEnginePda,
   });
@@ -294,7 +293,7 @@ async function setupHeroTemplates(
   console.log('\n=== Phase 3: Hero Templates ===');
 
   for (const template of HERO_TEMPLATES) {
-    const [templatePda] = deriveHeroTemplatePda(template.templateId);
+    const [templatePda] = await deriveHeroTemplatePda(template.templateId);
 
     // Check if already initialized
     const info = await connection.getAccountInfo(templatePda);
@@ -303,8 +302,8 @@ async function setupHeroTemplates(
       continue;
     }
 
-    const [gameEnginePda] = deriveGameEnginePda();
-    const ix = createCreateTemplateInstruction(
+    const [gameEnginePda] = await deriveGameEnginePda();
+    const ix = await createCreateTemplateInstruction(
       {
         daoAuthority: daoAuthority.publicKey,
         gameEngine: gameEnginePda,
@@ -324,7 +323,7 @@ async function setupCities(
   console.log('\n=== Phase 4: Cities ===');
 
   for (const city of CITIES) {
-    const [cityPda] = deriveCityPda(city.id);
+    const [cityPda] = await deriveCityPda(city.id);
 
     // Check if already initialized
     const info = await connection.getAccountInfo(cityPda);
@@ -333,7 +332,7 @@ async function setupCities(
       continue;
     }
 
-    const ix = createInitCityInstruction({
+    const ix = await createInitCityInstruction({
       authority: daoAuthority.publicKey,
       cityId: city.id,
       latitude: city.lat,
@@ -353,7 +352,7 @@ async function setupResearchTemplates(
   console.log('\n=== Phase 5: Research Templates ===');
 
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
 
     // Check if already initialized
     const info = await connection.getAccountInfo(templatePda);
@@ -362,8 +361,8 @@ async function setupResearchTemplates(
       continue;
     }
 
-    const [gameEnginePda] = deriveGameEnginePda();
-    const ix = createInitializeTemplateInstruction(
+    const [gameEnginePda] = await deriveGameEnginePda();
+    const ix = await createInitializeTemplateInstruction(
       {
         daoAuthority: daoAuthority.publicKey,
         gameEngine: gameEnginePda,
@@ -383,7 +382,7 @@ async function setupTestPlayer(
 ): Promise<void> {
   console.log('\n=== Phase 6: Test Player ===');
 
-  const [playerPda] = derivePlayerPda(playerKeypair.publicKey);
+  const [playerPda] = await derivePlayerPda(playerKeypair.publicKey);
 
   // Check if already initialized
   const info = await connection.getAccountInfo(playerPda);
@@ -392,7 +391,7 @@ async function setupTestPlayer(
     return;
   }
 
-  const ix = createInitPlayerInstruction({
+  const ix = await createInitPlayerInstruction({
     owner: playerKeypair.publicKey,
     startingCityId,
   });
@@ -439,10 +438,10 @@ async function main() {
   console.log('==============================================');
 
   // Print PDAs for reference
-  const [gameEnginePda] = deriveGameEnginePda();
-  const [heroCollectionPda] = deriveHeroCollectionPda();
-  const [city1Pda] = deriveCityPda(1);
-  const [playerPda] = derivePlayerPda(testPlayer.publicKey);
+  const [gameEnginePda] = await deriveGameEnginePda();
+  const [heroCollectionPda] = await deriveHeroCollectionPda();
+  const [city1Pda] = await deriveCityPda(1);
+  const [playerPda] = await derivePlayerPda(testPlayer.publicKey);
 
   console.log('\nPDA Addresses:');
   console.log(`  GameEngine: ${gameEnginePda.toBase58()}`);

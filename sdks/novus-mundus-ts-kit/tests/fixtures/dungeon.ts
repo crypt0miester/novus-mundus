@@ -31,7 +31,7 @@ export interface ResumeDungeonParams {
 }
 
 /** Build an enter-dungeon ix with the game_authority co-signer wired in. */
-export function enterDungeonIx(
+export async function enterDungeonIx(
   ctx: TestContext,
   owner: Address,
   heroMint: Address,
@@ -48,7 +48,7 @@ export function enterDungeonIx(
 }
 
 /** Build a resume ix with the game_authority co-signer wired in. */
-export function resumeDungeonIx(
+export async function resumeDungeonIx(
   ctx: TestContext,
   owner: Address,
   params: ResumeDungeonParams,
@@ -60,7 +60,7 @@ export function resumeDungeonIx(
 }
 
 /** Send an enter-dungeon tx, co-signed by the player + game_authority. */
-export function enterDungeon(
+export async function enterDungeon(
   ctx: TestContext,
   player: TestPlayer,
   heroMint: Address,
@@ -68,20 +68,20 @@ export function enterDungeon(
 ) {
   return sendTransaction(
     ctx.svm,
-    [enterDungeonIx(ctx, player.publicKey, heroMint, params)],
+    [await enterDungeonIx(ctx, player.publicKey, heroMint, params)],
     [player.keypair, ctx.daoAuthority],
   );
 }
 
 /** Send a resume tx, co-signed by the player + game_authority. */
-export function resumeDungeon(
+export async function resumeDungeon(
   ctx: TestContext,
   player: TestPlayer,
   params: ResumeDungeonParams,
 ) {
   return sendTransaction(
     ctx.svm,
-    [resumeDungeonIx(ctx, player.publicKey, params)],
+    [await resumeDungeonIx(ctx, player.publicKey, params)],
     [player.keypair, ctx.daoAuthority],
   );
 }

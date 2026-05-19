@@ -270,6 +270,7 @@ pub fn process(
             buyer,
             final_price,
             clock.slot,
+            clock.unix_timestamp,
         )?;
     }
 

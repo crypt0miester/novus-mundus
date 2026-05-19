@@ -10,10 +10,10 @@
  */
 
 import { address, type Address, type Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u64 } from '../utils/codec';
 import {
   derivePlayerPda,
   deriveExpeditionPda,
@@ -43,12 +43,27 @@ export interface ExpeditionStartParams {
   /** Tier of expedition (0-4, higher = better rewards) */
   tier: number;
   /** Tier 1 operatives to send */
-  operativeUnit1: BN | number | bigint;
+  operativeUnit1: bigint | number;
   /** Tier 2 operatives to send */
-  operativeUnit2: BN | number | bigint;
+  operativeUnit2: bigint | number;
   /** Tier 3 operatives to send */
-  operativeUnit3: BN | number | bigint;
+  operativeUnit3: bigint | number;
 }
+
+/** ExpeditionStart args (26 bytes): expedition_type (u8), tier (u8), operative_unit_1/2/3 (u64) */
+const expeditionStartArgs = packed<{
+  expeditionType: number;
+  tier: number;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
+}>([
+  ['expeditionType', u8],
+  ['tier', u8],
+  ['operativeUnit1', u64],
+  ['operativeUnit2', u64],
+  ['operativeUnit3', u64],
+], 26);
 
 /** ~10,000 CU */
 /**
@@ -68,13 +83,13 @@ export interface ExpeditionStartParams {
  *
  * Hero provides bonus yield if sent with expedition.
  */
-export function createExpeditionStartInstruction(
+export async function createExpeditionStartInstruction(
   accounts: ExpeditionStartAccounts,
   params: ExpeditionStartParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -91,20 +106,16 @@ export function createExpeditionStartInstruction(
     keys.push({ pubkey: P_CORE_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
-  // Instruction data: 26 bytes
-  // - expedition_type (u8)
-  // - tier (u8)
-  // - operative_unit_1 (u64)
-  // - operative_unit_2 (u64)
-  // - operative_unit_3 (u64)
-  const writer = new BufferWriter(26);
-  writer.writeU8(params.expeditionType);
-  writer.writeU8(params.tier);
-  writer.writeU64(params.operativeUnit1);
-  writer.writeU64(params.operativeUnit2);
-  writer.writeU64(params.operativeUnit3);
-
-  const data = createInstructionData(DISCRIMINATORS.EXPEDITION_START, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.EXPEDITION_START,
+    expeditionStartArgs.encode({
+      expeditionType: params.expeditionType,
+      tier: params.tier,
+      operativeUnit1: BigInt(params.operativeUnit1),
+      operativeUnit2: BigInt(params.operativeUnit2),
+      operativeUnit3: BigInt(params.operativeUnit3),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -125,6 +136,11 @@ export interface ExpeditionStrikeParams {
   score: number;
 }
 
+/** Single-u8 args (1 byte) — shared by strike (score) and speedup (speedup_tier) */
+const u8Args = packed<{ value: number }>([
+  ['value', u8],
+], 1);
+
 /** ~5,000 CU */
 /**
  * Strike during expedition (active engagement mini-game).
@@ -135,12 +151,12 @@ export interface ExpeditionStrikeParams {
  * Higher average score = bonus multiplier on final yield.
  * Strikes are optional - base yield is still earned without them.
  */
-export function createExpeditionStrikeInstruction(
+export async function createExpeditionStrikeInstruction(
   accounts: ExpeditionStrikeAccounts,
   params: ExpeditionStrikeParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -150,11 +166,10 @@ export function createExpeditionStrikeInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: score (u8, 1 byte)
-  const writer = new BufferWriter(1);
-  writer.writeU8(Math.min(params.score, 100));
-
-  const data = createInstructionData(DISCRIMINATORS.EXPEDITION_STRIKE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.EXPEDITION_STRIKE,
+    u8Args.encode({ value: Math.min(params.score, 100) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -189,12 +204,12 @@ export interface ExpeditionClaimAccounts {
  * Returns operatives and hero to player.
  * Closes expedition account (rent refunded).
  */
-export function createExpeditionClaimInstruction(
+export async function createExpeditionClaimInstruction(
   accounts: ExpeditionClaimAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -238,11 +253,11 @@ export interface ExpeditionAbortAccounts {
  * Locked NOVI cost is NOT refunded (burnt as penalty).
  * Closes expedition account (rent refunded).
  */
-export function createExpeditionAbortInstruction(
+export async function createExpeditionAbortInstruction(
   accounts: ExpeditionAbortAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -291,12 +306,12 @@ export interface ExpeditionSpeedupParams {
  *
  * Cost formula: remaining_minutes × gems_per_minute × tier_multiplier
  */
-export function createExpeditionSpeedupInstruction(
+export async function createExpeditionSpeedupInstruction(
   accounts: ExpeditionSpeedupAccounts,
   params: ExpeditionSpeedupParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -304,11 +319,10 @@ export function createExpeditionSpeedupInstruction(
     { pubkey: expedition, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: speedup_tier (u8, 1 byte)
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.speedupTier);
-
-  const data = createInstructionData(DISCRIMINATORS.EXPEDITION_SPEEDUP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.EXPEDITION_SPEEDUP,
+    u8Args.encode({ value: params.speedupTier })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

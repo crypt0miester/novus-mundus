@@ -56,7 +56,7 @@ export class HeroFactory {
   ): Promise<TestHero> {
     const heroMint = await generateKeyPairSigner();
 
-    const ix = createMintHeroInstruction(
+    const ix = await createMintHeroInstruction(
       {
         minter: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -106,10 +106,10 @@ export class HeroFactory {
     hero: TestHero,
     slotIndex: number = 0
   ): Promise<void> {
-    const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.playerPda);
+    const [heroTemplate] = await deriveHeroTemplatePda(hero.templateId);
+    const [estateAccount] = await deriveEstatePda(player.playerPda);
 
-    const ix = createLockHeroInstruction(
+    const ix = await createLockHeroInstruction(
       {
         owner: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -133,10 +133,10 @@ export class HeroFactory {
     hero: TestHero,
     slotIndex: number = 0
   ): Promise<void> {
-    const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.playerPda);
+    const [heroTemplate] = await deriveHeroTemplatePda(hero.templateId);
+    const [estateAccount] = await deriveEstatePda(player.playerPda);
 
-    const ix = createUnlockHeroInstruction(
+    const ix = await createUnlockHeroInstruction(
       {
         owner: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -158,10 +158,10 @@ export class HeroFactory {
     player: TestPlayer,
     hero: TestHero
   ): Promise<void> {
-    const [heroTemplate] = deriveHeroTemplatePda(hero.templateId);
-    const [estateAccount] = deriveEstatePda(player.playerPda);
+    const [heroTemplate] = await deriveHeroTemplatePda(hero.templateId);
+    const [estateAccount] = await deriveEstatePda(player.playerPda);
 
-    const ix = createLevelUpHeroInstruction({
+    const ix = await createLevelUpHeroInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       heroMint: hero.mintPubkey,
@@ -182,7 +182,7 @@ export class HeroFactory {
     hero: TestHero,
     slotIndex: number = 0
   ): Promise<void> {
-    const ix = createAssignDefensiveHeroInstruction(
+    const ix = await createAssignDefensiveHeroInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { slotIndex }
     );
@@ -197,7 +197,7 @@ export class HeroFactory {
     player: TestPlayer,
     hero: TestHero
   ): Promise<void> {
-    const ix = createBurnHeroInstruction(
+    const ix = await createBurnHeroInstruction(
       {
         owner: player.publicKey,
         gameEngine: this.ctx.gameEngine,

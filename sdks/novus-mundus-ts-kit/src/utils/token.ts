@@ -4,8 +4,8 @@
  * Helper functions for SPL Token operations.
  */
 
-import { address, type Address } from '@solana/kit';
-import { findProgramAddressSync, addressBytes, isAddressOnCurve } from '../crypto';
+import { address, getProgramDerivedAddress, type Address } from '@solana/kit';
+import { addressBytes, isAddressOnCurve } from '../crypto';
 
 /** Associated Token Program ID */
 export const ASSOCIATED_TOKEN_PROGRAM_ID: Address = address(
@@ -26,21 +26,21 @@ export const SPL_TOKEN_PROGRAM_ID: Address = address(
  * @param programId - Token program ID (defaults to SPL Token)
  * @param associatedTokenProgramId - ATA program ID
  */
-export function getAssociatedTokenAddressSync(
+export async function getAssociatedTokenAddressSync(
   mint: Address,
   owner: Address,
   allowOwnerOffCurve = false,
   programId: Address = SPL_TOKEN_PROGRAM_ID,
   associatedTokenProgramId: Address = ASSOCIATED_TOKEN_PROGRAM_ID
-): Address {
+): Promise<Address> {
   if (!allowOwnerOffCurve && !isAddressOnCurve(owner)) {
     throw new Error('TokenOwnerOffCurve');
   }
 
-  const [ata] = findProgramAddressSync(
-    [addressBytes(owner), addressBytes(programId), addressBytes(mint)],
-    associatedTokenProgramId
-  );
+  const [ata] = await getProgramDerivedAddress({
+    programAddress: associatedTokenProgramId,
+    seeds: [addressBytes(owner), addressBytes(programId), addressBytes(mint)],
+  });
 
   return ata;
 }
@@ -53,7 +53,7 @@ export function getAssociatedTokenAddressSyncForPda(
   pdaOwner: Address,
   programId: Address = SPL_TOKEN_PROGRAM_ID,
   associatedTokenProgramId: Address = ASSOCIATED_TOKEN_PROGRAM_ID
-): Address {
+): Promise<Address> {
   return getAssociatedTokenAddressSync(
     mint,
     pdaOwner,

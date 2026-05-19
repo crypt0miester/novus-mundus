@@ -1271,11 +1271,11 @@ export interface UpdateConfigAccounts {
 }
 
 export interface UpdateConfigParams {
-  /** SOL Pyth price feed */
-  solPythFeed?: PublicKey;
-  /** SOL Switchboard price feed */
+  /** SOL/USD Pyth feed id — 32-byte feed id as 64 hex chars (NOT an account). */
+  solPythFeed?: string;
+  /** SOL/USD Switchboard pull-feed account address. */
   solSwitchboardFeed?: PublicKey;
-  /** Max staleness in slots */
+  /** Max price age — seconds for Pyth, slots for Switchboard. */
   solMaxStalenessSlots?: number;
   /** Confidence threshold in basis points */
   solConfidenceThresholdBps?: number;
@@ -1283,6 +1283,21 @@ export interface UpdateConfigParams {
 
 // Rust `update_config` update flag bits.
 const UPDATE_SOL_ORACLE = 32;
+
+/**
+ * Decode a 32-byte Pyth feed id (64 hex chars, optional `0x` prefix).
+ *
+ * A Pyth pull-oracle feed is identified by this 32-byte feed id — NOT by an
+ * account address. The on-chain program stores it in the `*_pyth_feed` config
+ * fields and verifies it against the `PriceUpdateV2` account at purchase time.
+ */
+function feedIdBuffer(feedId: string): Buffer {
+  const hex = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
+  if (hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error(`Invalid Pyth feed id (expected 64 hex chars): ${feedId}`);
+  }
+  return Buffer.from(hex, 'hex');
+}
 
 /** ~20,000 CU */
 /**
@@ -1292,9 +1307,9 @@ const UPDATE_SOL_ORACLE = 32;
  * (other flags are pure DAO knobs not yet exposed). Layout matches the
  * Rust processor: `[update_flags: u8] + [...conditional sections...]`.
  *
- * For each non-zero feed pubkey in the SOL oracle section, the
- * corresponding feed account is appended after the 3 base accounts so
- * the program can owner-check + layout-validate at DAO config time.
+ * The Pyth feed is a bare 32-byte feed id (no account). When a non-zero
+ * Switchboard feed is set, its account is appended after the 3 base accounts
+ * so the program can owner-check + layout-validate it at DAO config time.
  */
 export function createUpdateConfigInstruction(
   accounts: UpdateConfigAccounts,
@@ -1326,9 +1341,10 @@ export function createUpdateConfigInstruction(
   writer.writeU8(updateFlags);
 
   if (setsSolOracle) {
+    // Pyth feed is a 32-byte feed id encoded into instruction data — no
+    // account, no trailing key slot.
     if (params.solPythFeed) {
-      writer.writePubkey(params.solPythFeed);
-      keys.push({ pubkey: params.solPythFeed, isSigner: false, isWritable: false });
+      writer.writeBytes(feedIdBuffer(params.solPythFeed));
     } else {
       writer.writeZeros(32);
     }
@@ -1432,11 +1448,13 @@ export interface CreateAllowedTokenAccounts {
 }
 
 export interface CreateAllowedTokenParams {
-  /** Pyth price feed (optional — at least one of pyth/switchboard must be set) */
-  pythFeed?: PublicKey;
-  /** Switchboard price feed (optional — at least one of pyth/switchboard must be set) */
+  /** Pyth feed id — 32-byte feed id as 64 hex chars, NOT an account.
+   *  Optional; at least one of pyth/switchboard must be set. */
+  pythFeed?: string;
+  /** Switchboard pull-feed account address.
+   *  Optional; at least one of pyth/switchboard must be set. */
   switchboardFeed?: PublicKey;
-  /** Max staleness in slots */
+  /** Max price age — seconds for Pyth, slots for Switchboard. */
   maxStalenessSlots: number;
   /** Confidence threshold in basis points */
   confidenceThresholdBps: number;
@@ -1459,8 +1477,8 @@ export function createCreateAllowedTokenInstruction(
 
   // Rust order (base 9): authority(signer+payer), game_engine, allowed_token,
   // token_mint, system_program, treasury_wallet, treasury_token_account,
-  // token_program, associated_token_program — followed by 0–2 trailing feed
-  // accounts (pyth then switchboard) for DAO-time owner + discriminator validation.
+  // token_program, associated_token_program — followed by an optional trailing
+  // Switchboard feed account for DAO-time owner + discriminator validation.
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
@@ -1473,11 +1491,9 @@ export function createCreateAllowedTokenInstruction(
     { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Pyth first, then Switchboard. Each only appears when the
-  // corresponding pubkey is set; the program iterates in this fixed order.
-  if (params.pythFeed) {
-    keys.push({ pubkey: params.pythFeed, isSigner: false, isWritable: false });
-  }
+  // The Pyth feed is a bare 32-byte feed id (no account). Only a non-zero
+  // Switchboard feed appends a trailing account, which the program
+  // owner-checks + layout-validates at config time.
   if (params.switchboardFeed) {
     keys.push({ pubkey: params.switchboardFeed, isSigner: false, isWritable: false });
   }
@@ -1485,7 +1501,7 @@ export function createCreateAllowedTokenInstruction(
   // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) = 70 bytes
   const writer = new BufferWriter(70);
   if (params.pythFeed) {
-    writer.writePubkey(params.pythFeed);
+    writer.writeBytes(feedIdBuffer(params.pythFeed));
   } else {
     writer.writeZeros(32);
   }
@@ -1519,11 +1535,11 @@ export interface UpdateAllowedTokenAccounts {
 }
 
 export interface UpdateAllowedTokenParams {
-  /** New Pyth feed (optional) */
-  pythFeed?: PublicKey;
-  /** New Switchboard feed (optional) */
+  /** New Pyth feed id — 32-byte feed id as 64 hex chars (NOT an account). */
+  pythFeed?: string;
+  /** New Switchboard pull-feed account address. */
   switchboardFeed?: PublicKey;
-  /** New max staleness */
+  /** New max price age — seconds for Pyth, slots for Switchboard. */
   maxStalenessSlots?: number;
   /** New confidence threshold */
   confidenceThresholdBps?: number;
@@ -1555,15 +1571,15 @@ export function createUpdateAllowedTokenInstruction(
   const instructions: TransactionInstruction[] = [];
 
   // Field enum: PythFeed=0, SwitchboardFeed=1, MaxStalenessSlots=2, ConfidenceThresholdBps=3, DiscountBps=4
-  // For PythFeed/SwitchboardFeed updates with a non-zero new pubkey, the
-  // program requires the matching feed account in slot 4 to validate
-  // owner + layout at DAO config time.
+  // A Pyth feed update carries only the 32-byte feed id (no account). A
+  // Switchboard feed update appends the feed account in slot 4 so the
+  // program can validate owner + layout at DAO config time.
   if (params.pythFeed) {
     const writer = new BufferWriter(33);
     writer.writeU8(0); // PythFeed
-    writer.writePubkey(params.pythFeed);
+    writer.writeBytes(feedIdBuffer(params.pythFeed));
     instructions.push(new TransactionInstruction({
-      keys: [...keys, { pubkey: params.pythFeed, isSigner: false, isWritable: false }],
+      keys,
       programId: PROGRAM_ID,
       data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
     }));

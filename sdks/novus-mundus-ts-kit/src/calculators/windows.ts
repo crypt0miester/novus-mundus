@@ -16,7 +16,6 @@
  * this is the estate daily-activity window.
  */
 
-import type BN from 'bn.js';
 import { BuildingType } from '../types/enums';
 
 // Window Constants (mirror daily_activity.rs)
@@ -45,7 +44,7 @@ export interface EstateWindowState {
   /** `daily_date` — the unix-day index (u16) the daily state belongs to. */
   dailyDate: number;
   /** `dawn_timestamp` — unix seconds of the first activity of `dailyDate`. */
-  dawnTimestamp: BN | number;
+  dawnTimestamp: bigint | number;
   /** Per-window completion bitflags for buildings 0-15. */
   dawnBuildings: number;
   middayBuildings: number;
@@ -56,8 +55,8 @@ export interface EstateWindowState {
 
 // Internal Helpers
 
-function toSeconds(t: BN | number): number {
-  return typeof t === 'number' ? t : t.toNumber();
+function toSeconds(t: bigint | number): number {
+  return typeof t === 'number' ? t : Number(t);
 }
 
 /**

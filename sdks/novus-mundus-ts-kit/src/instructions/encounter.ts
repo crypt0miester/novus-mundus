@@ -7,7 +7,8 @@
 import type { Address, Instruction } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, i32 } from '../utils/codec';
 import {
   deriveCityPda,
   deriveEncounterPda,
@@ -51,6 +52,13 @@ export interface SpawnEncounterParams {
   encounterType: EncounterRarity;
 }
 
+/** SpawnEncounter args: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE) */
+const spawnEncounterArgs = packed<{ encounterType: number; gridLat: number; gridLong: number }>([
+  ['encounterType', u8],
+  ['gridLat', i32],
+  ['gridLong', i32],
+], 9);
+
 /** ~20,000 CU */
 /**
  * Spawn an encounter at a location.
@@ -81,16 +89,16 @@ export interface SpawnEncounterParams {
  * 8. [] system_program
  * 9. [] spawn_location
  */
-export function createSpawnEncounterInstruction(
+export async function createSpawnEncounterInstruction(
   accounts: SpawnEncounterAccounts,
   params: SpawnEncounterParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  const [encounter] = deriveEncounterPda(accounts.gameEngine, accounts.cityId, accounts.encounterIndex);
-  const [noviMint] = deriveNoviMintPda();
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
-  const [spawnLocation] = deriveLocationPda(accounts.gameEngine, accounts.cityId, accounts.gridLat, accounts.gridLong);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
+  const [encounter] = await deriveEncounterPda(accounts.gameEngine, accounts.cityId, accounts.encounterIndex);
+  const [noviMint] = await deriveNoviMintPda();
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const [spawnLocation] = await deriveLocationPda(accounts.gameEngine, accounts.cityId, accounts.gridLat, accounts.gridLong);
 
   // Rust account order (10):
   // 0. payer (signer, writable)
@@ -116,13 +124,14 @@ export function createSpawnEncounterInstruction(
     { pubkey: spawnLocation, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE)
-  const writer = new BufferWriter(9);
-  writer.writeU8(params.encounterType);
-  writer.writeI32(accounts.gridLat);
-  writer.writeI32(accounts.gridLong);
-
-  const data = createInstructionData(DISCRIMINATORS.ENCOUNTER_SPAWN, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ENCOUNTER_SPAWN,
+    spawnEncounterArgs.encode({
+      encounterType: params.encounterType,
+      gridLat: accounts.gridLat,
+      gridLong: accounts.gridLong,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -168,16 +177,16 @@ export interface CleanupEncounterAccounts {
  * 3. [writable] encounter_location
  * 4. [writable] rent_recipient
  */
-export function createCleanupEncounterInstruction(
+export async function createCleanupEncounterInstruction(
   accounts: CleanupEncounterAccounts
-): Instruction {
-  const [encounter] = deriveEncounterPda(
+): Promise<Instruction> {
+  const [encounter] = await deriveEncounterPda(
     accounts.gameEngine,
     accounts.cityId,
     accounts.encounterIndex
   );
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  const [encounterLocation] = deriveLocationPda(
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
+  const [encounterLocation] = await deriveLocationPda(
     accounts.gameEngine,
     accounts.cityId,
     accounts.gridLat,

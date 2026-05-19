@@ -12,7 +12,6 @@ import { address, generateKeyPairSigner, type Address } from '@solana/kit';
 
 /** All-zeros pubkey (web3.js `PublicKey.default` replacement). */
 const DEFAULT_PUBKEY: Address = address('11111111111111111111111111111111');
-import BN from 'bn.js';
 
 import {
   createStartMeditationInstruction,
@@ -72,7 +71,7 @@ describe('Sanctuary System', () => {
       const heroTemplateId = 1;
       const heroSlot = 0;
 
-      const ix = createStartMeditationInstruction(
+      const ix = await createStartMeditationInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplateId },
         { heroSlot }
       );
@@ -90,7 +89,7 @@ describe('Sanctuary System', () => {
       const heroMint = DEFAULT_PUBKEY;
       const heroTemplateId = 1;
 
-      const ix = createStartMeditationInstruction(
+      const ix = await createStartMeditationInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplateId },
         { heroSlot: 0 }
       );
@@ -108,7 +107,7 @@ describe('Sanctuary System', () => {
       const heroMint = DEFAULT_PUBKEY;
       const heroTemplateId = 1;
 
-      const ix = createStartMeditationInstruction(
+      const ix = await createStartMeditationInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplateId },
         { heroSlot: 99 } // Invalid slot
       );
@@ -138,7 +137,7 @@ describe('Sanctuary System', () => {
       const heroTemplateId = 1;
 
       // Claim without an active meditation should fail
-      const claimIx = createClaimMeditationInstruction({
+      const claimIx = await createClaimMeditationInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         heroMint,
@@ -157,7 +156,7 @@ describe('Sanctuary System', () => {
       const heroMint = DEFAULT_PUBKEY;
       const heroTemplateId = 1;
 
-      const claimIx = createClaimMeditationInstruction({
+      const claimIx = await createClaimMeditationInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         heroMint,

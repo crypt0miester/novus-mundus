@@ -61,14 +61,14 @@ import {
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToPlayer(
+export async function subscribeToPlayer(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   owner: Address,
   callback: SubscriptionCallback<PlayerCore>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [playerPda] = derivePlayerPda(gameEngine, owner);
+): Promise<SubscriptionHandle> {
+  const [playerPda] = await derivePlayerPda(gameEngine, owner);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     playerPda,
@@ -87,13 +87,13 @@ export function subscribeToPlayer(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToUser(
+export async function subscribeToUser(
   rpcSubscriptions: SolanaRpcSubscriptions,
   owner: Address,
   callback: SubscriptionCallback<UserAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [userPda] = deriveUserPda(owner);
+): Promise<SubscriptionHandle> {
+  const [userPda] = await deriveUserPda(owner);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     userPda,
@@ -113,14 +113,14 @@ export function subscribeToUser(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToTeam(
+export async function subscribeToTeam(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   teamId: number,
   callback: SubscriptionCallback<TeamAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [teamPda] = deriveTeamPda(gameEngine, teamId);
+): Promise<SubscriptionHandle> {
+  const [teamPda] = await deriveTeamPda(gameEngine, teamId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     teamPda,
@@ -141,15 +141,15 @@ export function subscribeToTeam(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToRally(
+export async function subscribeToRally(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   creator: Address,
   rallyId: number,
   callback: SubscriptionCallback<RallyAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [rallyPda] = deriveRallyPda(gameEngine, creator, rallyId);
+): Promise<SubscriptionHandle> {
+  const [rallyPda] = await deriveRallyPda(gameEngine, creator, rallyId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     rallyPda,
@@ -170,15 +170,15 @@ export function subscribeToRally(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToReinforcement(
+export async function subscribeToReinforcement(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   sender: Address,
   receiver: Address,
   callback: SubscriptionCallback<ReinforcementAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [reinforcementPda] = deriveReinforcementPda(gameEngine, sender, receiver);
+): Promise<SubscriptionHandle> {
+  const [reinforcementPda] = await deriveReinforcementPda(gameEngine, sender, receiver);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     reinforcementPda,
@@ -199,15 +199,15 @@ export function subscribeToReinforcement(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToEncounter(
+export async function subscribeToEncounter(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   cityId: number,
   encounterId: number,
   callback: SubscriptionCallback<EncounterAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterId);
+): Promise<SubscriptionHandle> {
+  const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     encounterPda,
@@ -226,13 +226,13 @@ export function subscribeToEncounter(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToExpedition(
+export async function subscribeToExpedition(
   rpcSubscriptions: SolanaRpcSubscriptions,
   owner: Address,
   callback: SubscriptionCallback<ExpeditionAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [expeditionPda] = deriveExpeditionPda(owner);
+): Promise<SubscriptionHandle> {
+  const [expeditionPda] = await deriveExpeditionPda(owner);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     expeditionPda,
@@ -252,14 +252,14 @@ export function subscribeToExpedition(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToArenaSeason(
+export async function subscribeToArenaSeason(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   seasonId: number,
   callback: SubscriptionCallback<ArenaSeasonAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [seasonPda] = deriveArenaSeasonPda(gameEngine, seasonId);
+): Promise<SubscriptionHandle> {
+  const [seasonPda] = await deriveArenaSeasonPda(gameEngine, seasonId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     seasonPda,
@@ -280,15 +280,15 @@ export function subscribeToArenaSeason(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToArenaParticipant(
+export async function subscribeToArenaParticipant(
   rpcSubscriptions: SolanaRpcSubscriptions,
   gameEngine: Address,
   seasonId: number,
   player: Address,
   callback: SubscriptionCallback<ArenaParticipantAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [arenaParticipantPda] = deriveArenaParticipantPda(gameEngine, seasonId, player);
+): Promise<SubscriptionHandle> {
+  const [arenaParticipantPda] = await deriveArenaParticipantPda(gameEngine, seasonId, player);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     arenaParticipantPda,
@@ -308,14 +308,14 @@ export function subscribeToArenaParticipant(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToLoot(
+export async function subscribeToLoot(
   rpcSubscriptions: SolanaRpcSubscriptions,
   playerPda: Address,
   lootId: number | bigint,
   callback: SubscriptionCallback<LootAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [lootPda] = deriveLootPda(playerPda, lootId);
+): Promise<SubscriptionHandle> {
+  const [lootPda] = await deriveLootPda(playerPda, lootId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     lootPda,
@@ -334,13 +334,13 @@ export function subscribeToLoot(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToGameEngine(
+export async function subscribeToGameEngine(
   rpcSubscriptions: SolanaRpcSubscriptions,
   kingdomId: number,
   callback: SubscriptionCallback<GameEngine>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [gameEnginePda] = deriveGameEnginePda(kingdomId);
+): Promise<SubscriptionHandle> {
+  const [gameEnginePda] = await deriveGameEnginePda(kingdomId);
   return subscribeToAccountWithParser(
     rpcSubscriptions,
     gameEnginePda,

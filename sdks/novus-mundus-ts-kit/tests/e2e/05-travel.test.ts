@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 import {
   createIntracityStartInstruction,
@@ -81,7 +80,7 @@ async function speedupTravel(
       await sendTransaction(
         connection,
         [
-          createTravelSpeedupInstruction(
+          await createTravelSpeedupInstruction(
             { gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           )
@@ -123,10 +122,10 @@ describe('Travel System', () => {
       const destLat = city.lat + 0.005;
       const destLong = city.lon + 0.005;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
-      const ix = createIntracityStartInstruction(
+      const ix = await createIntracityStartInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -154,14 +153,14 @@ describe('Travel System', () => {
       const destLat = city.lat + 0.0002;
       const destLong = city.lon + 0.0002;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       // Start travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -183,7 +182,7 @@ describe('Travel System', () => {
       await advanceTime(ctx.svm, 5);
 
       // Complete travel
-      const completeIx = createIntracityCompleteInstruction({
+      const completeIx = await createIntracityCompleteInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         cityId,
@@ -202,19 +201,19 @@ describe('Travel System', () => {
       const cityId = 1;
       const city = CITIES[cityId]!;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const dest1Lat = city.lat + 0.008;
       const dest1Long = city.lon + 0.008;
       const dest2Lat = city.lat - 0.008;
       const dest2Long = city.lon - 0.008;
-      const [destinationLocation1] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest1Lat), toGrid(dest1Long));
-      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest2Lat), toGrid(dest2Long));
+      const [destinationLocation1] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest1Lat), toGrid(dest1Long));
+      const [destinationLocation2] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(dest2Lat), toGrid(dest2Long));
 
       // Start first travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -233,7 +232,7 @@ describe('Travel System', () => {
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -257,14 +256,14 @@ describe('Travel System', () => {
       const destLat = city.lat + 0.05;
       const destLong = city.lon + 0.05;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       // Start travel to far location
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -283,7 +282,7 @@ describe('Travel System', () => {
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntracityCompleteInstruction({
+          await createIntracityCompleteInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             cityId,
@@ -304,16 +303,16 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 2;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -340,17 +339,17 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 3;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       // Start travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -375,7 +374,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityCompleteInstruction({
+          await createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -398,21 +397,21 @@ describe('Travel System', () => {
       const originCityId = 1;
       const destinationCityId = 4;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[destinationCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
       // Return location is at origin city CENTER (not player's original position)
       const originCity = CITIES[originCityId]!;
-      const [returnLocation] = deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
+      const [returnLocation] = await deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
 
       // Start travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -436,7 +435,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityCancelInstruction({
+          await createIntercityCancelInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -460,16 +459,16 @@ describe('Travel System', () => {
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const cityId = 1;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[cityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId: cityId,
@@ -491,13 +490,13 @@ describe('Travel System', () => {
       const originCityId = 1;
       const invalidCityId = 999;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, invalidCityId, 0, 0);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, invalidCityId, 0, 0);
 
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -527,16 +526,16 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 5;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityTeleportInstruction({
+          await createIntercityTeleportInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -561,16 +560,16 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 2;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntercityTeleportInstruction({
+          await createIntercityTeleportInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -593,17 +592,17 @@ describe('Travel System', () => {
       const originCityId = 1;
       const destinationCityId = 6;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[destinationCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
       // Start intercity travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -626,7 +625,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createTravelSpeedupInstruction(
+          await createTravelSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           )
@@ -645,7 +644,7 @@ describe('Travel System', () => {
       await expectTransactionToFail(
         ctx.svm,
         [
-          createTravelSpeedupInstruction(
+          await createTravelSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           )
@@ -666,15 +665,15 @@ describe('Travel System', () => {
       const destLat = city.lat + 0.015;
       const destLong = city.lon + 0.015;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       const beforeTime = await getCurrentTimestamp(ctx.svm);
 
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -693,7 +692,7 @@ describe('Travel System', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
 
       expect(account).not.toBeNull();
-      const departureTime = account!.departureTime.toNumber();
+      const departureTime = Number(account!.departureTime);
       expect(departureTime).toBeGreaterThanOrEqual(beforeTime - 10);
       expect(departureTime).toBeLessThanOrEqual(afterTime + 10);
     });
@@ -706,13 +705,13 @@ describe('Travel System', () => {
       const destLat = city.lat + 0.006;
       const destLong = city.lon - 0.003;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -731,8 +730,8 @@ describe('Travel System', () => {
       expect(account).not.toBeNull();
       expect(account!.travelType).toBe(TravelType.Intracity);
       // Departure and arrival should be set
-      expect(account!.departureTime.toNumber()).toBeGreaterThan(0);
-      expect(account!.arrivalTime.toNumber()).toBeGreaterThan(account!.departureTime.toNumber());
+      expect(Number(account!.departureTime)).toBeGreaterThan(0);
+      expect(Number(account!.arrivalTime)).toBeGreaterThan(Number(account!.departureTime));
     });
   });
 
@@ -750,19 +749,19 @@ describe('Travel System', () => {
       const originLong = playerAccount!.currentLong;
       const originGridLat = toGrid(originLat);
       const originGridLong = toGrid(originLong);
-      const [originLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
+      const [originLocation] = await deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
 
       const destLat = city.lat + 0.02;
       const destLong = city.lon + 0.02;
       const destGridLat = toGrid(destLat);
       const destGridLong = toGrid(destLong);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, destGridLat, destGridLong);
 
       // Start intracity travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -782,13 +781,13 @@ describe('Travel System', () => {
       expect(account!.travelType).toBe(TravelType.Intracity);
 
       // Return location is the origin location PDA (re-reserved on cancel)
-      const [returnLocation] = deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
+      const [returnLocation] = await deriveLocationPda(ctx.gameEngine, cityId, originGridLat, originGridLong);
 
       // Cancel travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityCancelInstruction({
+          await createIntracityCancelInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             cityId,
@@ -810,7 +809,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityCompleteInstruction({
+          await createIntracityCompleteInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             cityId,
@@ -836,16 +835,16 @@ describe('Travel System', () => {
       const cityId = 1;
       const city = CITIES[cityId]!;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, cityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destLat = city.lat + 0.012;
       const destLong = city.lon + 0.012;
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, cityId, toGrid(destLat), toGrid(destLong));
 
       // Start intracity travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntracityStartInstruction(
+          await createIntracityStartInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -868,13 +867,13 @@ describe('Travel System', () => {
       const destCity2 = CITIES[2]!;
       const destGridLat2 = toGrid(destCity2.lat);
       const destGridLong2 = toGrid(destCity2.lon);
-      const [originLocation2] = getOriginLocationPda(ctx.gameEngine, cityId, account!.currentLat, account!.currentLong);
-      const [destinationLocation2] = deriveLocationPda(ctx.gameEngine, 2, destGridLat2, destGridLong2);
+      const [originLocation2] = await getOriginLocationPda(ctx.gameEngine, cityId, account!.currentLat, account!.currentLong);
+      const [destinationLocation2] = await deriveLocationPda(ctx.gameEngine, 2, destGridLat2, destGridLong2);
 
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId: cityId,
@@ -897,16 +896,16 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 2;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await expectTransactionToFail(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -928,16 +927,16 @@ describe('Travel System', () => {
       const originCityId = 1;
       const targetCityId = 13; // Use city 13 to avoid CellOccupied collision with other tests using city 2
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[targetCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, targetCityId, destGridLat, destGridLong);
 
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -973,27 +972,27 @@ describe('Travel System', () => {
       const playerAccount = await fetchPlayer(ctx.svm, player.playerPda);
       const originCityId = 10;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
 
       const destCity7 = CITIES[7]!;
       const destGridLat7 = toGrid(destCity7.lat);
       const destGridLong7 = toGrid(destCity7.lon);
-      const [destinationLocation7] = deriveLocationPda(ctx.gameEngine, 7, destGridLat7, destGridLong7);
+      const [destinationLocation7] = await deriveLocationPda(ctx.gameEngine, 7, destGridLat7, destGridLong7);
 
       // Return location is at origin city CENTER
       const originCity = CITIES[originCityId]!;
-      const [returnLocation] = deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
+      const [returnLocation] = await deriveLocationPda(ctx.gameEngine, originCityId, toGrid(originCity.lat), toGrid(originCity.lon));
 
       const destCity8 = CITIES[8]!;
       const destGridLat8 = toGrid(destCity8.lat);
       const destGridLong8 = toGrid(destCity8.lon);
-      const [destinationLocation8] = deriveLocationPda(ctx.gameEngine, 8, destGridLat8, destGridLong8);
+      const [destinationLocation8] = await deriveLocationPda(ctx.gameEngine, 8, destGridLat8, destGridLong8);
 
       // Start travel to city 7
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -1012,7 +1011,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityCancelInstruction({
+          await createIntercityCancelInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -1036,7 +1035,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityCompleteInstruction({
+          await createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -1057,7 +1056,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -1083,17 +1082,17 @@ describe('Travel System', () => {
       const originCityId = 1;
       const destinationCityId = 9;
 
-      const [originLocation] = getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
+      const [originLocation] = await getOriginLocationPda(ctx.gameEngine, originCityId, playerAccount!.currentLat, playerAccount!.currentLong);
       const destCity = CITIES[destinationCityId]!;
       const destGridLat = toGrid(destCity.lat);
       const destGridLong = toGrid(destCity.lon);
-      const [destinationLocation] = deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
+      const [destinationLocation] = await deriveLocationPda(ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
       // Start intercity travel
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityStartInstruction({
+          await createIntercityStartInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,
@@ -1118,7 +1117,7 @@ describe('Travel System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createIntercityCompleteInstruction({
+          await createIntercityCompleteInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             originCityId,

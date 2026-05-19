@@ -78,10 +78,8 @@
         "@noble/hashes": "^2.0.1",
         "@solana-program/compute-budget": "^0.15.0",
         "@solana/kit": "^6.9.0",
-        "bn.js": "^5.2.2",
       },
       "devDependencies": {
-        "@types/bn.js": "^5.2.0",
         "@types/bun": "latest",
         "litesvm": "1.0.0",
         "typescript": "^5",
@@ -2558,8 +2556,6 @@
     "novus-mundus-sdk/@types/bn.js": ["@types/bn.js@5.2.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-DLbJ1BPqxvQhIGbeu8VbUC1DiAiahHtAYvA0ZEAa4P31F7IaArc8z3C3BRQdWX4mtLQuABG4yzp76ZrS02Ui1Q=="],
 
     "novus-mundus-sdk/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
-
-    "novus-mundus-sdk-kit/@types/bn.js": ["@types/bn.js@5.2.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-DLbJ1BPqxvQhIGbeu8VbUC1DiAiahHtAYvA0ZEAa4P31F7IaArc8z3C3BRQdWX4mtLQuABG4yzp76ZrS02Ui1Q=="],
 
     "novus-mundus-sdk-kit/litesvm": ["litesvm@1.0.0", "", { "dependencies": { "@solana-program/system": "^0.12.0", "@solana-program/token": "^0.12.0", "@solana/kit": "^6.5.0" }, "optionalDependencies": { "litesvm-darwin-arm64": "1.0.0", "litesvm-darwin-x64": "1.0.0", "litesvm-linux-arm64-gnu": "1.0.0", "litesvm-linux-arm64-musl": "1.0.0", "litesvm-linux-x64-gnu": "1.0.0", "litesvm-linux-x64-musl": "1.0.0" } }, "sha512-+uM5Uqut++IKNoG4rw2QzMNspZhqqqRXZ5XDPxb68kJMBrOdvIJX9Ie7IAHTD26qdX074FqMDqlOqlJR9H3xIw=="],
 

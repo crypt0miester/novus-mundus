@@ -22,7 +22,7 @@ export async function initEngine(ctx: CLIContext): Promise<PhaseStats> {
     ctx,
     'GameEngine',
     ctx.gameEngine,
-    () => createInitGameEngineInstruction({
+    async () => await createInitGameEngineInstruction({
       authority: ctx.daoAuthority.publicKey,
       treasuryWallet: ctx.treasury.publicKey,
       kingdomId: ctx.kingdomId,

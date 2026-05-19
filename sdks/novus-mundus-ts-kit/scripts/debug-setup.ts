@@ -15,7 +15,6 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -159,8 +158,8 @@ async function main() {
   log('CONFIG', `Program ID: ${PROGRAM_ID.toBase58()}`);
 
   // Derive PDAs
-  const [gameEngine] = deriveGameEnginePda(KINGDOM_ID);
-  const [noviMint] = deriveNoviMintPda();
+  const [gameEngine] = await deriveGameEnginePda(KINGDOM_ID);
+  const [noviMint] = await deriveNoviMintPda();
   log('PDA', `GameEngine: ${gameEngine.toBase58()}`);
   log('PDA', `NOVI Mint: ${noviMint.toBase58()}`);
 
@@ -182,7 +181,7 @@ async function main() {
     const size = await getAccountSize(connection, gameEngine);
     logOk('GAME_ENGINE', `Already exists (${size} bytes)`);
   } else {
-    const ix = createInitGameEngineInstruction({
+    const ix = await createInitGameEngineInstruction({
       authority: daoAuthority.publicKey,
       treasuryWallet: treasury.publicKey,
       kingdomId: KINGDOM_ID,
@@ -207,14 +206,14 @@ async function main() {
 
   // Step 3: Cities (just city 1 for debugging)
   console.log('\n--- Step 3: City 1 ---');
-  const [city1Pda] = deriveCityPda(gameEngine, 1);
+  const [city1Pda] = await deriveCityPda(gameEngine, 1);
   log('CITY', `City 1 PDA: ${city1Pda.toBase58()}`);
 
   if (await accountExists(connection, city1Pda)) {
     const size = await getAccountSize(connection, city1Pda);
     logOk('CITY', `City 1 already exists (${size} bytes)`);
   } else {
-    const ix = createInitCityInstruction(
+    const ix = await createInitCityInstruction(
       { authority: daoAuthority.publicKey, gameEngine },
       {
         cityId: 1,
@@ -234,9 +233,9 @@ async function main() {
   // Step 4: Init Player
   console.log('\n--- Step 4: Init Player ---');
   const playerKeypair = Keypair.generate();
-  const [playerPda, playerBump] = derivePlayerPda(gameEngine, playerKeypair.publicKey);
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, playerPda);
-  const [spawnLocation] = deriveLocationPda(gameEngine, 1, 0, 0);
+  const [playerPda, playerBump] = await derivePlayerPda(gameEngine, playerKeypair.publicKey);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, playerPda);
+  const [spawnLocation] = await deriveLocationPda(gameEngine, 1, 0, 0);
 
   log('PLAYER', `Player wallet: ${playerKeypair.publicKey.toBase58()}`);
   log('PLAYER', `Player PDA: ${playerPda.toBase58()} (bump=${playerBump})`);
@@ -277,7 +276,7 @@ async function main() {
   logOk('PLAYER', `Airdropped 5 SOL to player`);
 
   // Build the init player instruction (city 1 = Novus Prime @ 40.7128, -74.006)
-  const ix = createInitPlayerInstruction({
+  const ix = await createInitPlayerInstruction({
     owner: playerKeypair.publicKey,
     gameEngine,
     startingCityId: 1,

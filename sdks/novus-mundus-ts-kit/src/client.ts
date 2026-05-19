@@ -28,7 +28,6 @@ import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
 } from '@solana-program/compute-budget';
-import BN from 'bn.js';
 import { PROGRAM_ID } from './program';
 import {
   type SolanaRpc,
@@ -214,7 +213,9 @@ export class NovusMundusClient {
   readonly defaultComputeUnits: number;
   readonly defaultComputeUnitPrice: number;
   readonly kingdomId: number;
-  readonly gameEngine: Address;
+
+  /** Cached GameEngine address. Resolved lazily on first use via resolveGameEngine(). */
+  private _gameEngine: Address | undefined;
 
   constructor(options: NovusMundusClientOptions) {
     this.rpc = options.rpc;
@@ -222,13 +223,25 @@ export class NovusMundusClient {
     this.defaultComputeUnits = options.computeUnits ?? 200_000;
     this.defaultComputeUnitPrice = options.computeUnitPrice ?? 1;
     this.kingdomId = options.kingdomId ?? 0;
-    // Derive gameEngine from kingdomId if not provided
-    if (options.gameEngine) {
-      this.gameEngine = options.gameEngine;
-    } else {
-      const [gameEngine] = deriveGameEnginePda(this.kingdomId);
-      this.gameEngine = gameEngine;
+    // gameEngine is derived lazily from kingdomId if not provided
+    this._gameEngine = options.gameEngine;
+  }
+
+  /**
+   * Resolve the GameEngine address, deriving it from kingdomId on first call
+   * and caching the result.
+   */
+  async resolveGameEngine(): Promise<Address> {
+    if (this._gameEngine === undefined) {
+      const [gameEngine] = await deriveGameEnginePda(this.kingdomId);
+      this._gameEngine = gameEngine;
     }
+    return this._gameEngine;
+  }
+
+  /** The GameEngine address if already resolved, otherwise undefined. */
+  get gameEngine(): Address | undefined {
+    return this._gameEngine;
   }
 
   // Account Fetching
@@ -237,7 +250,7 @@ export class NovusMundusClient {
    * Fetch the game engine account.
    */
   async fetchGameEngine(): Promise<AccountFetchResult<GameEngine>> {
-    const pubkey = this.gameEngine;
+    const pubkey = (await this.resolveGameEngine());
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -252,7 +265,7 @@ export class NovusMundusClient {
    * Fetch a player account by owner wallet.
    */
   async fetchPlayer(owner: Address): Promise<AccountFetchResult<PlayerAccount>> {
-    const [pubkey] = derivePlayerPda(this.gameEngine, owner);
+    const [pubkey] = await derivePlayerPda((await this.resolveGameEngine()), owner);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -267,7 +280,7 @@ export class NovusMundusClient {
    * Fetch a user account by wallet.
    */
   async fetchUser(wallet: Address): Promise<AccountFetchResult<UserAccount>> {
-    const [pubkey] = deriveUserPda(wallet);
+    const [pubkey] = await deriveUserPda(wallet);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -282,7 +295,7 @@ export class NovusMundusClient {
    * Fetch a city account by city ID.
    */
   async fetchCity(cityId: number): Promise<AccountFetchResult<CityAccount>> {
-    const [pubkey] = deriveCityPda(this.gameEngine, cityId);
+    const [pubkey] = await deriveCityPda((await this.resolveGameEngine()), cityId);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -297,7 +310,7 @@ export class NovusMundusClient {
    * Fetch a team account by team ID.
    */
   async fetchTeam(teamId: number): Promise<AccountFetchResult<TeamAccount>> {
-    const [pubkey] = deriveTeamPda(this.gameEngine, teamId);
+    const [pubkey] = await deriveTeamPda((await this.resolveGameEngine()), teamId);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -312,7 +325,7 @@ export class NovusMundusClient {
    * Fetch an encounter account.
    */
   async fetchEncounter(cityId: number, encounterId: number): Promise<AccountFetchResult<EncounterAccount>> {
-    const [pubkey] = deriveEncounterPda(this.gameEngine, cityId, encounterId);
+    const [pubkey] = await deriveEncounterPda((await this.resolveGameEngine()), cityId, encounterId);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -327,7 +340,7 @@ export class NovusMundusClient {
    * Fetch a rally account.
    */
   async fetchRally(creator: Address, rallyIndex: number): Promise<AccountFetchResult<RallyAccount>> {
-    const [pubkey] = deriveRallyPda(this.gameEngine, creator, rallyIndex);
+    const [pubkey] = await deriveRallyPda((await this.resolveGameEngine()), creator, rallyIndex);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -342,7 +355,7 @@ export class NovusMundusClient {
    * Fetch a reinforcement account.
    */
   async fetchReinforcement(sender: Address, recipient: Address): Promise<AccountFetchResult<ReinforcementAccount>> {
-    const [pubkey] = deriveReinforcementPda(this.gameEngine, sender, recipient);
+    const [pubkey] = await deriveReinforcementPda((await this.resolveGameEngine()), sender, recipient);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -357,7 +370,7 @@ export class NovusMundusClient {
    * Fetch an expedition account.
    */
   async fetchExpedition(player: Address): Promise<AccountFetchResult<ExpeditionAccount>> {
-    const [pubkey] = deriveExpeditionPda(player);
+    const [pubkey] = await deriveExpeditionPda(player);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -372,7 +385,7 @@ export class NovusMundusClient {
    * Fetch an estate account by player PDA.
    */
   async fetchEstate(player: Address): Promise<AccountFetchResult<EstateAccount>> {
-    const [pubkey] = deriveEstatePda(player);
+    const [pubkey] = await deriveEstatePda(player);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -387,7 +400,7 @@ export class NovusMundusClient {
    * Fetch a loot account.
    */
   async fetchLoot(playerPda: Address, lootId: number | bigint): Promise<AccountFetchResult<LootAccount>> {
-    const [pubkey] = deriveLootPda(playerPda, lootId);
+    const [pubkey] = await deriveLootPda(playerPda, lootId);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -402,7 +415,7 @@ export class NovusMundusClient {
    * Fetch an arena season account.
    */
   async fetchArenaSeason(seasonId: number): Promise<AccountFetchResult<ArenaSeasonAccount>> {
-    const [pubkey] = deriveArenaSeasonPda(this.gameEngine, seasonId);
+    const [pubkey] = await deriveArenaSeasonPda((await this.resolveGameEngine()), seasonId);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -417,7 +430,7 @@ export class NovusMundusClient {
    * Fetch an arena participant account.
    */
   async fetchArenaParticipant(seasonId: number, player: Address): Promise<AccountFetchResult<ArenaParticipantAccount>> {
-    const [pubkey] = deriveArenaParticipantPda(this.gameEngine, seasonId, player);
+    const [pubkey] = await deriveArenaParticipantPda((await this.resolveGameEngine()), seasonId, player);
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -432,7 +445,7 @@ export class NovusMundusClient {
    * Fetch the shop config account.
    */
   async fetchShopConfig(): Promise<AccountFetchResult<ShopConfigAccount>> {
-    const [pubkey] = deriveShopConfigPda(this.gameEngine);
+    const [pubkey] = await deriveShopConfigPda((await this.resolveGameEngine()));
     const accountInfo = await fetchAccount(this.rpc, pubkey, this.commitment);
 
     if (!accountInfo) {
@@ -454,11 +467,15 @@ export class NovusMundusClient {
     ], this.commitment);
 
     // Build reverse lookup: pubkey base58 -> itemId
-    const pdaToId = new Map<string, number>();
-    for (let i = 0; i < maxId; i++) {
-      const [pda] = deriveShopItemPda(this.gameEngine, i);
-      pdaToId.set(pda, i);
-    }
+    const gameEngine = await this.resolveGameEngine();
+    const pdaToId = new Map(
+      await Promise.all(
+        Array.from({ length: maxId }, async (_, i): Promise<[string, number]> => {
+          const [pda] = await deriveShopItemPda(gameEngine, i);
+          return [pda, i];
+        })
+      )
+    );
 
     return accounts
       .map(({ pubkey, data }) => {
@@ -483,11 +500,15 @@ export class NovusMundusClient {
     ], this.commitment);
 
     // Build reverse lookup: pubkey base58 -> bundleId
-    const pdaToId = new Map<string, number>();
-    for (let i = 0; i < maxId; i++) {
-      const [pda] = deriveBundlePda(this.gameEngine, i);
-      pdaToId.set(pda, i);
-    }
+    const gameEngine = await this.resolveGameEngine();
+    const pdaToId = new Map(
+      await Promise.all(
+        Array.from({ length: maxId }, async (_, i): Promise<[string, number]> => {
+          const [pda] = await deriveBundlePda(gameEngine, i);
+          return [pda, i];
+        })
+      )
+    );
 
     return accounts
       .map(({ pubkey, data }) => {
@@ -510,13 +531,16 @@ export class NovusMundusClient {
     const shopConfigResult = await this.fetchShopConfig();
     if (!shopConfigResult.account) return [];
 
-    const maxId = shopConfigResult.account.nextFlashSaleId.toNumber();
+    const maxId = Number(shopConfigResult.account.nextFlashSaleId);
     if (maxId === 0) return [];
 
-    const entries = Array.from({ length: maxId }, (_, i) => ({
-      id: i,
-      pubkey: deriveFlashSalePda(this.gameEngine, i)[0],
-    }));
+    const gameEngine = await this.resolveGameEngine();
+    const entries = await Promise.all(
+      Array.from({ length: maxId }, async (_, i) => ({
+        id: i,
+        pubkey: (await deriveFlashSalePda(gameEngine, i))[0],
+      }))
+    );
 
     const infos = await fetchAccounts(
       this.rpc,
@@ -544,10 +568,13 @@ export class NovusMundusClient {
    */
   async fetchAllDailyDeals(): Promise<(BulkFetchResult<DailyDealAccount> & { slot: number })[]> {
     const slots = [0, 1, 2];
-    const entries = slots.map((slot) => ({
-      slot,
-      pubkey: deriveDailyDealPda(this.gameEngine, slot)[0],
-    }));
+    const gameEngine = await this.resolveGameEngine();
+    const entries = await Promise.all(
+      slots.map(async (slot) => ({
+        slot,
+        pubkey: (await deriveDailyDealPda(gameEngine, slot))[0],
+      }))
+    );
 
     const infos = await fetchAccounts(
       this.rpc,
@@ -610,8 +637,9 @@ export class NovusMundusClient {
    */
   async fetchPlayerPurchases(
     wallet: Address,
-    pdaToId: Map<string, number> = derivePlayerPurchaseIndex(wallet),
+    pdaToId?: Map<string, number>,
   ): Promise<(BulkFetchResult<PlayerPurchaseAccount> & { itemId: number })[]> {
+    pdaToId ??= await derivePlayerPurchaseIndex(wallet);
     const accounts = await this.fetchAllByKey(AccountKey.PlayerPurchase, parsePlayerPurchase);
     return accounts
       .map(({ pubkey, account }) => {
@@ -719,13 +747,13 @@ export class NovusMundusClient {
   ): Promise<BulkFetchResult<EncounterAccount>[]> {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.Encounter]));
     // cityId is u16 at offset 48 (1 account_key + 32 game_engine + 7 padding + 8 id)
-    const cityIdBuffer = Buffer.alloc(2);
-    cityIdBuffer.writeUInt16LE(cityId, 0);
+    const cityIdBuffer = new Uint8Array(2);
+    new DataView(cityIdBuffer.buffer).setUint16(0, cityId, true);
 
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
-      memcmpFilter(48, getBase58Decoder().decode(new Uint8Array(cityIdBuffer))),
+      memcmpFilter(1, (await this.resolveGameEngine())),
+      memcmpFilter(48, getBase58Decoder().decode(cityIdBuffer)),
     ], this.commitment);
 
     let results = accounts
@@ -739,7 +767,7 @@ export class NovusMundusClient {
 
     // Filter alive encounters if requested
     if (options?.aliveOnly) {
-      results = results.filter(r => r.account.health.gtn(0));
+      results = results.filter(r => r.account.health > 0n);
     }
 
     return results;
@@ -755,7 +783,7 @@ export class NovusMundusClient {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.Rally]));
     const filters = [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
     ];
 
     // Filter by team if specified (team is at offset 80: 1 account_key + 32 game_engine + 7 pad + 8 id + 32 creator)
@@ -814,7 +842,7 @@ export class NovusMundusClient {
       .map(({ pubkey, data }) => {
         const parsed = parseRallyParticipant({ data });
         // Double-check rallyId matches (in case creator has multiple rallies)
-        if (parsed && parsed.rallyId.eq(rallyData!.id)) {
+        if (parsed && parsed.rallyId === rallyData!.id) {
           return { pubkey, account: parsed };
         }
         return null;
@@ -830,14 +858,14 @@ export class NovusMundusClient {
    */
   async fetchArenaParticipants(seasonId: number): Promise<BulkFetchResult<ArenaParticipantAccount>[]> {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.ArenaParticipant]));
-    const seasonIdBuffer = Buffer.alloc(4);
-    seasonIdBuffer.writeUInt32LE(seasonId, 0);
+    const seasonIdBuffer = new Uint8Array(4);
+    new DataView(seasonIdBuffer.buffer).setUint32(0, seasonId, true);
 
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
       // seasonId at offset 68 (1 account_key + 32 game_engine + 32 player + 3 padding)
-      memcmpFilter(68, getBase58Decoder().decode(new Uint8Array(seasonIdBuffer))),
+      memcmpFilter(68, getBase58Decoder().decode(seasonIdBuffer)),
     ], this.commitment);
 
     return accounts
@@ -858,7 +886,7 @@ export class NovusMundusClient {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.Reinforcement]));
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
       // sender is at offset 33 (1 account_key + 32 game_engine)
       memcmpFilter(33, sender),
     ], this.commitment);
@@ -881,7 +909,7 @@ export class NovusMundusClient {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.Reinforcement]));
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
       // destination is at offset 65 (1 account_key + 32 game_engine + 32 sender)
       memcmpFilter(65, recipient),
     ], this.commitment);
@@ -906,7 +934,7 @@ export class NovusMundusClient {
     const keyByte = getBase58Decoder().decode(new Uint8Array([AccountKey.Player]));
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
     ], this.commitment);
 
     return accounts
@@ -948,9 +976,8 @@ export class NovusMundusClient {
 
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
     ], this.commitment);
-    console.log(`Fetched ${accounts.length} city accounts`);
 
     return accounts
       .map(({ pubkey, data }) => {
@@ -972,7 +999,7 @@ export class NovusMundusClient {
 
     const accounts = await fetchProgramAccounts(this.rpc, PROGRAM_ID, [
       memcmpFilter(0, keyByte),
-      memcmpFilter(1, this.gameEngine),
+      memcmpFilter(1, (await this.resolveGameEngine())),
     ], this.commitment);
 
     let results = accounts
@@ -1139,9 +1166,9 @@ export class NovusMundusClient {
   /**
    * Get SOL balance of an account.
    */
-  async getBalance(pubkey: Address): Promise<BN> {
+  async getBalance(pubkey: Address): Promise<bigint> {
     const { value } = await this.rpc.getBalance(pubkey, { commitment: this.commitment }).send();
-    return new BN(value.toString());
+    return BigInt(value.toString());
   }
 
   /**

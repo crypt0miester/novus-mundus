@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import BN from 'bn.js';
 import {
   parseInstructionData,
   parseInstructionFromBase64,
@@ -18,27 +17,67 @@ import {
   type RallyJoinData,
 } from '../../src/parser/instruction';
 import { DISCRIMINATORS } from '../../src/program';
-import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
+import { createInstructionData } from '../../src/utils/serialize';
+import { getBase64Decoder } from '@solana/kit';
+
+// Test-data builders — construct instruction-argument byte arrays directly as
+// Uint8Arrays (no Node Buffer), mirroring the on-chain little-endian layout.
+
+/** Build a u8. */
+function u8Bytes(value: number): Uint8Array {
+  return new Uint8Array([value & 0xff]);
+}
+
+/** Build a little-endian u16. */
+function u16Bytes(value: number): Uint8Array {
+  const out = new Uint8Array(2);
+  new DataView(out.buffer).setUint16(0, value, true);
+  return out;
+}
+
+/** Build a little-endian i32. */
+function i32Bytes(value: number): Uint8Array {
+  const out = new Uint8Array(4);
+  new DataView(out.buffer).setInt32(0, value, true);
+  return out;
+}
+
+/** Build a little-endian u64. */
+function u64Bytes(value: bigint): Uint8Array {
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setBigUint64(0, value, true);
+  return out;
+}
+
+/** Concatenate byte chunks into a single Uint8Array. */
+function concat(...chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
 
 describe('Instruction Parser', () => {
   describe('parseInstructionData', () => {
     it('should return null for data too short', () => {
-      expect(parseInstructionData(Buffer.alloc(1))).toBeNull();
-      expect(parseInstructionData(Buffer.alloc(0))).toBeNull();
+      expect(parseInstructionData(new Uint8Array(1))).toBeNull();
+      expect(parseInstructionData(new Uint8Array(0))).toBeNull();
     });
 
     it('should return null for unknown discriminator', () => {
-      const buf = Buffer.alloc(10);
-      buf.writeUInt16LE(9999, 0); // Unknown discriminator
+      const buf = createInstructionData(9999); // Unknown discriminator
       expect(parseInstructionData(buf)).toBeNull();
     });
 
     it('should parse HireUnits instruction', () => {
       // Build instruction data: discriminator (2) + unitType (1) + noviAmount (8)
-      const writer = new BufferWriter(9);
-      writer.writeU8(3); // unitType
-      writer.writeU64(new BN(1000));
-      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
+      const args = concat(u8Bytes(3), u64Bytes(1000n));
+      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, args);
 
       const parsed = parseInstructionData(data);
 
@@ -49,13 +88,12 @@ describe('Instruction Parser', () => {
 
       const hireData = parsed!.data as HireUnitsData;
       expect(hireData.unitType).toBe(3);
-      expect(hireData.noviAmount.toNumber()).toBe(1000);
+      expect(Number(hireData.noviAmount)).toBe(1000);
     });
 
     it('should parse IntercityStart instruction', () => {
-      const writer = new BufferWriter(2);
-      writer.writeU16(5); // targetCityId
-      const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, writer.toBuffer());
+      const args = u16Bytes(5); // targetCityId
+      const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, args);
 
       const parsed = parseInstructionData(data);
 
@@ -68,10 +106,11 @@ describe('Instruction Parser', () => {
     });
 
     it('should parse IntracityStart instruction', () => {
-      const writer = new BufferWriter(8);
-      writer.writeI32(40712800); // targetLat (fixed-point)
-      writer.writeI32(-74006000); // targetLong (fixed-point)
-      const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, writer.toBuffer());
+      const args = concat(
+        i32Bytes(40712800), // targetLat (fixed-point)
+        i32Bytes(-74006000) // targetLong (fixed-point)
+      );
+      const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, args);
 
       const parsed = parseInstructionData(data);
 
@@ -85,10 +124,9 @@ describe('Instruction Parser', () => {
 
     it('should parse TeamCreate instruction', () => {
       const teamName = 'TestTeam';
-      const writer = new BufferWriter(1 + teamName.length);
-      writer.writeU8(teamName.length);
-      writer.writeBytes(Buffer.from(teamName, 'utf8'));
-      const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, writer.toBuffer());
+      const nameBytes = new TextEncoder().encode(teamName);
+      const args = concat(u8Bytes(nameBytes.length), nameBytes);
+      const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, args);
 
       const parsed = parseInstructionData(data);
 
@@ -101,14 +139,15 @@ describe('Instruction Parser', () => {
     });
 
     it('should parse RallyJoin instruction', () => {
-      const writer = new BufferWriter(48);
-      writer.writeU64(new BN(100)); // du1
-      writer.writeU64(new BN(200)); // du2
-      writer.writeU64(new BN(300)); // du3
-      writer.writeU64(new BN(50)); // melee
-      writer.writeU64(new BN(60)); // ranged
-      writer.writeU64(new BN(70)); // siege
-      const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
+      const args = concat(
+        u64Bytes(100n), // du1
+        u64Bytes(200n), // du2
+        u64Bytes(300n), // du3
+        u64Bytes(50n), // melee
+        u64Bytes(60n), // ranged
+        u64Bytes(70n) // siege
+      );
+      const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, args);
 
       const parsed = parseInstructionData(data);
 
@@ -117,12 +156,12 @@ describe('Instruction Parser', () => {
       expect(parsed!.category).toBe('Rally');
 
       const rallyData = parsed!.data as RallyJoinData;
-      expect(rallyData.du1.toNumber()).toBe(100);
-      expect(rallyData.du2.toNumber()).toBe(200);
-      expect(rallyData.du3.toNumber()).toBe(300);
-      expect(rallyData.meleeWeapons.toNumber()).toBe(50);
-      expect(rallyData.rangedWeapons.toNumber()).toBe(60);
-      expect(rallyData.siegeWeapons.toNumber()).toBe(70);
+      expect(Number(rallyData.du1)).toBe(100);
+      expect(Number(rallyData.du2)).toBe(200);
+      expect(Number(rallyData.du3)).toBe(300);
+      expect(Number(rallyData.meleeWeapons)).toBe(50);
+      expect(Number(rallyData.rangedWeapons)).toBe(60);
+      expect(Number(rallyData.siegeWeapons)).toBe(70);
     });
 
     it('should handle instructions with no parameters', () => {
@@ -138,7 +177,7 @@ describe('Instruction Parser', () => {
 
     it('should handle parse errors gracefully', () => {
       // HireUnits expects 9 bytes of data, but we give it less
-      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, Buffer.alloc(2));
+      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, new Uint8Array(2));
 
       const parsed = parseInstructionData(data);
 
@@ -150,11 +189,9 @@ describe('Instruction Parser', () => {
 
   describe('parseInstructionFromBase64', () => {
     it('should parse base64-encoded instruction', () => {
-      const writer = new BufferWriter(9);
-      writer.writeU8(2);
-      writer.writeU64(new BN(500));
-      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
-      const base64 = data.toString('base64');
+      const args = concat(u8Bytes(2), u64Bytes(500n));
+      const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, args);
+      const base64 = getBase64Decoder().decode(data);
 
       const parsed = parseInstructionFromBase64(base64);
 
@@ -178,13 +215,12 @@ describe('Instruction Parser', () => {
     });
 
     it('should return false for unknown discriminator', () => {
-      const buf = Buffer.alloc(10);
-      buf.writeUInt16LE(9999, 0);
+      const buf = createInstructionData(9999);
       expect(isNovusMundusInstruction(buf)).toBe(false);
     });
 
     it('should return false for data too short', () => {
-      expect(isNovusMundusInstruction(Buffer.alloc(1))).toBe(false);
+      expect(isNovusMundusInstruction(new Uint8Array(1))).toBe(false);
     });
   });
 
@@ -195,13 +231,12 @@ describe('Instruction Parser', () => {
     });
 
     it('should return undefined for unknown discriminator', () => {
-      const buf = Buffer.alloc(10);
-      buf.writeUInt16LE(9999, 0);
+      const buf = createInstructionData(9999);
       expect(getInstructionNameFromData(buf)).toBeUndefined();
     });
 
     it('should return undefined for data too short', () => {
-      expect(getInstructionNameFromData(Buffer.alloc(1))).toBeUndefined();
+      expect(getInstructionNameFromData(new Uint8Array(1))).toBeUndefined();
     });
   });
 
@@ -213,33 +248,29 @@ describe('Instruction Parser', () => {
     });
 
     it('should categorize Combat instructions', () => {
-      const data = createInstructionData(DISCRIMINATORS.ATTACK_PLAYER, Buffer.from([0]));
+      const data = createInstructionData(DISCRIMINATORS.ATTACK_PLAYER, new Uint8Array([0]));
       const parsed = parseInstructionData(data);
       expect(parsed!.category).toBe('Combat');
     });
 
     it('should categorize Travel instructions', () => {
-      const writer = new BufferWriter(2);
-      writer.writeU16(1);
-      const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, writer.toBuffer());
+      const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, u16Bytes(1));
       const parsed = parseInstructionData(data);
       expect(parsed!.category).toBe('TravelIntercity');
     });
 
     it('should categorize Team instructions', () => {
       const teamName = 'Test';
-      const writer = new BufferWriter(1 + teamName.length);
-      writer.writeU8(teamName.length);
-      writer.writeBytes(Buffer.from(teamName));
-      const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, writer.toBuffer());
+      const nameBytes = new TextEncoder().encode(teamName);
+      const args = concat(u8Bytes(nameBytes.length), nameBytes);
+      const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, args);
       const parsed = parseInstructionData(data);
       expect(parsed!.category).toBe('Team');
     });
 
     it('should categorize Rally instructions', () => {
-      const writer = new BufferWriter(48);
-      for (let i = 0; i < 6; i++) writer.writeU64(new BN(0));
-      const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
+      const args = concat(...Array.from({ length: 6 }, () => u64Bytes(0n)));
+      const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, args);
       const parsed = parseInstructionData(data);
       expect(parsed!.category).toBe('Rally');
     });
@@ -249,30 +280,26 @@ describe('Instruction Parser', () => {
 describe('Instruction Roundtrip', () => {
   it('should roundtrip HireUnits data', () => {
     const originalUnitType = 3;
-    const originalAmount = new BN(12345);
+    const originalAmount = 12345n;
 
     // Create instruction
-    const writer = new BufferWriter(9);
-    writer.writeU8(originalUnitType);
-    writer.writeU64(originalAmount);
-    const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
+    const args = concat(u8Bytes(originalUnitType), u64Bytes(originalAmount));
+    const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, args);
 
     // Parse back
     const parsed = parseInstructionData(data);
     const hireData = parsed!.data as HireUnitsData;
 
     expect(hireData.unitType).toBe(originalUnitType);
-    expect(hireData.noviAmount.eq(originalAmount)).toBe(true);
+    expect(hireData.noviAmount === originalAmount).toBe(true);
   });
 
   it('should roundtrip negative coordinates', () => {
     const originalLat = -40712800;
     const originalLong = 74006000;
 
-    const writer = new BufferWriter(8);
-    writer.writeI32(originalLat);
-    writer.writeI32(originalLong);
-    const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, writer.toBuffer());
+    const args = concat(i32Bytes(originalLat), i32Bytes(originalLong));
+    const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, args);
 
     const parsed = parseInstructionData(data);
     const intracityData = parsed!.data as IntracityStartData;

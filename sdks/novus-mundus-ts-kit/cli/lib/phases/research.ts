@@ -2,7 +2,6 @@
  * Phase 4 — Research Templates (30 nodes)
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
   accountExists,
@@ -28,13 +27,13 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
 
     await createOrUpdate(
       ctx,
       `Research #${template.researchType} (${template.name})`,
       templatePda,
-      () => createInitializeTemplateInstruction(
+      async () => await createInitializeTemplateInstruction(
         {
           daoAuthority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
@@ -44,7 +43,7 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
           category: template.category,
           maxLevel: template.maxLevel,
           baseTimeSeconds: template.baseTimeSeconds,
-          baseCost: new BN(template.baseNoviCost),
+          baseCost: BigInt(template.baseNoviCost),
           buffType: template.buffType,
           buffPerLevelBps: template.buffPerLevelBps,
           prerequisiteType: template.prerequisiteResearch === 255 ? -1 : template.prerequisiteResearch,
@@ -52,15 +51,15 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
           gemCostPerMinute: template.gemCostPerMinute,
         }
       ),
-      () => createUpdateTemplateInstruction(
+      async () => await createUpdateTemplateInstruction(
         {
           daoAuthority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           researchType: template.researchType,
         },
         {
-          baseCost: new BN(template.baseNoviCost),
-          baseDuration: new BN(template.baseTimeSeconds),
+          baseCost: BigInt(template.baseNoviCost),
+          baseDuration: BigInt(template.baseTimeSeconds),
           buffPerLevelBps: template.buffPerLevelBps,
           maxLevel: template.maxLevel,
         }
@@ -76,21 +75,21 @@ export async function updateResearch(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
 
     await updateOnly(
       ctx,
       `Research #${template.researchType} (${template.name})`,
       templatePda,
-      () => createUpdateTemplateInstruction(
+      async () => await createUpdateTemplateInstruction(
         {
           daoAuthority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           researchType: template.researchType,
         },
         {
-          baseCost: new BN(template.baseNoviCost),
-          baseDuration: new BN(template.baseTimeSeconds),
+          baseCost: BigInt(template.baseNoviCost),
+          baseDuration: BigInt(template.baseTimeSeconds),
           buffPerLevelBps: template.buffPerLevelBps,
           maxLevel: template.maxLevel,
         }
@@ -105,7 +104,7 @@ export async function updateResearch(ctx: CLIContext): Promise<PhaseStats> {
 export async function statusResearch(ctx: CLIContext): Promise<string> {
   let count = 0;
   for (let id = 0; id < 30; id++) {
-    const [pda] = deriveResearchTemplatePda(id);
+    const [pda] = await deriveResearchTemplatePda(id);
     if (await accountExists(ctx.connection, pda)) count++;
   }
   return `${count} templates`;
@@ -126,7 +125,7 @@ export async function detailResearch(ctx: CLIContext): Promise<string> {
   let consecutiveMisses = 0;
 
   for (let id = 0; id <= 34; id++) {
-    const [pda] = deriveResearchTemplatePda(id);
+    const [pda] = await deriveResearchTemplatePda(id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {

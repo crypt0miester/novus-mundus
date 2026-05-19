@@ -52,7 +52,7 @@ describe('Terrain', () => {
     };
 
     it('should set terrain on a city', async () => {
-      const ix = createSetTerrainInstruction(
+      const ix = await createSetTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, terrain: NYC_TERRAIN },
       );
@@ -126,7 +126,7 @@ describe('Terrain', () => {
         ],
       };
 
-      const ix = createSetTerrainInstruction(
+      const ix = await createSetTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, terrain: smallerTerrain },
       );
@@ -145,7 +145,7 @@ describe('Terrain', () => {
       // Airdrop to fake signer so it can pay fees
       ctx.svm.airdrop(fake.address, lamports(1_000_000_000n));
 
-      const ix = createSetTerrainInstruction(
+      const ix = await createSetTerrainInstruction(
         { daoAuthority: fake.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, terrain: NYC_TERRAIN },
       );
@@ -179,7 +179,7 @@ describe('Terrain', () => {
 
     it('should set initial terrain, then append anchors', async () => {
       // Step 1: Set base terrain
-      const setIx = createSetTerrainInstruction(
+      const setIx = await createSetTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, terrain: BASE_TERRAIN },
       );
@@ -190,7 +190,7 @@ describe('Terrain', () => {
       expect(city!.anchorCount).toBe(3);
 
       // Step 2: Append additional anchors
-      const appendIx = createAppendTerrainInstruction(
+      const appendIx = await createAppendTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, anchors: EXTRA_ANCHORS },
       );
@@ -228,7 +228,7 @@ describe('Terrain', () => {
         { x: 1500, y: 1500, mass: 90, lift: 165, pushX: 0, pushY: 0, moisture: 128 },
       ];
 
-      const ix = createAppendTerrainInstruction(
+      const ix = await createAppendTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: TEST_CITY_ID, anchors: moreAnchors },
       );
@@ -242,7 +242,7 @@ describe('Terrain', () => {
 
     it('should reject append on city without terrain', async () => {
       // City 2 (Chicago) has no terrain set
-      const ix = createAppendTerrainInstruction(
+      const ix = await createAppendTerrainInstruction(
         { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { cityId: 2, anchors: EXTRA_ANCHORS },
       );

@@ -10,9 +10,11 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, struct, custom, pad, u8, u16, u32, u64, i64, pubkey } from '../utils/codec';
 import { BuildingType } from '../types/enums';
+
+/** u32 value with alignment 1 — for Rust `[u8; 4]` fields read as numbers. */
+const u32le1 = custom(u32.codec, 1);
 
 // Building Status (local enum matching Rust)
 
@@ -31,9 +33,9 @@ export interface BuildingSlot {
   level: number;
   masteryLevel: number;
   masteryXp: number;
-  constructionStarted: BN;
-  constructionEnds: BN;
-  totalNoviInvested: BN;
+  constructionStarted: bigint;
+  constructionEnds: bigint;
+  totalNoviInvested: bigint;
 }
 
 // Estate Account Interface
@@ -72,7 +74,7 @@ export interface EstateAccount {
   longestLoginStreak: number;
   permanentBonusBps: number;
   dailyDate: number;
-  dawnTimestamp: BN;
+  dawnTimestamp: bigint;
   windowsCompleted: number;
   dawnBuildings: number;
   middayBuildings: number;
@@ -88,8 +90,8 @@ export interface EstateAccount {
   citadelStance: number;
 
   // Timestamps
-  createdAt: BN;
-  lastActivity: BN;
+  createdAt: bigint;
+  lastActivity: bigint;
 
   // Daily buffs from expansion buildings
   campDiscountBps: number;
@@ -125,203 +127,114 @@ export const BUILDING_SLOT_SIZE = 40;
 /** EstateAccount header size (before buildings array) */
 export const ESTATE_HEADER_SIZE = 192;
 
+// Codecs
+
+/** BuildingSlot `#[repr(C)]` codec (40 bytes) */
+const buildingSlotCodec = struct<BuildingSlot>([
+  ['buildingType', u8],
+  ['status', u8],
+  ['level', u8],
+  ['masteryLevel', u8],
+  ['masteryXp', u32],
+  ['constructionStarted', i64],
+  ['constructionEnds', i64],
+  ['totalNoviInvested', u64],
+  pad(4), // _padding [u8; 4]
+], BUILDING_SLOT_SIZE);
+
+/** EstateAccount fixed-header fields (excludes dynamic/computed members) */
+type EstateHeader = Omit<EstateAccount, 'buildings' | 'maxSlots' | 'activeBuildings'>;
+
+/** EstateAccount fixed-header `#[repr(C)]` codec */
+const estateHeaderCodec = reprC<EstateHeader>([
+  pad(1), // account_key discriminator
+  ['owner', pubkey],
+  ['cityId', u16],
+  ['bump', u8],
+  ['estateLevel', u8],
+  ['plotsOwned', u8],
+  ['totalBuildings', u8],
+  ['currentSlots', u8],
+  // Cached buffs (14 x u16)
+  ['attackBps', u16],
+  ['defenseBps', u16],
+  ['resourceGenBps', u16],
+  ['xpGainBps', u16],
+  ['storageBps', u16],
+  ['trainingSpeedBps', u16],
+  ['researchSpeedBps', u16],
+  ['craftSuccessBps', u16],
+  ['tradeDiscountBps', u16],
+  ['noviCapBonusBps', u16],
+  ['lootBonusBps', u16],
+  ['prizeBonusBps', u16],
+  ['rallyCapacityBonusBps', u16],
+  ['pvpDamageBps', u16],
+  // Daily activity tracking
+  ['lastLoginDate', u16],
+  ['loginStreak', u16],
+  ['longestLoginStreak', u16],
+  ['permanentBonusBps', u16],
+  ['dailyDate', u16],
+  ['dawnTimestamp', i64],
+  ['windowsCompleted', u8],
+  ['dawnBuildings', u16],
+  ['middayBuildings', u16],
+  ['duskBuildings', u16],
+  // Active daily buffs
+  ['unitEffectivenessBps', u16],
+  ['masteryBonusBps', u16],
+  ['arenaDamageBps', u16],
+  ['dailyLootBonusBps', u16],
+  ['marketDiscountBps', u16],
+  ['blessedHero', pubkey],
+  ['citadelStance', u8],
+  // Timestamps
+  ['createdAt', i64],
+  ['lastActivity', i64],
+  // Daily buffs from expansion buildings
+  ['campDiscountBps', u16],
+  ['stablesSpeedBps', u16],
+  ['infirmaryRecoveryDailyBps', u16],
+  ['expansionDaily', u8],
+  // Wounded units — stored on-chain as [u8; 4], align 1
+  ['woundedDef1', u32le1],
+  ['woundedDef2', u32le1],
+  ['woundedDef3', u32le1],
+  ['woundedOp1', u32le1],
+  ['woundedOp2', u32le1],
+  ['woundedOp3', u32le1],
+  pad(1), // _reserved [u8; 1]
+], ESTATE_HEADER_SIZE);
+
 // Deserialization
 
-/** Deserialize a single BuildingSlot from the reader (40 bytes) */
-export function deserializeBuildingSlot(reader: BufferReader): BuildingSlot {
-  const buildingType = reader.readU8();
-  const status = reader.readU8();
-  const level = reader.readU8();
-  const masteryLevel = reader.readU8();
-  const masteryXp = reader.readU32();
-  const constructionStarted = reader.readI64();
-  const constructionEnds = reader.readI64();
-  const totalNoviInvested = reader.readU64();
-  reader.skip(4); // _padding [u8; 4]
-  reader.skip(4); // struct alignment padding (align 8, 36 -> 40)
-
-  return {
-    buildingType,
-    status,
-    level,
-    masteryLevel,
-    masteryXp,
-    constructionStarted,
-    constructionEnds,
-    totalNoviInvested,
-  };
+/** Deserialize a single BuildingSlot from raw bytes at the given offset (40 bytes) */
+export function deserializeBuildingSlot(data: Uint8Array, offset: number): BuildingSlot {
+  return buildingSlotCodec.codec.decode(data.subarray(offset, offset + BUILDING_SLOT_SIZE));
 }
 
 /** Deserialize EstateAccount from raw bytes */
-export function deserializeEstate(data: Uint8Array | Buffer): EstateAccount {
-  const reader = new BufferReader(data);
+export function deserializeEstate(data: Uint8Array): EstateAccount {
+  const header = estateHeaderCodec.decode(data);
 
-  // offset 0: account_key (u8)
-  reader.readU8(); // account_key discriminator
-
-  // offset 1: owner (Pubkey, [u8;32], align 1 - no padding needed)
-  const owner = reader.readPubkey();
-
-  // offset 33: city_id (u16, align 2) - 1 byte implicit padding
-  reader.skip(1); // implicit padding for u16 alignment
-  const cityId = reader.readU16();
-
-  // offset 36: bump (u8)
-  const bump = reader.readU8();
-
-  // Progression (4 bytes)
-  const estateLevel = reader.readU8();
-  const plotsOwned = reader.readU8();
-  const totalBuildings = reader.readU8();
-  const currentSlots = reader.readU8();
-
-  // offset 41: attack_bps (u16, align 2) - 1 byte implicit padding
-  reader.skip(1); // implicit padding for u16 alignment
-
-  // Cached buffs (14 x u16 = 28 bytes, offset 42-69)
-  const attackBps = reader.readU16();
-  const defenseBps = reader.readU16();
-  const resourceGenBps = reader.readU16();
-  const xpGainBps = reader.readU16();
-  const storageBps = reader.readU16();
-  const trainingSpeedBps = reader.readU16();
-  const researchSpeedBps = reader.readU16();
-  const craftSuccessBps = reader.readU16();
-  const tradeDiscountBps = reader.readU16();
-  const noviCapBonusBps = reader.readU16();
-  const lootBonusBps = reader.readU16();
-  const prizeBonusBps = reader.readU16();
-  const rallyCapacityBonusBps = reader.readU16();
-  const pvpDamageBps = reader.readU16();
-
-  // Daily activity tracking (offset 70)
-  const lastLoginDate = reader.readU16();
-  const loginStreak = reader.readU16();
-  const longestLoginStreak = reader.readU16();
-  const permanentBonusBps = reader.readU16();
-  const dailyDate = reader.readU16();
-
-  // offset 80: dawn_timestamp (i64, align 8) - offset 80 is 8-aligned, no padding
-  const dawnTimestamp = reader.readI64();
-
-  // offset 88: windows_completed (u8)
-  const windowsCompleted = reader.readU8();
-
-  // offset 89: dawn_buildings (u16, align 2) - 1 byte implicit padding
-  reader.skip(1); // implicit padding for u16 alignment
-  const dawnBuildings = reader.readU16();
-  const middayBuildings = reader.readU16();
-  const duskBuildings = reader.readU16();
-
-  // Active daily buffs (offset 96)
-  const unitEffectivenessBps = reader.readU16();
-  const masteryBonusBps = reader.readU16();
-  const arenaDamageBps = reader.readU16();
-  const dailyLootBonusBps = reader.readU16();
-  const marketDiscountBps = reader.readU16();
-
-  // offset 106: blessed_hero (Pubkey, [u8;32], align 1 - no padding)
-  const blessedHero = reader.readPubkey();
-
-  // offset 138: citadel_stance (u8)
-  const citadelStance = reader.readU8();
-
-  // offset 139: created_at (i64, align 8) - need 5 bytes padding to reach 144
-  reader.skip(5); // implicit padding for i64 alignment
-
-  // Timestamps (offset 144)
-  const createdAt = reader.readI64();
-  const lastActivity = reader.readI64();
-
-  // Daily buffs from expansion buildings (offset 160)
-  const campDiscountBps = reader.readU16();
-  const stablesSpeedBps = reader.readU16();
-  const infirmaryRecoveryDailyBps = reader.readU16();
-  const expansionDaily = reader.readU8();
-
-  // Wounded units (stored as [u8;4], align 1 - no padding needed, offset 167)
-  const woundedDef1 = reader.readU32();
-  const woundedDef2 = reader.readU32();
-  const woundedDef3 = reader.readU32();
-  const woundedOp1 = reader.readU32();
-  const woundedOp2 = reader.readU32();
-  const woundedOp3 = reader.readU32();
-
-  // Reserved (offset 191)
-  reader.skip(1); // _reserved [u8; 1]
-
-  // Buildings array (offset 192, each slot = 40 bytes)
-  // Read based on how many slots exist in the data
-  const remainingBytes = reader.remaining();
+  // Buildings array (starts at ESTATE_HEADER_SIZE, each slot = 40 bytes)
+  const remainingBytes = data.length - ESTATE_HEADER_SIZE;
   const slotsInData = Math.floor(remainingBytes / BUILDING_SLOT_SIZE);
-  const slotsToRead = Math.min(slotsInData, MAX_BUILDING_SLOTS);
+  const slotsToRead = Math.min(Math.max(slotsInData, 0), MAX_BUILDING_SLOTS);
 
   const buildings: BuildingSlot[] = [];
   for (let i = 0; i < slotsToRead; i++) {
-    buildings.push(deserializeBuildingSlot(reader));
+    buildings.push(deserializeBuildingSlot(data, ESTATE_HEADER_SIZE + i * BUILDING_SLOT_SIZE));
   }
 
   // Computed helpers
-  const maxSlots = plotsOwned * SLOTS_PER_PLOT;
+  const maxSlots = header.plotsOwned * SLOTS_PER_PLOT;
   const activeBuildings = buildings.filter(
     (b) => b.status === BuildingStatus.Active || b.status === BuildingStatus.Upgrading,
   ).length;
 
-  return {
-    owner,
-    cityId,
-    bump,
-    estateLevel,
-    plotsOwned,
-    totalBuildings,
-    currentSlots,
-    attackBps,
-    defenseBps,
-    resourceGenBps,
-    xpGainBps,
-    storageBps,
-    trainingSpeedBps,
-    researchSpeedBps,
-    craftSuccessBps,
-    tradeDiscountBps,
-    noviCapBonusBps,
-    lootBonusBps,
-    prizeBonusBps,
-    rallyCapacityBonusBps,
-    pvpDamageBps,
-    lastLoginDate,
-    loginStreak,
-    longestLoginStreak,
-    permanentBonusBps,
-    dailyDate,
-    dawnTimestamp,
-    windowsCompleted,
-    dawnBuildings,
-    middayBuildings,
-    duskBuildings,
-    unitEffectivenessBps,
-    masteryBonusBps,
-    arenaDamageBps,
-    dailyLootBonusBps,
-    marketDiscountBps,
-    blessedHero,
-    citadelStance,
-    createdAt,
-    lastActivity,
-    campDiscountBps,
-    stablesSpeedBps,
-    infirmaryRecoveryDailyBps,
-    expansionDaily,
-    woundedDef1,
-    woundedDef2,
-    woundedDef3,
-    woundedOp1,
-    woundedOp2,
-    woundedOp3,
-    buildings,
-    maxSlots,
-    activeBuildings,
-  };
+  return { ...header, buildings, maxSlots, activeBuildings };
 }
 
 // Parse Functions
@@ -357,7 +270,7 @@ export function hasBuildingAtLevel(estate: EstateAccount, buildingType: Building
 /** Check if a building slot's construction is complete */
 export function isBuildingConstructionComplete(building: BuildingSlot, nowSeconds: number): boolean {
   return (building.status === BuildingStatus.Building || building.status === BuildingStatus.Upgrading) &&
-    nowSeconds >= building.constructionEnds.toNumber();
+    nowSeconds >= Number(building.constructionEnds);
 }
 
 /** Get the number of empty building slots */

@@ -8,12 +8,12 @@
  * - Claim prize
  */
 
-import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
+import type { Address, Instruction, ReadonlyUint8Array } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
 import { addressBytes } from '../crypto';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u64, i64, bool, bytes } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -38,26 +38,62 @@ export interface CreateEventParams {
   /** Event name (max 64 chars) */
   name: string;
   /** Start timestamp */
-  startTime: BN | number | bigint;
+  startTime: bigint | number;
   /** End timestamp */
-  endTime: BN | number | bigint;
+  endTime: bigint | number;
   /** Event type */
   eventType: number;
   /** Minimum level to participate */
   minLevel: number;
   /** Minimum reputation to participate */
-  minReputation: BN | number | bigint;
+  minReputation: bigint | number;
   /** Required subscription tier (0 = any) */
   requiredSubscriptionTier: number;
   /** Prize type (0=LockedNovi, 1=Gems, 2=Cash, 3=SPLToken) */
   prizeType: number;
   /** Prize amount */
-  prizeAmount: BN | number | bigint;
+  prizeAmount: bigint | number;
   /** Prize token mint (if SPL token) */
   prizeTokenMint?: Address;
   /** Auto-activate on start time */
   autoActivate: boolean;
 }
+
+/**
+ * CreateEvent has VARIABLE-LENGTH data (the name section length depends on the
+ * runtime name), so it cannot be a single fixed `packed` codec. The payload is
+ * assembled from a fixed head codec + variable name bytes + fixed tail codec.
+ */
+/** CreateEvent head (9 bytes): event_id (u64), name_len (u8) */
+const createEventHead = packed<{ eventId: bigint; nameLen: number }>([
+  ['eventId', u64],
+  ['nameLen', u8],
+], 9);
+
+/** CreateEvent tail (69 bytes): everything after the variable name section */
+const createEventTail = packed<{
+  startTime: bigint;
+  endTime: bigint;
+  eventType: number;
+  minLevel: number;
+  minReputation: bigint;
+  requiredSubscriptionTier: number;
+  prizeType: number;
+  prizeAmount: bigint;
+  prizeTokenMint: ReadonlyUint8Array;
+  autoActivate: boolean;
+}>([
+  ['startTime', i64],
+  ['endTime', i64],
+  ['eventType', u8],
+  ['minLevel', u8],
+  ['minReputation', u64],
+  ['requiredSubscriptionTier', u8],
+  ['prizeType', u8],
+  ['prizeAmount', u64],
+  ['prizeTokenMint', bytes(32)],
+  ['autoActivate', bool],
+], 69);
 
 /** ~10,000 CU */
 /**
@@ -66,11 +102,11 @@ export interface CreateEventParams {
  * Events track player actions and reward top performers.
  * Types: MostNoviConsumed, MostEncountersKilled, etc.
  */
-export function createCreateEventInstruction(
+export async function createCreateEventInstruction(
   accounts: CreateEventAccounts,
   params: CreateEventParams
-): Instruction {
-  const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
+): Promise<Instruction> {
+  const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
 
   // Rust account order:
   // 0. payer (SIGNER, WRITE)
@@ -91,33 +127,39 @@ export function createCreateEventInstruction(
     keys.push({ pubkey: params.prizeTokenMint, isSigner: false, isWritable: false });
   }
 
-  const nameBytes = Buffer.from(params.name, 'utf8');
+  const nameBytes = new TextEncoder().encode(params.name);
   if (nameBytes.length > 64) {
     throw new Error('Event name too long (max 64 bytes)');
   }
 
-  // Instruction data
-  const writer = new BufferWriter(200);
-  writer.writeU64(accounts.eventId);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
-  writer.writeI64(params.startTime);
-  writer.writeI64(params.endTime);
-  writer.writeU8(params.eventType);
-  writer.writeU8(params.minLevel);
-  writer.writeU64(params.minReputation);
-  writer.writeU8(params.requiredSubscriptionTier);
-  writer.writeU8(params.prizeType);
-  writer.writeU64(params.prizeAmount);
-  // Prize token mint (32 bytes, zeroed for non-SPL prizes)
-  if (params.prizeTokenMint) {
-    writer.writeBytes(addressBytes(params.prizeTokenMint));
-  } else {
-    writer.writeZeros(32);
-  }
-  writer.writeBool(params.autoActivate);
+  // Variable-length instruction data: fixed head + variable name + fixed tail.
+  const head = createEventHead.encode({
+    eventId: BigInt(accounts.eventId),
+    nameLen: nameBytes.length,
+  });
+  // Prize token mint: 32 bytes, zeroed for non-SPL prizes.
+  const prizeTokenMint = params.prizeTokenMint
+    ? addressBytes(params.prizeTokenMint)
+    : new Uint8Array(32);
+  const tail = createEventTail.encode({
+    startTime: BigInt(params.startTime),
+    endTime: BigInt(params.endTime),
+    eventType: params.eventType,
+    minLevel: params.minLevel,
+    minReputation: BigInt(params.minReputation),
+    requiredSubscriptionTier: params.requiredSubscriptionTier,
+    prizeType: params.prizeType,
+    prizeAmount: BigInt(params.prizeAmount),
+    prizeTokenMint,
+    autoActivate: params.autoActivate,
+  });
 
-  const data = createInstructionData(DISCRIMINATORS.EVENT_CREATE, writer.toBuffer());
+  const payload = new Uint8Array(head.length + nameBytes.length + tail.length);
+  payload.set(head, 0);
+  payload.set(nameBytes, head.length);
+  payload.set(tail, head.length + nameBytes.length);
+
+  const data = createInstructionData(DISCRIMINATORS.EVENT_CREATE, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -147,12 +189,12 @@ export interface JoinEventAccounts {
  *
  * Note: Payer can be different from playerOwner (allows backend to pay for joins)
  */
-export function createJoinEventInstruction(
+export async function createJoinEventInstruction(
   accounts: JoinEventAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-  const [participation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.playerOwner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+  const [participation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.playerOwner);
 
   // Rust account order:
   // 0. payer (SIGNER, WRITE) - pays for account creation
@@ -191,10 +233,10 @@ export interface FinalizeEventAccounts {
  * Permissionless - anyone can call after event end_time has passed.
  * Locks the leaderboard and enables prize claims.
  */
-export function createFinalizeEventInstruction(
+export async function createFinalizeEventInstruction(
   accounts: FinalizeEventAccounts
-): Instruction {
-  const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
+): Promise<Instruction> {
+  const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
 
   // Rust account order:
   // 0. event_account (WRITE)
@@ -244,16 +286,16 @@ export interface ClaimPrizeAccounts {
  * - Lv 15-19: +40% prize bonus
  * - Lv 20+: +50% prize bonus
  */
-export function createClaimPrizeInstruction(
+export async function createClaimPrizeInstruction(
   accounts: ClaimPrizeAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.winnerOwner);
-  const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-  const [participation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.winnerOwner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.winnerOwner);
+  const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+  const [participation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.winnerOwner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. payer (SIGNER, WRITE) - pays tx fees

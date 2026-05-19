@@ -14,8 +14,7 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, struct, pad, u8, u16, u32, u64, i64, bool, pubkey, array, fixedString } from '../utils/codec';
 
 // Shop Enums
 
@@ -65,11 +64,11 @@ export interface ShopConfigAccount {
   flashSaleMaxDurationSecs: number;
 
   // Milestone thresholds
-  bronzeThreshold: BN;
-  silverThreshold: BN;
-  goldThreshold: BN;
-  platinumThreshold: BN;
-  diamondThreshold: BN;
+  bronzeThreshold: bigint;
+  silverThreshold: bigint;
+  goldThreshold: bigint;
+  platinumThreshold: bigint;
+  diamondThreshold: bigint;
 
   // Milestone discounts
   bronzeDiscountBps: number;
@@ -85,11 +84,11 @@ export interface ShopConfigAccount {
   streakDay7Bps: number;
 
   // Global stats
-  totalSolCollected: BN;
-  totalNoviBurned: BN;
+  totalSolCollected: bigint;
+  totalNoviBurned: bigint;
 
   // State
-  nextFlashSaleId: BN;
+  nextFlashSaleId: bigint;
 
   // Oracle config
   solPythFeed: Address;
@@ -111,11 +110,11 @@ export interface ShopItemAccount {
   rarity: ShopItemRarity;
   quantityPerPurchase: number;
   baseStatsBps: number;
-  priceSolLamports: BN;
-  availableFrom: BN;
-  availableUntil: BN;
-  maxGlobalStock: BN;
-  currentGlobalStock: BN;
+  priceSolLamports: bigint;
+  availableFrom: bigint;
+  availableUntil: bigint;
+  maxGlobalStock: bigint;
+  currentGlobalStock: bigint;
   maxPerPlayer: number;
   maxPerDay: number;
   isActive: boolean;
@@ -143,11 +142,11 @@ export interface BundleAccount {
   savingsBps: number;
   isActive: boolean;
   items: BundleItem[];
-  priceSolLamports: BN;
-  availableFrom: BN;
-  availableUntil: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  priceSolLamports: bigint;
+  availableFrom: bigint;
+  availableUntil: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -159,11 +158,11 @@ export const BUNDLE_ACCOUNT_SIZE = 152;
 export interface DailyDealAccount {
   itemId: number;
   discountBps: number;
-  startedAt: BN;
+  startedAt: bigint;
   nextItemId: number;
   nextDiscountBps: number;
-  purchasesToday: BN;
-  revenueTodayLamports: BN;
+  purchasesToday: bigint;
+  revenueTodayLamports: bigint;
   bump: number;
 }
 
@@ -178,302 +177,173 @@ export interface FlashSaleAccount {
   isBundle: boolean;
   status: FlashSaleStatus;
   discountBps: number;
-  announcedAt: BN;
-  startsAt: BN;
-  endsAt: BN;
-  maxStock: BN;
-  remainingStock: BN;
-  totalClaims: BN;
-  totalRevenueLamports: BN;
+  announcedAt: bigint;
+  startsAt: bigint;
+  endsAt: bigint;
+  maxStock: bigint;
+  remainingStock: bigint;
+  totalClaims: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
 /** FlashSaleAccount size in bytes */
 export const FLASH_SALE_ACCOUNT_SIZE = 120;
 
+// Codecs
+
+/** ShopConfigAccount `#[repr(C)]` codec */
+const shopConfigCodec = reprC<ShopConfigAccount>([
+  pad(1), // account_key
+  ['maxBaseDiscountBps', u16],
+  ['maxBundleDiscountBps', u16],
+  ['maxFibDiscountBps', u16],
+  ['maxTotalDiscountBps', u16],
+  ['maxFlashSalesPerDay', u8],
+  ['maxDailyDeals', u8],
+  ['flashSaleMinDurationSecs', u16],
+  ['flashSaleMaxDurationSecs', u16],
+  pad(2), // _padding1
+  ['bronzeThreshold', u64],
+  ['silverThreshold', u64],
+  ['goldThreshold', u64],
+  ['platinumThreshold', u64],
+  ['diamondThreshold', u64],
+  ['bronzeDiscountBps', u16],
+  ['silverDiscountBps', u16],
+  ['goldDiscountBps', u16],
+  ['platinumDiscountBps', u16],
+  ['diamondDiscountBps', u16],
+  ['streakDay2Bps', u16],
+  ['streakDay3Bps', u16],
+  ['streakDay5Bps', u16],
+  ['streakDay7Bps', u16],
+  ['totalSolCollected', u64],
+  ['totalNoviBurned', u64],
+  ['nextFlashSaleId', u64],
+  ['solPythFeed', pubkey],
+  ['solSwitchboardFeed', pubkey],
+  ['solMaxStalenessSlots', u16],
+  ['solConfidenceThresholdBps', u16],
+  pad(8), // _reserved
+  pad(3), // _padding
+  ['bump', u8],
+], SHOP_CONFIG_ACCOUNT_SIZE);
+
+/** ShopItemAccount `#[repr(C)]` codec */
+const shopItemCodec = reprC<ShopItemAccount>([
+  pad(1), // account_key
+  ['itemType', u16],
+  ['category', u8],
+  ['rarity', u8],
+  ['quantityPerPurchase', u16],
+  ['baseStatsBps', u16],
+  ['priceSolLamports', u64],
+  pad(8), // _reserved_price
+  ['availableFrom', i64],
+  ['availableUntil', i64],
+  ['maxGlobalStock', u64],
+  ['currentGlobalStock', u64],
+  ['maxPerPlayer', u32],
+  ['maxPerDay', u16],
+  pad(2), // _padding
+  ['isActive', bool],
+  ['isFeatured', bool],
+  pad(8), // _reserved
+  pad(5), // _padding
+  ['bump', u8],
+], SHOP_ITEM_ACCOUNT_SIZE);
+
+/** BundleItem `#[repr(C)]` codec */
+const bundleItemCodec = struct<BundleItem>([
+  ['itemId', u32],
+  ['quantity', u32],
+]);
+
+/** BundleAccount `#[repr(C)]` codec */
+const bundleCodec = reprC<BundleAccount>([
+  pad(1), // account_key
+  ['tier', u8],
+  ['category', u8],
+  ['itemCount', u8],
+  ['requiresSubscription', u8],
+  ['savingsBps', u16],
+  ['isActive', bool],
+  pad(1), // _padding
+  ['items', array(bundleItemCodec, 10)],
+  ['priceSolLamports', u64],
+  ['availableFrom', i64],
+  ['availableUntil', i64],
+  ['totalPurchases', u64],
+  ['totalRevenueLamports', u64],
+  pad(8), // _reserved
+  pad(7), // _padding
+  ['bump', u8],
+], BUNDLE_ACCOUNT_SIZE);
+
+/** DailyDealAccount `#[repr(C)]` codec */
+const dailyDealCodec = reprC<DailyDealAccount>([
+  pad(1), // account_key
+  ['itemId', u32],
+  ['discountBps', u16],
+  pad(2), // _padding1
+  ['startedAt', i64],
+  ['nextItemId', u32],
+  ['nextDiscountBps', u16],
+  pad(2), // _padding
+  ['purchasesToday', u64],
+  ['revenueTodayLamports', u64],
+  pad(8), // _reserved
+  ['bump', u8],
+], DAILY_DEAL_ACCOUNT_SIZE);
+
+/** FlashSaleAccount `#[repr(C)]` codec */
+const flashSaleCodec = reprC<FlashSaleAccount>([
+  pad(1), // account_key
+  ['payer', pubkey],
+  ['itemId', u32],
+  ['isBundle', bool],
+  ['status', u8],
+  ['discountBps', u16],
+  ['announcedAt', i64],
+  ['startsAt', i64],
+  ['endsAt', i64],
+  ['maxStock', u64],
+  ['remainingStock', u64],
+  ['totalClaims', u64],
+  ['totalRevenueLamports', u64],
+  pad(8), // _reserved
+  pad(7), // _padding
+  ['bump', u8],
+], FLASH_SALE_ACCOUNT_SIZE);
+
 // Deserialization
 
 /** Deserialize ShopConfigAccount from raw bytes */
-export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(1); // implicit padding for u16 alignment
-
-  // Discount caps
-  const maxBaseDiscountBps = reader.readU16();
-  const maxBundleDiscountBps = reader.readU16();
-  const maxFibDiscountBps = reader.readU16();
-  const maxTotalDiscountBps = reader.readU16();
-
-  // Sale limits
-  const maxFlashSalesPerDay = reader.readU8();
-  const maxDailyDeals = reader.readU8();
-  const flashSaleMinDurationSecs = reader.readU16();
-  const flashSaleMaxDurationSecs = reader.readU16();
-  reader.skip(2); // _padding1
-  reader.skip(6); // implicit padding for u64 alignment
-
-  // Milestone thresholds
-  const bronzeThreshold = reader.readU64();
-  const silverThreshold = reader.readU64();
-  const goldThreshold = reader.readU64();
-  const platinumThreshold = reader.readU64();
-  const diamondThreshold = reader.readU64();
-
-  // Milestone discounts
-  const bronzeDiscountBps = reader.readU16();
-  const silverDiscountBps = reader.readU16();
-  const goldDiscountBps = reader.readU16();
-  const platinumDiscountBps = reader.readU16();
-  const diamondDiscountBps = reader.readU16();
-
-  // Loyalty streak discounts
-  const streakDay2Bps = reader.readU16();
-  const streakDay3Bps = reader.readU16();
-  const streakDay5Bps = reader.readU16();
-  const streakDay7Bps = reader.readU16();
-  reader.skip(6); // implicit padding for u64 alignment
-
-  // Global stats
-  const totalSolCollected = reader.readU64();
-  const totalNoviBurned = reader.readU64();
-
-  // State
-  const nextFlashSaleId = reader.readU64();
-
-  // Oracle config
-  const solPythFeed = reader.readPubkey();
-  const solSwitchboardFeed = reader.readPubkey();
-  const solMaxStalenessSlots = reader.readU16();
-  const solConfidenceThresholdBps = reader.readU16();
-
-  reader.skip(8); // _reserved
-  reader.skip(3); // padding
-  const bump = reader.readU8();
-
-  return {
-    maxBaseDiscountBps,
-    maxBundleDiscountBps,
-    maxFibDiscountBps,
-    maxTotalDiscountBps,
-    maxFlashSalesPerDay,
-    maxDailyDeals,
-    flashSaleMinDurationSecs,
-    flashSaleMaxDurationSecs,
-    bronzeThreshold,
-    silverThreshold,
-    goldThreshold,
-    platinumThreshold,
-    diamondThreshold,
-    bronzeDiscountBps,
-    silverDiscountBps,
-    goldDiscountBps,
-    platinumDiscountBps,
-    diamondDiscountBps,
-    streakDay2Bps,
-    streakDay3Bps,
-    streakDay5Bps,
-    streakDay7Bps,
-    totalSolCollected,
-    totalNoviBurned,
-    nextFlashSaleId,
-    solPythFeed,
-    solSwitchboardFeed,
-    solMaxStalenessSlots,
-    solConfidenceThresholdBps,
-    bump,
-  };
+export function deserializeShopConfig(data: Uint8Array): ShopConfigAccount {
+  return shopConfigCodec.decode(data);
 }
 
 /** Deserialize ShopItemAccount from raw bytes */
-export function deserializeShopItem(data: Uint8Array | Buffer): ShopItemAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(1); // implicit padding for u16 alignment
-
-  const itemType = reader.readU16();
-  const categoryValue = reader.readU8();
-  const category = categoryValue as ShopItemCategory;
-  const rarityValue = reader.readU8();
-  const rarity = rarityValue as ShopItemRarity;
-  const quantityPerPurchase = reader.readU16();
-  const baseStatsBps = reader.readU16();
-  reader.skip(6); // implicit padding for u64 alignment
-
-  const priceSolLamports = reader.readU64();
-  reader.skip(8); // _reserved_price
-
-  const availableFrom = reader.readI64();
-  const availableUntil = reader.readI64();
-
-  const maxGlobalStock = reader.readU64();
-  const currentGlobalStock = reader.readU64();
-
-  const maxPerPlayer = reader.readU32();
-  const maxPerDay = reader.readU16();
-  reader.skip(2); // padding
-
-  const isActive = reader.readBool();
-  const isFeatured = reader.readBool();
-
-  reader.skip(8); // _reserved
-  reader.skip(5); // padding
-  const bump = reader.readU8();
-
-  return {
-    itemType,
-    category,
-    rarity,
-    quantityPerPurchase,
-    baseStatsBps,
-    priceSolLamports,
-    availableFrom,
-    availableUntil,
-    maxGlobalStock,
-    currentGlobalStock,
-    maxPerPlayer,
-    maxPerDay,
-    isActive,
-    isFeatured,
-    bump,
-  };
+export function deserializeShopItem(data: Uint8Array): ShopItemAccount {
+  return shopItemCodec.decode(data);
 }
 
 /** Deserialize BundleAccount from raw bytes */
-export function deserializeBundle(data: Uint8Array | Buffer): BundleAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const tier = reader.readU8();
-  const category = reader.readU8();
-  const itemCount = reader.readU8();
-  const requiresSubscription = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment
-  const savingsBps = reader.readU16();
-  const isActive = reader.readBool();
-  reader.skip(1); // _padding
-  reader.skip(2); // implicit padding for u32 alignment (BundleItem)
-
-  // Read items (max 10)
-  const items: BundleItem[] = [];
-  for (let i = 0; i < 10; i++) {
-    const itemId = reader.readU32();
-    const quantity = reader.readU32();
-    if (i < itemCount) {
-      items.push({ itemId, quantity });
-    }
-  }
-
-  reader.skip(4); // implicit padding for u64 alignment
-  const priceSolLamports = reader.readU64();
-  const availableFrom = reader.readI64();
-  const availableUntil = reader.readI64();
-  const totalPurchases = reader.readU64();
-  const totalRevenueLamports = reader.readU64();
-
-  reader.skip(8); // _reserved
-  reader.skip(7); // padding
-  const bump = reader.readU8();
-
-  return {
-    tier,
-    category,
-    itemCount,
-    requiresSubscription,
-    savingsBps,
-    isActive,
-    items,
-    priceSolLamports,
-    availableFrom,
-    availableUntil,
-    totalPurchases,
-    totalRevenueLamports,
-    bump,
-  };
+export function deserializeBundle(data: Uint8Array): BundleAccount {
+  const decoded = bundleCodec.decode(data);
+  // `items` is a fixed [BundleItem; 10] array on-chain; expose only `itemCount`.
+  return { ...decoded, items: decoded.items.slice(0, decoded.itemCount) };
 }
 
 /** Deserialize DailyDealAccount from raw bytes */
-export function deserializeDailyDeal(data: Uint8Array | Buffer): DailyDealAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(3); // implicit padding for u32 alignment
-
-  const itemId = reader.readU32();
-  const discountBps = reader.readU16();
-  reader.skip(2); // _padding1
-  reader.skip(4); // implicit padding for i64 alignment
-  const startedAt = reader.readI64();
-
-  const nextItemId = reader.readU32();
-  const nextDiscountBps = reader.readU16();
-  reader.skip(2); // padding
-
-  const purchasesToday = reader.readU64();
-  const revenueTodayLamports = reader.readU64();
-
-  reader.skip(8); // _reserved
-  const bump = reader.readU8();
-
-  return {
-    itemId,
-    discountBps,
-    startedAt,
-    nextItemId,
-    nextDiscountBps,
-    purchasesToday,
-    revenueTodayLamports,
-    bump,
-  };
+export function deserializeDailyDeal(data: Uint8Array): DailyDealAccount {
+  return dailyDealCodec.decode(data);
 }
 
 /** Deserialize FlashSaleAccount from raw bytes */
-export function deserializeFlashSale(data: Uint8Array | Buffer): FlashSaleAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const payer = reader.readPubkey();
-  reader.skip(3); // implicit padding for u32 alignment
-  const itemId = reader.readU32();
-  const isBundle = reader.readBool();
-  const statusValue = reader.readU8();
-  const status = statusValue as FlashSaleStatus;
-  const discountBps = reader.readU16();
-  reader.skip(4); // implicit padding for i64 alignment
-
-  const announcedAt = reader.readI64();
-  const startsAt = reader.readI64();
-  const endsAt = reader.readI64();
-
-  const maxStock = reader.readU64();
-  const remainingStock = reader.readU64();
-
-  const totalClaims = reader.readU64();
-  const totalRevenueLamports = reader.readU64();
-
-  reader.skip(8); // _reserved
-  reader.skip(7); // padding
-  const bump = reader.readU8();
-
-  return {
-    payer,
-    itemId,
-    isBundle,
-    status,
-    discountBps,
-    announcedAt,
-    startsAt,
-    endsAt,
-    maxStock,
-    remainingStock,
-    totalClaims,
-    totalRevenueLamports,
-    bump,
-  };
+export function deserializeFlashSale(data: Uint8Array): FlashSaleAccount {
+  return flashSaleCodec.decode(data);
 }
 
 // Parse Functions
@@ -523,8 +393,8 @@ export function parseFlashSale(accountInfo: { data: Uint8Array }): FlashSaleAcco
 /** Check if item is available for purchase */
 export function isItemAvailable(item: ShopItemAccount, nowSeconds: number): boolean {
   if (!item.isActive) return false;
-  const from = item.availableFrom.toNumber();
-  const until = item.availableUntil.toNumber();
+  const from = Number(item.availableFrom);
+  const until = Number(item.availableUntil);
   if (from > 0 && nowSeconds < from) return false;
   if (until > 0 && nowSeconds > until) return false;
   return true;
@@ -533,7 +403,7 @@ export function isItemAvailable(item: ShopItemAccount, nowSeconds: number): bool
 /** Check if flash sale is currently active */
 export function isFlashSaleActive(sale: FlashSaleAccount, nowSeconds: number): boolean {
   if (sale.status !== FlashSaleStatus.Active) return false;
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if flash sale can be closed */
@@ -544,13 +414,13 @@ export function canCloseFlashSale(sale: FlashSaleAccount): boolean {
 /** Get milestone tier from total spent */
 export function getMilestoneTier(
   config: ShopConfigAccount,
-  totalSpent: BN
+  totalSpent: bigint
 ): 'none' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' {
-  if (totalSpent.gte(config.diamondThreshold)) return 'diamond';
-  if (totalSpent.gte(config.platinumThreshold)) return 'platinum';
-  if (totalSpent.gte(config.goldThreshold)) return 'gold';
-  if (totalSpent.gte(config.silverThreshold)) return 'silver';
-  if (totalSpent.gte(config.bronzeThreshold)) return 'bronze';
+  if (totalSpent >= config.diamondThreshold) return 'diamond';
+  if (totalSpent >= config.platinumThreshold) return 'platinum';
+  if (totalSpent >= config.goldThreshold) return 'gold';
+  if (totalSpent >= config.silverThreshold) return 'silver';
+  if (totalSpent >= config.bronzeThreshold) return 'bronze';
   return 'none';
 }
 
@@ -595,10 +465,10 @@ export interface WeeklySaleAccount {
   bonusType: number;
   bonusValueBps: number;
   categoryDiscounts: number[];
-  startsAt: BN;
-  endsAt: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  startsAt: bigint;
+  endsAt: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -615,18 +485,18 @@ export interface SeasonalSaleAccount {
   featuredCount: number;
   status: SeasonalSaleStatus;
   globalDiscountBps: number;
-  startsAt: BN;
-  endsAt: BN;
-  spendThreshold: BN;
+  startsAt: bigint;
+  endsAt: bigint;
+  spendThreshold: bigint;
   exclusiveCosmeticId: number;
   exclusiveClaims: number;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
 /** SeasonalSaleAccount size in bytes */
-export const SEASONAL_SALE_ACCOUNT_SIZE = 208;
+export const SEASONAL_SALE_ACCOUNT_SIZE = 200;
 
 // DAO Promotion Account Interface
 
@@ -640,14 +510,14 @@ export interface DAOPromotionAccount {
   globalDiscountBps: number;
   maxDiscountBps: number;
   status: DaoPromotionStatus;
-  approvedAt: BN;
-  startsAt: BN;
-  endsAt: BN;
-  maxDiscountBudgetLamports: BN;
-  usedDiscountBudget: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
-  uniquePurchasers: BN;
+  approvedAt: bigint;
+  startsAt: bigint;
+  endsAt: bigint;
+  maxDiscountBudgetLamports: bigint;
+  usedDiscountBudget: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
+  uniquePurchasers: bigint;
   bump: number;
 }
 
@@ -657,9 +527,9 @@ export const DAO_PROMOTION_ACCOUNT_SIZE = 168;
 // Player Purchase Account Interface
 
 export interface PlayerPurchaseAccount {
-  lifetimePurchased: BN;
-  purchasedToday: BN;
-  lastPurchaseDay: BN;
+  lifetimePurchased: bigint;
+  purchasedToday: bigint;
+  lastPurchaseDay: bigint;
   bump: number;
 }
 
@@ -683,188 +553,120 @@ export const ALLOWED_TOKEN_ACCOUNT_SIZE = 122;
 
 // New Account Deserialization
 
+/** WeeklySaleAccount `#[repr(C)]` codec */
+const weeklySaleCodec = reprC<WeeklySaleAccount>([
+  pad(1), // account_key
+  ['payer', pubkey],
+  ['theme', u8],
+  ['bonusType', u8],
+  ['bonusValueBps', u16],
+  pad(4), // _padding1
+  ['categoryDiscounts', array(u16, 4)],
+  ['startsAt', i64],
+  ['endsAt', i64],
+  ['totalPurchases', u64],
+  ['totalRevenueLamports', u64],
+  pad(8), // _reserved
+  pad(7), // _padding2
+  ['bump', u8],
+], WEEKLY_SALE_ACCOUNT_SIZE);
+
+/** SeasonalSaleAccount `#[repr(C)]` codec */
+const seasonalSaleCodec = reprC<SeasonalSaleAccount>([
+  pad(1), // account_key
+  ['payer', pubkey],
+  ['name', fixedString(32)],
+  ['featuredItemIds', array(u32, 10)],
+  ['featuredDiscountsBps', array(u16, 10)],
+  ['featuredCount', u8],
+  ['status', u8],
+  ['globalDiscountBps', u16],
+  pad(4), // _padding1
+  ['startsAt', i64],
+  ['endsAt', i64],
+  ['spendThreshold', u64],
+  ['exclusiveCosmeticId', u32],
+  ['exclusiveClaims', u32],
+  ['totalPurchases', u64],
+  ['totalRevenueLamports', u64],
+  pad(8), // _reserved
+  pad(7), // _padding2
+  ['bump', u8],
+], SEASONAL_SALE_ACCOUNT_SIZE);
+
+/** DAOPromotionAccount `#[repr(C)]` codec */
+const daoPromotionCodec = reprC<DAOPromotionAccount>([
+  pad(1), // account_key
+  ['payer', pubkey],
+  ['title', fixedString(32)],
+  ['equipmentDiscountBps', u16],
+  ['consumableDiscountBps', u16],
+  ['materialDiscountBps', u16],
+  ['cosmeticDiscountBps', u16],
+  ['globalDiscountBps', u16],
+  ['maxDiscountBps', u16],
+  ['status', u8],
+  pad(3), // _padding1
+  ['approvedAt', i64],
+  ['startsAt', i64],
+  ['endsAt', i64],
+  ['maxDiscountBudgetLamports', u64],
+  ['usedDiscountBudget', u64],
+  ['totalPurchases', u64],
+  ['totalRevenueLamports', u64],
+  ['uniquePurchasers', u64],
+  pad(8), // _reserved
+  pad(7), // _padding2
+  ['bump', u8],
+], DAO_PROMOTION_ACCOUNT_SIZE);
+
+/** PlayerPurchaseAccount `#[repr(C)]` codec */
+const playerPurchaseCodec = reprC<PlayerPurchaseAccount>([
+  pad(1), // account_key
+  ['lifetimePurchased', u64],
+  ['purchasedToday', u64],
+  ['lastPurchaseDay', u64],
+  pad(8), // _reserved
+  ['bump', u8],
+], PLAYER_PURCHASE_ACCOUNT_SIZE);
+
+/** AllowedTokenAccount `#[repr(C)]` codec */
+const allowedTokenCodec = reprC<AllowedTokenAccount>([
+  pad(1), // account_key
+  ['mint', pubkey],
+  ['pythFeed', pubkey],
+  ['switchboardFeed', pubkey],
+  ['maxStalenessSlots', u16],
+  ['confidenceThresholdBps', u16],
+  ['discountBps', u16],
+  pad(2), // _padding
+  pad(15), // _reserved
+  ['bump', u8],
+], ALLOWED_TOKEN_ACCOUNT_SIZE);
+
 /** Deserialize WeeklySaleAccount from raw bytes */
-export function deserializeWeeklySale(data: Uint8Array | Buffer): WeeklySaleAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const payer = reader.readPubkey();
-  const theme = reader.readU8();
-  const bonusType = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment
-  const bonusValueBps = reader.readU16();
-  reader.skip(4); // _padding1
-  const categoryDiscounts = reader.readU16Array(4);
-  reader.skip(6); // implicit padding for i64 alignment
-  const startsAt = reader.readI64();
-  const endsAt = reader.readI64();
-  const totalPurchases = reader.readU64();
-  const totalRevenueLamports = reader.readU64();
-  reader.skip(8); // _reserved
-  reader.skip(7); // _padding2
-  const bump = reader.readU8();
-
-  return {
-    payer,
-    theme,
-    bonusType,
-    bonusValueBps,
-    categoryDiscounts,
-    startsAt,
-    endsAt,
-    totalPurchases,
-    totalRevenueLamports,
-    bump,
-  };
+export function deserializeWeeklySale(data: Uint8Array): WeeklySaleAccount {
+  return weeklySaleCodec.decode(data);
 }
 
 /** Deserialize SeasonalSaleAccount from raw bytes */
-export function deserializeSeasonalSale(data: Uint8Array | Buffer): SeasonalSaleAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const payer = reader.readPubkey();
-  const name = reader.readString(32);
-  reader.skip(3); // implicit padding for u32 alignment
-  const featuredItemIds = reader.readU32Array(10);
-  const featuredDiscountsBps = reader.readU16Array(10);
-  const featuredCount = reader.readU8();
-  const statusValue = reader.readU8();
-  const status = statusValue as SeasonalSaleStatus;
-  const globalDiscountBps = reader.readU16();
-  reader.skip(4); // _padding1
-  const startsAt = reader.readI64();
-  const endsAt = reader.readI64();
-  const spendThreshold = reader.readU64();
-  const exclusiveCosmeticId = reader.readU32();
-  const exclusiveClaims = reader.readU32();
-  const totalPurchases = reader.readU64();
-  const totalRevenueLamports = reader.readU64();
-  reader.skip(8); // _reserved
-  reader.skip(7); // _padding2
-  const bump = reader.readU8();
-
-  return {
-    payer,
-    name,
-    featuredItemIds,
-    featuredDiscountsBps,
-    featuredCount,
-    status,
-    globalDiscountBps,
-    startsAt,
-    endsAt,
-    spendThreshold,
-    exclusiveCosmeticId,
-    exclusiveClaims,
-    totalPurchases,
-    totalRevenueLamports,
-    bump,
-  };
+export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
+  return seasonalSaleCodec.decode(data);
 }
 
 /** Deserialize DAOPromotionAccount from raw bytes */
-export function deserializeDaoPromotion(data: Uint8Array | Buffer): DAOPromotionAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const payer = reader.readPubkey();
-  const title = reader.readString(32);
-  reader.skip(1); // implicit padding for u16 alignment
-  const equipmentDiscountBps = reader.readU16();
-  const consumableDiscountBps = reader.readU16();
-  const materialDiscountBps = reader.readU16();
-  const cosmeticDiscountBps = reader.readU16();
-  const globalDiscountBps = reader.readU16();
-  const maxDiscountBps = reader.readU16();
-  const statusValue = reader.readU8();
-  const status = statusValue as DaoPromotionStatus;
-  reader.skip(3); // _padding1
-  reader.skip(6); // implicit padding for i64 alignment
-  const approvedAt = reader.readI64();
-  const startsAt = reader.readI64();
-  const endsAt = reader.readI64();
-  const maxDiscountBudgetLamports = reader.readU64();
-  const usedDiscountBudget = reader.readU64();
-  const totalPurchases = reader.readU64();
-  const totalRevenueLamports = reader.readU64();
-  const uniquePurchasers = reader.readU64();
-  reader.skip(8); // _reserved
-  reader.skip(7); // _padding2
-  const bump = reader.readU8();
-
-  return {
-    payer,
-    title,
-    equipmentDiscountBps,
-    consumableDiscountBps,
-    materialDiscountBps,
-    cosmeticDiscountBps,
-    globalDiscountBps,
-    maxDiscountBps,
-    status,
-    approvedAt,
-    startsAt,
-    endsAt,
-    maxDiscountBudgetLamports,
-    usedDiscountBudget,
-    totalPurchases,
-    totalRevenueLamports,
-    uniquePurchasers,
-    bump,
-  };
+export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
+  return daoPromotionCodec.decode(data);
 }
 
 /** Deserialize PlayerPurchaseAccount from raw bytes */
-export function deserializePlayerPurchase(data: Uint8Array | Buffer): PlayerPurchaseAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(7); // implicit padding for u64 alignment
-
-  const lifetimePurchased = reader.readU64();
-  const purchasedToday = reader.readU64();
-  const lastPurchaseDay = reader.readU64();
-  reader.skip(8); // _reserved
-  const bump = reader.readU8();
-
-  return {
-    lifetimePurchased,
-    purchasedToday,
-    lastPurchaseDay,
-    bump,
-  };
+export function deserializePlayerPurchase(data: Uint8Array): PlayerPurchaseAccount {
+  return playerPurchaseCodec.decode(data);
 }
 
 /** Deserialize AllowedTokenAccount from raw bytes */
-export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedTokenAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const mint = reader.readPubkey();
-  const pythFeed = reader.readPubkey();
-  const switchboardFeed = reader.readPubkey();
-  reader.skip(1); // implicit padding for u16 alignment
-  const maxStalenessSlots = reader.readU16();
-  const confidenceThresholdBps = reader.readU16();
-  const discountBps = reader.readU16();
-  reader.skip(2); // _padding
-  reader.skip(15); // _reserved
-  const bump = reader.readU8();
-
-  return {
-    mint,
-    pythFeed,
-    switchboardFeed,
-    maxStalenessSlots,
-    confidenceThresholdBps,
-    discountBps,
-    bump,
-  };
+export function deserializeAllowedToken(data: Uint8Array): AllowedTokenAccount {
+  return allowedTokenCodec.decode(data);
 }
 
 // New Account Parse Functions
@@ -913,24 +715,24 @@ export function parseAllowedToken(accountInfo: { data: Uint8Array }): AllowedTok
 
 /** Check if weekly sale is currently active */
 export function isWeeklySaleActive(sale: WeeklySaleAccount, nowSeconds: number): boolean {
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if seasonal sale is currently active */
 export function isSeasonalSaleActive(sale: SeasonalSaleAccount, nowSeconds: number): boolean {
   if (sale.status !== SeasonalSaleStatus.Active) return false;
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if DAO promotion is currently active */
 export function isDaoPromotionActive(promotion: DAOPromotionAccount, nowSeconds: number): boolean {
   if (promotion.status !== DaoPromotionStatus.Active) return false;
-  return nowSeconds >= promotion.startsAt.toNumber() && nowSeconds < promotion.endsAt.toNumber();
+  return nowSeconds >= Number(promotion.startsAt) && nowSeconds < Number(promotion.endsAt);
 }
 
 /** Check if DAO promotion has remaining budget */
 export function hasDaoPromotionBudget(promotion: DAOPromotionAccount): boolean {
-  return promotion.usedDiscountBudget.lt(promotion.maxDiscountBudgetLamports);
+  return promotion.usedDiscountBudget < promotion.maxDiscountBudgetLamports;
 }
 
 // Item Type Metadata (derived from on-chain fulfill_item)

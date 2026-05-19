@@ -6,8 +6,8 @@
  */
 
 import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata } from 'litesvm';
-import { address, lamports, type Address } from '@solana/kit';
-import { addressBytes, findProgramAddressSync } from '../../src/crypto';
+import { address, lamports, getProgramDerivedAddress, type Address } from '@solana/kit';
+import { addressBytes } from '../../src/crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -94,65 +94,68 @@ export interface MockPythPrice {
   /** Exponent (negative power of 10). Typical: -8 for USD prices. */
   expo?: number;
   /**
-   * Slot the price was published at. Defaults to the current LiteSVM slot so
-   * `agg.pub_slot >= now - max_staleness` always succeeds. Override to
-   * exercise stale-price branches.
+   * Publish time (Unix seconds). The on-chain staleness check is
+   * `publish_time + max_staleness >= now`. Defaults to the current LiteSVM
+   * clock so a fresh price always passes; override to exercise stale branches.
    */
-  pubSlot?: bigint | number;
+  publishTime?: bigint | number;
 }
 
-/**
- * Seed a synthetic Pyth price-feed account at `pubkey`.
- *
- * The on-chain `validate_oracle_feed_at_config` does:
- *   1. owner == PYTH_PROGRAM_ID
- *   2. `PythPriceAccount::load(&data)` — checks magic, version, account type
- *
- * The price-read path (called from `purchase_item` token-payment flow,
- * `purchase_novi`, etc.) additionally requires `agg.status == Trading` and
- * `agg.pub_slot >= current_slot - max_staleness_slots`. Pass `price` to seed
- * a live, queryable price; pass nothing for the header-only legacy mock used
- * by config-only tests.
- *
- * Field offsets are pinned from `p_pyth::PythPriceAccount` (240-byte struct);
- * `agg` is the 32-byte PriceInfo at offset 208.
- */
-const PYTH = {
-  MAGIC: 0,
-  VER: 4,
-  ATYPE: 8,
-  SIZE: 12,
-  PTYPE: 16,
-  EXPO: 20,
-  AGG_PRICE: 208,
-  AGG_CONF: 216,
-  AGG_STATUS: 224,
-  AGG_PUB_SLOT: 232,
-  LEN: 240,
-} as const;
+/** Anchor account discriminator for Pyth `PriceUpdateV2`. */
+const PRICE_UPDATE_V2_DISCRIMINATOR = Buffer.from([
+  34, 241, 35, 99, 157, 126, 244, 205,
+]);
 
+/**
+ * Seed a synthetic Pyth `PriceUpdateV2` pull-oracle account at `pubkey`.
+ *
+ * The modern pull-oracle model: a feed is identified by a 32-byte `feedId`,
+ * and the price lives in a `PriceUpdateV2` account owned by the Pyth program.
+ * The on-chain `read_pyth_price` parses it and enforces
+ * `VerificationLevel::Full`, that `price_message.feed_id == feedId`, and a
+ * `publish_time` no older than `max_staleness` seconds.
+ *
+ * `feedId` is the 32-byte identifier embedded in the account — it must equal
+ * the id stored in the DAO config (`*_pyth_feed`). Pass 32 raw bytes or a
+ * 64-hex string.
+ *
+ * Layout (Borsh, `VerificationLevel::Full`): discriminator(8) +
+ * write_authority(32) + verification_level tag(1) + price_message(84) +
+ * posted_slot(8) = 133 bytes.
+ */
 export function seedMockPythFeed(
   svm: LiteSVM,
   pubkey: Address,
+  feedId: Buffer | Uint8Array | string,
   price?: MockPythPrice,
 ): void {
-  const data = Buffer.alloc(PYTH.LEN);
-  data.writeUInt32LE(0xa1b2c3d4, PYTH.MAGIC);
-  data.writeUInt32LE(2, PYTH.VER);
-  data.writeUInt32LE(3, PYTH.ATYPE); // Price
-  data.writeUInt32LE(PYTH.LEN, PYTH.SIZE);
-
-  if (price !== undefined) {
-    data.writeUInt8(1, PYTH.PTYPE); // Price
-    data.writeInt32LE(price.expo ?? -8, PYTH.EXPO);
-    data.writeBigInt64LE(BigInt(price.price), PYTH.AGG_PRICE);
-    data.writeBigUInt64LE(BigInt(price.conf ?? 0), PYTH.AGG_CONF);
-    data.writeUInt8(1, PYTH.AGG_STATUS); // Trading
-    const pubSlot = price.pubSlot !== undefined
-      ? BigInt(price.pubSlot)
-      : svm.getClock().slot;
-    data.writeBigUInt64LE(pubSlot, PYTH.AGG_PUB_SLOT);
+  const feedIdBuf =
+    typeof feedId === 'string'
+      ? Buffer.from(feedId.replace(/^0x/, ''), 'hex')
+      : Buffer.from(feedId);
+  if (feedIdBuf.length !== 32) {
+    throw new Error(`Pyth feedId must be 32 bytes, got ${feedIdBuf.length}`);
   }
+
+  const data = Buffer.alloc(133);
+  PRICE_UPDATE_V2_DISCRIMINATOR.copy(data, 0);
+  // write_authority @8 left as zeros.
+  data.writeUInt8(1, 40); // verification_level = Full
+
+  const pm = 41; // price_message offset (Full => single-byte verification tag)
+  feedIdBuf.copy(data, pm); // feed_id
+  data.writeBigInt64LE(BigInt(price?.price ?? 0), pm + 32); // price
+  data.writeBigUInt64LE(BigInt(price?.conf ?? 0), pm + 40); // conf
+  data.writeInt32LE(price?.expo ?? -8, pm + 48); // exponent
+  const publishTime =
+    price?.publishTime !== undefined
+      ? BigInt(price.publishTime)
+      : svm.getClock().unixTimestamp;
+  data.writeBigInt64LE(publishTime, pm + 52); // publish_time
+  data.writeBigInt64LE(publishTime, pm + 60); // prev_publish_time
+  data.writeBigInt64LE(BigInt(price?.price ?? 0), pm + 68); // ema_price
+  data.writeBigUInt64LE(BigInt(price?.conf ?? 0), pm + 76); // ema_conf
+  data.writeBigUInt64LE(svm.getClock().slot, pm + 84); // posted_slot
 
   svm.setAccount({
     address: pubkey,
@@ -180,53 +183,74 @@ export interface MockSwitchboardPrice {
   /** Standard deviation, same 10^18 scale. Default 0 (always passes the std-dev gate). */
   stdDev?: bigint | number;
   /**
-   * Result slot for the staleness check (`current_slot - result_slot <= max`).
-   * Defaults to the current LiteSVM slot.
+   * Slot of the seeded oracle submissions, for the `get_value` staleness
+   * filter (`submission.slot >= clock_slot - max_staleness`). Defaults to the
+   * current LiteSVM slot.
    */
-  resultSlot?: bigint | number;
+  slot?: bigint | number;
 }
 
 /**
- * Seed a synthetic Switchboard pull-feed account at `pubkey`.
+ * Seed a synthetic Switchboard On-Demand `PullFeedAccountData` account.
  *
- * The on-chain `validate_oracle_feed_at_config` checks:
- *   1. owner == SWITCHBOARD_PROGRAM_ID
- *   2. `p_switchboard::validate_discriminator(&data)` — first 8 bytes
- *      must match the Anchor discriminator for `PullFeedAccountData`.
+ * The on-chain `read_switchboard_price` resolves the price via `get_value`:
+ * it walks the `submissions` ring buffer, keeps submissions no older than
+ * `max_staleness` slots, requires at least `min_sample_size` of them, and
+ * takes the median. We seed three identical fresh submissions so the median
+ * is unambiguous, plus the matching `CurrentResult` (its `std_dev` feeds the
+ * confidence gate).
  *
- * The price-read path (`load_switchboard_price`, used by the token-payment
- * and purchase_novi Switchboard branches) additionally reads:
- *   - result_value  (i128 LE @ 2264) — the price, must be > 0
- *   - result_std_dev(i128 LE @ 2280) — for the confidence gate
- *   - result_slot   (u64  LE @ 2368) — for the staleness gate
- *   - last_update_ts(i64  LE @ 2216)
- * Offsets are pinned from `p_switchboard` (MIN_PULL_FEED_LEN = 2396).
- *
- * Pass `price` to seed a live, queryable feed; pass nothing for the
- * discriminator-only mock used by config-gate-only tests.
+ * `validate_switchboard_feed_at_config` only needs the discriminator + the
+ * full 3208-byte length, so the price-less form still satisfies config-gate
+ * tests. Layout offsets are pinned from `p_switchboard` (`PullFeedAccountData`).
  */
 export function seedMockSwitchboardFeed(
   svm: LiteSVM,
   pubkey: Address,
   price?: MockSwitchboardPrice,
 ): void {
-  const MIN_PULL_FEED_LEN = 2396;
-  const data = Buffer.alloc(MIN_PULL_FEED_LEN);
-  const discriminator = Buffer.from([196, 27, 108, 196, 10, 215, 219, 40]);
-  discriminator.copy(data, 0);
+  const PULL_FEED_LEN = 3208;
+  const OFF_SUBMISSIONS = 8;
+  const SUBMISSION_SIZE = 64;
+  const SUB_OFF_SLOT = 32;
+  const SUB_OFF_LANDED_AT = 40;
+  const SUB_OFF_VALUE = 48;
+  const OFF_MIN_SAMPLE_SIZE = 2215;
+  const OFF_LAST_UPDATE_TS = 2216;
+  const OFF_RESULT_VALUE = 2264;
+  const OFF_RESULT_STD_DEV = 2280;
+  const OFF_RESULT_NUM_SAMPLES = 2360;
+  const OFF_RESULT_SLOT = 2368;
+
+  const data = Buffer.alloc(PULL_FEED_LEN);
+  Buffer.from([196, 27, 108, 196, 10, 215, 219, 40]).copy(data, 0);
+  // min_sample_size: the program floors `min_samples` at 1, but set it
+  // explicitly so even a price-less mock has a sane value.
+  data.writeUInt8(1, OFF_MIN_SAMPLE_SIZE);
 
   if (price !== undefined) {
-    const OFF_LAST_UPDATE_TS = 2216;
-    const OFF_RESULT_VALUE = 2264;
-    const OFF_RESULT_STD_DEV = 2280;
-    const OFF_RESULT_SLOT = 2368;
-    writeI128LE(data, BigInt(price.value), OFF_RESULT_VALUE);
-    writeI128LE(data, BigInt(price.stdDev ?? 0), OFF_RESULT_STD_DEV);
-    const slot = price.resultSlot !== undefined
-      ? BigInt(price.resultSlot)
-      : svm.getClock().slot;
-    data.writeBigUInt64LE(slot, OFF_RESULT_SLOT);
+    const slot =
+      price.slot !== undefined ? BigInt(price.slot) : svm.getClock().slot;
+    const value = BigInt(price.value);
+    const stdDev = BigInt(price.stdDev ?? 0);
+
+    // Three identical fresh submissions → median == value.
+    const NUM_SUBMISSIONS = 3;
+    for (let i = 0; i < NUM_SUBMISSIONS; i++) {
+      const base = OFF_SUBMISSIONS + i * SUBMISSION_SIZE;
+      data.writeBigUInt64LE(slot, base + SUB_OFF_SLOT);
+      data.writeBigUInt64LE(slot, base + SUB_OFF_LANDED_AT);
+      writeI128LE(data, value, base + SUB_OFF_VALUE);
+    }
+
     data.writeBigInt64LE(svm.getClock().unixTimestamp, OFF_LAST_UPDATE_TS);
+
+    // CurrentResult — std_dev feeds the confidence gate; value/slot mirror
+    // the submissions for realism.
+    writeI128LE(data, value, OFF_RESULT_VALUE);
+    writeI128LE(data, stdDev, OFF_RESULT_STD_DEV);
+    data.writeUInt8(NUM_SUBMISSIONS, OFF_RESULT_NUM_SAMPLES);
+    data.writeBigUInt64LE(slot, OFF_RESULT_SLOT);
   }
 
   svm.setAccount({
@@ -340,15 +364,15 @@ export function readSplTokenAmount(svm: LiteSVM, tokenAccount: Address): bigint 
  * solana-program-loader layout) and the offsets read by
  * `assert_is_program_authority` in `init_game_engine.rs`.
  */
-export function seedProgramDataPda(
+export async function seedProgramDataPda(
   svm: LiteSVM,
   programId: Address,
   upgradeAuthority: Address,
-): void {
-  const [programData] = findProgramAddressSync(
-    [addressBytes(programId)],
-    BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
-  );
+): Promise<void> {
+  const [programData] = await getProgramDerivedAddress({
+    programAddress: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    seeds: [addressBytes(programId)],
+  });
 
   const data = Buffer.alloc(45);
   data.writeUInt32LE(3, 0); // enum tag = ProgramData

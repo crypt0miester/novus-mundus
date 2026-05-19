@@ -101,7 +101,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       log.error(`Invalid --near pubkey: ${nearFlag}`);
       return;
     }
-    const [playerPda] = derivePlayerPda(ctx.gameEngine, owner);
+    const [playerPda] = await derivePlayerPda(ctx.gameEngine, owner);
     const info = await ctx.connection.getAccountInfo(playerPda);
     if (!info) {
       log.error(`No player account found for ${nearFlag}`);
@@ -135,7 +135,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       continue;
     }
 
-    const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+    const [cityPda] = await deriveCityPda(ctx.gameEngine, cityId);
     const cityInfo = await ctx.connection.getAccountInfo(cityPda);
     if (!cityInfo) {
       log.error(`City ${cityId} not initialized on-chain`);
@@ -143,7 +143,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     }
 
     const cityAccount = deserializeCity(cityInfo.data);
-    let nextIndex = cityAccount.totalEncountersSpawned.toNumber();
+    let nextIndex = Number(cityAccount.totalEncountersSpawned);
 
     const baseLat = Math.round(city.lat * GRID_PRECISION);
     const baseLong = Math.round(city.lon * GRID_PRECISION);
@@ -163,7 +163,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
           ? nearGrid.long + NEAR_OFFSETS[attempt][1]
           : baseLong + Math.floor(Math.random() * 100) - 50;
 
-        const ix = createSpawnEncounterInstruction(
+        const ix = await createSpawnEncounterInstruction(
           {
             payer: ctx.daoAuthority.publicKey,
             playerOwner: ctx.daoAuthority.publicKey,
@@ -233,13 +233,13 @@ async function handleStatus(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     const city = CITIES.find(c => c.id === cityId);
     if (!city) continue;
 
-    const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+    const [cityPda] = await deriveCityPda(ctx.gameEngine, cityId);
     const cityInfo = await ctx.connection.getAccountInfo(cityPda);
     if (!cityInfo) continue;
 
     const account = deserializeCity(cityInfo.data);
-    const spawned = account.totalEncountersSpawned.toNumber();
-    const active = account.activeEncounters.toNumber();
+    const spawned = Number(account.totalEncountersSpawned);
+    const active = Number(account.activeEncounters);
 
     totalSpawned += spawned;
     totalActive += active;
@@ -300,17 +300,17 @@ async function handleCleanup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     let cityCleaned = 0;
 
     for (const { account: enc } of encounters) {
-      if (now < enc.despawnAt.toNumber() + CLEANUP_GRACE_SECONDS) {
+      if (now < Number(enc.despawnAt) + CLEANUP_GRACE_SECONDS) {
         totalPending++;
         continue; // still within the grace window
       }
 
-      const encounterIndex = enc.id.toNumber();
+      const encounterIndex = Number(enc.id);
       const gridLat = Math.round(enc.locationLat * GRID_PRECISION);
       const gridLong = Math.round(enc.locationLong * GRID_PRECISION);
 
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
-      const [locationPda] = deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+      const [locationPda] = await deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
 
       // Route rent: cell still held by this encounter -> its creator; cell
       // closed or reused by a newer encounter -> kingdom (DAO) authority.
@@ -323,7 +323,7 @@ async function handleCleanup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
         }
       }
 
-      const ix = createCleanupEncounterInstruction({
+      const ix = await createCleanupEncounterInstruction({
         gameEngine: ctx.gameEngine,
         cityId,
         encounterIndex,

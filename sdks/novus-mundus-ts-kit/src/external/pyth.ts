@@ -1,7 +1,13 @@
 /**
- * Pyth Network Price Feed Helpers
+ * Pyth Network pull-oracle helpers.
  *
- * Utilities for working with Pyth price oracles on Solana.
+ * Mirrors the on-chain `p-pyth` reader: parses the modern `PriceUpdateV2`
+ * account (Anchor / Borsh-serialized), NOT the deprecated legacy push-oracle
+ * price account (magic `0xa1b2c3d4`), which Pyth sunset on 2024-06-30.
+ *
+ * A Pyth feed is identified by a 32-byte **feed id** (`FeedId`), not by an
+ * account address — the on-chain program pins feeds by id and verifies it
+ * against the `PriceUpdateV2`'s embedded `price_message.feed_id`.
  */
 
 import { address } from '@solana/kit';
@@ -11,270 +17,246 @@ import { fetchAccount } from '../rpc';
 
 // Program IDs
 
-/** Pyth Oracle Program ID (Mainnet) */
-export const PYTH_ORACLE_PROGRAM_ID = address(
-  'FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH'
+/** Pyth price-feed program — owns sponsored, continuously-updated feeds. */
+export const PYTH_PRICE_FEED_PROGRAM_ID = address(
+  'pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT'
 );
 
-/** Pyth Oracle Program ID (Devnet) */
-export const PYTH_ORACLE_PROGRAM_ID_DEVNET = address(
-  'gSbePebfvPy7tRqimPoVecS2UsBvYv46ynrzWocc92s'
+/** Pyth Solana Receiver — owns caller-posted ephemeral price updates. */
+export const PYTH_RECEIVER_PROGRAM_ID = address(
+  'rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ'
 );
 
-// Well-Known Price Feed IDs (Mainnet)
+// Well-Known Price Feed IDs (32-byte hex identifiers; chain-agnostic)
+//
+// These are Pyth *feed ids*, NOT Solana account addresses. They are what the
+// on-chain program stores in its `*_pyth_feed` config fields.
 
-/** SOL/USD price feed */
-export const PYTH_SOL_USD_FEED = address(
-  'H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG'
-);
+/** SOL/USD feed id */
+export const PYTH_SOL_USD_FEED_ID =
+  'ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
 
-/** USDC/USD price feed */
-export const PYTH_USDC_USD_FEED = address(
-  'Gnt27xtC473ZT2Mw5u8wZ68Z3gULkSTb5DuxJy7eJotD'
-);
+/** USDC/USD feed id */
+export const PYTH_USDC_USD_FEED_ID =
+  'eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a';
 
-/** USDT/USD price feed */
-export const PYTH_USDT_USD_FEED = address(
-  '3vxLXJqLqF3JG5TCbYycbKWRBbCJQLxQmBGCkyqEEefL'
-);
+/** USDT/USD feed id */
+export const PYTH_USDT_USD_FEED_ID =
+  '2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b';
 
-/** BTC/USD price feed */
-export const PYTH_BTC_USD_FEED = address(
-  'GVXRSBjFk6e6J3NbVPXohDJetcTjaeeuykUpbQF8UoMU'
-);
+/** BTC/USD feed id */
+export const PYTH_BTC_USD_FEED_ID =
+  'e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43';
 
-/** ETH/USD price feed */
-export const PYTH_ETH_USD_FEED = address(
-  'JBu1AL4obBcCMqKBBxhpWCNUt136ijcuMZLFvTP7iWdB'
-);
+/** ETH/USD feed id */
+export const PYTH_ETH_USD_FEED_ID =
+  'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
 
-// Price Data Types
+/** `PriceUpdateV2` Anchor account discriminator. */
+const PRICE_UPDATE_V2_DISCRIMINATOR = Uint8Array.from([
+  34, 241, 35, 99, 157, 126, 244, 205,
+]);
 
-/** Pyth price data structure */
-export interface PythPrice {
-  /** Price value (scaled by 10^expo) */
+// Types
+
+/** Pyth `VerificationLevel`. */
+export type PythVerificationLevel =
+  | { kind: 'partial'; numSignatures: number }
+  | { kind: 'full' };
+
+/** Parsed `PriceUpdateV2` account. */
+export interface PythPriceUpdate {
+  /** Authority that posted/owns the update account. */
+  writeAuthority: Uint8Array;
+  /** How thoroughly the underlying Wormhole VAA was verified. */
+  verificationLevel: PythVerificationLevel;
+  /** 32-byte feed id. */
+  feedId: Uint8Array;
+  /** Price value (real value = `price * 10^exponent`). */
   price: bigint;
-  /** Confidence interval (scaled by 10^expo) */
+  /** Confidence interval, same scale as `price`. */
   conf: bigint;
-  /** Price exponent (negative means decimal places) */
-  expo: number;
-  /** Publish timestamp (Unix seconds) */
+  /** Price exponent (typically negative). */
+  exponent: number;
+  /** Publish timestamp (Unix seconds). */
   publishTime: number;
-}
-
-/** Extended price data with EMA */
-export interface PythPriceData extends PythPrice {
-  /** EMA price */
+  /** Previous publish timestamp (Unix seconds). */
+  prevPublishTime: number;
+  /** EMA price. */
   emaPrice: bigint;
-  /** EMA confidence */
+  /** EMA confidence. */
   emaConf: bigint;
-  /** Status (0=unknown, 1=trading, 2=halted, 3=auction) */
-  status: number;
-  /** Number of publishers */
-  numPublishers: number;
-  /** Max number of publishers */
-  maxNumPublishers: number;
+  /** Slot at which the update was posted. */
+  postedSlot: bigint;
 }
 
-// Price Parsing Functions
+// Feed id helpers
+
+/** Convert a 64-hex-char (optionally `0x`-prefixed) feed id to 32 bytes. */
+export function feedIdToBytes(feedId: string): Uint8Array {
+  const hex = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
+  if (hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error(`Invalid Pyth feed id (expected 64 hex chars): ${feedId}`);
+  }
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/** Convert a 32-byte feed id to a 64-hex-char string. */
+export function feedIdToHex(feedId: Uint8Array): string {
+  return Array.from(feedId, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Parsing
 
 /**
- * Parse Pyth price account data.
+ * Parse a `PriceUpdateV2` account.
  *
- * @param data - Raw account data buffer
- * @returns Parsed price data or null if invalid
+ * The account is Borsh-serialized: `verification_level` is a variable-length
+ * enum (`Full` = 1 byte, `Partial` = 2 bytes) that shifts every field after it.
+ *
+ * @param data - Raw account data (including the 8-byte discriminator)
+ * @returns Parsed update, or `null` if the data is not a `PriceUpdateV2`
  */
-export function parsePythPriceData(data: Buffer): PythPriceData | null {
-  if (data.length < 208) {
+export function parsePythPriceUpdate(data: Uint8Array): PythPriceUpdate | null {
+  // discriminator(8) + write_authority(32) + verification_level tag(1)
+  if (data.length < 41) return null;
+  for (let i = 0; i < 8; i++) {
+    if (data[i] !== PRICE_UPDATE_V2_DISCRIMINATOR[i]) return null;
+  }
+
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const writeAuthority = data.slice(8, 40);
+
+  // Borsh enum: 1-byte variant tag (+ payload). 0 = Partial, 1 = Full.
+  let verificationLevel: PythVerificationLevel;
+  let pmOff: number;
+  if (data[40] === 0) {
+    if (data.length < 42) return null;
+    verificationLevel = { kind: 'partial', numSignatures: data[41]! };
+    pmOff = 42;
+  } else if (data[40] === 1) {
+    verificationLevel = { kind: 'full' };
+    pmOff = 41;
+  } else {
     return null;
   }
 
-  // Pyth V2 price account layout:
-  // 0-4: magic number (0xa1b2c3d4)
-  // 4-8: version
-  // 8-12: type (1 = price)
-  // 12-16: size
-  // ...
-  // 208+: price data
-
-  const magic = data.readUInt32LE(0);
-  if (magic !== 0xa1b2c3d4) {
-    return null;
-  }
-
-  const accountType = data.readUInt32LE(8);
-  if (accountType !== 3) {
-    // 3 = price account
-    return null;
-  }
-
-  // Price data offset varies by version, use standard offsets for V2
-  const priceOffset = 208;
-  if (data.length < priceOffset + 96) {
-    return null;
-  }
-
-  // Read current price data
-  const expo = data.readInt32LE(priceOffset + 20);
-  const status = data.readUInt32LE(priceOffset + 12);
-  const numPublishers = data.readUInt32LE(priceOffset + 16);
-  const maxNumPublishers = data.readUInt32LE(priceOffset + 28);
-
-  // Price and confidence at offset + 32
-  const price = data.readBigInt64LE(priceOffset + 32);
-  const conf = data.readBigUInt64LE(priceOffset + 40);
-
-  // EMA price and confidence at offset + 72
-  const emaPrice = data.readBigInt64LE(priceOffset + 72);
-  const emaConf = data.readBigUInt64LE(priceOffset + 80);
-
-  // Publish time at offset + 48
-  const publishTime = Number(data.readBigInt64LE(priceOffset + 48));
+  // price_message(84) + posted_slot(8)
+  if (data.length < pmOff + 84 + 8) return null;
 
   return {
-    price,
-    conf,
-    expo,
-    publishTime,
-    emaPrice,
-    emaConf,
-    status,
-    numPublishers,
-    maxNumPublishers,
+    writeAuthority,
+    verificationLevel,
+    feedId: data.slice(pmOff, pmOff + 32),
+    price: view.getBigInt64(pmOff + 32, true),
+    conf: view.getBigUint64(pmOff + 40, true),
+    exponent: view.getInt32(pmOff + 48, true),
+    publishTime: Number(view.getBigInt64(pmOff + 52, true)),
+    prevPublishTime: Number(view.getBigInt64(pmOff + 60, true)),
+    emaPrice: view.getBigInt64(pmOff + 68, true),
+    emaConf: view.getBigUint64(pmOff + 76, true),
+    postedSlot: view.getBigUint64(pmOff + 84, true),
   };
 }
 
-/**
- * Convert Pyth price to human-readable decimal.
- *
- * @param price - Price value from Pyth
- * @param expo - Price exponent from Pyth
- * @returns Price as a decimal number
- */
-export function pythPriceToDecimal(price: bigint, expo: number): number {
-  return Number(price) * Math.pow(10, expo);
+// Conversions
+
+/** Convert a Pyth price to a human-readable decimal number. */
+export function pythPriceToDecimal(price: bigint, exponent: number): number {
+  return Number(price) * Math.pow(10, exponent);
 }
 
-/**
- * Convert decimal price to Pyth format.
- *
- * @param decimalPrice - Human-readable price
- * @param expo - Target exponent (typically -8 for USD prices)
- * @returns Price value for Pyth
- */
-export function decimalToPythPrice(decimalPrice: number, expo: number = -8): bigint {
-  return BigInt(Math.round(decimalPrice * Math.pow(10, -expo)));
+/** Convert a decimal price to Pyth integer form at `exponent`. */
+export function decimalToPythPrice(decimalPrice: number, exponent = -8): bigint {
+  return BigInt(Math.round(decimalPrice * Math.pow(10, -exponent)));
 }
 
-// Price Validation Functions
+// Validation (mirrors `PriceUpdateV2::get_price_no_older_than`)
 
-/**
- * Check if a price is stale based on slot age.
- *
- * @param priceData - Pyth price data
- * @param currentSlot - Current Solana slot
- * @param maxStalenessSlots - Maximum allowed age in slots
- * @returns true if price is stale
- */
+/** Whether the update is fully verified (the safe default to require). */
+export function isFullyVerified(update: PythPriceUpdate): boolean {
+  return update.verificationLevel.kind === 'full';
+}
+
+/** Whether `publishTime` is older than `maxStalenessSeconds`. */
 export function isPriceStale(
-  priceData: PythPriceData,
+  update: PythPriceUpdate,
   currentTimestamp: number,
-  maxStalenessSeconds: number = 60
+  maxStalenessSeconds = 60
 ): boolean {
-  return currentTimestamp - priceData.publishTime > maxStalenessSeconds;
+  return currentTimestamp - update.publishTime > maxStalenessSeconds;
 }
 
-/**
- * Check if price confidence is within acceptable threshold.
- *
- * @param priceData - Pyth price data
- * @param maxConfidenceBps - Maximum confidence as basis points of price
- * @returns true if confidence is acceptable
- */
+/** Whether the confidence interval is within `maxConfidenceBps` of the price. */
 export function isConfidenceAcceptable(
-  priceData: PythPriceData,
-  maxConfidenceBps: number = 100 // 1% default
+  update: PythPriceUpdate,
+  maxConfidenceBps = 100
 ): boolean {
-  if (priceData.price === 0n) return false;
-
-  // Calculate confidence as percentage of price
-  const confidenceBps = Number((priceData.conf * 10000n) / BigInt(Math.abs(Number(priceData.price))));
-
-  return confidenceBps <= maxConfidenceBps;
+  if (maxConfidenceBps === 0) return true;
+  if (update.price === 0n) return false;
+  const priceAbs = update.price < 0n ? -update.price : update.price;
+  const confBps = (update.conf * 10000n) / priceAbs;
+  return confBps <= BigInt(maxConfidenceBps);
 }
 
 /**
- * Validate a Pyth price for use in transactions.
+ * Validate a Pyth price update for use in a transaction.
  *
- * @param priceData - Pyth price data
- * @param currentTimestamp - Current Unix timestamp
- * @param maxStalenessSeconds - Maximum age in seconds
- * @param maxConfidenceBps - Maximum confidence in basis points
- * @returns Validation result with error message if invalid
+ * Mirrors the on-chain checks: full verification, feed-id match, staleness,
+ * confidence, positive price.
  */
-export function validatePythPrice(
-  priceData: PythPriceData,
+export function validatePythPriceUpdate(
+  update: PythPriceUpdate,
+  expectedFeedId: Uint8Array,
   currentTimestamp: number,
-  maxStalenessSeconds: number = 60,
-  maxConfidenceBps: number = 100
+  maxStalenessSeconds = 60,
+  maxConfidenceBps = 100
 ): { valid: boolean; error?: string } {
-  if (priceData.status !== 1) {
-    return { valid: false, error: 'Price feed not trading' };
+  if (!isFullyVerified(update)) {
+    return { valid: false, error: 'Price update is not fully verified' };
   }
-
-  if (isPriceStale(priceData, currentTimestamp, maxStalenessSeconds)) {
+  if (feedIdToHex(update.feedId) !== feedIdToHex(expectedFeedId)) {
+    return { valid: false, error: 'Price update feed id mismatch' };
+  }
+  if (isPriceStale(update, currentTimestamp, maxStalenessSeconds)) {
     return { valid: false, error: 'Price is stale' };
   }
-
-  if (!isConfidenceAcceptable(priceData, maxConfidenceBps)) {
+  if (!isConfidenceAcceptable(update, maxConfidenceBps)) {
     return { valid: false, error: 'Price confidence too wide' };
   }
-
-  if (priceData.price <= 0n) {
+  if (update.price <= 0n) {
     return { valid: false, error: 'Invalid price value' };
   }
-
   return { valid: true };
 }
 
-// Fetch Functions
+// Fetch
 
 /**
- * Fetch and parse Pyth price data from the network.
+ * Fetch and parse a Pyth `PriceUpdateV2` account.
  *
  * @param rpc - Solana RPC client
- * @param feedAddress - Pyth price feed address
- * @returns Parsed price data or null if unavailable
+ * @param priceAccount - The price-update / sponsored-feed account address
  */
-export async function fetchPythPrice(
+export async function fetchPythPriceUpdate(
   rpc: SolanaRpc,
-  feedAddress: Address
-): Promise<PythPriceData | null> {
-  const accountInfo = await fetchAccount(rpc, feedAddress);
-
-  if (!accountInfo || !accountInfo.data) {
-    return null;
-  }
-
-  return parsePythPriceData(Buffer.from(accountInfo.data));
+  priceAccount: Address
+): Promise<PythPriceUpdate | null> {
+  const accountInfo = await fetchAccount(rpc, priceAccount);
+  if (!accountInfo || !accountInfo.data) return null;
+  return parsePythPriceUpdate(accountInfo.data);
 }
 
-/**
- * Fetch USD price for a token using Pyth.
- *
- * @param rpc - Solana RPC client
- * @param feedAddress - Pyth price feed address
- * @returns Price in USD or null if unavailable
- */
+/** Fetch the USD price for a Pyth price account. */
 export async function fetchUsdPrice(
   rpc: SolanaRpc,
-  feedAddress: Address
+  priceAccount: Address
 ): Promise<number | null> {
-  const priceData = await fetchPythPrice(rpc, feedAddress);
-
-  if (!priceData) {
-    return null;
-  }
-
-  return pythPriceToDecimal(priceData.price, priceData.expo);
+  const update = await fetchPythPriceUpdate(rpc, priceAccount);
+  if (!update) return null;
+  return pythPriceToDecimal(update.price, update.exponent);
 }

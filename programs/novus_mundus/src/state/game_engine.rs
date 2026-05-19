@@ -695,13 +695,15 @@ pub struct NoviPurchaseConfig {
     pub novi_streak_bonus_bps: [u16; 7],
 
     // === Oracle Configuration (72 bytes) ===
-    /// Pyth NOVI/USD price feed (Address::default() = not configured)
+    /// Pyth NOVI/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
+    /// pubkey (all-zero = not configured).
     pub novi_pyth_feed: Address,
-    /// Switchboard NOVI/USD price feed (Address::default() = not configured)
+    /// Switchboard NOVI/USD pull-feed *account* pubkey (all-zero = not configured).
     pub novi_switchboard_feed: Address,
-    /// Max staleness in slots before oracle price is rejected
+    /// Max price age before the oracle price is rejected — interpreted as
+    /// SECONDS for Pyth feeds, SLOTS for Switchboard feeds.
     pub novi_max_staleness_slots: u16,
-    /// Max confidence interval for Pyth (basis points)
+    /// Max confidence interval (Pyth) / standard deviation (Switchboard), bps.
     pub novi_confidence_threshold_bps: u16,
 
     // === Padding for alignment (4 bytes) ===
@@ -737,7 +739,7 @@ impl NoviPurchaseConfig {
             // DAO sets these when oracle feeds become available
             novi_pyth_feed: NULL_PUBKEY,
             novi_switchboard_feed: NULL_PUBKEY,
-            novi_max_staleness_slots: 30,           // ~12 seconds at 400ms slots
+            novi_max_staleness_slots: 60,           // 60s for Pyth / 60 slots for Switchboard
             novi_confidence_threshold_bps: 500,     // 5% max confidence interval
 
             _padding: [0; 4],

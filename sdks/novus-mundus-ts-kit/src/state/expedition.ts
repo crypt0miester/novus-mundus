@@ -6,8 +6,8 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { isNullPubkey } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u64, i64, pubkey } from '../utils/codec';
 import { ExpeditionType } from '../types/enums';
 import {
   MINING_DURATION_HOURS,
@@ -44,52 +44,39 @@ export interface ExpeditionAccount {
   bump: number;
   score: number;
   cityId: number;
-  startTime: BN;
-  operativeUnit1: BN;
-  operativeUnit2: BN;
-  operativeUnit3: BN;
+  startTime: bigint;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
 }
 
 /** ExpeditionAccount size in bytes */
 export const EXPEDITION_ACCOUNT_SIZE = 112;
 
+// Codec
+
+/** ExpeditionAccount `#[repr(C)]` codec */
+const expeditionCodec = reprC<ExpeditionAccount>([
+  pad(1), // account_key discriminator
+  ['player', pubkey],
+  ['heroMint', pubkey],
+  ['expeditionType', u8],
+  ['tier', u8],
+  ['strikes', u8],
+  ['bump', u8],
+  ['score', u16],
+  ['cityId', u16],
+  ['startTime', i64],
+  ['operativeUnit1', u64],
+  ['operativeUnit2', u64],
+  ['operativeUnit3', u64],
+], EXPEDITION_ACCOUNT_SIZE);
+
 // Deserialization
 
 /** Deserialize ExpeditionAccount from raw bytes */
-export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const player = reader.readPubkey();
-  const heroMint = reader.readPubkey();
-  const expeditionTypeValue = reader.readU8();
-  const expeditionType = expeditionTypeValue as ExpeditionType;
-  const tier = reader.readU8();
-  const strikes = reader.readU8();
-  const bump = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment (offset 69 -> 70)
-  const score = reader.readU16();
-  const cityId = reader.readU16();
-  reader.skip(6); // implicit padding for i64 alignment (offset 74 -> 80)
-  const startTime = reader.readI64();
-  const operativeUnit1 = reader.readU64();
-  const operativeUnit2 = reader.readU64();
-  const operativeUnit3 = reader.readU64();
-
-  return {
-    player,
-    heroMint,
-    expeditionType,
-    tier,
-    strikes,
-    bump,
-    score,
-    cityId,
-    startTime,
-    operativeUnit1,
-    operativeUnit2,
-    operativeUnit3,
-  };
+export function deserializeExpedition(data: Uint8Array): ExpeditionAccount {
+  return expeditionCodec.decode(data);
 }
 
 /** Parse ExpeditionAccount from account info */
@@ -108,8 +95,8 @@ export function expeditionHasHero(expedition: ExpeditionAccount): boolean {
 }
 
 /** Get total operatives locked */
-export function getExpeditionTotalOperatives(expedition: ExpeditionAccount): BN {
-  return expedition.operativeUnit1.add(expedition.operativeUnit2).add(expedition.operativeUnit3);
+export function getExpeditionTotalOperatives(expedition: ExpeditionAccount): bigint {
+  return (expedition.operativeUnit1 + expedition.operativeUnit2 + expedition.operativeUnit3);
 }
 
 /** Get expedition duration in seconds */
@@ -123,7 +110,7 @@ export function getExpeditionDurationSeconds(expedition: ExpeditionAccount): num
 
 /** Get expedition end time */
 export function getExpeditionEndTime(expedition: ExpeditionAccount): number {
-  return expedition.startTime.toNumber() + getExpeditionDurationSeconds(expedition);
+  return Number(expedition.startTime) + getExpeditionDurationSeconds(expedition);
 }
 
 /** Check if expedition is complete */
@@ -145,7 +132,7 @@ export function canExpeditionStrike(expedition: ExpeditionAccount): boolean {
 
 /** Get next strike window time */
 export function getExpeditionNextStrikeTime(expedition: ExpeditionAccount): number {
-  return expedition.startTime.toNumber() + expedition.strikes * SECONDS_PER_HOUR;
+  return Number(expedition.startTime) + expedition.strikes * SECONDS_PER_HOUR;
 }
 
 /** Check if strike is ready */

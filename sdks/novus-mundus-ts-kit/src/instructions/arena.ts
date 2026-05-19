@@ -12,10 +12,10 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u32, u64, i64, pubkey, array } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -39,14 +39,29 @@ export interface CreateSeasonAccounts {
 
 export interface CreateSeasonParams {
   /** Master prize pool in NOVI */
-  masterPrizePool: BN | number | bigint;
+  masterPrizePool: bigint | number;
   /** Daily prize pool */
-  dailyPrizePool: BN | number | bigint;
+  dailyPrizePool: bigint | number;
   /** Daily distribution cap */
-  dailyDistributionCap: BN | number | bigint;
+  dailyDistributionCap: bigint | number;
   /** Minimum level required to join */
   minLevelRequired: number;
 }
+
+/** CreateSeason args (29 bytes): season_id (u32), master_prize_pool (u64), daily_prize_pool (u64), daily_distribution_cap (u64), min_level_required (u8) */
+const createSeasonArgs = packed<{
+  seasonId: number;
+  masterPrizePool: bigint;
+  dailyPrizePool: bigint;
+  dailyDistributionCap: bigint;
+  minLevelRequired: number;
+}>([
+  ['seasonId', u32],
+  ['masterPrizePool', u64],
+  ['dailyPrizePool', u64],
+  ['dailyDistributionCap', u64],
+  ['minLevelRequired', u8],
+], 29);
 
 /** ~10,000 CU */
 /**
@@ -56,11 +71,11 @@ export interface CreateSeasonParams {
  * Season ID auto-increments from city's current arena_season_id.
  * Start/end times are calculated from current timestamp + ARENA_SEASON_DURATION.
  */
-export function createCreateSeasonInstruction(
+export async function createCreateSeasonInstruction(
   accounts: CreateSeasonAccounts,
   params: CreateSeasonParams
-): Instruction {
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+): Promise<Instruction> {
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
 
   // Rust account order (4 accounts):
   // 0. arena_season (WRITE)
@@ -74,20 +89,16 @@ export function createCreateSeasonInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data (29 bytes):
-  // - season_id (u32)
-  // - master_prize_pool (u64)
-  // - daily_prize_pool (u64)
-  // - daily_distribution_cap (u64)
-  // - min_level_required (u8)
-  const writer = new BufferWriter(29);
-  writer.writeU32(accounts.seasonId);
-  writer.writeU64(params.masterPrizePool);
-  writer.writeU64(params.dailyPrizePool);
-  writer.writeU64(params.dailyDistributionCap);
-  writer.writeU8(params.minLevelRequired);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_CREATE_SEASON, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_CREATE_SEASON,
+    createSeasonArgs.encode({
+      seasonId: accounts.seasonId,
+      masterPrizePool: BigInt(params.masterPrizePool),
+      dailyPrizePool: BigInt(params.dailyPrizePool),
+      dailyDistributionCap: BigInt(params.dailyDistributionCap),
+      minLevelRequired: params.minLevelRequired,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -105,6 +116,11 @@ export interface JoinSeasonAccounts {
   seasonId: number;
 }
 
+/** season_id-only args (4 bytes): season_id (u32) — shared by join/claim-daily/claim-master */
+const seasonIdArgs = packed<{ seasonId: number }>([
+  ['seasonId', u32],
+], 4);
+
 /** ~30,000 CU */
 /**
  * Join an arena season.
@@ -112,13 +128,13 @@ export interface JoinSeasonAccounts {
  * Creates participant and loadout accounts.
  * Player must meet minimum level requirement.
  */
-export function createJoinSeasonInstruction(
+export async function createJoinSeasonInstruction(
   accounts: JoinSeasonAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const [loadout] = await deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. arena_season (WRITE)
@@ -136,11 +152,10 @@ export function createJoinSeasonInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
-  writer.writeU32(accounts.seasonId);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_JOIN_SEASON, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_JOIN_SEASON,
+    seasonIdArgs.encode({ seasonId: accounts.seasonId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -158,14 +173,31 @@ export interface UpdateLoadoutParams {
   /** Hero NFT mint (or default/zero pubkey for no hero) */
   arenaHero: Address;
   /** Defensive units [unit1, unit2, unit3] */
-  defensiveUnits: [BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  defensiveUnits: [bigint | number, bigint | number, bigint | number];
   /** Weapons */
-  meleeWeapons: BN | number | bigint;
-  rangedWeapons: BN | number | bigint;
-  siegeWeapons: BN | number | bigint;
+  meleeWeapons: bigint | number;
+  rangedWeapons: bigint | number;
+  siegeWeapons: bigint | number;
   /** Armor */
-  armorPieces: BN | number | bigint;
+  armorPieces: bigint | number;
 }
+
+/** UpdateLoadout args (88 bytes): arena_hero (pubkey), defensive_units ([u64;3]), melee/ranged/siege/armor (u64) */
+const updateLoadoutArgs = packed<{
+  arenaHero: Address;
+  defensiveUnits: bigint[];
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armorPieces: bigint;
+}>([
+  ['arenaHero', pubkey],
+  ['defensiveUnits', array(u64, 3)],
+  ['meleeWeapons', u64],
+  ['rangedWeapons', u64],
+  ['siegeWeapons', u64],
+  ['armorPieces', u64],
+], 88);
 
 /** ~5,000 CU */
 /**
@@ -174,12 +206,12 @@ export interface UpdateLoadoutParams {
  * Loadout determines combat strength in arena battles.
  * Loadout is per-player, not per-season.
  */
-export function createUpdateLoadoutInstruction(
+export async function createUpdateLoadoutInstruction(
   accounts: UpdateLoadoutAccounts,
   params: UpdateLoadoutParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [loadout] = await deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. loadout_account (WRITE)
@@ -189,24 +221,17 @@ export function createUpdateLoadoutInstruction(
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
   ];
 
-  // Instruction data (88 bytes):
-  // - arena_hero: Pubkey (32 bytes)
-  // - defensive_units: [u64; 3] (24 bytes)
-  // - melee_weapons (u64)
-  // - ranged_weapons (u64)
-  // - siege_weapons (u64)
-  // - armor_pieces (u64)
-  const writer = new BufferWriter(88);
-  writer.writePubkey(params.arenaHero);
-  writer.writeU64(params.defensiveUnits[0]);
-  writer.writeU64(params.defensiveUnits[1]);
-  writer.writeU64(params.defensiveUnits[2]);
-  writer.writeU64(params.meleeWeapons);
-  writer.writeU64(params.rangedWeapons);
-  writer.writeU64(params.siegeWeapons);
-  writer.writeU64(params.armorPieces);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_UPDATE_LOADOUT, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_UPDATE_LOADOUT,
+    updateLoadoutArgs.encode({
+      arenaHero: params.arenaHero,
+      defensiveUnits: params.defensiveUnits.map((u) => BigInt(u)),
+      meleeWeapons: BigInt(params.meleeWeapons),
+      rangedWeapons: BigInt(params.rangedWeapons),
+      siegeWeapons: BigInt(params.siegeWeapons),
+      armorPieces: BigInt(params.armorPieces),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -238,10 +263,21 @@ export interface ChallengePlayerAccounts {
 
 export interface ChallengePlayerParams {
   /** Unique match ID from matchmaker */
-  matchId: BN | number | bigint;
+  matchId: bigint | number;
   /** When match was assigned */
-  matchTimestamp: BN | number | bigint;
+  matchTimestamp: bigint | number;
 }
+
+/** ChallengePlayer args (20 bytes): match_id (u64), match_timestamp (i64), season_id (u32) */
+const challengePlayerArgs = packed<{
+  matchId: bigint;
+  matchTimestamp: bigint;
+  seasonId: number;
+}>([
+  ['matchId', u64],
+  ['matchTimestamp', i64],
+  ['seasonId', u32],
+], 20);
 
 /** ~40,000 CU */
 /**
@@ -251,17 +287,17 @@ export interface ChallengePlayerParams {
  * ELO-based matchmaking affects point gains/losses.
  * Battle limit: 10 battles per rolling 24h window.
  */
-export function createChallengePlayerInstruction(
+export async function createChallengePlayerInstruction(
   accounts: ChallengePlayerAccounts,
   params: ChallengePlayerParams
-): Instruction {
-  const [challengerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.challenger);
-  const [defenderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.defenderAuthority);
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [challengerParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, challengerPlayer);
-  const [defenderParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, defenderPlayer);
-  const [challengerLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, challengerPlayer);
-  const [defenderLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, defenderPlayer);
+): Promise<Instruction> {
+  const [challengerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.challenger);
+  const [defenderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.defenderAuthority);
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [challengerParticipant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, challengerPlayer);
+  const [defenderParticipant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, defenderPlayer);
+  const [challengerLoadout] = await deriveArenaLoadoutPda(accounts.gameEngine, challengerPlayer);
+  const [defenderLoadout] = await deriveArenaLoadoutPda(accounts.gameEngine, defenderPlayer);
 
   // Rust account order (14 accounts):
   // 0. challenger_authority (SIGNER)
@@ -295,16 +331,14 @@ export function createChallengePlayerInstruction(
     { pubkey: season, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data (20 bytes):
-  // - match_id (u64)
-  // - match_timestamp (i64)
-  // - season_id (u32)
-  const writer = new BufferWriter(20);
-  writer.writeU64(params.matchId);
-  writer.writeI64(params.matchTimestamp);
-  writer.writeU32(accounts.seasonId);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_CHALLENGE_PLAYER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_CHALLENGE_PLAYER,
+    challengePlayerArgs.encode({
+      matchId: BigInt(params.matchId),
+      matchTimestamp: BigInt(params.matchTimestamp),
+      seasonId: accounts.seasonId,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -330,14 +364,14 @@ export interface ClaimArenaDailyRewardAccounts {
  * Based on participation and wins that day.
  * Requires minimum 5 battles in rolling 24h window.
  */
-export function createClaimArenaDailyRewardInstruction(
+export async function createClaimArenaDailyRewardInstruction(
   accounts: ClaimArenaDailyRewardAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [noviMint] = deriveNoviMintPda();
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)
@@ -359,11 +393,10 @@ export function createClaimArenaDailyRewardInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
-  writer.writeU32(accounts.seasonId);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_CLAIM_DAILY_REWARD, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_CLAIM_DAILY_REWARD,
+    seasonIdArgs.encode({ seasonId: accounts.seasonId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -389,14 +422,14 @@ export interface ClaimMasterRewardAccounts {
  * Only for top 10 leaderboard finishers.
  * Must be claimed within claim deadline.
  */
-export function createClaimMasterRewardInstruction(
+export async function createClaimMasterRewardInstruction(
   accounts: ClaimMasterRewardAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [noviMint] = deriveNoviMintPda();
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)
@@ -418,11 +451,10 @@ export function createClaimMasterRewardInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
-  writer.writeU32(accounts.seasonId);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_CLAIM_MASTER_REWARD, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_CLAIM_MASTER_REWARD,
+    seasonIdArgs.encode({ seasonId: accounts.seasonId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -440,6 +472,12 @@ export interface CloseSeasonAccounts {
   cityId: number;
 }
 
+/** CloseSeason args (6 bytes): season_id (u32), city_id (u16) */
+const closeSeasonArgs = packed<{ seasonId: number; cityId: number }>([
+  ['seasonId', u32],
+  ['cityId', u16],
+], 6);
+
 /** ~5,000 CU */
 /**
  * Close an arena season.
@@ -450,11 +488,11 @@ export interface CloseSeasonAccounts {
  * - Season is 4+ behind the city's current arena_season_id
  * Rent is returned to the season authority.
  */
-export function createCloseSeasonInstruction(
+export async function createCloseSeasonInstruction(
   accounts: CloseSeasonAccounts
-): Instruction {
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
+): Promise<Instruction> {
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
 
   // Rust account order (3 accounts):
   // 0. arena_season (WRITE)
@@ -466,12 +504,10 @@ export function createCloseSeasonInstruction(
     { pubkey: accounts.seasonAuthority, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: season_id (u32), city_id (u16) = 6 bytes
-  const writer = new BufferWriter(6);
-  writer.writeU32(accounts.seasonId);
-  writer.writeU16(accounts.cityId);
-
-  const data = createInstructionData(DISCRIMINATORS.ARENA_CLOSE_SEASON, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ARENA_CLOSE_SEASON,
+    closeSeasonArgs.encode({ seasonId: accounts.seasonId, cityId: accounts.cityId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

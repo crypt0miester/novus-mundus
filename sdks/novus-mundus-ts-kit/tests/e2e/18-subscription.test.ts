@@ -61,7 +61,7 @@ describe('Subscription System', () => {
   });
 
   // Helper to create subscription instruction with default accounts
-  function createSubIx(player: TestPlayer, tier: number) {
+  async function createSubIx(player: TestPlayer, tier: number) {
     return createPurchaseSubscriptionInstruction(
       {
         gameEngine: ctx.gameEngine,
@@ -80,28 +80,28 @@ describe('Subscription System', () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createSubIx(player, 1);
+      const ix = await createSubIx(player, 1);
       await sendInstructions(ctx.svm, [ix], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Expert);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
       // Expert tier grants 1,500,000 cash on purchase
-      const cashDelta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
+      const cashDelta = Number(after!.cashOnHand) - Number(before!.cashOnHand);
       expect(cashDelta).toBe(1_500_000);
     });
 
     it('should purchase Epic subscription (tier 2)', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createSubIx(player, 2);
+      const ix = await createSubIx(player, 2);
       await sendInstructions(ctx.svm, [ix], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Epic);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
     });
 
     it('should purchase Legendary subscription (tier 3)', async () => {
@@ -110,19 +110,19 @@ describe('Subscription System', () => {
       // Legendary costs $250 (~2.5 SOL) — airdrop extra to cover it
       ctx.svm.airdrop(player.publicKey, lamports(BigInt(5 * LAMPORTS_PER_SOL)));
 
-      const ix = createSubIx(player, 3);
+      const ix = await createSubIx(player, 3);
       await sendInstructions(ctx.svm, [ix], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Legendary);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
     });
 
     it('should reject invalid tier', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createSubIx(player, 99);
+      const ix = await createSubIx(player, 99);
 
       await expectTransactionToFail(
         ctx.svm,
@@ -136,7 +136,7 @@ describe('Subscription System', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Tier 0 (Rookie) costs $5 and grants bonuses on purchase
-      const ix = createSubIx(player, 0);
+      const ix = await createSubIx(player, 0);
       await sendInstructions(ctx.svm, [ix], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
@@ -144,11 +144,11 @@ describe('Subscription System', () => {
       // Tier stays Rookie
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Rookie);
       // But expiry is set (30 days) and bonuses granted
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
       // Rookie tier grants: cash=1M, du1=10k, op1=30k
-      expect(after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber()).toBe(1_000_000);
-      expect(after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber()).toBe(10_000);
-      expect(after!.operativeUnit1.toNumber() - before!.operativeUnit1.toNumber()).toBe(30_000);
+      expect(Number(after!.cashOnHand) - Number(before!.cashOnHand)).toBe(1_000_000);
+      expect(Number(after!.defensiveUnit1) - Number(before!.defensiveUnit1)).toBe(10_000);
+      expect(Number(after!.operativeUnit1) - Number(before!.operativeUnit1)).toBe(30_000);
     });
 
     it('should extend existing subscription', async () => {
@@ -157,21 +157,21 @@ describe('Subscription System', () => {
       // First purchase
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
       const afterFirst = await fetchPlayer(ctx.svm, player.playerPda);
-      const firstExpiry = afterFirst!.subscriptionEnd.toNumber();
+      const firstExpiry = Number(afterFirst!.subscriptionEnd);
       expect(firstExpiry).toBeGreaterThan(0);
 
       // Second purchase extends from current expiry
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
       const afterSecond = await fetchPlayer(ctx.svm, player.playerPda);
-      const secondExpiry = afterSecond!.subscriptionEnd.toNumber();
+      const secondExpiry = Number(afterSecond!.subscriptionEnd);
 
       // Should be ~30 days longer than first expiry
       const extension = secondExpiry - firstExpiry;
@@ -185,7 +185,7 @@ describe('Subscription System', () => {
       // Buy Expert (tier 1)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
       const afterExpert = await fetchPlayer(ctx.svm, player.playerPda);
@@ -198,14 +198,14 @@ describe('Subscription System', () => {
       // Upgrade to Epic (tier 2)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
       const afterEpic = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterEpic!.subscriptionTier).toBe(SubscriptionTier.Epic);
       // Expiry extends from current expiry, not reset
-      expect(afterEpic!.subscriptionEnd.toNumber()).toBeGreaterThan(
-        afterExpert!.subscriptionEnd.toNumber()
+      expect(Number(afterEpic!.subscriptionEnd)).toBeGreaterThan(
+        Number(afterExpert!.subscriptionEnd)
       );
     });
   });
@@ -220,12 +220,12 @@ describe('Subscription System', () => {
       // Epic tier grants 3,000,000 cash
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      const delta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
+      const delta = Number(after!.cashOnHand) - Number(before!.cashOnHand);
       expect(delta).toBe(3_000_000);
     });
 
@@ -236,14 +236,14 @@ describe('Subscription System', () => {
       // Epic tier: du1=28k, du2=28k, du3=14k
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber()).toBe(28_000);
-      expect(after!.defensiveUnit2.toNumber() - before!.defensiveUnit2.toNumber()).toBe(28_000);
-      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(14_000);
+      expect(Number(after!.defensiveUnit1) - Number(before!.defensiveUnit1)).toBe(28_000);
+      expect(Number(after!.defensiveUnit2) - Number(before!.defensiveUnit2)).toBe(28_000);
+      expect(Number(after!.defensiveUnit3) - Number(before!.defensiveUnit3)).toBe(14_000);
     });
 
     it('should grant operative units', async () => {
@@ -253,14 +253,14 @@ describe('Subscription System', () => {
       // Epic tier: op1=84k, op2=56k, op3=28k
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.operativeUnit1.toNumber() - before!.operativeUnit1.toNumber()).toBe(84_000);
-      expect(after!.operativeUnit2.toNumber() - before!.operativeUnit2.toNumber()).toBe(56_000);
-      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(28_000);
+      expect(Number(after!.operativeUnit1) - Number(before!.operativeUnit1)).toBe(84_000);
+      expect(Number(after!.operativeUnit2) - Number(before!.operativeUnit2)).toBe(56_000);
+      expect(Number(after!.operativeUnit3) - Number(before!.operativeUnit3)).toBe(28_000);
     });
 
     it('should grant equipment', async () => {
@@ -270,17 +270,17 @@ describe('Subscription System', () => {
       // Expert tier: melee=32k, ranged=8k, siege=2k, armor=8k, produce=500k, vehicles=500
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.meleeWeapons.toNumber() - before!.meleeWeapons.toNumber()).toBe(32_000);
-      expect(after!.rangedWeapons.toNumber() - before!.rangedWeapons.toNumber()).toBe(8_000);
-      expect(after!.siegeWeapons.toNumber() - before!.siegeWeapons.toNumber()).toBe(2_000);
-      expect(after!.armorPieces.toNumber() - before!.armorPieces.toNumber()).toBe(8_000);
-      expect(after!.produce.toNumber() - before!.produce.toNumber()).toBe(500_000);
-      expect(after!.vehicles.toNumber() - before!.vehicles.toNumber()).toBe(500);
+      expect(Number(after!.meleeWeapons) - Number(before!.meleeWeapons)).toBe(32_000);
+      expect(Number(after!.rangedWeapons) - Number(before!.rangedWeapons)).toBe(8_000);
+      expect(Number(after!.siegeWeapons) - Number(before!.siegeWeapons)).toBe(2_000);
+      expect(Number(after!.armorPieces) - Number(before!.armorPieces)).toBe(8_000);
+      expect(Number(after!.produce) - Number(before!.produce)).toBe(500_000);
+      expect(Number(after!.vehicles) - Number(before!.vehicles)).toBe(500);
     });
 
     it('should grant reputation', async () => {
@@ -290,12 +290,12 @@ describe('Subscription System', () => {
       // Expert tier grants 250 reputation
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      const repDelta = after!.reputation.toNumber() - before!.reputation.toNumber();
+      const repDelta = Number(after!.reputation) - Number(before!.reputation);
       expect(repDelta).toBe(250);
     });
 
@@ -307,7 +307,7 @@ describe('Subscription System', () => {
       // XP grant may trigger level-ups which consume currentXp
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
@@ -315,7 +315,7 @@ describe('Subscription System', () => {
       // Verify progression: either level increased or remaining XP increased
       expect(
         after!.level > before!.level ||
-        after!.currentXp.toNumber() > before!.currentXp.toNumber()
+        Number(after!.currentXp) > Number(before!.currentXp)
       ).toBe(true);
     });
 
@@ -326,21 +326,21 @@ describe('Subscription System', () => {
       // Purchase Expert twice — bonuses stack
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Cash should be 2× Expert bonus (2 × 1,500,000 = 3,000,000)
-      const cashDelta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
+      const cashDelta = Number(after!.cashOnHand) - Number(before!.cashOnHand);
       expect(cashDelta).toBe(3_000_000);
       // du1 should be 2× Expert bonus (2 × 16,000 = 32,000)
-      const du1Delta = after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber();
+      const du1Delta = Number(after!.defensiveUnit1) - Number(before!.defensiveUnit1);
       expect(du1Delta).toBe(32_000);
     }, 15_000);
   });
@@ -354,7 +354,7 @@ describe('Subscription System', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       expect(account!.subscriptionTier).toBe(SubscriptionTier.Rookie);
-      expect(account!.subscriptionEnd.toNumber()).toBe(0);
+      expect(Number(account!.subscriptionEnd)).toBe(0);
     });
 
     it('should scale bonuses with tier', async () => {
@@ -367,14 +367,14 @@ describe('Subscription System', () => {
       // Player1 gets Expert (tier 1)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player1, 1)],
+        [await createSubIx(player1, 1)],
         [player1.keypair]
       );
 
       // Player2 gets Epic (tier 2)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player2, 2)],
+        [await createSubIx(player2, 2)],
         [player2.keypair]
       );
 
@@ -382,13 +382,13 @@ describe('Subscription System', () => {
       const after2 = await fetchPlayer(ctx.svm, player2.playerPda);
 
       // Epic grants more cash than Expert (3M vs 1.5M)
-      const cash1 = after1!.cashOnHand.toNumber() - before1!.cashOnHand.toNumber();
-      const cash2 = after2!.cashOnHand.toNumber() - before2!.cashOnHand.toNumber();
+      const cash1 = Number(after1!.cashOnHand) - Number(before1!.cashOnHand);
+      const cash2 = Number(after2!.cashOnHand) - Number(before2!.cashOnHand);
       expect(cash2).toBeGreaterThan(cash1);
 
       // Epic grants more tier-3 defensive units than Expert (14k vs 8k)
-      const du3_1 = after1!.defensiveUnit3.toNumber() - before1!.defensiveUnit3.toNumber();
-      const du3_2 = after2!.defensiveUnit3.toNumber() - before2!.defensiveUnit3.toNumber();
+      const du3_1 = Number(after1!.defensiveUnit3) - Number(before1!.defensiveUnit3);
+      const du3_2 = Number(after2!.defensiveUnit3) - Number(before2!.defensiveUnit3);
       expect(du3_1).toBe(8_000);
       expect(du3_2).toBe(14_000);
     });
@@ -400,14 +400,14 @@ describe('Subscription System', () => {
       // Epic (tier 2) grants all 3 defensive and operative unit types
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Epic grants du3=14k, op3=28k
-      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(14_000);
-      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(28_000);
+      expect(Number(after!.defensiveUnit3) - Number(before!.defensiveUnit3)).toBe(14_000);
+      expect(Number(after!.operativeUnit3) - Number(before!.operativeUnit3)).toBe(28_000);
     });
   });
 
@@ -420,12 +420,12 @@ describe('Subscription System', () => {
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
       const account = await fetchPlayer(ctx.svm, player.playerPda);
-      const expiry = account!.subscriptionEnd.toNumber();
+      const expiry = Number(account!.subscriptionEnd);
       // Expiry should be ~30 days from now (allow small clock drift)
       expect(expiry).toBeGreaterThanOrEqual(beforeTime + THIRTY_DAYS - 5);
       expect(expiry).toBeLessThanOrEqual(beforeTime + THIRTY_DAYS + 10);
@@ -437,7 +437,7 @@ describe('Subscription System', () => {
       // Purchase active subscription
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
@@ -454,8 +454,8 @@ describe('Subscription System', () => {
       const afterDowngrade = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterDowngrade!.subscriptionTier).toBe(SubscriptionTier.Expert);
       // Expiry unchanged
-      expect(afterDowngrade!.subscriptionEnd.toNumber()).toBe(
-        beforeDowngrade!.subscriptionEnd.toNumber()
+      expect(Number(afterDowngrade!.subscriptionEnd)).toBe(
+        Number(beforeDowngrade!.subscriptionEnd)
       );
     });
 
@@ -495,7 +495,7 @@ describe('Subscription System', () => {
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
@@ -503,7 +503,7 @@ describe('Subscription System', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account!.subscriptionTier).toBe(SubscriptionTier.Epic);
       const now = await getCurrentTimestamp(ctx.svm);
-      expect(account!.subscriptionEnd.toNumber()).toBeGreaterThan(now);
+      expect(Number(account!.subscriptionEnd)).toBeGreaterThan(now);
     });
   });
 
@@ -517,7 +517,7 @@ describe('Subscription System', () => {
       // Expert tier costs $10 in SOL
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
@@ -536,7 +536,7 @@ describe('Subscription System', () => {
       // Rookie tier costs $5 — SOL is deducted
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 0)],
+        [await createSubIx(player, 0)],
         [player.keypair]
       );
 
@@ -556,14 +556,14 @@ describe('Subscription System', () => {
       // Player1 buys Expert ($10)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player1, 1)],
+        [await createSubIx(player1, 1)],
         [player1.keypair]
       );
 
       // Player2 buys Epic ($50)
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player2, 2)],
+        [await createSubIx(player2, 2)],
         [player2.keypair]
       );
 
@@ -582,14 +582,14 @@ describe('Subscription System', () => {
       // Buy Epic (tier 2) first
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 
       // Attempt to "buy" Expert (tier 1) — rejected as downgrade
       await expectTransactionToFail(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
@@ -602,7 +602,7 @@ describe('Subscription System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Tier 99 doesn't exist (valid range 0-3)
-      const ix = createSubIx(player, 99);
+      const ix = await createSubIx(player, 99);
 
       await expectTransactionToFail(
         ctx.svm,
@@ -620,21 +620,21 @@ describe('Subscription System', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
       expect(before!.subscriptionTier).toBe(SubscriptionTier.Rookie);
 
-      await sendInstructions(ctx.svm, [createSubIx(player, 1)], [player.keypair]);
+      await sendInstructions(ctx.svm, [await createSubIx(player, 1)], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Expert);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
     });
 
     it('should set tier and expiry for Epic (tier 2)', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      await sendInstructions(ctx.svm, [createSubIx(player, 2)], [player.keypair]);
+      await sendInstructions(ctx.svm, [await createSubIx(player, 2)], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Epic);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
     });
 
     it('should set tier and expiry for Legendary (tier 3)', async () => {
@@ -643,25 +643,25 @@ describe('Subscription System', () => {
       // Legendary costs $250 (~2.5 SOL) — airdrop extra to cover it
       ctx.svm.airdrop(player.publicKey, lamports(BigInt(5 * LAMPORTS_PER_SOL)));
 
-      await sendInstructions(ctx.svm, [createSubIx(player, 3)], [player.keypair]);
+      await sendInstructions(ctx.svm, [await createSubIx(player, 3)], [player.keypair]);
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Legendary);
-      expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
+      expect(Number(after!.subscriptionEnd)).toBeGreaterThan(0);
     });
 
     it('should extend expiry when purchasing same tier twice', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // First purchase
-      await sendInstructions(ctx.svm, [createSubIx(player, 1)], [player.keypair]);
+      await sendInstructions(ctx.svm, [await createSubIx(player, 1)], [player.keypair]);
       const afterFirst = await fetchPlayer(ctx.svm, player.playerPda);
-      const firstExpiry = afterFirst!.subscriptionEnd.toNumber();
+      const firstExpiry = Number(afterFirst!.subscriptionEnd);
 
       // Second purchase extends from current expiry
-      await sendInstructions(ctx.svm, [createSubIx(player, 1)], [player.keypair]);
+      await sendInstructions(ctx.svm, [await createSubIx(player, 1)], [player.keypair]);
       const afterSecond = await fetchPlayer(ctx.svm, player.playerPda);
-      const secondExpiry = afterSecond!.subscriptionEnd.toNumber();
+      const secondExpiry = Number(afterSecond!.subscriptionEnd);
 
       // Should be ~30 days longer than first expiry
       const extension = secondExpiry - firstExpiry;
@@ -673,7 +673,7 @@ describe('Subscription System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Tier 5 doesn't exist (valid range 0-3)
-      const ix = createSubIx(player, 5);
+      const ix = await createSubIx(player, 5);
 
       await expectTransactionToFail(
         ctx.svm,
@@ -691,14 +691,14 @@ describe('Subscription System', () => {
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair]
       );
 
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       const now = await getCurrentTimestamp(ctx.svm);
       // Expiry is in the future — subscription is active
-      expect(account!.subscriptionEnd.toNumber()).toBeGreaterThan(now);
+      expect(Number(account!.subscriptionEnd)).toBeGreaterThan(now);
       expect(account!.subscriptionTier).toBe(SubscriptionTier.Expert);
     });
 
@@ -707,7 +707,7 @@ describe('Subscription System', () => {
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair]
       );
 

@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { generateKeyPairSigner, isAddress, lamports } from '@solana/kit';
-import BN from 'bn.js';
 
 import {
   createInitPlayerInstruction,
@@ -117,7 +116,7 @@ describe('Player Lifecycle', () => {
       });
 
       // Try to initialize again
-      const ix = createInitPlayerInstruction({
+      const ix = await createInitPlayerInstruction({
         owner: player.publicKey,
         gameEngine: ctx.gameEngine,
         startingCityId: 1,
@@ -131,13 +130,13 @@ describe('Player Lifecycle', () => {
 
     it('should reject initialization with invalid city', async () => {
       const keypair = await generateKeyPairSigner();
-      const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.address);
+      const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.address);
 
       // Airdrop some SOL
       ctx.svm.airdrop(keypair.address, lamports(BigInt(1_000_000_000)));
 
       // Try to initialize with non-existent city (999)
-      const ix = createInitPlayerInstruction({
+      const ix = await createInitPlayerInstruction({
         owner: keypair.address,
         gameEngine: ctx.gameEngine,
         startingCityId: 999,
@@ -294,7 +293,7 @@ describe('Player Lifecycle', () => {
       assertPlayerProtected(account!, currentTime);
 
       // Protection should be set for ~24 hours in the future
-      const protectionEnd = account!.newPlayerProtectionUntil.toNumber();
+      const protectionEnd = Number(account!.newPlayerProtectionUntil);
       const expectedEnd = currentTime + SECONDS_PER_DAY;
 
       // Allow some tolerance (within 1 hour)
@@ -343,7 +342,7 @@ describe('Player Lifecycle', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
-      const createdAt = account!.createdAt.toNumber();
+      const createdAt = Number(account!.createdAt);
       expect(createdAt).toBeGreaterThanOrEqual(beforeTime - 10);
       expect(createdAt).toBeLessThanOrEqual(afterTime + 10);
     });
@@ -396,14 +395,14 @@ describe('Player Lifecycle', () => {
   describe('PDA Derivation', () => {
     it('should derive correct player PDA', async () => {
       const keypair = await generateKeyPairSigner();
-      const [derivedPda, bump] = derivePlayerPda(ctx.gameEngine, keypair.address);
+      const [derivedPda, bump] = await derivePlayerPda(ctx.gameEngine, keypair.address);
 
       // PDA should be a well-formed address
       expect(isAddress(derivedPda)).toBe(true);
       expect(bump).toBeGreaterThanOrEqual(0);
 
       // Same owner should always derive same PDA
-      const [derivedPda2] = derivePlayerPda(ctx.gameEngine, keypair.address);
+      const [derivedPda2] = await derivePlayerPda(ctx.gameEngine, keypair.address);
       expect(derivedPda === derivedPda2).toBe(true);
     });
 
@@ -411,15 +410,15 @@ describe('Player Lifecycle', () => {
       const keypair1 = await generateKeyPairSigner();
       const keypair2 = await generateKeyPairSigner();
 
-      const [pda1] = derivePlayerPda(ctx.gameEngine, keypair1.address);
-      const [pda2] = derivePlayerPda(ctx.gameEngine, keypair2.address);
+      const [pda1] = await derivePlayerPda(ctx.gameEngine, keypair1.address);
+      const [pda2] = await derivePlayerPda(ctx.gameEngine, keypair2.address);
 
       expect(pda1 === pda2).toBe(false);
     });
 
     it('should derive correct city PDA', async () => {
       for (const city of CITIES) {
-        const [cityPda] = deriveCityPda(ctx.gameEngine, city.id);
+        const [cityPda] = await deriveCityPda(ctx.gameEngine, city.id);
         expect(isAddress(cityPda)).toBe(true);
 
         // Verify it matches what we stored in context

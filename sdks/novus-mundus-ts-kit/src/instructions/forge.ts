@@ -12,7 +12,8 @@
 import type { Address, Instruction } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8 } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -45,12 +46,12 @@ export interface InitializeForgeAccounts {
  * 3. [writable] crafted_equipment: CraftedEquipmentAccount PDA (to be created)
  * 4. [] system_program: System program
  */
-export function createInitializeForgeInstruction(
+export async function createInitializeForgeInstruction(
   accounts: InitializeForgeAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -81,6 +82,12 @@ export interface StartCraftParams {
   qualityTier: QualityTier | number;
 }
 
+/** StartCraft args: equipment_type (u8), quality_tier (u8) */
+const startCraftArgs = packed<{ equipmentType: number; qualityTier: number }>([
+  ['equipmentType', u8],
+  ['qualityTier', u8],
+], 2);
+
 /** ~10,000 CU */
 /**
  * Start a staged tempering craft.
@@ -88,16 +95,16 @@ export interface StartCraftParams {
  * Initiates the craft process. Requires Forge building.
  * Each tier requires multiple "tempering stages".
  */
-export function createStartCraftInstruction(
+export async function createStartCraftInstruction(
   accounts: StartCraftAccounts,
   params: StartCraftParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -109,11 +116,13 @@ export function createStartCraftInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
-  writer.writeU8(typeof params.equipmentType === 'number' ? params.equipmentType : params.equipmentType);
-  writer.writeU8(typeof params.qualityTier === 'number' ? params.qualityTier : params.qualityTier);
-
-  const data = createInstructionData(DISCRIMINATORS.FORGE_START_CRAFT, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.FORGE_START_CRAFT,
+    startCraftArgs.encode({
+      equipmentType: params.equipmentType,
+      qualityTier: params.qualityTier,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -134,12 +143,12 @@ export interface StrikeAccounts {
  * Must be called within the active tempering window.
  * Missing a window fails the craft (deterministic, skill-based).
  */
-export function createStrikeInstruction(
+export async function createStrikeInstruction(
   accounts: StrikeAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -173,11 +182,11 @@ export interface AbandonCraftAccounts {
  *
  * Returns partial materials based on progress.
  */
-export function createAbandonCraftInstruction(
+export async function createAbandonCraftInstruction(
   accounts: AbandonCraftAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -210,18 +219,24 @@ export interface EquipParams {
   qualityTier: QualityTier | number;
 }
 
+/** Equip args: equipment_type (u8), quality_tier (u8) */
+const equipArgs = packed<{ equipmentType: number; qualityTier: number }>([
+  ['equipmentType', u8],
+  ['qualityTier', u8],
+], 2);
+
 /** ~5,000 CU */
 /**
  * Equip a crafted item.
  *
  * Sets the crafted equipment as active for combat.
  */
-export function createEquipInstruction(
+export async function createEquipInstruction(
   accounts: EquipAccounts,
   params: EquipParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -229,11 +244,13 @@ export function createEquipInstruction(
     { pubkey: craftedEquipment, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(2);
-  writer.writeU8(typeof params.equipmentType === 'number' ? params.equipmentType : params.equipmentType);
-  writer.writeU8(typeof params.qualityTier === 'number' ? params.qualityTier : params.qualityTier);
-
-  const data = createInstructionData(DISCRIMINATORS.FORGE_EQUIP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.FORGE_EQUIP,
+    equipArgs.encode({
+      equipmentType: params.equipmentType,
+      qualityTier: params.qualityTier,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

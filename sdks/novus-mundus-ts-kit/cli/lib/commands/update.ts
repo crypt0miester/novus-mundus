@@ -25,10 +25,10 @@ async function updateCastleConfig(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const castle of CASTLES) {
-    const [castlePda] = deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
+    const [castlePda] = await deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
 
     // Update castle name from data file
-    const ix = createUpdateCastleConfigInstruction(
+    const ix = await createUpdateCastleConfigInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,

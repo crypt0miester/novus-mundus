@@ -8,10 +8,10 @@
  * - City Account
  */
 
-import { address, type Address, type Instruction } from '@solana/kit';
+import { address, getProgramDerivedAddress, type Address, type Instruction, type ReadonlyUint8Array } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { addressBytes, findProgramAddressSync } from '../crypto';
+import { addressBytes } from '../crypto';
 
 const SYSVAR_RENT_PUBKEY = address('SysvarRent111111111111111111111111111111111');
 
@@ -24,13 +24,16 @@ export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = address(
  * Derive the program-data PDA for this program.
  * Layout: `find_program_address([PROGRAM_ID], BPF_LOADER_UPGRADEABLE)`.
  */
-export function deriveProgramDataPda(): [Address, number] {
-  return findProgramAddressSync(
-    [addressBytes(PROGRAM_ID)],
-    BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
-  );
+export async function deriveProgramDataPda(): Promise<[Address, number]> {
+  const [addr, bump] = await getProgramDerivedAddress({
+    programAddress: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
+    seeds: [addressBytes(PROGRAM_ID)],
+  });
+  return [addr, bump];
 }
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { concatBytes } from '../utils/bytes';
+import { packed, u8, u16, i8, i16, i64, f32, f64, fixedString } from '../utils/codec';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -81,13 +84,29 @@ export interface InitGameEngineParams {
  * - kingdom_start_time: i64 (8 bytes)
  * - registration_closes_at: i64 (8 bytes)
  */
-export function createInitGameEngineInstruction(
+const initGameEngineArgs = packed<{
+  kingdomId: number;
+  kingdomName: string;
+  theme: number;
+  kingdomStartTime: bigint;
+  registrationClosesAt: bigint;
+}>([
+  ['kingdomId', u16],
+  ['kingdomName', fixedString(32)],
+  ['theme', u8],
+  ['kingdomStartTime', i64],
+  ['registrationClosesAt', i64],
+], 51);
+
+export async function createInitGameEngineInstruction(
   accounts: InitGameEngineAccounts,
   params?: InitGameEngineParams
-): Instruction {
-  const [gameEngine] = deriveGameEnginePda(accounts.kingdomId);
-  const [noviMint] = deriveNoviMintPda();
-  const [programData] = deriveProgramDataPda();
+): Promise<Instruction> {
+  const [[gameEngine], [noviMint], [programData]] = await Promise.all([
+    deriveGameEnginePda(accounts.kingdomId),
+    deriveNoviMintPda(),
+    deriveProgramDataPda(),
+  ]);
 
   // Rust account order (8):
   // 0. [writable] game_engine: GameEngine PDA
@@ -112,32 +131,16 @@ export function createInitGameEngineInstruction(
   ];
 
   // Instruction data: 51 bytes
-  // - kingdom_id: u16 (2)
-  // - kingdom_name: [u8; 32] (32)
-  // - theme: u8 (1)
-  // - kingdom_start_time: i64 (8)
-  // - registration_closes_at: i64 (8)
-  const writer = new BufferWriter(51);
-
-  // kingdom_id
-  writer.writeU16(accounts.kingdomId);
-
-  // kingdom_name: [u8; 32] zero-padded
-  const kingdomName = params?.kingdomName || `Kingdom ${accounts.kingdomId}`;
-  const nameBytes = Buffer.from(kingdomName, 'utf8').subarray(0, 32);
-  writer.writeBytes(nameBytes);
-  writer.writeZeros(32 - nameBytes.length);
-
-  // theme
-  writer.writeU8(params?.theme ?? 3); // Default: Modern
-
-  // kingdom_start_time (0 = immediately)
-  writer.writeI64(params?.kingdomStartTime ?? 0);
-
-  // registration_closes_at (0 = never)
-  writer.writeI64(params?.registrationClosesAt ?? 0);
-
-  const data = createInstructionData(DISCRIMINATORS.INIT_GAME_ENGINE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.INIT_GAME_ENGINE,
+    initGameEngineArgs.encode({
+      kingdomId: accounts.kingdomId,
+      kingdomName: params?.kingdomName || `Kingdom ${accounts.kingdomId}`,
+      theme: params?.theme ?? 3, // Default: Modern
+      kingdomStartTime: BigInt(params?.kingdomStartTime ?? 0),
+      registrationClosesAt: BigInt(params?.registrationClosesAt ?? 0),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -173,15 +176,25 @@ export interface InitPlayerAccounts {
  * - 20 Produce, 1000 Cash
  * - 24-hour New Player Protection
  */
-export function createInitPlayerInstruction(
+const initPlayerArgs = packed<{
+  startingCityId: number;
+  cityLatitude: number;
+  cityLongitude: number;
+}>([
+  ['startingCityId', u16],
+  ['cityLatitude', f64],
+  ['cityLongitude', f64],
+], 18);
+
+export async function createInitPlayerInstruction(
   accounts: InitPlayerAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [startingCity] = deriveCityPda(accounts.gameEngine, accounts.startingCityId);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [startingCity] = await deriveCityPda(accounts.gameEngine, accounts.startingCityId);
 
   // Player's NOVI token ATA - owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Quantize city coordinates to grid (must match Rust: round(coord * 10000.0) as i32)
   const GRID_PRECISION = 10000.0;
@@ -189,10 +202,10 @@ export function createInitPlayerInstruction(
   const spawnGridLong = Math.round(accounts.cityLongitude * GRID_PRECISION);
 
   // Spawn location PDA derived from quantized spawn coordinates
-  const [spawnLocation] = deriveLocationPda(accounts.gameEngine, accounts.startingCityId, spawnGridLat, spawnGridLong);
+  const [spawnLocation] = await deriveLocationPda(accounts.gameEngine, accounts.startingCityId, spawnGridLat, spawnGridLong);
 
   // User account PDA - must be created before player init
-  const [user] = deriveUserPda(accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -209,12 +222,14 @@ export function createInitPlayerInstruction(
   ];
 
   // Instruction data: starting_city_id (u16) + spawn_lat (f64) + spawn_long (f64) = 18 bytes
-  const writer = new BufferWriter(18);
-  writer.writeU16(accounts.startingCityId);
-  writer.writeF64(accounts.cityLatitude);
-  writer.writeF64(accounts.cityLongitude);
-
-  const data = createInstructionData(DISCRIMINATORS.INIT_PLAYER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.INIT_PLAYER,
+    initPlayerArgs.encode({
+      startingCityId: accounts.startingCityId,
+      cityLatitude: accounts.cityLatitude,
+      cityLongitude: accounts.cityLongitude,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -246,14 +261,14 @@ export interface InitUserAccounts {
  * 6. [] token_program
  * 7. [] associated_token_program
  */
-export function createInitUserInstruction(
+export async function createInitUserInstruction(
   accounts: InitUserAccounts
-): Instruction {
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // User's NOVI token ATA - owned by UserAccount PDA
-  const userTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
@@ -319,11 +334,27 @@ export interface InitCityParams {
  * - [50..54] radius_km: f32
  * - [54] city_type: u8
  */
-export function createInitCityInstruction(
+const initCityArgs = packed<{
+  cityId: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radiusKm: number;
+  cityType: number;
+}>([
+  ['cityId', u16],
+  ['name', fixedString(32)],
+  ['latitude', f64],
+  ['longitude', f64],
+  ['radiusKm', f32],
+  ['cityType', u8],
+], 55);
+
+export async function createInitCityInstruction(
   accounts: InitCityAccounts,
   params: InitCityParams
-): Instruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+): Promise<Instruction> {
+  const [city] = await deriveCityPda(accounts.gameEngine, params.cityId);
 
   // Rust account order: dao_authority, city, game_engine, system_program
   const keys = [
@@ -334,29 +365,17 @@ export function createInitCityInstruction(
   ];
 
   // Fixed 55-byte instruction data per Rust
-  const writer = new BufferWriter(55);
-
-  // [0..2] city_id: u16
-  writer.writeU16(params.cityId);
-
-  // [2..34] name: [u8; 32] - fixed size, zero-padded
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
-  writer.writeBytes(nameBytes);
-  writer.writeZeros(32 - nameBytes.length);
-
-  // [34..42] latitude: f64
-  writer.writeF64(params.latitude);
-
-  // [42..50] longitude: f64
-  writer.writeF64(params.longitude);
-
-  // [50..54] radius_km: f32
-  writer.writeF32(params.radiusKm);
-
-  // [54] city_type: u8
-  writer.writeU8(params.cityType);
-
-  const data = createInstructionData(DISCRIMINATORS.INIT_CITY, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.INIT_CITY,
+    initCityArgs.encode({
+      cityId: params.cityId,
+      name: params.name,
+      latitude: params.latitude,
+      longitude: params.longitude,
+      radiusKm: params.radiusKm,
+      cityType: params.cityType,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -428,6 +447,25 @@ export interface BatchCitiesParams {
   cities: CityInfo[];
 }
 
+/** BatchCities header (3 bytes): start_city_id (u16) + count (u8). */
+const batchCitiesHeader = packed<{ startCityId: number; count: number }>([
+  ['startCityId', u16],
+  ['count', u8],
+], 3);
+
+/** Per-city fixed tail (21 bytes): lat (f64) + lon (f64) + radius (f32) + type (u8). */
+const batchCityTail = packed<{
+  lat: number;
+  lon: number;
+  radiusKm: number;
+  cityType: number;
+}>([
+  ['lat', f64],
+  ['lon', f64],
+  ['radiusKm', f32],
+  ['cityType', u8],
+], 21);
+
 /** ~5,000 CU */
 /**
  * Initialize multiple cities in a single transaction.
@@ -471,32 +509,29 @@ export function createBatchCitiesInstruction(
   // Add system program
   keys.push({ pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false });
 
-  // Calculate buffer size: header (3) + per city (1 + name_len + 8 + 8 + 4 + 1)
-  let bufSize = 3;
-  for (const city of params.cities) {
-    const nameBytes = Buffer.from(city.name, 'utf-8');
-    bufSize += 1 + nameBytes.length + 21; // name_len + name + lat + lon + radius + type
-  }
+  // Variable-length payload: header (start_city_id u16 + count u8) followed by
+  // per-city records (name_len u8 + name bytes + lat/lon/radius/type fixed tail).
+  const header = batchCitiesHeader.encode({ startCityId: params.startCityId, count });
 
-  const writer = new BufferWriter(bufSize);
-  writer.writeU16(params.startCityId);
-  writer.writeU8(count);
-
-  // Write each city's data
+  const chunks: Array<Uint8Array | ReadonlyUint8Array> = [header];
   for (const city of params.cities) {
-    const nameBytes = Buffer.from(city.name, 'utf-8');
+    const nameBytes = new TextEncoder().encode(city.name);
     if (nameBytes.length > 32) {
       throw new Error(`City name "${city.name}" exceeds 32 bytes`);
     }
-    writer.writeU8(nameBytes.length);
-    writer.writeBytes(nameBytes);
-    writer.writeF64(city.lat);
-    writer.writeF64(city.lon);
-    writer.writeF32(city.radiusKm);
-    writer.writeU8(city.cityType);
+    chunks.push(Uint8Array.of(nameBytes.length));
+    chunks.push(nameBytes);
+    chunks.push(
+      batchCityTail.encode({
+        lat: city.lat,
+        lon: city.lon,
+        radiusKm: city.radiusKm,
+        cityType: city.cityType,
+      }),
+    );
   }
 
-  const data = createInstructionData(DISCRIMINATORS.BATCH_CITIES, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.BATCH_CITIES, concatBytes(chunks));
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -575,35 +610,35 @@ export function createUpdateGameConfigInstruction(
   // IMPORTANT: buffers must be in bit order (caps=0, arena=7, expedition=8, ...)
   // because the on-chain code reads them sequentially by bit position.
   let updateFlags = 0;
-  const configBuffers: Buffer[] = [];
+  const configChunks: Array<Uint8Array | ReadonlyUint8Array> = [];
 
   if (params.capsConfig) {
     updateFlags |= UPDATE_FLAGS.CAPS;
-    configBuffers.push(serializeGameCaps(params.capsConfig));
+    configChunks.push(serializeGameCaps(params.capsConfig));
   }
   if (params.gameplayConfig) {
     updateFlags |= UPDATE_FLAGS.GAMEPLAY;
-    configBuffers.push(serializeGameplayConfig(params.gameplayConfig));
+    configChunks.push(serializeGameplayConfig(params.gameplayConfig));
   }
   if (params.arenaConfig) {
     updateFlags |= UPDATE_FLAGS.ARENA;
-    configBuffers.push(serializeArenaConfig(params.arenaConfig));
+    configChunks.push(serializeArenaConfig(params.arenaConfig));
   }
   if (params.expeditionConfig) {
     updateFlags |= UPDATE_FLAGS.EXPEDITION;
-    configBuffers.push(serializeExpeditionConfig(params.expeditionConfig));
+    configChunks.push(serializeExpeditionConfig(params.expeditionConfig));
   }
   if (params.dungeonConfig) {
     updateFlags |= UPDATE_FLAGS.DUNGEON;
-    configBuffers.push(serializeDungeonConfig(params.dungeonConfig));
+    configChunks.push(serializeDungeonConfig(params.dungeonConfig));
   }
   if (params.castleConfig) {
     updateFlags |= UPDATE_FLAGS.CASTLE;
-    configBuffers.push(serializeCastleConfig(params.castleConfig));
+    configChunks.push(serializeCastleConfig(params.castleConfig));
   }
   if (params.combatConfig) {
     updateFlags |= UPDATE_FLAGS.COMBAT;
-    configBuffers.push(serializeCombatConfig(params.combatConfig));
+    configChunks.push(serializeCombatConfig(params.combatConfig));
   }
 
   if (updateFlags === 0) {
@@ -611,9 +646,7 @@ export function createUpdateGameConfigInstruction(
   }
 
   // Instruction data: update_flags (u16) + concatenated config bytes
-  const flagsBuf = Buffer.alloc(2);
-  flagsBuf.writeUInt16LE(updateFlags);
-  const instructionPayload = Buffer.concat([flagsBuf, ...configBuffers]);
+  const instructionPayload = concatBytes([u16.codec.encode(updateFlags), ...configChunks]);
 
   const data = createInstructionData(DISCRIMINATORS.UPDATE_GAME_CONFIG, instructionPayload);
 
@@ -652,11 +685,11 @@ export interface SetTerrainParams {
  * - city_id: u16 (2 bytes)
  * - terrain payload: seed(4) + waterLine(1) + peakLine(1) + anchorCount(2) + version(1) + reserved(7) + anchors(N×8)
  */
-export function createSetTerrainInstruction(
+export async function createSetTerrainInstruction(
   accounts: SetTerrainAccounts,
   params: SetTerrainParams,
-): Instruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+): Promise<Instruction> {
+  const [city] = await deriveCityPda(accounts.gameEngine, params.cityId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -667,11 +700,11 @@ export function createSetTerrainInstruction(
 
   // city_id (2 bytes) + serialized terrain (header + anchors)
   const terrainBuf = serializeTerrain(params.terrain);
-  const writer = new BufferWriter(2 + terrainBuf.length);
-  writer.writeU16(params.cityId);
-  writer.writeBytes(terrainBuf);
 
-  const data = createInstructionData(DISCRIMINATORS.SET_TERRAIN, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.SET_TERRAIN,
+    concatBytes([u16.codec.encode(params.cityId), terrainBuf]),
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -694,6 +727,25 @@ export interface AppendTerrainParams {
   anchors: Anchor[];
 }
 
+/** Single terrain anchor (8 bytes): x/y (i16) + mass/lift (u8) + pushX/pushY (i8) + moisture (u8). */
+const anchorArgs = packed<{
+  x: number;
+  y: number;
+  mass: number;
+  lift: number;
+  pushX: number;
+  pushY: number;
+  moisture: number;
+}>([
+  ['x', i16],
+  ['y', i16],
+  ['mass', u8],
+  ['lift', u8],
+  ['pushX', i8],
+  ['pushY', i8],
+  ['moisture', u8],
+], ANCHOR_SIZE);
+
 /**
  * Append terrain anchors to an existing city account.
  * The city must already have terrain configured via set_terrain.
@@ -709,11 +761,11 @@ export interface AppendTerrainParams {
  * - city_id: u16 (2 bytes)
  * - anchors: N × 8 bytes (raw anchor data)
  */
-export function createAppendTerrainInstruction(
+export async function createAppendTerrainInstruction(
   accounts: AppendTerrainAccounts,
   params: AppendTerrainParams,
-): Instruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+): Promise<Instruction> {
+  const [city] = await deriveCityPda(accounts.gameEngine, params.cityId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -723,20 +775,22 @@ export function createAppendTerrainInstruction(
   ];
 
   // city_id (2 bytes) + raw anchor bytes (N × ANCHOR_SIZE)
-  const writer = new BufferWriter(2 + params.anchors.length * ANCHOR_SIZE);
-  writer.writeU16(params.cityId);
-
+  const chunks: Array<Uint8Array | ReadonlyUint8Array> = [u16.codec.encode(params.cityId)];
   for (const a of params.anchors) {
-    writer.writeI16(a.x);
-    writer.writeI16(a.y);
-    writer.writeU8(a.mass);
-    writer.writeU8(a.lift);
-    writer.writeI8(a.pushX);
-    writer.writeI8(a.pushY);
-    writer.writeU8(a.moisture ?? 128);
+    chunks.push(
+      anchorArgs.encode({
+        x: a.x,
+        y: a.y,
+        mass: a.mass,
+        lift: a.lift,
+        pushX: a.pushX,
+        pushY: a.pushY,
+        moisture: a.moisture ?? 128,
+      }),
+    );
   }
 
-  const data = createInstructionData(DISCRIMINATORS.APPEND_TERRAIN, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.APPEND_TERRAIN, concatBytes(chunks));
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

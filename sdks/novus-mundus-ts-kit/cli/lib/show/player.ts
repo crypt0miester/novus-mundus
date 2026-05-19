@@ -48,7 +48,7 @@ export async function showAllPlayers(client: NovusMundusClient, ctx: CLIContext)
   ];
 
   const rows = players
-    .sort((a, b) => b.account.networth.cmp(a.account.networth))
+    .sort((a, b) => (b.account.networth < a.account.networth ? -1 : b.account.networth > a.account.networth ? 1 : 0))
     .map(({ account: p }) => [
       p.name || dim('--'),
       String(p.level),
@@ -86,7 +86,7 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   log.info(section('Identity'));
   log.info(`  Level ${p.level} (${formatNum(p.currentXp)} XP)    Reputation: ${formatNum(p.reputation)}    Networth: ${formatNum(p.networth)}`);
   const tierName = TIER_NAMES[p.subscriptionTier] ?? 'Unknown';
-  const subExpiry = p.subscriptionEnd.toNumber() > 0 ? formatDate(p.subscriptionEnd) : dim('none');
+  const subExpiry = Number(p.subscriptionEnd) > 0 ? formatDate(p.subscriptionEnd) : dim('none');
   log.info(`  Subscription: ${tierName} (expires ${subExpiry})    City: ${cityName(p.currentCity)} (ID ${p.currentCity})`);
 
   // Location
@@ -144,8 +144,8 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   }
 
   // Materials
-  const matTotal = p.commonMaterials.add(p.uncommonMaterials).add(p.rareMaterials).add(p.epicMaterials).add(p.legendaryMaterials);
-  if (matTotal.gtn(0)) {
+  const matTotal = (p.commonMaterials + p.uncommonMaterials).add(p.rareMaterials).add(p.epicMaterials).add(p.legendaryMaterials);
+  if ((matTotal > 0n)) {
     log.info(section('Materials'));
     log.info(`  Common: ${formatNum(p.commonMaterials)}  Uncommon: ${formatNum(p.uncommonMaterials)}  Rare: ${formatNum(p.rareMaterials)}  Epic: ${formatNum(p.epicMaterials)}  Legendary: ${formatNum(p.legendaryMaterials)}`);
   }
@@ -156,7 +156,7 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   log.info(`  Joined: ${formatNum(rs.totalRalliesJoined)}    Created: ${formatNum(rs.totalRalliesCreated)}    Won: ${formatNum(rs.totalRalliesWon)}    Lost: ${formatNum(rs.totalRalliesLost)}    Loot: ${formatNum(rs.totalRallyLootEarned)}`);
 
   // Shop Stats
-  if (p.totalShopSpent.gtn(0)) {
+  if ((p.totalShopSpent > 0n)) {
     log.info(section('Shop Stats'));
     log.info(`  Total Spent: ${formatNum(p.totalShopSpent)}    Milestone: ${p.milestoneTier}    Loyalty Streak: ${p.loyaltyStreak}`);
   }

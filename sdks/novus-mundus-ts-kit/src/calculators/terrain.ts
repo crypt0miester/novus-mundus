@@ -171,26 +171,26 @@ export function radiusToGridUnits(radiusKm: number, latitude: number): number {
 // Serialization
 
 /** Deserialize terrain from CityAccount buffer at the terrain fields offset. */
-export function deserializeTerrain(data: Buffer | Uint8Array, offset: number): CityTerrain {
-  const view = data instanceof Buffer ? data : Buffer.from(data);
-  const seed = view.readUInt32LE(offset);
-  const waterLine = view.readUInt8(offset + 4);
-  const peakLine = view.readUInt8(offset + 5);
-  const anchorCount = view.readUInt16LE(offset + 6);
-  const version = view.readUInt8(offset + 8);
+export function deserializeTerrain(data: Uint8Array, offset: number): CityTerrain {
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const seed = view.getUint32(offset, true);
+  const waterLine = view.getUint8(offset + 4);
+  const peakLine = view.getUint8(offset + 5);
+  const anchorCount = view.getUint16(offset + 6, true);
+  const version = view.getUint8(offset + 8);
 
   const anchorsStart = offset + TERRAIN_HEADER_SIZE;
   const anchors: Anchor[] = [];
   for (let i = 0; i < anchorCount; i++) {
     const base = anchorsStart + i * ANCHOR_SIZE;
     anchors.push({
-      x: view.readInt16LE(base),
-      y: view.readInt16LE(base + 2),
-      mass: view.readUInt8(base + 4),
-      lift: view.readUInt8(base + 5),
-      pushX: view.readInt8(base + 6),
-      pushY: view.readInt8(base + 7),
-      moisture: view.readUInt8(base + 8),
+      x: view.getInt16(base, true),
+      y: view.getInt16(base + 2, true),
+      mass: view.getUint8(base + 4),
+      lift: view.getUint8(base + 5),
+      pushX: view.getInt8(base + 6),
+      pushY: view.getInt8(base + 7),
+      moisture: view.getUint8(base + 8),
     });
   }
 
@@ -198,25 +198,26 @@ export function deserializeTerrain(data: Buffer | Uint8Array, offset: number): C
 }
 
 /** Serialize terrain to buffer. */
-export function serializeTerrain(terrain: CityTerrain): Buffer {
+export function serializeTerrain(terrain: CityTerrain): Uint8Array {
   const size = TERRAIN_HEADER_SIZE + terrain.anchors.length * ANCHOR_SIZE;
-  const buf = Buffer.alloc(size);
-  buf.writeUInt32LE(terrain.seed, 0);
-  buf.writeUInt8(terrain.waterLine, 4);
-  buf.writeUInt8(terrain.peakLine, 5);
-  buf.writeUInt16LE(terrain.anchors.length, 6);
-  buf.writeUInt8(terrain.version ?? 0, 8);
+  const buf = new Uint8Array(size);
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  view.setUint32(0, terrain.seed, true);
+  view.setUint8(4, terrain.waterLine);
+  view.setUint8(5, terrain.peakLine);
+  view.setUint16(6, terrain.anchors.length, true);
+  view.setUint8(8, terrain.version ?? 0);
 
   for (let i = 0; i < terrain.anchors.length; i++) {
     const a = terrain.anchors[i]!;
     const off = TERRAIN_HEADER_SIZE + i * ANCHOR_SIZE;
-    buf.writeInt16LE(a.x, off);
-    buf.writeInt16LE(a.y, off + 2);
-    buf.writeUInt8(a.mass, off + 4);
-    buf.writeUInt8(a.lift, off + 5);
-    buf.writeInt8(a.pushX, off + 6);
-    buf.writeInt8(a.pushY, off + 7);
-    buf.writeUInt8(a.moisture ?? 128, off + 8);
+    view.setInt16(off, a.x, true);
+    view.setInt16(off + 2, a.y, true);
+    view.setUint8(off + 4, a.mass);
+    view.setUint8(off + 5, a.lift);
+    view.setInt8(off + 6, a.pushX);
+    view.setInt8(off + 7, a.pushY);
+    view.setUint8(off + 8, a.moisture ?? 128);
   }
 
   return buf;

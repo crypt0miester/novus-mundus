@@ -10,7 +10,8 @@
 import type { Address, Instruction } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u32, u64, i64, fixedString, pad } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -44,6 +45,12 @@ export interface PurchaseSubscriptionParams {
   tier: number;
 }
 
+/** PurchaseSubscription args: payment_type (u8) + new_tier_index (u8) */
+const purchaseSubscriptionArgs = packed<{ paymentType: number; tier: number }>([
+  ['paymentType', u8],
+  ['tier', u8],
+], 2);
+
 /** ~55,000 CU */
 /**
  * Purchase or upgrade subscription tier.
@@ -67,15 +74,15 @@ export interface PurchaseSubscriptionParams {
  * - Transfer limits
  * - Travel speed bonus
  */
-export function createPurchaseSubscriptionInstruction(
+export async function createPurchaseSubscriptionInstruction(
   accounts: PurchaseSubscriptionAccounts,
   params: PurchaseSubscriptionParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by UserAccount PDA (not PlayerAccount)
-  const userNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, user);
 
   // Rust account order (10 base accounts):
   // 0. player (writable)
@@ -114,11 +121,10 @@ export function createPurchaseSubscriptionInstruction(
   }
 
   // Instruction data: payment_type (u8) + new_tier_index (u8)
-  const writer = new BufferWriter(2);
-  writer.writeU8(params.paymentType);
-  writer.writeU8(params.tier);
-
-  const data = createInstructionData(DISCRIMINATORS.SUBSCRIPTION_PURCHASE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.SUBSCRIPTION_PURCHASE,
+    purchaseSubscriptionArgs.encode({ paymentType: params.paymentType, tier: params.tier })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -173,83 +179,90 @@ export interface SubscriptionTierConfigInput {
 }
 
 /**
- * Calculate the serialized size of a SubscriptionTierConfig.
- * Used internally for buffer allocation.
+ * UpdateTierConfig args (257 bytes): tier_index (u8) + SubscriptionTier struct
+ * (256 bytes, repr(C) with explicit alignment padding written inline).
  */
-const SUBSCRIPTION_TIER_SIZE = 256; // repr(C) size including alignment padding
-
-/**
- * Serialize a SubscriptionTierConfig to bytes.
- */
-function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): Buffer {
-  const writer = new BufferWriter(SUBSCRIPTION_TIER_SIZE);
-
-  // name: [u8; 16]
-  const nameBytes = Buffer.alloc(16);
-  const nameEncoded = Buffer.from(config.name, 'utf8');
-  nameEncoded.copy(nameBytes, 0, 0, Math.min(nameEncoded.length, 16));
-  writer.writeBytes(nameBytes);
-
-  // tier_index: u8
-  writer.writeU8(config.tierIndex);
-  // _padding1: [u8; 7]
-  writer.writeBytes(Buffer.alloc(7));
-
-  // cost_in_usd_cents: u64
-  writer.writeU64(BigInt(config.costInUsdCents));
-  // duration_days: u32
-  writer.writeU32(config.durationDays);
-  // _padding2: [u8; 4]
-  writer.writeBytes(Buffer.alloc(4));
-
-  // generation_multiplier: u64
-  writer.writeU64(BigInt(config.generationMultiplier));
-  // max_locked_novi: u64
-  writer.writeU64(BigInt(config.maxLockedNovi));
-  // daily_reward_multiplier: u64
-  writer.writeU64(BigInt(config.dailyRewardMultiplier));
-  // synchrony_bonus: u32
-  writer.writeU32(config.synchronyBonus);
-  // implicit repr(C) alignment padding before next u64
-  writer.writeBytes(Buffer.alloc(4));
-
-  // Bonuses
-  writer.writeU64(BigInt(config.novi));
-  writer.writeU64(BigInt(config.cash));
-  writer.writeU64(BigInt(config.du1));
-  writer.writeU64(BigInt(config.du2));
-  writer.writeU64(BigInt(config.du3));
-  writer.writeU64(BigInt(config.op1));
-  writer.writeU64(BigInt(config.op2));
-  writer.writeU64(BigInt(config.op3));
-  writer.writeU64(BigInt(config.meleeWeapons));
-  writer.writeU64(BigInt(config.rangedWeapons));
-  writer.writeU64(BigInt(config.siegeWeapons));
-  writer.writeU64(BigInt(config.armor));
-  writer.writeU64(BigInt(config.produce));
-  writer.writeU64(BigInt(config.vehicles));
-  writer.writeU64(BigInt(config.reputation));
-  writer.writeU64(BigInt(config.xp));
-
-  // RallyCaps
-  writer.writeU8(config.rallyCaps.maxActiveRalliesJoined);
-  writer.writeU8(config.rallyCaps.maxRalliesCreatedPerDay);
-  writer.writeBytes(Buffer.alloc(6)); // padding
-  writer.writeU64(BigInt(config.rallyCaps.maxRallyTroopContribution));
-  writer.writeU8(config.rallyCaps.maxRallySize);
-  writer.writeBytes(Buffer.alloc(7)); // padding
-  writer.writeI64(BigInt(config.rallyCaps.maxRallyDurationSeconds));
-
-  // Team and transfer limits
-  writer.writeU8(config.maxTeamMembers);
-  writer.writeBytes(Buffer.alloc(7)); // padding
-  writer.writeU64(BigInt(config.maxDailyTransferAmount));
-  writer.writeU8(config.maxDailyTransferCount);
-  writer.writeBytes(Buffer.alloc(3)); // padding
-  writer.writeU32(config.travelSpeedBonusBps);
-
-  return writer.toBuffer();
+interface UpdateTierConfigArgs {
+  outerTierIndex: number;
+  name: string;
+  tierIndex: number;
+  costInUsdCents: bigint;
+  durationDays: number;
+  generationMultiplier: bigint;
+  maxLockedNovi: bigint;
+  dailyRewardMultiplier: bigint;
+  synchronyBonus: number;
+  novi: bigint;
+  cash: bigint;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  op1: bigint;
+  op2: bigint;
+  op3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armor: bigint;
+  produce: bigint;
+  vehicles: bigint;
+  reputation: bigint;
+  xp: bigint;
+  rallyMaxActiveRalliesJoined: number;
+  rallyMaxRalliesCreatedPerDay: number;
+  rallyMaxRallyTroopContribution: bigint;
+  rallyMaxRallySize: number;
+  rallyMaxRallyDurationSeconds: bigint;
+  maxTeamMembers: number;
+  maxDailyTransferAmount: bigint;
+  maxDailyTransferCount: number;
+  travelSpeedBonusBps: number;
 }
+
+const updateTierConfigArgs = packed<UpdateTierConfigArgs>([
+  ['outerTierIndex', u8],
+  // SubscriptionTier struct (256 bytes)
+  ['name', fixedString(16)],
+  ['tierIndex', u8],
+  pad(7),
+  ['costInUsdCents', u64],
+  ['durationDays', u32],
+  pad(4),
+  ['generationMultiplier', u64],
+  ['maxLockedNovi', u64],
+  ['dailyRewardMultiplier', u64],
+  ['synchronyBonus', u32],
+  pad(4),
+  ['novi', u64],
+  ['cash', u64],
+  ['du1', u64],
+  ['du2', u64],
+  ['du3', u64],
+  ['op1', u64],
+  ['op2', u64],
+  ['op3', u64],
+  ['meleeWeapons', u64],
+  ['rangedWeapons', u64],
+  ['siegeWeapons', u64],
+  ['armor', u64],
+  ['produce', u64],
+  ['vehicles', u64],
+  ['reputation', u64],
+  ['xp', u64],
+  ['rallyMaxActiveRalliesJoined', u8],
+  ['rallyMaxRalliesCreatedPerDay', u8],
+  pad(6),
+  ['rallyMaxRallyTroopContribution', u64],
+  ['rallyMaxRallySize', u8],
+  pad(7),
+  ['rallyMaxRallyDurationSeconds', i64],
+  ['maxTeamMembers', u8],
+  pad(7),
+  ['maxDailyTransferAmount', u64],
+  ['maxDailyTransferCount', u8],
+  pad(3),
+  ['travelSpeedBonusBps', u32],
+], 257);
 
 /** ~5,000 CU */
 /**
@@ -273,13 +286,46 @@ export function createUpdateTierConfigInstruction(
     { pubkey: accounts.authority, isSigner: true, isWritable: false },
   ];
 
-  // Instruction data: tier_index (u8) + SubscriptionTier struct
-  const tierData = serializeSubscriptionTierConfig(tierConfig);
-  const writer = new BufferWriter(1 + tierData.length);
-  writer.writeU8(tierConfig.tierIndex);
-  writer.writeBytes(tierData);
-
-  const data = createInstructionData(DISCRIMINATORS.SUBSCRIPTION_UPDATE_TIER, writer.toBuffer());
+  // Instruction data: tier_index (u8) + SubscriptionTier struct (256 bytes)
+  const data = createInstructionData(
+    DISCRIMINATORS.SUBSCRIPTION_UPDATE_TIER,
+    updateTierConfigArgs.encode({
+      outerTierIndex: tierConfig.tierIndex,
+      name: tierConfig.name,
+      tierIndex: tierConfig.tierIndex,
+      costInUsdCents: BigInt(tierConfig.costInUsdCents),
+      durationDays: tierConfig.durationDays,
+      generationMultiplier: BigInt(tierConfig.generationMultiplier),
+      maxLockedNovi: BigInt(tierConfig.maxLockedNovi),
+      dailyRewardMultiplier: BigInt(tierConfig.dailyRewardMultiplier),
+      synchronyBonus: tierConfig.synchronyBonus,
+      novi: BigInt(tierConfig.novi),
+      cash: BigInt(tierConfig.cash),
+      du1: BigInt(tierConfig.du1),
+      du2: BigInt(tierConfig.du2),
+      du3: BigInt(tierConfig.du3),
+      op1: BigInt(tierConfig.op1),
+      op2: BigInt(tierConfig.op2),
+      op3: BigInt(tierConfig.op3),
+      meleeWeapons: BigInt(tierConfig.meleeWeapons),
+      rangedWeapons: BigInt(tierConfig.rangedWeapons),
+      siegeWeapons: BigInt(tierConfig.siegeWeapons),
+      armor: BigInt(tierConfig.armor),
+      produce: BigInt(tierConfig.produce),
+      vehicles: BigInt(tierConfig.vehicles),
+      reputation: BigInt(tierConfig.reputation),
+      xp: BigInt(tierConfig.xp),
+      rallyMaxActiveRalliesJoined: tierConfig.rallyCaps.maxActiveRalliesJoined,
+      rallyMaxRalliesCreatedPerDay: tierConfig.rallyCaps.maxRalliesCreatedPerDay,
+      rallyMaxRallyTroopContribution: BigInt(tierConfig.rallyCaps.maxRallyTroopContribution),
+      rallyMaxRallySize: tierConfig.rallyCaps.maxRallySize,
+      rallyMaxRallyDurationSeconds: BigInt(tierConfig.rallyCaps.maxRallyDurationSeconds),
+      maxTeamMembers: tierConfig.maxTeamMembers,
+      maxDailyTransferAmount: BigInt(tierConfig.maxDailyTransferAmount),
+      maxDailyTransferCount: tierConfig.maxDailyTransferCount,
+      travelSpeedBonusBps: tierConfig.travelSpeedBonusBps,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

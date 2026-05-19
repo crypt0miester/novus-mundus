@@ -7,8 +7,8 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { bytesToAddress } from '../crypto';
+import { reprC, struct, pad, u8, u16, u32, u64, i64, bool, pubkey, fixedString, array } from '../utils/codec';
 
 // Dungeon Enums (local definitions matching Rust state)
 // Note: These differ from types/enums.ts which has simplified versions
@@ -87,8 +87,8 @@ export interface DungeonTemplateAccount {
   timeLimitSeconds: number;
 
   // Reward configuration
-  baseXpPerRoom: BN;
-  baseNoviPerFloor: BN;
+  baseXpPerRoom: bigint;
+  baseNoviPerFloor: bigint;
   completionBonusBps: number;
   rewardScalingBps: number;
 }
@@ -108,8 +108,8 @@ export interface DungeonRunAccount {
   bump: number;
 
   // Enemy state
-  enemyHealth: BN;
-  enemyMaxHealth: BN;
+  enemyHealth: bigint;
+  enemyMaxHealth: bigint;
   enemyPower: number;
   enemyDefense: number;
   isBoss: boolean;
@@ -123,14 +123,14 @@ export interface DungeonRunAccount {
   bossWrath: number;
   bossAbilityActive: boolean;
   bossAbilityCounter: number;
-  bossShield: BN;
+  bossShield: bigint;
 
   // Units [tier1, tier2, tier3]
-  remainingUnits: BN[];
-  originalUnits: BN[];
+  remainingUnits: bigint[];
+  originalUnits: bigint[];
 
   // Weapons [melee, ranged, siege]
-  remainingWeapons: BN[];
+  remainingWeapons: bigint[];
 
   // Relics & synergies
   relicMask: number;
@@ -139,25 +139,25 @@ export interface DungeonRunAccount {
   darknessMitigation: number;
 
   // Pending rewards
-  pendingXp: BN;
-  pendingNovi: BN;
-  pendingGems: BN;
+  pendingXp: bigint;
+  pendingNovi: bigint;
+  pendingGems: bigint;
   pendingMaterials: number;
 
   // Checkpoint rewards
-  checkpointXp: BN;
-  checkpointNovi: BN;
-  checkpointGems: BN;
+  checkpointXp: bigint;
+  checkpointNovi: bigint;
+  checkpointGems: bigint;
 
   // Stats
-  totalDamageDealt: BN;
-  totalDamageTaken: BN;
+  totalDamageDealt: bigint;
+  totalDamageTaken: bigint;
   enemiesKilled: number;
   relicsCollected: number;
   roomsCleared: number;
 
   // Timestamps
-  startedAt: BN;
+  startedAt: bigint;
 
   // Camp buff
   campBonusBps: number;
@@ -178,8 +178,8 @@ export interface DungeonRunAccount {
 
 export interface DungeonLeaderboardEntry {
   player: Address;
-  score: BN;
-  timestamp: BN;
+  score: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonLeaderboardAccount {
@@ -189,253 +189,157 @@ export interface DungeonLeaderboardAccount {
   entries: DungeonLeaderboardEntry[];
 }
 
+// Codecs
+
+/** DungeonTemplate `#[repr(C)]` codec */
+const dungeonTemplateCodec = reprC<DungeonTemplateAccount>([
+  pad(1), // account_key
+  ['dungeonId', u16],
+  ['theme', u8],
+  ['totalFloors', u8],
+  ['roomsPerFloor', u8],
+  ['checkpointInterval', u8],
+  ['minPlayerLevel', u8],
+  ['requiredBuildingLevel', u8],
+  ['staminaCost', u16],
+  ['bossPowerMultiplier', u16],
+  ['bump', u8],
+  pad(3), // _padding1
+  ['name', fixedString(32)],
+  ['floorPower', array(u32, 10)],
+  ['combatWeight', u16],
+  ['treasureWeight', u16],
+  ['campWeight', u16],
+  ['restWeight', u16],
+  ['trapWeight', u16],
+  pad(2), // _padding2
+  ['darknessBaseBps', u16],
+  ['darknessPerFloorBps', u16],
+  ['timeLimitSeconds', u32],
+  ['baseXpPerRoom', u64],
+  ['baseNoviPerFloor', u64],
+  ['completionBonusBps', u16],
+  ['rewardScalingBps', u16],
+]);
+
+/** Decoded DungeonRun fields (excludes computed `isActive`/`isEnded`/`isWiped`) */
+type DungeonRunDecoded = Omit<DungeonRunAccount, 'isActive' | 'isEnded' | 'isWiped'>;
+
+/** DungeonRun `#[repr(C)]` codec */
+const dungeonRunCodec = reprC<DungeonRunDecoded>([
+  pad(1), // account_key
+  ['player', pubkey],
+  ['heroMint', pubkey],
+  ['dungeonId', u16],
+  ['status', u8],
+  ['currentFloor', u8],
+  ['currentRoom', u8],
+  ['roomType', u8],
+  ['lastCheckpoint', u8],
+  ['bump', u8],
+  ['enemyHealth', u64],
+  ['enemyMaxHealth', u64],
+  ['enemyPower', u32],
+  ['enemyDefense', u16],
+  ['isBoss', bool],
+  ['timePeriod', u8],
+  ['dungeonTheme', u8],
+  ['heroSpecialization', u8],
+  pad(1), // _spec_padding
+  ['bossWrath', u8],
+  ['bossAbilityActive', bool],
+  ['bossAbilityCounter', u8],
+  pad(3), // _boss_padding
+  ['bossShield', u64],
+  ['remainingUnits', array(u64, 3)],
+  ['originalUnits', array(u64, 3)],
+  ['remainingWeapons', array(u64, 3)],
+  ['relicMask', u32],
+  ['synergyMask', u8],
+  ['darknessLevel', u8],
+  ['darknessMitigation', u16],
+  ['pendingXp', u64],
+  ['pendingNovi', u64],
+  ['pendingGems', u64],
+  ['pendingMaterials', u32],
+  pad(4), // _padding2
+  ['checkpointXp', u64],
+  ['checkpointNovi', u64],
+  ['checkpointGems', u64],
+  ['totalDamageDealt', u64],
+  ['totalDamageTaken', u64],
+  ['enemiesKilled', u16],
+  ['relicsCollected', u8],
+  ['roomsCleared', u8],
+  pad(4), // _padding3
+  ['startedAt', i64],
+  ['campBonusBps', u16],
+  ['campExpiresFloor', u8],
+  ['resumeCount', u8],
+  ['xpBuildingBonusBps', u16],
+  ['noviBuildingBonusBps', u16],
+]);
+
+/** DungeonLeaderboard fixed-header fields (excludes the dynamic `entries` array) */
+type DungeonLeaderboardHeader = Omit<DungeonLeaderboardAccount, 'entries'> & {
+  entryCount: number;
+};
+
+/** DungeonLeaderboard base size in bytes (before trailing entries) */
+const DUNGEON_LEADERBOARD_HEADER_SIZE = 56;
+
+/** DungeonLeaderboard fixed-header `#[repr(C)]` codec */
+const dungeonLeaderboardHeaderCodec = reprC<DungeonLeaderboardHeader>([
+  pad(1), // account_key
+  pad(32), // game_engine
+  ['dungeonId', u16],
+  ['weekNumber', u16],
+  ['entryCount', u8],
+  ['bump', u8],
+  pad(2), // claimed_mask u16 (not in interface)
+  pad(6), // implicit padding before prize_pool u64
+  pad(8), // prize_pool u64 (not in interface)
+], DUNGEON_LEADERBOARD_HEADER_SIZE);
+
 // Deserialization
 
-export function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(1); // implicit padding for u16 alignment
-
-  const dungeonId = reader.readU16();
-  const theme = reader.readU8() as DungeonTheme;
-  const totalFloors = reader.readU8();
-  const roomsPerFloor = reader.readU8();
-  const checkpointInterval = reader.readU8();
-  const minPlayerLevel = reader.readU8();
-  const requiredBuildingLevel = reader.readU8();
-
-  const staminaCost = reader.readU16();
-  const bossPowerMultiplier = reader.readU16();
-  const bump = reader.readU8();
-  reader.skip(3); // _padding1
-
-  const nameBytes = reader.readBytes(32);
-  const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
-
-  reader.skip(2); // implicit padding for u32 alignment
-
-  // Floor power array (10 u32s)
-  const floorPower: number[] = [];
-  for (let i = 0; i < 10; i++) {
-    floorPower.push(reader.readU32());
-  }
-
-  const combatWeight = reader.readU16();
-  const treasureWeight = reader.readU16();
-  const campWeight = reader.readU16();
-  const restWeight = reader.readU16();
-  const trapWeight = reader.readU16();
-  reader.skip(2); // _padding2
-
-  const darknessBaseBps = reader.readU16();
-  const darknessPerFloorBps = reader.readU16();
-
-  const timeLimitSeconds = reader.readU32();
-
-  const baseXpPerRoom = reader.readU64();
-  const baseNoviPerFloor = reader.readU64();
-  const completionBonusBps = reader.readU16();
-  const rewardScalingBps = reader.readU16();
-  // reader.skip(4); // _padding3
-
-  return {
-    dungeonId,
-    theme,
-    totalFloors,
-    roomsPerFloor,
-    checkpointInterval,
-    minPlayerLevel,
-    requiredBuildingLevel,
-    staminaCost,
-    bossPowerMultiplier,
-    bump,
-    name,
-    floorPower,
-    combatWeight,
-    treasureWeight,
-    campWeight,
-    restWeight,
-    trapWeight,
-    darknessBaseBps,
-    darknessPerFloorBps,
-    timeLimitSeconds,
-    baseXpPerRoom,
-    baseNoviPerFloor,
-    completionBonusBps,
-    rewardScalingBps,
-  };
+export function deserializeDungeonTemplate(data: Uint8Array): DungeonTemplateAccount {
+  return dungeonTemplateCodec.decode(data);
 }
 
-export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const player = reader.readPubkey();
-  const heroMint = reader.readPubkey();
-
-  reader.skip(1); // implicit padding for u16 alignment
-  const dungeonId = reader.readU16();
-  const status = reader.readU8() as DungeonStatus;
-  const currentFloor = reader.readU8();
-  const currentRoom = reader.readU8();
-  const roomType = reader.readU8() as RoomType;
-  const lastCheckpoint = reader.readU8();
-  const bump = reader.readU8();
-  reader.skip(6); // implicit padding for u64 alignment
-
-  const enemyHealth = reader.readU64();
-  const enemyMaxHealth = reader.readU64();
-  const enemyPower = reader.readU32();
-  const enemyDefense = reader.readU16();
-  const isBoss = reader.readBool();
-
-  const timePeriod = reader.readU8();
-  const dungeonTheme = reader.readU8() as DungeonTheme;
-  const heroSpecialization = reader.readU8() as HeroSpecialization;
-  reader.skip(1); // _spec_padding
-
-  const bossWrath = reader.readU8();
-  const bossAbilityActive = reader.readBool();
-  const bossAbilityCounter = reader.readU8();
-  reader.skip(3); // _boss_padding
-  reader.skip(7); // implicit padding for u64 alignment
-  const bossShield = reader.readU64();
-
-  // Units arrays
-  const remainingUnits: BN[] = [];
-  for (let i = 0; i < 3; i++) {
-    remainingUnits.push(reader.readU64());
-  }
-
-  const originalUnits: BN[] = [];
-  for (let i = 0; i < 3; i++) {
-    originalUnits.push(reader.readU64());
-  }
-
-  const remainingWeapons: BN[] = [];
-  for (let i = 0; i < 3; i++) {
-    remainingWeapons.push(reader.readU64());
-  }
-
-  const relicMask = reader.readU32();
-  const synergyMask = reader.readU8();
-  const darknessLevel = reader.readU8();
-  const darknessMitigation = reader.readU16();
-
-  const pendingXp = reader.readU64();
-  const pendingNovi = reader.readU64();
-  const pendingGems = reader.readU64();
-  const pendingMaterials = reader.readU32();
-  reader.skip(4); // _padding2
-
-  const checkpointXp = reader.readU64();
-  const checkpointNovi = reader.readU64();
-  const checkpointGems = reader.readU64();
-
-  const totalDamageDealt = reader.readU64();
-  const totalDamageTaken = reader.readU64();
-  const enemiesKilled = reader.readU16();
-  const relicsCollected = reader.readU8();
-  const roomsCleared = reader.readU8();
-  reader.skip(4); // _padding3
-
-  const startedAt = reader.readI64();
-  const campBonusBps = reader.readU16();
-  const campExpiresFloor = reader.readU8();
-  const resumeCount = reader.readU8();
-
-  const xpBuildingBonusBps = reader.readU16();
-  const noviBuildingBonusBps = reader.readU16();
-
-  // Computed helpers
-  const isActive = status === DungeonStatus.Active ||
-                   status === DungeonStatus.BossFight ||
-                   status === DungeonStatus.AwaitingRelic;
-  const isEnded = status === DungeonStatus.Completed ||
-                  status === DungeonStatus.Failed ||
-                  status === DungeonStatus.Fled;
-  const totalUnits = remainingUnits.reduce((a, b) => a.add(b));
-  const isWiped = totalUnits.isZero();
-
-  return {
-    player,
-    heroMint,
-    dungeonId,
-    status,
-    currentFloor,
-    currentRoom,
-    roomType,
-    lastCheckpoint,
-    bump,
-    enemyHealth,
-    enemyMaxHealth,
-    enemyPower,
-    enemyDefense,
-    isBoss,
-    timePeriod,
-    dungeonTheme,
-    heroSpecialization,
-    bossWrath,
-    bossAbilityActive,
-    bossAbilityCounter,
-    bossShield,
-    remainingUnits,
-    originalUnits,
-    remainingWeapons,
-    relicMask,
-    synergyMask,
-    darknessLevel,
-    darknessMitigation,
-    pendingXp,
-    pendingNovi,
-    pendingGems,
-    pendingMaterials,
-    checkpointXp,
-    checkpointNovi,
-    checkpointGems,
-    totalDamageDealt,
-    totalDamageTaken,
-    enemiesKilled,
-    relicsCollected,
-    roomsCleared,
-    startedAt,
-    campBonusBps,
-    campExpiresFloor,
-    resumeCount,
-    xpBuildingBonusBps,
-    noviBuildingBonusBps,
-    isActive,
-    isEnded,
-    isWiped,
-  };
+export function deserializeDungeonRun(data: Uint8Array): DungeonRunAccount {
+  const decoded = dungeonRunCodec.decode(data);
+  const isActive = decoded.status === DungeonStatus.Active ||
+                   decoded.status === DungeonStatus.BossFight ||
+                   decoded.status === DungeonStatus.AwaitingRelic;
+  const isEnded = decoded.status === DungeonStatus.Completed ||
+                  decoded.status === DungeonStatus.Failed ||
+                  decoded.status === DungeonStatus.Fled;
+  const totalUnits = decoded.remainingUnits.reduce((a, b) => a + b);
+  const isWiped = totalUnits === 0n;
+  return { ...decoded, isActive, isEnded, isWiped };
 }
 
-export function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): DungeonLeaderboardAccount {
-  const reader = new BufferReader(data);
+export function deserializeDungeonLeaderboard(data: Uint8Array): DungeonLeaderboardAccount {
+  const header = dungeonLeaderboardHeaderCodec.decode(data);
 
-  reader.readU8(); // account_key
-  reader.skip(32); // game_engine
-  reader.skip(1); // implicit padding for u16 alignment
-
-  const dungeonId = reader.readU16();
-  const weekNumber = reader.readU16();
-  const entryCount = reader.readU8();
-  const bump = reader.readU8();
-  reader.skip(2); // claimed_mask u16 (skip for interface)
-  reader.skip(6); // implicit padding for u64 alignment
-  reader.skip(8); // prize_pool (skip for interface)
-
+  // Entries are stored as a trailing array (pubkey + u64 = 40 bytes each)
   const entries: DungeonLeaderboardEntry[] = [];
-  for (let i = 0; i < entryCount; i++) {
-    const player = reader.readPubkey();
-    const score = reader.readU64();
-    const timestamp = score; // LeaderboardEntry only has player+score; timestamp for compatibility
-    entries.push({ player, score, timestamp });
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  for (let i = 0; i < header.entryCount; i++) {
+    const base = DUNGEON_LEADERBOARD_HEADER_SIZE + i * 40;
+    const player = bytesToAddress(data.subarray(base, base + 32));
+    const score = view.getBigUint64(base + 32, true);
+    // LeaderboardEntry only has player+score; timestamp for compatibility
+    entries.push({ player, score, timestamp: score });
   }
 
-  return { dungeonId, weekNumber, bump, entries };
+  return {
+    dungeonId: header.dungeonId,
+    weekNumber: header.weekNumber,
+    bump: header.bump,
+    entries,
+  };
 }
 
 // Parse Functions

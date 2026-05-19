@@ -13,7 +13,6 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import BN from 'bn.js';
 
 import {
   createSetPlayerNameInstruction,
@@ -69,7 +68,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Name service requires real domain accounts - fails without them
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -87,7 +86,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Try to set a domain we don't own
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -105,7 +104,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Update requires existing name set first
-      const ix = createUpdatePlayerNameInstruction({
+      const ix = await createUpdatePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -125,7 +124,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Remove transfers domain back - fails if no domain set
-      const ix = createRemovePlayerNameInstruction({
+      const ix = await createRemovePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -142,7 +141,7 @@ describe('Name Service', () => {
     it('should reject remove when no name set', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createRemovePlayerNameInstruction({
+      const ix = await createRemovePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -163,10 +162,10 @@ describe('Name Service', () => {
     it('should reject set team name without real domain', async () => {
       const leaderPlayer = await factory.createPlayer({ initialize: true });
       const teamId = Date.now();
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
       // Requires real domain + team account
-      const ix = createSetTeamNameInstruction({
+      const ix = await createSetTeamNameInstruction({
         gameEngine: ctx.gameEngine,
         leader: leaderPlayer.publicKey,
         team: teamPda,
@@ -184,9 +183,9 @@ describe('Name Service', () => {
     it('should reject update team name without real domain', async () => {
       const leaderPlayer = await factory.createPlayer({ initialize: true });
       const teamId = Date.now();
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
-      const ix = createUpdateTeamNameInstruction({
+      const ix = await createUpdateTeamNameInstruction({
         gameEngine: ctx.gameEngine,
         leader: leaderPlayer.publicKey,
         team: teamPda,
@@ -206,9 +205,9 @@ describe('Name Service', () => {
     it('should reject remove team name without real domain', async () => {
       const leaderPlayer = await factory.createPlayer({ initialize: true });
       const teamId = Date.now();
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
-      const ix = createRemoveTeamNameInstruction({
+      const ix = await createRemoveTeamNameInstruction({
         gameEngine: ctx.gameEngine,
         leader: leaderPlayer.publicKey,
         team: teamPda,
@@ -227,10 +226,10 @@ describe('Name Service', () => {
       const leaderPlayer = await factory.createPlayer({ initialize: true });
       const memberPlayer = await factory.createPlayer({ initialize: true });
       const teamId = Date.now();
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
       // Only team leader/officer can set team name
-      const ix = createSetTeamNameInstruction({
+      const ix = await createSetTeamNameInstruction({
         gameEngine: ctx.gameEngine,
         leader: memberPlayer.publicKey, // Not the leader
         team: teamPda,
@@ -253,7 +252,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Only supported TLDs work
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'invalidtld',
@@ -271,7 +270,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Domain ownership verification
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -290,14 +289,14 @@ describe('Name Service', () => {
       const player2 = await factory.createPlayer({ initialize: true });
 
       // Different TLDs supported (sol, bonk, etc.) but domains must exist
-      const ix1 = createSetPlayerNameInstruction({
+      const ix1 = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player1.publicKey,
         tld: 'sol',
         domainName: 'player1',
       });
 
-      const ix2 = createSetPlayerNameInstruction({
+      const ix2 = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player2.publicKey,
         tld: 'bonk',
@@ -325,7 +324,7 @@ describe('Name Service', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Player account stores domain reference - requires real domain
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -355,7 +354,7 @@ describe('Name Service', () => {
     it('should reject transfer without real domain on set', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -372,7 +371,7 @@ describe('Name Service', () => {
     it('should reject transfer back without real domain on remove', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createRemovePlayerNameInstruction({
+      const ix = await createRemovePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
@@ -389,7 +388,7 @@ describe('Name Service', () => {
     it('should reject swap without real domains on update', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createUpdatePlayerNameInstruction({
+      const ix = await createUpdatePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',

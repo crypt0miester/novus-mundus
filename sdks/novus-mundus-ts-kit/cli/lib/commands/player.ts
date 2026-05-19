@@ -7,7 +7,6 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { loadKeypair } from '../context';
@@ -62,7 +61,7 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, recipientOwner);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, recipientOwner);
   if (!await accountExists(ctx.connection, playerPda)) {
     log.error(`Player account not found for ${recipientOwner.toBase58()}`);
     return;
@@ -86,13 +85,13 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     while (allocated < cap && remaining > 0) {
       const thisAmount = Math.min(MAX_PER_CALL, cap - allocated, remaining);
 
-      const mintIx = createMintForPrizeInstruction(
+      const mintIx = await createMintForPrizeInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           recipientOwner,
         },
-        { amount: new BN(thisAmount), purpose }
+        { amount: BigInt(thisAmount), purpose }
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
@@ -132,7 +131,7 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   }
 
   const playerKeypair = loadKeypair(keypairPath);
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
 
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
   if (!playerInfo) {
@@ -160,10 +159,10 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const destGridLat = Math.round(destCity.lat * GRID_PRECISION);
   const destGridLong = Math.round(destCity.lon * GRID_PRECISION);
 
-  const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-  const [destLocation] = deriveLocationPda(ctx.gameEngine, destCityId, destGridLat, destGridLong);
+  const [originLocation] = await deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
+  const [destLocation] = await deriveLocationPda(ctx.gameEngine, destCityId, destGridLat, destGridLong);
 
-  const ix = createIntercityTeleportInstruction({
+  const ix = await createIntercityTeleportInstruction({
     owner: playerKeypair.publicKey,
     gameEngine: ctx.gameEngine,
     originCityId,

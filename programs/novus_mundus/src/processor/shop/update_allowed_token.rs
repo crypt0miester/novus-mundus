@@ -7,7 +7,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, AllowedTokenAccount},
     validation::{require_signer, require_writable, require_owner},
-    helpers::{consume_optional_feed_slot, OracleType},
+    helpers::consume_optional_switchboard_feed,
     utils::{read_bytes32, read_u16, read_u8},
 };
 
@@ -46,14 +46,14 @@ impl AllowedTokenUpdateField {
 /// - [] token_mint: The SPL token mint (for PDA verification)
 ///
 /// # Accounts (conditional)
-/// - [] oracle_feed_account: Required iff `field == PythFeed | SwitchboardFeed`
-///   AND the new pubkey in instruction data is non-zero. Owner-checked +
-///   layout-validated against the target oracle type.
+/// - [] switchboard_feed_account: Required iff `field == SwitchboardFeed` AND the
+///   new pubkey is non-zero. Owner-checked + `PullFeedAccountData`-validated.
+///   (A Pyth feed is a bare feed-id and consumes no account slot.)
 ///
 /// # Instruction Data
 /// - field: u8 (AllowedTokenUpdateField enum)
 /// - value: varies by field type
-///   - PythFeed/SwitchboardFeed: Address (32 bytes)
+///   - PythFeed: 32 bytes (Pyth feed id) / SwitchboardFeed: Address (32 bytes)
 ///   - MaxStalenessSlots/ConfidenceThresholdBps/DiscountBps: u16 (2 bytes)
 pub fn process(
     program_id: &Address,
@@ -110,15 +110,16 @@ pub fn process(
 
     match field {
         AllowedTokenUpdateField::PythFeed => {
+            // A Pyth feed is a bare 32-byte feed-id (no account to validate);
+            // it is verified against the PriceUpdateV2 account at purchase time.
             let new_pyth_feed = read_bytes32(instruction_data, 1, "pyth_feed")?;
-            // Non-zero → require feed account in slot 4 and validate it.
-            // Zero clears the feed and consumes no slot.
-            consume_optional_feed_slot(accounts, 4, &new_pyth_feed, OracleType::Pyth)?;
             allowed_token.pyth_feed = Address::from(new_pyth_feed);
         }
         AllowedTokenUpdateField::SwitchboardFeed => {
             let new_sb_feed = read_bytes32(instruction_data, 1, "switchboard_feed")?;
-            consume_optional_feed_slot(accounts, 4, &new_sb_feed, OracleType::Switchboard)?;
+            // Non-zero → require the feed account in slot 4 and validate it.
+            // Zero clears the feed and consumes no slot.
+            consume_optional_switchboard_feed(accounts, 4, &new_sb_feed)?;
             allowed_token.switchboard_feed = Address::from(new_sb_feed);
         }
         AllowedTokenUpdateField::MaxStalenessSlots => {

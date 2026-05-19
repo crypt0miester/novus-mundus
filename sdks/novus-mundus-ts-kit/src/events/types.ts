@@ -5,7 +5,6 @@
  */
 
 import type { Address } from '@solana/kit';
-import BN from 'bn.js';
 
 // Combat Events
 
@@ -14,29 +13,29 @@ export interface PlayerAttackedEvent {
   attackerName: string;
   defender: Address;
   defenderName: string;
-  damageDealt: BN;
-  damageReceived: BN;
-  cashStolen: BN;
-  armorStolen: BN;
-  produceStolen: BN;
-  vehiclesStolen: BN;
-  attackerUnitsLost: [BN, BN, BN];
-  defenderUnitsLost: [BN, BN, BN];
+  damageDealt: bigint;
+  damageReceived: bigint;
+  cashStolen: bigint;
+  armorStolen: bigint;
+  produceStolen: bigint;
+  vehiclesStolen: bigint;
+  attackerUnitsLost: [bigint, bigint, bigint];
+  defenderUnitsLost: [bigint, bigint, bigint];
   attackerWon: boolean;
   driveBy: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface EncounterAttackedEvent {
   player: Address;
   playerName: string;
   encounter: Address;
-  damageDealt: BN;
-  healthRemaining: BN;
+  damageDealt: bigint;
+  healthRemaining: bigint;
   staminaConsumed: number;
-  noviConsumed: BN;
+  noviConsumed: bigint;
   attackerCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface EncounterDefeatedEvent {
@@ -46,9 +45,9 @@ export interface EncounterDefeatedEvent {
   totalAttackers: number;
   killingBlowBy: Address;
   killingBlowName: string;
-  lootCash: BN;
-  lootNovi: BN;
-  timestamp: BN;
+  lootCash: bigint;
+  lootNovi: bigint;
+  timestamp: bigint;
 }
 
 // Economy Events
@@ -57,24 +56,24 @@ export interface ResourcesCollectedEvent {
   player: Address;
   playerName: string;
   collectionType: number;
-  noviConsumed: BN;
-  baseOutput: BN;
-  finalOutput: BN;
-  gemsEarned: BN;
-  fragmentsEarned: BN;
-  xpGained: BN;
-  timestamp: BN;
+  noviConsumed: bigint;
+  baseOutput: bigint;
+  finalOutput: bigint;
+  gemsEarned: bigint;
+  fragmentsEarned: bigint;
+  xpGained: bigint;
+  timestamp: bigint;
 }
 
 export interface UnitsHiredEvent {
   player: Address;
   playerName: string;
   unitType: number;
-  baseQuantity: BN;
-  finalQuantity: BN;
-  noviBurned: BN;
+  baseQuantity: bigint;
+  finalQuantity: bigint;
+  noviBurned: bigint;
   timeBonusBps: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CashTransferredEvent {
@@ -82,17 +81,17 @@ export interface CashTransferredEvent {
   fromName: string;
   to: Address;
   toName: string;
-  amount: BN;
-  fee: BN;
-  timestamp: BN;
+  amount: bigint;
+  fee: bigint;
+  timestamp: bigint;
 }
 
 export interface NoviLockedEvent {
   player: Address;
   playerName: string;
-  amount: BN;
-  totalLocked: BN;
-  timestamp: BN;
+  amount: bigint;
+  totalLocked: bigint;
+  timestamp: bigint;
 }
 
 export interface EquipmentPurchasedEvent {
@@ -100,25 +99,25 @@ export interface EquipmentPurchasedEvent {
   playerName: string;
   slot: number;
   tier: number;
-  noviBurned: BN;
-  timestamp: BN;
+  noviBurned: bigint;
+  timestamp: bigint;
 }
 
 export interface StaminaPurchasedEvent {
   player: Address;
   playerName: string;
-  stamina: BN;
-  gemsSpent: BN;
-  timestamp: BN;
+  stamina: bigint;
+  gemsSpent: bigint;
+  timestamp: bigint;
 }
 
 export interface VaultTransferEvent {
   player: Address;
   playerName: string;
-  amount: BN;
+  amount: bigint;
   toVault: boolean;
-  vaultBalance: BN;
-  timestamp: BN;
+  vaultBalance: bigint;
+  timestamp: bigint;
 }
 
 // Team Events
@@ -127,8 +126,8 @@ export interface TeamCreatedEvent {
   team: Address;
   teamName: string;
   founder: Address;
-  noviBurned: BN;
-  timestamp: BN;
+  noviBurned: bigint;
+  timestamp: bigint;
 }
 
 export interface TeamJoinedEvent {
@@ -136,7 +135,7 @@ export interface TeamJoinedEvent {
   teamName: string;
   player: Address;
   memberCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamLeftEvent {
@@ -144,7 +143,7 @@ export interface TeamLeftEvent {
   teamName: string;
   player: Address;
   memberCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface MemberKickedEvent {
@@ -152,7 +151,7 @@ export interface MemberKickedEvent {
   teamName: string;
   kicked: Address;
   kickedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface LeadershipTransferredEvent {
@@ -160,33 +159,33 @@ export interface LeadershipTransferredEvent {
   teamName: string;
   oldLeader: Address;
   newLeader: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamDisbandedEvent {
   team: Address;
   teamName: string;
   leader: Address;
-  treasuryDistributed: BN;
-  timestamp: BN;
+  treasuryDistributed: bigint;
+  timestamp: bigint;
 }
 
 export interface TreasuryDepositEvent {
   team: Address;
   teamName: string;
   depositor: Address;
-  amount: BN;
-  newBalance: BN;
-  timestamp: BN;
+  amount: bigint;
+  newBalance: bigint;
+  timestamp: bigint;
 }
 
 export interface TreasuryWithdrawEvent {
   team: Address;
   teamName: string;
   withdrawer: Address;
-  amount: BN;
-  newBalance: BN;
-  timestamp: BN;
+  amount: bigint;
+  newBalance: bigint;
+  timestamp: bigint;
 }
 
 export interface MemberRankChangedEvent {
@@ -196,7 +195,7 @@ export interface MemberRankChangedEvent {
   oldRank: number;
   newRank: number;
   changedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface InviteSentEvent {
@@ -204,7 +203,7 @@ export interface InviteSentEvent {
   teamName: string;
   invitee: Address;
   inviter: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface InviteAcceptedEvent {
@@ -212,14 +211,14 @@ export interface InviteAcceptedEvent {
   teamName: string;
   player: Address;
   memberCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface InviteDeclinedEvent {
   team: Address;
   teamName: string;
   player: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface InviteCancelledEvent {
@@ -227,36 +226,36 @@ export interface InviteCancelledEvent {
   teamName: string;
   invitee: Address;
   cancelledBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface MotdUpdatedEvent {
   team: Address;
   teamName: string;
   updatedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamSettingsUpdatedEvent {
   team: Address;
   teamName: string;
   updatedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TreasurySettingsUpdatedEvent {
   team: Address;
   teamName: string;
   updatedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TreasuryWithdrawRequestedEvent {
   team: Address;
   teamName: string;
   requester: Address;
-  amount: BN;
-  timestamp: BN;
+  amount: bigint;
+  timestamp: bigint;
 }
 
 export interface TreasuryRequestApprovedEvent {
@@ -264,7 +263,7 @@ export interface TreasuryRequestApprovedEvent {
   teamName: string;
   approver: Address;
   requester: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TreasuryRequestRejectedEvent {
@@ -272,7 +271,7 @@ export interface TreasuryRequestRejectedEvent {
   teamName: string;
   rejector: Address;
   requester: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TreasuryRequestExecutedEvent {
@@ -280,16 +279,16 @@ export interface TreasuryRequestExecutedEvent {
   teamName: string;
   executor: Address;
   requester: Address;
-  amount: BN;
-  newBalance: BN;
-  timestamp: BN;
+  amount: bigint;
+  newBalance: bigint;
+  timestamp: bigint;
 }
 
 export interface TreasuryRequestCancelledEvent {
   team: Address;
   teamName: string;
   requester: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Travel Events
@@ -299,15 +298,15 @@ export interface IntercityTravelStartedEvent {
   playerName: string;
   fromCity: Address;
   toCity: Address;
-  arrivalAt: BN;
-  timestamp: BN;
+  arrivalAt: bigint;
+  timestamp: bigint;
 }
 
 export interface IntercityTravelCompletedEvent {
   player: Address;
   playerName: string;
   city: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface PlayerTeleportedEvent {
@@ -315,8 +314,8 @@ export interface PlayerTeleportedEvent {
   playerName: string;
   fromCity: Address;
   toCity: Address;
-  gemsSpent: BN;
-  timestamp: BN;
+  gemsSpent: bigint;
+  timestamp: bigint;
 }
 
 export interface IntracityTravelStartedEvent {
@@ -325,8 +324,8 @@ export interface IntracityTravelStartedEvent {
   city: Address;
   destX: number;
   destY: number;
-  arrivalAt: BN;
-  timestamp: BN;
+  arrivalAt: bigint;
+  timestamp: bigint;
 }
 
 export interface IntracityTravelCompletedEvent {
@@ -334,7 +333,7 @@ export interface IntracityTravelCompletedEvent {
   playerName: string;
   x: number;
   y: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TravelCancelledEvent {
@@ -342,7 +341,7 @@ export interface TravelCancelledEvent {
   playerName: string;
   isIntercity: boolean;
   wasBumped: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TravelSpeedupEvent {
@@ -350,9 +349,9 @@ export interface TravelSpeedupEvent {
   playerName: string;
   isIntercity: boolean;
   speedupTier: number;
-  gemsSpent: BN;
-  newEta: BN;
-  timestamp: BN;
+  gemsSpent: bigint;
+  newEta: bigint;
+  timestamp: bigint;
 }
 
 // Rally Events
@@ -363,52 +362,52 @@ export interface RallyCreatedEvent {
   teamName: string;
   leader: Address;
   target: Address;
-  gatherAt: BN;
-  timestamp: BN;
+  gatherAt: bigint;
+  timestamp: bigint;
 }
 
 export interface RallyJoinedEvent {
   rally: Address;
   teamName: string;
   player: Address;
-  units: [BN, BN, BN];
+  units: [bigint, bigint, bigint];
   participantCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface RallyExecutedEvent {
   rally: Address;
   teamName: string;
   target: Address;
-  damageDealt: BN;
-  damageReceived: BN;
-  lootCaptured: BN;
+  damageDealt: bigint;
+  damageReceived: bigint;
+  lootCaptured: bigint;
   participantCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface RallyCancelledEvent {
   rally: Address;
   teamName: string;
   cancelledBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface RallyLeftEvent {
   rally: Address;
   teamName: string;
   player: Address;
-  units: [BN, BN, BN];
+  units: [bigint, bigint, bigint];
   participantCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface RallyClosedEvent {
   rally: Address;
-  rallyId: BN;
+  rallyId: bigint;
   teamName: string;
   leader: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface RallySpeedupEvent {
@@ -416,8 +415,8 @@ export interface RallySpeedupEvent {
   teamName: string;
   payer: Address;
   speedupType: number;
-  gemsSpent: BN;
-  timestamp: BN;
+  gemsSpent: bigint;
+  timestamp: bigint;
 }
 
 export interface RallyParticipantReturnedEvent {
@@ -425,9 +424,9 @@ export interface RallyParticipantReturnedEvent {
   teamName: string;
   player: Address;
   participatedInCombat: boolean;
-  unitsReturned: [BN, BN, BN];
-  lootReceived: BN;
-  timestamp: BN;
+  unitsReturned: [bigint, bigint, bigint];
+  lootReceived: bigint;
+  timestamp: bigint;
 }
 
 // Reinforcement Events
@@ -437,9 +436,9 @@ export interface ReinforcementSentEvent {
   senderName: string;
   receiver: Address;
   receiverName: string;
-  units: [BN, BN, BN];
-  arrivesAt: BN;
-  timestamp: BN;
+  units: [bigint, bigint, bigint];
+  arrivesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface ReinforcementArrivedEvent {
@@ -448,8 +447,8 @@ export interface ReinforcementArrivedEvent {
   senderName: string;
   receiver: Address;
   receiverName: string;
-  units: [BN, BN, BN];
-  timestamp: BN;
+  units: [bigint, bigint, bigint];
+  timestamp: bigint;
 }
 
 export interface ReinforcementRecalledEvent {
@@ -458,8 +457,8 @@ export interface ReinforcementRecalledEvent {
   senderName: string;
   receiver: Address;
   receiverName: string;
-  units: [BN, BN, BN];
-  timestamp: BN;
+  units: [bigint, bigint, bigint];
+  timestamp: bigint;
 }
 
 export interface ReinforcementRelievedEvent {
@@ -468,15 +467,15 @@ export interface ReinforcementRelievedEvent {
   senderName: string;
   receiver: Address;
   receiverName: string;
-  units: [BN, BN, BN];
-  timestamp: BN;
+  units: [bigint, bigint, bigint];
+  timestamp: bigint;
 }
 
 export interface ReinforcementReturnedEvent {
   sender: Address;
   senderName: string;
-  units: [BN, BN, BN];
-  timestamp: BN;
+  units: [bigint, bigint, bigint];
+  timestamp: bigint;
 }
 
 export interface ReinforcementSpeedupEvent {
@@ -485,9 +484,9 @@ export interface ReinforcementSpeedupEvent {
   senderName: string;
   receiver: Address;
   speedupType: number;
-  gemsSpent: BN;
-  newEta: BN;
-  timestamp: BN;
+  gemsSpent: bigint;
+  newEta: bigint;
+  timestamp: bigint;
 }
 
 // Expedition Events
@@ -498,43 +497,43 @@ export interface ExpeditionStartedEvent {
   expeditionType: number;
   nodeId: number;
   duration: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface ExpeditionStrikeEvent {
   player: Address;
   playerName: string;
   strikeNum: number;
-  yieldAmount: BN;
+  yieldAmount: bigint;
   quality: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface ExpeditionClaimedEvent {
   player: Address;
   playerName: string;
   expeditionType: number;
-  totalYield: BN;
-  bonusYield: BN;
-  xpEarned: BN;
-  timestamp: BN;
+  totalYield: bigint;
+  bonusYield: bigint;
+  xpEarned: bigint;
+  timestamp: bigint;
 }
 
 export interface ExpeditionAbortedEvent {
   player: Address;
   playerName: string;
   expeditionType: number;
-  partialYield: BN;
-  timestamp: BN;
+  partialYield: bigint;
+  timestamp: bigint;
 }
 
 export interface ExpeditionSpeedupEvent {
   player: Address;
   playerName: string;
-  speedupSeconds: BN;
-  gemsSpent: BN;
-  newEta: BN;
-  timestamp: BN;
+  speedupSeconds: bigint;
+  gemsSpent: bigint;
+  newEta: bigint;
+  timestamp: bigint;
 }
 
 // Loot Events
@@ -542,9 +541,9 @@ export interface ExpeditionSpeedupEvent {
 export interface LootClaimedEvent {
   player: Address;
   playerName: string;
-  cash: BN;
+  cash: bigint;
   items: [number, number, number, number];
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface EncounterSpawnedEvent {
@@ -554,7 +553,7 @@ export interface EncounterSpawnedEvent {
   level: number;
   x: number;
   y: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Progression Events
@@ -562,8 +561,8 @@ export interface EncounterSpawnedEvent {
 export interface DailyRewardClaimedEvent {
   player: Address;
   playerName: string;
-  cash: BN;
-  timestamp: BN;
+  cash: bigint;
+  timestamp: bigint;
 }
 
 export interface SubscriptionPurchasedEvent {
@@ -571,18 +570,18 @@ export interface SubscriptionPurchasedEvent {
   playerName: string;
   tier: number;
   durationDays: number;
-  noviPaid: BN;
-  expiresAt: BN;
-  timestamp: BN;
+  noviPaid: bigint;
+  expiresAt: bigint;
+  timestamp: bigint;
 }
 
 export interface XpGainedEvent {
   player: Address;
   playerName: string;
-  amount: BN;
+  amount: bigint;
   source: number;
-  totalXp: BN;
-  timestamp: BN;
+  totalXp: bigint;
+  timestamp: bigint;
 }
 
 export interface PlayerLeveledUpEvent {
@@ -590,7 +589,7 @@ export interface PlayerLeveledUpEvent {
   playerName: string;
   oldLevel: number;
   newLevel: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface EventPrizeClaimedEvent {
@@ -598,8 +597,8 @@ export interface EventPrizeClaimedEvent {
   playerName: string;
   event: Address;
   rank: number;
-  prizeAmount: BN;
-  timestamp: BN;
+  prizeAmount: bigint;
+  timestamp: bigint;
 }
 
 export interface SubscriptionTierUpdatedEvent {
@@ -607,15 +606,15 @@ export interface SubscriptionTierUpdatedEvent {
   playerName: string;
   oldTier: number;
   newTier: number;
-  expiresAt: BN;
-  timestamp: BN;
+  expiresAt: bigint;
+  timestamp: bigint;
 }
 
 export interface SubscriptionExpiredEvent {
   player: Address;
   playerName: string;
   oldTier: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Estate Events
@@ -624,7 +623,7 @@ export interface EstateCreatedEvent {
   estate: Address;
   player: Address;
   playerName: string;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface BuildingStartedEvent {
@@ -632,8 +631,8 @@ export interface BuildingStartedEvent {
   playerName: string;
   buildingType: number;
   plot: number;
-  completesAt: BN;
-  timestamp: BN;
+  completesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface BuildingCompletedEvent {
@@ -642,7 +641,7 @@ export interface BuildingCompletedEvent {
   buildingType: number;
   level: number;
   plot: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface BuildingUpgradeStartedEvent {
@@ -651,25 +650,25 @@ export interface BuildingUpgradeStartedEvent {
   buildingType: number;
   fromLevel: number;
   toLevel: number;
-  completesAt: BN;
-  timestamp: BN;
+  completesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface PlotPurchasedEvent {
   player: Address;
   playerName: string;
   plot: number;
-  cost: BN;
+  cost: bigint;
   totalPlots: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface EstateDailyClaimedEvent {
   player: Address;
   playerName: string;
-  materials: BN;
+  materials: bigint;
   streak: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Forge Events
@@ -679,8 +678,8 @@ export interface CraftStartedEvent {
   playerName: string;
   itemType: number;
   qualityTier: number;
-  materialsUsed: BN;
-  timestamp: BN;
+  materialsUsed: bigint;
+  timestamp: bigint;
 }
 
 export interface CraftStrikeEvent {
@@ -689,7 +688,7 @@ export interface CraftStrikeEvent {
   stage: number;
   quality: number;
   score: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CraftCompletedEvent {
@@ -699,7 +698,7 @@ export interface CraftCompletedEvent {
   quality: number;
   score: number;
   inventorySlot: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CraftAbandonedEvent {
@@ -707,7 +706,7 @@ export interface CraftAbandonedEvent {
   playerName: string;
   itemType: number;
   stageReached: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface ItemEquippedEvent {
@@ -718,7 +717,7 @@ export interface ItemEquippedEvent {
   slot: number;
   quality: number;
   fromInventory: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Research Events
@@ -728,8 +727,8 @@ export interface ResearchStartedEvent {
   playerName: string;
   researchId: number;
   level: number;
-  completesAt: BN;
-  timestamp: BN;
+  completesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface ResearchCompletedEvent {
@@ -737,24 +736,24 @@ export interface ResearchCompletedEvent {
   playerName: string;
   researchId: number;
   level: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface ResearchCancelledEvent {
   player: Address;
   playerName: string;
   researchId: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface ResearchSpeedupEvent {
   player: Address;
   playerName: string;
   researchId: number;
-  speedupSeconds: BN;
-  gemsSpent: BN;
-  newEta: BN;
-  timestamp: BN;
+  speedupSeconds: bigint;
+  gemsSpent: bigint;
+  newEta: bigint;
+  timestamp: bigint;
 }
 
 export interface ResearchAscendedEvent {
@@ -763,7 +762,7 @@ export interface ResearchAscendedEvent {
   researchTree: number;
   newAscensionLevel: number;
   masteryCost: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface PlayerAscendedEvent {
@@ -771,7 +770,7 @@ export interface PlayerAscendedEvent {
   playerName: string;
   ascensionLevel: number;
   masteryGained: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Sanctuary Events
@@ -782,8 +781,8 @@ export interface MeditationStartedEvent {
   heroMint: Address;
   heroName: string;
   durationHours: number;
-  completesAt: BN;
-  timestamp: BN;
+  completesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface MeditationClaimedEvent {
@@ -793,7 +792,7 @@ export interface MeditationClaimedEvent {
   heroName: string;
   xpEarned: number;
   levelsGained: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Hero Events
@@ -805,7 +804,7 @@ export interface HeroMintedEvent {
   playerName: string;
   templateId: number;
   rarity: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface HeroLockedEvent {
@@ -814,7 +813,7 @@ export interface HeroLockedEvent {
   player: Address;
   playerName: string;
   slot: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface HeroUnlockedEvent {
@@ -822,7 +821,7 @@ export interface HeroUnlockedEvent {
   heroName: string;
   player: Address;
   playerName: string;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface HeroLeveledUpEvent {
@@ -832,8 +831,8 @@ export interface HeroLeveledUpEvent {
   playerName: string;
   oldLevel: number;
   newLevel: number;
-  xpSpent: BN;
-  timestamp: BN;
+  xpSpent: bigint;
+  timestamp: bigint;
 }
 
 export interface HeroAssignedDefensiveEvent {
@@ -842,7 +841,7 @@ export interface HeroAssignedDefensiveEvent {
   player: Address;
   playerName: string;
   assigned: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface HeroBurnedEvent {
@@ -852,16 +851,16 @@ export interface HeroBurnedEvent {
   templateId: number;
   heroLevel: number;
   tier: number;
-  noviReward: BN;
+  noviReward: bigint;
   newMintedCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface SupplyCapUpdatedEvent {
   templateId: number;
   oldSupplyCap: number;
   newSupplyCap: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Shop Events
@@ -871,41 +870,41 @@ export interface ItemPurchasedEvent {
   playerName: string;
   itemId: number;
   quantity: number;
-  price: BN;
+  price: bigint;
   currency: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface BundlePurchasedEvent {
   player: Address;
   playerName: string;
   bundleId: number;
-  price: BN;
+  price: bigint;
   currency: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface FlashSalePurchasedEvent {
   player: Address;
   playerName: string;
-  saleId: BN;
-  originalPrice: BN;
-  pricePaid: BN;
+  saleId: bigint;
+  originalPrice: bigint;
+  pricePaid: bigint;
   currency: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface NoviPurchasedEvent {
   buyer: Address;
   user: Address;
   packageIndex: number;
-  baseAmount: BN;
-  bonusAmount: BN;
-  totalReceived: BN;
-  costLamports: BN;
+  baseAmount: bigint;
+  bonusAmount: bigint;
+  totalReceived: bigint;
+  costLamports: bigint;
   streakDay: number;
   subscriptionTier: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Initialization Events
@@ -914,25 +913,25 @@ export interface PlayerCreatedEvent {
   player: Address;
   user: Address;
   city: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface UserCreatedEvent {
   user: Address;
   wallet: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CityInitializedEvent {
   city: Address;
   cityIndex: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface GameEngineInitializedEvent {
   gameEngine: Address;
   authority: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Name Events
@@ -941,13 +940,13 @@ export interface PlayerNameSetEvent {
   player: Address;
   playerName: string;
   domainHash: Uint8Array;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface PlayerNameRemovedEvent {
   player: Address;
   playerName: string;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface PlayerNameUpdatedEvent {
@@ -955,20 +954,20 @@ export interface PlayerNameUpdatedEvent {
   oldName: string;
   newName: string;
   newDomainHash: Uint8Array;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamNameSetEvent {
   team: Address;
   teamName: string;
   domainHash: Uint8Array;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamNameRemovedEvent {
   team: Address;
   teamName: string;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface TeamNameUpdatedEvent {
@@ -976,7 +975,7 @@ export interface TeamNameUpdatedEvent {
   oldName: string;
   newName: string;
   newDomainHash: Uint8Array;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Token Events
@@ -984,18 +983,18 @@ export interface TeamNameUpdatedEvent {
 export interface NoviReservedToLockedEvent {
   player: Address;
   playerName: string;
-  amount: BN;
-  newLocked: BN;
-  remainingReserved: BN;
-  timestamp: BN;
+  amount: bigint;
+  newLocked: bigint;
+  remainingReserved: bigint;
+  timestamp: bigint;
 }
 
 export interface NoviWithdrawnEvent {
   player: Address;
   playerName: string;
-  amount: BN;
-  remainingReserved: BN;
-  timestamp: BN;
+  amount: bigint;
+  remainingReserved: bigint;
+  timestamp: bigint;
 }
 
 // Dungeon Events
@@ -1007,7 +1006,7 @@ export interface DungeonEnteredEvent {
   heroMint: Address;
   heroName: string;
   staminaSpent: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface DungeonRoomClearedEvent {
@@ -1016,8 +1015,8 @@ export interface DungeonRoomClearedEvent {
   dungeonId: number;
   floor: number;
   room: number;
-  xpGained: BN;
-  timestamp: BN;
+  xpGained: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonFloorCompletedEvent {
@@ -1025,9 +1024,9 @@ export interface DungeonFloorCompletedEvent {
   playerName: string;
   dungeonId: number;
   floor: number;
-  noviGained: BN;
+  noviGained: bigint;
   isCheckpoint: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface DungeonRelicChosenEvent {
@@ -1037,7 +1036,7 @@ export interface DungeonRelicChosenEvent {
   floor: number;
   relicId: number;
   totalRelics: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface DungeonBossFightEvent {
@@ -1046,8 +1045,8 @@ export interface DungeonBossFightEvent {
   dungeonId: number;
   floor: number;
   bossPower: number;
-  bossHealth: BN;
-  timestamp: BN;
+  bossHealth: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonFailedEvent {
@@ -1057,7 +1056,7 @@ export interface DungeonFailedEvent {
   floor: number;
   room: number;
   enemiesKilled: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface DungeonFledEvent {
@@ -1066,10 +1065,10 @@ export interface DungeonFledEvent {
   dungeonId: number;
   floor: number;
   enemiesKilled: number;
-  xpGained: BN;
-  noviGained: BN;
-  gemsGained: BN;
-  timestamp: BN;
+  xpGained: bigint;
+  noviGained: bigint;
+  gemsGained: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonCompletedEvent {
@@ -1081,12 +1080,12 @@ export interface DungeonCompletedEvent {
   enemiesKilled: number;
   roomsCleared: number;
   relicsCollected: number;
-  xpGained: BN;
-  noviGained: BN;
-  gemsGained: BN;
+  xpGained: bigint;
+  noviGained: bigint;
+  gemsGained: bigint;
   materialsGained: number;
-  totalDamageDealt: BN;
-  timestamp: BN;
+  totalDamageDealt: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonResumedEvent {
@@ -1095,9 +1094,9 @@ export interface DungeonResumedEvent {
   dungeonId: number;
   checkpointFloor: number;
   resumeFloor: number;
-  gemCost: BN;
+  gemCost: bigint;
   resumeCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface DungeonLeaderboardPrizeClaimedEvent {
@@ -1106,9 +1105,9 @@ export interface DungeonLeaderboardPrizeClaimedEvent {
   dungeonId: number;
   weekNumber: number;
   rank: number;
-  score: BN;
-  prizeAmount: BN;
-  timestamp: BN;
+  score: bigint;
+  prizeAmount: bigint;
+  timestamp: bigint;
 }
 
 // Castle Events
@@ -1119,7 +1118,7 @@ export interface CastleCreatedEvent {
   cityId: number;
   castleId: number;
   tier: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleClaimedEvent {
@@ -1129,7 +1128,7 @@ export interface CastleClaimedEvent {
   kingName: string;
   team: Address;
   tier: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleConqueredEvent {
@@ -1139,18 +1138,18 @@ export interface CastleConqueredEvent {
   newKing: Address;
   newKingName: string;
   newTeam: Address;
-  rallyId: BN;
-  timestamp: BN;
+  rallyId: bigint;
+  timestamp: bigint;
 }
 
 export interface CastleDefendedEvent {
   castle: Address;
   castleName: string;
   king: Address;
-  rallyId: BN;
-  damageDealt: BN;
-  weaponsCaptured: BN;
-  timestamp: BN;
+  rallyId: bigint;
+  damageDealt: bigint;
+  weaponsCaptured: bigint;
+  timestamp: bigint;
 }
 
 export interface CourtAppointedEvent {
@@ -1160,7 +1159,7 @@ export interface CourtAppointedEvent {
   appointeeName: string;
   positionType: number;
   appointedBy: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CourtDismissedEvent {
@@ -1171,7 +1170,7 @@ export interface CourtDismissedEvent {
   positionType: number;
   dismissedBy: Address;
   resigned: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface GarrisonJoinedEvent {
@@ -1179,13 +1178,13 @@ export interface GarrisonJoinedEvent {
   castleName: string;
   contributor: Address;
   contributorName: string;
-  units1: BN;
-  units2: BN;
-  units3: BN;
-  weapons: BN;
+  units1: bigint;
+  units2: bigint;
+  units3: bigint;
+  weapons: bigint;
   heroMint: Address;
   garrisonCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface GarrisonLeftEvent {
@@ -1193,14 +1192,14 @@ export interface GarrisonLeftEvent {
   castleName: string;
   contributor: Address;
   contributorName: string;
-  units1: BN;
-  units2: BN;
-  units3: BN;
-  weapons: BN;
+  units1: bigint;
+  units2: bigint;
+  units3: bigint;
+  weapons: bigint;
   heroMint: Address;
   relieved: boolean;
   garrisonCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface GarrisonLootClaimedEvent {
@@ -1208,10 +1207,10 @@ export interface GarrisonLootClaimedEvent {
   castleName: string;
   claimer: Address;
   claimerName: string;
-  melee: BN;
-  ranged: BN;
-  siege: BN;
-  timestamp: BN;
+  melee: bigint;
+  ranged: bigint;
+  siege: bigint;
+  timestamp: bigint;
 }
 
 export interface CastleUpgradeStartedEvent {
@@ -1221,9 +1220,9 @@ export interface CastleUpgradeStartedEvent {
   upgradeType: number;
   currentLevel: number;
   targetLevel: number;
-  noviCost: BN;
-  completesAt: BN;
-  timestamp: BN;
+  noviCost: bigint;
+  completesAt: bigint;
+  timestamp: bigint;
 }
 
 export interface CastleUpgradeCompletedEvent {
@@ -1231,15 +1230,15 @@ export interface CastleUpgradeCompletedEvent {
   castleName: string;
   upgradeType: number;
   newLevel: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleUpgradeCancelledEvent {
   castle: Address;
   castleName: string;
   upgradeType: number;
-  noviRefunded: BN;
-  timestamp: BN;
+  noviRefunded: bigint;
+  timestamp: bigint;
 }
 
 export interface CastleRewardsClaimedEvent {
@@ -1249,16 +1248,16 @@ export interface CastleRewardsClaimedEvent {
   claimerName: string;
   role: number;
   days: number;
-  novi: BN;
-  cash: BN;
-  timestamp: BN;
+  novi: bigint;
+  cash: bigint;
+  timestamp: bigint;
 }
 
 export interface CastleProtectionExpiredEvent {
   castle: Address;
   castleName: string;
   king: Address;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface KingForceRemovedEvent {
@@ -1266,7 +1265,7 @@ export interface KingForceRemovedEvent {
   castleName: string;
   removedKing: Address;
   removedKingName: string;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleTransitionProgressEvent {
@@ -1274,7 +1273,7 @@ export interface CastleTransitionProgressEvent {
   phase: number;
   cleanedCount: number;
   totalCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleStatusChangedEvent {
@@ -1282,7 +1281,7 @@ export interface CastleStatusChangedEvent {
   castleName: string;
   oldStatus: number;
   newStatus: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface CastleAttackedEvent {
@@ -1291,12 +1290,12 @@ export interface CastleAttackedEvent {
   attacker: Address;
   attackerName: string;
   king: Address;
-  damageDealt: BN;
-  damageReceived: BN;
-  attackerCasualties: BN;
-  garrisonCasualties: BN;
+  damageDealt: bigint;
+  damageReceived: bigint;
+  attackerCasualties: bigint;
+  garrisonCasualties: bigint;
   attackerWon: boolean;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 // Game Event Events
@@ -1304,35 +1303,35 @@ export interface CastleAttackedEvent {
 export interface GameEventCreatedEvent {
   event: Address;
   eventType: number;
-  startTime: BN;
-  endTime: BN;
-  prizePool: BN;
-  timestamp: BN;
+  startTime: bigint;
+  endTime: bigint;
+  prizePool: bigint;
+  timestamp: bigint;
 }
 
 export interface GameEventJoinedEvent {
   event: Address;
   player: Address;
   playerName: string;
-  entryFee: BN;
+  entryFee: bigint;
   participantCount: number;
-  timestamp: BN;
+  timestamp: bigint;
 }
 
 export interface GameEventFinalizedEvent {
   event: Address;
   totalParticipants: number;
-  totalPrizes: BN;
-  timestamp: BN;
+  totalPrizes: bigint;
+  timestamp: bigint;
 }
 
 export interface EventScoreUpdatedEvent {
   event: Address;
   player: Address;
   playerName: string;
-  scoreDelta: BN;
-  newScore: BN;
-  timestamp: BN;
+  scoreDelta: bigint;
+  newScore: bigint;
+  timestamp: bigint;
 }
 
 // Kingdom Events
@@ -1341,17 +1340,17 @@ export interface KingdomCreatedEvent {
   kingdomId: number;
   kingdomName: string;
   theme: number;
-  startTime: BN;
-  registrationClosesAt: BN;
+  startTime: bigint;
+  registrationClosesAt: bigint;
   createdBy: Address;
-  createdAt: BN;
+  createdAt: bigint;
 }
 
 export interface KingdomRegistrationClosedEvent {
   kingdomId: number;
   gameEngine: Address;
-  totalPlayers: BN;
-  closedAt: BN;
+  totalPlayers: bigint;
+  closedAt: bigint;
 }
 
 export interface PlayerJoinedKingdomEvent {
@@ -1359,26 +1358,26 @@ export interface PlayerJoinedKingdomEvent {
   gameEngine: Address;
   player: Address;
   owner: Address;
-  joinedAt: BN;
+  joinedAt: bigint;
 }
 
 export interface KingdomEventCreatedEvent {
   kingdomId: number;
   gameEngine: Address;
-  eventId: BN;
+  eventId: bigint;
   eventType: number;
-  startTime: BN;
-  endTime: BN;
-  prizePool: BN;
+  startTime: bigint;
+  endTime: bigint;
+  prizePool: bigint;
 }
 
 export interface KingdomArenaSeasonStartedEvent {
   kingdomId: number;
   gameEngine: Address;
   seasonId: number;
-  startTime: BN;
-  endTime: BN;
-  prizePool: BN;
+  startTime: bigint;
+  endTime: bigint;
+  prizePool: bigint;
 }
 
 export interface KingdomDungeonLeaderboardCreatedEvent {
@@ -1386,7 +1385,7 @@ export interface KingdomDungeonLeaderboardCreatedEvent {
   gameEngine: Address;
   dungeonId: number;
   weekNumber: number;
-  prizePool: BN;
+  prizePool: bigint;
 }
 
 export interface KingdomCitiesInitializedEvent {
@@ -1394,7 +1393,7 @@ export interface KingdomCitiesInitializedEvent {
   gameEngine: Address;
   startCityId: number;
   citiesCount: number;
-  initializedAt: BN;
+  initializedAt: bigint;
 }
 
 // Discriminated Union

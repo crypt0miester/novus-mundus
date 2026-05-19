@@ -306,6 +306,7 @@ pub fn process(
             owner,
             sol_cost_lamports,
             clock.slot,
+            clock.unix_timestamp,
         )?;
     }
     // For offchain, payment already verified by backend (payment_authority signed)

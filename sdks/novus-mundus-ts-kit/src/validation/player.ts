@@ -6,7 +6,6 @@
 
 import type { Address } from '@solana/kit';
 import { address } from '@solana/kit';
-import BN from 'bn.js';
 import type { PlayerCore } from '../state/player';
 import {
   isTraveling,
@@ -41,7 +40,7 @@ export function validateNotTraveling(player: PlayerCore): ValidationResult {
 /** Validate player has arrived at destination (if traveling) */
 export function validateArrived(player: PlayerCore, nowSeconds: number): ValidationResult {
   if (isTraveling(player) && !hasArrived(player, nowSeconds)) {
-    const eta = player.arrivalTime.toNumber();
+    const eta = Number(player.arrivalTime);
     const remaining = eta - nowSeconds;
     return invalid(`Player has not arrived yet (${remaining} seconds remaining)`);
   }
@@ -132,24 +131,24 @@ export function validateInSpecificTeam(player: PlayerCore, teamPubkey: Address):
 // Resource Validation
 
 /** Validate player has enough cash on hand */
-export function validateHasCash(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.cashOnHand.lt(amount)) {
+export function validateHasCash(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.cashOnHand < amount) {
     return invalid(`Insufficient cash: need ${amount.toString()}, have ${player.cashOnHand.toString()}`);
   }
   return valid();
 }
 
 /** Validate player has enough cash in vault */
-export function validateHasVaultCash(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.cashInVault.lt(amount)) {
+export function validateHasVaultCash(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.cashInVault < amount) {
     return invalid(`Insufficient vault cash: need ${amount.toString()}, have ${player.cashInVault.toString()}`);
   }
   return valid();
 }
 
 /** Validate player has enough locked NOVI */
-export function validateHasLockedNovi(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.lockedNovi.lt(amount)) {
+export function validateHasLockedNovi(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.lockedNovi < amount) {
     return invalid(
       `Insufficient locked NOVI: need ${amount.toString()}, have ${player.lockedNovi.toString()}`
     );
@@ -158,16 +157,16 @@ export function validateHasLockedNovi(player: PlayerCore, amount: BN): Validatio
 }
 
 /** Validate player has enough gems */
-export function validateHasGems(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.gems.lt(amount)) {
+export function validateHasGems(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.gems < amount) {
     return invalid(`Insufficient gems: need ${amount.toString()}, have ${player.gems.toString()}`);
   }
   return valid();
 }
 
 /** Validate player has enough fragments */
-export function validateHasFragments(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.fragments.lt(amount)) {
+export function validateHasFragments(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.fragments < amount) {
     return invalid(`Insufficient fragments: need ${amount.toString()}, have ${player.fragments.toString()}`);
   }
   return valid();
@@ -177,9 +176,9 @@ export function validateHasFragments(player: PlayerCore, amount: BN): Validation
 export function validateHasMaterials(
   player: PlayerCore,
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary',
-  amount: BN
+  amount: bigint
 ): ValidationResult {
-  let available: BN;
+  let available: bigint;
   switch (rarity) {
     case 'common':
       available = player.commonMaterials;
@@ -198,7 +197,7 @@ export function validateHasMaterials(
       break;
   }
 
-  if (available.lt(amount)) {
+  if (available < amount) {
     return invalid(`Insufficient ${rarity} materials: need ${amount.toString()}, have ${available.toString()}`);
   }
   return valid();
@@ -207,9 +206,9 @@ export function validateHasMaterials(
 // Units Validation
 
 /** Validate player has minimum defensive units */
-export function validateMinDefensiveUnits(player: PlayerCore, minUnits: BN): ValidationResult {
+export function validateMinDefensiveUnits(player: PlayerCore, minUnits: bigint): ValidationResult {
   const total = getTotalDefensiveUnits(player);
-  if (total.lt(minUnits)) {
+  if (total < minUnits) {
     return invalid(
       `Insufficient defensive units: need ${minUnits.toString()}, have ${total.toString()}`
     );
@@ -218,9 +217,9 @@ export function validateMinDefensiveUnits(player: PlayerCore, minUnits: BN): Val
 }
 
 /** Validate player has minimum operative units */
-export function validateMinOperativeUnits(player: PlayerCore, minUnits: BN): ValidationResult {
+export function validateMinOperativeUnits(player: PlayerCore, minUnits: bigint): ValidationResult {
   const total = getTotalOperativeUnits(player);
-  if (total.lt(minUnits)) {
+  if (total < minUnits) {
     return invalid(
       `Insufficient operative units: need ${minUnits.toString()}, have ${total.toString()}`
     );
@@ -229,18 +228,18 @@ export function validateMinOperativeUnits(player: PlayerCore, minUnits: BN): Val
 }
 
 /** Validate player has minimum total units */
-export function validateMinTotalUnits(player: PlayerCore, minUnits: BN): ValidationResult {
+export function validateMinTotalUnits(player: PlayerCore, minUnits: bigint): ValidationResult {
   const total = getTotalUnits(player);
-  if (total.lt(minUnits)) {
+  if (total < minUnits) {
     return invalid(`Insufficient units: need ${minUnits.toString()}, have ${total.toString()}`);
   }
   return valid();
 }
 
 /** Validate player has minimum weapons */
-export function validateMinWeapons(player: PlayerCore, minWeapons: BN): ValidationResult {
+export function validateMinWeapons(player: PlayerCore, minWeapons: bigint): ValidationResult {
   const total = getTotalWeapons(player);
-  if (total.lt(minWeapons)) {
+  if (total < minWeapons) {
     return invalid(
       `Insufficient weapons: need ${minWeapons.toString()}, have ${total.toString()}`
     );
@@ -252,9 +251,9 @@ export function validateMinWeapons(player: PlayerCore, minWeapons: BN): Validati
 export function validateHasDefensiveUnit(
   player: PlayerCore,
   unitIndex: 1 | 2 | 3,
-  amount: BN
+  amount: bigint
 ): ValidationResult {
-  let available: BN;
+  let available: bigint;
   switch (unitIndex) {
     case 1:
       available = player.defensiveUnit1;
@@ -267,7 +266,7 @@ export function validateHasDefensiveUnit(
       break;
   }
 
-  if (available.lt(amount)) {
+  if (available < amount) {
     return invalid(
       `Insufficient defensive unit ${unitIndex}: need ${amount.toString()}, have ${available.toString()}`
     );
@@ -279,9 +278,9 @@ export function validateHasDefensiveUnit(
 export function validateHasOperativeUnit(
   player: PlayerCore,
   unitIndex: 1 | 2 | 3,
-  amount: BN
+  amount: bigint
 ): ValidationResult {
-  let available: BN;
+  let available: bigint;
   switch (unitIndex) {
     case 1:
       available = player.operativeUnit1;
@@ -294,7 +293,7 @@ export function validateHasOperativeUnit(
       break;
   }
 
-  if (available.lt(amount)) {
+  if (available < amount) {
     return invalid(
       `Insufficient operative unit ${unitIndex}: need ${amount.toString()}, have ${available.toString()}`
     );
@@ -305,8 +304,8 @@ export function validateHasOperativeUnit(
 // Stamina Validation
 
 /** Validate player has enough stamina */
-export function validateHasStamina(player: PlayerCore, amount: BN): ValidationResult {
-  if (player.encounterStamina.lt(amount)) {
+export function validateHasStamina(player: PlayerCore, amount: bigint): ValidationResult {
+  if (player.encounterStamina < amount) {
     return invalid(`Insufficient stamina: need ${amount.toString()}, have ${player.encounterStamina.toString()}`);
   }
   return valid();
@@ -355,8 +354,8 @@ export function validateMinLevel(player: PlayerCore, minLevel: number): Validati
 
 /** Validate player's new player protection has expired */
 export function validateProtectionExpired(player: PlayerCore, nowSeconds: number): ValidationResult {
-  if (player.newPlayerProtectionUntil.toNumber() > nowSeconds) {
-    const remaining = player.newPlayerProtectionUntil.toNumber() - nowSeconds;
+  if (Number(player.newPlayerProtectionUntil) > nowSeconds) {
+    const remaining = Number(player.newPlayerProtectionUntil) - nowSeconds;
     return invalid(`New player protection still active (${remaining} seconds remaining)`);
   }
   return valid();
@@ -364,7 +363,7 @@ export function validateProtectionExpired(player: PlayerCore, nowSeconds: number
 
 /** Validate target player is not under new player protection */
 export function validateTargetNotProtected(target: PlayerCore, nowSeconds: number): ValidationResult {
-  if (target.newPlayerProtectionUntil.toNumber() > nowSeconds) {
+  if (Number(target.newPlayerProtectionUntil) > nowSeconds) {
     return invalid('Target is under new player protection');
   }
   return valid();
@@ -425,13 +424,13 @@ export function validateCanAct(player: PlayerCore, nowSeconds: number): Validati
 /** Validate player can engage in combat */
 export function validateCanCombat(
   player: PlayerCore,
-  requiredStamina: BN,
+  requiredStamina: bigint,
   nowSeconds: number
 ): ValidationResult {
   return combine(
     validateCanAct(player, nowSeconds),
     validateHasStamina(player, requiredStamina),
-    validateMinDefensiveUnits(player, new BN(1)),
+    validateMinDefensiveUnits(player, 1n),
     validateNotFlagged(player)
   );
 }
@@ -457,7 +456,7 @@ export function validateCanJoinRally(player: PlayerCore, nowSeconds: number): Va
 export function validateCanStartExpedition(player: PlayerCore, nowSeconds: number): ValidationResult {
   return combine(
     validateCanAct(player, nowSeconds),
-    validateMinOperativeUnits(player, new BN(1)),
+    validateMinOperativeUnits(player, 1n),
     validateNotFlagged(player)
   );
 }

@@ -2,10 +2,17 @@
 
 // Oracle Program IDs
 // Used to verify the owner of an oracle feed account so a buyer can't
-// pass an account whose bytes match the Pyth magic / SB discriminator
+// pass an account whose bytes match the PriceUpdateV2 / SB discriminator
 // but is owned by some unrelated program.
+//
+// Pyth pull-oracle accounts (`PriceUpdateV2`) are owned by one of two
+// programs: the Pyth price-feed program (sponsored, continuously-updated
+// feeds) or the Pyth Solana Receiver (caller-posted ephemeral updates).
+// Both produce the identical `PriceUpdateV2` layout; either owner is accepted.
 pub const PYTH_PROGRAM_ID: [u8; 32] =
     five8_const::decode_32_const("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
+pub const PYTH_RECEIVER_PROGRAM_ID: [u8; 32] =
+    five8_const::decode_32_const("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
 pub const SWITCHBOARD_PROGRAM_ID: [u8; 32] =
     five8_const::decode_32_const("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
 

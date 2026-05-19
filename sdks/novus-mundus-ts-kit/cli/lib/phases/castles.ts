@@ -24,13 +24,13 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const castle of CASTLES) {
-    const [castlePda] = deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
+    const [castlePda] = await deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
 
     await createOrSkip(
       ctx,
       `Castle #${castle.castleId} (${castle.name})`,
       castlePda,
-      () => createCreateCastleInstruction(
+      async () => await createCreateCastleInstruction(
         {
           daoAuthority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
@@ -57,7 +57,7 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
 export async function statusCastles(ctx: CLIContext): Promise<string> {
   let count = 0;
   for (const castle of CASTLES) {
-    const [pda] = deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
+    const [pda] = await deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
     if (await accountExists(ctx.connection, pda)) count++;
   }
   return `${count}`;
@@ -72,7 +72,7 @@ export async function detailCastles(ctx: CLIContext): Promise<string> {
 
   const rows: string[][] = [];
   for (const c of CASTLES) {
-    const [pda] = deriveCastlePda(ctx.gameEngine, c.cityId, c.castleId);
+    const [pda] = await deriveCastlePda(ctx.gameEngine, c.cityId, c.castleId);
     const info = await ctx.connection.getAccountInfo(pda);
     if (!info) {
       rows.push([

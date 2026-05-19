@@ -63,10 +63,10 @@ pub struct ShopConfigAccount {
 
     // SOL Oracle Configuration (68 bytes)
     // Used for token payments: convert token USD price to SOL amount
-    pub sol_pyth_feed: Address,           // Pyth SOL/USD price feed (32 bytes)
-    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD feed (32 bytes)
-    pub sol_max_staleness_slots: u16,    // Max age in slots before rejection
-    pub sol_confidence_threshold_bps: u16, // Max confidence interval for Pyth
+    pub sol_pyth_feed: Address,           // Pyth SOL/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
+    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD pull-feed *account* pubkey (32 bytes)
+    pub sol_max_staleness_slots: u16,    // Max price age — SECONDS for Pyth, SLOTS for Switchboard
+    pub sol_confidence_threshold_bps: u16, // Max confidence interval (Pyth) / std deviation (Switchboard), bps
 
     // Reserved (8 bytes)
     pub _reserved: [u8; 8],
@@ -856,12 +856,12 @@ pub struct AllowedTokenAccount {
     pub mint: Address,
 
     // Dual Oracle Configuration (64 bytes)
-    pub pyth_feed: Address,                 // Pyth TOKEN/USD price account
-    pub switchboard_feed: Address,          // Switchboard TOKEN/USD quote account
+    pub pyth_feed: Address,                 // Pyth TOKEN/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
+    pub switchboard_feed: Address,          // Switchboard TOKEN/USD pull-feed *account* pubkey
 
     // Pricing Parameters (8 bytes)
-    pub max_staleness_slots: u16,          // Max age in SLOTS before rejection
-    pub confidence_threshold_bps: u16,     // Max confidence interval (Pyth only)
+    pub max_staleness_slots: u16,          // Max price age — SECONDS for Pyth, SLOTS for Switchboard
+    pub confidence_threshold_bps: u16,     // Max confidence interval (Pyth) / std deviation (Switchboard), bps
     pub discount_bps: u16,                 // Discount for using this token
     pub _padding: [u8; 2],
 

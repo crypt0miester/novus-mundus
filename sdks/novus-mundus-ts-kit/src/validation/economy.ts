@@ -4,7 +4,6 @@
  * Validate economy-related parameters and requirements.
  */
 
-import BN from 'bn.js';
 import type { PlayerCore } from '../state/player';
 import {
   type ValidationResult,
@@ -25,10 +24,10 @@ import {
 // Constants
 
 /** Maximum transfer amount (u64 max) */
-const MAX_TRANSFER_AMOUNT = new BN('18446744073709551615');
+const MAX_TRANSFER_AMOUNT = 18446744073709551615n;
 
 /** Minimum transfer amount */
-const MIN_TRANSFER_AMOUNT = new BN(1);
+const MIN_TRANSFER_AMOUNT = 1n;
 
 /** Maximum units that can be hired at once */
 const MAX_HIRE_BATCH = 10000;
@@ -36,18 +35,18 @@ const MAX_HIRE_BATCH = 10000;
 // Transfer Validation
 
 /** Validate transfer amount is within valid range */
-export function validateTransferAmount(amount: BN): ValidationResult {
-  if (amount.lt(MIN_TRANSFER_AMOUNT)) {
+export function validateTransferAmount(amount: bigint): ValidationResult {
+  if (amount < MIN_TRANSFER_AMOUNT) {
     return invalid(`Transfer amount must be at least ${MIN_TRANSFER_AMOUNT.toString()}`);
   }
-  if (amount.gt(MAX_TRANSFER_AMOUNT)) {
+  if (amount > MAX_TRANSFER_AMOUNT) {
     return invalid(`Transfer amount exceeds maximum`);
   }
   return valid();
 }
 
 /** Validate player can transfer cash */
-export function validateCanTransferCash(player: PlayerCore, amount: BN): ValidationResult {
+export function validateCanTransferCash(player: PlayerCore, amount: bigint): ValidationResult {
   return combine(
     validateTransferAmount(amount),
     validateHasCash(player, amount)
@@ -84,7 +83,7 @@ export function validateCanHireUnits(
   player: PlayerCore,
   unitType: number,
   amount: number,
-  cost: BN
+  cost: bigint
 ): ValidationResult {
   return combine(
     validateHireableUnitType(unitType),
@@ -104,7 +103,7 @@ export function validatePurchaseQuantity(quantity: number, maxQuantity: number):
 export function validateCanAffordPurchase(
   player: PlayerCore,
   priceType: 'cash' | 'gems' | 'fragments' | 'locked',
-  price: BN
+  price: bigint
 ): ValidationResult {
   switch (priceType) {
     case 'cash':
@@ -137,7 +136,7 @@ export function validateSpeedupAmount(speedupSeconds: number): ValidationResult 
 /** Validate player can afford speedup */
 export function validateCanAffordSpeedup(
   player: PlayerCore,
-  speedupCost: BN
+  speedupCost: bigint
 ): ValidationResult {
   return validateHasGems(player, speedupCost);
 }
@@ -145,14 +144,14 @@ export function validateCanAffordSpeedup(
 // Stake/Lock Validation
 
 /** Validate token lock amount */
-export function validateLockAmount(amount: BN): ValidationResult {
-  return validateMinimumBN(amount, new BN(1), 'Lock amount');
+export function validateLockAmount(amount: bigint): ValidationResult {
+  return validateMinimumBN(amount, 1n, 'Lock amount');
 }
 
 /** Validate token unlock amount */
-export function validateUnlockAmount(player: PlayerCore, amount: BN): ValidationResult {
+export function validateUnlockAmount(player: PlayerCore, amount: bigint): ValidationResult {
   return combine(
-    validateMinimumBN(amount, new BN(1), 'Unlock amount'),
+    validateMinimumBN(amount, 1n, 'Unlock amount'),
     validateHasLockedNovi(player, amount)
   );
 }
@@ -163,28 +162,28 @@ export function validateUnlockAmount(player: PlayerCore, amount: BN): Validation
 export function validateHasCraftingMaterials(
   player: PlayerCore,
   requirements: {
-    common?: BN;
-    uncommon?: BN;
-    rare?: BN;
-    epic?: BN;
-    legendary?: BN;
+    common?: bigint;
+    uncommon?: bigint;
+    rare?: bigint;
+    epic?: bigint;
+    legendary?: bigint;
   }
 ): ValidationResult {
   const results: ValidationResult[] = [];
 
-  if (requirements.common && !requirements.common.isZero()) {
+  if (requirements.common && requirements.common !== 0n) {
     results.push(validateHasMaterials(player, 'common', requirements.common));
   }
-  if (requirements.uncommon && !requirements.uncommon.isZero()) {
+  if (requirements.uncommon && requirements.uncommon !== 0n) {
     results.push(validateHasMaterials(player, 'uncommon', requirements.uncommon));
   }
-  if (requirements.rare && !requirements.rare.isZero()) {
+  if (requirements.rare && requirements.rare !== 0n) {
     results.push(validateHasMaterials(player, 'rare', requirements.rare));
   }
-  if (requirements.epic && !requirements.epic.isZero()) {
+  if (requirements.epic && requirements.epic !== 0n) {
     results.push(validateHasMaterials(player, 'epic', requirements.epic));
   }
-  if (requirements.legendary && !requirements.legendary.isZero()) {
+  if (requirements.legendary && requirements.legendary !== 0n) {
     results.push(validateHasMaterials(player, 'legendary', requirements.legendary));
   }
 
@@ -196,11 +195,11 @@ export function validateHasCraftingMaterials(
 /** Validate player hasn't exceeded daily transfer limit */
 export function validateDailyTransferLimit(
   player: PlayerCore,
-  amount: BN,
-  maxDaily: BN
+  amount: bigint,
+  maxDaily: bigint
 ): ValidationResult {
-  const newTotal = player.dailyTransferred.add(amount);
-  if (newTotal.gt(maxDaily)) {
+  const newTotal = (player.dailyTransferred + amount);
+  if (newTotal > maxDaily) {
     return invalid(
       `Would exceed daily transfer limit: ${newTotal.toString()} > ${maxDaily.toString()}`
     );

@@ -204,7 +204,10 @@ export async function createOrSkip(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildIx: () => TransactionInstruction | TransactionInstruction[],
+  buildIx: () =>
+    | TransactionInstruction
+    | TransactionInstruction[]
+    | Promise<TransactionInstruction | TransactionInstruction[]>,
   stats: PhaseStats
 ): Promise<boolean> {
   const exists = await accountExists(ctx.connection, pda);
@@ -220,7 +223,7 @@ export async function createOrSkip(
     return true;
   }
 
-  const ix = buildIx();
+  const ix = await buildIx();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
   log.create(name);
   stats.created++;
@@ -231,8 +234,14 @@ export async function createOrUpdate(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildCreate: () => TransactionInstruction | TransactionInstruction[],
-  buildUpdate: () => TransactionInstruction | TransactionInstruction[],
+  buildCreate: () =>
+    | TransactionInstruction
+    | TransactionInstruction[]
+    | Promise<TransactionInstruction | TransactionInstruction[]>,
+  buildUpdate: () =>
+    | TransactionInstruction
+    | TransactionInstruction[]
+    | Promise<TransactionInstruction | TransactionInstruction[]>,
   stats: PhaseStats
 ): Promise<'created' | 'updated' | 'skipped'> {
   const exists = await accountExists(ctx.connection, pda);
@@ -243,7 +252,7 @@ export async function createOrUpdate(
       stats.created++;
       return 'created';
     }
-    const ix = buildCreate();
+    const ix = await buildCreate();
     await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
     log.create(name);
     stats.created++;
@@ -255,7 +264,7 @@ export async function createOrUpdate(
     stats.updated++;
     return 'updated';
   }
-  const ix = buildUpdate();
+  const ix = await buildUpdate();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
   log.update(name);
   stats.updated++;
@@ -266,7 +275,10 @@ export async function updateOnly(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildUpdate: () => TransactionInstruction | TransactionInstruction[],
+  buildUpdate: () =>
+    | TransactionInstruction
+    | TransactionInstruction[]
+    | Promise<TransactionInstruction | TransactionInstruction[]>,
   stats: PhaseStats
 ): Promise<boolean> {
   const exists = await accountExists(ctx.connection, pda);
@@ -281,7 +293,7 @@ export async function updateOnly(
     return true;
   }
 
-  const ix = buildUpdate();
+  const ix = await buildUpdate();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
   log.update(name);
   stats.updated++;

@@ -5,7 +5,6 @@
  * Matches the on-chain logic in processor/shop/purchase_novi.rs
  */
 
-import BN from 'bn.js';
 import type { NoviPurchaseConfig } from '../state/game-engine';
 
 // Types
@@ -13,19 +12,19 @@ import type { NoviPurchaseConfig } from '../state/game-engine';
 /** NOVI purchase preview result */
 export interface NoviPurchasePreview {
   /** Base NOVI amount (before bonuses) */
-  baseAmount: BN;
+  baseAmount: bigint;
   /** Bulk bonus amount */
-  bulkBonus: BN;
+  bulkBonus: bigint;
   /** Subscription bonus amount */
-  subscriptionBonus: BN;
+  subscriptionBonus: bigint;
   /** Streak bonus amount */
-  streakBonus: BN;
+  streakBonus: bigint;
   /** Total bonus amount (all bonuses combined) */
-  totalBonus: BN;
+  totalBonus: bigint;
   /** Total NOVI to receive (base + bonuses) */
-  totalNovi: BN;
+  totalNovi: bigint;
   /** Cost in lamports */
-  costLamports: BN;
+  costLamports: bigint;
   /** Total bonus in basis points */
   totalBonusBps: number;
 }
@@ -149,8 +148,8 @@ export function calculateTotalBonusBps(
  * @param bonusBps - Bonus in basis points
  * @returns Bonus amount
  */
-export function calculateBonusAmount(baseAmount: BN, bonusBps: number): BN {
-  return baseAmount.mul(new BN(bonusBps)).div(new BN(10000));
+export function calculateBonusAmount(baseAmount: bigint, bonusBps: number): bigint {
+  return (baseAmount * BigInt(bonusBps)) / 10000n;
 }
 
 // Daily Cap Calculations
@@ -165,7 +164,7 @@ export function calculateBonusAmount(baseAmount: BN, bonusBps: number): BN {
 export function getDailyCap(
   subscriptionTier: number,
   config: NoviPurchaseConfig
-): BN {
+): bigint {
   if (subscriptionTier >= 0 && subscriptionTier < 4) {
     const cap = config.noviSubDailyCap[subscriptionTier];
     if (cap) return cap;
@@ -184,14 +183,14 @@ export function getDailyCap(
  * @returns Whether purchase would exceed cap
  */
 export function wouldExceedDailyCap(
-  purchasedToday: BN,
-  purchaseAmount: BN,
+  purchasedToday: bigint,
+  purchaseAmount: bigint,
   subscriptionTier: number,
   config: NoviPurchaseConfig
 ): boolean {
   const cap = getDailyCap(subscriptionTier, config);
-  const newTotal = purchasedToday.add(purchaseAmount);
-  return newTotal.gt(cap);
+  const newTotal = (purchasedToday + purchaseAmount);
+  return newTotal > cap;
 }
 
 /**
@@ -203,15 +202,15 @@ export function wouldExceedDailyCap(
  * @returns Remaining allowance (0 if cap reached)
  */
 export function getRemainingDailyAllowance(
-  purchasedToday: BN,
+  purchasedToday: bigint,
   subscriptionTier: number,
   config: NoviPurchaseConfig
-): BN {
+): bigint {
   const cap = getDailyCap(subscriptionTier, config);
-  if (purchasedToday.gte(cap)) {
-    return new BN(0);
+  if (purchasedToday >= cap) {
+    return 0n;
   }
-  return cap.sub(purchasedToday);
+  return (cap - purchasedToday);
 }
 
 // Purchase Preview
@@ -254,13 +253,13 @@ export function calculateNoviPurchasePreview(
   const bulkBonus = calculateBonusAmount(baseAmount, bulkBonusBps);
   const subscriptionBonus = calculateBonusAmount(baseAmount, subBonusBps);
   const streakBonus = calculateBonusAmount(baseAmount, streakBonusBps);
-  const totalBonus = bulkBonus.add(subscriptionBonus).add(streakBonus);
+  const totalBonus = (bulkBonus + subscriptionBonus + streakBonus);
 
   // Total NOVI
-  const totalNovi = baseAmount.add(totalBonus);
+  const totalNovi = (baseAmount + totalBonus);
 
   // Cost in lamports (pay for base amount only, bonuses are free)
-  const costLamports = baseAmount.mul(config.noviBasePriceLamports);
+  const costLamports = (baseAmount * config.noviBasePriceLamports);
 
   return {
     baseAmount,
@@ -295,7 +294,7 @@ export const NOVI_PACKAGE_TIERS = [
 export function getPackageAmount(
   packageIndex: number,
   config: NoviPurchaseConfig
-): BN | null {
+): bigint | null {
   if (packageIndex >= 0 && packageIndex < 5) {
     return config.noviPurchaseAmounts[packageIndex] ?? null;
   }
@@ -308,8 +307,8 @@ export function getPackageAmount(
  * @param amount - Raw amount (with 1 decimal, e.g., 5000 = 500 NOVI)
  * @returns Formatted string
  */
-export function formatNoviAmount(amount: BN | number): string {
-  const value = typeof amount === 'number' ? amount : amount.toNumber();
+export function formatNoviAmount(amount: bigint | number): string {
+  const value = typeof amount === 'number' ? amount : Number(amount);
   return (value / 10).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
@@ -322,8 +321,8 @@ export function formatNoviAmount(amount: BN | number): string {
  * @param lamports - Amount in lamports
  * @returns Formatted SOL string
  */
-export function formatLamportsAsSol(lamports: BN | number): string {
-  const value = typeof lamports === 'number' ? lamports : lamports.toNumber();
+export function formatLamportsAsSol(lamports: bigint | number): string {
+  const value = typeof lamports === 'number' ? lamports : Number(lamports);
   const sol = value / 1_000_000_000;
   return sol.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -345,12 +344,12 @@ export function formatLamportsAsSol(lamports: BN | number): string {
  * @returns Cost in lamports
  */
 export function calculateOracleCostLamports(
-  baseAmount: BN | number,
+  baseAmount: bigint | number,
   noviUsdPrice: number,
   solUsdPrice: number,
   undercutBps: number = 1500
-): BN {
-  const amount = typeof baseAmount === 'number' ? baseAmount : baseAmount.toNumber();
+): bigint {
+  const amount = typeof baseAmount === 'number' ? baseAmount : Number(baseAmount);
 
   // Calculate: (amount * novi_usd / sol_usd) * 10^8
   // NOVI has 1 decimal in base_amount, SOL has 9 decimals in lamports
@@ -360,7 +359,7 @@ export function calculateOracleCostLamports(
   // Apply undercut (reduce price by undercut percentage)
   const lamportsAfterUndercut = lamportsBeforeUndercut * (10000 - undercutBps) / 10000;
 
-  return new BN(Math.floor(lamportsAfterUndercut));
+  return BigInt(Math.floor(lamportsAfterUndercut));
 }
 
 /**

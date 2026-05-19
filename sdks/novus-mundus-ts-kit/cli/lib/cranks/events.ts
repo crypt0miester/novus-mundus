@@ -18,7 +18,7 @@ export async function crankEvents(ctx: CLIContext): Promise<PhaseStats> {
   log.info(`  Checking ${EVENTS.length} known events...`);
 
   for (const event of EVENTS) {
-    const [eventPda] = deriveEventPda(ctx.gameEngine, event.eventId);
+    const [eventPda] = await deriveEventPda(ctx.gameEngine, event.eventId);
 
     const exists = await accountExists(ctx.connection, eventPda);
     if (!exists) {
@@ -84,7 +84,7 @@ export async function crankEvents(ctx: CLIContext): Promise<PhaseStats> {
     }
 
     // Finalize this event
-    const ix = createFinalizeEventInstruction({
+    const ix = await createFinalizeEventInstruction({
       gameEngine: ctx.gameEngine,
       eventId: event.eventId,
     });

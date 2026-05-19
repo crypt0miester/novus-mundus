@@ -6,8 +6,7 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u32, u64, i64, bool, pubkey, array } from '../utils/codec';
 
 // Research Template Interface
 
@@ -16,7 +15,7 @@ export interface ResearchTemplateAccount {
   category: number;
   maxLevel: number;
   baseTimeSeconds: number;
-  baseNoviCost: BN;
+  baseNoviCost: bigint;
   buffType: number;
   buffPerLevelBps: number;
   prerequisiteResearch: number;
@@ -34,11 +33,11 @@ export interface ResearchProgressAccount {
   player: Address;
   currentResearch: number;
   currentLevel: number;
-  startedAt: BN;
-  completesAt: BN;
+  startedAt: bigint;
+  completesAt: bigint;
   completedLevels: number[];
-  totalGemsSpent: BN;
-  totalNoviSpent: BN;
+  totalGemsSpent: bigint;
+  totalNoviSpent: bigint;
   buffCacheVersion: number;
 
   // Economy Research Buffs
@@ -68,117 +67,66 @@ export interface ResearchProgressAccount {
 /** ResearchProgress size in bytes (repr(C) layout with alignment padding) */
 export const RESEARCH_PROGRESS_SIZE = 144;
 
+// Codecs
+
+/** ResearchTemplate `#[repr(C)]` codec (leading byte is the account-key discriminator) */
+const researchTemplateCodec = reprC<ResearchTemplateAccount>([
+  pad(1), // account_key discriminator
+  ['researchType', u8],
+  ['category', u8],
+  ['maxLevel', u8],
+  ['baseTimeSeconds', u32],
+  ['baseNoviCost', u64],
+  ['buffType', u8],
+  ['buffPerLevelBps', u16],
+  ['prerequisiteResearch', u8],
+  ['prerequisiteLevel', u8],
+  ['gemCostPerMinute', u16],
+  ['isActive', bool],
+  pad(5), // _padding
+], RESEARCH_TEMPLATE_SIZE);
+
+/** ResearchProgress `#[repr(C)]` codec */
+const researchProgressCodec = reprC<ResearchProgressAccount>([
+  pad(1), // account_key discriminator
+  ['player', pubkey],
+  ['currentResearch', u8],
+  ['currentLevel', u8],
+  ['startedAt', i64],
+  ['completesAt', i64],
+  ['completedLevels', array(u8, 30)],
+  ['totalGemsSpent', u64],
+  ['totalNoviSpent', u64],
+  ['buffCacheVersion', u32],
+  ['productionEfficiencyBps', u16],
+  ['resourceCapacityBps', u16],
+  ['marketTaxReductionBps', u16],
+  ['tradeSpeedBps', u16],
+  ['miningOutputBps', u16],
+  ['cashGenerationBps', u16],
+  ['constructionSpeedBps', u16],
+  ['upkeepReductionBps', u16],
+  ['blackMarketLevel', u16],
+  ['taxCollectionBps', u16],
+  ['fishingEfficiencyBps', u16],
+  ['fragmentDropRateBps', u16],
+  ['gemDropRateBps', u16],
+  ['ascendedNodes', u32],
+  ['totalAscensions', u8],
+  ['bump', u8],
+  pad(1), // _padding
+], RESEARCH_PROGRESS_SIZE);
+
 // Deserialization
 
 /** Deserialize ResearchTemplate from raw bytes */
-export function deserializeResearchTemplate(data: Uint8Array | Buffer): ResearchTemplateAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const researchType = reader.readU8();
-  const category = reader.readU8();
-  const maxLevel = reader.readU8();
-  const baseTimeSeconds = reader.readU32();
-  const baseNoviCost = reader.readU64();
-  const buffType = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment (offset 17 -> 18)
-  const buffPerLevelBps = reader.readU16();
-  const prerequisiteResearch = reader.readU8();
-  const prerequisiteLevel = reader.readU8();
-  const gemCostPerMinute = reader.readU16();
-  const isActive = reader.readBool();
-  reader.skip(5); // _padding
-
-  return {
-    researchType,
-    category,
-    maxLevel,
-    baseTimeSeconds,
-    baseNoviCost,
-    buffType,
-    buffPerLevelBps,
-    prerequisiteResearch,
-    prerequisiteLevel,
-    gemCostPerMinute,
-    isActive,
-  };
+export function deserializeResearchTemplate(data: Uint8Array): ResearchTemplateAccount {
+  return researchTemplateCodec.decode(data);
 }
 
 /** Deserialize ResearchProgress from raw bytes */
-export function deserializeResearchProgress(data: Uint8Array | Buffer): ResearchProgressAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const player = reader.readPubkey();
-  const currentResearch = reader.readU8();
-  const currentLevel = reader.readU8();
-  reader.skip(5); // implicit padding for i64 alignment (offset 35 -> 40)
-  const startedAt = reader.readI64();
-  const completesAt = reader.readI64();
-
-  // completed_levels: [u8; 30]
-  const completedLevels: number[] = [];
-  for (let i = 0; i < 30; i++) {
-    completedLevels.push(reader.readU8());
-  }
-
-  reader.skip(2); // implicit padding for u64 alignment (offset 86 -> 88)
-  const totalGemsSpent = reader.readU64();
-  const totalNoviSpent = reader.readU64();
-  const buffCacheVersion = reader.readU32();
-
-  // Economy Research Buffs
-  const productionEfficiencyBps = reader.readU16();
-  const resourceCapacityBps = reader.readU16();
-  const marketTaxReductionBps = reader.readU16();
-  const tradeSpeedBps = reader.readU16();
-  const miningOutputBps = reader.readU16();
-  const cashGenerationBps = reader.readU16();
-  const constructionSpeedBps = reader.readU16();
-  const upkeepReductionBps = reader.readU16();
-  const blackMarketLevel = reader.readU16();
-  const taxCollectionBps = reader.readU16();
-
-  // Growth Buffs
-  const fishingEfficiencyBps = reader.readU16();
-  const fragmentDropRateBps = reader.readU16();
-  const gemDropRateBps = reader.readU16();
-
-  reader.skip(2); // implicit padding for u32 alignment (offset 134 -> 136)
-
-  // Ascension System
-  const ascendedNodes = reader.readU32();
-  const totalAscensions = reader.readU8();
-  const bump = reader.readU8();
-  reader.skip(1); // _padding
-
-  return {
-    player,
-    currentResearch,
-    currentLevel,
-    startedAt,
-    completesAt,
-    completedLevels,
-    totalGemsSpent,
-    totalNoviSpent,
-    buffCacheVersion,
-    productionEfficiencyBps,
-    resourceCapacityBps,
-    marketTaxReductionBps,
-    tradeSpeedBps,
-    miningOutputBps,
-    cashGenerationBps,
-    constructionSpeedBps,
-    upkeepReductionBps,
-    blackMarketLevel,
-    taxCollectionBps,
-    fishingEfficiencyBps,
-    fragmentDropRateBps,
-    gemDropRateBps,
-    ascendedNodes,
-    totalAscensions,
-    bump,
-  };
+export function deserializeResearchProgress(data: Uint8Array): ResearchProgressAccount {
+  return researchProgressCodec.decode(data);
 }
 
 // Parse Functions
@@ -208,7 +156,7 @@ export function isResearching(progress: ResearchProgressAccount): boolean {
 
 /** Check if research is complete and ready to claim */
 export function isResearchComplete(progress: ResearchProgressAccount, nowSeconds: number): boolean {
-  return isResearching(progress) && nowSeconds >= progress.completesAt.toNumber();
+  return isResearching(progress) && nowSeconds >= Number(progress.completesAt);
 }
 
 /** Get level of a specific research node */

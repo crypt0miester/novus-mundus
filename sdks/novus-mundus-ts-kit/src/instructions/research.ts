@@ -9,10 +9,10 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u32, u64, i64, pad } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -44,7 +44,7 @@ export interface InitializeTemplateParams {
   /** Base time in seconds for level 1 */
   baseTimeSeconds: number;
   /** Base NOVI cost for level 1 */
-  baseCost: BN | number | bigint;
+  baseCost: bigint | number;
   /** Buff type for this research */
   buffType: number;
   /** Buff per level in basis points */
@@ -57,6 +57,31 @@ export interface InitializeTemplateParams {
   gemCostPerMinute: number;
 }
 
+/** InitializeTemplate args (22 bytes) */
+const initializeTemplateArgs = packed<{
+  researchType: number;
+  category: number;
+  maxLevel: number;
+  baseTimeSeconds: number;
+  baseCost: bigint;
+  buffType: number;
+  buffPerLevelBps: number;
+  prerequisiteResearch: number;
+  prerequisiteLevel: number;
+  gemCostPerMinute: number;
+}>([
+  ['researchType', u8],
+  ['category', u8],
+  ['maxLevel', u8],
+  ['baseTimeSeconds', u32],
+  ['baseCost', u64],
+  ['buffType', u8],
+  ['buffPerLevelBps', u16],
+  ['prerequisiteResearch', u8],
+  ['prerequisiteLevel', u8],
+  ['gemCostPerMinute', u16],
+], 22);
+
 /** ~5,000 CU */
 /**
  * Initialize a research template.
@@ -66,11 +91,11 @@ export interface InitializeTemplateParams {
  * Rust account order: [dao_authority, research_template, game_engine, system_program]
  * Rust instruction data: 22 bytes
  */
-export function createInitializeTemplateInstruction(
+export async function createInitializeTemplateInstruction(
   accounts: InitializeTemplateAccounts,
   params: InitializeTemplateParams
-): Instruction {
-  const [template] = deriveResearchTemplatePda(params.researchType);
+): Promise<Instruction> {
+  const [template] = await deriveResearchTemplatePda(params.researchType);
 
   // Rust: [dao_authority, research_template, game_engine, system_program]
   const keys = [
@@ -80,30 +105,22 @@ export function createInitializeTemplateInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Rust expects exactly 22 bytes:
-  // [0] research_type: u8
-  // [1] category: u8
-  // [2] max_level: u8
-  // [3..7] base_time_seconds: u32
-  // [7..15] base_novi_cost: u64
-  // [15] buff_type: u8
-  // [16..18] buff_per_level_bps: u16
-  // [18] prerequisite_research: u8
-  // [19] prerequisite_level: u8
-  // [20..22] gem_cost_per_minute: u16
-  const writer = new BufferWriter(22);
-  writer.writeU8(params.researchType);
-  writer.writeU8(params.category);
-  writer.writeU8(params.maxLevel);
-  writer.writeU32(params.baseTimeSeconds);
-  writer.writeU64(params.baseCost);
-  writer.writeU8(params.buffType);
-  writer.writeU16(params.buffPerLevelBps);
-  writer.writeU8(params.prerequisiteType === -1 ? 255 : params.prerequisiteType);
-  writer.writeU8(params.prerequisiteLevel);
-  writer.writeU16(params.gemCostPerMinute);
-
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_INIT_TEMPLATE, writer.toBuffer());
+  // Rust expects exactly 22 bytes (see initializeTemplateArgs layout).
+  const data = createInstructionData(
+    DISCRIMINATORS.RESEARCH_INIT_TEMPLATE,
+    initializeTemplateArgs.encode({
+      researchType: params.researchType,
+      category: params.category,
+      maxLevel: params.maxLevel,
+      baseTimeSeconds: params.baseTimeSeconds,
+      baseCost: BigInt(params.baseCost),
+      buffType: params.buffType,
+      buffPerLevelBps: params.buffPerLevelBps,
+      prerequisiteResearch: params.prerequisiteType === -1 ? 255 : params.prerequisiteType,
+      prerequisiteLevel: params.prerequisiteLevel,
+      gemCostPerMinute: params.gemCostPerMinute,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -121,14 +138,28 @@ export interface UpdateTemplateAccounts {
 
 export interface UpdateTemplateParams {
   /** New base cost (0=no change) */
-  baseCost?: BN | number | bigint;
+  baseCost?: bigint | number;
   /** New base duration (0=no change) */
-  baseDuration?: BN | number | bigint;
+  baseDuration?: bigint | number;
   /** New buff per level (0=no change) */
   buffPerLevelBps?: number;
   /** New max level (0=no change) */
   maxLevel?: number;
 }
+
+/** UpdateTemplate args (20 bytes) */
+const updateTemplateArgs = packed<{
+  baseCost: bigint;
+  baseDuration: bigint;
+  buffPerLevelBps: number;
+  maxLevel: number;
+}>([
+  ['baseCost', u64],
+  ['baseDuration', i64],
+  ['buffPerLevelBps', u16],
+  ['maxLevel', u8],
+  pad(1),
+], 20);
 
 /** ~5,000 CU */
 /**
@@ -136,11 +167,11 @@ export interface UpdateTemplateParams {
  *
  * Admin-only.
  */
-export function createUpdateTemplateInstruction(
+export async function createUpdateTemplateInstruction(
   accounts: UpdateTemplateAccounts,
   params: UpdateTemplateParams = {}
-): Instruction {
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<Instruction> {
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
@@ -148,13 +179,15 @@ export function createUpdateTemplateInstruction(
     { pubkey: template, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(20);
-  writer.writeU64(params.baseCost ?? 0);
-  writer.writeI64(params.baseDuration ?? 0);
-  writer.writeU16(params.buffPerLevelBps ?? 0);
-  writer.writeU8(params.maxLevel ?? 0);
-
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_UPDATE_TEMPLATE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.RESEARCH_UPDATE_TEMPLATE,
+    updateTemplateArgs.encode({
+      baseCost: BigInt(params.baseCost ?? 0),
+      baseDuration: BigInt(params.baseDuration ?? 0),
+      buffPerLevelBps: params.buffPerLevelBps ?? 0,
+      maxLevel: params.maxLevel ?? 0,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -174,11 +207,11 @@ export interface CreateProgressAccounts {
  *
  * Creates the player's research progress PDA.
  */
-export function createCreateProgressInstruction(
+export async function createCreateProgressInstruction(
   accounts: CreateProgressAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
 
   // Rust order: [player_owner, research_progress, player_account, payer, system_program]
   const keys = [
@@ -205,22 +238,27 @@ export interface StartResearchAccounts {
   researchType: number;
 }
 
+/** Single research_type (u8) args — shared by start_research and ascend */
+const researchTypeArgs = packed<{ researchType: number }>([
+  ['researchType', u8],
+], 1);
+
 /** ~15,000 CU */
 /**
  * Start researching a node.
  *
  * Requires Academy building and NOVI tokens.
  */
-export function createStartResearchInstruction(
+export async function createStartResearchInstruction(
   accounts: StartResearchAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -234,10 +272,10 @@ export function createStartResearchInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(accounts.researchType);
-
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_START, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.RESEARCH_START,
+    researchTypeArgs.encode({ researchType: accounts.researchType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -261,12 +299,12 @@ export interface CompleteResearchAccounts {
  *
  * Permissionless - anyone can call after research time elapsed.
  */
-export function createCompleteResearchInstruction(
+export async function createCompleteResearchInstruction(
   accounts: CompleteResearchAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: false },
@@ -293,8 +331,13 @@ export interface SpeedUpResearchAccounts {
 
 export interface SpeedUpResearchParams {
   /** Seconds to speed up (0 = complete all remaining) */
-  speedUpSeconds: BN | number | bigint;
+  speedUpSeconds: bigint | number;
 }
+
+/** SpeedUpResearch args (8 bytes) */
+const speedUpResearchArgs = packed<{ speedUpSeconds: bigint }>([
+  ['speedUpSeconds', u64],
+], 8);
 
 /** ~5,000 CU */
 /**
@@ -311,13 +354,13 @@ export interface SpeedUpResearchParams {
  * On-chain data (8 bytes):
  * - speed_up_seconds: u64 (0 = complete all remaining)
  */
-export function createSpeedUpResearchInstruction(
+export async function createSpeedUpResearchInstruction(
   accounts: SpeedUpResearchAccounts,
   params: SpeedUpResearchParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -326,10 +369,10 @@ export function createSpeedUpResearchInstruction(
     { pubkey: template, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(8);
-  writer.writeU64(params.speedUpSeconds);
-
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_SPEEDUP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.RESEARCH_SPEEDUP,
+    speedUpResearchArgs.encode({ speedUpSeconds: BigInt(params.speedUpSeconds) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -359,12 +402,12 @@ export interface CancelResearchAccounts {
  *
  * On-chain data: None
  */
-export function createCancelResearchInstruction(
+export async function createCancelResearchInstruction(
   accounts: CancelResearchAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -409,14 +452,14 @@ export interface AscendParams {
  * On-chain data (1 byte):
  * - research_type: u8 (which research to ascend)
  */
-export function createAscendInstruction(
+export async function createAscendInstruction(
   accounts: AscendAccounts,
   params: AscendParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(params.researchType);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(params.researchType);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -426,10 +469,10 @@ export function createAscendInstruction(
     { pubkey: estate, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.researchType);
-
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_ASCEND, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.RESEARCH_ASCEND,
+    researchTypeArgs.encode({ researchType: params.researchType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

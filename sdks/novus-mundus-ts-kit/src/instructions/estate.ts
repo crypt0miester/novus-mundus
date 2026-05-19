@@ -13,11 +13,13 @@
 import type { Address, Instruction } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u32, u64, pad } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveEstatePda,
+  deriveBuildingTemplatePda,
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 import { BuildingType } from '../types/enums';
@@ -36,6 +38,22 @@ export interface CreateEstateParams {
   cityId: number;
 }
 
+/** CreateEstate args (2 bytes): city_id (u16) */
+const createEstateArgs = packed<{ cityId: number }>([
+  ['cityId', u16],
+], 2);
+
+/** Single building_type (u8) args (1 byte) — shared by build/upgrade/complete */
+const buildingTypeArgs = packed<{ buildingType: number }>([
+  ['buildingType', u8],
+], 1);
+
+/** Two-u8 args (2 bytes) — shared by daily-activity, convert-materials, speedup */
+const twoU8Args = packed<{ a: number; b: number }>([
+  ['a', u8],
+  ['b', u8],
+], 2);
+
 /** ~5,000 CU */
 /**
  * Create estate account.
@@ -43,12 +61,12 @@ export interface CreateEstateParams {
  * Creates the player's estate PDA for building management.
  * Estate starts with 1 plot (4 building slots).
  */
-export function createCreateEstateInstruction(
+export async function createCreateEstateInstruction(
   accounts: CreateEstateAccounts,
   params: CreateEstateParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER, WRITE)
@@ -62,11 +80,10 @@ export function createCreateEstateInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: city_id (u16)
-  const writer = new BufferWriter(2);
-  writer.writeU16(params.cityId);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_CREATE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_CREATE,
+    createEstateArgs.encode({ cityId: params.cityId })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -91,15 +108,16 @@ export interface BuildBuildingParams {
  *
  * Requires NOVI payment and available building slot.
  */
-export function createBuildBuildingInstruction(
+export async function createBuildBuildingInstruction(
   accounts: BuildBuildingAccounts,
   params: BuildBuildingParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -108,12 +126,13 @@ export function createBuildBuildingInstruction(
     { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_BUILD, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_BUILD,
+    buildingTypeArgs.encode({ buildingType: params.buildingType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -138,15 +157,16 @@ export interface UpgradeBuildingParams {
  *
  * Requires NOVI payment. Cost scales with level.
  */
-export function createUpgradeBuildingInstruction(
+export async function createUpgradeBuildingInstruction(
   accounts: UpgradeBuildingAccounts,
   params: UpgradeBuildingParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -155,12 +175,13 @@ export function createUpgradeBuildingInstruction(
     { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_UPGRADE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_UPGRADE,
+    buildingTypeArgs.encode({ buildingType: params.buildingType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -186,12 +207,12 @@ export interface CompleteBuildingParams {
  * Must be called by the estate owner after construction time has elapsed.
  * Building becomes Active and level increases.
  */
-export function createCompleteBuildingInstruction(
+export async function createCompleteBuildingInstruction(
   accounts: CompleteBuildingAccounts,
   params: CompleteBuildingParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -203,10 +224,10 @@ export function createCompleteBuildingInstruction(
     { pubkey: estate, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_COMPLETE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_COMPLETE,
+    buildingTypeArgs.encode({ buildingType: params.buildingType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -226,14 +247,14 @@ export interface BuyPlotAccounts {
  *
  * Costs increase with each plot purchased.
  */
-export function createBuyPlotInstruction(
+export async function createBuyPlotInstruction(
   accounts: BuyPlotAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -265,11 +286,11 @@ export interface DailyClaimAccounts {
  *
  * Collects resources from all active buildings.
  */
-export function createDailyClaimInstruction(
+export async function createDailyClaimInstruction(
   accounts: DailyClaimAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -325,12 +346,12 @@ export interface DailyActivityParams {
  * - Midday: Market, Academy, Arena, Stables
  * - Dusk: Sanctuary, Observatory, Treasury, Citadel, Catacombs, Infirmary
  */
-export function createDailyActivityInstruction(
+export async function createDailyActivityInstruction(
   accounts: DailyActivityAccounts,
   params: DailyActivityParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -362,12 +383,11 @@ export function createDailyActivityInstruction(
     keys.push({ pubkey: accounts.researchProgress, isSigner: false, isWritable: true });
   }
 
-  // Instruction data: building_type (u8), score (u8)
-  const writer = new BufferWriter(2);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
-  writer.writeU8(Math.min(params.score, 100)); // Cap at 100
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_DAILY_ACTIVITY, writer.toBuffer());
+  // Instruction data: building_type (u8), score (u8) — score capped at 100
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_DAILY_ACTIVITY,
+    twoU8Args.encode({ a: params.buildingType, b: Math.min(params.score, 100) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -406,12 +426,12 @@ export interface ConvertMaterialsParams {
  * - Workshop Lv 10+: Rare → Epic
  * - Workshop Lv 15+: Epic → Legendary
  */
-export function createConvertMaterialsInstruction(
+export async function createConvertMaterialsInstruction(
   accounts: ConvertMaterialsAccounts,
   params: ConvertMaterialsParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -424,11 +444,10 @@ export function createConvertMaterialsInstruction(
   ];
 
   // Instruction data: from_tier (u8), conversions (u8)
-  const writer = new BufferWriter(2);
-  writer.writeU8(params.fromTier);
-  writer.writeU8(params.conversions);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_CONVERT_MATERIALS, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_CONVERT_MATERIALS,
+    twoU8Args.encode({ a: params.fromTier, b: params.conversions })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -457,12 +476,12 @@ export interface BuildingSpeedupParams {
  * - Tier 1: 50% of time remains (1x gem cost)
  * - Tier 2: 25% of time remains (2x gem cost)
  */
-export function createBuildingSpeedupInstruction(
+export async function createBuildingSpeedupInstruction(
   accounts: BuildingSpeedupAccounts,
   params: BuildingSpeedupParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. player_account (WRITE)
@@ -476,11 +495,10 @@ export function createBuildingSpeedupInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
-  writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
-  writer.writeU8(params.speedupTier);
-
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_SPEEDUP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_SPEEDUP,
+    twoU8Args.encode({ a: params.buildingType, b: params.speedupTier })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -499,6 +517,13 @@ export interface RecoverTroopsParams {
   amount: bigint | number;
 }
 
+/** RecoverTroops args (10 bytes): unit_type (u8), 1 byte padding, amount (u64) */
+const recoverTroopsArgs = packed<{ unitType: number; amount: bigint }>([
+  ['unitType', u8],
+  pad(1),
+  ['amount', u64],
+], 10);
+
 /** ~15,000 CU */
 /**
  * Recover wounded troops from the Infirmary.
@@ -506,12 +531,12 @@ export interface RecoverTroopsParams {
  * Requires Infirmary building. Cost is 50% of normal hire cost,
  * further reduced by Infirmary level and daily buff.
  */
-export function createRecoverTroopsInstruction(
+export async function createRecoverTroopsInstruction(
   accounts: RecoverTroopsAccounts,
   params: RecoverTroopsParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -525,12 +550,82 @@ export function createRecoverTroopsInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(10);
-  writer.writeU8(params.unitType);
-  writer.writeU8(0); // padding
-  writer.writeU64(BigInt(params.amount));
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_RECOVER_TROOPS,
+    recoverTroopsArgs.encode({ unitType: params.unitType, amount: BigInt(params.amount) })
+  );
 
-  const data = createInstructionData(DISCRIMINATORS.ESTATE_RECOVER_TROOPS, writer.toBuffer());
+  return buildInstruction(PROGRAM_ID, keys, data);
+}
+
+// Initialize Building Template (DAO)
+
+export interface InitializeBuildingTemplateAccounts {
+  /** DAO authority (signer, pays rent) */
+  daoAuthority: Address;
+  /** GameEngine PDA */
+  gameEngine: Address;
+}
+
+export interface InitializeBuildingTemplateParams {
+  buildingType: BuildingType | number;
+  tier: number;
+  maxLevel: number;
+  baseTimeSeconds: number;
+  baseNoviCost: bigint | number;
+  costGrowthBps: number;
+  timeGrowthBps: number;
+}
+
+/** InitBuildingTemplate args (19 bytes). */
+const initBuildingTemplateArgs = packed<{
+  buildingType: number;
+  tier: number;
+  maxLevel: number;
+  baseTimeSeconds: number;
+  baseNoviCost: bigint;
+  costGrowthBps: number;
+  timeGrowthBps: number;
+}>([
+  ['buildingType', u8],
+  ['tier', u8],
+  ['maxLevel', u8],
+  ['baseTimeSeconds', u32],
+  ['baseNoviCost', u64],
+  ['costGrowthBps', u16],
+  ['timeGrowthBps', u16],
+], 19);
+
+/**
+ * Create the on-chain BuildingTemplate for one building type (DAO only).
+ *
+ * Build/upgrade read cost and time from this account; one PDA per type.
+ */
+export async function createInitializeBuildingTemplateInstruction(
+  accounts: InitializeBuildingTemplateAccounts,
+  params: InitializeBuildingTemplateParams
+): Promise<Instruction> {
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
+
+  const keys = [
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
+    { pubkey: buildingTemplate, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+  ];
+
+  const data = createInstructionData(
+    DISCRIMINATORS.ESTATE_INIT_BUILDING_TEMPLATE,
+    initBuildingTemplateArgs.encode({
+      buildingType: params.buildingType,
+      tier: params.tier,
+      maxLevel: params.maxLevel,
+      baseTimeSeconds: params.baseTimeSeconds,
+      baseNoviCost: BigInt(params.baseNoviCost),
+      costGrowthBps: params.costGrowthBps,
+      timeGrowthBps: params.timeGrowthBps,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

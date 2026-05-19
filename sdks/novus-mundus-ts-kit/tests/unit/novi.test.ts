@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import BN from 'bn.js';
 import {
   // Streak
   calculateNoviStreak,
@@ -39,22 +38,22 @@ import type { NoviPurchaseConfig } from '../../src/state/game-engine';
 
 function createTestConfig(): NoviPurchaseConfig {
   return {
-    noviBasePriceLamports: new BN(100_000), // 0.0001 SOL per NOVI
+    noviBasePriceLamports: 100_000n, // 0.0001 SOL per NOVI
     noviMarketUndercutBps: 1500, // 15% undercut
     noviPurchaseAmounts: [
-      new BN(5000),   // 500 NOVI (1 decimal)
-      new BN(10000),  // 1000 NOVI
-      new BN(50000),  // 5000 NOVI
-      new BN(100000), // 10000 NOVI
-      new BN(250000), // 25000 NOVI
+      5000n,   // 500 NOVI (1 decimal)
+      10000n,  // 1000 NOVI
+      50000n,  // 5000 NOVI
+      100000n, // 10000 NOVI
+      250000n, // 25000 NOVI
     ],
     noviBulkBonusBps: [0, 200, 500, 1000, 1500],
     noviSubBonusBps: [0, 500, 1000, 2000],
     noviSubDailyCap: [
-      new BN(50000),   // Free tier: 5000 NOVI/day
-      new BN(100000),  // Bronze: 10000 NOVI/day
-      new BN(250000),  // Silver: 25000 NOVI/day
-      new BN(500000),  // Gold: 50000 NOVI/day
+      50000n,   // Free tier: 5000 NOVI/day
+      100000n,  // Bronze: 10000 NOVI/day
+      250000n,  // Silver: 25000 NOVI/day
+      500000n,  // Gold: 50000 NOVI/day
     ],
     noviStreakBonusBps: [0, 100, 200, 300, 500, 700, 1000],
     noviPythFeed: null,
@@ -189,34 +188,34 @@ describe('Bonus Calculations', () => {
 
   describe('calculateBonusAmount', () => {
     it('should calculate 10% bonus', () => {
-      const base = new BN(10000);
+      const base = 10000n;
       const bonus = calculateBonusAmount(base, 1000); // 10%
-      expect(bonus.toNumber()).toBe(1000);
+      expect(Number(bonus)).toBe(1000);
     });
 
     it('should return 0 for 0 bps', () => {
-      const base = new BN(10000);
+      const base = 10000n;
       const bonus = calculateBonusAmount(base, 0);
-      expect(bonus.toNumber()).toBe(0);
+      expect(Number(bonus)).toBe(0);
     });
 
     it('should return full amount for 10000 bps (100%)', () => {
-      const base = new BN(5000);
+      const base = 5000n;
       const bonus = calculateBonusAmount(base, 10000);
-      expect(bonus.toNumber()).toBe(5000);
+      expect(Number(bonus)).toBe(5000);
     });
 
     it('should handle large BN values', () => {
-      const base = new BN(1_000_000);
+      const base = 1_000_000n;
       const bonus = calculateBonusAmount(base, 500); // 5%
-      expect(bonus.toNumber()).toBe(50000);
+      expect(Number(bonus)).toBe(50000);
     });
 
     it('should floor fractional results', () => {
-      const base = new BN(333);
+      const base = 333n;
       const bonus = calculateBonusAmount(base, 1000); // 10%
       // 333 * 1000 / 10000 = 33.3 -> BN division floors
-      expect(bonus.toNumber()).toBe(33);
+      expect(Number(bonus)).toBe(33);
     });
   });
 });
@@ -228,42 +227,42 @@ describe('Daily Cap Calculations', () => {
 
   describe('getDailyCap', () => {
     it('should return cap for each subscription tier', () => {
-      expect(getDailyCap(0, config).toNumber()).toBe(50000);
-      expect(getDailyCap(1, config).toNumber()).toBe(100000);
-      expect(getDailyCap(2, config).toNumber()).toBe(250000);
-      expect(getDailyCap(3, config).toNumber()).toBe(500000);
+      expect(Number(getDailyCap(0, config))).toBe(50000);
+      expect(Number(getDailyCap(1, config))).toBe(100000);
+      expect(Number(getDailyCap(2, config))).toBe(250000);
+      expect(Number(getDailyCap(3, config))).toBe(500000);
     });
 
     it('should fallback to highest tier for out-of-range', () => {
-      expect(getDailyCap(5, config).toNumber()).toBe(500000);
-      expect(getDailyCap(-1, config).toNumber()).toBe(500000);
+      expect(Number(getDailyCap(5, config))).toBe(500000);
+      expect(Number(getDailyCap(-1, config))).toBe(500000);
     });
   });
 
   describe('wouldExceedDailyCap', () => {
     it('should return false when under cap', () => {
-      const purchased = new BN(10000);
-      const amount = new BN(5000);
+      const purchased = 10000n;
+      const amount = 5000n;
       expect(wouldExceedDailyCap(purchased, amount, 0, config)).toBe(false);
     });
 
     it('should return true when exceeding cap', () => {
-      const purchased = new BN(45000);
-      const amount = new BN(10000);
+      const purchased = 45000n;
+      const amount = 10000n;
       // 45000 + 10000 = 55000 > 50000 (free tier cap)
       expect(wouldExceedDailyCap(purchased, amount, 0, config)).toBe(true);
     });
 
     it('should return false when exactly at cap', () => {
-      const purchased = new BN(40000);
-      const amount = new BN(10000);
+      const purchased = 40000n;
+      const amount = 10000n;
       // 40000 + 10000 = 50000 = cap -> not greater than
       expect(wouldExceedDailyCap(purchased, amount, 0, config)).toBe(false);
     });
 
     it('should respect higher tier caps', () => {
-      const purchased = new BN(45000);
-      const amount = new BN(10000);
+      const purchased = 45000n;
+      const amount = 10000n;
       // Free tier would exceed, Gold tier (500000) would not
       expect(wouldExceedDailyCap(purchased, amount, 0, config)).toBe(true);
       expect(wouldExceedDailyCap(purchased, amount, 3, config)).toBe(false);
@@ -272,29 +271,29 @@ describe('Daily Cap Calculations', () => {
 
   describe('getRemainingDailyAllowance', () => {
     it('should return full cap when nothing purchased', () => {
-      const remaining = getRemainingDailyAllowance(new BN(0), 0, config);
-      expect(remaining.toNumber()).toBe(50000);
+      const remaining = getRemainingDailyAllowance(0n, 0, config);
+      expect(Number(remaining)).toBe(50000);
     });
 
     it('should return remaining after partial purchase', () => {
-      const remaining = getRemainingDailyAllowance(new BN(20000), 0, config);
-      expect(remaining.toNumber()).toBe(30000);
+      const remaining = getRemainingDailyAllowance(20000n, 0, config);
+      expect(Number(remaining)).toBe(30000);
     });
 
     it('should return 0 when cap reached', () => {
-      const remaining = getRemainingDailyAllowance(new BN(50000), 0, config);
-      expect(remaining.toNumber()).toBe(0);
+      const remaining = getRemainingDailyAllowance(50000n, 0, config);
+      expect(Number(remaining)).toBe(0);
     });
 
     it('should return 0 when cap exceeded', () => {
-      const remaining = getRemainingDailyAllowance(new BN(60000), 0, config);
-      expect(remaining.toNumber()).toBe(0);
+      const remaining = getRemainingDailyAllowance(60000n, 0, config);
+      expect(Number(remaining)).toBe(0);
     });
 
     it('should use correct tier cap', () => {
-      const remaining = getRemainingDailyAllowance(new BN(60000), 1, config);
+      const remaining = getRemainingDailyAllowance(60000n, 1, config);
       // Bronze cap = 100000, purchased 60000, remaining = 40000
-      expect(remaining.toNumber()).toBe(40000);
+      expect(Number(remaining)).toBe(40000);
     });
   });
 });
@@ -308,21 +307,21 @@ describe('Purchase Preview', () => {
     it('should calculate preview for starter package', () => {
       const preview = calculateNoviPurchasePreview(0, 0, 1, config);
 
-      expect(preview.baseAmount.toNumber()).toBe(5000);
+      expect(Number(preview.baseAmount)).toBe(5000);
       expect(preview.totalBonusBps).toBe(0); // No bonuses for tier 0, sub 0, streak 1
-      expect(preview.bulkBonus.toNumber()).toBe(0);
-      expect(preview.subscriptionBonus.toNumber()).toBe(0);
-      expect(preview.streakBonus.toNumber()).toBe(0);
-      expect(preview.totalBonus.toNumber()).toBe(0);
-      expect(preview.totalNovi.toNumber()).toBe(5000);
+      expect(Number(preview.bulkBonus)).toBe(0);
+      expect(Number(preview.subscriptionBonus)).toBe(0);
+      expect(Number(preview.streakBonus)).toBe(0);
+      expect(Number(preview.totalBonus)).toBe(0);
+      expect(Number(preview.totalNovi)).toBe(5000);
     });
 
     it('should apply bulk bonus for higher packages', () => {
       const preview = calculateNoviPurchasePreview(2, 0, 1, config);
 
       // Package 2: base 50000, bulk bonus 500 bps (5%)
-      expect(preview.baseAmount.toNumber()).toBe(50000);
-      expect(preview.bulkBonus.toNumber()).toBe(2500); // 50000 * 500 / 10000
+      expect(Number(preview.baseAmount)).toBe(50000);
+      expect(Number(preview.bulkBonus)).toBe(2500); // 50000 * 500 / 10000
     });
 
     it('should apply subscription bonus', () => {
@@ -330,7 +329,7 @@ describe('Purchase Preview', () => {
 
       // Sub tier 2 = 1000 bps (10%)
       // Base 5000, sub bonus = 500
-      expect(preview.subscriptionBonus.toNumber()).toBe(500);
+      expect(Number(preview.subscriptionBonus)).toBe(500);
     });
 
     it('should apply streak bonus', () => {
@@ -338,7 +337,7 @@ describe('Purchase Preview', () => {
 
       // Streak day 5 = index 4 = 500 bps (5%)
       // Base 5000, streak bonus = 250
-      expect(preview.streakBonus.toNumber()).toBe(250);
+      expect(Number(preview.streakBonus)).toBe(250);
     });
 
     it('should sum all bonuses correctly', () => {
@@ -349,11 +348,11 @@ describe('Purchase Preview', () => {
       const expectedSub = Math.floor(50000 * 1000 / 10000); // 5000
       const expectedStreak = Math.floor(50000 * 500 / 10000); // 2500
 
-      expect(preview.bulkBonus.toNumber()).toBe(expectedBulk);
-      expect(preview.subscriptionBonus.toNumber()).toBe(expectedSub);
-      expect(preview.streakBonus.toNumber()).toBe(expectedStreak);
-      expect(preview.totalBonus.toNumber()).toBe(expectedBulk + expectedSub + expectedStreak);
-      expect(preview.totalNovi.toNumber()).toBe(50000 + expectedBulk + expectedSub + expectedStreak);
+      expect(Number(preview.bulkBonus)).toBe(expectedBulk);
+      expect(Number(preview.subscriptionBonus)).toBe(expectedSub);
+      expect(Number(preview.streakBonus)).toBe(expectedStreak);
+      expect(Number(preview.totalBonus)).toBe(expectedBulk + expectedSub + expectedStreak);
+      expect(Number(preview.totalNovi)).toBe(50000 + expectedBulk + expectedSub + expectedStreak);
       expect(preview.totalBonusBps).toBe(500 + 1000 + 500);
     });
 
@@ -361,7 +360,7 @@ describe('Purchase Preview', () => {
       const preview = calculateNoviPurchasePreview(0, 0, 1, config);
 
       // Cost = baseAmount * noviBasePriceLamports = 5000 * 100000 = 500000000
-      expect(preview.costLamports.toNumber()).toBe(500_000_000);
+      expect(Number(preview.costLamports)).toBe(500_000_000);
     });
 
     it('should throw for invalid package index', () => {
@@ -413,7 +412,7 @@ describe('Package Helpers', () => {
     it('should return amount for valid index', () => {
       const amount = getPackageAmount(0, config);
       expect(amount).not.toBeNull();
-      expect(amount!.toNumber()).toBe(5000);
+      expect(Number(amount!)).toBe(5000);
     });
 
     it('should return null for out-of-range index', () => {
@@ -423,11 +422,11 @@ describe('Package Helpers', () => {
     });
 
     it('should return correct amounts for all tiers', () => {
-      expect(getPackageAmount(0, config)!.toNumber()).toBe(5000);
-      expect(getPackageAmount(1, config)!.toNumber()).toBe(10000);
-      expect(getPackageAmount(2, config)!.toNumber()).toBe(50000);
-      expect(getPackageAmount(3, config)!.toNumber()).toBe(100000);
-      expect(getPackageAmount(4, config)!.toNumber()).toBe(250000);
+      expect(Number(getPackageAmount(0, config)!)).toBe(5000);
+      expect(Number(getPackageAmount(1, config)!)).toBe(10000);
+      expect(Number(getPackageAmount(2, config)!)).toBe(50000);
+      expect(Number(getPackageAmount(3, config)!)).toBe(100000);
+      expect(Number(getPackageAmount(4, config)!)).toBe(250000);
     });
   });
 });
@@ -443,7 +442,7 @@ describe('Formatting', () => {
     });
 
     it('should handle BN input', () => {
-      const formatted = formatNoviAmount(new BN(10000));
+      const formatted = formatNoviAmount(10000n);
       expect(formatted).toContain('1');
     });
 
@@ -473,7 +472,7 @@ describe('Formatting', () => {
     });
 
     it('should handle BN input', () => {
-      const formatted = formatLamportsAsSol(new BN(1_000_000_000));
+      const formatted = formatLamportsAsSol(1_000_000_000n);
       expect(formatted).toContain('SOL');
     });
 
@@ -501,47 +500,47 @@ describe('Oracle Pricing', () => {
 
       // (5000 * 0.05 / 100) * 1e8 = 2.5 * 1e8 = 250_000_000
       // After 15% undercut: 250_000_000 * 8500/10000 = 212_500_000
-      expect(cost.toNumber()).toBe(212_500_000);
+      expect(Number(cost)).toBe(212_500_000);
     });
 
     it('should handle zero undercut', () => {
       const cost = calculateOracleCostLamports(5000, 0.05, 100, 0);
       // (5000 * 0.05 / 100) * 1e8 = 250_000_000
-      expect(cost.toNumber()).toBe(250_000_000);
+      expect(Number(cost)).toBe(250_000_000);
     });
 
     it('should accept BN as base amount', () => {
-      const cost = calculateOracleCostLamports(new BN(5000), 0.05, 100, 0);
-      expect(cost.toNumber()).toBe(250_000_000);
+      const cost = calculateOracleCostLamports(5000n, 0.05, 100, 0);
+      expect(Number(cost)).toBe(250_000_000);
     });
 
     it('should use default undercut of 1500 bps', () => {
       const withDefault = calculateOracleCostLamports(5000, 0.05, 100);
       const explicit = calculateOracleCostLamports(5000, 0.05, 100, 1500);
-      expect(withDefault.toNumber()).toBe(explicit.toNumber());
+      expect(Number(withDefault)).toBe(Number(explicit));
     });
 
     it('should scale linearly with base amount', () => {
       const cost1 = calculateOracleCostLamports(5000, 0.05, 100, 0);
       const cost2 = calculateOracleCostLamports(10000, 0.05, 100, 0);
-      expect(cost2.toNumber()).toBe(cost1.toNumber() * 2);
+      expect(Number(cost2)).toBe(Number(cost1) * 2);
     });
 
     it('should decrease with higher SOL price', () => {
       const costLowSol = calculateOracleCostLamports(5000, 0.05, 50, 0);
       const costHighSol = calculateOracleCostLamports(5000, 0.05, 200, 0);
-      expect(costHighSol.toNumber()).toBeLessThan(costLowSol.toNumber());
+      expect(Number(costHighSol)).toBeLessThan(Number(costLowSol));
     });
 
     it('should increase with higher NOVI price', () => {
       const costLowNovi = calculateOracleCostLamports(5000, 0.01, 100, 0);
       const costHighNovi = calculateOracleCostLamports(5000, 0.10, 100, 0);
-      expect(costHighNovi.toNumber()).toBeGreaterThan(costLowNovi.toNumber());
+      expect(Number(costHighNovi)).toBeGreaterThan(Number(costLowNovi));
     });
 
     it('should floor the result', () => {
       const cost = calculateOracleCostLamports(333, 0.07, 123, 1500);
-      expect(cost.toNumber()).toBe(Math.floor(cost.toNumber()));
+      expect(Number(cost)).toBe(Math.floor(Number(cost)));
     });
   });
 
@@ -580,7 +579,7 @@ describe('Oracle Pricing', () => {
       expect(preview.usedOracle).toBe(false);
       // Should match base preview
       const basePreview = calculateNoviPurchasePreview(0, 0, 1, config);
-      expect(preview.costLamports.toNumber()).toBe(basePreview.costLamports.toNumber());
+      expect(Number(preview.costLamports)).toBe(Number(basePreview.costLamports));
     });
 
     it('should use fallback when oracle configured but no prices', () => {
@@ -614,9 +613,9 @@ describe('Oracle Pricing', () => {
       const basePreview = calculateNoviPurchasePreview(2, 2, 5, config);
 
       // Bonuses should be the same regardless of pricing method
-      expect(oraclePreview.baseAmount.toNumber()).toBe(basePreview.baseAmount.toNumber());
-      expect(oraclePreview.totalBonus.toNumber()).toBe(basePreview.totalBonus.toNumber());
-      expect(oraclePreview.totalNovi.toNumber()).toBe(basePreview.totalNovi.toNumber());
+      expect(Number(oraclePreview.baseAmount)).toBe(Number(basePreview.baseAmount));
+      expect(Number(oraclePreview.totalBonus)).toBe(Number(basePreview.totalBonus));
+      expect(Number(oraclePreview.totalNovi)).toBe(Number(basePreview.totalNovi));
       expect(oraclePreview.totalBonusBps).toBe(basePreview.totalBonusBps);
     });
   });

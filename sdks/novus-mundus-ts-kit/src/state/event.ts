@@ -6,8 +6,7 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, struct, pad, u8, u32, u64, i64, bool, pubkey, fixedString, array } from '../utils/codec';
 
 // Event Enums
 
@@ -29,28 +28,28 @@ export enum EventPrizeType {
 
 export interface EventLeaderboardEntry {
   player: Address;
-  score: BN;
+  score: bigint;
 }
 
 // Event Account Interface
 
 export interface EventAccount {
   gameEngine: Address;
-  id: BN;
+  id: bigint;
   name: string;
-  startTime: BN;
-  endTime: BN;
+  startTime: bigint;
+  endTime: bigint;
   status: EventStatus;
   autoActivate: boolean;
   eventType: number;
   minLevel: number;
-  minReputation: BN;
+  minReputation: bigint;
   requiredSubscriptionTier: number;
   leaderboard: EventLeaderboardEntry[];
   leaderboardCount: number;
   prizeType: EventPrizeType;
-  prizeAmount: BN;
-  prizeRemaining: BN;
+  prizeAmount: bigint;
+  prizeRemaining: bigint;
   prizeTokenMint: Address;
   participantCount: number;
   bump: number;
@@ -63,117 +62,81 @@ export const EVENT_ACCOUNT_SIZE = 648;
 
 export interface EventParticipation {
   gameEngine: Address;
-  eventId: BN;
+  eventId: bigint;
   player: Address;
-  score: BN;
-  joinedAt: BN;
-  lastUpdate: BN;
+  score: bigint;
+  joinedAt: bigint;
+  lastUpdate: bigint;
   bump: number;
 }
 
 /** EventParticipation size in bytes (1 + 32 + 7pad + 8 + 32 + 8 + 8 + 8 + 1 + 7 = 112) */
 export const EVENT_PARTICIPATION_SIZE = 112;
 
+// Codecs
+
+/** EventLeaderboardEntry `#[repr(C)]` codec (40 bytes) */
+const eventLeaderboardEntry = struct<EventLeaderboardEntry>([
+  ['player', pubkey],
+  ['score', u64],
+]);
+
+/** EventAccount `#[repr(C)]` codec */
+const eventCodec = reprC<EventAccount>([
+  pad(1), // account_key discriminator
+  ['gameEngine', pubkey],
+  ['id', u64],
+  ['name', fixedString(64)],
+  pad(1), // name_len
+  pad(7), // _padding
+  ['startTime', i64],
+  ['endTime', i64],
+  ['status', u8],
+  ['autoActivate', bool],
+  pad(6), // _padding
+  ['eventType', u8],
+  pad(7), // _padding
+  ['minLevel', u8],
+  pad(7), // _padding
+  ['minReputation', u64],
+  ['requiredSubscriptionTier', u8],
+  pad(7), // _padding
+  ['leaderboard', array(eventLeaderboardEntry, 10)],
+  ['leaderboardCount', u8],
+  pad(7), // _padding
+  ['prizeType', u8],
+  pad(7), // _padding
+  ['prizeAmount', u64],
+  ['prizeRemaining', u64],
+  ['prizeTokenMint', pubkey],
+  ['participantCount', u32],
+  ['bump', u8],
+  pad(3), // _padding
+], EVENT_ACCOUNT_SIZE);
+
+/** EventParticipation `#[repr(C)]` codec */
+const eventParticipationCodec = reprC<EventParticipation>([
+  pad(1), // account_key discriminator
+  ['gameEngine', pubkey],
+  ['eventId', u64],
+  ['player', pubkey],
+  ['score', u64],
+  ['joinedAt', i64],
+  ['lastUpdate', i64],
+  ['bump', u8],
+  pad(7), // padding
+], EVENT_PARTICIPATION_SIZE);
+
 // Deserialization
 
 /** Deserialize EventAccount from raw bytes */
-export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const gameEngine = reader.readPubkey();
-  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
-  const id = reader.readU64();
-  const nameBytes = reader.readBytes(64);
-  const nameLen = reader.readU8();
-  const name = new TextDecoder().decode(nameBytes.slice(0, nameLen));
-  reader.skip(7); // padding
-
-  const startTime = reader.readI64();
-  const endTime = reader.readI64();
-  const statusValue = reader.readU8();
-  const status = statusValue as EventStatus;
-  const autoActivate = reader.readBool();
-  reader.skip(6); // padding
-
-  const eventType = reader.readU8();
-  reader.skip(7); // padding
-
-  const minLevel = reader.readU8();
-  reader.skip(7); // padding
-  const minReputation = reader.readU64();
-  const requiredSubscriptionTier = reader.readU8();
-  reader.skip(7); // padding
-
-  // Leaderboard
-  const leaderboard: EventLeaderboardEntry[] = [];
-  for (let i = 0; i < 10; i++) {
-    const player = reader.readPubkey();
-    const score = reader.readU64();
-    leaderboard.push({ player, score });
-  }
-  const leaderboardCount = reader.readU8();
-  reader.skip(7); // padding
-
-  // Prize pool
-  const prizeTypeValue = reader.readU8();
-  const prizeType = prizeTypeValue as EventPrizeType;
-  reader.skip(7); // padding
-  const prizeAmount = reader.readU64();
-  const prizeRemaining = reader.readU64();
-  const prizeTokenMint = reader.readPubkey();
-
-  const participantCount = reader.readU32();
-  const bump = reader.readU8();
-  reader.skip(3); // padding
-
-  return {
-    gameEngine,
-    id,
-    name,
-    startTime,
-    endTime,
-    status,
-    autoActivate,
-    eventType,
-    minLevel,
-    minReputation,
-    requiredSubscriptionTier,
-    leaderboard,
-    leaderboardCount,
-    prizeType,
-    prizeAmount,
-    prizeRemaining,
-    prizeTokenMint,
-    participantCount,
-    bump,
-  };
+export function deserializeEvent(data: Uint8Array): EventAccount {
+  return eventCodec.decode(data);
 }
 
 /** Deserialize EventParticipation from raw bytes */
-export function deserializeEventParticipation(data: Uint8Array | Buffer): EventParticipation {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const gameEngine = reader.readPubkey();
-  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
-  const eventId = reader.readU64();
-  const player = reader.readPubkey();
-  const score = reader.readU64();
-  const joinedAt = reader.readI64();
-  const lastUpdate = reader.readI64();
-  const bump = reader.readU8();
-  reader.skip(7); // padding
-
-  return {
-    gameEngine,
-    eventId,
-    player,
-    score,
-    joinedAt,
-    lastUpdate,
-    bump,
-  };
+export function deserializeEventParticipation(data: Uint8Array): EventParticipation {
+  return eventParticipationCodec.decode(data);
 }
 
 // Parse Functions

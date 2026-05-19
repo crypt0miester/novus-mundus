@@ -381,7 +381,7 @@ describe('Package Helpers', () => {
 
     it('should have correct indices', () => {
       for (let i = 0; i < NOVI_PACKAGE_TIERS.length; i++) {
-        expect(NOVI_PACKAGE_TIERS[i]!.index).toBe(i);
+        expect(Number(NOVI_PACKAGE_TIERS[i]!.index)).toBe(i);
       }
     });
 

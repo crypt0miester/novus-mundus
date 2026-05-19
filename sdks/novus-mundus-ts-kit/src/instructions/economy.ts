@@ -13,10 +13,10 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u64, bool } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -70,8 +70,14 @@ export interface HireUnitsAccounts {
 
 export interface HireUnitsParams {
   unitType: UnitType;
-  noviAmount: BN | number | bigint;
+  noviAmount: bigint | number;
 }
+
+/** HireUnits args (9 bytes): unit_type (u8), novi_amount (u64) */
+const hireUnitsArgs = packed<{ unitType: number; noviAmount: bigint }>([
+  ['unitType', u8],
+  ['noviAmount', u64],
+], 9);
 
 /** ~40,000 CU */
 /**
@@ -90,15 +96,15 @@ export interface HireUnitsParams {
  * - Operative Unit 2: Camp Level 5
  * - Operative Unit 3: Camp Level 10
  */
-export function createHireUnitsInstruction(
+export async function createHireUnitsInstruction(
   accounts: HireUnitsAccounts,
   params: HireUnitsParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -112,18 +118,16 @@ export function createHireUnitsInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
 
-  // Instruction data: unit_type (u8) + novi_amount (u64)
-  const writer = new BufferWriter(9);
-  writer.writeU8(params.unitType);
-  writer.writeU64(params.noviAmount);
-
-  const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.HIRE_UNITS,
+    hireUnitsArgs.encode({ unitType: params.unitType, noviAmount: BigInt(params.noviAmount) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -140,9 +144,15 @@ export interface CollectResourcesAccounts {
 }
 
 export interface CollectResourcesParams {
-  noviAmount: BN | number | bigint;
+  noviAmount: bigint | number;
   collectionType: CollectionType;
 }
+
+/** CollectResources args (9 bytes): novi_amount (u64), collection_type (u8) */
+const collectResourcesArgs = packed<{ noviAmount: bigint; collectionType: number }>([
+  ['noviAmount', u64],
+  ['collectionType', u8],
+], 9);
 
 /** ~45,000 CU */
 /**
@@ -154,16 +164,16 @@ export interface CollectResourcesParams {
  * - Dock: Fishing bonus
  * - Farm: Farming bonus (50 bps/level), uses defensive units
  */
-export function createCollectResourcesInstruction(
+export async function createCollectResourcesInstruction(
   accounts: CollectResourcesAccounts,
   params: CollectResourcesParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -178,18 +188,19 @@ export function createCollectResourcesInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
 
-  // Instruction data: novi_amount (u64) + collection_type (u8)
-  const writer = new BufferWriter(9);
-  writer.writeU64(params.noviAmount);
-  writer.writeU8(params.collectionType);
-
-  const data = createInstructionData(DISCRIMINATORS.COLLECT_RESOURCES, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.COLLECT_RESOURCES,
+    collectResourcesArgs.encode({
+      noviAmount: BigInt(params.noviAmount),
+      collectionType: params.collectionType,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -207,9 +218,20 @@ export interface PurchaseEquipmentAccounts {
 
 export interface PurchaseEquipmentParams {
   equipmentType: EquipmentType;
-  quantity: BN | number | bigint;
+  quantity: bigint | number;
   payWithCash: boolean;
 }
+
+/** PurchaseEquipment args (10 bytes): equipment_type (u8), quantity (u64), pay_with_cash (bool) */
+const purchaseEquipmentArgs = packed<{
+  equipmentType: number;
+  quantity: bigint;
+  payWithCash: boolean;
+}>([
+  ['equipmentType', u8],
+  ['quantity', u64],
+  ['payWithCash', bool],
+], 10);
 
 /** ~20,000 CU */
 /**
@@ -218,12 +240,12 @@ export interface PurchaseEquipmentParams {
  * Building Bonuses:
  * - Market: 1% discount per level (max 20% at level 20)
  */
-export function createPurchaseEquipmentInstruction(
+export async function createPurchaseEquipmentInstruction(
   accounts: PurchaseEquipmentAccounts,
   params: PurchaseEquipmentParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -234,19 +256,20 @@ export function createPurchaseEquipmentInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
 
-  // Instruction data: equipment_type (u8) + quantity (u64) + pay_with_cash (bool)
-  const writer = new BufferWriter(10);
-  writer.writeU8(params.equipmentType);
-  writer.writeU64(params.quantity);
-  writer.writeBool(params.payWithCash);
-
-  const data = createInstructionData(DISCRIMINATORS.PURCHASE_EQUIPMENT, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.PURCHASE_EQUIPMENT,
+    purchaseEquipmentArgs.encode({
+      equipmentType: params.equipmentType,
+      quantity: BigInt(params.quantity),
+      payWithCash: params.payWithCash,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -261,8 +284,13 @@ export interface PurchaseStaminaAccounts {
 }
 
 export interface PurchaseStaminaParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
+
+/** PurchaseStamina args (8 bytes): amount (u64) */
+const purchaseStaminaArgs = packed<{ amount: bigint }>([
+  ['amount', u64],
+], 8);
 
 /** ~10,000 CU */
 /**
@@ -278,14 +306,14 @@ export interface PurchaseStaminaParams {
  * 4. [signer] owner: Player wallet
  * 5. [] token_program: SPL Token program
  */
-export function createPurchaseStaminaInstruction(
+export async function createPurchaseStaminaInstruction(
   accounts: PurchaseStaminaAccounts,
   params: PurchaseStaminaParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -296,11 +324,10 @@ export function createPurchaseStaminaInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
-  writer.writeU64(params.amount);
-
-  const data = createInstructionData(DISCRIMINATORS.PURCHASE_STAMINA, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.PURCHASE_STAMINA,
+    purchaseStaminaArgs.encode({ amount: BigInt(params.amount) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -317,12 +344,12 @@ export interface TransferCashAccounts {
   /** Team account PDA (sender and receiver must be on same team) */
   team: Address;
   /** Team ID for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
 }
 
 export interface TransferCashParams {
   /** Amount of cash to transfer */
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
 
 /** ~5,000 CU */
@@ -359,12 +386,18 @@ export interface TransferCashParams {
  * - amount: u64 (8)
  * - team_id: u64 (8)
  */
-export function createTransferCashInstruction(
+/** TransferCash args (16 bytes): amount (u64), team_id (u64) */
+const transferCashArgs = packed<{ amount: bigint; teamId: bigint }>([
+  ['amount', u64],
+  ['teamId', u64],
+], 16);
+
+export async function createTransferCashInstruction(
   accounts: TransferCashAccounts,
   params: TransferCashParams
-): Instruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [estate] = deriveEstatePda(senderPlayer);
+): Promise<Instruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [estate] = await deriveEstatePda(senderPlayer);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: true },
@@ -375,12 +408,10 @@ export function createTransferCashInstruction(
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: amount (u64) + team_id (u64)
-  const writer = new BufferWriter(16);
-  writer.writeU64(params.amount);
-  writer.writeU64(accounts.teamId);
-
-  const data = createInstructionData(DISCRIMINATORS.TRANSFER_CASH, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TRANSFER_CASH,
+    transferCashArgs.encode({ amount: BigInt(params.amount), teamId: BigInt(accounts.teamId) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -395,7 +426,7 @@ export interface VaultTransferAccounts {
 }
 
 export interface VaultTransferParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
   toVault: boolean;
 }
 
@@ -415,12 +446,18 @@ export interface VaultTransferParams {
  * - [0] direction: u8 (0 = deposit: hand→vault, 1 = withdraw: vault→hand)
  * - [1..9] amount: u64 (little-endian)
  */
-export function createVaultTransferInstruction(
+/** VaultTransfer args (9 bytes): direction (u8), amount (u64) */
+const vaultTransferArgs = packed<{ direction: number; amount: bigint }>([
+  ['direction', u8],
+  ['amount', u64],
+], 9);
+
+export async function createVaultTransferInstruction(
   accounts: VaultTransferAccounts,
   params: VaultTransferParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -429,13 +466,11 @@ export function createVaultTransferInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: direction (u8) + amount (u64)
   // direction: 0 = deposit (hand→vault), 1 = withdraw (vault→hand)
-  const writer = new BufferWriter(9);
-  writer.writeU8(params.toVault ? 0 : 1);
-  writer.writeU64(params.amount);
-
-  const data = createInstructionData(DISCRIMINATORS.VAULT_TRANSFER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.VAULT_TRANSFER,
+    vaultTransferArgs.encode({ direction: params.toVault ? 0 : 1, amount: BigInt(params.amount) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -469,15 +504,15 @@ export interface UpdateLockedNoviAccounts {
  * # Instruction Data
  * None
  */
-export function createUpdateLockedNoviInstruction(
+export async function createUpdateLockedNoviInstruction(
   accounts: UpdateLockedNoviAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -519,7 +554,7 @@ export enum MintPurpose {
 }
 
 export interface MintForPrizeParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
   purpose: MintPurpose;
 }
 
@@ -541,14 +576,20 @@ export interface MintForPrizeParams {
  * - [0..8] amount: u64
  * - [8] purpose: u8
  */
-export function createMintForPrizeInstruction(
+/** MintForPrize args (9 bytes): amount (u64), purpose (u8) */
+const mintForPrizeArgs = packed<{ amount: bigint; purpose: number }>([
+  ['amount', u64],
+  ['purpose', u8],
+], 9);
+
+export async function createMintForPrizeInstruction(
   accounts: MintForPrizeAccounts,
   params: MintForPrizeParams
-): Instruction {
-  const [recipientUser] = deriveUserPda(accounts.recipientOwner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [recipientUser] = await deriveUserPda(accounts.recipientOwner);
+  const [noviMint] = await deriveNoviMintPda();
   // User's NOVI token account is owned by UserAccount PDA
-  const userTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, recipientUser);
+  const userTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, recipientUser);
 
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: false },
@@ -559,12 +600,10 @@ export function createMintForPrizeInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: amount (u64) + purpose (u8)
-  const writer = new BufferWriter(9);
-  writer.writeU64(params.amount);
-  writer.writeU8(params.purpose);
-
-  const data = createInstructionData(DISCRIMINATORS.MINT_FOR_PRIZE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.MINT_FOR_PRIZE,
+    mintForPrizeArgs.encode({ amount: BigInt(params.amount), purpose: params.purpose })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

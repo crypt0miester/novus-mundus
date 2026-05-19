@@ -10,11 +10,12 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
+import { getU64Encoder, getProgramDerivedAddress } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { addressBytes, findProgramAddressSync } from '../crypto';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { addressBytes } from '../crypto';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u64, i64, pubkey, array } from '../utils/codec';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -26,6 +27,27 @@ import {
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
+// Shared instruction-data codecs
+
+/** team_id (u64) — 8 bytes. Used by disband and treasury cancel-request. */
+const teamIdArgs = packed<{ teamId: bigint }>([
+  ['teamId', u64],
+], 8);
+
+/**
+ * team_id (u64) + slot_index (u16) — 10 bytes. Used by join, leave,
+ * accept-invite, cancel-invite, treasury approve/execute request.
+ */
+const teamIdSlotArgs = packed<{ teamId: bigint; slotIndex: number }>([
+  ['teamId', u64],
+  ['slotIndex', u16],
+], 10);
+
+/** Optional expires_in_seconds (i64) tail of the team-invite payload — 8 bytes. */
+const teamInviteExpiryArgs = packed<{ expiresInSeconds: bigint }>([
+  ['expiresInSeconds', i64],
+], 8);
+
 // Team Create
 
 export interface TeamCreateAccounts {
@@ -34,7 +56,7 @@ export interface TeamCreateAccounts {
   /** GameEngine account */
   gameEngine: Address;
   /** Team ID (generated from timestamp + owner hash) */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
 }
 
 export interface TeamCreateParams {
@@ -50,29 +72,23 @@ export interface TeamCreateParams {
  *
  * Prerequisites: Player must have EXT_RALLY unlocked (created/joined a rally first).
  */
-export function createTeamCreateInstruction(
+export async function createTeamCreateInstruction(
   accounts: TeamCreateAccounts,
   params: TeamCreateParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-    const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+    const [noviMint] = await deriveNoviMintPda();
 
   // Team ID as u64
-  const teamIdBn = typeof accounts.teamId === 'number'
-    ? new BN(accounts.teamId)
-    : typeof accounts.teamId === 'bigint'
-      ? new BN(accounts.teamId.toString())
-      : accounts.teamId;
+  const teamIdBytes = new Uint8Array(getU64Encoder().encode(BigInt(accounts.teamId)));
+  const [team] = await getProgramDerivedAddress({
+    programAddress: PROGRAM_ID,
+    seeds: [new TextEncoder().encode('team'), addressBytes(accounts.gameEngine), teamIdBytes],
+  });
 
-  const teamIdBuffer = teamIdBn.toArrayLike(Buffer, 'le', 8);
-  const [team] = findProgramAddressSync(
-    [Buffer.from('team'), addressBytes(accounts.gameEngine), teamIdBuffer],
-    PROGRAM_ID
-  );
-
-  const [leaderSlot] = deriveTeamSlotPda(team, 0);
+  const [leaderSlot] = await deriveTeamSlotPda(team, 0);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -86,17 +102,18 @@ export function createTeamCreateInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: team_id (u64) + name_len (u8) + name (bytes)
-  const nameBytes = Buffer.from(params.name, 'utf8');
+  // Instruction data: team_id (u64) + name_len (u8) + name (bytes).
+  // Variable-length payload — assembled manually (packed is fixed-size).
+  const nameBytes = new TextEncoder().encode(params.name);
   if (nameBytes.length > 32) {
     throw new Error('Team name too long (max 32 bytes)');
   }
-  const writer = new BufferWriter(8 + 1 + nameBytes.length);
-  writer.writeU64(teamIdBn);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
+  const payload = new Uint8Array(8 + 1 + nameBytes.length);
+  payload.set(teamIdArgs.encode({ teamId: BigInt(accounts.teamId) }), 0);
+  payload[8] = nameBytes.length;
+  payload.set(nameBytes, 9);
 
-  const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -111,7 +128,7 @@ export interface TeamJoinAccounts {
   /** Team to join */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Slot index to use */
   slotIndex: number;
 }
@@ -133,11 +150,11 @@ export interface TeamJoinAccounts {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamJoinInstruction(
+export async function createTeamJoinInstruction(
   accounts: TeamJoinAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -148,11 +165,10 @@ export function createTeamJoinInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_JOIN, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_JOIN,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -167,7 +183,7 @@ export interface TeamLeaveAccounts {
   /** Team to leave */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Player's slot index */
   slotIndex: number;
 }
@@ -188,11 +204,11 @@ export interface TeamLeaveAccounts {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamLeaveInstruction(
+export async function createTeamLeaveInstruction(
   accounts: TeamLeaveAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -202,11 +218,10 @@ export function createTeamLeaveInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_LEAVE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_LEAVE,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -221,7 +236,7 @@ export interface TeamDisbandAccounts {
   /** Team to disband */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
 }
 
 /** ~10,000 CU */
@@ -238,10 +253,10 @@ export interface TeamDisbandAccounts {
  * On-chain data (8 bytes):
  * - team_id: u64
  */
-export function createTeamDisbandInstruction(
+export async function createTeamDisbandInstruction(
   accounts: TeamDisbandAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.leader);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -250,10 +265,10 @@ export function createTeamDisbandInstruction(
   ];
 
   // Instruction data: team_id (u64)
-  const writer = new BufferWriter(8);
-  writer.writeU64(accounts.teamId);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_DISBAND, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_DISBAND,
+    teamIdArgs.encode({ teamId: BigInt(accounts.teamId) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -268,7 +283,7 @@ export interface TeamInviteAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Inviter's slot index */
   inviterSlotIndex: number;
   /** Player to invite (PlayerAccount PDA) */
@@ -277,7 +292,7 @@ export interface TeamInviteAccounts {
 
 export interface TeamInviteParams {
   /** Optional custom expiry time in seconds (0 = use default 7 days) */
-  expiresInSeconds?: BN | number | bigint;
+  expiresInSeconds?: bigint | number;
 }
 
 /** ~30,000 CU */
@@ -301,13 +316,13 @@ export interface TeamInviteParams {
  * - slot_index: u16 (2)
  * - expires_in_seconds: i64 (8) - optional, 0 = default
  */
-export function createTeamInviteInstruction(
+export async function createTeamInviteInstruction(
   accounts: TeamInviteAccounts,
   params?: TeamInviteParams
-): Instruction {
-  const [inviterPlayer] = derivePlayerPda(accounts.gameEngine, accounts.inviter);
-  const [inviterSlot] = deriveTeamSlotPda(accounts.team, accounts.inviterSlotIndex);
-  const [invite] = deriveTeamInvitePda(accounts.team, accounts.inviteePlayer);
+): Promise<Instruction> {
+  const [inviterPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.inviter);
+  const [inviterSlot] = await deriveTeamSlotPda(accounts.team, accounts.inviterSlotIndex);
+  const [invite] = await deriveTeamInvitePda(accounts.team, accounts.inviteePlayer);
 
   const keys = [
     { pubkey: inviterPlayer, isSigner: false, isWritable: false },
@@ -319,17 +334,20 @@ export function createTeamInviteInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: team_id (u64) + slot_index (u16) + optional expires_in_seconds (i64)
+  // Instruction data: team_id (u64) + slot_index (u16) + optional expires_in_seconds (i64).
+  // Variable-length payload — assembled manually (packed is fixed-size).
   const hasExpiry = params?.expiresInSeconds !== undefined && params.expiresInSeconds !== 0;
-  const dataLen = hasExpiry ? 18 : 10;
-  const writer = new BufferWriter(dataLen);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.inviterSlotIndex);
+  const head = teamIdSlotArgs.encode({
+    teamId: BigInt(accounts.teamId),
+    slotIndex: accounts.inviterSlotIndex,
+  });
+  const payload = new Uint8Array(hasExpiry ? 18 : 10);
+  payload.set(head, 0);
   if (hasExpiry) {
-    writer.writeI64(params!.expiresInSeconds!);
+    payload.set(teamInviteExpiryArgs.encode({ expiresInSeconds: BigInt(params!.expiresInSeconds!) }), 10);
   }
 
-  const data = createInstructionData(DISCRIMINATORS.TEAM_INVITE, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.TEAM_INVITE, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -344,7 +362,7 @@ export interface TeamAcceptInviteAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Slot index to use */
   slotIndex: number;
   /** Account to receive invite rent refund (usually inviter's wallet) */
@@ -372,12 +390,12 @@ export interface TeamAcceptInviteAccounts {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamAcceptInviteInstruction(
+export async function createTeamAcceptInviteInstruction(
   accounts: TeamAcceptInviteAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [invite] = deriveTeamInvitePda(accounts.team, player);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [invite] = await deriveTeamInvitePda(accounts.team, player);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -390,11 +408,10 @@ export function createTeamAcceptInviteInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_ACCEPT_INVITE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_ACCEPT_INVITE,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -428,11 +445,11 @@ export interface TeamDeclineInviteAccounts {
  *
  * On-chain data: None
  */
-export function createTeamDeclineInviteInstruction(
+export async function createTeamDeclineInviteInstruction(
   accounts: TeamDeclineInviteAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [invite] = deriveTeamInvitePda(accounts.team, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [invite] = await deriveTeamInvitePda(accounts.team, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -457,7 +474,7 @@ export interface TeamCancelInviteAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   memberSlotIndex: number;
   /** Player whose invite to cancel (PlayerAccount PDA) */
@@ -483,12 +500,12 @@ export interface TeamCancelInviteAccounts {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamCancelInviteInstruction(
+export async function createTeamCancelInviteInstruction(
   accounts: TeamCancelInviteAccounts
-): Instruction {
-  const [memberPlayer] = derivePlayerPda(accounts.gameEngine, accounts.member);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.memberSlotIndex);
-  const [invite] = deriveTeamInvitePda(accounts.team, accounts.inviteePlayer);
+): Promise<Instruction> {
+  const [memberPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.member);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.memberSlotIndex);
+  const [invite] = await deriveTeamInvitePda(accounts.team, accounts.inviteePlayer);
 
   const keys = [
     { pubkey: memberPlayer, isSigner: false, isWritable: false },
@@ -500,11 +517,10 @@ export function createTeamCancelInviteInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.memberSlotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_CANCEL_INVITE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_CANCEL_INVITE,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.memberSlotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -519,7 +535,7 @@ export interface TeamKickMemberAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Kicker's slot index */
   kickerSlotIndex: number;
   /** Member to kick (PlayerAccount PDA) */
@@ -529,6 +545,17 @@ export interface TeamKickMemberAccounts {
   /** Kicked player's wallet (receives slot rent refund) */
   kickedOwner: Address;
 }
+
+/** TeamKickMember args (12 bytes) */
+const teamKickMemberArgs = packed<{
+  teamId: bigint;
+  kickerSlotIndex: number;
+  kickedSlotIndex: number;
+}>([
+  ['teamId', u64],
+  ['kickerSlotIndex', u16],
+  ['kickedSlotIndex', u16],
+], 12);
 
 /** ~5,000 CU */
 /**
@@ -552,12 +579,12 @@ export interface TeamKickMemberAccounts {
  * - kicker_slot_index: u16 (2)
  * - kicked_slot_index: u16 (2)
  */
-export function createTeamKickMemberInstruction(
+export async function createTeamKickMemberInstruction(
   accounts: TeamKickMemberAccounts
-): Instruction {
-  const [kickerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.kicker);
-  const [kickerSlot] = deriveTeamSlotPda(accounts.team, accounts.kickerSlotIndex);
-  const [kickedSlot] = deriveTeamSlotPda(accounts.team, accounts.kickedSlotIndex);
+): Promise<Instruction> {
+  const [kickerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.kicker);
+  const [kickerSlot] = await deriveTeamSlotPda(accounts.team, accounts.kickerSlotIndex);
+  const [kickedSlot] = await deriveTeamSlotPda(accounts.team, accounts.kickedSlotIndex);
 
   const keys = [
     { pubkey: kickerPlayer, isSigner: false, isWritable: false },
@@ -570,12 +597,14 @@ export function createTeamKickMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + kicker_slot_index (u16) + kicked_slot_index (u16)
-  const writer = new BufferWriter(12);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.kickerSlotIndex);
-  writer.writeU16(accounts.kickedSlotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_KICK_MEMBER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_KICK_MEMBER,
+    teamKickMemberArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      kickerSlotIndex: accounts.kickerSlotIndex,
+      kickedSlotIndex: accounts.kickedSlotIndex,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -590,7 +619,7 @@ export interface TeamPromoteMemberAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Promoter's slot index */
   promoterSlotIndex: number;
   /** Target member's slot index */
@@ -601,6 +630,22 @@ export interface TeamPromoteMemberParams {
   /** New rank for target (1-4, cannot promote to 0=leader) */
   newRank: number;
 }
+
+/**
+ * Rank-change args (13 bytes): team_id (u64) + actor_slot_index (u16) +
+ * target_slot_index (u16) + new_rank (u8). Shared by promote and demote.
+ */
+const teamRankChangeArgs = packed<{
+  teamId: bigint;
+  actorSlotIndex: number;
+  targetSlotIndex: number;
+  newRank: number;
+}>([
+  ['teamId', u64],
+  ['actorSlotIndex', u16],
+  ['targetSlotIndex', u16],
+  ['newRank', u8],
+], 13);
 
 /** ~5,000 CU */
 /**
@@ -622,13 +667,13 @@ export interface TeamPromoteMemberParams {
  * - target_slot_index: u16 (2)
  * - new_rank: u8 (1)
  */
-export function createTeamPromoteMemberInstruction(
+export async function createTeamPromoteMemberInstruction(
   accounts: TeamPromoteMemberAccounts,
   params: TeamPromoteMemberParams
-): Instruction {
-  const [promoterPlayer] = derivePlayerPda(accounts.gameEngine, accounts.promoter);
-  const [promoterSlot] = deriveTeamSlotPda(accounts.team, accounts.promoterSlotIndex);
-  const [targetSlot] = deriveTeamSlotPda(accounts.team, accounts.targetSlotIndex);
+): Promise<Instruction> {
+  const [promoterPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.promoter);
+  const [promoterSlot] = await deriveTeamSlotPda(accounts.team, accounts.promoterSlotIndex);
+  const [targetSlot] = await deriveTeamSlotPda(accounts.team, accounts.targetSlotIndex);
 
   const keys = [
     { pubkey: promoterPlayer, isSigner: false, isWritable: false },
@@ -639,13 +684,15 @@ export function createTeamPromoteMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + promoter_slot_index (u16) + target_slot_index (u16) + new_rank (u8)
-  const writer = new BufferWriter(13);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.promoterSlotIndex);
-  writer.writeU16(accounts.targetSlotIndex);
-  writer.writeU8(params.newRank);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_PROMOTE_MEMBER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_PROMOTE_MEMBER,
+    teamRankChangeArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      actorSlotIndex: accounts.promoterSlotIndex,
+      targetSlotIndex: accounts.targetSlotIndex,
+      newRank: params.newRank,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -660,7 +707,7 @@ export interface TeamDemoteMemberAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Demoter's slot index */
   demoterSlotIndex: number;
   /** Target member's slot index */
@@ -692,13 +739,13 @@ export interface TeamDemoteMemberParams {
  * - target_slot_index: u16 (2)
  * - new_rank: u8 (1)
  */
-export function createTeamDemoteMemberInstruction(
+export async function createTeamDemoteMemberInstruction(
   accounts: TeamDemoteMemberAccounts,
   params: TeamDemoteMemberParams
-): Instruction {
-  const [demoterPlayer] = derivePlayerPda(accounts.gameEngine, accounts.demoter);
-  const [demoterSlot] = deriveTeamSlotPda(accounts.team, accounts.demoterSlotIndex);
-  const [targetSlot] = deriveTeamSlotPda(accounts.team, accounts.targetSlotIndex);
+): Promise<Instruction> {
+  const [demoterPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.demoter);
+  const [demoterSlot] = await deriveTeamSlotPda(accounts.team, accounts.demoterSlotIndex);
+  const [targetSlot] = await deriveTeamSlotPda(accounts.team, accounts.targetSlotIndex);
 
   const keys = [
     { pubkey: demoterPlayer, isSigner: false, isWritable: false },
@@ -709,13 +756,15 @@ export function createTeamDemoteMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + demoter_slot_index (u16) + target_slot_index (u16) + new_rank (u8)
-  const writer = new BufferWriter(13);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.demoterSlotIndex);
-  writer.writeU16(accounts.targetSlotIndex);
-  writer.writeU8(params.newRank);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_DEMOTE_MEMBER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_DEMOTE_MEMBER,
+    teamRankChangeArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      actorSlotIndex: accounts.demoterSlotIndex,
+      targetSlotIndex: accounts.targetSlotIndex,
+      newRank: params.newRank,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -730,7 +779,7 @@ export interface TeamTransferLeadershipAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Current leader's slot index */
   currentSlotIndex: number;
   /** New leader (PlayerAccount PDA) */
@@ -738,6 +787,17 @@ export interface TeamTransferLeadershipAccounts {
   /** New leader's slot index */
   newSlotIndex: number;
 }
+
+/** TeamTransferLeadership args (12 bytes) */
+const teamTransferLeadershipArgs = packed<{
+  teamId: bigint;
+  currentSlotIndex: number;
+  newSlotIndex: number;
+}>([
+  ['teamId', u64],
+  ['currentSlotIndex', u16],
+  ['newSlotIndex', u16],
+], 12);
 
 /** ~5,000 CU */
 /**
@@ -759,12 +819,12 @@ export interface TeamTransferLeadershipAccounts {
  * - current_slot_index: u16 (2)
  * - new_slot_index: u16 (2)
  */
-export function createTeamTransferLeadershipInstruction(
+export async function createTeamTransferLeadershipInstruction(
   accounts: TeamTransferLeadershipAccounts
-): Instruction {
-  const [leaderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [currentLeaderSlot] = deriveTeamSlotPda(accounts.team, accounts.currentSlotIndex);
-  const [newLeaderSlot] = deriveTeamSlotPda(accounts.team, accounts.newSlotIndex);
+): Promise<Instruction> {
+  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
+  const [currentLeaderSlot] = await deriveTeamSlotPda(accounts.team, accounts.currentSlotIndex);
+  const [newLeaderSlot] = await deriveTeamSlotPda(accounts.team, accounts.newSlotIndex);
 
   const keys = [
     { pubkey: leaderPlayer, isSigner: false, isWritable: false },
@@ -776,12 +836,14 @@ export function createTeamTransferLeadershipInstruction(
   ];
 
   // Instruction data: team_id (u64) + current_slot_index (u16) + new_slot_index (u16)
-  const writer = new BufferWriter(12);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.currentSlotIndex);
-  writer.writeU16(accounts.newSlotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TRANSFER_LEADERSHIP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TRANSFER_LEADERSHIP,
+    teamTransferLeadershipArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      currentSlotIndex: accounts.currentSlotIndex,
+      newSlotIndex: accounts.newSlotIndex,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -796,7 +858,7 @@ export interface TeamSetMotdAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   slotIndex: number;
 }
@@ -824,12 +886,12 @@ export interface TeamSetMotdParams {
  * - motd_len: u8 (1)
  * - motd: [u8; N]
  */
-export function createTeamSetMotdInstruction(
+export async function createTeamSetMotdInstruction(
   accounts: TeamSetMotdAccounts,
   params: TeamSetMotdParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -838,18 +900,18 @@ export function createTeamSetMotdInstruction(
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
   ];
 
-  // Instruction data: team_id (u64) + slot_index (u16) + motd_len (u8) + motd (bytes)
-  const motdBytes = Buffer.from(params.motd, 'utf8');
+  // Instruction data: team_id (u64) + slot_index (u16) + motd_len (u8) + motd (bytes).
+  // Variable-length payload — assembled manually (packed is fixed-size).
+  const motdBytes = new TextEncoder().encode(params.motd);
   if (motdBytes.length > 32) {
     throw new Error('MOTD too long (max 32 bytes)');
   }
-  const writer = new BufferWriter(11 + motdBytes.length);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-  writer.writeU8(motdBytes.length);
-  writer.writeBytes(motdBytes);
+  const payload = new Uint8Array(11 + motdBytes.length);
+  payload.set(teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.slotIndex }), 0);
+  payload[10] = motdBytes.length;
+  payload.set(motdBytes, 11);
 
-  const data = createInstructionData(DISCRIMINATORS.TEAM_SET_MOTD, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.TEAM_SET_MOTD, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -864,7 +926,7 @@ export interface TeamUpdateSettingsAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   slotIndex: number;
 }
@@ -879,6 +941,19 @@ export interface TeamUpdateSettingsParams {
   /** Minimum player level to join (1-255) */
   minLevelToJoin: number;
 }
+
+/** TeamUpdateSettings args (12 bytes) */
+const teamUpdateSettingsArgs = packed<{
+  teamId: bigint;
+  slotIndex: number;
+  settings: number;
+  minLevelToJoin: number;
+}>([
+  ['teamId', u64],
+  ['slotIndex', u16],
+  ['settings', u8],
+  ['minLevelToJoin', u8],
+], 12);
 
 /** ~15,000 CU */
 /**
@@ -898,12 +973,12 @@ export interface TeamUpdateSettingsParams {
  * - settings: u8 (1)
  * - min_level_to_join: u8 (1)
  */
-export function createTeamUpdateSettingsInstruction(
+export async function createTeamUpdateSettingsInstruction(
   accounts: TeamUpdateSettingsAccounts,
   params: TeamUpdateSettingsParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.member);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.member);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -913,13 +988,15 @@ export function createTeamUpdateSettingsInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16) + settings (u8) + min_level_to_join (u8)
-  const writer = new BufferWriter(12);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-  writer.writeU8(params.settings);
-  writer.writeU8(params.minLevelToJoin);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_UPDATE_SETTINGS, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_UPDATE_SETTINGS,
+    teamUpdateSettingsArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      slotIndex: accounts.slotIndex,
+      settings: params.settings,
+      minLevelToJoin: params.minLevelToJoin,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -934,12 +1011,18 @@ export interface TeamDepositTreasuryAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
 }
 
 export interface TeamDepositTreasuryParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
+
+/** TeamDepositTreasury args (16 bytes): amount (u64) + team_id (u64) */
+const teamDepositTreasuryArgs = packed<{ amount: bigint; teamId: bigint }>([
+  ['amount', u64],
+  ['teamId', u64],
+], 16);
 
 /** ~10,000 CU */
 /**
@@ -956,11 +1039,11 @@ export interface TeamDepositTreasuryParams {
  * - amount: u64 (8)
  * - team_id: u64 (8)
  */
-export function createTeamDepositTreasuryInstruction(
+export async function createTeamDepositTreasuryInstruction(
   accounts: TeamDepositTreasuryAccounts,
   params: TeamDepositTreasuryParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -969,11 +1052,13 @@ export function createTeamDepositTreasuryInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64)
-  const writer = new BufferWriter(16);
-  writer.writeU64(params.amount);
-  writer.writeU64(accounts.teamId);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_DEPOSIT_TREASURY, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_DEPOSIT_TREASURY,
+    teamDepositTreasuryArgs.encode({
+      amount: BigInt(params.amount),
+      teamId: BigInt(accounts.teamId),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -988,14 +1073,28 @@ export interface TeamWithdrawTreasuryAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   slotIndex: number;
 }
 
 export interface TeamWithdrawTreasuryParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
+
+/**
+ * Treasury-amount args (18 bytes): amount (u64) + team_id (u64) + slot_index
+ * (u16). Shared by instant withdraw and request-withdraw.
+ */
+const teamTreasuryAmountArgs = packed<{
+  amount: bigint;
+  teamId: bigint;
+  slotIndex: number;
+}>([
+  ['amount', u64],
+  ['teamId', u64],
+  ['slotIndex', u16],
+], 18);
 
 /** ~5,000 CU */
 /**
@@ -1015,12 +1114,12 @@ export interface TeamWithdrawTreasuryParams {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamWithdrawTreasuryInstruction(
+export async function createTeamWithdrawTreasuryInstruction(
   accounts: TeamWithdrawTreasuryAccounts,
   params: TeamWithdrawTreasuryParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -1030,12 +1129,14 @@ export function createTeamWithdrawTreasuryInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(18);
-  writer.writeU64(params.amount);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_WITHDRAW_TREASURY, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_WITHDRAW_TREASURY,
+    teamTreasuryAmountArgs.encode({
+      amount: BigInt(params.amount),
+      teamId: BigInt(accounts.teamId),
+      slotIndex: accounts.slotIndex,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1050,13 +1151,13 @@ export interface TeamTreasuryRequestWithdrawAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   slotIndex: number;
 }
 
 export interface TeamTreasuryRequestWithdrawParams {
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
 
 /** ~5,000 CU */
@@ -1080,13 +1181,13 @@ export interface TeamTreasuryRequestWithdrawParams {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamTreasuryRequestWithdrawInstruction(
+export async function createTeamTreasuryRequestWithdrawInstruction(
   accounts: TeamTreasuryRequestWithdrawAccounts,
   params: TeamTreasuryRequestWithdrawParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
-  const [request] = deriveTreasuryRequestPda(accounts.team, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+  const [request] = await deriveTreasuryRequestPda(accounts.team, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -1098,12 +1199,14 @@ export function createTeamTreasuryRequestWithdrawInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(18);
-  writer.writeU64(params.amount);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_REQUEST_WITHDRAW, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TREASURY_REQUEST_WITHDRAW,
+    teamTreasuryAmountArgs.encode({
+      amount: BigInt(params.amount),
+      teamId: BigInt(accounts.teamId),
+      slotIndex: accounts.slotIndex,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1118,7 +1221,7 @@ export interface TeamTreasuryApproveRequestAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Approver's slot index */
   approverSlotIndex: number;
   /** Requester's slot index (used to fetch requester's current rank) */
@@ -1151,13 +1254,13 @@ export interface TeamTreasuryApproveRequestAccounts {
  * - team_id: u64 (8)
  * - approver_slot_index: u16 (2)
  */
-export function createTeamTreasuryApproveRequestInstruction(
+export async function createTeamTreasuryApproveRequestInstruction(
   accounts: TeamTreasuryApproveRequestAccounts
-): Instruction {
-  const [approverPlayer] = derivePlayerPda(accounts.gameEngine, accounts.approver);
-  const [approverSlot] = deriveTeamSlotPda(accounts.team, accounts.approverSlotIndex);
-  const [requesterSlot] = deriveTeamSlotPda(accounts.team, accounts.requesterSlotIndex);
-  const [request] = deriveTreasuryRequestPda(accounts.team, accounts.requesterPlayer);
+): Promise<Instruction> {
+  const [approverPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.approver);
+  const [approverSlot] = await deriveTeamSlotPda(accounts.team, accounts.approverSlotIndex);
+  const [requesterSlot] = await deriveTeamSlotPda(accounts.team, accounts.requesterSlotIndex);
+  const [request] = await deriveTreasuryRequestPda(accounts.team, accounts.requesterPlayer);
 
   const keys = [
     { pubkey: approverPlayer, isSigner: false, isWritable: false },
@@ -1171,11 +1274,10 @@ export function createTeamTreasuryApproveRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + approver_slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.approverSlotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_APPROVE_REQUEST, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TREASURY_APPROVE_REQUEST,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.approverSlotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1190,7 +1292,7 @@ export interface TeamTreasuryRejectRequestAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Rejecter's slot index */
   rejecterSlotIndex: number;
   /** Requester's player account (for PDA derivation) */
@@ -1198,6 +1300,17 @@ export interface TeamTreasuryRejectRequestAccounts {
   /** Account to receive request rent refund (usually requester's wallet) */
   requesterRefund: Address;
 }
+
+/** TeamTreasuryRejectRequest args (42 bytes) */
+const teamTreasuryRejectRequestArgs = packed<{
+  teamId: bigint;
+  rejecterSlotIndex: number;
+  requesterPubkey: Address;
+}>([
+  ['teamId', u64],
+  ['rejecterSlotIndex', u16],
+  ['requesterPubkey', pubkey],
+], 42);
 
 /** ~5,000 CU */
 /**
@@ -1220,12 +1333,12 @@ export interface TeamTreasuryRejectRequestAccounts {
  * - rejecter_slot_index: u16 (2)
  * - requester_pubkey: Pubkey (32)
  */
-export function createTeamTreasuryRejectRequestInstruction(
+export async function createTeamTreasuryRejectRequestInstruction(
   accounts: TeamTreasuryRejectRequestAccounts
-): Instruction {
-  const [rejecterPlayer] = derivePlayerPda(accounts.gameEngine, accounts.rejecter);
-  const [rejecterSlot] = deriveTeamSlotPda(accounts.team, accounts.rejecterSlotIndex);
-  const [request] = deriveTreasuryRequestPda(accounts.team, accounts.requesterPlayer);
+): Promise<Instruction> {
+  const [rejecterPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.rejecter);
+  const [rejecterSlot] = await deriveTeamSlotPda(accounts.team, accounts.rejecterSlotIndex);
+  const [request] = await deriveTreasuryRequestPda(accounts.team, accounts.requesterPlayer);
 
   const keys = [
     { pubkey: rejecterPlayer, isSigner: false, isWritable: false },
@@ -1237,12 +1350,14 @@ export function createTeamTreasuryRejectRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + rejecter_slot_index (u16) + requester_pubkey (Pubkey)
-  const writer = new BufferWriter(42);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.rejecterSlotIndex);
-  writer.writeBytes(addressBytes(accounts.requesterPlayer));
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_REJECT_REQUEST, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TREASURY_REJECT_REQUEST,
+    teamTreasuryRejectRequestArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      rejecterSlotIndex: accounts.rejecterSlotIndex,
+      requesterPubkey: accounts.requesterPlayer,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1257,7 +1372,7 @@ export interface TeamTreasuryExecuteRequestAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Member's slot index */
   slotIndex: number;
 }
@@ -1281,12 +1396,12 @@ export interface TeamTreasuryExecuteRequestAccounts {
  * - team_id: u64 (8)
  * - slot_index: u16 (2)
  */
-export function createTeamTreasuryExecuteRequestInstruction(
+export async function createTeamTreasuryExecuteRequestInstruction(
   accounts: TeamTreasuryExecuteRequestAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [memberSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
-  const [request] = deriveTreasuryRequestPda(accounts.team, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [memberSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+  const [request] = await deriveTreasuryRequestPda(accounts.team, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -1297,11 +1412,10 @@ export function createTeamTreasuryExecuteRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_EXECUTE_REQUEST, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TREASURY_EXECUTE_REQUEST,
+    teamIdSlotArgs.encode({ teamId: BigInt(accounts.teamId), slotIndex: accounts.slotIndex })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1316,7 +1430,7 @@ export interface TeamTreasuryCancelRequestAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
 }
 
 /** ~5,000 CU */
@@ -1335,11 +1449,11 @@ export interface TeamTreasuryCancelRequestAccounts {
  * On-chain data (8 bytes):
  * - team_id: u64
  */
-export function createTeamTreasuryCancelRequestInstruction(
+export async function createTeamTreasuryCancelRequestInstruction(
   accounts: TeamTreasuryCancelRequestAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [request] = deriveTreasuryRequestPda(accounts.team, player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [request] = await deriveTreasuryRequestPda(accounts.team, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -1349,10 +1463,10 @@ export function createTeamTreasuryCancelRequestInstruction(
   ];
 
   // Instruction data: team_id (u64)
-  const writer = new BufferWriter(8);
-  writer.writeU64(accounts.teamId);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_CANCEL_REQUEST, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_TREASURY_CANCEL_REQUEST,
+    teamIdArgs.encode({ teamId: BigInt(accounts.teamId) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -1367,19 +1481,34 @@ export interface TeamUpdateTreasurySettingsAccounts {
   /** Team */
   team: Address;
   /** Team ID (u64) for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: bigint | number;
   /** Leader's slot index */
   slotIndex: number;
 }
 
 export interface TeamUpdateTreasurySettingsParams {
   /** Instant withdrawal limits per rank (4 values for ranks 1-4) */
-  instantLimits: [BN | number | bigint, BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  instantLimits: [bigint | number, bigint | number, bigint | number, bigint | number];
   /** Daily withdrawal caps per rank (4 values for ranks 1-4) */
-  dailyCaps: [BN | number | bigint, BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  dailyCaps: [bigint | number, bigint | number, bigint | number, bigint | number];
   /** Cooldown hours for large withdrawals (1-72 hours) */
   cooldownHours: number;
 }
+
+/** TeamUpdateTreasurySettings args (75 bytes) */
+const teamUpdateTreasurySettingsArgs = packed<{
+  teamId: bigint;
+  slotIndex: number;
+  instantLimits: bigint[];
+  dailyCaps: bigint[];
+  cooldownHours: number;
+}>([
+  ['teamId', u64],
+  ['slotIndex', u16],
+  ['instantLimits', array(u64, 4)],
+  ['dailyCaps', array(u64, 4)],
+  ['cooldownHours', u8],
+], 75);
 
 /** ~5,000 CU */
 /**
@@ -1400,12 +1529,12 @@ export interface TeamUpdateTreasurySettingsParams {
  * - daily_caps: [u64; 4] (32)
  * - cooldown_hours: u8 (1)
  */
-export function createTeamUpdateTreasurySettingsInstruction(
+export async function createTeamUpdateTreasurySettingsInstruction(
   accounts: TeamUpdateTreasurySettingsAccounts,
   params: TeamUpdateTreasurySettingsParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [leaderSlot] = deriveTeamSlotPda(accounts.team, accounts.slotIndex);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
+  const [leaderSlot] = await deriveTeamSlotPda(accounts.team, accounts.slotIndex);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: false },
@@ -1415,18 +1544,16 @@ export function createTeamUpdateTreasurySettingsInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16) + instant_limits ([u64;4]) + daily_caps ([u64;4]) + cooldown_hours (u8)
-  const writer = new BufferWriter(75);
-  writer.writeU64(accounts.teamId);
-  writer.writeU16(accounts.slotIndex);
-  for (const limit of params.instantLimits) {
-    writer.writeU64(limit);
-  }
-  for (const cap of params.dailyCaps) {
-    writer.writeU64(cap);
-  }
-  writer.writeU8(params.cooldownHours);
-
-  const data = createInstructionData(DISCRIMINATORS.TEAM_UPDATE_TREASURY_SETTINGS, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.TEAM_UPDATE_TREASURY_SETTINGS,
+    teamUpdateTreasurySettingsArgs.encode({
+      teamId: BigInt(accounts.teamId),
+      slotIndex: accounts.slotIndex,
+      instantLimits: params.instantLimits.map((v) => BigInt(v)),
+      dailyCaps: params.dailyCaps.map((v) => BigInt(v)),
+      cooldownHours: params.cooldownHours,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

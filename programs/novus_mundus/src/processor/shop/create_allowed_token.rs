@@ -9,7 +9,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, AllowedTokenAccount},
     validation::{require_signer, require_writable, require_key_match},
-    helpers::{consume_optional_feed_slot, OracleType, ZERO_PUBKEY},
+    helpers::{consume_optional_switchboard_feed, ZERO_PUBKEY},
     token_helpers::create_associated_token_account,
     utils::{read_bytes32, read_u16},
 };
@@ -30,21 +30,20 @@ use crate::{
 /// - [] token_program: SPL Token program
 /// - [] associated_token_program: Associated Token program
 ///
-/// # Accounts (conditional, appended in this order)
-/// - [] pyth_feed_account: Required iff `pyth_feed` in instruction data is non-zero.
-///   Owner-checked + parsed as a Pyth `PythPriceAccount`.
+/// # Accounts (conditional, appended at index 9)
 /// - [] switchboard_feed_account: Required iff `switchboard_feed` in instruction
-///   data is non-zero. Owner-checked + Anchor-discriminator-validated.
+///   data is non-zero. Owner-checked + `PullFeedAccountData`-validated.
 ///
-/// Without these trailing accounts, a junk pubkey would only fail later
-/// at purchase time. Caller passes 0–2 trailing accounts depending on
-/// which feed pubkeys are being configured.
+/// Pyth feeds are configured as a bare 32-byte feed-id (no account), so a Pyth
+/// feed consumes no trailing account slot; only a Switchboard feed does.
+/// Without the Switchboard account, a junk pubkey would only fail later at
+/// purchase time.
 ///
 /// # Instruction Data
-/// - pyth_feed: Address (32 bytes) - Pyth TOKEN/USD price feed
-/// - switchboard_feed: Address (32 bytes) - Switchboard TOKEN/USD quote account
-/// - max_staleness_slots: u16 - Max age in slots before rejection
-/// - confidence_threshold_bps: u16 - Max confidence interval (Pyth only)
+/// - pyth_feed: 32 bytes - Pyth TOKEN/USD feed id (Pyth feed identifier, 0 = unset)
+/// - switchboard_feed: Address (32 bytes) - Switchboard TOKEN/USD pull-feed account
+/// - max_staleness_slots: u16 - Max price age (Pyth: seconds; Switchboard: slots)
+/// - confidence_threshold_bps: u16 - Max confidence interval / std deviation
 /// - discount_bps: u16 - Discount for using this token
 pub fn process(
     program_id: &Address,
@@ -128,11 +127,9 @@ pub fn process(
         return Err(GameError::OracleUnavailable.into());
     }
 
-    // Walk the variable-length tail of feed accounts (pyth then switchboard,
-    // a zero pubkey consumes no slot).
-    let mut feed_slot = 9usize;
-    feed_slot = consume_optional_feed_slot(accounts, feed_slot, pyth_feed.as_array(), OracleType::Pyth)?;
-    let _ = consume_optional_feed_slot(accounts, feed_slot, switchboard_feed.as_array(), OracleType::Switchboard)?;
+    // Only a Switchboard feed has an account to validate at config time; a
+    // Pyth feed is a bare feed-id and is checked at purchase time instead.
+    let _ = consume_optional_switchboard_feed(accounts, 9, switchboard_feed.as_array())?;
 
     // 6b. Provision the treasury's ATA for this token (create if missing).
     // process_token_payment_flow pins treasury_token_ata to

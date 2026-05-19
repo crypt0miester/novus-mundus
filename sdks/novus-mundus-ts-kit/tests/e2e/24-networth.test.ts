@@ -4,7 +4,7 @@
  * Verifies that on-chain networth is computed correctly at player init
  * and after subscription purchases.
  *
- * NOTE: The TS calculator cross-check uses BN.toNumber() for asset values,
+ * NOTE: The TS calculator cross-check uses Number(BN) for asset values,
  * which can lose precision for large u64 values from the GameEngine.
  * On-chain networth (computed by Rust u64 arithmetic) is the source of truth.
  */
@@ -42,12 +42,12 @@ import { log } from '../utils/logger';
 
 /** Log player assets and on-chain networth for visibility */
 function logPlayerNetworth(label: string, p: PlayerAccount) {
-  const nw = p.networth.toNumber();
-  const du = [p.defensiveUnit1.toNumber(), p.defensiveUnit2.toNumber(), p.defensiveUnit3.toNumber()];
-  const op = [p.operativeUnit1.toNumber(), p.operativeUnit2.toNumber(), p.operativeUnit3.toNumber()];
-  const wp = [p.meleeWeapons.toNumber(), p.rangedWeapons.toNumber(), p.siegeWeapons.toNumber()];
-  const eq = [p.armorPieces.toNumber(), p.produce.toNumber(), p.vehicles.toNumber()];
-  const cash = p.cashOnHand.toNumber() + p.cashInVault.toNumber();
+  const nw = Number(p.networth);
+  const du = [Number(p.defensiveUnit1), Number(p.defensiveUnit2), Number(p.defensiveUnit3)];
+  const op = [Number(p.operativeUnit1), Number(p.operativeUnit2), Number(p.operativeUnit3)];
+  const wp = [Number(p.meleeWeapons), Number(p.rangedWeapons), Number(p.siegeWeapons)];
+  const eq = [Number(p.armorPieces), Number(p.produce), Number(p.vehicles)];
+  const cash = Number(p.cashOnHand) + Number(p.cashInVault);
 
   log.info(`${label}: networth=${nw}`);
   log.info(`  du=[${du}] op=[${op}] wp=[${wp}] eq=[${eq}] cash=${cash}`);
@@ -73,8 +73,8 @@ describe('Networth Calculation', () => {
   });
 
   // Helper to create subscription instruction
-  function createSubIx(player: TestPlayer, tier: number) {
-    return createPurchaseSubscriptionInstruction(
+  async function createSubIx(player: TestPlayer, tier: number) {
+    return await createPurchaseSubscriptionInstruction(
       {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -93,7 +93,7 @@ describe('Networth Calculation', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
-      const onChain = account!.networth.toNumber();
+      const onChain = Number(account!.networth);
       expect(onChain).toBeGreaterThan(0);
 
       networthByTier.set(-1, onChain);
@@ -107,17 +107,17 @@ describe('Networth Calculation', () => {
     it('should increase after Rookie (tier 0) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
-      const baselineNw = before!.networth.toNumber();
+      const baselineNw = Number(before!.networth);
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 0)],
+        [await createSubIx(player, 0)],
         [player.keypair],
       );
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
-      const onChain = after!.networth.toNumber();
+      const onChain = Number(after!.networth);
       // Rookie sub grants du1, op1, cash — networth must increase
       expect(onChain).toBeGreaterThan(baselineNw);
 
@@ -128,17 +128,17 @@ describe('Networth Calculation', () => {
     it('should increase after Expert (tier 1) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
-      const baselineNw = before!.networth.toNumber();
+      const baselineNw = Number(before!.networth);
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair],
       );
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
-      const onChain = after!.networth.toNumber();
+      const onChain = Number(after!.networth);
       expect(onChain).toBeGreaterThan(baselineNw);
 
       networthByTier.set(1, onChain);
@@ -148,17 +148,17 @@ describe('Networth Calculation', () => {
     it('should increase after Epic (tier 2) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
-      const baselineNw = before!.networth.toNumber();
+      const baselineNw = Number(before!.networth);
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 2)],
+        [await createSubIx(player, 2)],
         [player.keypair],
       );
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
-      const onChain = after!.networth.toNumber();
+      const onChain = Number(after!.networth);
       expect(onChain).toBeGreaterThan(baselineNw);
 
       networthByTier.set(2, onChain);
@@ -168,20 +168,20 @@ describe('Networth Calculation', () => {
     it('should increase after Legendary (tier 3) subscription', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
-      const baselineNw = before!.networth.toNumber();
+      const baselineNw = Number(before!.networth);
 
       // Legendary costs $250 (~2.5 SOL) -- airdrop extra to cover it
       ctx.svm.airdrop(player.publicKey, lamports(BigInt(5 * LAMPORTS_PER_SOL)));
 
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 3)],
+        [await createSubIx(player, 3)],
         [player.keypair],
       );
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       expect(after).not.toBeNull();
 
-      const onChain = after!.networth.toNumber();
+      const onChain = Number(after!.networth);
       expect(onChain).toBeGreaterThan(baselineNw);
 
       networthByTier.set(3, onChain);
@@ -228,7 +228,7 @@ describe('Networth Calculation', () => {
       expect(a2).not.toBeNull();
 
       // Same starter assets → same networth
-      expect(a1!.networth.toNumber()).toBe(a2!.networth.toNumber());
+      expect(Number(a1!.networth)).toBe(Number(a2!.networth));
     });
 
     it('should update networth when subscription grants resources', async () => {
@@ -238,7 +238,7 @@ describe('Networth Calculation', () => {
       // Expert subscription grants units, weapons, equipment, cash
       await sendInstructions(
         ctx.svm,
-        [createSubIx(player, 1)],
+        [await createSubIx(player, 1)],
         [player.keypair],
       );
 
@@ -246,10 +246,10 @@ describe('Networth Calculation', () => {
       expect(after).not.toBeNull();
 
       // More assets → higher networth
-      expect(after!.networth.toNumber()).toBeGreaterThan(before!.networth.toNumber());
+      expect(Number(after!.networth)).toBeGreaterThan(Number(before!.networth));
 
       // Verify the delta is meaningful (not just a few units)
-      const delta = after!.networth.toNumber() - before!.networth.toNumber();
+      const delta = Number(after!.networth) - Number(before!.networth);
       expect(delta).toBeGreaterThan(0);
       log.info(`Expert sub networth delta: +${delta}`);
     });

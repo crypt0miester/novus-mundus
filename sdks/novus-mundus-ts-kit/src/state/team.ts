@@ -8,9 +8,41 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { createEncoder, createDecoder, combineCodec, type FixedSizeCodec } from '@solana/kit';
+import { isNullPubkey } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u64, i64, bool, pubkey, array, custom } from '../utils/codec';
 import { TeamMemberRank } from '../types/enums';
+
+// Length-prefixed-buffer string field: `[u8; n]` content + 1-byte length suffix.
+const utf8Decoder = new TextDecoder();
+const utf8Encoder = new TextEncoder();
+
+/** A `[u8; n]` name buffer followed by a trailing `u8` length field. */
+function nameWithLen(n: number) {
+  const codec = combineCodec(
+    createEncoder<string>({
+      fixedSize: n + 1,
+      write: (value, dst, base) => {
+        const src = utf8Encoder.encode(value);
+        const len = Math.min(src.length, n);
+        dst.set(src.subarray(0, len), base);
+        dst[base + n] = len;
+        return base + n + 1;
+      },
+    }),
+    createDecoder<string>({
+      fixedSize: n + 1,
+      read: (src, base) => {
+        const len = src[base + n] ?? 0;
+        return [
+          utf8Decoder.decode(src.subarray(base, base + Math.min(len, n))),
+          base + n + 1,
+        ];
+      },
+    })
+  ) as FixedSizeCodec<string>;
+  return custom(codec, 1);
+}
 
 // Team Settings & Permissions
 
@@ -33,22 +65,22 @@ export const TeamPermissions = {
 // Team Account Interface
 
 export interface TeamAccount {
-  id: BN;
+  id: bigint;
   leader: Address;
   bump: number;
   disbanded: boolean;
   name: string;
   memberCount: number;
   maxMembers: number;
-  createdAt: BN;
-  lastActivity: BN;
-  treasury: BN;
+  createdAt: bigint;
+  lastActivity: bigint;
+  treasury: bigint;
   settings: number;
   minLevelToJoin: number;
   rolePermissions: number[];
   motd: string;
-  treasuryInstantLimit: BN[];
-  treasuryDailyCap: BN[];
+  treasuryInstantLimit: bigint[];
+  treasuryDailyCap: bigint[];
   treasuryCooldownHours: number;
 }
 
@@ -60,11 +92,11 @@ export const TEAM_ACCOUNT_SIZE = 280;
 export interface TeamMemberSlot {
   team: Address;
   player: Address;
-  joinedAt: BN;
+  joinedAt: bigint;
   slotIndex: number;
   bump: number;
   rank: TeamMemberRank;
-  treasuryWithdrawnToday: BN;
+  treasuryWithdrawnToday: bigint;
   lastTreasuryDay: number;
 }
 
@@ -78,8 +110,8 @@ export interface TeamInviteAccount {
   invitee: Address;
   bump: number;
   inviter: Address;
-  createdAt: BN;
-  expiresAt: BN;
+  createdAt: bigint;
+  expiresAt: bigint;
 }
 
 /** TeamInviteAccount size in bytes */
@@ -90,164 +122,103 @@ export const TEAM_INVITE_ACCOUNT_SIZE = 136;
 export interface TreasuryRequest {
   team: Address;
   requester: Address;
-  amount: BN;
-  createdAt: BN;
-  executableAt: BN;
+  amount: bigint;
+  createdAt: bigint;
+  executableAt: bigint;
   bump: number;
 }
 
 /** TreasuryRequest size in bytes */
 export const TREASURY_REQUEST_SIZE = 112;
 
+// Codecs
+
+/** TeamAccount `#[repr(C)]` codec */
+const teamCodec = reprC<TeamAccount>([
+  pad(1), // account_key
+  pad(32), // game_engine (not in interface)
+  ['id', u64],
+  ['leader', pubkey],
+  ['bump', u8],
+  ['disbanded', bool],
+  pad(6), // _padding
+  ['name', nameWithLen(32)],
+  pad(7), // _padding
+  ['memberCount', u16],
+  ['maxMembers', u16],
+  ['createdAt', i64],
+  ['lastActivity', i64],
+  ['treasury', u64],
+  ['settings', u8],
+  ['minLevelToJoin', u8],
+  ['rolePermissions', array(u8, 5)],
+  pad(1), // _padding
+  ['motd', nameWithLen(32)],
+  ['treasuryInstantLimit', array(u64, 4)],
+  ['treasuryDailyCap', array(u64, 4)],
+  ['treasuryCooldownHours', u8],
+  pad(7), // _treasury_reserved
+], TEAM_ACCOUNT_SIZE);
+
+/** TeamMemberSlot `#[repr(C)]` codec */
+const teamMemberSlotCodec = reprC<TeamMemberSlot>([
+  pad(1), // account_key
+  ['team', pubkey],
+  ['player', pubkey],
+  ['joinedAt', i64],
+  ['slotIndex', u16],
+  ['bump', u8],
+  ['rank', u8],
+  pad(4), // _reserved
+  ['treasuryWithdrawnToday', u64],
+  ['lastTreasuryDay', u16],
+], TEAM_MEMBER_SLOT_SIZE);
+
+/** TeamInviteAccount `#[repr(C)]` codec */
+const teamInviteCodec = reprC<TeamInviteAccount>([
+  pad(1), // account_key
+  ['team', pubkey],
+  ['invitee', pubkey],
+  ['bump', u8],
+  pad(7), // _padding0
+  ['inviter', pubkey],
+  ['createdAt', i64],
+  ['expiresAt', i64],
+  pad(8), // _reserved
+], TEAM_INVITE_ACCOUNT_SIZE);
+
+/** TreasuryRequest `#[repr(C)]` codec */
+const treasuryRequestCodec = reprC<TreasuryRequest>([
+  pad(1), // account_key
+  ['team', pubkey],
+  ['requester', pubkey],
+  ['amount', u64],
+  ['createdAt', i64],
+  ['executableAt', i64],
+  ['bump', u8],
+  pad(15), // _reserved
+], TREASURY_REQUEST_SIZE);
+
 // Deserialization Functions
 
 /** Deserialize TeamAccount from raw bytes */
-export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-  reader.skip(32); // game_engine
-  reader.skip(7); // implicit padding for u64 alignment
-
-  const id = reader.readU64();
-  const leader = reader.readPubkey();
-  const bump = reader.readU8();
-  const disbanded = reader.readBool();
-  reader.skip(6); // padding
-
-  const nameBytes = reader.readBytes(32);
-  const nameLen = reader.readU8();
-  const name = new TextDecoder().decode(nameBytes.slice(0, nameLen));
-  reader.skip(7); // padding
-
-  const memberCount = reader.readU16();
-  const maxMembers = reader.readU16();
-  reader.skip(4); // padding
-
-  const createdAt = reader.readI64();
-  const lastActivity = reader.readI64();
-  const treasury = reader.readU64();
-
-  const settings = reader.readU8();
-  const minLevelToJoin = reader.readU8();
-  const rolePermissions: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    rolePermissions.push(reader.readU8());
-  }
-  reader.skip(1); // padding
-
-  const motdBytes = reader.readBytes(32);
-  const motdLen = reader.readU8();
-  const motd = new TextDecoder().decode(motdBytes.slice(0, motdLen));
-  reader.skip(7); // padding
-
-  const treasuryInstantLimit = reader.readU64Array(4);
-  const treasuryDailyCap = reader.readU64Array(4);
-  const treasuryCooldownHours = reader.readU8();
-  reader.skip(7); // _treasury_reserved
-
-  return {
-    id,
-    leader,
-    bump,
-    disbanded,
-    name,
-    memberCount,
-    maxMembers,
-    createdAt,
-    lastActivity,
-    treasury,
-    settings,
-    minLevelToJoin,
-    rolePermissions,
-    motd,
-    treasuryInstantLimit,
-    treasuryDailyCap,
-    treasuryCooldownHours,
-  };
+export function deserializeTeam(data: Uint8Array): TeamAccount {
+  return teamCodec.decode(data);
 }
 
 /** Deserialize TeamMemberSlot from raw bytes */
-export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMemberSlot {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const team = reader.readPubkey();
-  const player = reader.readPubkey();
-  reader.skip(7); // implicit padding for i64 alignment
-  const joinedAt = reader.readI64();
-  const slotIndex = reader.readU16();
-  const bump = reader.readU8();
-  const rank = reader.readU8() as TeamMemberRank;
-  reader.skip(4); // _reserved
-
-  const treasuryWithdrawnToday = reader.readU64();
-  const lastTreasuryDay = reader.readU16();
-  reader.skip(6); // padding
-
-  return {
-    team,
-    player,
-    joinedAt,
-    slotIndex,
-    bump,
-    rank,
-    treasuryWithdrawnToday,
-    lastTreasuryDay,
-  };
+export function deserializeTeamMemberSlot(data: Uint8Array): TeamMemberSlot {
+  return teamMemberSlotCodec.decode(data);
 }
 
 /** Deserialize TeamInviteAccount from raw bytes */
-export function deserializeTeamInvite(data: Uint8Array | Buffer): TeamInviteAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const team = reader.readPubkey();
-  const invitee = reader.readPubkey();
-  const bump = reader.readU8();
-  reader.skip(7); // _padding0
-
-  const inviter = reader.readPubkey();
-  reader.skip(7); // implicit padding for i64 alignment
-  const createdAt = reader.readI64();
-  const expiresAt = reader.readI64();
-  reader.skip(8); // _reserved
-
-  return {
-    team,
-    invitee,
-    bump,
-    inviter,
-    createdAt,
-    expiresAt,
-  };
+export function deserializeTeamInvite(data: Uint8Array): TeamInviteAccount {
+  return teamInviteCodec.decode(data);
 }
 
 /** Deserialize TreasuryRequest from raw bytes */
-export function deserializeTreasuryRequest(data: Uint8Array | Buffer): TreasuryRequest {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key
-
-  const team = reader.readPubkey();
-  const requester = reader.readPubkey();
-  reader.skip(7); // implicit padding for u64 alignment
-  const amount = reader.readU64();
-  const createdAt = reader.readI64();
-  const executableAt = reader.readI64();
-  const bump = reader.readU8();
-  reader.skip(15); // _reserved
-
-  return {
-    team,
-    requester,
-    amount,
-    createdAt,
-    executableAt,
-    bump,
-  };
+export function deserializeTreasuryRequest(data: Uint8Array): TreasuryRequest {
+  return treasuryRequestCodec.decode(data);
 }
 
 // Parse Functions
@@ -309,13 +280,13 @@ export function rankHasPermission(team: TeamAccount, rank: number, perm: number)
 
 /** Check if invite has expired */
 export function isInviteExpired(invite: TeamInviteAccount, nowSeconds: number): boolean {
-  const expiresAt = invite.expiresAt.toNumber();
+  const expiresAt = Number(invite.expiresAt);
   return expiresAt > 0 && nowSeconds >= expiresAt;
 }
 
 /** Check if treasury request is executable */
 export function isTreasuryRequestExecutable(request: TreasuryRequest, nowSeconds: number): boolean {
-  return nowSeconds >= request.executableAt.toNumber();
+  return nowSeconds >= Number(request.executableAt);
 }
 
 /** Check if member is leader */

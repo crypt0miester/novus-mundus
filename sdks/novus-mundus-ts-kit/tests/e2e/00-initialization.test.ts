@@ -6,7 +6,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { generateKeyPairSigner, lamports } from '@solana/kit';
-import BN from 'bn.js';
 
 import {
   createUpdateGameConfigInstruction,
@@ -38,7 +37,7 @@ describe('Initialization', () => {
     it('should have initialized GameEngine with default configs', async () => {
       const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engine).not.toBeNull();
-      expect(engine!.version.toNumber()).toBeGreaterThanOrEqual(0);
+      expect(Number(engine!.version)).toBeGreaterThanOrEqual(0);
       expect(engine!.paused).toBe(false);
     });
 
@@ -47,21 +46,21 @@ describe('Initialization', () => {
       expect(engine).not.toBeNull();
 
       const arena = engine!.arenaConfig;
-      expect(arena.seasonDuration.toNumber()).toBe(7 * 86400);     // 7 days
-      expect(arena.claimDeadline.toNumber()).toBe(30 * 86400);     // 30 days
-      expect(arena.matchExpirySeconds.toNumber()).toBe(300);       // 5 min
+      expect(Number(arena.seasonDuration)).toBe(7 * 86400);     // 7 days
+      expect(Number(arena.claimDeadline)).toBe(30 * 86400);     // 30 days
+      expect(Number(arena.matchExpirySeconds)).toBe(300);       // 5 min
       expect(arena.maxDailyBattles).toBe(10);
       expect(arena.maxBattlesPerOpponent).toBe(2);
       expect(arena.minBattlesForDailyReward).toBe(5);
       expect(arena.startingElo).toBe(1000);
       expect(arena.eloKFactor).toBe(32);
-      expect(arena.meleeWeaponPower.toNumber()).toBe(10);
-      expect(arena.rangedWeaponPower.toNumber()).toBe(16);
-      expect(arena.siegeWeaponPower.toNumber()).toBe(26);
-      expect(arena.armorPower.toNumber()).toBe(5);
-      expect(arena.baseWinPoints.toNumber()).toBe(100);
-      expect(arena.baseLossPoints.toNumber()).toBe(20);
-      expect(arena.drawPoints.toNumber()).toBe(50);
+      expect(Number(arena.meleeWeaponPower)).toBe(10);
+      expect(Number(arena.rangedWeaponPower)).toBe(16);
+      expect(Number(arena.siegeWeaponPower)).toBe(26);
+      expect(Number(arena.armorPower)).toBe(5);
+      expect(Number(arena.baseWinPoints)).toBe(100);
+      expect(Number(arena.baseLossPoints)).toBe(20);
+      expect(Number(arena.drawPoints)).toBe(50);
       expect(arena.prizeDistribution).toEqual([3500, 2500, 1500, 750, 750, 200, 200, 200, 200, 200]);
     });
 
@@ -72,29 +71,29 @@ describe('Initialization', () => {
       expect(exp.perfectScoreThreshold).toBe(80);
       expect(exp.miningDurationHours).toEqual([1, 2, 4, 8, 16]);
       expect(exp.fishingDurationHours).toEqual([1, 2, 4, 8, 16]);
-      expect(exp.rareFindMultiplier.toNumber()).toBe(5);
-      expect(exp.operativeTier1MultiplierBps.toNumber()).toBe(10000);
-      expect(exp.operativeTier2MultiplierBps.toNumber()).toBe(15000);
-      expect(exp.operativeTier3MultiplierBps.toNumber()).toBe(20000);
+      expect(Number(exp.rareFindMultiplier)).toBe(5);
+      expect(Number(exp.operativeTier1MultiplierBps)).toBe(10000);
+      expect(Number(exp.operativeTier2MultiplierBps)).toBe(15000);
+      expect(Number(exp.operativeTier3MultiplierBps)).toBe(20000);
     });
 
     it('should have default DungeonConfig values', async () => {
       const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const dg = engine!.dungeonConfig;
-      expect(dg.resumeGemCost.toNumber()).toBe(500);
+      expect(Number(dg.resumeGemCost)).toBe(500);
       expect(dg.maxMultiAttacks).toBe(5);
       expect(dg.restHealPercent).toBe(20);
       expect(dg.trapDamagePercent).toBe(10);
       expect(dg.fleePenaltyBps).toEqual([7000, 6000, 5000, 4000]);
-      expect(dg.unitPower.map(b => b.toNumber())).toEqual([15, 35, 80]);
-      expect(dg.unitHealth.map(b => b.toNumber())).toEqual([100, 250, 600]);
+      expect(dg.unitPower.map(b => Number(b))).toEqual([15, 35, 80]);
+      expect(dg.unitHealth.map(b => Number(b))).toEqual([100, 250, 600]);
     });
 
     it('should have default CastleConfig values', async () => {
       const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const castle = engine!.castleConfig;
-      expect(castle.contestDuration.toNumber()).toBe(0);           // testing mode
-      expect(castle.protectionDuration.toNumber()).toBe(864_000);  // 10 days
+      expect(Number(castle.contestDuration)).toBe(0);           // testing mode
+      expect(Number(castle.protectionDuration)).toBe(864_000);  // 10 days
       expect(castle.attackRangeMeters).toBe(50.0);
       expect(castle.maxCastlesPerKing).toBe(5);
       expect(castle.kingLootCutBps).toBe(1500);
@@ -105,12 +104,12 @@ describe('Initialization', () => {
     it('should have default CombatConfig values', async () => {
       const engine = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       const combat = engine!.combatConfig;
-      expect(combat.damagePerSiegeWeapon.toNumber()).toBe(500);
-      expect(combat.maxReinforcementReceive.toNumber()).toBe(10_000);
-      expect(combat.defensiveUnit1Power.toNumber()).toBe(10);
-      expect(combat.defensiveUnit2Power.toNumber()).toBe(25);
-      expect(combat.defensiveUnit3Power.toNumber()).toBe(60);
-      expect(combat.staminaRegenInterval.toNumber()).toBe(300);
+      expect(Number(combat.damagePerSiegeWeapon)).toBe(500);
+      expect(Number(combat.maxReinforcementReceive)).toBe(10_000);
+      expect(Number(combat.defensiveUnit1Power)).toBe(10);
+      expect(Number(combat.defensiveUnit2Power)).toBe(25);
+      expect(Number(combat.defensiveUnit3Power)).toBe(60);
+      expect(Number(combat.staminaRegenInterval)).toBe(300);
       expect(combat.encounterAttackRangeMeters).toBe(16.0);
       expect(combat.pvpAttackRangeMeters).toBe(15.0);
       expect(combat.baseEncountersPerCity).toBe(25);
@@ -124,17 +123,17 @@ describe('Initialization', () => {
   describe('update_game_config', () => {
     it('should update ArenaConfig via DAO authority', async () => {
       const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      const versionBefore = engineBefore!.version.toNumber();
+      const versionBefore = Number(engineBefore!.version);
 
       // Modify arena config: change max daily battles and ELO K-factor
       const updatedArena: ArenaConfig = {
         ...engineBefore!.arenaConfig,
         maxDailyBattles: 20,              // was 10
         eloKFactor: 48,                   // was 32
-        dailyBaseReward: new BN(2000),    // was 1000
+        dailyBaseReward: 2000n,    // was 1000
       };
 
-      const ix = createUpdateGameConfigInstruction(
+      const ix = await createUpdateGameConfigInstruction(
         {
           authority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -148,12 +147,12 @@ describe('Initialization', () => {
       expect(engineAfter).not.toBeNull();
 
       // Version incremented
-      expect(engineAfter!.version.toNumber()).toBe(versionBefore + 1);
+      expect(Number(engineAfter!.version)).toBe(versionBefore + 1);
 
       // Changed values
       expect(engineAfter!.arenaConfig.maxDailyBattles).toBe(20);
       expect(engineAfter!.arenaConfig.eloKFactor).toBe(48);
-      expect(engineAfter!.arenaConfig.dailyBaseReward.toNumber()).toBe(2000);
+      expect(Number(engineAfter!.arenaConfig.dailyBaseReward)).toBe(2000);
 
       // Unchanged values preserved
       expect(engineAfter!.arenaConfig.startingElo).toBe(1000);
@@ -167,10 +166,10 @@ describe('Initialization', () => {
         ...engineBefore!.combatConfig,
         maxEncountersPerCity: 100,         // was 50
         weaponLootRateBps: 7500,          // was 6000
-        damagePerSiegeWeapon: new BN(750), // was 500
+        damagePerSiegeWeapon: 750n, // was 500
       };
 
-      const ix = createUpdateGameConfigInstruction(
+      const ix = await createUpdateGameConfigInstruction(
         {
           authority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -183,21 +182,21 @@ describe('Initialization', () => {
       const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       expect(engineAfter!.combatConfig.maxEncountersPerCity).toBe(100);
       expect(engineAfter!.combatConfig.weaponLootRateBps).toBe(7500);
-      expect(engineAfter!.combatConfig.damagePerSiegeWeapon.toNumber()).toBe(750);
+      expect(Number(engineAfter!.combatConfig.damagePerSiegeWeapon)).toBe(750);
 
       // Other combat values unchanged
-      expect(engineAfter!.combatConfig.maxReinforcementReceive.toNumber()).toBe(10_000);
-      expect(engineAfter!.combatConfig.staminaRegenInterval.toNumber()).toBe(300);
+      expect(Number(engineAfter!.combatConfig.maxReinforcementReceive)).toBe(10_000);
+      expect(Number(engineAfter!.combatConfig.staminaRegenInterval)).toBe(300);
     });
 
     it('should update multiple configs in single transaction', async () => {
       const engineBefore = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      const versionBefore = engineBefore!.version.toNumber();
+      const versionBefore = Number(engineBefore!.version);
 
       const updatedCastle: CastleConfig = {
         ...engineBefore!.castleConfig,
         maxCastlesPerKing: 3,             // was 5
-        contestDuration: new BN(7200),    // was 0, now 2 hours
+        contestDuration: 7200n,    // was 0, now 2 hours
       };
 
       const updatedExpedition: ExpeditionConfig = {
@@ -206,7 +205,7 @@ describe('Initialization', () => {
         perfectScoreThreshold: 90,        // was 80
       };
 
-      const ix = createUpdateGameConfigInstruction(
+      const ix = await createUpdateGameConfigInstruction(
         {
           authority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -221,13 +220,13 @@ describe('Initialization', () => {
 
       const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
       // Version incremented once (single instruction)
-      expect(engineAfter!.version.toNumber()).toBe(versionBefore + 1);
+      expect(Number(engineAfter!.version)).toBe(versionBefore + 1);
 
       // Castle changes applied
       expect(engineAfter!.castleConfig.maxCastlesPerKing).toBe(3);
-      expect(engineAfter!.castleConfig.contestDuration.toNumber()).toBe(7200);
+      expect(Number(engineAfter!.castleConfig.contestDuration)).toBe(7200);
       // Castle unchanged values preserved
-      expect(engineAfter!.castleConfig.protectionDuration.toNumber()).toBe(864_000);
+      expect(Number(engineAfter!.castleConfig.protectionDuration)).toBe(864_000);
 
       // Expedition changes applied
       expect(engineAfter!.expeditionConfig.maxTier).toBe(3);
@@ -241,12 +240,12 @@ describe('Initialization', () => {
 
       const updatedDungeon: DungeonConfig = {
         ...engineBefore!.dungeonConfig,
-        resumeGemCost: new BN(1000),      // was 500
+        resumeGemCost: 1000n,      // was 500
         maxMultiAttacks: 10,              // was 5
         restHealPercent: 30,              // was 20
       };
 
-      const ix = createUpdateGameConfigInstruction(
+      const ix = await createUpdateGameConfigInstruction(
         {
           authority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -257,7 +256,7 @@ describe('Initialization', () => {
       await sendInstructions(ctx.svm, [ix], [ctx.daoAuthority]);
 
       const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      expect(engineAfter!.dungeonConfig.resumeGemCost.toNumber()).toBe(1000);
+      expect(Number(engineAfter!.dungeonConfig.resumeGemCost)).toBe(1000);
       expect(engineAfter!.dungeonConfig.maxMultiAttacks).toBe(10);
       expect(engineAfter!.dungeonConfig.restHealPercent).toBe(30);
 
@@ -278,7 +277,7 @@ describe('Initialization', () => {
         maxDailyBattles: 99,
       };
 
-      const ix = createUpdateGameConfigInstruction(
+      const ix = await createUpdateGameConfigInstruction(
         {
           authority: impostor.address,
           gameEngine: ctx.gameEngine,

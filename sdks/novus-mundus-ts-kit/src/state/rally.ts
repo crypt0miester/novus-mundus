@@ -6,15 +6,15 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { isNullPubkey } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u64, i32, i64, bool, pubkey } from '../utils/codec';
 import { RallyStatus, RallyTargetType } from '../types/enums';
 
 // Rally Account Interface
 
 export interface RallyAccount {
   // Identity
-  id: BN;
+  id: bigint;
   creator: Address;
   team: Address;
 
@@ -27,11 +27,11 @@ export interface RallyAccount {
   target: Address;
 
   // Timing
-  createdAt: BN;
-  gatherAt: BN;
-  executeAt: BN;
-  marchStartedAt: BN;
-  arriveAt: BN;
+  createdAt: bigint;
+  gatherAt: bigint;
+  executeAt: bigint;
+  marchStartedAt: bigint;
+  arriveAt: bigint;
   marchDuration: number;
 
   // Leader buffs
@@ -52,31 +52,31 @@ export interface RallyAccount {
   returnedCount: number;
 
   // Aggregated totals
-  totalUnits: BN;
-  totalMeleeWeapons: BN;
-  totalRangedWeapons: BN;
-  totalSiegeWeapons: BN;
-  totalPower: BN;
+  totalUnits: bigint;
+  totalMeleeWeapons: bigint;
+  totalRangedWeapons: bigint;
+  totalSiegeWeapons: bigint;
+  totalPower: bigint;
 
   // Combat results
-  totalCasualties: BN;
-  attackDamageDealt: BN;
-  defenseDamageReceived: BN;
+  totalCasualties: bigint;
+  attackDamageDealt: bigint;
+  defenseDamageReceived: bigint;
 
   // Resource loot
-  totalLootCash: BN;
-  totalLootLockedNovi: BN;
+  totalLootCash: bigint;
+  totalLootLockedNovi: bigint;
 
   // Weapon loot
-  totalLootMelee: BN;
-  totalLootRanged: BN;
-  totalLootSiege: BN;
+  totalLootMelee: bigint;
+  totalLootRanged: bigint;
+  totalLootSiege: bigint;
 
   // Other loot
-  totalLootProduce: BN;
-  totalLootVehicles: BN;
-  totalLootFragments: BN;
-  totalLootGems: BN;
+  totalLootProduce: bigint;
+  totalLootVehicles: bigint;
+  totalLootFragments: bigint;
+  totalLootGems: bigint;
 
   // Status
   status: RallyStatus;
@@ -92,7 +92,7 @@ export const RALLY_ACCOUNT_SIZE = 368;
 
 export interface RallyParticipant {
   // Identity
-  rallyId: BN;
+  rallyId: bigint;
   rallyCreator: Address;
   participant: Address;
 
@@ -100,14 +100,14 @@ export interface RallyParticipant {
   homeCity: number;
 
   // Units committed
-  unitsCommitted1: BN;
-  unitsCommitted2: BN;
-  unitsCommitted3: BN;
+  unitsCommitted1: bigint;
+  unitsCommitted2: bigint;
+  unitsCommitted3: bigint;
 
   // Weapons committed
-  meleeWeaponsCommitted: BN;
-  rangedWeaponsCommitted: BN;
-  siegeWeaponsCommitted: BN;
+  meleeWeaponsCommitted: bigint;
+  rangedWeaponsCommitted: bigint;
+  siegeWeaponsCommitted: bigint;
 
   // Buffs snapshotted
   researchAttackBps: number;
@@ -120,11 +120,11 @@ export interface RallyParticipant {
 
   // Hero
   hero: Address;
-  heroPowerContribution: BN;
+  heroPowerContribution: bigint;
 
   // Travel to rally
-  travelStartedAt: BN;
-  arrivesAtRally: BN;
+  travelStartedAt: bigint;
+  arrivesAtRally: bigint;
   travelDuration: number;
 
   // Status flags
@@ -134,31 +134,31 @@ export interface RallyParticipant {
   isLeader: boolean;
 
   // Casualties
-  casualties1: BN;
-  casualties2: BN;
-  casualties3: BN;
+  casualties1: bigint;
+  casualties2: bigint;
+  casualties3: bigint;
 
   // Resource loot share
-  lootCash: BN;
-  lootLockedNovi: BN;
+  lootCash: bigint;
+  lootLockedNovi: bigint;
 
   // Weapon loot share
-  lootMelee: BN;
-  lootRanged: BN;
-  lootSiege: BN;
+  lootMelee: bigint;
+  lootRanged: bigint;
+  lootSiege: bigint;
 
   // Other loot share
-  lootProduce: BN;
-  lootVehicles: BN;
-  lootFragments: BN;
-  lootGems: BN;
+  lootProduce: bigint;
+  lootVehicles: bigint;
+  lootFragments: bigint;
+  lootGems: bigint;
 
   // Return journey
-  returnStartedAt: BN;
+  returnStartedAt: bigint;
   returnDuration: number;
 
   // Contribution tracking
-  contributionPower: BN;
+  contributionPower: bigint;
   contributionBps: number;
   bump: number;
 }
@@ -166,276 +166,125 @@ export interface RallyParticipant {
 /** RallyParticipant size in bytes (repr(C) layout with alignment padding) */
 export const RALLY_PARTICIPANT_SIZE = 352;
 
+// Codecs
+
+/** RallyAccount `#[repr(C)]` codec */
+const rallyCodec = reprC<RallyAccount>([
+  pad(1), // account_key discriminator
+  pad(32), // game_engine (not in interface)
+  ['id', u64],
+  ['creator', pubkey],
+  ['team', pubkey],
+  ['rallyCity', u16],
+  ['targetCity', u16],
+  ['targetType', u8],
+  pad(3), // _padding
+  ['target', pubkey],
+  ['createdAt', i64],
+  ['gatherAt', i64],
+  ['executeAt', i64],
+  ['marchStartedAt', i64],
+  ['arriveAt', i64],
+  ['marchDuration', i32],
+  pad(4), // _padding
+  ['leaderResearchAttackBps', u16],
+  ['leaderResearchCritChanceBps', u16],
+  ['leaderResearchCritDamageBps', u16],
+  ['leaderHeroAttackBps', u16],
+  ['leaderHeroWeaponEfficiencyBps', u16],
+  ['leaderHeroCritChanceBps', u16],
+  ['leaderEquippedWeaponBonusBps', u16],
+  pad(2), // _padding
+  ['minParticipants', u8],
+  ['maxParticipants', u8],
+  ['participantCount', u8],
+  ['arrivedCount', u8],
+  ['marchedCount', u8],
+  ['returnedCount', u8],
+  ['totalUnits', u64],
+  ['totalMeleeWeapons', u64],
+  ['totalRangedWeapons', u64],
+  ['totalSiegeWeapons', u64],
+  ['totalPower', u64],
+  ['totalCasualties', u64],
+  ['attackDamageDealt', u64],
+  ['defenseDamageReceived', u64],
+  ['totalLootCash', u64],
+  ['totalLootLockedNovi', u64],
+  ['totalLootMelee', u64],
+  ['totalLootRanged', u64],
+  ['totalLootSiege', u64],
+  ['totalLootProduce', u64],
+  ['totalLootVehicles', u64],
+  ['totalLootFragments', u64],
+  ['totalLootGems', u64],
+  ['status', u8],
+  ['fallbackTriggered', bool],
+  ['attackerWon', bool],
+  ['bump', u8],
+], RALLY_ACCOUNT_SIZE);
+
+/** RallyParticipant `#[repr(C)]` codec */
+const rallyParticipantCodec = reprC<RallyParticipant>([
+  pad(1), // account_key discriminator
+  ['rallyId', u64],
+  ['rallyCreator', pubkey],
+  ['participant', pubkey],
+  ['homeCity', u16],
+  pad(2), // _padding1
+  ['unitsCommitted1', u64],
+  ['unitsCommitted2', u64],
+  ['unitsCommitted3', u64],
+  ['meleeWeaponsCommitted', u64],
+  ['rangedWeaponsCommitted', u64],
+  ['siegeWeaponsCommitted', u64],
+  ['researchAttackBps', u16],
+  ['researchCritChanceBps', u16],
+  ['researchCritDamageBps', u16],
+  ['heroAttackBps', u16],
+  ['heroWeaponEfficiencyBps', u16],
+  ['heroCritChanceBps', u16],
+  ['equippedWeaponBonusBps', u16],
+  pad(2), // _padding
+  ['hero', pubkey],
+  ['heroPowerContribution', u64],
+  ['travelStartedAt', i64],
+  ['arrivesAtRally', i64],
+  ['travelDuration', i32],
+  pad(4), // _padding
+  ['arrivedAtRally', bool],
+  ['includedInMarch', bool],
+  ['returned', bool],
+  ['isLeader', bool],
+  ['casualties1', u64],
+  ['casualties2', u64],
+  ['casualties3', u64],
+  ['lootCash', u64],
+  ['lootLockedNovi', u64],
+  ['lootMelee', u64],
+  ['lootRanged', u64],
+  ['lootSiege', u64],
+  ['lootProduce', u64],
+  ['lootVehicles', u64],
+  ['lootFragments', u64],
+  ['lootGems', u64],
+  ['returnStartedAt', i64],
+  ['returnDuration', i32],
+  ['contributionPower', u64],
+  ['contributionBps', u16],
+  ['bump', u8],
+], RALLY_PARTICIPANT_SIZE);
+
 // Deserialization
 
 /** Deserialize RallyAccount from raw bytes */
-export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-
-  // Kingdom Reference (32 bytes)
-  reader.readPubkey(); // game_engine (skip, not in interface)
-  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
-
-  // Identity
-  const id = reader.readU64();
-  const creator = reader.readPubkey();
-  const team = reader.readPubkey();
-
-  // Location (8 bytes)
-  const rallyCity = reader.readU16();
-  const targetCity = reader.readU16();
-  const targetTypeValue = reader.readU8();
-  const targetType = targetTypeValue as RallyTargetType;
-  reader.skip(3); // padding
-
-  // Target (32 bytes)
-  const target = reader.readPubkey();
-
-  // Timing (48 bytes)
-  const createdAt = reader.readI64();
-  const gatherAt = reader.readI64();
-  const executeAt = reader.readI64();
-  const marchStartedAt = reader.readI64();
-  const arriveAt = reader.readI64();
-  const marchDuration = reader.readI32();
-  reader.skip(4); // padding
-
-  // Leader buffs (16 bytes)
-  const leaderResearchAttackBps = reader.readU16();
-  const leaderResearchCritChanceBps = reader.readU16();
-  const leaderResearchCritDamageBps = reader.readU16();
-  const leaderHeroAttackBps = reader.readU16();
-  const leaderHeroWeaponEfficiencyBps = reader.readU16();
-  const leaderHeroCritChanceBps = reader.readU16();
-  const leaderEquippedWeaponBonusBps = reader.readU16();
-  reader.skip(2); // padding
-
-  // Participants (8 bytes)
-  const minParticipants = reader.readU8();
-  const maxParticipants = reader.readU8();
-  const participantCount = reader.readU8();
-  const arrivedCount = reader.readU8();
-  const marchedCount = reader.readU8();
-  const returnedCount = reader.readU8();
-  reader.skip(2); // padding
-
-  // Aggregated totals (40 bytes)
-  const totalUnits = reader.readU64();
-  const totalMeleeWeapons = reader.readU64();
-  const totalRangedWeapons = reader.readU64();
-  const totalSiegeWeapons = reader.readU64();
-  const totalPower = reader.readU64();
-
-  // Combat results (24 bytes)
-  const totalCasualties = reader.readU64();
-  const attackDamageDealt = reader.readU64();
-  const defenseDamageReceived = reader.readU64();
-
-  // Resource loot (16 bytes)
-  const totalLootCash = reader.readU64();
-  const totalLootLockedNovi = reader.readU64();
-
-  // Weapon loot (24 bytes)
-  const totalLootMelee = reader.readU64();
-  const totalLootRanged = reader.readU64();
-  const totalLootSiege = reader.readU64();
-
-  // Other loot (32 bytes)
-  const totalLootProduce = reader.readU64();
-  const totalLootVehicles = reader.readU64();
-  const totalLootFragments = reader.readU64();
-  const totalLootGems = reader.readU64();
-
-  // Status (8 bytes)
-  const statusValue = reader.readU8();
-  const status = statusValue as RallyStatus;
-  const fallbackTriggered = reader.readBool();
-  const attackerWon = reader.readBool();
-  const bump = reader.readU8();
-  reader.skip(4); // padding
-
-  return {
-    id,
-    creator,
-    team,
-    rallyCity,
-    targetCity,
-    targetType,
-    target,
-    createdAt,
-    gatherAt,
-    executeAt,
-    marchStartedAt,
-    arriveAt,
-    marchDuration,
-    leaderResearchAttackBps,
-    leaderResearchCritChanceBps,
-    leaderResearchCritDamageBps,
-    leaderHeroAttackBps,
-    leaderHeroWeaponEfficiencyBps,
-    leaderHeroCritChanceBps,
-    leaderEquippedWeaponBonusBps,
-    minParticipants,
-    maxParticipants,
-    participantCount,
-    arrivedCount,
-    marchedCount,
-    returnedCount,
-    totalUnits,
-    totalMeleeWeapons,
-    totalRangedWeapons,
-    totalSiegeWeapons,
-    totalPower,
-    totalCasualties,
-    attackDamageDealt,
-    defenseDamageReceived,
-    totalLootCash,
-    totalLootLockedNovi,
-    totalLootMelee,
-    totalLootRanged,
-    totalLootSiege,
-    totalLootProduce,
-    totalLootVehicles,
-    totalLootFragments,
-    totalLootGems,
-    status,
-    fallbackTriggered,
-    attackerWon,
-    bump,
-  };
+export function deserializeRally(data: Uint8Array): RallyAccount {
+  return rallyCodec.decode(data);
 }
 
 /** Deserialize RallyParticipant from raw bytes */
-export function deserializeRallyParticipant(data: Uint8Array | Buffer): RallyParticipant {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  reader.skip(7); // implicit padding for u64 alignment (offset 1 -> 8)
-
-  // Identity
-  const rallyId = reader.readU64();
-  const rallyCreator = reader.readPubkey();
-  const participant = reader.readPubkey();
-
-  // Home location (2 bytes + 6 bytes padding for u64 alignment)
-  const homeCity = reader.readU16();
-  reader.skip(6); // 2 explicit _padding1 + 4 implicit repr(C) alignment
-
-  // Units committed (24 bytes)
-  const unitsCommitted1 = reader.readU64();
-  const unitsCommitted2 = reader.readU64();
-  const unitsCommitted3 = reader.readU64();
-
-  // Weapons committed (24 bytes)
-  const meleeWeaponsCommitted = reader.readU64();
-  const rangedWeaponsCommitted = reader.readU64();
-  const siegeWeaponsCommitted = reader.readU64();
-
-  // Buffs (16 bytes)
-  const researchAttackBps = reader.readU16();
-  const researchCritChanceBps = reader.readU16();
-  const researchCritDamageBps = reader.readU16();
-  const heroAttackBps = reader.readU16();
-  const heroWeaponEfficiencyBps = reader.readU16();
-  const heroCritChanceBps = reader.readU16();
-  const equippedWeaponBonusBps = reader.readU16();
-  reader.skip(2); // padding
-
-  // Hero (40 bytes)
-  const hero = reader.readPubkey();
-  const heroPowerContribution = reader.readU64();
-
-  // Travel (24 bytes)
-  const travelStartedAt = reader.readI64();
-  const arrivesAtRally = reader.readI64();
-  const travelDuration = reader.readI32();
-  reader.skip(4); // padding
-
-  // Status flags (8 bytes)
-  const arrivedAtRally = reader.readBool();
-  const includedInMarch = reader.readBool();
-  const returned = reader.readBool();
-  const isLeader = reader.readBool();
-  reader.skip(4); // padding
-
-  // Casualties (24 bytes)
-  const casualties1 = reader.readU64();
-  const casualties2 = reader.readU64();
-  const casualties3 = reader.readU64();
-
-  // Resource loot (16 bytes)
-  const lootCash = reader.readU64();
-  const lootLockedNovi = reader.readU64();
-
-  // Weapon loot (24 bytes)
-  const lootMelee = reader.readU64();
-  const lootRanged = reader.readU64();
-  const lootSiege = reader.readU64();
-
-  // Other loot (32 bytes)
-  const lootProduce = reader.readU64();
-  const lootVehicles = reader.readU64();
-  const lootFragments = reader.readU64();
-  const lootGems = reader.readU64();
-
-  // Return journey (16 bytes)
-  const returnStartedAt = reader.readI64();
-  const returnDuration = reader.readI32();
-  reader.skip(4); // padding
-
-  // Contribution (16 bytes)
-  const contributionPower = reader.readU64();
-  const contributionBps = reader.readU16();
-  const bump = reader.readU8();
-  reader.skip(5); // padding
-
-  return {
-    rallyId,
-    rallyCreator,
-    participant,
-    homeCity,
-    unitsCommitted1,
-    unitsCommitted2,
-    unitsCommitted3,
-    meleeWeaponsCommitted,
-    rangedWeaponsCommitted,
-    siegeWeaponsCommitted,
-    researchAttackBps,
-    researchCritChanceBps,
-    researchCritDamageBps,
-    heroAttackBps,
-    heroWeaponEfficiencyBps,
-    heroCritChanceBps,
-    equippedWeaponBonusBps,
-    hero,
-    heroPowerContribution,
-    travelStartedAt,
-    arrivesAtRally,
-    travelDuration,
-    arrivedAtRally,
-    includedInMarch,
-    returned,
-    isLeader,
-    casualties1,
-    casualties2,
-    casualties3,
-    lootCash,
-    lootLockedNovi,
-    lootMelee,
-    lootRanged,
-    lootSiege,
-    lootProduce,
-    lootVehicles,
-    lootFragments,
-    lootGems,
-    returnStartedAt,
-    returnDuration,
-    contributionPower,
-    contributionBps,
-    bump,
-  };
+export function deserializeRallyParticipant(data: Uint8Array): RallyParticipant {
+  return rallyParticipantCodec.decode(data);
 }
 
 // Parse Functions
@@ -487,8 +336,8 @@ export function canCloseRally(rally: RallyAccount): boolean {
 }
 
 /** Get total weapons for rally */
-export function getRallyTotalWeapons(rally: RallyAccount): BN {
-  return rally.totalMeleeWeapons.add(rally.totalRangedWeapons).add(rally.totalSiegeWeapons);
+export function getRallyTotalWeapons(rally: RallyAccount): bigint {
+  return (rally.totalMeleeWeapons + rally.totalRangedWeapons + rally.totalSiegeWeapons);
 }
 
 /** Check if participant has hero committed */
@@ -497,11 +346,11 @@ export function participantHasHero(participant: RallyParticipant): boolean {
 }
 
 /** Get participant total committed units */
-export function getParticipantTotalUnits(participant: RallyParticipant): BN {
-  return participant.unitsCommitted1.add(participant.unitsCommitted2).add(participant.unitsCommitted3);
+export function getParticipantTotalUnits(participant: RallyParticipant): bigint {
+  return (participant.unitsCommitted1 + participant.unitsCommitted2 + participant.unitsCommitted3);
 }
 
 /** Get participant total casualties */
-export function getParticipantTotalCasualties(participant: RallyParticipant): BN {
-  return participant.casualties1.add(participant.casualties2).add(participant.casualties3);
+export function getParticipantTotalCasualties(participant: RallyParticipant): bigint {
+  return (participant.casualties1 + participant.casualties2 + participant.casualties3);
 }

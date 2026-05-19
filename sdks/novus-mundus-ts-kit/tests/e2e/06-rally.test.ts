@@ -16,7 +16,6 @@ import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bu
 
 setDefaultTimeout(120_000);
 import { generateKeyPairSigner, type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 import {
   createTeamCreateInstruction,
@@ -96,7 +95,7 @@ describe('Rally System', () => {
     await sendTransaction(
       ctx.svm,
       [
-        createTeamCreateInstruction(
+        await createTeamCreateInstruction(
           { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
           { name: teamName }
         )
@@ -104,7 +103,7 @@ describe('Rally System', () => {
       [leader.keypair]
     );
 
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
     // Add members with 200ms delay between each
     for (let i = 0; i < members.length; i++) {
@@ -114,7 +113,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             gameEngine: ctx.gameEngine,
             inviter: leader.publicKey,
             team: teamPda,
@@ -131,7 +130,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createTeamAcceptInviteInstruction({
+          await createTeamAcceptInviteInstruction({
             gameEngine: ctx.gameEngine,
             owner: member.publicKey,
             team: teamPda,
@@ -166,7 +165,7 @@ describe('Rally System', () => {
       const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
       const targetCityId = targetAccount!.currentCity;
 
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -177,21 +176,21 @@ describe('Rally System', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: 3600n,
           targetCityId,
-          defensiveUnit1: new BN(100),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 100n,
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
       await sendTransaction(ctx.svm, [ix], [creator.keypair]);
 
       // Verify rally was created with correct state
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
       const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
       expect(rally!.participantCount).toBe(1); // Creator is auto-joined
@@ -206,11 +205,11 @@ describe('Rally System', () => {
       );
       expect(creatorParticipant).not.toBeNull();
       expect(creatorParticipant!.isLeader).toBe(true);
-      expect(creatorParticipant!.unitsCommitted1.toNumber()).toBe(100);
+      expect(Number(creatorParticipant!.unitsCommitted1)).toBe(100);
 
       // Verify creator's units were deducted
       const postCreator = await fetchPlayer(ctx.svm, creator.playerPda);
-      expect(postCreator!.defensiveUnit1.toNumber()).toBeLessThan(creatorAccount!.defensiveUnit1.toNumber());
+      expect(Number(postCreator!.defensiveUnit1)).toBeLessThan(Number(creatorAccount!.defensiveUnit1));
     });
 
     it('should create a rally targeting an encounter using a non-null target pubkey', async () => {
@@ -224,7 +223,7 @@ describe('Rally System', () => {
       // Use a random keypair as a dummy encounter target (must be non-null)
       const dummyEncounterTarget = (await generateKeyPairSigner()).address;
 
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -235,21 +234,21 @@ describe('Rally System', () => {
         },
         {
           targetType: RallyTargetType.Encounter,
-          gatherDuration: new BN(3600),
+          gatherDuration: 3600n,
           targetCityId: creatorCityId,
-          defensiveUnit1: new BN(50),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 50n,
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
       await sendTransaction(ctx.svm, [ix], [creator.keypair]);
 
       // Verify rally was created with encounter target type
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
       const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
       expect(rally!.targetType).toBe(RallyTargetType.Encounter);
@@ -264,7 +263,7 @@ describe('Rally System', () => {
       const creatorCityId = creatorAccount!.currentCity;
 
       // Try to create rally without being on a team — use a fake teamId
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -275,14 +274,14 @@ describe('Rally System', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: 3600n,
           targetCityId: creatorCityId,
-          defensiveUnit1: new BN(100),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 100n,
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
@@ -299,7 +298,7 @@ describe('Rally System', () => {
       const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -310,14 +309,14 @@ describe('Rally System', () => {
         },
         {
           targetType: 99 as any,
-          gatherDuration: new BN(3600),
+          gatherDuration: 3600n,
           targetCityId: creatorCityId,
-          defensiveUnit1: new BN(100),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 100n,
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
@@ -334,7 +333,7 @@ describe('Rally System', () => {
       const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
       const creatorCityId = creatorAccount!.currentCity;
 
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -345,14 +344,14 @@ describe('Rally System', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: 3600n,
           targetCityId: creatorCityId,
-          defensiveUnit1: new BN(0), // Zero units should fail
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 0n, // Zero units should fail
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
@@ -381,7 +380,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -392,21 +391,21 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // First participant joins the rally
       const participant = participants[0]!;
@@ -415,7 +414,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: participant.publicKey,
@@ -426,12 +425,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(50),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 50n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -444,7 +443,7 @@ describe('Rally System', () => {
       );
       expect(participantInfo).not.toBeNull();
       expect(participantInfo!.isLeader).toBe(false);
-      expect(participantInfo!.unitsCommitted1.toNumber()).toBe(50);
+      expect(Number(participantInfo!.unitsCommitted1)).toBe(50);
 
       // Verify rally participant count increased
       const rally = await fetchRally(ctx.svm, rallyPda);
@@ -465,7 +464,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -476,21 +475,21 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Create an outsider player (not on the team) with Barracks for units
       const outsider = await factory.createPlayer({
@@ -502,7 +501,7 @@ describe('Rally System', () => {
 
 
 
-      const joinIx = createRallyJoinInstruction(
+      const joinIx = await createRallyJoinInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: outsider.publicKey,
@@ -513,12 +512,12 @@ describe('Rally System', () => {
           rallyCityId: creatorCityId,
         },
         {
-          defensiveUnit1: new BN(50),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: 50n,
+          defensiveUnit2: 0n,
+          defensiveUnit3: 0n,
+          meleeWeapons: 0n,
+          rangedWeapons: 0n,
+          siegeWeapons: 0n,
         }
       );
 
@@ -547,7 +546,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -558,21 +557,21 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Participant joins
       const participant = participants[0]!;
@@ -583,7 +582,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: participant.publicKey,
@@ -594,12 +593,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(50),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 50n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -615,7 +614,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyLeaveInstruction({
+          await createRallyLeaveInstruction({
             gameEngine: ctx.gameEngine,
             owner: participant.publicKey,
             rally: rallyPda,
@@ -651,7 +650,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -662,28 +661,28 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Cancel rally
 
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCancelInstruction({
+          await createRallyCancelInstruction({
             gameEngine: ctx.gameEngine,
             owner: creator.publicKey,
             rally: rallyPda,
@@ -714,7 +713,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -725,26 +724,26 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Non-creator tries to cancel — should fail
       const participant = participants[0]!;
 
-      const cancelIx = createRallyCancelInstruction({
+      const cancelIx = await createRallyCancelInstruction({
         gameEngine: ctx.gameEngine,
         owner: participant.publicKey,
         rally: rallyPda,
@@ -777,7 +776,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -788,25 +787,25 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(7200),
+              gatherDuration: 7200n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Speedup the leader's gather travel
 
-      const speedupIx = createRallySpeedupInstruction(
+      const speedupIx = await createRallySpeedupInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -849,7 +848,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -860,28 +859,28 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Cancel rally
 
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCancelInstruction({
+          await createRallyCancelInstruction({
             gameEngine: ctx.gameEngine,
             owner: creator.publicKey,
             rally: rallyPda,
@@ -898,7 +897,7 @@ describe('Rally System', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createRallySpeedupInstruction(
+              await createRallySpeedupInstruction(
                 {
                   gameEngine: ctx.gameEngine,
                   owner: creator.publicKey,
@@ -927,7 +926,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyProcessReturnInstruction({
+          await createRallyProcessReturnInstruction({
             gameEngine: ctx.gameEngine,
             rally: rallyPda,
             rallyCreator: creator.publicKey,
@@ -954,7 +953,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCloseInstruction({
+          await createRallyCloseInstruction({
             leaderOwner: creator.publicKey,
             rally: rallyPda,
           })
@@ -985,7 +984,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -996,21 +995,21 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Check initial state — creator auto-joined
       let rally = await fetchRally(ctx.svm, rallyPda);
@@ -1022,7 +1021,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: p1.publicKey,
@@ -1033,12 +1032,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(50),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 50n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -1054,7 +1053,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: p2.publicKey,
@@ -1065,12 +1064,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(30),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 30n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -1096,7 +1095,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -1107,25 +1106,25 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: 3600n,
               targetCityId,
-              defensiveUnit1: new BN(creatorUnits),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: BigInt(creatorUnits),
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Verify initial total units
       let rally = await fetchRally(ctx.svm, rallyPda);
-      expect(rally!.totalUnits.toNumber()).toBe(creatorUnits);
+      expect(Number(rally!.totalUnits)).toBe(creatorUnits);
 
       // Join with 75 more units
       const participant = participants[0]!;
@@ -1134,7 +1133,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: participant.publicKey,
@@ -1145,12 +1144,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(participantUnits),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: BigInt(participantUnits),
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -1159,7 +1158,7 @@ describe('Rally System', () => {
 
       // Verify total units accumulated correctly
       rally = await fetchRally(ctx.svm, rallyPda);
-      expect(rally!.totalUnits.toNumber()).toBe(creatorUnits + participantUnits);
+      expect(Number(rally!.totalUnits)).toBe(creatorUnits + participantUnits);
     });
   });
 
@@ -1180,7 +1179,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: creator.publicKey,
@@ -1191,21 +1190,21 @@ describe('Rally System', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(1), // 1 second gather time
+              gatherDuration: 1n, // 1 second gather time
               targetCityId,
-              defensiveUnit1: new BN(100),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 100n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
 
       // Join with a participant
       const participant = participants[0]!;
@@ -1213,7 +1212,7 @@ describe('Rally System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createRallyJoinInstruction(
+          await createRallyJoinInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: participant.publicKey,
@@ -1224,12 +1223,12 @@ describe('Rally System', () => {
               rallyCityId: creatorCityId,
             },
             {
-              defensiveUnit1: new BN(50),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: 50n,
+              defensiveUnit2: 0n,
+              defensiveUnit3: 0n,
+              meleeWeapons: 0n,
+              rangedWeapons: 0n,
+              siegeWeapons: 0n,
             }
           )
         ],
@@ -1242,7 +1241,7 @@ describe('Rally System', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createRallySpeedupInstruction(
+              await createRallySpeedupInstruction(
                 {
                   gameEngine: ctx.gameEngine,
                   owner: creator.publicKey,
@@ -1265,12 +1264,12 @@ describe('Rally System', () => {
       await advanceTime(ctx.svm, 5);
 
       // Build participant PDA list
-      const [creatorParticipantPda] = deriveRallyParticipantPda(ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey);
-      const [participantPda] = deriveRallyParticipantPda(ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey);
-      const [leaderEstatePda] = deriveEstatePda(creator.playerPda);
+      const [creatorParticipantPda] = await deriveRallyParticipantPda(ctx.gameEngine, creator.publicKey, rallyIndex, creator.publicKey);
+      const [participantPda] = await deriveRallyParticipantPda(ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey);
+      const [leaderEstatePda] = await deriveEstatePda(creator.playerPda);
 
       // Execute rally
-      const executeIx = createRallyExecuteInstruction({
+      const executeIx = await createRallyExecuteInstruction({
         gameEngine: ctx.gameEngine,
         rally: rallyPda,
         target: target.playerPda,

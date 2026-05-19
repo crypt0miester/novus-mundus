@@ -6,7 +6,6 @@
 
 import type { Address } from '@solana/kit';
 import { address, isAddress } from '@solana/kit';
-import BN from 'bn.js';
 
 // Types
 
@@ -69,8 +68,8 @@ export function validateDifferentPubkeys(
 // Number Validation
 
 /** Validate a number is positive */
-export function validatePositive(value: number | BN, fieldName: string): ValidationResult {
-  const num = BN.isBN(value) ? value.toNumber() : value;
+export function validatePositive(value: number | bigint, fieldName: string): ValidationResult {
+  const num = typeof value === 'bigint' ? Number(value) : value;
   if (num <= 0) {
     return invalid(`${fieldName} must be positive (got ${num})`);
   }
@@ -78,8 +77,8 @@ export function validatePositive(value: number | BN, fieldName: string): Validat
 }
 
 /** Validate a number is non-negative */
-export function validateNonNegative(value: number | BN, fieldName: string): ValidationResult {
-  const num = BN.isBN(value) ? value.toNumber() : value;
+export function validateNonNegative(value: number | bigint, fieldName: string): ValidationResult {
+  const num = typeof value === 'bigint' ? Number(value) : value;
   if (num < 0) {
     return invalid(`${fieldName} cannot be negative (got ${num})`);
   }
@@ -88,12 +87,12 @@ export function validateNonNegative(value: number | BN, fieldName: string): Vali
 
 /** Validate a number is within range (inclusive) */
 export function validateRange(
-  value: number | BN,
+  value: number | bigint,
   min: number,
   max: number,
   fieldName: string
 ): ValidationResult {
-  const num = BN.isBN(value) ? value.toNumber() : value;
+  const num = typeof value === 'bigint' ? Number(value) : value;
   if (num < min || num > max) {
     return invalid(`${fieldName} must be between ${min} and ${max} (got ${num})`);
   }
@@ -102,11 +101,11 @@ export function validateRange(
 
 /** Validate a number is at least a minimum value */
 export function validateMinimum(
-  value: number | BN,
+  value: number | bigint,
   min: number,
   fieldName: string
 ): ValidationResult {
-  const num = BN.isBN(value) ? value.toNumber() : value;
+  const num = typeof value === 'bigint' ? Number(value) : value;
   if (num < min) {
     return invalid(`${fieldName} must be at least ${min} (got ${num})`);
   }
@@ -115,28 +114,28 @@ export function validateMinimum(
 
 /** Validate a number is at most a maximum value */
 export function validateMaximum(
-  value: number | BN,
+  value: number | bigint,
   max: number,
   fieldName: string
 ): ValidationResult {
-  const num = BN.isBN(value) ? value.toNumber() : value;
+  const num = typeof value === 'bigint' ? Number(value) : value;
   if (num > max) {
     return invalid(`${fieldName} must be at most ${max} (got ${num})`);
   }
   return valid();
 }
 
-/** Validate a BN is at most a max BN value */
-export function validateMaximumBN(value: BN, max: BN, fieldName: string): ValidationResult {
-  if (value.gt(max)) {
+/** Validate a bigint is at most a max bigint value */
+export function validateMaximumBN(value: bigint, max: bigint, fieldName: string): ValidationResult {
+  if (value > max) {
     return invalid(`${fieldName} must be at most ${max.toString()} (got ${value.toString()})`);
   }
   return valid();
 }
 
-/** Validate a BN is at least a min BN value */
-export function validateMinimumBN(value: BN, min: BN, fieldName: string): ValidationResult {
-  if (value.lt(min)) {
+/** Validate a bigint is at least a min bigint value */
+export function validateMinimumBN(value: bigint, min: bigint, fieldName: string): ValidationResult {
+  if (value < min) {
     return invalid(`${fieldName} must be at least ${min.toString()} (got ${value.toString()})`);
   }
   return valid();

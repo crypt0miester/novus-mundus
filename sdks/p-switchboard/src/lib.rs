@@ -1,18 +1,26 @@
-//! p-switchboard: Minimal pinocchio-compatible Switchboard on-demand pull feed reader
+//! p-switchboard: pinocchio / no_std port of the Switchboard On-Demand SDK.
 //!
-//! Reads price data from Switchboard on-demand `PullFeedAccountData` accounts.
-//! Values are i128 scaled by 10^18 (PRECISION = 18).
+//! Faithful 1:1 port of the pull-feed reader in the audited
+//! `switchboard-on-demand` v0.11.3 crate (`PullFeedAccountData`), adapted for
+//! no_std / pinocchio.
 //!
-//! Layout is derived from the official `switchboard-on-demand` v0.11.3 crate source
-//! (`PullFeedAccountData`, repr(C), bytemuck::Pod).
+//! The struct layout, discriminator and the [`SwitchboardFeed::get_value`]
+//! algorithm match upstream exactly:
+//! - `get_value` recomputes the price from the raw `submissions` ring buffer,
+//!   filtering by slot staleness and requiring `min_samples` fresh
+//!   submissions — this is the safe path the Switchboard docs recommend.
+//! - The lower-bound median (`sort` then `values[len / 2]`) is preserved.
+//!
+//! Values are `i128` scaled by `10^18` (`PRECISION = 18`).
 //!
 //! # Example
 //! ```ignore
-//! use p_switchboard::load_switchboard_price;
+//! use p_switchboard::SwitchboardFeed;
 //!
 //! let data = feed_account.try_borrow()?;
-//! let price = load_switchboard_price(&data, current_slot, 100)?;
-//! let usdc_price = price.get_price_in_decimals(6).unwrap();
+//! let feed = SwitchboardFeed::load(&data)?;
+//! let min_samples = feed.min_sample_size().max(1) as u32;
+//! let median = feed.get_value(current_slot, 100, min_samples, true)?;
 //! ```
 
 #![cfg_attr(not(test), no_std)]
@@ -25,68 +33,74 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
 use pinocchio::error::ProgramError;
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// CONSTANTS
 
-/// Anchor discriminator for PullFeedAccountData
-pub const DISCRIMINATOR: [u8; 8] = [196, 27, 108, 196, 10, 215, 219, 40];
+/// Anchor discriminator for `PullFeedAccountData` (switchboard-on-demand).
+pub const ON_DEMAND_DISCRIMINATOR: [u8; 8] = [196, 27, 108, 196, 10, 215, 219, 40];
 
-/// Switchboard values are scaled by 10^18
+/// Switchboard On-Demand values are fixed-point scaled by `10^18`.
 pub const PRECISION: u32 = 18;
 
-/// OracleSubmission: oracle([u8;32]) + slot(u64) + landed_at(u64) + value(i128) = 64 bytes
-const SUBMISSION_SIZE: usize = 64;
+/// Number of slots in the `submissions` ring buffer.
 const NUM_SUBMISSIONS: usize = 32;
+/// Size of one `OracleSubmission`: oracle[32] + slot(8) + landed_at(8) + value(16).
+const SUBMISSION_SIZE: usize = 64;
 
-/// CurrentResult: 6×i128 + u8 + u8 + [u8;6] + 3×u64 = 128 bytes
-const CURRENT_RESULT_SIZE: usize = 128;
+/// `size_of::<PullFeedAccountData>()` for v0.11.3 (verified field-by-field).
+const PULL_FEED_STRUCT_SIZE: usize = 3200;
+/// Minimum total account length: 8-byte discriminator + struct.
+pub const MIN_PULL_FEED_LEN: usize = 8 + PULL_FEED_STRUCT_SIZE;
 
-// Byte offsets from start of account data (after 8-byte Anchor discriminator)
-// See PullFeedAccountData layout in switchboard-on-demand v0.11.3
+// Byte offsets into the account data (including the 8-byte discriminator).
+// Derived from the `#[repr(C)]` `PullFeedAccountData` layout in v0.11.3.
 
-/// submissions: [OracleSubmission; 32] = 32 × 64 = 2048 bytes
+/// `submissions: [OracleSubmission; 32]` begins right after the discriminator.
 const OFF_SUBMISSIONS: usize = 8;
-const OFF_AUTHORITY: usize = OFF_SUBMISSIONS + NUM_SUBMISSIONS * SUBMISSION_SIZE; // 2056
-const OFF_QUEUE: usize = OFF_AUTHORITY + 32; // 2088
-const OFF_FEED_HASH: usize = OFF_QUEUE + 32; // 2120
-const OFF_INITIALIZED_AT: usize = OFF_FEED_HASH + 32; // 2152
-const OFF_PERMISSIONS: usize = OFF_INITIALIZED_AT + 8; // 2160
-const OFF_MAX_VARIANCE: usize = OFF_PERMISSIONS + 8; // 2168
-const OFF_MIN_RESPONSES: usize = OFF_MAX_VARIANCE + 8; // 2176
-const OFF_NAME: usize = OFF_MIN_RESPONSES + 4; // 2180
-const OFF_PADDING1: usize = OFF_NAME + 32; // 2212
-const OFF_PERMIT_WRITE: usize = OFF_PADDING1 + 1; // 2213
-const OFF_HIST_IDX: usize = OFF_PERMIT_WRITE + 1; // 2214
-const OFF_MIN_SAMPLE_SIZE: usize = OFF_HIST_IDX + 1; // 2215
-const OFF_LAST_UPDATE_TS: usize = OFF_MIN_SAMPLE_SIZE + 1; // 2216
-const OFF_LUT_SLOT: usize = OFF_LAST_UPDATE_TS + 8; // 2224
-const OFF_RESERVED1: usize = OFF_LUT_SLOT + 8; // 2232
+/// `min_responses: u32`.
+const OFF_MIN_RESPONSES: usize = 2176;
+/// `min_sample_size: u8`.
+const OFF_MIN_SAMPLE_SIZE: usize = 2215;
+/// `last_update_timestamp: i64`.
+const OFF_LAST_UPDATE_TS: usize = 2216;
+/// `result: CurrentResult` begins here.
+const OFF_RESULT: usize = 2264;
+/// `result.value: i128`.
+const OFF_RESULT_VALUE: usize = OFF_RESULT;
+/// `result.std_dev: i128`.
+const OFF_RESULT_STD_DEV: usize = OFF_RESULT + 16;
+/// `result.num_samples: u8` (after 6 i128 stat fields = 96 bytes).
+const OFF_RESULT_NUM_SAMPLES: usize = OFF_RESULT + 96;
+/// `result.slot: u64` (the slot at which the result was signed).
+const OFF_RESULT_SLOT: usize = OFF_RESULT + 104;
+/// `max_staleness: u32`.
+const OFF_MAX_STALENESS: usize = OFF_RESULT + 128;
 
-// CurrentResult fields
-const OFF_RESULT: usize = OFF_RESERVED1 + 32; // 2264
-const OFF_RESULT_VALUE: usize = OFF_RESULT; // 2264 (i128)
-const OFF_RESULT_STD_DEV: usize = OFF_RESULT + 16; // 2280 (i128)
-const _OFF_RESULT_MEAN: usize = OFF_RESULT + 32; // 2296 (i128)
-const _OFF_RESULT_RANGE: usize = OFF_RESULT + 48; // 2312 (i128)
-const _OFF_RESULT_MIN_VALUE: usize = OFF_RESULT + 64; // 2328 (i128)
-const _OFF_RESULT_MAX_VALUE: usize = OFF_RESULT + 80; // 2344 (i128)
-// num_samples(u8) + submission_idx(u8) + padding1([u8;6]) = 8 bytes at OFF_RESULT + 96
-const OFF_RESULT_SLOT: usize = OFF_RESULT + 104; // 2368 (u64)
+// Within one OracleSubmission:
+/// `OracleSubmission.slot: u64`.
+const SUB_OFF_SLOT: usize = 32;
+/// `OracleSubmission.value: i128`.
+const SUB_OFF_VALUE: usize = 48;
 
-const OFF_MAX_STALENESS: usize = OFF_RESULT + CURRENT_RESULT_SIZE; // 2392
+// ERRORS
 
-/// Minimum data length to read result + max_staleness
-pub const MIN_PULL_FEED_LEN: usize = OFF_MAX_STALENESS + 4; // 2396
-
-// ── Errors ───────────────────────────────────────────────────────────────────
-
+/// Errors surfaced by this crate.
+///
+/// On-chain these surface as `ProgramError::Custom(6200 + variant)`.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SwitchboardError {
+    /// Account data is too short for a `PullFeedAccountData`.
     InvalidAccountData = 0,
+    /// The 8-byte Anchor discriminator does not match.
     InvalidDiscriminator = 1,
-    StalePrice = 2,
-    InvalidPrice = 3,
-    ConfidenceTooWide = 4,
+    /// Fewer than `min_samples` fresh submissions were available.
+    NotEnoughSamples = 2,
+    /// The aggregated result is older than the staleness threshold.
+    StaleResult = 3,
+    /// The resolved value is non-positive while `only_positive` was set.
+    IllegalFeedValue = 4,
+    /// The standard deviation is wider than the caller's threshold.
+    ConfidenceTooWide = 5,
 }
 
 impl From<SwitchboardError> for ProgramError {
@@ -95,33 +109,28 @@ impl From<SwitchboardError> for ProgramError {
     }
 }
 
-// ── Output ───────────────────────────────────────────────────────────────────
+// PRICE OUTPUT
 
-/// Price output from Switchboard oracle
+/// Resolved Switchboard price (`i128` values scaled by `10^18`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SwitchboardPrice {
-    /// Median price value, scaled by 10^18
+    /// Median value across the fresh oracle submissions (`get_value` result).
     pub value: i128,
-    /// Standard deviation, scaled by 10^18
+    /// Standard deviation of the on-chain aggregated `CurrentResult`.
     pub std_dev: i128,
-    /// Slot when this result was computed
+    /// Slot at which the on-chain `CurrentResult` was signed.
     pub result_slot: u64,
-    /// Unix timestamp of last feed update
-    pub last_update_timestamp: i64,
 }
 
 impl SwitchboardPrice {
-    /// Convert the price to a u64 scaled to target decimal precision.
+    /// Convert the price to a `u64` scaled to `target_decimals`.
     ///
-    /// Example: value = 2650.5 * 10^18, target_decimals = 6
-    ///          → 2650.5 * 10^6 = 2_650_500_000
+    /// Returns `None` on a non-positive value or on overflow.
     pub fn get_price_in_decimals(&self, target_decimals: u32) -> Option<u64> {
         if self.value <= 0 {
             return None;
         }
-
         let value = self.value as u128;
-
         if target_decimals >= PRECISION {
             let multiplier = 10u128.checked_pow(target_decimals - PRECISION)?;
             u64::try_from(value.checked_mul(multiplier)?).ok()
@@ -131,8 +140,12 @@ impl SwitchboardPrice {
         }
     }
 
-    /// Check if std_dev is within acceptable threshold (basis points of price).
+    /// Check the standard deviation is within `max_std_dev_bps` basis points
+    /// of the value. `max_std_dev_bps == 0` disables the check.
     pub fn is_confidence_acceptable(&self, max_std_dev_bps: u16) -> bool {
+        if max_std_dev_bps == 0 {
+            return true;
+        }
         if self.value <= 0 {
             return false;
         }
@@ -143,202 +156,369 @@ impl SwitchboardPrice {
     }
 }
 
-// ── Readers ──────────────────────────────────────────────────────────────────
+// FEED READER
 
-#[inline(always)]
-fn read_i128_le(data: &[u8], off: usize) -> i128 {
-    let mut buf = [0u8; 16];
-    buf.copy_from_slice(&data[off..off + 16]);
-    i128::from_le_bytes(buf)
+/// A validated view over a `PullFeedAccountData` account.
+///
+/// The caller MUST separately verify the account is owned by the Switchboard
+/// On-Demand program — the discriminator alone does not prove provenance.
+#[derive(Clone, Copy, Debug)]
+pub struct SwitchboardFeed<'a> {
+    data: &'a [u8],
+}
+
+impl<'a> SwitchboardFeed<'a> {
+    /// Validate and wrap raw account data.
+    ///
+    /// Mirrors `PullFeedAccountData::parse`: checks the discriminator and that
+    /// the buffer is large enough for the full struct.
+    pub fn load(data: &'a [u8]) -> Result<Self, SwitchboardError> {
+        if data.len() < 8 {
+            return Err(SwitchboardError::InvalidDiscriminator);
+        }
+        if data[..8] != ON_DEMAND_DISCRIMINATOR {
+            return Err(SwitchboardError::InvalidDiscriminator);
+        }
+        if data.len() < MIN_PULL_FEED_LEN {
+            return Err(SwitchboardError::InvalidAccountData);
+        }
+        Ok(Self { data })
+    }
+
+    /// `min_sample_size`: the feed's configured minimum samples for a valid result.
+    pub fn min_sample_size(&self) -> u8 {
+        self.data[OFF_MIN_SAMPLE_SIZE]
+    }
+
+    /// `min_responses`: the feed's configured minimum oracle responses.
+    pub fn min_responses(&self) -> u32 {
+        read_u32(self.data, OFF_MIN_RESPONSES)
+    }
+
+    /// `max_staleness`: the feed's own configured staleness bound, in slots.
+    pub fn max_staleness(&self) -> u32 {
+        read_u32(self.data, OFF_MAX_STALENESS)
+    }
+
+    /// Unix timestamp of the last feed update.
+    pub fn last_update_timestamp(&self) -> i64 {
+        read_i64(self.data, OFF_LAST_UPDATE_TS)
+    }
+
+    /// `CurrentResult.value` — the on-chain aggregated median (`10^18` scale).
+    pub fn current_result_value(&self) -> i128 {
+        read_i128(self.data, OFF_RESULT_VALUE)
+    }
+
+    /// `CurrentResult.std_dev` — std deviation of the aggregated result.
+    pub fn current_result_std_dev(&self) -> i128 {
+        read_i128(self.data, OFF_RESULT_STD_DEV)
+    }
+
+    /// `CurrentResult.slot` — slot at which the aggregated result was signed.
+    pub fn current_result_slot(&self) -> u64 {
+        read_u64(self.data, OFF_RESULT_SLOT)
+    }
+
+    /// `CurrentResult.num_samples` — submissions that fed the aggregated result.
+    pub fn current_result_num_samples(&self) -> u8 {
+        self.data[OFF_RESULT_NUM_SAMPLES]
+    }
+
+    /// Faithful port of `PullFeedAccountData::get_value`.
+    ///
+    /// Returns the lower-bound median of the oracle submissions made in the
+    /// last `max_staleness` slots. The `submissions` ring buffer is walked
+    /// with `take_while(!is_empty)` (an empty slot has `slot == 0`), fresh
+    /// submissions (`slot >= clock_slot - max_staleness`) are collected, and:
+    /// - fewer than `min_samples` fresh submissions => `NotEnoughSamples`;
+    /// - the median is `sorted[len / 2]` (lower-bound median);
+    /// - `only_positive && median <= 0` => `IllegalFeedValue`.
+    ///
+    /// The returned value is `i128` scaled by `10^18`.
+    pub fn get_value(
+        &self,
+        clock_slot: u64,
+        max_staleness: u64,
+        min_samples: u32,
+        only_positive: bool,
+    ) -> Result<i128, SwitchboardError> {
+        let min_valid_slot = clock_slot.saturating_sub(max_staleness);
+
+        let mut values = [0i128; NUM_SUBMISSIONS];
+        let mut count: usize = 0;
+        for i in 0..NUM_SUBMISSIONS {
+            let base = OFF_SUBMISSIONS + i * SUBMISSION_SIZE;
+            let slot = read_u64(self.data, base + SUB_OFF_SLOT);
+            // take_while(!is_empty): an uninitialized submission has slot == 0.
+            if slot == 0 {
+                break;
+            }
+            // filter(slot >= clock_slot - max_staleness)
+            if slot >= min_valid_slot {
+                values[count] = read_i128(self.data, base + SUB_OFF_VALUE);
+                count += 1;
+            }
+        }
+
+        if count == 0 || (count as u32) < min_samples {
+            return Err(SwitchboardError::NotEnoughSamples);
+        }
+
+        // lower_bound_median: sort ascending, take element at len / 2.
+        insertion_sort(&mut values[..count]);
+        let median = values[count / 2];
+
+        if only_positive && median <= 0 {
+            return Err(SwitchboardError::IllegalFeedValue);
+        }
+        Ok(median)
+    }
+}
+
+/// Validate the 8-byte Anchor discriminator (config-time helper).
+pub fn validate_discriminator(data: &[u8]) -> Result<(), SwitchboardError> {
+    if data.len() < 8 {
+        return Err(SwitchboardError::InvalidDiscriminator);
+    }
+    if data[..8] != ON_DEMAND_DISCRIMINATOR {
+        return Err(SwitchboardError::InvalidDiscriminator);
+    }
+    Ok(())
+}
+
+/// Resolve a Switchboard price via the faithful `get_value` path.
+///
+/// Walks the submissions ring buffer (fresh-slot filtered, `min_samples`
+/// enforced, `only_positive` enforced) for the price, and reads the
+/// `CurrentResult` for the accompanying `std_dev` / signing slot.
+pub fn load_switchboard_price(
+    data: &[u8],
+    clock_slot: u64,
+    max_staleness: u64,
+    min_samples: u32,
+    only_positive: bool,
+) -> Result<SwitchboardPrice, SwitchboardError> {
+    let feed = SwitchboardFeed::load(data)?;
+    let value = feed.get_value(clock_slot, max_staleness, min_samples, only_positive)?;
+    Ok(SwitchboardPrice {
+        value,
+        std_dev: feed.current_result_std_dev(),
+        result_slot: feed.current_result_slot(),
+    })
+}
+
+/// Like [`load_switchboard_price`], plus a standard-deviation confidence gate.
+pub fn load_switchboard_price_with_confidence(
+    data: &[u8],
+    clock_slot: u64,
+    max_staleness: u64,
+    min_samples: u32,
+    only_positive: bool,
+    max_std_dev_bps: u16,
+) -> Result<SwitchboardPrice, SwitchboardError> {
+    let price =
+        load_switchboard_price(data, clock_slot, max_staleness, min_samples, only_positive)?;
+    if !price.is_confidence_acceptable(max_std_dev_bps) {
+        return Err(SwitchboardError::ConfidenceTooWide);
+    }
+    Ok(price)
+}
+
+// HELPERS
+
+/// In-place ascending insertion sort. `n <= 32`, so this is cheap.
+fn insertion_sort(values: &mut [i128]) {
+    for i in 1..values.len() {
+        let mut j = i;
+        while j > 0 && values[j - 1] > values[j] {
+            values.swap(j - 1, j);
+            j -= 1;
+        }
+    }
 }
 
 #[inline(always)]
-fn read_i64_le(data: &[u8], off: usize) -> i64 {
+fn read_u32(data: &[u8], off: usize) -> u32 {
+    let mut buf = [0u8; 4];
+    buf.copy_from_slice(&data[off..off + 4]);
+    u32::from_le_bytes(buf)
+}
+
+#[inline(always)]
+fn read_i64(data: &[u8], off: usize) -> i64 {
     let mut buf = [0u8; 8];
     buf.copy_from_slice(&data[off..off + 8]);
     i64::from_le_bytes(buf)
 }
 
 #[inline(always)]
-fn read_u64_le(data: &[u8], off: usize) -> u64 {
+fn read_u64(data: &[u8], off: usize) -> u64 {
     let mut buf = [0u8; 8];
     buf.copy_from_slice(&data[off..off + 8]);
     u64::from_le_bytes(buf)
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
-
-/// Validate the 8-byte Anchor discriminator.
-#[inline]
-pub fn validate_discriminator(data: &[u8]) -> Result<(), SwitchboardError> {
-    if data.len() < 8 {
-        return Err(SwitchboardError::InvalidAccountData);
-    }
-    if data[..8] != DISCRIMINATOR {
-        return Err(SwitchboardError::InvalidDiscriminator);
-    }
-    Ok(())
+#[inline(always)]
+fn read_i128(data: &[u8], off: usize) -> i128 {
+    let mut buf = [0u8; 16];
+    buf.copy_from_slice(&data[off..off + 16]);
+    i128::from_le_bytes(buf)
 }
 
-/// Load Switchboard price from raw account data.
-///
-/// Validates discriminator, checks staleness against the result slot,
-/// and extracts the median result.
-///
-/// The caller must verify the account is owned by the Switchboard on-demand program.
-#[inline]
-pub fn load_switchboard_price(
-    data: &[u8],
-    current_slot: u64,
-    max_staleness_slots: u64,
-) -> Result<SwitchboardPrice, SwitchboardError> {
-    if data.len() < MIN_PULL_FEED_LEN {
-        return Err(SwitchboardError::InvalidAccountData);
-    }
-
-    validate_discriminator(data)?;
-
-    let result_slot = read_u64_le(data, OFF_RESULT_SLOT);
-
-    if current_slot.saturating_sub(result_slot) > max_staleness_slots {
-        return Err(SwitchboardError::StalePrice);
-    }
-
-    let value = read_i128_le(data, OFF_RESULT_VALUE);
-    if value <= 0 {
-        return Err(SwitchboardError::InvalidPrice);
-    }
-
-    Ok(SwitchboardPrice {
-        value,
-        std_dev: read_i128_le(data, OFF_RESULT_STD_DEV),
-        result_slot,
-        last_update_timestamp: read_i64_le(data, OFF_LAST_UPDATE_TS),
-    })
-}
-
-/// Load Switchboard price with confidence (std_dev) check.
-#[inline]
-pub fn load_switchboard_price_with_confidence(
-    data: &[u8],
-    current_slot: u64,
-    max_staleness_slots: u64,
-    max_std_dev_bps: u16,
-) -> Result<SwitchboardPrice, SwitchboardError> {
-    let price = load_switchboard_price(data, current_slot, max_staleness_slots)?;
-
-    if !price.is_confidence_acceptable(max_std_dev_bps) {
-        return Err(SwitchboardError::ConfidenceTooWide);
-    }
-
-    Ok(price)
-}
-
-// ── Tests ────────────────────────────────────────────────────────────────────
+// TESTS
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn make_test_data(value: i128, std_dev: i128, result_slot: u64, timestamp: i64) -> Vec<u8> {
+    /// Build a minimal valid account buffer with the given submissions
+    /// (`(slot, value)` pairs) and a `CurrentResult`.
+    fn build_account(
+        submissions: &[(u64, i128)],
+        result_value: i128,
+        result_std_dev: i128,
+        result_slot: u64,
+        min_sample_size: u8,
+    ) -> Vec<u8> {
         let mut data = vec![0u8; MIN_PULL_FEED_LEN];
-        // Write discriminator
-        data[..8].copy_from_slice(&DISCRIMINATOR);
-        // Write result.value
-        data[OFF_RESULT_VALUE..OFF_RESULT_VALUE + 16].copy_from_slice(&value.to_le_bytes());
-        // Write result.std_dev
-        data[OFF_RESULT_STD_DEV..OFF_RESULT_STD_DEV + 16].copy_from_slice(&std_dev.to_le_bytes());
-        // Write result.result_slot
+        data[..8].copy_from_slice(&ON_DEMAND_DISCRIMINATOR);
+        for (i, (slot, value)) in submissions.iter().enumerate() {
+            let base = OFF_SUBMISSIONS + i * SUBMISSION_SIZE;
+            data[base + SUB_OFF_SLOT..base + SUB_OFF_SLOT + 8].copy_from_slice(&slot.to_le_bytes());
+            data[base + SUB_OFF_VALUE..base + SUB_OFF_VALUE + 16]
+                .copy_from_slice(&value.to_le_bytes());
+        }
+        data[OFF_MIN_SAMPLE_SIZE] = min_sample_size;
+        data[OFF_RESULT_VALUE..OFF_RESULT_VALUE + 16].copy_from_slice(&result_value.to_le_bytes());
+        data[OFF_RESULT_STD_DEV..OFF_RESULT_STD_DEV + 16]
+            .copy_from_slice(&result_std_dev.to_le_bytes());
         data[OFF_RESULT_SLOT..OFF_RESULT_SLOT + 8].copy_from_slice(&result_slot.to_le_bytes());
-        // Write last_update_timestamp
-        data[OFF_LAST_UPDATE_TS..OFF_LAST_UPDATE_TS + 8].copy_from_slice(&timestamp.to_le_bytes());
         data
     }
 
     #[test]
-    fn test_offsets_are_consistent() {
-        // Verify key offsets are what we calculated
-        assert_eq!(OFF_SUBMISSIONS, 8);
-        assert_eq!(OFF_AUTHORITY, 2056);
-        assert_eq!(OFF_LAST_UPDATE_TS, 2216);
+    fn struct_size_is_known() {
+        // Guards the hand-derived layout offsets.
         assert_eq!(OFF_RESULT, 2264);
-        assert_eq!(OFF_RESULT_VALUE, 2264);
-        assert_eq!(OFF_RESULT_STD_DEV, 2280);
-        assert_eq!(OFF_RESULT_SLOT, 2368);
         assert_eq!(OFF_MAX_STALENESS, 2392);
+        assert_eq!(MIN_PULL_FEED_LEN, 3208);
     }
 
     #[test]
-    fn test_load_price_valid() {
-        // Gold at $2650.50, scaled by 10^18
-        let value: i128 = 2_650_500_000_000_000_000_000;
-        let data = make_test_data(value, 1_000_000_000_000_000_000, 100, 1700000000);
-
-        let price = load_switchboard_price(&data, 110, 50).unwrap();
-        assert_eq!(price.value, value);
-        assert_eq!(price.result_slot, 100);
+    fn get_value_median_of_fresh_submissions() {
+        let one = 1_000_000_000_000_000_000i128; // 1.0 at 10^18
+        let subs = [
+            (100, 3 * one),
+            (101, 1 * one),
+            (102, 2 * one),
+        ];
+        let data = build_account(&subs, 2 * one, 0, 102, 1);
+        let feed = SwitchboardFeed::load(&data).unwrap();
+        // Fresh window covers all three; median of [1,2,3] = 2.
+        assert_eq!(feed.get_value(110, 50, 1, true).unwrap(), 2 * one);
     }
 
     #[test]
-    fn test_load_price_stale() {
-        let value: i128 = 2_650_500_000_000_000_000_000;
-        let data = make_test_data(value, 0, 100, 1700000000);
+    fn get_value_filters_stale_submissions() {
+        let one = 1_000_000_000_000_000_000i128;
+        // slot 10 is stale relative to clock 200 / max_staleness 50.
+        let subs = [(10, 99 * one), (180, 5 * one), (185, 7 * one)];
+        let data = build_account(&subs, 6 * one, 0, 185, 1);
+        let feed = SwitchboardFeed::load(&data).unwrap();
+        // Only slots 180,185 are fresh; median of [5,7] = sorted[1] = 7.
+        assert_eq!(feed.get_value(200, 50, 1, true).unwrap(), 7 * one);
+    }
+
+    #[test]
+    fn get_value_enforces_min_samples() {
+        let one = 1_000_000_000_000_000_000i128;
+        let subs = [(180, 5 * one), (185, 7 * one)];
+        let data = build_account(&subs, 6 * one, 0, 185, 1);
+        let feed = SwitchboardFeed::load(&data).unwrap();
         assert_eq!(
-            load_switchboard_price(&data, 300, 50),
-            Err(SwitchboardError::StalePrice)
+            feed.get_value(200, 50, 5, true),
+            Err(SwitchboardError::NotEnoughSamples)
         );
     }
 
     #[test]
-    fn test_load_price_negative() {
-        let data = make_test_data(-100, 0, 100, 1700000000);
+    fn get_value_stops_at_first_empty_slot() {
+        let one = 1_000_000_000_000_000_000i128;
+        // A slot==0 entry terminates the take_while; later entries are ignored.
+        let subs = [(180, 5 * one), (0, 0), (185, 999 * one)];
+        let data = build_account(&subs, 5 * one, 0, 180, 1);
+        let feed = SwitchboardFeed::load(&data).unwrap();
+        assert_eq!(feed.get_value(200, 50, 1, true).unwrap(), 5 * one);
+    }
+
+    #[test]
+    fn get_value_rejects_non_positive_when_only_positive() {
+        let subs = [(180, -1), (185, -2), (186, -3)];
+        let data = build_account(&subs, -2, 0, 186, 1);
+        let feed = SwitchboardFeed::load(&data).unwrap();
         assert_eq!(
-            load_switchboard_price(&data, 110, 50),
-            Err(SwitchboardError::InvalidPrice)
+            feed.get_value(200, 50, 1, true),
+            Err(SwitchboardError::IllegalFeedValue)
         );
     }
 
     #[test]
-    fn test_bad_discriminator() {
-        let mut data = make_test_data(1000, 0, 100, 1700000000);
-        data[0] = 0xFF;
+    fn bad_discriminator_rejected() {
+        let mut data = build_account(&[(1, 1)], 1, 0, 1, 1);
+        data[0] ^= 0xff;
         assert_eq!(
-            load_switchboard_price(&data, 110, 50),
-            Err(SwitchboardError::InvalidDiscriminator)
+            SwitchboardFeed::load(&data).unwrap_err(),
+            SwitchboardError::InvalidDiscriminator
         );
     }
 
     #[test]
-    fn test_price_to_usdc_decimals() {
+    fn short_account_rejected() {
+        let data = vec![0u8; 100];
+        assert_eq!(
+            SwitchboardFeed::load(&data).unwrap_err(),
+            SwitchboardError::InvalidDiscriminator
+        );
+        let mut short = vec![0u8; 2400];
+        short[..8].copy_from_slice(&ON_DEMAND_DISCRIMINATOR);
+        assert_eq!(
+            SwitchboardFeed::load(&short).unwrap_err(),
+            SwitchboardError::InvalidAccountData
+        );
+    }
+
+    #[test]
+    fn confidence_gate() {
+        let price = SwitchboardPrice {
+            value: 10_000_000_000_000_000_000_000, // $10000
+            std_dev: 100_000_000_000_000_000_000,  // $100 = 1%
+            result_slot: 0,
+        };
+        assert!(price.is_confidence_acceptable(100));
+        assert!(price.is_confidence_acceptable(200));
+        assert!(!price.is_confidence_acceptable(50));
+        assert!(price.is_confidence_acceptable(0)); // disabled
+    }
+
+    #[test]
+    fn price_to_decimals() {
         let price = SwitchboardPrice {
             value: 2_650_500_000_000_000_000_000, // $2650.50
             std_dev: 0,
             result_slot: 0,
-            last_update_timestamp: 0,
         };
-        // $2650.50 in USDC (6 decimals) = 2_650_500_000
         assert_eq!(price.get_price_in_decimals(6), Some(2_650_500_000));
     }
 
     #[test]
-    fn test_confidence_check() {
-        let price = SwitchboardPrice {
-            value: 10_000_000_000_000_000_000_000, // $10000
-            std_dev: 100_000_000_000_000_000_000,   // $100 = 1%
-            result_slot: 0,
-            last_update_timestamp: 0,
-        };
-        assert!(price.is_confidence_acceptable(100)); // 1% - at limit
-        assert!(price.is_confidence_acceptable(200)); // 2% - within
-        assert!(!price.is_confidence_acceptable(50)); // 0.5% - exceeds
-    }
-
-    #[test]
-    fn test_data_too_short() {
-        let data = vec![0u8; 100];
-        assert_eq!(
-            load_switchboard_price(&data, 100, 50),
-            Err(SwitchboardError::InvalidAccountData)
-        );
+    fn load_switchboard_price_populates_result_fields() {
+        let one = 1_000_000_000_000_000_000i128;
+        let subs = [(180, 5 * one), (185, 7 * one), (186, 6 * one)];
+        let data = build_account(&subs, 6 * one, one / 10, 186, 1);
+        let price = load_switchboard_price(&data, 200, 50, 1, true).unwrap();
+        assert_eq!(price.value, 6 * one); // median of [5,6,7]
+        assert_eq!(price.std_dev, one / 10);
+        assert_eq!(price.result_slot, 186);
     }
 }

@@ -5,10 +5,9 @@
  * Events are emitted via sol_log_data and appear base64-encoded in logs.
  */
 
-import type { Address } from '@solana/kit';
-import BN from 'bn.js';
-import { createHash } from 'crypto';
-import { bytesToAddress } from '../crypto';
+import { getBase64Encoder, getStructCodec, type Decoder } from '@solana/kit';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { u8, i8, u16, i16, u32, i32, u64, i64, bool, pubkey, bytes, array, fixedString } from '../utils/codec';
 import type { NovusMundusEvent } from './types';
 
 // Discriminator Computation
@@ -18,8 +17,8 @@ import type { NovusMundusEvent } from './types';
  * Uses SHA256 and takes first 8 bytes (Anchor-compatible).
  */
 export function computeEventDiscriminator(eventName: string): Uint8Array {
-  const hash = createHash('sha256').update(`event:${eventName}`).digest();
-  return new Uint8Array(hash.slice(0, 8));
+  const hash = sha256(new TextEncoder().encode(`event:${eventName}`));
+  return hash.slice(0, 8);
 }
 
 /**
@@ -228,1522 +227,1404 @@ export const EVENT_DISCRIMINATORS: Map<string, string> = new Map([
   d('KingdomCitiesInitialized'),
 ]);
 
-// Event Buffer Reader
+// Event Codecs
 
-/** Reader for sequential byte reads from a buffer */
-export class EventBufferReader {
-  private buffer: Buffer;
-  private offset = 0;
-
-  constructor(data: Buffer | Uint8Array) {
-    this.buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  }
-
-  /** Get current offset */
-  getOffset(): number {
-    return this.offset;
-  }
-
-  /** Get remaining bytes */
-  remaining(): number {
-    return this.buffer.length - this.offset;
-  }
-
-  /** Read u8 */
-  readU8(): number {
-    const value = this.buffer.readUInt8(this.offset);
-    this.offset += 1;
-    return value;
-  }
-
-  /** Read i8 */
-  readI8(): number {
-    const value = this.buffer.readInt8(this.offset);
-    this.offset += 1;
-    return value;
-  }
-
-  /** Read u16 (little-endian) */
-  readU16(): number {
-    const value = this.buffer.readUInt16LE(this.offset);
-    this.offset += 2;
-    return value;
-  }
-
-  /** Read i16 (little-endian) */
-  readI16(): number {
-    const value = this.buffer.readInt16LE(this.offset);
-    this.offset += 2;
-    return value;
-  }
-
-  /** Read u32 (little-endian) */
-  readU32(): number {
-    const value = this.buffer.readUInt32LE(this.offset);
-    this.offset += 4;
-    return value;
-  }
-
-  /** Read i32 (little-endian) */
-  readI32(): number {
-    const value = this.buffer.readInt32LE(this.offset);
-    this.offset += 4;
-    return value;
-  }
-
-  /** Read u64 as BN (little-endian) */
-  readU64(): BN {
-    const bytes = this.buffer.subarray(this.offset, this.offset + 8);
-    this.offset += 8;
-    return new BN(bytes, 'le');
-  }
-
-  /** Read i64 as BN (little-endian) */
-  readI64(): BN {
-    const bytes = this.buffer.subarray(this.offset, this.offset + 8);
-    this.offset += 8;
-    const bn = new BN(bytes, 'le');
-    // Handle negative: if high bit set, subtract 2^64
-    const highByte = this.buffer.readUInt8(this.offset - 1);
-    if (highByte & 0x80) {
-      return bn.sub(new BN(1).shln(64));
-    }
-    return bn;
-  }
-
-  /** Read bool (1 byte) */
-  readBool(): boolean {
-    return this.readU8() !== 0;
-  }
-
-  /** Read PublicKey (32 bytes) */
-  readPubkey(): Address {
-    const bytes = this.buffer.subarray(this.offset, this.offset + 32);
-    this.offset += 32;
-    return bytesToAddress(new Uint8Array(bytes));
-  }
-
-  /** Read raw bytes */
-  readBytes(length: number): Uint8Array {
-    const bytes = this.buffer.subarray(this.offset, this.offset + length);
-    this.offset += length;
-    return new Uint8Array(bytes);
-  }
-
-  /** Read fixed-size string (null-terminated within fixed buffer) */
-  readString(maxLength: number): string {
-    const bytes = this.readBytes(maxLength);
-    const nullIndex = bytes.indexOf(0);
-    const actualBytes = nullIndex >= 0 ? bytes.subarray(0, nullIndex) : bytes;
-    return new TextDecoder().decode(actualBytes);
-  }
-
-  /** Read fixed-size name (32 bytes) */
-  readName32(): string {
-    return this.readString(32);
-  }
-
-  /** Read fixed-size name (48 bytes) */
-  readName48(): string {
-    return this.readString(48);
-  }
-}
-
-// Event Parsers
-
-type EventParser = (reader: EventBufferReader) => Record<string, unknown>;
-
-const EVENT_PARSERS = new Map<string, EventParser>();
+/**
+ * Packed struct codec per event, keyed by event name. Decodes the
+ * post-discriminator payload. Each `getStructCodec` infers a distinct field
+ * shape, so the map is typed by the decoder surface used at the call site.
+ */
+const EVENT_CODECS = new Map<string, Decoder<Record<string, unknown>>>();
 
 // ── Combat ──
 
-EVENT_PARSERS.set('PlayerAttacked', (r) => ({
-  attacker: r.readPubkey(),
-  attackerName: r.readName48(),
-  defender: r.readPubkey(),
-  defenderName: r.readName48(),
-  damageDealt: r.readU64(),
-  damageReceived: r.readU64(),
-  cashStolen: r.readU64(),
-  armorStolen: r.readU64(),
-  produceStolen: r.readU64(),
-  vehiclesStolen: r.readU64(),
-  attackerUnitsLost: [r.readU64(), r.readU64(), r.readU64()],
-  defenderUnitsLost: [r.readU64(), r.readU64(), r.readU64()],
-  attackerWon: r.readBool(),
-  driveBy: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerAttacked', getStructCodec([
+  ['attacker', pubkey.codec],
+  ['attackerName', fixedString(48).codec],
+  ['defender', pubkey.codec],
+  ['defenderName', fixedString(48).codec],
+  ['damageDealt', u64.codec],
+  ['damageReceived', u64.codec],
+  ['cashStolen', u64.codec],
+  ['armorStolen', u64.codec],
+  ['produceStolen', u64.codec],
+  ['vehiclesStolen', u64.codec],
+  ['attackerUnitsLost', array(u64, 3).codec],
+  ['defenderUnitsLost', array(u64, 3).codec],
+  ['attackerWon', bool.codec],
+  ['driveBy', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EncounterAttacked', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  encounter: r.readPubkey(),
-  damageDealt: r.readU64(),
-  healthRemaining: r.readU64(),
-  staminaConsumed: r.readU16(),
-  noviConsumed: r.readU64(),
-  attackerCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EncounterAttacked', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['encounter', pubkey.codec],
+  ['damageDealt', u64.codec],
+  ['healthRemaining', u64.codec],
+  ['staminaConsumed', u16.codec],
+  ['noviConsumed', u64.codec],
+  ['attackerCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EncounterDefeated', (r) => ({
-  encounter: r.readPubkey(),
-  encounterType: r.readU8(),
-  level: r.readU8(),
-  totalAttackers: r.readU8(),
-  killingBlowBy: r.readPubkey(),
-  killingBlowName: r.readName48(),
-  lootCash: r.readU64(),
-  lootNovi: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EncounterDefeated', getStructCodec([
+  ['encounter', pubkey.codec],
+  ['encounterType', u8.codec],
+  ['level', u8.codec],
+  ['totalAttackers', u8.codec],
+  ['killingBlowBy', pubkey.codec],
+  ['killingBlowName', fixedString(48).codec],
+  ['lootCash', u64.codec],
+  ['lootNovi', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Economy ──
 
-EVENT_PARSERS.set('ResourcesCollected', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  collectionType: r.readU8(),
-  noviConsumed: r.readU64(),
-  baseOutput: r.readU64(),
-  finalOutput: r.readU64(),
-  gemsEarned: r.readU64(),
-  fragmentsEarned: r.readU64(),
-  xpGained: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResourcesCollected', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['collectionType', u8.codec],
+  ['noviConsumed', u64.codec],
+  ['baseOutput', u64.codec],
+  ['finalOutput', u64.codec],
+  ['gemsEarned', u64.codec],
+  ['fragmentsEarned', u64.codec],
+  ['xpGained', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('UnitsHired', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  unitType: r.readU8(),
-  baseQuantity: r.readU64(),
-  finalQuantity: r.readU64(),
-  noviBurned: r.readU64(),
-  timeBonusBps: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('UnitsHired', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['unitType', u8.codec],
+  ['baseQuantity', u64.codec],
+  ['finalQuantity', u64.codec],
+  ['noviBurned', u64.codec],
+  ['timeBonusBps', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CashTransferred', (r) => ({
-  from: r.readPubkey(),
-  fromName: r.readName48(),
-  to: r.readPubkey(),
-  toName: r.readName48(),
-  amount: r.readU64(),
-  fee: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CashTransferred', getStructCodec([
+  ['from', pubkey.codec],
+  ['fromName', fixedString(48).codec],
+  ['to', pubkey.codec],
+  ['toName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['fee', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('NoviLocked', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  amount: r.readU64(),
-  totalLocked: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('NoviLocked', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['totalLocked', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EquipmentPurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  slot: r.readU8(),
-  tier: r.readU8(),
-  noviBurned: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EquipmentPurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['slot', u8.codec],
+  ['tier', u8.codec],
+  ['noviBurned', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('StaminaPurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  stamina: r.readU64(),
-  gemsSpent: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('StaminaPurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['stamina', u64.codec],
+  ['gemsSpent', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('VaultTransfer', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  amount: r.readU64(),
-  toVault: r.readBool(),
-  vaultBalance: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('VaultTransfer', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['toVault', bool.codec],
+  ['vaultBalance', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Team ──
 
-EVENT_PARSERS.set('TeamCreated', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  founder: r.readPubkey(),
-  noviBurned: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamCreated', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['founder', pubkey.codec],
+  ['noviBurned', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamJoined', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  memberCount: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamJoined', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['memberCount', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamLeft', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  memberCount: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamLeft', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['memberCount', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('MemberKicked', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  kicked: r.readPubkey(),
-  kickedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('MemberKicked', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['kicked', pubkey.codec],
+  ['kickedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('LeadershipTransferred', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  oldLeader: r.readPubkey(),
-  newLeader: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('LeadershipTransferred', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['oldLeader', pubkey.codec],
+  ['newLeader', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamDisbanded', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  leader: r.readPubkey(),
-  treasuryDistributed: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamDisbanded', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['leader', pubkey.codec],
+  ['treasuryDistributed', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryDeposit', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  depositor: r.readPubkey(),
-  amount: r.readU64(),
-  newBalance: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryDeposit', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['depositor', pubkey.codec],
+  ['amount', u64.codec],
+  ['newBalance', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryWithdraw', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  withdrawer: r.readPubkey(),
-  amount: r.readU64(),
-  newBalance: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryWithdraw', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['withdrawer', pubkey.codec],
+  ['amount', u64.codec],
+  ['newBalance', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('MemberRankChanged', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  member: r.readPubkey(),
-  oldRank: r.readU8(),
-  newRank: r.readU8(),
-  changedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('MemberRankChanged', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['member', pubkey.codec],
+  ['oldRank', u8.codec],
+  ['newRank', u8.codec],
+  ['changedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('InviteSent', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  invitee: r.readPubkey(),
-  inviter: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('InviteSent', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['invitee', pubkey.codec],
+  ['inviter', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('InviteAccepted', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  memberCount: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('InviteAccepted', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['memberCount', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('InviteDeclined', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('InviteDeclined', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('InviteCancelled', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  invitee: r.readPubkey(),
-  cancelledBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('InviteCancelled', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['invitee', pubkey.codec],
+  ['cancelledBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('MotdUpdated', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  updatedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('MotdUpdated', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['updatedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamSettingsUpdated', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  updatedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamSettingsUpdated', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['updatedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasurySettingsUpdated', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  updatedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasurySettingsUpdated', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['updatedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryWithdrawRequested', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  requester: r.readPubkey(),
-  amount: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryWithdrawRequested', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['requester', pubkey.codec],
+  ['amount', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryRequestApproved', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  approver: r.readPubkey(),
-  requester: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryRequestApproved', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['approver', pubkey.codec],
+  ['requester', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryRequestRejected', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  rejector: r.readPubkey(),
-  requester: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryRequestRejected', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['rejector', pubkey.codec],
+  ['requester', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryRequestExecuted', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  executor: r.readPubkey(),
-  requester: r.readPubkey(),
-  amount: r.readU64(),
-  newBalance: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryRequestExecuted', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['executor', pubkey.codec],
+  ['requester', pubkey.codec],
+  ['amount', u64.codec],
+  ['newBalance', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TreasuryRequestCancelled', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  requester: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TreasuryRequestCancelled', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['requester', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Travel ──
 
-EVENT_PARSERS.set('IntercityTravelStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  fromCity: r.readPubkey(),
-  toCity: r.readPubkey(),
-  arrivalAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('IntercityTravelStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['fromCity', pubkey.codec],
+  ['toCity', pubkey.codec],
+  ['arrivalAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('IntercityTravelCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  city: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('IntercityTravelCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['city', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerTeleported', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  fromCity: r.readPubkey(),
-  toCity: r.readPubkey(),
-  gemsSpent: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerTeleported', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['fromCity', pubkey.codec],
+  ['toCity', pubkey.codec],
+  ['gemsSpent', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('IntracityTravelStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  city: r.readPubkey(),
-  destX: r.readI32(),
-  destY: r.readI32(),
-  arrivalAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('IntracityTravelStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['city', pubkey.codec],
+  ['destX', i32.codec],
+  ['destY', i32.codec],
+  ['arrivalAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('IntracityTravelCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  x: r.readI32(),
-  y: r.readI32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('IntracityTravelCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['x', i32.codec],
+  ['y', i32.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TravelCancelled', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  isIntercity: r.readBool(),
-  wasBumped: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TravelCancelled', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['isIntercity', bool.codec],
+  ['wasBumped', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TravelSpeedup', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  isIntercity: r.readBool(),
-  speedupTier: r.readU8(),
-  gemsSpent: r.readU64(),
-  newEta: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TravelSpeedup', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['isIntercity', bool.codec],
+  ['speedupTier', u8.codec],
+  ['gemsSpent', u64.codec],
+  ['newEta', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Rally ──
 
-EVENT_PARSERS.set('RallyCreated', (r) => ({
-  rally: r.readPubkey(),
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  leader: r.readPubkey(),
-  target: r.readPubkey(),
-  gatherAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyCreated', getStructCodec([
+  ['rally', pubkey.codec],
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['leader', pubkey.codec],
+  ['target', pubkey.codec],
+  ['gatherAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyJoined', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  participantCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyJoined', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['units', array(u64, 3).codec],
+  ['participantCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyExecuted', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  target: r.readPubkey(),
-  damageDealt: r.readU64(),
-  damageReceived: r.readU64(),
-  lootCaptured: r.readU64(),
-  participantCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyExecuted', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['target', pubkey.codec],
+  ['damageDealt', u64.codec],
+  ['damageReceived', u64.codec],
+  ['lootCaptured', u64.codec],
+  ['participantCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyCancelled', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  cancelledBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyCancelled', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['cancelledBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyLeft', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  participantCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyLeft', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['units', array(u64, 3).codec],
+  ['participantCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyClosed', (r) => ({
-  rally: r.readPubkey(),
-  rallyId: r.readU64(),
-  teamName: r.readName32(),
-  leader: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyClosed', getStructCodec([
+  ['rally', pubkey.codec],
+  ['rallyId', u64.codec],
+  ['teamName', fixedString(32).codec],
+  ['leader', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallySpeedup', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  payer: r.readPubkey(),
-  speedupType: r.readU8(),
-  gemsSpent: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallySpeedup', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['payer', pubkey.codec],
+  ['speedupType', u8.codec],
+  ['gemsSpent', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('RallyParticipantReturned', (r) => ({
-  rally: r.readPubkey(),
-  teamName: r.readName32(),
-  player: r.readPubkey(),
-  participatedInCombat: r.readBool(),
-  unitsReturned: [r.readU64(), r.readU64(), r.readU64()],
-  lootReceived: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('RallyParticipantReturned', getStructCodec([
+  ['rally', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['participatedInCombat', bool.codec],
+  ['unitsReturned', array(u64, 3).codec],
+  ['lootReceived', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Reinforcement ──
 
-EVENT_PARSERS.set('ReinforcementSent', (r) => ({
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  receiver: r.readPubkey(),
-  receiverName: r.readName48(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  arrivesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementSent', getStructCodec([
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['receiver', pubkey.codec],
+  ['receiverName', fixedString(48).codec],
+  ['units', array(u64, 3).codec],
+  ['arrivesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ReinforcementArrived', (r) => ({
-  reinforcement: r.readPubkey(),
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  receiver: r.readPubkey(),
-  receiverName: r.readName48(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementArrived', getStructCodec([
+  ['reinforcement', pubkey.codec],
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['receiver', pubkey.codec],
+  ['receiverName', fixedString(48).codec],
+  ['units', array(u64, 3).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ReinforcementRecalled', (r) => ({
-  reinforcement: r.readPubkey(),
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  receiver: r.readPubkey(),
-  receiverName: r.readName48(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementRecalled', getStructCodec([
+  ['reinforcement', pubkey.codec],
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['receiver', pubkey.codec],
+  ['receiverName', fixedString(48).codec],
+  ['units', array(u64, 3).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ReinforcementRelieved', (r) => ({
-  reinforcement: r.readPubkey(),
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  receiver: r.readPubkey(),
-  receiverName: r.readName48(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementRelieved', getStructCodec([
+  ['reinforcement', pubkey.codec],
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['receiver', pubkey.codec],
+  ['receiverName', fixedString(48).codec],
+  ['units', array(u64, 3).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ReinforcementReturned', (r) => ({
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  units: [r.readU64(), r.readU64(), r.readU64()],
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementReturned', getStructCodec([
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['units', array(u64, 3).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ReinforcementSpeedup', (r) => ({
-  reinforcement: r.readPubkey(),
-  sender: r.readPubkey(),
-  senderName: r.readName48(),
-  receiver: r.readPubkey(),
-  speedupType: r.readU8(),
-  gemsSpent: r.readU64(),
-  newEta: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ReinforcementSpeedup', getStructCodec([
+  ['reinforcement', pubkey.codec],
+  ['sender', pubkey.codec],
+  ['senderName', fixedString(48).codec],
+  ['receiver', pubkey.codec],
+  ['speedupType', u8.codec],
+  ['gemsSpent', u64.codec],
+  ['newEta', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Expedition ──
 
-EVENT_PARSERS.set('ExpeditionStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  expeditionType: r.readU8(),
-  nodeId: r.readU8(),
-  duration: r.readU32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ExpeditionStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['expeditionType', u8.codec],
+  ['nodeId', u8.codec],
+  ['duration', u32.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ExpeditionStrike', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  strikeNum: r.readU8(),
-  yieldAmount: r.readU64(),
-  quality: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ExpeditionStrike', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['strikeNum', u8.codec],
+  ['yieldAmount', u64.codec],
+  ['quality', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ExpeditionClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  expeditionType: r.readU8(),
-  totalYield: r.readU64(),
-  bonusYield: r.readU64(),
-  xpEarned: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ExpeditionClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['expeditionType', u8.codec],
+  ['totalYield', u64.codec],
+  ['bonusYield', u64.codec],
+  ['xpEarned', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ExpeditionAborted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  expeditionType: r.readU8(),
-  partialYield: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ExpeditionAborted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['expeditionType', u8.codec],
+  ['partialYield', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ExpeditionSpeedup', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  speedupSeconds: r.readU64(),
-  gemsSpent: r.readU64(),
-  newEta: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ExpeditionSpeedup', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['speedupSeconds', u64.codec],
+  ['gemsSpent', u64.codec],
+  ['newEta', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Loot ──
 
-EVENT_PARSERS.set('LootClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  cash: r.readU64(),
-  items: [r.readU16(), r.readU16(), r.readU16(), r.readU16()],
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('LootClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['cash', u64.codec],
+  ['items', array(u16, 4).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EncounterSpawned', (r) => ({
-  encounter: r.readPubkey(),
-  city: r.readPubkey(),
-  encounterType: r.readU8(),
-  level: r.readU8(),
-  x: r.readI32(),
-  y: r.readI32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EncounterSpawned', getStructCodec([
+  ['encounter', pubkey.codec],
+  ['city', pubkey.codec],
+  ['encounterType', u8.codec],
+  ['level', u8.codec],
+  ['x', i32.codec],
+  ['y', i32.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Progression ──
 
-EVENT_PARSERS.set('DailyRewardClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  cash: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DailyRewardClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['cash', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('SubscriptionPurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  tier: r.readU8(),
-  durationDays: r.readU16(),
-  noviPaid: r.readU64(),
-  expiresAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('SubscriptionPurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['tier', u8.codec],
+  ['durationDays', u16.codec],
+  ['noviPaid', u64.codec],
+  ['expiresAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('XpGained', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  amount: r.readU64(),
-  source: r.readU8(),
-  totalXp: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('XpGained', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['source', u8.codec],
+  ['totalXp', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerLeveledUp', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  oldLevel: r.readU16(),
-  newLevel: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerLeveledUp', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['oldLevel', u16.codec],
+  ['newLevel', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EventPrizeClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  event: r.readPubkey(),
-  rank: r.readU16(),
-  prizeAmount: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EventPrizeClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['event', pubkey.codec],
+  ['rank', u16.codec],
+  ['prizeAmount', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('SubscriptionTierUpdated', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  oldTier: r.readU8(),
-  newTier: r.readU8(),
-  expiresAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('SubscriptionTierUpdated', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['oldTier', u8.codec],
+  ['newTier', u8.codec],
+  ['expiresAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('SubscriptionExpired', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  oldTier: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('SubscriptionExpired', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['oldTier', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Estate ──
 
-EVENT_PARSERS.set('EstateCreated', (r) => ({
-  estate: r.readPubkey(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EstateCreated', getStructCodec([
+  ['estate', pubkey.codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('BuildingStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  buildingType: r.readU8(),
-  plot: r.readU8(),
-  completesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('BuildingStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['buildingType', u8.codec],
+  ['plot', u8.codec],
+  ['completesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('BuildingCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  buildingType: r.readU8(),
-  level: r.readU8(),
-  plot: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('BuildingCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['buildingType', u8.codec],
+  ['level', u8.codec],
+  ['plot', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('BuildingUpgradeStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  buildingType: r.readU8(),
-  fromLevel: r.readU8(),
-  toLevel: r.readU8(),
-  completesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('BuildingUpgradeStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['buildingType', u8.codec],
+  ['fromLevel', u8.codec],
+  ['toLevel', u8.codec],
+  ['completesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlotPurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  plot: r.readU8(),
-  cost: r.readU64(),
-  totalPlots: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlotPurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['plot', u8.codec],
+  ['cost', u64.codec],
+  ['totalPlots', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EstateDailyClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  materials: r.readU64(),
-  streak: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EstateDailyClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['materials', u64.codec],
+  ['streak', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Forge ──
 
-EVENT_PARSERS.set('CraftStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  itemType: r.readU8(),
-  qualityTier: r.readU8(),
-  materialsUsed: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CraftStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['itemType', u8.codec],
+  ['qualityTier', u8.codec],
+  ['materialsUsed', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CraftStrike', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  stage: r.readU8(),
-  quality: r.readU8(),
-  score: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CraftStrike', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['stage', u8.codec],
+  ['quality', u8.codec],
+  ['score', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CraftCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  itemType: r.readU8(),
-  quality: r.readU8(),
-  score: r.readU16(),
-  inventorySlot: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CraftCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['itemType', u8.codec],
+  ['quality', u8.codec],
+  ['score', u16.codec],
+  ['inventorySlot', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CraftAbandoned', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  itemType: r.readU8(),
-  stageReached: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CraftAbandoned', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['itemType', u8.codec],
+  ['stageReached', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ItemEquipped', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  slot: r.readU8(),
-  quality: r.readU8(),
-  fromInventory: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ItemEquipped', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['slot', u8.codec],
+  ['quality', u8.codec],
+  ['fromInventory', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Research ──
 
-EVENT_PARSERS.set('ResearchStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  researchId: r.readU16(),
-  level: r.readU8(),
-  completesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResearchStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['researchId', u16.codec],
+  ['level', u8.codec],
+  ['completesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ResearchCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  researchId: r.readU16(),
-  level: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResearchCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['researchId', u16.codec],
+  ['level', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ResearchCancelled', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  researchId: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResearchCancelled', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['researchId', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ResearchSpeedup', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  researchId: r.readU16(),
-  speedupSeconds: r.readI64(),
-  gemsSpent: r.readU64(),
-  newEta: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResearchSpeedup', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['researchId', u16.codec],
+  ['speedupSeconds', i64.codec],
+  ['gemsSpent', u64.codec],
+  ['newEta', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('ResearchAscended', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  researchTree: r.readU16(),
-  newAscensionLevel: r.readU8(),
-  masteryCost: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ResearchAscended', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['researchTree', u16.codec],
+  ['newAscensionLevel', u8.codec],
+  ['masteryCost', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerAscended', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  ascensionLevel: r.readU8(),
-  masteryGained: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerAscended', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['ascensionLevel', u8.codec],
+  ['masteryGained', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Sanctuary ──
 
-EVENT_PARSERS.set('MeditationStarted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  durationHours: r.readU8(),
-  completesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('MeditationStarted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['durationHours', u8.codec],
+  ['completesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('MeditationClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  xpEarned: r.readU32(),
-  levelsGained: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('MeditationClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['xpEarned', u32.codec],
+  ['levelsGained', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Hero ──
 
-EVENT_PARSERS.set('HeroMinted', (r) => ({
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  templateId: r.readU16(),
-  rarity: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroMinted', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['templateId', u16.codec],
+  ['rarity', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('HeroLocked', (r) => ({
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  slot: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroLocked', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['slot', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('HeroUnlocked', (r) => ({
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroUnlocked', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('HeroLeveledUp', (r) => ({
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  oldLevel: r.readU32(),
-  newLevel: r.readU32(),
-  xpSpent: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroLeveledUp', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['oldLevel', u32.codec],
+  ['newLevel', u32.codec],
+  ['xpSpent', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('HeroAssignedDefensive', (r) => ({
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  assigned: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroAssignedDefensive', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['assigned', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('HeroBurned', (r) => ({
-  heroMint: r.readPubkey(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  templateId: r.readU16(),
-  heroLevel: r.readU32(),
-  tier: r.readU8(),
-  noviReward: r.readU64(),
-  newMintedCount: r.readU32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('HeroBurned', getStructCodec([
+  ['heroMint', pubkey.codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['templateId', u16.codec],
+  ['heroLevel', u32.codec],
+  ['tier', u8.codec],
+  ['noviReward', u64.codec],
+  ['newMintedCount', u32.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('SupplyCapUpdated', (r) => ({
-  templateId: r.readU16(),
-  oldSupplyCap: r.readU32(),
-  newSupplyCap: r.readU32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('SupplyCapUpdated', getStructCodec([
+  ['templateId', u16.codec],
+  ['oldSupplyCap', u32.codec],
+  ['newSupplyCap', u32.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Shop ──
 
-EVENT_PARSERS.set('ItemPurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  itemId: r.readU32(),
-  quantity: r.readU16(),
-  price: r.readU64(),
-  currency: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('ItemPurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['itemId', u32.codec],
+  ['quantity', u16.codec],
+  ['price', u64.codec],
+  ['currency', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('BundlePurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  bundleId: r.readU32(),
-  price: r.readU64(),
-  currency: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('BundlePurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['bundleId', u32.codec],
+  ['price', u64.codec],
+  ['currency', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('FlashSalePurchased', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  saleId: r.readU64(),
-  originalPrice: r.readU64(),
-  pricePaid: r.readU64(),
-  currency: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('FlashSalePurchased', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['saleId', u64.codec],
+  ['originalPrice', u64.codec],
+  ['pricePaid', u64.codec],
+  ['currency', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('NoviPurchased', (r) => ({
-  buyer: r.readPubkey(),
-  user: r.readPubkey(),
-  packageIndex: r.readU8(),
-  baseAmount: r.readU64(),
-  bonusAmount: r.readU64(),
-  totalReceived: r.readU64(),
-  costLamports: r.readU64(),
-  streakDay: r.readU16(),
-  subscriptionTier: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('NoviPurchased', getStructCodec([
+  ['buyer', pubkey.codec],
+  ['user', pubkey.codec],
+  ['packageIndex', u8.codec],
+  ['baseAmount', u64.codec],
+  ['bonusAmount', u64.codec],
+  ['totalReceived', u64.codec],
+  ['costLamports', u64.codec],
+  ['streakDay', u16.codec],
+  ['subscriptionTier', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Initialization ──
 
-EVENT_PARSERS.set('PlayerCreated', (r) => ({
-  player: r.readPubkey(),
-  user: r.readPubkey(),
-  city: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerCreated', getStructCodec([
+  ['player', pubkey.codec],
+  ['user', pubkey.codec],
+  ['city', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('UserCreated', (r) => ({
-  user: r.readPubkey(),
-  wallet: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('UserCreated', getStructCodec([
+  ['user', pubkey.codec],
+  ['wallet', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CityInitialized', (r) => ({
-  city: r.readPubkey(),
-  cityIndex: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CityInitialized', getStructCodec([
+  ['city', pubkey.codec],
+  ['cityIndex', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GameEngineInitialized', (r) => ({
-  gameEngine: r.readPubkey(),
-  authority: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GameEngineInitialized', getStructCodec([
+  ['gameEngine', pubkey.codec],
+  ['authority', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Name ──
 
-EVENT_PARSERS.set('PlayerNameSet', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  domainHash: r.readBytes(32),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerNameSet', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['domainHash', bytes(32).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerNameRemoved', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerNameRemoved', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerNameUpdated', (r) => ({
-  player: r.readPubkey(),
-  oldName: r.readName48(),
-  newName: r.readName48(),
-  newDomainHash: r.readBytes(32),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerNameUpdated', getStructCodec([
+  ['player', pubkey.codec],
+  ['oldName', fixedString(48).codec],
+  ['newName', fixedString(48).codec],
+  ['newDomainHash', bytes(32).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamNameSet', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  domainHash: r.readBytes(32),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamNameSet', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['domainHash', bytes(32).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamNameRemoved', (r) => ({
-  team: r.readPubkey(),
-  teamName: r.readName32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamNameRemoved', getStructCodec([
+  ['team', pubkey.codec],
+  ['teamName', fixedString(32).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('TeamNameUpdated', (r) => ({
-  team: r.readPubkey(),
-  oldName: r.readName32(),
-  newName: r.readName32(),
-  newDomainHash: r.readBytes(32),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('TeamNameUpdated', getStructCodec([
+  ['team', pubkey.codec],
+  ['oldName', fixedString(32).codec],
+  ['newName', fixedString(32).codec],
+  ['newDomainHash', bytes(32).codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Token ──
 
-EVENT_PARSERS.set('NoviReservedToLocked', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  amount: r.readU64(),
-  newLocked: r.readU64(),
-  remainingReserved: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('NoviReservedToLocked', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['newLocked', u64.codec],
+  ['remainingReserved', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('NoviWithdrawn', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  amount: r.readU64(),
-  remainingReserved: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('NoviWithdrawn', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['amount', u64.codec],
+  ['remainingReserved', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Dungeon ──
 
-EVENT_PARSERS.set('DungeonEntered', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  heroMint: r.readPubkey(),
-  heroName: r.readName32(),
-  staminaSpent: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonEntered', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['heroMint', pubkey.codec],
+  ['heroName', fixedString(32).codec],
+  ['staminaSpent', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonRoomCleared', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  room: r.readU8(),
-  xpGained: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonRoomCleared', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['room', u8.codec],
+  ['xpGained', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonFloorCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  noviGained: r.readU64(),
-  isCheckpoint: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonFloorCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['noviGained', u64.codec],
+  ['isCheckpoint', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonRelicChosen', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  relicId: r.readU8(),
-  totalRelics: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonRelicChosen', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['relicId', u8.codec],
+  ['totalRelics', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonBossFight', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  bossPower: r.readU32(),
-  bossHealth: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonBossFight', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['bossPower', u32.codec],
+  ['bossHealth', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonFailed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  room: r.readU8(),
-  enemiesKilled: r.readU16(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonFailed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['room', u8.codec],
+  ['enemiesKilled', u16.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonFled', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  floor: r.readU8(),
-  enemiesKilled: r.readU16(),
-  xpGained: r.readU64(),
-  noviGained: r.readU64(),
-  gemsGained: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonFled', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['floor', u8.codec],
+  ['enemiesKilled', u16.codec],
+  ['xpGained', u64.codec],
+  ['noviGained', u64.codec],
+  ['gemsGained', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonCompleted', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  victory: r.readBool(),
-  finalFloor: r.readU8(),
-  enemiesKilled: r.readU16(),
-  roomsCleared: r.readU8(),
-  relicsCollected: r.readU8(),
-  xpGained: r.readU64(),
-  noviGained: r.readU64(),
-  gemsGained: r.readU64(),
-  materialsGained: r.readU32(),
-  totalDamageDealt: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonCompleted', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['victory', bool.codec],
+  ['finalFloor', u8.codec],
+  ['enemiesKilled', u16.codec],
+  ['roomsCleared', u8.codec],
+  ['relicsCollected', u8.codec],
+  ['xpGained', u64.codec],
+  ['noviGained', u64.codec],
+  ['gemsGained', u64.codec],
+  ['materialsGained', u32.codec],
+  ['totalDamageDealt', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonResumed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  checkpointFloor: r.readU8(),
-  resumeFloor: r.readU8(),
-  gemCost: r.readU64(),
-  resumeCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonResumed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['checkpointFloor', u8.codec],
+  ['resumeFloor', u8.codec],
+  ['gemCost', u64.codec],
+  ['resumeCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('DungeonLeaderboardPrizeClaimed', (r) => ({
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  dungeonId: r.readU16(),
-  weekNumber: r.readU16(),
-  rank: r.readU8(),
-  score: r.readU64(),
-  prizeAmount: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('DungeonLeaderboardPrizeClaimed', getStructCodec([
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['dungeonId', u16.codec],
+  ['weekNumber', u16.codec],
+  ['rank', u8.codec],
+  ['score', u64.codec],
+  ['prizeAmount', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Castle ──
 
-EVENT_PARSERS.set('CastleCreated', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  cityId: r.readU16(),
-  castleId: r.readU16(),
-  tier: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleCreated', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['cityId', u16.codec],
+  ['castleId', u16.codec],
+  ['tier', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleClaimed', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  king: r.readPubkey(),
-  kingName: r.readName48(),
-  team: r.readPubkey(),
-  tier: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleClaimed', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['king', pubkey.codec],
+  ['kingName', fixedString(48).codec],
+  ['team', pubkey.codec],
+  ['tier', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleConquered', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  previousKing: r.readPubkey(),
-  newKing: r.readPubkey(),
-  newKingName: r.readName48(),
-  newTeam: r.readPubkey(),
-  rallyId: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleConquered', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['previousKing', pubkey.codec],
+  ['newKing', pubkey.codec],
+  ['newKingName', fixedString(48).codec],
+  ['newTeam', pubkey.codec],
+  ['rallyId', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleDefended', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  king: r.readPubkey(),
-  rallyId: r.readU64(),
-  damageDealt: r.readU64(),
-  weaponsCaptured: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleDefended', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['king', pubkey.codec],
+  ['rallyId', u64.codec],
+  ['damageDealt', u64.codec],
+  ['weaponsCaptured', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CourtAppointed', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  appointee: r.readPubkey(),
-  appointeeName: r.readName48(),
-  positionType: r.readU8(),
-  appointedBy: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CourtAppointed', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['appointee', pubkey.codec],
+  ['appointeeName', fixedString(48).codec],
+  ['positionType', u8.codec],
+  ['appointedBy', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CourtDismissed', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  dismissed: r.readPubkey(),
-  dismissedName: r.readName48(),
-  positionType: r.readU8(),
-  dismissedBy: r.readPubkey(),
-  resigned: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CourtDismissed', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['dismissed', pubkey.codec],
+  ['dismissedName', fixedString(48).codec],
+  ['positionType', u8.codec],
+  ['dismissedBy', pubkey.codec],
+  ['resigned', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GarrisonJoined', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  contributor: r.readPubkey(),
-  contributorName: r.readName48(),
-  units1: r.readU64(),
-  units2: r.readU64(),
-  units3: r.readU64(),
-  weapons: r.readU64(),
-  heroMint: r.readPubkey(),
-  garrisonCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GarrisonJoined', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['contributor', pubkey.codec],
+  ['contributorName', fixedString(48).codec],
+  ['units1', u64.codec],
+  ['units2', u64.codec],
+  ['units3', u64.codec],
+  ['weapons', u64.codec],
+  ['heroMint', pubkey.codec],
+  ['garrisonCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GarrisonLeft', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  contributor: r.readPubkey(),
-  contributorName: r.readName48(),
-  units1: r.readU64(),
-  units2: r.readU64(),
-  units3: r.readU64(),
-  weapons: r.readU64(),
-  heroMint: r.readPubkey(),
-  relieved: r.readBool(),
-  garrisonCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GarrisonLeft', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['contributor', pubkey.codec],
+  ['contributorName', fixedString(48).codec],
+  ['units1', u64.codec],
+  ['units2', u64.codec],
+  ['units3', u64.codec],
+  ['weapons', u64.codec],
+  ['heroMint', pubkey.codec],
+  ['relieved', bool.codec],
+  ['garrisonCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GarrisonLootClaimed', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  claimer: r.readPubkey(),
-  claimerName: r.readName48(),
-  melee: r.readU64(),
-  ranged: r.readU64(),
-  siege: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GarrisonLootClaimed', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['claimer', pubkey.codec],
+  ['claimerName', fixedString(48).codec],
+  ['melee', u64.codec],
+  ['ranged', u64.codec],
+  ['siege', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleUpgradeStarted', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  king: r.readPubkey(),
-  upgradeType: r.readU8(),
-  currentLevel: r.readU8(),
-  targetLevel: r.readU8(),
-  noviCost: r.readU64(),
-  completesAt: r.readI64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleUpgradeStarted', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['king', pubkey.codec],
+  ['upgradeType', u8.codec],
+  ['currentLevel', u8.codec],
+  ['targetLevel', u8.codec],
+  ['noviCost', u64.codec],
+  ['completesAt', i64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleUpgradeCompleted', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  upgradeType: r.readU8(),
-  newLevel: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleUpgradeCompleted', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['upgradeType', u8.codec],
+  ['newLevel', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleUpgradeCancelled', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  upgradeType: r.readU8(),
-  noviRefunded: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleUpgradeCancelled', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['upgradeType', u8.codec],
+  ['noviRefunded', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleRewardsClaimed', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  claimer: r.readPubkey(),
-  claimerName: r.readName48(),
-  role: r.readU8(),
-  days: r.readU8(),
-  novi: r.readU64(),
-  cash: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleRewardsClaimed', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['claimer', pubkey.codec],
+  ['claimerName', fixedString(48).codec],
+  ['role', u8.codec],
+  ['days', u8.codec],
+  ['novi', u64.codec],
+  ['cash', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleProtectionExpired', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  king: r.readPubkey(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleProtectionExpired', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['king', pubkey.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('KingForceRemoved', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  removedKing: r.readPubkey(),
-  removedKingName: r.readName48(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('KingForceRemoved', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['removedKing', pubkey.codec],
+  ['removedKingName', fixedString(48).codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleTransitionProgress', (r) => ({
-  castle: r.readPubkey(),
-  phase: r.readU8(),
-  cleanedCount: r.readU8(),
-  totalCount: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleTransitionProgress', getStructCodec([
+  ['castle', pubkey.codec],
+  ['phase', u8.codec],
+  ['cleanedCount', u8.codec],
+  ['totalCount', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleStatusChanged', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  oldStatus: r.readU8(),
-  newStatus: r.readU8(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleStatusChanged', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['oldStatus', u8.codec],
+  ['newStatus', u8.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('CastleAttacked', (r) => ({
-  castle: r.readPubkey(),
-  castleName: r.readName32(),
-  attacker: r.readPubkey(),
-  attackerName: r.readName48(),
-  king: r.readPubkey(),
-  damageDealt: r.readU64(),
-  damageReceived: r.readU64(),
-  attackerCasualties: r.readU64(),
-  garrisonCasualties: r.readU64(),
-  attackerWon: r.readBool(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('CastleAttacked', getStructCodec([
+  ['castle', pubkey.codec],
+  ['castleName', fixedString(32).codec],
+  ['attacker', pubkey.codec],
+  ['attackerName', fixedString(48).codec],
+  ['king', pubkey.codec],
+  ['damageDealt', u64.codec],
+  ['damageReceived', u64.codec],
+  ['attackerCasualties', u64.codec],
+  ['garrisonCasualties', u64.codec],
+  ['attackerWon', bool.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Game Event ──
 
-EVENT_PARSERS.set('GameEventCreated', (r) => ({
-  event: r.readPubkey(),
-  eventType: r.readU8(),
-  startTime: r.readI64(),
-  endTime: r.readI64(),
-  prizePool: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GameEventCreated', getStructCodec([
+  ['event', pubkey.codec],
+  ['eventType', u8.codec],
+  ['startTime', i64.codec],
+  ['endTime', i64.codec],
+  ['prizePool', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GameEventJoined', (r) => ({
-  event: r.readPubkey(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  entryFee: r.readU64(),
-  participantCount: r.readU32(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GameEventJoined', getStructCodec([
+  ['event', pubkey.codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['entryFee', u64.codec],
+  ['participantCount', u32.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('GameEventFinalized', (r) => ({
-  event: r.readPubkey(),
-  totalParticipants: r.readU32(),
-  totalPrizes: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('GameEventFinalized', getStructCodec([
+  ['event', pubkey.codec],
+  ['totalParticipants', u32.codec],
+  ['totalPrizes', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
-EVENT_PARSERS.set('EventScoreUpdated', (r) => ({
-  event: r.readPubkey(),
-  player: r.readPubkey(),
-  playerName: r.readName48(),
-  scoreDelta: r.readI64(),
-  newScore: r.readU64(),
-  timestamp: r.readI64(),
-}));
+EVENT_CODECS.set('EventScoreUpdated', getStructCodec([
+  ['event', pubkey.codec],
+  ['player', pubkey.codec],
+  ['playerName', fixedString(48).codec],
+  ['scoreDelta', i64.codec],
+  ['newScore', u64.codec],
+  ['timestamp', i64.codec],
+]));
 
 // ── Kingdom ──
 
-EVENT_PARSERS.set('KingdomCreated', (r) => ({
-  kingdomId: r.readU16(),
-  kingdomName: r.readName32(),
-  theme: r.readU8(),
-  startTime: r.readI64(),
-  registrationClosesAt: r.readI64(),
-  createdBy: r.readPubkey(),
-  createdAt: r.readI64(),
-}));
+EVENT_CODECS.set('KingdomCreated', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['kingdomName', fixedString(32).codec],
+  ['theme', u8.codec],
+  ['startTime', i64.codec],
+  ['registrationClosesAt', i64.codec],
+  ['createdBy', pubkey.codec],
+  ['createdAt', i64.codec],
+]));
 
-EVENT_PARSERS.set('KingdomRegistrationClosed', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  totalPlayers: r.readU64(),
-  closedAt: r.readI64(),
-}));
+EVENT_CODECS.set('KingdomRegistrationClosed', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['totalPlayers', u64.codec],
+  ['closedAt', i64.codec],
+]));
 
-EVENT_PARSERS.set('PlayerJoinedKingdom', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  player: r.readPubkey(),
-  owner: r.readPubkey(),
-  joinedAt: r.readI64(),
-}));
+EVENT_CODECS.set('PlayerJoinedKingdom', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['player', pubkey.codec],
+  ['owner', pubkey.codec],
+  ['joinedAt', i64.codec],
+]));
 
-EVENT_PARSERS.set('KingdomEventCreated', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  eventId: r.readU64(),
-  eventType: r.readU8(),
-  startTime: r.readI64(),
-  endTime: r.readI64(),
-  prizePool: r.readU64(),
-}));
+EVENT_CODECS.set('KingdomEventCreated', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['eventId', u64.codec],
+  ['eventType', u8.codec],
+  ['startTime', i64.codec],
+  ['endTime', i64.codec],
+  ['prizePool', u64.codec],
+]));
 
-EVENT_PARSERS.set('KingdomArenaSeasonStarted', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  seasonId: r.readU32(),
-  startTime: r.readI64(),
-  endTime: r.readI64(),
-  prizePool: r.readU64(),
-}));
+EVENT_CODECS.set('KingdomArenaSeasonStarted', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['seasonId', u32.codec],
+  ['startTime', i64.codec],
+  ['endTime', i64.codec],
+  ['prizePool', u64.codec],
+]));
 
-EVENT_PARSERS.set('KingdomDungeonLeaderboardCreated', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  dungeonId: r.readU16(),
-  weekNumber: r.readU16(),
-  prizePool: r.readU64(),
-}));
+EVENT_CODECS.set('KingdomDungeonLeaderboardCreated', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['dungeonId', u16.codec],
+  ['weekNumber', u16.codec],
+  ['prizePool', u64.codec],
+]));
 
-EVENT_PARSERS.set('KingdomCitiesInitialized', (r) => ({
-  kingdomId: r.readU16(),
-  gameEngine: r.readPubkey(),
-  startCityId: r.readU16(),
-  citiesCount: r.readU8(),
-  initializedAt: r.readI64(),
-}));
+EVENT_CODECS.set('KingdomCitiesInitialized', getStructCodec([
+  ['kingdomId', u16.codec],
+  ['gameEngine', pubkey.codec],
+  ['startCityId', u16.codec],
+  ['citiesCount', u8.codec],
+  ['initializedAt', i64.codec],
+]));
 
 // Main Parser Functions
 
@@ -1753,27 +1634,24 @@ EVENT_PARSERS.set('KingdomCitiesInitialized', (r) => ({
  * @param data - Raw event data (8-byte discriminator + payload)
  * @returns Parsed event or null if unknown discriminator
  */
-export function parseNovusMundusEvent(data: Buffer | Uint8Array): NovusMundusEvent | null {
+export function parseNovusMundusEvent(data: Uint8Array): NovusMundusEvent | null {
   if (data.length < 8) {
     return null;
   }
 
-  const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buffer.subarray(0, 8);
-  const discHex = discriminatorToHex(new Uint8Array(discriminator));
+  const discHex = discriminatorToHex(data.subarray(0, 8));
 
   const eventName = EVENT_DISCRIMINATORS.get(discHex);
   if (!eventName) {
     return null;
   }
 
-  const parser = EVENT_PARSERS.get(eventName);
-  if (!parser) {
+  const codec = EVENT_CODECS.get(eventName);
+  if (!codec) {
     return null;
   }
 
-  const reader = new EventBufferReader(buffer.subarray(8));
-  const parsedData = parser(reader);
+  const parsedData = codec.decode(data.subarray(8));
 
   return {
     name: eventName,
@@ -1788,7 +1666,12 @@ export function parseNovusMundusEvent(data: Buffer | Uint8Array): NovusMundusEve
  * @returns Parsed event or null
  */
 export function parseEventFromBase64(base64Data: string): NovusMundusEvent | null {
-  const buffer = Buffer.from(base64Data, 'base64');
+  let buffer: Uint8Array;
+  try {
+    buffer = new Uint8Array(getBase64Encoder().encode(base64Data));
+  } catch {
+    return null;
+  }
   return parseNovusMundusEvent(buffer);
 }
 

@@ -21,7 +21,6 @@
     "novus": "bun run cli/cli.ts"
   },
   "devDependencies": {
-    "@types/bn.js": "^5.2.0",
     "@types/bun": "latest",
     "litesvm": "1.0.0",
     "typescript": "^5"
@@ -30,7 +29,6 @@
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^2.0.1",
     "@solana-program/compute-budget": "^0.15.0",
-    "@solana/kit": "^6.9.0",
-    "bn.js": "^5.2.2"
+    "@solana/kit": "^6.9.0"
   }
 }

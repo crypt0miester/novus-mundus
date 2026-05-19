@@ -7,13 +7,11 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u32, u64, f32, f64, i64, pubkey, fixedString } from '../utils/codec';
 import { CityType } from '../types/enums';
 import {
   type Anchor,
   type CityTerrain,
-  TERRAIN_HEADER_SIZE,
   ANCHOR_SIZE,
 } from '../calculators/terrain';
 
@@ -37,11 +35,11 @@ export interface CityAccount {
   /** Current number of players present in this city */
   playersPresent: number;
   /** Total PvP attacks initiated in this city (all-time) */
-  activeEncounters: BN;
+  activeEncounters: bigint;
   /** Total PvE encounters spawned in this city (all-time) */
-  totalEncountersSpawned: BN;
+  totalEncountersSpawned: bigint;
   /** Unix timestamp when city was founded */
-  foundedAt: BN;
+  foundedAt: bigint;
   /** Minimum encounter level for this city */
   minEncounterLevel: number;
   /** Maximum encounter level for this city */
@@ -69,86 +67,70 @@ export interface CityAccount {
 /** CityAccount fixed size in bytes (repr(C) layout, excluding trailing anchors) */
 export const CITY_ACCOUNT_SIZE = 152;
 
+// Codec
+
+/** CityAccount fixed-header fields (excludes the dynamic `anchors` array) */
+type CityHeader = Omit<CityAccount, 'anchors'>;
+
+/** CityAccount fixed-header `#[repr(C)]` codec — see programs/novus_mundus/src/state/city.rs */
+const cityHeaderCodec = reprC<CityHeader>([
+  pad(1), // account_key discriminator
+  ['gameEngine', pubkey],
+  ['cityId', u16],
+  ['name', fixedString(32)],
+  ['latitude', f64],
+  ['longitude', f64],
+  ['radiusKm', f32],
+  ['cityType', u8],
+  ['playersPresent', u32],
+  ['activeEncounters', u64],
+  ['totalEncountersSpawned', u64],
+  ['foundedAt', i64],
+  ['minEncounterLevel', u8],
+  ['maxEncounterLevel', u8],
+  ['bump', u8],
+  pad(1), // _padding1
+  ['arenaSeasonId', u32],
+  // Terrain header
+  ['terrainSeed', u32],
+  ['waterLine', u8],
+  ['peakLine', u8],
+  ['anchorCount', u16],
+  ['terrainVersion', u8],
+  pad(7), // _terrain_reserved
+], CITY_ACCOUNT_SIZE);
+
 // Deserialization
 
 /**
  * Deserialize CityAccount from raw account bytes.
  * Matches the on-chain repr(C) layout exactly, including padding.
+ * The fixed header is decoded via the codec; trailing anchors are read after.
  */
-export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
-  const reader = new BufferReader(data);
+export function deserializeCity(data: Uint8Array): CityAccount {
+  const header = cityHeaderCodec.decode(data);
 
-  // repr(C) layout — see programs/novus_mundus/src/state/city.rs
-  reader.readU8();                                     // offset 0   (account_key discriminator)
-  const gameEngine = reader.readPubkey();              // offset 1   (32 bytes)
-  reader.skip(1);                                      // offset 33  (implicit padding for u16 align)
-  const cityId = reader.readU16();                     // offset 34  (2 bytes)
-  const nameBytes = reader.readBytes(32);              // offset 36  (32 bytes)
-  const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
-  reader.skip(4);                                      // offset 68  (padding for f64 align, reduced from 6)
-  const latitude = reader.readF64();                  // offset 72  (8 bytes)
-  const longitude = reader.readF64();                 // offset 80  (8 bytes)
-  const radiusKm = reader.readF32();                  // offset 88  (4 bytes)
-  const cityTypeValue = reader.readU8();              // offset 92  (1 byte)
-  const cityType = cityTypeValue as CityType;
-  reader.skip(3);                                     // offset 93  (padding for u32 align)
-  const playersPresent = reader.readU32();            // offset 96  (4 bytes)
-  reader.skip(4);                                     // offset 100 (padding for u64 align)
-  const activeEncounters = reader.readU64();          // offset 104 (8 bytes)
-  const totalEncountersSpawned = reader.readU64();    // offset 112 (8 bytes)
-  const foundedAt = reader.readI64();                 // offset 120 (8 bytes)
-  const minEncounterLevel = reader.readU8();          // offset 128 (1 byte)
-  const maxEncounterLevel = reader.readU8();          // offset 129 (1 byte)
-  const bump = reader.readU8();                       // offset 130 (1 byte)
-  reader.skip(1);                                     // offset 131 (_padding1)
-  const arenaSeasonId = reader.readU32();             // offset 132 (4 bytes)
-
-  // ─── Terrain header ────────────────────────────────────────
-  const terrainSeed = reader.readU32();               // offset 136 (4 bytes)
-  const waterLine = reader.readU8();                  // offset 140 (1 byte)
-  const peakLine = reader.readU8();                   // offset 141 (1 byte)
-  const anchorCount = reader.readU16();               // offset 142 (2 bytes)
-  const terrainVersion = reader.readU8();             // offset 144 (1 byte)
-  reader.skip(7);                                     // offset 145 (_terrain_reserved)
-  // now at offset 152
-
-  // ─── Trailing anchor data ──────────────────────────────────
+  // Trailing anchor data (starts at CITY_ACCOUNT_SIZE)
+  const view = new DataView(
+    data.buffer,
+    data.byteOffset,
+    data.byteLength,
+  );
   const anchors: Anchor[] = [];
-  for (let i = 0; i < anchorCount; i++) {
+  for (let i = 0; i < header.anchorCount; i++) {
+    const base = CITY_ACCOUNT_SIZE + i * ANCHOR_SIZE;
     anchors.push({
-      x: reader.readI16(),
-      y: reader.readI16(),
-      mass: reader.readU8(),
-      lift: reader.readU8(),
-      pushX: reader.readI8(),
-      pushY: reader.readI8(),
-      moisture: reader.readU8(),
+      x: view.getInt16(base, true),
+      y: view.getInt16(base + 2, true),
+      mass: view.getUint8(base + 4),
+      lift: view.getUint8(base + 5),
+      pushX: view.getInt8(base + 6),
+      pushY: view.getInt8(base + 7),
+      moisture: view.getUint8(base + 8),
     });
   }
 
-  return {
-    gameEngine,
-    cityId,
-    name,
-    latitude,
-    longitude,
-    radiusKm,
-    cityType,
-    playersPresent,
-    activeEncounters,
-    totalEncountersSpawned,
-    foundedAt,
-    minEncounterLevel,
-    maxEncounterLevel,
-    bump,
-    arenaSeasonId,
-    terrainSeed,
-    waterLine,
-    peakLine,
-    anchorCount,
-    terrainVersion,
-    anchors,
-  };
+  return { ...header, anchors };
 }
 
 /** Build a CityTerrain view from a deserialized CityAccount */

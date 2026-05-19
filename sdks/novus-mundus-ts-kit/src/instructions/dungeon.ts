@@ -13,10 +13,10 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u16, u32, u64, fixedString, array, pad } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -72,11 +72,64 @@ export interface CreateDungeonTemplateParams {
   /** Time limit in seconds (0 = unlimited) */
   timeLimitSeconds?: number;
   /** Reward config */
-  baseXpPerRoom?: BN | number | bigint;
-  baseNoviPerFloor?: BN | number | bigint;
+  baseXpPerRoom?: bigint | number;
+  baseNoviPerFloor?: bigint | number;
   completionBonusBps?: number;
   rewardScalingBps?: number;
 }
+
+/** CreateDungeonTemplate args (128 bytes) — matches the DungeonTemplate struct layout */
+const createDungeonTemplateArgs = packed<{
+  dungeonId: number;
+  theme: number;
+  totalFloors: number;
+  roomsPerFloor: number;
+  checkpointInterval: number;
+  minPlayerLevel: number;
+  requiredBuildingLevel: number;
+  staminaCost: number;
+  bossPowerMultiplier: number;
+  name: string;
+  floorPower: number[];
+  combatWeight: number;
+  treasureWeight: number;
+  campWeight: number;
+  restWeight: number;
+  trapWeight: number;
+  darknessBaseBps: number;
+  darknessPerFloorBps: number;
+  timeLimitSeconds: number;
+  baseXpPerRoom: bigint;
+  baseNoviPerFloor: bigint;
+  completionBonusBps: number;
+  rewardScalingBps: number;
+}>([
+  ['dungeonId', u16],
+  ['theme', u8],
+  ['totalFloors', u8],
+  ['roomsPerFloor', u8],
+  ['checkpointInterval', u8],
+  ['minPlayerLevel', u8],
+  ['requiredBuildingLevel', u8],
+  ['staminaCost', u16],
+  ['bossPowerMultiplier', u16],
+  pad(4),
+  ['name', fixedString(32)],
+  ['floorPower', array(u32, 10)],
+  ['combatWeight', u16],
+  ['treasureWeight', u16],
+  ['campWeight', u16],
+  ['restWeight', u16],
+  ['trapWeight', u16],
+  pad(2),
+  ['darknessBaseBps', u16],
+  ['darknessPerFloorBps', u16],
+  ['timeLimitSeconds', u32],
+  ['baseXpPerRoom', u64],
+  ['baseNoviPerFloor', u64],
+  ['completionBonusBps', u16],
+  ['rewardScalingBps', u16],
+], 128);
 
 /** ~10,000 CU */
 /**
@@ -87,11 +140,11 @@ export interface CreateDungeonTemplateParams {
  * Rust account order: [dao_authority, dungeon_template, game_engine, system_program]
  * Instruction data: 128 bytes matching DungeonTemplate struct layout.
  */
-export function createCreateDungeonTemplateInstruction(
+export async function createCreateDungeonTemplateInstruction(
   accounts: CreateDungeonTemplateAccounts,
   params: CreateDungeonTemplateParams
-): Instruction {
-  const [template] = deriveDungeonTemplatePda(params.templateId);
+): Promise<Instruction> {
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
 
   // Rust expects: [dao_authority, dungeon_template, game_engine, system_program]
   const keys = [
@@ -127,51 +180,38 @@ export function createCreateDungeonTemplateInstruction(
   //  [116..124] base_novi_per_floor: u64
   //  [124..126] completion_bonus_bps: u16
   //  [126..128] reward_scaling_bps: u16
-  const writer = new BufferWriter(132);
-  writer.writeU16(params.templateId);                           // [0..2]
-  writer.writeU8(params.theme ?? 0);                            // [2]
-  writer.writeU8(params.totalFloors);                           // [3]
-  writer.writeU8(params.roomsPerFloor ?? 5);                    // [4]
-  writer.writeU8(params.checkpointInterval ?? 3);               // [5]
-  writer.writeU8(params.minPlayerLevel ?? 1);                   // [6]
-  writer.writeU8(params.requiredBuildingLevel ?? 0);            // [7]
-  writer.writeU16(params.staminaCost ?? 0);                     // [8..10]
-  writer.writeU16(params.bossPowerMultiplier ?? 15000);         // [10..12]
-  writer.writeZeros(4);                                          // [12..16] padding
+  // Floor power (10 entries, defaulting per-index when not supplied).
+  const floorPowerInput = params.floorPower ?? [];
+  const floorPower = Array.from({ length: 10 }, (_, i) => floorPowerInput[i] ?? (100 + i * 50));
 
-  // Name (32 bytes, zero-padded)
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
-  writer.writeBytes(nameBytes);                                  // [16..16+len]
-  writer.writeZeros(32 - nameBytes.length);                      // pad to [48]
-
-  // Floor power (10 × u32 = 40 bytes)
-  const floorPower = params.floorPower ?? [];
-  for (let i = 0; i < 10; i++) {
-    writer.writeU32(floorPower[i] ?? (100 + i * 50));           // [48..88]
-  }
-
-  // Room weights (must sum to 10000)
-  writer.writeU16(params.combatWeight ?? 4000);                  // [88..90]
-  writer.writeU16(params.treasureWeight ?? 2000);                // [90..92]
-  writer.writeU16(params.campWeight ?? 1500);                    // [92..94]
-  writer.writeU16(params.restWeight ?? 1500);                    // [94..96]
-  writer.writeU16(params.trapWeight ?? 1000);                    // [96..98]
-  writer.writeZeros(2);                                          // [98..100] padding2
-
-  // Darkness config
-  writer.writeU16(params.darknessBaseBps ?? 0);                  // [100..102]
-  writer.writeU16(params.darknessPerFloorBps ?? 0);              // [102..104]
-
-  // Time limit
-  writer.writeU32(params.timeLimitSeconds ?? 0);                 // [104..108]
-
-  // Reward config
-  writer.writeU64(params.baseXpPerRoom ?? 100);                  // [108..116]
-  writer.writeU64(params.baseNoviPerFloor ?? 50);                // [116..124]
-  writer.writeU16(params.completionBonusBps ?? 5000);            // [124..126]
-  writer.writeU16(params.rewardScalingBps ?? 10000);             // [126..128]
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_CREATE_TEMPLATE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_CREATE_TEMPLATE,
+    createDungeonTemplateArgs.encode({
+      dungeonId: params.templateId,
+      theme: params.theme ?? 0,
+      totalFloors: params.totalFloors,
+      roomsPerFloor: params.roomsPerFloor ?? 5,
+      checkpointInterval: params.checkpointInterval ?? 3,
+      minPlayerLevel: params.minPlayerLevel ?? 1,
+      requiredBuildingLevel: params.requiredBuildingLevel ?? 0,
+      staminaCost: params.staminaCost ?? 0,
+      bossPowerMultiplier: params.bossPowerMultiplier ?? 15000,
+      name: params.name,
+      floorPower,
+      combatWeight: params.combatWeight ?? 4000,
+      treasureWeight: params.treasureWeight ?? 2000,
+      campWeight: params.campWeight ?? 1500,
+      restWeight: params.restWeight ?? 1500,
+      trapWeight: params.trapWeight ?? 1000,
+      darknessBaseBps: params.darknessBaseBps ?? 0,
+      darknessPerFloorBps: params.darknessPerFloorBps ?? 0,
+      timeLimitSeconds: params.timeLimitSeconds ?? 0,
+      baseXpPerRoom: BigInt(params.baseXpPerRoom ?? 100),
+      baseNoviPerFloor: BigInt(params.baseNoviPerFloor ?? 50),
+      completionBonusBps: params.completionBonusBps ?? 5000,
+      rewardScalingBps: params.rewardScalingBps ?? 10000,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -193,8 +233,19 @@ export interface CreateLeaderboardParams {
   /** Week number */
   weekNumber: number;
   /** Prize pool in NOVI */
-  prizePool: BN | number | bigint;
+  prizePool: bigint | number;
 }
+
+/** CreateLeaderboard args (12 bytes): dungeon_id (u16), week_number (u16), prize_pool (u64) */
+const createLeaderboardArgs = packed<{
+  dungeonId: number;
+  weekNumber: number;
+  prizePool: bigint;
+}>([
+  ['dungeonId', u16],
+  ['weekNumber', u16],
+  ['prizePool', u64],
+], 12);
 
 /** ~5,000 CU */
 /**
@@ -202,12 +253,12 @@ export interface CreateLeaderboardParams {
  *
  * Admin-only. Creates leaderboard for weekly competitions.
  */
-export function createCreateLeaderboardInstruction(
+export async function createCreateLeaderboardInstruction(
   accounts: CreateLeaderboardAccounts,
   params: CreateLeaderboardParams
-): Instruction {
-  const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
-  const [dungeonTemplate] = deriveDungeonTemplatePda(params.templateId);
+): Promise<Instruction> {
+  const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
+  const [dungeonTemplate] = await deriveDungeonTemplatePda(params.templateId);
 
   // Rust account order: payer, dungeon_template, leaderboard, game_engine, system_program
   const keys = [
@@ -218,12 +269,14 @@ export function createCreateLeaderboardInstruction(
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(12);
-  writer.writeU16(params.templateId);
-  writer.writeU16(params.weekNumber);
-  writer.writeU64(params.prizePool);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_CREATE_LEADERBOARD, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_CREATE_LEADERBOARD,
+    createLeaderboardArgs.encode({
+      dungeonId: params.templateId,
+      weekNumber: params.weekNumber,
+      prizePool: BigInt(params.prizePool),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -250,21 +303,32 @@ export interface EnterDungeonParams {
   heroSpecialization: number;
 }
 
+/** EnterDungeon args (4 bytes): dungeon_id (u16), first_room_type (u8), hero_specialization (u8) */
+const enterDungeonArgs = packed<{
+  dungeonId: number;
+  firstRoomType: number;
+  heroSpecialization: number;
+}>([
+  ['dungeonId', u16],
+  ['firstRoomType', u8],
+  ['heroSpecialization', u8],
+], 4);
+
 /** ~40,000 CU */
 /**
  * Enter a dungeon.
  *
  * Starts a new dungeon run. Hero is transferred to DungeonRun PDA as escrow.
  */
-export function createEnterDungeonInstruction(
+export async function createEnterDungeonInstruction(
   accounts: EnterDungeonAccounts,
   params: EnterDungeonParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [estate] = deriveEstatePda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [estate] = await deriveEstatePda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -292,13 +356,14 @@ export function createEnterDungeonInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: dungeon_id (u16), first_room_type (u8), hero_specialization (u8)
-  const writer = new BufferWriter(4);
-  writer.writeU16(params.templateId);
-  writer.writeU8(params.firstRoomType);
-  writer.writeU8(params.heroSpecialization);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_ENTER, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_ENTER,
+    enterDungeonArgs.encode({
+      dungeonId: params.templateId,
+      firstRoomType: params.firstRoomType,
+      heroSpecialization: params.heroSpecialization,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -325,19 +390,30 @@ export interface AttackParams {
   crit: boolean;
 }
 
+/** Attack args (3 bytes): next_room_type (u8), double_strike (u8), crit (u8) */
+const attackArgs = packed<{
+  nextRoomType: number;
+  doubleStrike: number;
+  crit: number;
+}>([
+  ['nextRoomType', u8],
+  ['doubleStrike', u8],
+  ['crit', u8],
+], 3);
+
 /** ~60,000 CU */
 /**
  * Attack an enemy in the dungeon.
  *
  * Single target attack. Auto-advances on kill.
  */
-export function createAttackInstruction(
+export async function createAttackInstruction(
   accounts: AttackAccounts,
   params: AttackParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order (process_attacks):
   // 0. owner (signer)
@@ -355,13 +431,14 @@ export function createAttackInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: next_room_type (u8), double_strike (u8), crit (u8)
-  const writer = new BufferWriter(3);
-  writer.writeU8(params.nextRoomType);
-  writer.writeU8(params.doubleStrike ? 1 : 0);
-  writer.writeU8(params.crit ? 1 : 0);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_ATTACK, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_ATTACK,
+    attackArgs.encode({
+      nextRoomType: params.nextRoomType,
+      doubleStrike: params.doubleStrike ? 1 : 0,
+      crit: params.crit ? 1 : 0,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -390,19 +467,32 @@ export interface AttackMultiParams {
   crit: boolean;
 }
 
+/** AttackMulti args (4 bytes): attack_count (u8), next_room_type (u8), double_strike (u8), crit (u8) */
+const attackMultiArgs = packed<{
+  attackCount: number;
+  nextRoomType: number;
+  doubleStrike: number;
+  crit: number;
+}>([
+  ['attackCount', u8],
+  ['nextRoomType', u8],
+  ['doubleStrike', u8],
+  ['crit', u8],
+], 4);
+
 /** ~60,000 CU */
 /**
  * Attack multiple enemies in the dungeon.
  *
  * Executes up to 5 attacks. Stops early if enemy dies.
  */
-export function createAttackMultiInstruction(
+export async function createAttackMultiInstruction(
   accounts: AttackMultiAccounts,
   params: AttackMultiParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Same accounts as single attack (see createAttackInstruction)
   const keys = [
@@ -414,14 +504,15 @@ export function createAttackMultiInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: attack_count (u8), next_room_type (u8), double_strike (u8), crit (u8)
-  const writer = new BufferWriter(4);
-  writer.writeU8(params.attackCount);
-  writer.writeU8(params.nextRoomType);
-  writer.writeU8(params.doubleStrike ? 1 : 0);
-  writer.writeU8(params.crit ? 1 : 0);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_ATTACK_MULTI, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_ATTACK_MULTI,
+    attackMultiArgs.encode({
+      attackCount: params.attackCount,
+      nextRoomType: params.nextRoomType,
+      doubleStrike: params.doubleStrike ? 1 : 0,
+      crit: params.crit ? 1 : 0,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -452,13 +543,13 @@ export interface InteractParams {
  *
  * Opens chests, activates shrines, etc.
  */
-export function createInteractInstruction(
+export async function createInteractInstruction(
   accounts: InteractAccounts,
   params: InteractParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -476,15 +567,21 @@ export function createInteractInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: camp_bonus_bps (u16, optional), next_room_type (u8)
+  // VARIABLE-LENGTH instruction data: camp_bonus_bps (u16, only when present),
+  // next_room_type (u8). Layout depends on hasCampBonus, so it is assembled
+  // manually rather than via a fixed `packed` codec.
   const hasCampBonus = params.campBonusBps !== undefined && params.campBonusBps > 0;
-  const writer = new BufferWriter(hasCampBonus ? 3 : 1);
+  const payload = new Uint8Array(hasCampBonus ? 3 : 1);
+  let offset = 0;
   if (hasCampBonus) {
-    writer.writeU16(params.campBonusBps!);
+    const bps = params.campBonusBps!;
+    payload[0] = bps & 0xff;
+    payload[1] = (bps >> 8) & 0xff;
+    offset = 2;
   }
-  writer.writeU8(params.nextRoomType);
+  payload[offset] = params.nextRoomType & 0xff;
 
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_INTERACT, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.DUNGEON_INTERACT, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -517,13 +614,13 @@ export interface ChooseRelicParams {
  *
  * Relics provide run-long buffs.
  */
-export function createChooseRelicInstruction(
+export async function createChooseRelicInstruction(
   accounts: ChooseRelicAccounts,
   params: ChooseRelicParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -541,15 +638,17 @@ export function createChooseRelicInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: relic_id (u8), first_room_type (u8), relic_options (u8×3-4)
-  const writer = new BufferWriter(2 + params.relicOptions.length);
-  writer.writeU8(params.relicId);
-  writer.writeU8(params.firstRoomType);
-  for (const opt of params.relicOptions) {
-    writer.writeU8(opt);
-  }
+  // VARIABLE-LENGTH instruction data: relic_id (u8), first_room_type (u8),
+  // relic_options (u8 × 3-4). The trailing options count is runtime-dependent,
+  // so the payload is assembled manually rather than via a fixed `packed` codec.
+  const payload = new Uint8Array(2 + params.relicOptions.length);
+  payload[0] = params.relicId & 0xff;
+  payload[1] = params.firstRoomType & 0xff;
+  params.relicOptions.forEach((opt, i) => {
+    payload[2 + i] = opt & 0xff;
+  });
 
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_CHOOSE_RELIC, writer.toBuffer());
+  const data = createInstructionData(DISCRIMINATORS.DUNGEON_CHOOSE_RELIC, payload);
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -572,12 +671,12 @@ export interface FleeAccounts {
  * Ends run early, keeps partial rewards based on floor.
  * Hero is returned from escrow.
  */
-export function createFleeInstruction(
+export async function createFleeInstruction(
   accounts: FleeAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -628,13 +727,13 @@ export interface ClaimDungeonParams {
  *
  * Called after completing or failing a run. Hero is returned from escrow.
  */
-export function createClaimDungeonInstruction(
+export async function createClaimDungeonInstruction(
   accounts: ClaimDungeonAccounts,
   params?: ClaimDungeonParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -659,7 +758,7 @@ export function createClaimDungeonInstruction(
   if (accounts.leaderboard) {
     keys.push({ pubkey: accounts.leaderboard, isSigner: false, isWritable: true });
   } else if (params?.templateId !== undefined && params?.weekNumber !== undefined) {
-    const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
+    const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
     keys.push({ pubkey: leaderboard, isSigner: false, isWritable: true });
   }
 
@@ -686,19 +785,24 @@ export interface ResumeParams {
   firstRoomType: number;
 }
 
+/** Resume args (1 byte): first_room_type (u8) */
+const resumeArgs = packed<{ firstRoomType: number }>([
+  ['firstRoomType', u8],
+], 1);
+
 /** ~10,000 CU */
 /**
  * Resume an interrupted dungeon run.
  *
  * Continues from last saved checkpoint. Costs gems.
  */
-export function createResumeInstruction(
+export async function createResumeInstruction(
   accounts: ResumeAccounts,
   params: ResumeParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -716,11 +820,10 @@ export function createResumeInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: first_room_type (u8)
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.firstRoomType);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_RESUME, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_RESUME,
+    resumeArgs.encode({ firstRoomType: params.firstRoomType })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -741,21 +844,27 @@ export interface ClaimLeaderboardPrizeParams {
   weekNumber: number;
 }
 
+/** ClaimLeaderboardPrize args (4 bytes): dungeon_id (u16), week_number (u16) */
+const claimLeaderboardPrizeArgs = packed<{ dungeonId: number; weekNumber: number }>([
+  ['dungeonId', u16],
+  ['weekNumber', u16],
+], 4);
+
 /** ~10,000 CU */
 /**
  * Claim leaderboard prize.
  *
  * For top 10 finishers in weekly competition. Mints NOVI tokens as prize.
  */
-export function createClaimLeaderboardPrizeInstruction(
+export async function createClaimLeaderboardPrizeInstruction(
   accounts: ClaimLeaderboardPrizeAccounts,
   params: ClaimLeaderboardPrizeParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.dungeonId, params.weekNumber);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.dungeonId, params.weekNumber);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -775,12 +884,13 @@ export function createClaimLeaderboardPrizeInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: dungeon_id (u16), week_number (u16)
-  const writer = new BufferWriter(4);
-  writer.writeU16(params.dungeonId);
-  writer.writeU16(params.weekNumber);
-
-  const data = createInstructionData(DISCRIMINATORS.DUNGEON_CLAIM_LEADERBOARD_PRIZE, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.DUNGEON_CLAIM_LEADERBOARD_PRIZE,
+    claimLeaderboardPrizeArgs.encode({
+      dungeonId: params.dungeonId,
+      weekNumber: params.weekNumber,
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

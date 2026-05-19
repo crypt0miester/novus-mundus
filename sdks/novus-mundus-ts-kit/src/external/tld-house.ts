@@ -4,12 +4,12 @@
  * Utilities for working with domain names on Solana.
  */
 
-import { address } from '@solana/kit';
+import { address, getProgramDerivedAddress } from '@solana/kit';
 import type { Address } from '@solana/kit';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { SolanaRpc } from '../rpc';
 import { fetchAccount } from '../rpc';
-import { addressBytes, bytesToAddress, findProgramAddressSync } from '../crypto';
+import { addressBytes, bytesToAddress } from '../crypto';
 
 // Re-export program IDs from main program module
 export { TLD_HOUSE_PROGRAM_ID, ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
@@ -57,17 +57,17 @@ export interface TldHouseData {
   authority: Address;
   /** TLD registry pubkey */
   tldRegistryPubkey: Address;
-  /** TLD string (e.g., ".sol") */
+  /** TLD string (e.g., ".solana") */
   tld: string;
 }
 
 /** Domain info with resolved data */
 export interface DomainInfo {
-  /** Full domain name (e.g., "example.sol") */
+  /** Full domain name (e.g., "example.solana") */
   name: string;
   /** Name without TLD (e.g., "example") */
   baseName: string;
-  /** TLD (e.g., ".sol") */
+  /** TLD (e.g., ".solana") */
   tld: string;
   /** Owner of the domain */
   owner: Address;
@@ -121,17 +121,18 @@ export function computeReverseLookupHash(pubkey: Address): Uint8Array {
  * @param tldHouse - TLD House account pubkey
  * @returns [pda, bump]
  */
-export function deriveReverseLookupPda(
+export async function deriveReverseLookupPda(
   nameAccount: Address,
   tldHouse: Address
-): [Address, number] {
+): Promise<[Address, number]> {
   const hashedName = computeReverseLookupHash(nameAccount);
   const nullKey = address('11111111111111111111111111111111');
 
-  return findProgramAddressSync(
-    [hashedName, addressBytes(tldHouse), addressBytes(nullKey)],
-    ALT_NAME_SERVICE_PROGRAM_ID
-  );
+  const [addr, bump] = await getProgramDerivedAddress({
+    programAddress: ALT_NAME_SERVICE_PROGRAM_ID,
+    seeds: [hashedName, addressBytes(tldHouse), addressBytes(nullKey)],
+  });
+  return [addr, bump];
 }
 
 // Parsing Functions
@@ -145,16 +146,18 @@ export const NAME_RECORD_HEADER_SIZE = 96;
  * @param data - Account data buffer
  * @returns Parsed header or null if invalid
  */
-export function parseNameRecordHeader(data: Buffer): NameRecordHeader | null {
+export function parseNameRecordHeader(data: Uint8Array): NameRecordHeader | null {
   if (data.length < NAME_RECORD_HEADER_SIZE) {
     return null;
   }
+
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
   return {
     parentName: bytesToAddress(data.subarray(0, 32)),
     owner: bytesToAddress(data.subarray(32, 64)),
     nclass: bytesToAddress(data.subarray(64, 96)),
-    expiresAt: data.length >= 104 ? Number(data.readBigInt64LE(96)) : 0,
+    expiresAt: data.length >= 104 ? Number(view.getBigInt64(96, true)) : 0,
   };
 }
 
@@ -164,7 +167,7 @@ export function parseNameRecordHeader(data: Buffer): NameRecordHeader | null {
  * @param data - Account data buffer
  * @returns Domain name string or null if invalid
  */
-export function extractDomainName(data: Buffer): string | null {
+export function extractDomainName(data: Uint8Array): string | null {
   if (data.length <= NAME_RECORD_HEADER_SIZE) {
     return null;
   }
@@ -190,7 +193,7 @@ export function extractDomainName(data: Buffer): string | null {
  * @param data - Account data buffer
  * @returns Parsed TLD House data or null if invalid
  */
-export function parseTldHouseData(data: Buffer): TldHouseData | null {
+export function parseTldHouseData(data: Uint8Array): TldHouseData | null {
   // TLD House layout:
   // 8 bytes: discriminator
   // 32 bytes: treasury_manager
@@ -208,7 +211,8 @@ export function parseTldHouseData(data: Buffer): TldHouseData | null {
   const authority = bytesToAddress(data.subarray(40, 72));
   const tldRegistryPubkey = bytesToAddress(data.subarray(72, 104));
 
-  const tldLength = data.readUInt32LE(104);
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const tldLength = view.getUint32(104, true);
   if (data.length < 108 + tldLength) {
     return null;
   }
@@ -257,7 +261,7 @@ export function isNameExpired(header: NameRecordHeader, currentTimestamp: number
  * Fetch domain info by name.
  *
  * @param rpc - Solana RPC client
- * @param domainName - Full domain name (e.g., "example.sol")
+ * @param domainName - Full domain name (e.g., "example.solana")
  * @returns Domain info or null if not found
  */
 export async function fetchDomainInfo(
@@ -275,7 +279,7 @@ export async function fetchDomainInfo(
   const tld = '.' + tldPart;
 
   // Derive TLD House PDA
-  const [tldHouse] = deriveTldHousePda(tld);
+  const [tldHouse] = await deriveTldHousePda(tld);
 
   // Fetch TLD House to get TLD registry
   const tldHouseInfo = await fetchAccount(rpc, tldHouse);
@@ -283,13 +287,13 @@ export async function fetchDomainInfo(
     return null;
   }
 
-  const tldHouseData = parseTldHouseData(Buffer.from(tldHouseInfo.data));
+  const tldHouseData = parseTldHouseData(tldHouseInfo.data);
   if (!tldHouseData) {
     return null;
   }
 
   // Derive name account PDA
-  const [nameAccount] = deriveNameAccountPda(baseName, tldHouseData.tldRegistryPubkey);
+  const [nameAccount] = await deriveNameAccountPda(baseName, tldHouseData.tldRegistryPubkey);
 
   // Fetch name account
   const nameAccountInfo = await fetchAccount(rpc, nameAccount);
@@ -297,7 +301,7 @@ export async function fetchDomainInfo(
     return null;
   }
 
-  const header = parseNameRecordHeader(Buffer.from(nameAccountInfo.data));
+  const header = parseNameRecordHeader(nameAccountInfo.data);
   if (!header) {
     return null;
   }
@@ -320,7 +324,7 @@ export async function fetchDomainInfo(
  *
  * @param rpc - Solana RPC client
  * @param owner - Owner's wallet pubkey
- * @param tld - TLD to check (e.g., ".sol")
+ * @param tld - TLD to check (e.g., ".solana")
  * @returns Domain name or null if not set
  */
 export async function fetchMainDomain(
@@ -328,8 +332,8 @@ export async function fetchMainDomain(
   owner: Address,
   tld: string
 ): Promise<string | null> {
-  const [tldHouse] = deriveTldHousePda(tld);
-  const [mainDomainPda] = deriveMainDomainPda(owner);
+  const [tldHouse] = await deriveTldHousePda(tld);
+  const [mainDomainPda] = await deriveMainDomainPda(owner);
 
   const accountInfo = await fetchAccount(rpc, mainDomainPda);
   if (!accountInfo || !accountInfo.data) {
@@ -338,7 +342,7 @@ export async function fetchMainDomain(
 
   // Main domain account contains the name account pubkey
   // Then we need to reverse lookup to get the name
-  const data = Buffer.from(accountInfo.data);
+  const data = accountInfo.data;
   if (data.length < 40) {
     // 8 (discriminator) + 32 (name account)
     return null;
@@ -347,14 +351,14 @@ export async function fetchMainDomain(
   const nameAccountPubkey = bytesToAddress(data.subarray(8, 40));
 
   // Derive reverse lookup
-  const [reversePda] = deriveReverseLookupPda(nameAccountPubkey, tldHouse);
+  const [reversePda] = await deriveReverseLookupPda(nameAccountPubkey, tldHouse);
 
   const reverseInfo = await fetchAccount(rpc, reversePda);
   if (!reverseInfo || !reverseInfo.data) {
     return null;
   }
 
-  const domainName = extractDomainName(Buffer.from(reverseInfo.data));
+  const domainName = extractDomainName(reverseInfo.data);
   if (!domainName) {
     return null;
   }
@@ -366,7 +370,7 @@ export async function fetchMainDomain(
  * Resolve a domain name to owner pubkey.
  *
  * @param rpc - Solana RPC client
- * @param domainName - Full domain name (e.g., "example.sol")
+ * @param domainName - Full domain name (e.g., "example.solana")
  * @returns Owner pubkey or null if not found
  */
 export async function resolveDomain(
@@ -385,7 +389,7 @@ export async function resolveDomain(
  *
  * @param rpc - Solana RPC client
  * @param owner - Owner's wallet pubkey
- * @param tld - TLD to check (e.g., ".sol")
+ * @param tld - TLD to check (e.g., ".solana")
  * @returns Domain name or null if not found
  */
 export async function reverseLookup(

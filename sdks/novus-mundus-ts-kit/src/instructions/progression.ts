@@ -38,10 +38,10 @@ export interface ClaimDailyRewardAccounts {
  *
  * 24-hour cooldown between claims.
  */
-export function createClaimDailyRewardInstruction(
+export async function createClaimDailyRewardInstruction(
   accounts: ClaimDailyRewardAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   // Rust account order:
   // 0. player (writable)

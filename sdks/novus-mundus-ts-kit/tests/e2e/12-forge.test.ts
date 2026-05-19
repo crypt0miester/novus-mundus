@@ -10,7 +10,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { address, generateKeyPairSigner, type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 import {
   createStartCraftInstruction,
@@ -73,12 +72,12 @@ describe('Forge System', () => {
 
     // Initialize the CraftedEquipmentAccount PDA + buy materials in one tx
     const tx = [
-      createInitializeForgeInstruction({
+      await createInitializeForgeInstruction({
         owner: player.publicKey,
         gameEngine: ctx.gameEngine,
       }),
       // Buy common materials (100 per purchase × 2 = 200, need 50 per Refined craft)
-      createPurchaseItemInstruction(
+      await createPurchaseItemInstruction(
         {
           buyer: player.publicKey,
           gameEngine: ctx.gameEngine,
@@ -104,7 +103,7 @@ describe('Forge System', () => {
       const equipmentType = 0;
       const qualityTier = 1; // Uncommon (Common is not craftable)
 
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType, qualityTier }
       );
@@ -123,7 +122,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -132,7 +131,7 @@ describe('Forge System', () => {
       );
 
       // Try second craft
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 1, qualityTier: 1 }
       );
@@ -147,7 +146,7 @@ describe('Forge System', () => {
     it('should reject invalid equipment type', async () => {
       const player = await createForgeReadyPlayer();
 
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 255, qualityTier: 1 } // Invalid
       );
@@ -170,7 +169,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -194,7 +193,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -203,7 +202,7 @@ describe('Forge System', () => {
       );
 
       // Strike immediately — window opens after 60s for Refined tier
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -219,7 +218,7 @@ describe('Forge System', () => {
     it('should reject strike when not crafting', async () => {
       const player = await createForgeReadyPlayer();
 
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -238,7 +237,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -247,7 +246,7 @@ describe('Forge System', () => {
       );
 
       // Strike multiple times
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -271,7 +270,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -280,7 +279,7 @@ describe('Forge System', () => {
       );
 
       // Strike immediately — should fail with StrikeTooEarly since window opens after 60s
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -307,7 +306,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -316,7 +315,7 @@ describe('Forge System', () => {
       );
 
       // Abandon
-      const abandonIx = createAbandonCraftInstruction({
+      const abandonIx = await createAbandonCraftInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -331,7 +330,7 @@ describe('Forge System', () => {
     it('should reject abandon when not crafting', async () => {
       const player = await createForgeReadyPlayer();
 
-      const abandonIx = createAbandonCraftInstruction({
+      const abandonIx = await createAbandonCraftInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -353,7 +352,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -365,7 +364,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createAbandonCraftInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })
+          await createAbandonCraftInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })
         ],
         [player.keypair]
       );
@@ -383,7 +382,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Try to equip without having crafted any item first
-      const equipIx = createEquipInstruction(
+      const equipIx = await createEquipInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 0, qualityTier: 1 }
       );
@@ -400,7 +399,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Can't equip equipment you haven't crafted
-      const equipIx = createEquipInstruction(
+      const equipIx = await createEquipInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 0, qualityTier: 3 } // Legendary item we don't have
       );
@@ -419,7 +418,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -428,7 +427,7 @@ describe('Forge System', () => {
       );
 
       // Try to equip while crafting — should fail
-      const equipIx = createEquipInstruction(
+      const equipIx = await createEquipInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 0, qualityTier: 1 }
       );
@@ -449,7 +448,7 @@ describe('Forge System', () => {
 
       // Superior tier (2) requires 100 common + 25 uncommon materials.
       // Player only has common materials, so this should fail (InsufficientMaterials).
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 0, qualityTier: 2 } // Superior needs uncommon materials
       );
@@ -465,7 +464,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Some recipes require minimum player level
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 5, qualityTier: 1 } // Advanced equipment type
       );
@@ -481,7 +480,7 @@ describe('Forge System', () => {
       const player = await createForgeReadyPlayer();
 
       // Recipe determines output type
-      const ix = createStartCraftInstruction(
+      const ix = await createStartCraftInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { equipmentType: 0, qualityTier: 1 } // Sword
       );
@@ -504,7 +503,7 @@ describe('Forge System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createStartCraftInstruction(
+          await createStartCraftInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { equipmentType: 0, qualityTier: 1 }
           )
@@ -517,7 +516,7 @@ describe('Forge System', () => {
       expect(account).not.toBeNull();
 
       // Strike fails because window hasn't opened (60s for Refined)
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });

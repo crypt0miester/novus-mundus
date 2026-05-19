@@ -14,7 +14,6 @@ import { address, generateKeyPairSigner, type Address } from '@solana/kit';
 
 /** All-zeros pubkey (web3.js `PublicKey.default` replacement). */
 const DEFAULT_PUBKEY: Address = address('11111111111111111111111111111111');
-import BN from 'bn.js';
 
 import {
   createMintHeroInstruction,
@@ -76,7 +75,7 @@ async function mintHero(
 ): Promise<{ heroMint: Address; templateId: number }> {
   const heroMintKeypair = await generateKeyPairSigner();
 
-  const ix = createMintHeroInstruction(
+  const ix = await createMintHeroInstruction(
     {
       gameEngine: ctx.gameEngine,
       minter: player.publicKey,
@@ -118,7 +117,7 @@ async function createHeroReadyPlayer(
   });
 
   // 1b. Buy second plot + build Citadel (for rally creation → EXT_RALLY)
-  const buyPlotIx = createBuyPlotInstruction({
+  const buyPlotIx = await createBuyPlotInstruction({
     owner: player.publicKey,
     gameEngine: ctx.gameEngine,
   });
@@ -127,7 +126,7 @@ async function createHeroReadyPlayer(
 
   // 2. Create team → unlocks EXT_TEAM, sets player.team
   const teamId = Date.now() % 1000000 + heroReadyCounter;
-  const teamIx = createTeamCreateInstruction(
+  const teamIx = await createTeamCreateInstruction(
     { owner: player.publicKey, gameEngine: ctx.gameEngine, teamId },
     { name: `HTeam${teamId}` }
   );
@@ -141,7 +140,7 @@ async function createHeroReadyPlayer(
   const rallyId = Date.now() % 1000000 + heroReadyCounter + 500000;
   const target = (await generateKeyPairSigner()).address; // Dummy target
   const rallyCityId = player.startingCityId;
-  const rallyIx = createRallyCreateInstruction(
+  const rallyIx = await createRallyCreateInstruction(
     {
       owner: player.publicKey,
       gameEngine: ctx.gameEngine,
@@ -192,7 +191,7 @@ describe('Hero System', () => {
       const player = await factory.createPlayer({ initialize: true });
       const heroMintKeypair = (await generateKeyPairSigner());
 
-      const ix = createMintHeroInstruction(
+      const ix = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -235,7 +234,7 @@ describe('Hero System', () => {
       expect(Object.keys(attrs).length).toBeGreaterThanOrEqual(9); // 5 identity + 4 buffs
 
       // Also verify the HeroTemplate account
-      const [heroTemplatePda] = deriveHeroTemplatePda(1);
+      const [heroTemplatePda] = await deriveHeroTemplatePda(1);
       const templateInfo = await fetchAccount(ctx.svm,heroTemplatePda);
       expect(templateInfo).not.toBeNull();
       const heroTemplate = deserializeHeroTemplate(templateInfo!.data);
@@ -247,7 +246,7 @@ describe('Hero System', () => {
       const heroMintKeypair = (await generateKeyPairSigner());
 
       // Expensive hero template
-      const ix = createMintHeroInstruction(
+      const ix = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -269,7 +268,7 @@ describe('Hero System', () => {
       const player = await factory.createPlayer({ initialize: true });
       const heroMintKeypair = (await generateKeyPairSigner());
 
-      const ix = createMintHeroInstruction(
+      const ix = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -291,7 +290,7 @@ describe('Hero System', () => {
 
       // First mint should succeed
       const heroMint1 = (await generateKeyPairSigner());
-      const ix1 = createMintHeroInstruction(
+      const ix1 = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -303,14 +302,14 @@ describe('Hero System', () => {
       await sendInstructions(ctx.svm, [ix1], [player.keypair, heroMint1]);
 
       // Verify receipt PDA exists
-      const [receiptPda] = deriveHeroMintReceiptPda(player.playerPda, 1);
+      const [receiptPda] = await deriveHeroMintReceiptPda(player.playerPda, 1);
       const receiptInfo = await fetchAccount(ctx.svm,receiptPda);
       expect(receiptInfo).not.toBeNull();
       expect(receiptInfo!.data.length).toBe(0); // 0-byte receipt
 
       // Second mint of same template should fail
       const heroMint2 = (await generateKeyPairSigner());
-      const ix2 = createMintHeroInstruction(
+      const ix2 = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -332,7 +331,7 @@ describe('Hero System', () => {
       // Mint template 1
       const heroMint1 = (await generateKeyPairSigner());
       await sendInstructions(ctx.svm,
-        [createMintHeroInstruction(
+        [await createMintHeroInstruction(
           { gameEngine: ctx.gameEngine, minter: player.publicKey, heroMint: heroMint1.address, treasury: ctx.treasury.address },
           { templateId: 1 }
         )],
@@ -342,7 +341,7 @@ describe('Hero System', () => {
       // Mint template 2 (different template, should succeed)
       const heroMint2 = (await generateKeyPairSigner());
       await sendInstructions(ctx.svm,
-        [createMintHeroInstruction(
+        [await createMintHeroInstruction(
           { gameEngine: ctx.gameEngine, minter: player.publicKey, heroMint: heroMint2.address, treasury: ctx.treasury.address },
           { templateId: 2 }
         )],
@@ -360,11 +359,11 @@ describe('Hero System', () => {
 
       // Mint a hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero first (this unlocks EXT_HEROES)
-      const lockIx = createLockHeroInstruction(
+      const lockIx = await createLockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -377,7 +376,7 @@ describe('Hero System', () => {
       await sendInstructions(ctx.svm, [lockIx], [player.keypair]);
 
       // Now unlock to get hero back in wallet for level-up test
-      const unlockIx = createUnlockHeroInstruction(
+      const unlockIx = await createUnlockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -393,7 +392,7 @@ describe('Hero System', () => {
       await factory.buyFragments(player, 1); // 100 fragments
 
       // Level up the hero (hero in wallet, not locked)
-      const levelUpIx = createLevelUpHeroInstruction({
+      const levelUpIx = await createLevelUpHeroInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         heroMint,
@@ -409,19 +408,19 @@ describe('Hero System', () => {
 
       // Mint a hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock to unlock EXT_HEROES
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
         [player.keypair]
       );
       await sendInstructions(ctx.svm,
-        [createUnlockHeroInstruction(
+        [await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -431,7 +430,7 @@ describe('Hero System', () => {
       // Try many level ups - should eventually fail due to fragment cost
       let failed = false;
       for (let i = 0; i < 20; i++) {
-        const levelUpIx = createLevelUpHeroInstruction({
+        const levelUpIx = await createLevelUpHeroInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           heroMint,
@@ -453,19 +452,19 @@ describe('Hero System', () => {
 
       // Mint a hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
         [player.keypair]
       );
       await sendInstructions(ctx.svm,
-        [createUnlockHeroInstruction(
+        [await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -475,7 +474,7 @@ describe('Hero System', () => {
       // Level up multiple times until we hit the cap
       let reachedMax = false;
       for (let i = 0; i < 50; i++) {
-        const levelUpIx = createLevelUpHeroInstruction({
+        const levelUpIx = await createLevelUpHeroInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           heroMint,
@@ -497,19 +496,19 @@ describe('Hero System', () => {
 
       // Mint a hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
         [player.keypair]
       );
       await sendInstructions(ctx.svm,
-        [createUnlockHeroInstruction(
+        [await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -524,7 +523,7 @@ describe('Hero System', () => {
       await factory.buyFragments(player, 1);
 
       // Level up hero
-      const levelUpIx = createLevelUpHeroInstruction({
+      const levelUpIx = await createLevelUpHeroInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         heroMint,
@@ -546,11 +545,11 @@ describe('Hero System', () => {
 
       // Mint hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero
-      const lockIx = createLockHeroInstruction(
+      const lockIx = await createLockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -569,14 +568,14 @@ describe('Hero System', () => {
 
       // Mint hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -591,7 +590,7 @@ describe('Hero System', () => {
       );
 
       // Unlock hero
-      const unlockIx = createUnlockHeroInstruction(
+      const unlockIx = await createUnlockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -610,13 +609,13 @@ describe('Hero System', () => {
 
       // Mint and lock hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -631,7 +630,7 @@ describe('Hero System', () => {
       );
 
       // Unlock immediately (no expedition active)
-      const unlockIx = createUnlockHeroInstruction(
+      const unlockIx = await createUnlockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -651,13 +650,13 @@ describe('Hero System', () => {
       // Mint two heroes (different templates — 1-per-player-per-template limit)
       const hero1 = await mintHero(ctx, player, 1);
       const hero2 = await mintHero(ctx, player, 2);
-      const [heroTemplate1] = deriveHeroTemplatePda(hero1.templateId);
-      const [heroTemplate2] = deriveHeroTemplatePda(hero2.templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate1] = await deriveHeroTemplatePda(hero1.templateId);
+      const [heroTemplate2] = await deriveHeroTemplatePda(hero2.templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero1 to slot 0
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: hero1.heroMint, heroTemplate: heroTemplate1, estateAccount },
           { slotIndex: 0 }
         )],
@@ -666,7 +665,7 @@ describe('Hero System', () => {
 
       // Try to lock hero2 to slot 0 (already occupied) - should fail
       await expectTransactionToFail(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: hero2.heroMint, heroTemplate: heroTemplate2, estateAccount },
           { slotIndex: 0 }
         )],
@@ -683,14 +682,14 @@ describe('Hero System', () => {
 
       // Mint hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero first (required before assignment)
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -705,7 +704,7 @@ describe('Hero System', () => {
       );
 
       // Assign for defense (uses slot index, not hero mint)
-      const assignIx = createAssignDefensiveHeroInstruction(
+      const assignIx = await createAssignDefensiveHeroInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { slotIndex: 0 }
       );
@@ -722,14 +721,14 @@ describe('Hero System', () => {
 
       // Mint and assign hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -747,7 +746,7 @@ describe('Hero System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createAssignDefensiveHeroInstruction(
+          await createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { slotIndex: 0 }
           )
@@ -756,7 +755,7 @@ describe('Hero System', () => {
       );
 
       // Unassign by unlocking the hero (removes it from active_heroes, resets defensive slot)
-      const unlockIx = createUnlockHeroInstruction(
+      const unlockIx = await createUnlockHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -774,7 +773,7 @@ describe('Hero System', () => {
       const player = await createHeroReadyPlayer(ctx, factory);
 
       // Try to assign slot 2 which has no hero locked
-      const assignIx = createAssignDefensiveHeroInstruction(
+      const assignIx = await createAssignDefensiveHeroInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { slotIndex: 2 } // Slot 2 is empty
       );
@@ -810,13 +809,13 @@ describe('Hero System', () => {
 
       // Mint and lock hero (locked heroes provide combat bonuses)
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -834,7 +833,7 @@ describe('Hero System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createAssignDefensiveHeroInstruction(
+          await createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { slotIndex: 0 }
           )
@@ -867,14 +866,14 @@ describe('Hero System', () => {
 
       // Mint a hero first
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero (required before equipping)
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -898,13 +897,13 @@ describe('Hero System', () => {
 
       // Mint and lock hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -922,7 +921,7 @@ describe('Hero System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createUnlockHeroInstruction(
+          await createUnlockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -945,14 +944,14 @@ describe('Hero System', () => {
 
       // Mint hero but don't lock
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Try to assign slot 0 without locking - should fail (slot is empty)
       await expectTransactionToFail(
         ctx.svm,
         [
-          createAssignDefensiveHeroInstruction(
+          await createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { slotIndex: 0 }
           )
@@ -967,7 +966,7 @@ describe('Hero System', () => {
   describe('Hero Collection', () => {
     it('should reject duplicate collection creation', async () => {
       // Collection already created in setup, so this should fail
-      const ix = createCreateCollectionInstruction({
+      const ix = await createCreateCollectionInstruction({
         gameEngine: ctx.gameEngine,
         daoAuthority: ctx.daoAuthority.address,
       });
@@ -982,7 +981,7 @@ describe('Hero System', () => {
     it('should reject collection creation by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createCreateCollectionInstruction({
+      const ix = await createCreateCollectionInstruction({
         gameEngine: ctx.gameEngine,
         daoAuthority: player.publicKey,
       });
@@ -1003,13 +1002,13 @@ describe('Hero System', () => {
 
       // Mint and lock hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -1027,7 +1026,7 @@ describe('Hero System', () => {
       await sendInstructions(
         ctx.svm,
         [
-          createAssignDefensiveHeroInstruction(
+          await createAssignDefensiveHeroInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { slotIndex: 0 }
           )
@@ -1057,19 +1056,19 @@ describe('Hero System', () => {
       const player = await createHeroReadyPlayer(ctx, factory);
 
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock/unlock to get EXT_HEROES
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
         [player.keypair]
       );
       await sendInstructions(ctx.svm,
-        [createUnlockHeroInstruction(
+        [await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -1080,7 +1079,7 @@ describe('Hero System', () => {
       await factory.buyFragments(player, 1);
 
       // Try leveling up (always levels up by 1)
-      const levelUpIx = createLevelUpHeroInstruction({
+      const levelUpIx = await createLevelUpHeroInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         heroMint,
@@ -1108,14 +1107,14 @@ describe('Hero System', () => {
       const player = await createHeroReadyPlayer(ctx, factory);
 
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       // Lock hero to see location bonus applied
       await sendInstructions(
         ctx.svm,
         [
-          createLockHeroInstruction(
+          await createLockHeroInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -1149,7 +1148,7 @@ describe('Hero System', () => {
       const lockedNoviBefore = playerBefore!.lockedNovi;
 
       // Burn the hero
-      const burnIx = createBurnHeroInstruction(
+      const burnIx = await createBurnHeroInstruction(
         {
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1170,7 +1169,7 @@ describe('Hero System', () => {
       }
 
       // Verify receipt PDA was closed (allowing re-mint)
-      const [receiptPda] = deriveHeroMintReceiptPda(player.playerPda, templateId);
+      const [receiptPda] = await deriveHeroMintReceiptPda(player.playerPda, templateId);
       const receiptInfo = (await fetchAccount(ctx.svm,receiptPda));
       expect(receiptInfo === null || Number(receiptInfo.lamports) === 0).toBe(true);
     });
@@ -1180,11 +1179,11 @@ describe('Hero System', () => {
 
       // Mint and lock a hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -1192,7 +1191,7 @@ describe('Hero System', () => {
       );
 
       // Try to burn locked hero - should fail
-      const burnIx = createBurnHeroInstruction(
+      const burnIx = await createBurnHeroInstruction(
         {
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1215,7 +1214,7 @@ describe('Hero System', () => {
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
 
       // Burn it
-      const burnIx = createBurnHeroInstruction(
+      const burnIx = await createBurnHeroInstruction(
         {
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1227,7 +1226,7 @@ describe('Hero System', () => {
 
       // Re-mint same template - should succeed (receipt was closed)
       const heroMint2 = (await generateKeyPairSigner());
-      const mintIx = createMintHeroInstruction(
+      const mintIx = await createMintHeroInstruction(
         {
           gameEngine: ctx.gameEngine,
           minter: player.publicKey,
@@ -1247,7 +1246,7 @@ describe('Hero System', () => {
       const { heroMint, templateId } = await mintHero(ctx, player1, 1);
 
       // Player2 tries to burn player1's hero - should fail
-      const burnIx = createBurnHeroInstruction(
+      const burnIx = await createBurnHeroInstruction(
         {
           owner: player2.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1269,14 +1268,14 @@ describe('Hero System', () => {
   describe('Supply Cap Update', () => {
     it('should increase supply cap (DAO)', async () => {
       const templateId = 1;
-      const [templatePda] = deriveHeroTemplatePda(templateId);
+      const [templatePda] = await deriveHeroTemplatePda(templateId);
 
       // Read current supply cap
       const templateBefore = await fetchAccount(ctx.svm,templatePda);
       expect(templateBefore).not.toBeNull();
 
       // Update supply cap (increase)
-      const ix = createUpdateSupplyCapInstruction(
+      const ix = await createUpdateSupplyCapInstruction(
         {
           daoAuthority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -1288,7 +1287,7 @@ describe('Hero System', () => {
     });
 
     it('should reject supply cap decrease', async () => {
-      const ix = createUpdateSupplyCapInstruction(
+      const ix = await createUpdateSupplyCapInstruction(
         {
           daoAuthority: ctx.daoAuthority.address,
           gameEngine: ctx.gameEngine,
@@ -1306,7 +1305,7 @@ describe('Hero System', () => {
     it('should reject supply cap update by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createUpdateSupplyCapInstruction(
+      const ix = await createUpdateSupplyCapInstruction(
         {
           daoAuthority: player.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1341,11 +1340,11 @@ describe('Hero System', () => {
 
       // Mint and lock hero to slot 0
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],
@@ -1354,7 +1353,7 @@ describe('Hero System', () => {
 
       // Try to unlock from slot 1 (hero is in slot 0)
       await expectTransactionToFail(ctx.svm,
-        [createUnlockHeroInstruction(
+        [await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 1 }
         )],
@@ -1367,11 +1366,11 @@ describe('Hero System', () => {
 
       // Mint and lock hero
       const { heroMint, templateId } = await mintHero(ctx, player, 1);
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const [estateAccount] = deriveEstatePda(player.playerPda);
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
 
       await sendInstructions(ctx.svm,
-        [createLockHeroInstruction(
+        [await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 }
         )],

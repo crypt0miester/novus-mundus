@@ -9,7 +9,8 @@
 import type { Address, Instruction } from '@solana/kit';
 import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8 } from '../utils/codec';
 import {
   derivePlayerPda,
   deriveEstatePda,
@@ -35,6 +36,9 @@ export interface StartMeditationParams {
   heroSlot: number;
 }
 
+/** StartMeditation args: hero_slot (u8). */
+const startMeditationArgs = packed<{ heroSlot: number }>([['heroSlot', u8]], 1);
+
 /** ~10,000 CU */
 /**
  * Start hero meditation at the Sanctuary.
@@ -42,13 +46,13 @@ export interface StartMeditationParams {
  * Meditation is a slow but free way to level up heroes.
  * Requires Sanctuary building and hero must be locked.
  */
-export function createStartMeditationInstruction(
+export async function createStartMeditationInstruction(
   accounts: StartMeditationAccounts,
   params: StartMeditationParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -58,10 +62,10 @@ export function createStartMeditationInstruction(
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.heroSlot);
-
-  const data = createInstructionData(DISCRIMINATORS.SANCTUARY_START_MEDITATION, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.SANCTUARY_START_MEDITATION,
+    startMeditationArgs.encode({ heroSlot: params.heroSlot })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -90,13 +94,13 @@ export interface ClaimMeditationAccounts {
  * - Phase 1 (Meditation): Free but extremely slow leveling up to meditation cap
  * - Phase 2 (Fragments): Must use fragments (level_up.rs) beyond the cap
  */
-export function createClaimMeditationInstruction(
+export async function createClaimMeditationInstruction(
   accounts: ClaimMeditationAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -138,6 +142,9 @@ export interface SpeedupMeditationParams {
   speedupTier: 1 | 2;
 }
 
+/** SpeedupMeditation args: speedup_tier (u8). */
+const speedupMeditationArgs = packed<{ speedupTier: number }>([['speedupTier', u8]], 1);
+
 /** ~5,000 CU */
 /**
  * Speed up an active meditation by spending gems.
@@ -148,21 +155,21 @@ export interface SpeedupMeditationParams {
  * - Tier 1: adds 1 hour of meditation time (3,000 gems)
  * - Tier 2: adds 6 hours of meditation time (18,000 gems)
  */
-export function createSpeedupMeditationInstruction(
+export async function createSpeedupMeditationInstruction(
   accounts: SpeedupMeditationAccounts,
   params: SpeedupMeditationParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.speedupTier);
-
-  const data = createInstructionData(DISCRIMINATORS.SANCTUARY_SPEEDUP_MEDITATION, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.SANCTUARY_SPEEDUP_MEDITATION,
+    speedupMeditationArgs.encode({ speedupTier: params.speedupTier })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

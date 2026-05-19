@@ -5,11 +5,6 @@
  */
 
 import {
-  PHI,
-  GOLDEN_ROOT,
-  PHI_SQUARED,
-  PHI_INVERSE,
-  PHI_SQUARED_INVERSE,
   BPS_100,
   applyBps,
   applyBpsBonus,

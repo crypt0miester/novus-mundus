@@ -15,7 +15,6 @@ import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bu
 
 // Transfer Cash setup needs many transactions (vault upgrades, team, subscription)
 setDefaultTimeout(60_000);
-import BN from 'bn.js';
 
 import {
   createHireUnitsInstruction,
@@ -91,8 +90,8 @@ describe('Economy', () => {
       const before = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(before).not.toBeNull();
 
-      const hireAmount = new BN(100);
-      const ix = createHireUnitsInstruction(
+      const hireAmount = 100n;
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { unitType: 0, noviAmount: hireAmount } // 0 = defensive unit 1
       );
@@ -113,9 +112,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 1, noviAmount: new BN(100) }
+        { unitType: 1, noviAmount: 100n }
       );
 
       const tx = [ix];
@@ -129,9 +128,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 2, noviAmount: new BN(200) }
+        { unitType: 2, noviAmount: 200n }
       );
 
       const tx = [ix];
@@ -145,9 +144,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 3, noviAmount: new BN(100) }
+        { unitType: 3, noviAmount: 100n }
       );
 
       const tx = [ix];
@@ -161,9 +160,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 4, noviAmount: new BN(200) }
+        { unitType: 4, noviAmount: 200n }
       );
 
       const tx = [ix];
@@ -177,9 +176,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Camp] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 5, noviAmount: new BN(500) }
+        { unitType: 5, noviAmount: 500n }
       );
 
       const tx = [ix];
@@ -192,9 +191,9 @@ describe('Economy', () => {
     it('should reject hiring operatives without Camp', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 3, noviAmount: new BN(100) }
+        { unitType: 3, noviAmount: 100n }
       );
 
       const tx = [ix];
@@ -205,9 +204,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 0, noviAmount: new BN(100) }
+        { unitType: 0, noviAmount: 100n }
       );
 
       const tx = [ix];
@@ -224,9 +223,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
 
       // Try to hire a huge amount of units
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 0, noviAmount: new BN(1_000_000_000) }
+        { unitType: 0, noviAmount: 1_000_000_000n }
       );
 
       const tx = [ix];
@@ -236,9 +235,9 @@ describe('Economy', () => {
     it('should reject invalid unit type', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
 
-      const ix = createHireUnitsInstruction(
+      const ix = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 99 as any, noviAmount: new BN(10) } // Invalid unit type - cast to bypass TypeScript
+        { unitType: 99 as any, noviAmount: 10n } // Invalid unit type - cast to bypass TypeScript
       );
 
       const tx = [ix];
@@ -253,9 +252,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseEquipmentInstruction(
+      const ix = await createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { equipmentType: 0, quantity: new BN(10), payWithCash: false }
+        { equipmentType: 0, quantity: 10n, payWithCash: false }
       );
 
       const tx = [ix];
@@ -269,9 +268,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseEquipmentInstruction(
+      const ix = await createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { equipmentType: 1, quantity: new BN(10), payWithCash: false }
+        { equipmentType: 1, quantity: 10n, payWithCash: false }
       );
 
       const tx = [ix];
@@ -285,9 +284,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseEquipmentInstruction(
+      const ix = await createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { equipmentType: 2, quantity: new BN(5), payWithCash: false }
+        { equipmentType: 2, quantity: 5n, payWithCash: false }
       );
 
       const tx = [ix];
@@ -301,9 +300,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseEquipmentInstruction(
+      const ix = await createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { equipmentType: 5, quantity: new BN(15), payWithCash: false }
+        { equipmentType: 5, quantity: 15n, payWithCash: false }
       );
 
       const tx = [ix];
@@ -317,9 +316,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Market] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseEquipmentInstruction(
+      const ix = await createPurchaseEquipmentInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { equipmentType: 0, quantity: new BN(50), payWithCash: false }
+        { equipmentType: 0, quantity: 50n, payWithCash: false }
       );
 
       const tx = [ix];
@@ -340,9 +339,9 @@ describe('Economy', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
       const staminaBefore = before!.encounterStamina;
 
-      const ix = createPurchaseStaminaInstruction(
+      const ix = await createPurchaseStaminaInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(100) }
+        { amount: 100n }
       );
 
       const tx = [ix];
@@ -358,9 +357,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Barracks] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createPurchaseStaminaInstruction(
+      const ix = await createPurchaseStaminaInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(100) }
+        { amount: 100n }
       );
 
       const tx = [ix];
@@ -378,7 +377,7 @@ describe('Economy', () => {
     let sender: TestPlayer;
     let receiver: TestPlayer;
     let testTeamId: number;
-    let teamPda: ReturnType<typeof deriveTeamPda>[0];
+    let teamPda: Awaited<ReturnType<typeof deriveTeamPda>>[0];
 
     /**
      * Upgrade a building from its current level by one.
@@ -388,21 +387,21 @@ describe('Economy', () => {
       const instructions = [];
 
       // Start upgrade
-      instructions.push(createUpgradeBuildingInstruction(
+      instructions.push(await createUpgradeBuildingInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { buildingType }
       ));
 
       // 7× tier-2 speedup (each reduces remaining to 25%)
       for (let i = 0; i < 7; i++) {
-        instructions.push(createBuildingSpeedupInstruction(
+        instructions.push(await createBuildingSpeedupInstruction(
           { owner: player.publicKey, gameEngine: ctx.gameEngine },
           { buildingType, speedupTier: 2 }
         ));
       }
 
       // Complete
-      instructions.push(createCompleteBuildingInstruction(
+      instructions.push(await createCompleteBuildingInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { buildingType }
       ));
@@ -417,10 +416,10 @@ describe('Economy', () => {
 
       const updatedCaps = {
         ...engine!.caps,
-        minAccountAgeForEvents: new BN(0),
+        minAccountAgeForEvents: 0n,
       };
 
-      const configIx = createUpdateGameConfigInstruction(
+      const configIx = await createUpdateGameConfigInstruction(
         { authority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
         { capsConfig: updatedCaps }
       );
@@ -430,14 +429,14 @@ describe('Economy', () => {
 
       // Verify the update
       const engineAfter = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      expect(engineAfter!.caps.minAccountAgeForEvents.toNumber()).toBe(0);
+      expect(Number(engineAfter!.caps.minAccountAgeForEvents)).toBe(0);
 
       // 2. Create players with estate + vault (level 1)
       sender = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
       receiver = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
 
       // 3. Buy extra gems for vault upgrade speedups (4 upgrade cycles × 7 speedups)
-      const gemsIx = createPurchaseItemInstruction(
+      const gemsIx = await createPurchaseItemInstruction(
         {
           buyer: sender.publicKey,
           gameEngine: ctx.gameEngine,
@@ -456,7 +455,7 @@ describe('Economy', () => {
 
       // 5. Create team with sender as leader
       testTeamId = Date.now();
-      const createTeamIx = createTeamCreateInstruction(
+      const createTeamIx = await createTeamCreateInstruction(
         { owner: sender.publicKey, gameEngine: ctx.gameEngine, teamId: testTeamId },
         { name: 'TransferTeam' }
       );
@@ -464,8 +463,8 @@ describe('Economy', () => {
       await sendTransaction(ctx.svm, createTeamTx, [sender.keypair]);
 
       // 6. Invite receiver to team, then receiver accepts
-      [teamPda] = deriveTeamPda(ctx.gameEngine, testTeamId);
-      const inviteIx = createTeamInviteInstruction({
+      [teamPda] = await deriveTeamPda(ctx.gameEngine, testTeamId);
+      const inviteIx = await createTeamInviteInstruction({
         inviter: sender.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -476,7 +475,7 @@ describe('Economy', () => {
       const inviteTx = [inviteIx];
       await sendTransaction(ctx.svm, inviteTx, [sender.keypair]);
 
-      const acceptIx = createTeamAcceptInviteInstruction({
+      const acceptIx = await createTeamAcceptInviteInstruction({
         owner: receiver.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -488,7 +487,7 @@ describe('Economy', () => {
       await sendTransaction(ctx.svm, acceptTx, [receiver.keypair]);
 
       // 7. Sender buys Expert subscription (tier 1) via SOL payment
-      const subIx = createPurchaseSubscriptionInstruction(
+      const subIx = await createPurchaseSubscriptionInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: sender.publicKey,
@@ -509,10 +508,10 @@ describe('Economy', () => {
       const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
       const receiverBefore = await fetchPlayer(ctx.svm, receiver.playerPda);
 
-      const [receiverPlayerPda] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
+      const [receiverPlayerPda] = await derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
-      const transferAmount = new BN(100);
-      const ix = createTransferCashInstruction(
+      const transferAmount = 100n;
+      const ix = await createTransferCashInstruction(
         {
           sender: sender.publicKey,
           gameEngine: ctx.gameEngine,
@@ -538,11 +537,11 @@ describe('Economy', () => {
 
     it('should reject transfer with insufficient cash', async () => {
       const senderBefore = await fetchPlayer(ctx.svm, sender.playerPda);
-      const [receiverPlayerPda] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
+      const [receiverPlayerPda] = await derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
       // Try to transfer more than available
-      const transferAmount = senderBefore!.cashOnHand.add(new BN(1_000_000));
-      const ix = createTransferCashInstruction(
+      const transferAmount = (senderBefore!.cashOnHand + 1_000_000n);
+      const ix = await createTransferCashInstruction(
         {
           sender: sender.publicKey,
           gameEngine: ctx.gameEngine,
@@ -558,9 +557,9 @@ describe('Economy', () => {
     });
 
     it('should reject transfer to self', async () => {
-      const [senderPlayerPda] = derivePlayerPda(ctx.gameEngine, sender.publicKey);
+      const [senderPlayerPda] = await derivePlayerPda(ctx.gameEngine, sender.publicKey);
 
-      const ix = createTransferCashInstruction(
+      const ix = await createTransferCashInstruction(
         {
           sender: sender.publicKey,
           gameEngine: ctx.gameEngine,
@@ -568,7 +567,7 @@ describe('Economy', () => {
           team: teamPda,
           teamId: testTeamId,
         },
-        { amount: new BN(100) }
+        { amount: 100n }
       );
 
       const tx = [ix];
@@ -576,9 +575,9 @@ describe('Economy', () => {
     });
 
     it('should track daily transfer count', async () => {
-      const [receiverPlayerPda] = derivePlayerPda(ctx.gameEngine, receiver.publicKey);
+      const [receiverPlayerPda] = await derivePlayerPda(ctx.gameEngine, receiver.publicKey);
 
-      const ix = createTransferCashInstruction(
+      const ix = await createTransferCashInstruction(
         {
           sender: sender.publicKey,
           gameEngine: ctx.gameEngine,
@@ -586,7 +585,7 @@ describe('Economy', () => {
           team: teamPda,
           teamId: testTeamId,
         },
-        { amount: new BN(10) }
+        { amount: 10n }
       );
 
       const tx = [ix];
@@ -604,8 +603,8 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const depositAmount = new BN(50);
-      const ix = createVaultTransferInstruction(
+      const depositAmount = 50n;
+      const ix = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { amount: depositAmount, toVault: true }
       );
@@ -626,9 +625,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
 
       // First deposit to vault
-      const depositIx = createVaultTransferInstruction(
+      const depositIx = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(100), toVault: true }
+        { amount: 100n, toVault: true }
       );
       const depositTx = [depositIx];
       await sendTransaction(ctx.svm, depositTx, [player.keypair]);
@@ -636,8 +635,8 @@ describe('Economy', () => {
       // Now withdraw
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const withdrawAmount = new BN(50);
-      const withdrawIx = createVaultTransferInstruction(
+      const withdrawAmount = 50n;
+      const withdrawIx = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { amount: withdrawAmount, toVault: false }
       );
@@ -659,8 +658,8 @@ describe('Economy', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Request more than available — program clamps to min(amount, space, cashOnHand)
-      const depositAmount = before!.cashOnHand.add(new BN(1_000_001));
-      const ix = createVaultTransferInstruction(
+      const depositAmount = (before!.cashOnHand + 1_000_001n);
+      const ix = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { amount: depositAmount, toVault: true }
       );
@@ -670,16 +669,16 @@ describe('Economy', () => {
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Vault balance should not exceed what was on hand before
-      assertBnGreaterThanOrEqual(before!.cashOnHand, after!.cashInVault.sub(before!.cashInVault));
+      assertBnGreaterThanOrEqual(before!.cashOnHand, (after!.cashInVault - before!.cashInVault));
     });
 
     it('should clamp vault withdrawal to vault balance', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Vault] });
 
       // First deposit some cash into vault
-      const depositIx = createVaultTransferInstruction(
+      const depositIx = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(100), toVault: true }
+        { amount: 100n, toVault: true }
       );
       const depositTx = [depositIx];
       await sendTransaction(ctx.svm, depositTx, [player.keypair]);
@@ -687,8 +686,8 @@ describe('Economy', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Request more than vault balance — program clamps to min(amount, cashInVault)
-      const withdrawAmount = before!.cashInVault.add(new BN(1_000_001));
-      const ix = createVaultTransferInstruction(
+      const withdrawAmount = (before!.cashInVault + 1_000_001n);
+      const ix = await createVaultTransferInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
         { amount: withdrawAmount, toVault: false }
       );
@@ -698,7 +697,7 @@ describe('Economy', () => {
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       // Vault should be drained to 0 (clamped to vault balance)
-      assertBnGreaterThanOrEqual(before!.cashInVault, before!.cashInVault.sub(after!.cashInVault));
+      assertBnGreaterThanOrEqual(before!.cashInVault, (before!.cashInVault - after!.cashInVault));
     });
   });
 
@@ -709,9 +708,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createCollectResourcesInstruction(
+      const ix = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 0 }
+        { noviAmount: 100n, collectionType: 0 }
       );
 
       const tx = [ix];
@@ -722,17 +721,17 @@ describe('Economy', () => {
 
       // Should have collected some resources (exact amount depends on buildings)
       // At minimum, timestamp should update
-      expect(after!.lastUpdatedTokensAt.toNumber()).toBeGreaterThanOrEqual(
-        before!.lastUpdatedTokensAt.toNumber()
+      expect(Number(after!.lastUpdatedTokensAt)).toBeGreaterThanOrEqual(
+        Number(before!.lastUpdatedTokensAt)
       );
     });
 
     it('should collect farming resources (requires Farm)', async () => {
       const player = await factory.createPlayer({ createEstate: true, buildings: [BuildingType.Farm] });
 
-      const ix = createCollectResourcesInstruction(
+      const ix = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 3 } // 3 = Farming
+        { noviAmount: 100n, collectionType: 3 } // 3 = Farming
       );
 
       const tx = [ix];
@@ -742,9 +741,9 @@ describe('Economy', () => {
     it('should reject farming without Farm building', async () => {
       const player = await factory.createPlayer({ createEstate: true });
 
-      const ix = createCollectResourcesInstruction(
+      const ix = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 3 } // 3 = Farming
+        { noviAmount: 100n, collectionType: 3 } // 3 = Farming
       );
 
       const tx = [ix];
@@ -756,15 +755,15 @@ describe('Economy', () => {
       await factory.completeResearch(player, 21); // Unlock mining (has_mining = true)
 
       // Hire operative units (needed for mining output calculation)
-      const hireIx = createHireUnitsInstruction(
+      const hireIx = await createHireUnitsInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { unitType: 3, noviAmount: new BN(1000) }
+        { unitType: 3, noviAmount: 1000n }
       );
       await sendTransaction(ctx.svm, [hireIx], [player.keypair]);
 
-      const ix = createCollectResourcesInstruction(
+      const ix = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 1 } // 1 = Mining
+        { noviAmount: 100n, collectionType: 1 } // 1 = Mining
       );
 
       const tx = [ix];
@@ -775,9 +774,9 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true });
 
       // First collection
-      const ix1 = createCollectResourcesInstruction(
+      const ix1 = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 0 }
+        { noviAmount: 100n, collectionType: 0 }
       );
       const tx1 = [ix1];
 
@@ -786,16 +785,16 @@ describe('Economy', () => {
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Second collection should also succeed (no cooldown)
-      const ix2 = createCollectResourcesInstruction(
+      const ix2 = await createCollectResourcesInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine },
-        { noviAmount: new BN(100), collectionType: 0 }
+        { noviAmount: 100n, collectionType: 0 }
       );
       const tx2 = [ix2];
 
       await sendTransaction(ctx.svm, tx2, [player.keypair]);
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.lastUpdatedTokensAt.toNumber()).toBeGreaterThanOrEqual(
-        before!.lastUpdatedTokensAt.toNumber()
+      expect(Number(after!.lastUpdatedTokensAt)).toBeGreaterThanOrEqual(
+        Number(before!.lastUpdatedTokensAt)
       );
     });
   });
@@ -807,7 +806,7 @@ describe('Economy', () => {
       const player = await factory.createPlayer({ createEstate: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      const ix = createUpdateLockedNoviInstruction(
+      const ix = await createUpdateLockedNoviInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine }
       );
 
@@ -817,8 +816,8 @@ describe('Economy', () => {
       const after = await fetchPlayer(ctx.svm, player.playerPda);
 
       // Token update timestamp should be updated
-      expect(after!.lastUpdatedTokensAt.toNumber()).toBeGreaterThanOrEqual(
-        before!.lastUpdatedTokensAt.toNumber()
+      expect(Number(after!.lastUpdatedTokensAt)).toBeGreaterThanOrEqual(
+        Number(before!.lastUpdatedTokensAt)
       );
     });
   });

@@ -32,8 +32,8 @@ export async function showDungeon(
     return;
   }
 
-  const [playerPda] = derivePlayerPda(client.gameEngine, wallet);
-  const [runPda] = deriveDungeonRunPda(playerPda);
+  const [playerPda] = await derivePlayerPda(await client.resolveGameEngine(), wallet);
+  const [runPda] = await deriveDungeonRunPda(playerPda);
 
   log.info(section(`Dungeon Run for ${addr(wallet)}`));
 

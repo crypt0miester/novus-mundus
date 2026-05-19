@@ -7,7 +7,6 @@ import {
   Keypair,
   Transaction,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -91,8 +90,8 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
       await ensureFunded(ctx.connection, playerKeypair.publicKey).catch(() => {});
     }
 
-    const [playerPda] = derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
-    const [estatePda] = deriveEstatePda(playerPda);
+    const [playerPda] = await derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
+    const [estatePda] = await deriveEstatePda(playerPda);
 
     // Step 1: Init user + player + research progress
     await initPlayer(ctx, playerKeypair, cityId, city.lat, city.lon, playerIndex);
@@ -176,7 +175,7 @@ async function initPlayer(
   cityLon: number,
   spawnIndex: number,
 ): Promise<void> {
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
   if (await accountExists(ctx.connection, playerPda)) {
     log.skip('initPlayer [exists]');
@@ -187,18 +186,18 @@ async function initPlayer(
   const spawnLat = cityLat + spawnIndex * 0.0001;
 
   const ixs = [
-    createInitUserInstruction({
+    await createInitUserInstruction({
       owner: keypair.publicKey,
       gameEngine: ctx.gameEngine,
     }),
-    createInitPlayerInstruction({
+    await createInitPlayerInstruction({
       owner: keypair.publicKey,
       gameEngine: ctx.gameEngine,
       startingCityId: cityId,
       cityLatitude: spawnLat,
       cityLongitude: cityLon,
     }),
-    createCreateProgressInstruction({
+    await createCreateProgressInstruction({
       owner: keypair.publicKey,
       gameEngine: ctx.gameEngine,
     }),
@@ -215,8 +214,8 @@ async function createEstateAndBuyGems(
   keypair: Keypair,
   gemPurchases: number,
 ): Promise<void> {
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
-  const [estatePda] = deriveEstatePda(playerPda);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+  const [estatePda] = await deriveEstatePda(playerPda);
 
   if (await accountExists(ctx.connection, estatePda)) {
     log.skip('estate [exists]');
@@ -229,14 +228,14 @@ async function createEstateAndBuyGems(
 
   // Batch: createEstate + first gem purchase
   const ixs = [
-    createCreateEstateInstruction(
+    await createCreateEstateInstruction(
       { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
       { cityId: 1 }
     ),
   ];
 
   if (gemPurchases > 0) {
-    ixs.push(createPurchaseItemInstruction(
+    ixs.push(await createPurchaseItemInstruction(
       {
         buyer: keypair.publicKey,
         gameEngine: ctx.gameEngine,
@@ -258,7 +257,7 @@ async function createEstateAndBuyGems(
 
 async function buyGems(ctx: CLIContext, keypair: Keypair, purchases: number): Promise<void> {
   for (let i = 0; i < purchases; i++) {
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         buyer: keypair.publicKey,
         gameEngine: ctx.gameEngine,
@@ -303,20 +302,20 @@ async function buildAndComplete(
 
   // Single tx: build + 7x speedup(tier2) + complete
   const ixs = [
-    createBuildBuildingInstruction(
+    await createBuildBuildingInstruction(
       { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
       { buildingType }
     ),
   ];
 
   for (let i = 0; i < 7; i++) {
-    ixs.push(createBuildingSpeedupInstruction(
+    ixs.push(await createBuildingSpeedupInstruction(
       { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
       { buildingType, speedupTier: 2 }
     ));
   }
 
-  ixs.push(createCompleteBuildingInstruction(
+  ixs.push(await createCompleteBuildingInstruction(
     { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
     { buildingType }
   ));
@@ -331,13 +330,13 @@ async function buildAndComplete(
     } else if (errCode === 7708) {
       // ConstructionNotComplete — split into two txs
       const buildIxs = [
-        createBuildBuildingInstruction(
+        await createBuildBuildingInstruction(
           { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
           { buildingType }
         ),
       ];
       for (let i = 0; i < 7; i++) {
-        buildIxs.push(createBuildingSpeedupInstruction(
+        buildIxs.push(await createBuildingSpeedupInstruction(
           { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
           { buildingType, speedupTier: 2 }
         ));
@@ -367,7 +366,7 @@ async function completeExistingBuilding(
   for (let round = 0; round < 8; round++) {
     // Try complete
     try {
-      const completeIx = createCompleteBuildingInstruction(
+      const completeIx = await createCompleteBuildingInstruction(
         { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
         { buildingType }
       );
@@ -379,7 +378,7 @@ async function completeExistingBuilding(
 
     // Speedup
     try {
-      const speedupIx = createBuildingSpeedupInstruction(
+      const speedupIx = await createBuildingSpeedupInstruction(
         { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
         { buildingType, speedupTier: 2 }
       );
@@ -415,20 +414,20 @@ async function fundNovi(
       const thisAmount = Math.min(MAX_PER_CALL, cap - allocated, remaining);
 
       // Mint to reserved_novi (DAO signs)
-      const mintIx = createMintForPrizeInstruction(
+      const mintIx = await createMintForPrizeInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           recipientOwner: keypair.publicKey,
         },
-        { amount: new BN(thisAmount), purpose }
+        { amount: BigInt(thisAmount), purpose }
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
       // Convert reserved -> locked (player signs)
-      const convertIx = createReservedToLockedInstruction(
+      const convertIx = await createReservedToLockedInstruction(
         { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(thisAmount) }
+        { amount: BigInt(thisAmount) }
       );
       await sendWithRetry(ctx, convertIx, [keypair]);
 
@@ -454,7 +453,7 @@ async function buyPlots(
   const plotsToBuy = plotsNeeded - 1; // the estate already ships with 1 plot
 
   for (let i = 0; i < plotsToBuy; i++) {
-    const ix = createBuyPlotInstruction({
+    const ix = await createBuyPlotInstruction({
       owner: keypair.publicKey,
       gameEngine: ctx.gameEngine,
     });
@@ -472,9 +471,9 @@ async function hireUnits(
   unitType: number,
   noviAmount: number,
 ): Promise<void> {
-  const ix = createHireUnitsInstruction(
+  const ix = await createHireUnitsInstruction(
     { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-    { unitType, noviAmount: new BN(noviAmount) }
+    { unitType, noviAmount: BigInt(noviAmount) }
   );
   await sendWithRetry(ctx, ix, [keypair]);
   log.create(`units type=${unitType} (${noviAmount} NOVI)`);
@@ -488,9 +487,9 @@ async function purchaseEquipment(
   equipmentType: number,
   quantity: number,
 ): Promise<void> {
-  const ix = createPurchaseEquipmentInstruction(
+  const ix = await createPurchaseEquipmentInstruction(
     { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-    { equipmentType, quantity: new BN(quantity), payWithCash: false }
+    { equipmentType, quantity: BigInt(quantity), payWithCash: false }
   );
   await sendWithRetry(ctx, ix, [keypair]);
   log.create(`equipment type=${equipmentType} qty=${quantity}`);
@@ -506,7 +505,7 @@ async function doResearch(
   for (const r of research) {
     for (let level = 1; level <= r.targetLevel; level++) {
       // Start
-      const startIx = createStartResearchInstruction({
+      const startIx = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: keypair.publicKey,
         researchType: r.type,
@@ -514,14 +513,14 @@ async function doResearch(
       await sendWithRetry(ctx, startIx, [keypair]);
 
       // Speedup to completion (0 = complete all remaining)
-      const speedupIx = createSpeedUpResearchInstruction(
+      const speedupIx = await createSpeedUpResearchInstruction(
         { gameEngine: ctx.gameEngine, owner: keypair.publicKey, researchType: r.type },
-        { speedUpSeconds: new BN(0) }
+        { speedUpSeconds: 0n }
       );
       await sendWithRetry(ctx, speedupIx, [keypair]);
 
       // Complete
-      const completeIx = createCompleteResearchInstruction({
+      const completeIx = await createCompleteResearchInstruction({
         gameEngine: ctx.gameEngine,
         payer: keypair.publicKey,
         playerOwner: keypair.publicKey,

@@ -9,8 +9,8 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { isNullPubkey } from '../utils/deserialize';
+import { reprC, pad, u8, u16, i32, i64, pubkey } from '../utils/codec';
 
 // Occupant Type Constants
 
@@ -28,45 +28,36 @@ export interface LocationAccount {
   bump: number;
   occupantType: number;
   occupant: Address;
-  occupiedSince: BN;
+  occupiedSince: bigint;
   locationCreator: Address;
-  reservedArrivalTime: BN;
+  reservedArrivalTime: bigint;
 }
 
 /** LocationAccount size in bytes (repr(C) layout with alignment padding) */
 export const LOCATION_ACCOUNT_SIZE = 128;
 
+// Codec
+
+/** LocationAccount `#[repr(C)]` codec */
+const locationCodec = reprC<LocationAccount>([
+  pad(1), // account_key discriminator
+  ['gameEngine', pubkey],
+  ['gridLat', i32],
+  ['gridLong', i32],
+  ['cityId', u16],
+  ['bump', u8],
+  ['occupantType', u8],
+  ['occupant', pubkey],
+  ['occupiedSince', i64],
+  ['locationCreator', pubkey],
+  ['reservedArrivalTime', i64],
+], LOCATION_ACCOUNT_SIZE);
+
 // Deserialization
 
 /** Deserialize LocationAccount from raw bytes */
-export function deserializeLocation(data: Uint8Array | Buffer): LocationAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-  const gameEngine = reader.readPubkey();
-  reader.skip(3); // implicit padding for i32 alignment (offset 33 -> 36)
-  const gridLat = reader.readI32();
-  const gridLong = reader.readI32();
-  const cityId = reader.readU16();
-  const bump = reader.readU8();
-  const occupantType = reader.readU8();
-  const occupant = reader.readPubkey();
-  const occupiedSince = reader.readI64();
-  const locationCreator = reader.readPubkey();
-  const reservedArrivalTime = reader.readI64();
-
-  return {
-    gameEngine,
-    gridLat,
-    gridLong,
-    cityId,
-    bump,
-    occupantType,
-    occupant,
-    occupiedSince,
-    locationCreator,
-    reservedArrivalTime,
-  };
+export function deserializeLocation(data: Uint8Array): LocationAccount {
+  return locationCodec.decode(data);
 }
 
 /** Parse LocationAccount from account info */
@@ -96,6 +87,6 @@ export function isEncounterOccupied(location: LocationAccount): boolean {
 
 /** Check if occupant is still traveling (hasn't arrived yet) */
 export function isLocationTraveling(location: LocationAccount): boolean {
-  return location.reservedArrivalTime.toNumber() > 0;
+  return Number(location.reservedArrivalTime) > 0;
 }
 

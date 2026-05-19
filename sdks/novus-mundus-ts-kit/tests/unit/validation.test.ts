@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { address, generateKeyPairSigner } from '@solana/kit';
-import BN from 'bn.js';
 
 const DEFAULT_ADDRESS = address('11111111111111111111111111111111');
 import {
@@ -190,8 +189,8 @@ describe('Number validation', () => {
     });
 
     it('should work with BN', () => {
-      expect(validatePositive(new BN(100), 'amount').valid).toBe(true);
-      expect(validatePositive(new BN(0), 'amount').valid).toBe(false);
+      expect(validatePositive(100n, 'amount').valid).toBe(true);
+      expect(validatePositive(0n, 'amount').valid).toBe(false);
     });
   });
 
@@ -243,23 +242,23 @@ describe('Number validation', () => {
 
   describe('validateMinimumBN', () => {
     it('should pass for BN >= minimum', () => {
-      expect(validateMinimumBN(new BN(100), new BN(100), 'amount').valid).toBe(true);
-      expect(validateMinimumBN(new BN(200), new BN(100), 'amount').valid).toBe(true);
+      expect(validateMinimumBN(100n, 100n, 'amount').valid).toBe(true);
+      expect(validateMinimumBN(200n, 100n, 'amount').valid).toBe(true);
     });
 
     it('should fail for BN < minimum', () => {
-      expect(validateMinimumBN(new BN(50), new BN(100), 'amount').valid).toBe(false);
+      expect(validateMinimumBN(50n, 100n, 'amount').valid).toBe(false);
     });
   });
 
   describe('validateMaximumBN', () => {
     it('should pass for BN <= maximum', () => {
-      expect(validateMaximumBN(new BN(100), new BN(100), 'amount').valid).toBe(true);
-      expect(validateMaximumBN(new BN(50), new BN(100), 'amount').valid).toBe(true);
+      expect(validateMaximumBN(100n, 100n, 'amount').valid).toBe(true);
+      expect(validateMaximumBN(50n, 100n, 'amount').valid).toBe(true);
     });
 
     it('should fail for BN > maximum', () => {
-      expect(validateMaximumBN(new BN(150), new BN(100), 'amount').valid).toBe(false);
+      expect(validateMaximumBN(150n, 100n, 'amount').valid).toBe(false);
     });
   });
 });

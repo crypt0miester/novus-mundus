@@ -16,7 +16,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { address, generateKeyPairSigner, lamports, type Address } from '@solana/kit';
-import BN from 'bn.js';
 
 const DEFAULT_ADDRESS = address('11111111111111111111111111111111');
 
@@ -157,7 +156,7 @@ describe('Full Game Stress (200 players)', () => {
       await sendTransaction(
         ctx.svm,
         [
-          createCreateCastleInstruction(
+          await createCreateCastleInstruction(
             { daoAuthority: ctx.daoAuthority.address, gameEngine: ctx.gameEngine },
             {
               cityId,
@@ -266,13 +265,13 @@ describe('Full Game Stress (200 players)', () => {
       }
 
       const teamId = 100_000 + i;
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
       try {
         await sendTransaction(
           ctx.svm,
           [
-            createTeamCreateInstruction(
+            await createTeamCreateInstruction(
               { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
               { name: `StressTeam${i}` },
             ),
@@ -292,7 +291,7 @@ describe('Full Game Stress (200 players)', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createTeamInviteInstruction({
+              await createTeamInviteInstruction({
                 gameEngine: ctx.gameEngine,
                 inviter: leader.publicKey,
                 team: teamPda,
@@ -307,7 +306,7 @@ describe('Full Game Stress (200 players)', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createTeamAcceptInviteInstruction({
+              await createTeamAcceptInviteInstruction({
                 gameEngine: ctx.gameEngine,
                 owner: member.publicKey,
                 team: teamPda,
@@ -359,7 +358,7 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createClaimVacantCastleInstruction({
+            await createClaimVacantCastleInstruction({
               gameEngine: ctx.gameEngine,
               claimer: lord.publicKey,
               cityId,
@@ -384,7 +383,7 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createUpdateCastleStatusInstruction({
+            await createUpdateCastleStatusInstruction({
               caller: ctx.daoAuthority.address,
               gameEngine: ctx.gameEngine,
               cityId: c.cityId,
@@ -408,7 +407,7 @@ describe('Full Game Stress (200 players)', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createAppointCourtInstruction(
+              await createAppointCourtInstruction(
                 {
                   king: c.lord.publicKey,
                   appointee: teammates[pos]!.publicKey,
@@ -445,16 +444,16 @@ describe('Full Game Stress (200 players)', () => {
     await sendTransaction(
       ctx.svm,
       [
-        createCreateSeasonInstruction(
+        await createCreateSeasonInstruction(
           {
             authority: ctx.daoAuthority.address,
             gameEngine: ctx.gameEngine,
             seasonId: ARENA_SEASON_ID,
           },
           {
-            masterPrizePool: new BN(1_000_000),
-            dailyPrizePool: new BN(100_000),
-            dailyDistributionCap: new BN(50_000),
+            masterPrizePool: 1_000_000n,
+            dailyPrizePool: 100_000n,
+            dailyDistributionCap: 50_000n,
             minLevelRequired: 1,
           },
         ),
@@ -471,7 +470,7 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.address,
@@ -484,15 +483,15 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: p.publicKey, gameEngine: ctx.gameEngine },
               {
                 arenaHero: DEFAULT_ADDRESS,
-                defensiveUnits: [new BN(200), new BN(100), new BN(0)],
-                meleeWeapons: new BN(0),
-                rangedWeapons: new BN(0),
-                siegeWeapons: new BN(0),
-                armorPieces: new BN(0),
+                defensiveUnits: [200n, 100n, 0n],
+                meleeWeapons: 0n,
+                rangedWeapons: 0n,
+                siegeWeapons: 0n,
+                armorPieces: 0n,
               },
             ),
           ],
@@ -525,7 +524,7 @@ describe('Full Game Stress (200 players)', () => {
           await sendTransaction(
             ctx.svm,
             [
-              createChallengePlayerInstruction(
+              await createChallengePlayerInstruction(
                 {
                   gameEngine: ctx.gameEngine,
                   challenger: challenger.publicKey,
@@ -538,7 +537,7 @@ describe('Full Game Stress (200 players)', () => {
                   defenderHero: DEFAULT_ADDRESS,
                   defenderEstate: DEFAULT_ADDRESS,
                 },
-                { matchId: new BN(matchId++), matchTimestamp: new BN(tNow) },
+                { matchId: BigInt(matchId++), matchTimestamp: BigInt(tNow) },
               ),
             ],
             [challenger.keypair, ctx.daoAuthority],
@@ -566,7 +565,7 @@ describe('Full Game Stress (200 players)', () => {
     await sendTransaction(
       ctx.svm,
       [
-        createCreateEventInstruction(
+        await createCreateEventInstruction(
           {
             authority: ctx.daoAuthority.address,
             gameEngine: ctx.gameEngine,
@@ -596,7 +595,7 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createJoinEventInstruction({
+            await createJoinEventInstruction({
               gameEngine: ctx.gameEngine,
               payer: p.publicKey,
               playerOwner: p.publicKey,
@@ -663,7 +662,7 @@ describe('Full Game Stress (200 players)', () => {
         await sendTransaction(
           ctx.svm,
           [
-            createAttackPlayerInstruction(
+            await createAttackPlayerInstruction(
               {
                 gameEngine: ctx.gameEngine,
                 attacker: attacker.publicKey,
@@ -713,14 +712,14 @@ describe('Full Game Stress (200 players)', () => {
 
       // Skip if creator has insufficient units (spent in PvP) or is mid-travel.
       // Rally requires 50 def_1; check before attempting.
-      if (creatorAcc.defensiveUnit1.lt(new BN(50))) {
+      if ((creatorAcc.defensiveUnit1 < 50n)) {
         skippedUnits += 1;
         continue;
       }
-      if (creatorAcc.arrivalTime && creatorAcc.arrivalTime.gtn(0)) {
+      if (creatorAcc.arrivalTime && (creatorAcc.arrivalTime > 0n)) {
         // arrival_time > 0 indicates active travel (set to -1 when not traveling)
         const tNow = await getCurrentTimestamp(ctx.svm);
-        if (creatorAcc.arrivalTime.gtn(tNow)) {
+        if ((creatorAcc.arrivalTime > BigInt(tNow))) {
           skippedTraveling += 1;
           continue;
         }
@@ -733,13 +732,13 @@ describe('Full Game Stress (200 players)', () => {
       const targetCity = targetAcc.currentCity;
 
       const rallyId = i; // Unique per creator; creator+id is the PDA seed.
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyId);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyId);
 
       try {
         await sendTransaction(
           ctx.svm,
           [
-            createRallyCreateInstruction(
+            await createRallyCreateInstruction(
               {
                 gameEngine: ctx.gameEngine,
                 owner: creator.publicKey,
@@ -750,14 +749,14 @@ describe('Full Game Stress (200 players)', () => {
               },
               {
                 targetType: RallyTargetType.Player,
-                gatherDuration: new BN(3600),
+                gatherDuration: 3600n,
                 targetCityId: targetCity,
-                defensiveUnit1: new BN(50),
-                defensiveUnit2: new BN(0),
-                defensiveUnit3: new BN(0),
-                meleeWeapons: new BN(0),
-                rangedWeapons: new BN(0),
-                siegeWeapons: new BN(0),
+                defensiveUnit1: 50n,
+                defensiveUnit2: 0n,
+                defensiveUnit3: 0n,
+                meleeWeapons: 0n,
+                rangedWeapons: 0n,
+                siegeWeapons: 0n,
               },
             ),
           ],
@@ -771,7 +770,7 @@ describe('Full Game Stress (200 players)', () => {
             await sendTransaction(
               ctx.svm,
               [
-                createRallyJoinInstruction(
+                await createRallyJoinInstruction(
                   {
                     gameEngine: ctx.gameEngine,
                     owner: member.publicKey,
@@ -782,12 +781,12 @@ describe('Full Game Stress (200 players)', () => {
                     rallyCityId: creatorCity,
                   },
                   {
-                    defensiveUnit1: new BN(20),
-                    defensiveUnit2: new BN(0),
-                    defensiveUnit3: new BN(0),
-                    meleeWeapons: new BN(0),
-                    rangedWeapons: new BN(0),
-                    siegeWeapons: new BN(0),
+                    defensiveUnit1: 20n,
+                    defensiveUnit2: 0n,
+                    defensiveUnit3: 0n,
+                    meleeWeapons: 0n,
+                    rangedWeapons: 0n,
+                    siegeWeapons: 0n,
                   },
                 ),
               ],
@@ -806,7 +805,7 @@ describe('Full Game Stress (200 players)', () => {
             await sendTransaction(
               ctx.svm,
               [
-                createRallyCancelInstruction({
+                await createRallyCancelInstruction({
                   gameEngine: ctx.gameEngine,
                   owner: creator.publicKey,
                   rally: rallyPda,
@@ -845,7 +844,7 @@ describe('Full Game Stress (200 players)', () => {
     expect(evt).not.toBeNull();
 
     const now = await getCurrentTimestamp(ctx.svm);
-    const remaining = evt!.endTime.toNumber() - now;
+    const remaining = Number(evt!.endTime) - now;
     if (remaining > 0) {
       await advanceTime(ctx.svm, remaining + 5);
     }
@@ -853,7 +852,7 @@ describe('Full Game Stress (200 players)', () => {
     await sendTransaction(
       ctx.svm,
       [
-        createFinalizeEventInstruction({
+        await createFinalizeEventInstruction({
           gameEngine: ctx.gameEngine,
           eventId: STRESS_EVENT_ID,
         }),
@@ -886,7 +885,7 @@ describe('Full Game Stress (200 players)', () => {
       if (acc.owner !== p.publicKey) {
         violations.push(`Player ${p.publicKey} owner mismatch`);
       }
-      if (acc.networth.isNeg()) {
+      if ((acc.networth < 0n)) {
         violations.push(`Player ${p.publicKey} negative networth`);
       }
       playersChecked += 1;
@@ -918,7 +917,7 @@ describe('Full Game Stress (200 players)', () => {
     // Invariant C: every claimed castle account exists at the expected PDA.
     let castlesVerified = 0;
     for (const c of castleClaims) {
-      const [castlePda] = deriveCastlePda(ctx.gameEngine, c.cityId, c.castleId);
+      const [castlePda] = await deriveCastlePda(ctx.gameEngine, c.cityId, c.castleId);
       const info = await fetchAccount(ctx.svm, castlePda);
       if (!info || info.data.length === 0) {
         violations.push(`Castle (city=${c.cityId}, id=${c.castleId}) account missing`);
@@ -946,7 +945,7 @@ describe('Full Game Stress (200 players)', () => {
         seenArena.add(key);
         if (i > 0) {
           const prev = lb[i - 1];
-          if (prev && prev.totalPoints.lt(entry.totalPoints)) {
+          if (prev && (prev.totalPoints < entry.totalPoints)) {
             violations.push(`Arena LB unsorted at rank ${i + 1}`);
           }
         }
@@ -968,7 +967,7 @@ describe('Full Game Stress (200 players)', () => {
         seenEvent.add(key);
         if (i > 0) {
           const prev = finalEvent.leaderboard[i - 1];
-          if (prev && prev.score.lt(entry.score)) {
+          if (prev && (prev.score < entry.score)) {
             violations.push(`Event LB unsorted at rank ${i + 1}`);
           }
         }

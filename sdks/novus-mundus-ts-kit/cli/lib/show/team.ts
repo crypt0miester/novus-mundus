@@ -50,7 +50,7 @@ export async function showAllTeams(client: NovusMundusClient, ctx: CLIContext): 
   ];
 
   const rows = teams
-    .sort((a, b) => a.account.id.cmp(b.account.id))
+    .sort((a, b) => (a.account.id < b.account.id ? -1 : a.account.id > b.account.id ? 1 : 0))
     .map(({ account: t }) => [
       t.id.toString(),
       t.name || dim('--'),
@@ -77,7 +77,7 @@ export async function showTeam(client: NovusMundusClient, ctx: CLIContext, teamI
   }
 
   const t = result.account;
-  const [teamPda] = deriveTeamPda(client.gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(await client.resolveGameEngine(), teamId);
 
   log.info(`\nTeam: ${t.name || dim('(unnamed)')}  (ID ${t.id.toString()})`);
   log.info(`PDA: ${addr(teamPda)}`);

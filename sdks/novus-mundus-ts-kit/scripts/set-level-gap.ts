@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     Uint8Array.from(JSON.parse(fs.readFileSync(daoPath, 'utf8'))),
   );
 
-  const [gameEngine] = deriveGameEnginePda(KINGDOM_ID);
+  const [gameEngine] = await deriveGameEnginePda(KINGDOM_ID);
   const info = await connection.getAccountInfo(gameEngine);
   if (!info) throw new Error(`GameEngine not found for kingdom ${KINGDOM_ID}`);
 

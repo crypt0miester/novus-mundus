@@ -2,7 +2,6 @@
  * Phase 3 — Hero Collection + 79 templates
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
   accountExists,
@@ -30,12 +29,12 @@ export async function initHeroes(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   // Step 1: Hero Collection
-  const [collectionPda] = deriveHeroCollectionPda();
+  const [collectionPda] = await deriveHeroCollectionPda();
   await createOrSkip(
     ctx,
     'Hero Collection',
     collectionPda,
-    () => createCreateCollectionInstruction({
+    async () => await createCreateCollectionInstruction({
       daoAuthority: ctx.daoAuthority.publicKey,
       gameEngine: ctx.gameEngine,
     }),
@@ -48,7 +47,7 @@ export async function initHeroes(ctx: CLIContext): Promise<PhaseStats> {
     const batch = HERO_TEMPLATES.slice(i, i + batchSize);
 
     const promises = batch.map(async (template) => {
-      const [templatePda] = deriveHeroTemplatePda(template.templateId);
+      const [templatePda] = await deriveHeroTemplatePda(template.templateId);
       const exists = await accountExists(ctx.connection, templatePda);
 
       if (!exists) {
@@ -57,7 +56,7 @@ export async function initHeroes(ctx: CLIContext): Promise<PhaseStats> {
           stats.created++;
           return;
         }
-        const ix = createCreateTemplateInstruction(
+        const ix = await createCreateTemplateInstruction(
           {
             daoAuthority: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
@@ -67,7 +66,7 @@ export async function initHeroes(ctx: CLIContext): Promise<PhaseStats> {
             name: template.name,
             heroType: template.heroType,
             category: template.category,
-            mintCostSol: new BN(template.mintCostLamports),
+            mintCostSol: BigInt(template.mintCostLamports),
             supplyCap: template.supplyCap,
             enabled: template.enabled,
             eventExclusive: template.eventExclusive,
@@ -96,7 +95,7 @@ export async function updateHeroSupplyCaps(ctx: CLIContext): Promise<PhaseStats>
   const stats = newStats();
 
   for (const template of HERO_TEMPLATES) {
-    const [templatePda] = deriveHeroTemplatePda(template.templateId);
+    const [templatePda] = await deriveHeroTemplatePda(template.templateId);
     const exists = await accountExists(ctx.connection, templatePda);
 
     if (!exists) {
@@ -110,7 +109,7 @@ export async function updateHeroSupplyCaps(ctx: CLIContext): Promise<PhaseStats>
       continue;
     }
 
-    const ix = createUpdateSupplyCapInstruction(
+    const ix = await createUpdateSupplyCapInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -129,7 +128,7 @@ export async function updateHeroSupplyCaps(ctx: CLIContext): Promise<PhaseStats>
 }
 
 export async function statusHeroes(ctx: CLIContext): Promise<string> {
-  const [collectionPda] = deriveHeroCollectionPda();
+  const [collectionPda] = await deriveHeroCollectionPda();
   const collectionExists = await accountExists(ctx.connection, collectionPda);
 
   if (!collectionExists) return 'missing';
@@ -137,7 +136,7 @@ export async function statusHeroes(ctx: CLIContext): Promise<string> {
   let templateCount = 0;
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [pda] = deriveHeroTemplatePda(id);
+    const [pda] = await deriveHeroTemplatePda(id);
     if (await accountExists(ctx.connection, pda)) {
       templateCount++;
       misses = 0;
@@ -156,14 +155,14 @@ export async function detailHeroes(ctx: CLIContext): Promise<string> {
   const lines: string[] = [];
   lines.push(section(`Hero Templates — Kingdom ${ctx.kingdomId}`));
 
-  const [collectionPda] = deriveHeroCollectionPda();
+  const [collectionPda] = await deriveHeroCollectionPda();
   const collectionExists = await accountExists(ctx.connection, collectionPda);
   lines.push(`  Collection: ${statusBadge(collectionExists)}\n`);
 
   const rows: string[][] = [];
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [pda] = deriveHeroTemplatePda(id);
+    const [pda] = await deriveHeroTemplatePda(id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {

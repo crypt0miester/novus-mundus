@@ -47,11 +47,11 @@ export interface ClaimLootAccounts {
  * - Fragments
  * - Gems
  */
-export function createClaimLootInstruction(
+export async function createClaimLootInstruction(
   accounts: ClaimLootAccounts
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
 
   // Rust account order:
   // 0. loot (WRITE)

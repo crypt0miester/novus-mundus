@@ -25,8 +25,9 @@ pub use token_ops::{
     burn_tokens, mint_tokens, process_token_payment_flow, transfer_tokens,
     validate_token_account_owner,
     // Oracle helpers
-    consume_optional_feed_slot, detect_oracle_type, get_pyth_price,
-    pin_oracle_feed, read_switchboard_price, scale_ratio, OracleType, ZERO_PUBKEY,
+    consume_optional_switchboard_feed, detect_oracle_type, pin_oracle_feed,
+    read_pyth_price, read_switchboard_price, require_pyth_feed_configured, scale_ratio,
+    OracleType, ZERO_PUBKEY,
 };
 
 // Hero helpers (NFT-Only System)

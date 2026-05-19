@@ -11,10 +11,10 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u8, u64 } from '../utils/codec';
 import {
   derivePlayerPda,
   deriveReinforcementPda,
@@ -43,20 +43,41 @@ export interface SendReinforcementAccounts {
 
 export interface SendReinforcementParams {
   /** Defensive unit tier 1 to send */
-  defensiveUnit1: BN | number | bigint;
+  defensiveUnit1: bigint | number;
   /** Defensive unit tier 2 to send */
-  defensiveUnit2: BN | number | bigint;
+  defensiveUnit2: bigint | number;
   /** Defensive unit tier 3 to send */
-  defensiveUnit3: BN | number | bigint;
+  defensiveUnit3: bigint | number;
   /** Melee weapons to send */
-  meleeWeapons: BN | number | bigint;
+  meleeWeapons: bigint | number;
   /** Ranged weapons to send */
-  rangedWeapons: BN | number | bigint;
+  rangedWeapons: bigint | number;
   /** Siege weapons to send */
-  siegeWeapons: BN | number | bigint;
+  siegeWeapons: bigint | number;
   /** Hero slot to send (0-2), or 255 for no hero */
   heroSlot: number;
 }
+
+/** SendReinforcement args (57 bytes) */
+const sendReinforcementArgs = packed<{
+  defensiveUnit1: bigint;
+  defensiveUnit2: bigint;
+  defensiveUnit3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  heroSlot: number;
+  teamId: bigint;
+}>([
+  ['defensiveUnit1', u64],
+  ['defensiveUnit2', u64],
+  ['defensiveUnit3', u64],
+  ['meleeWeapons', u64],
+  ['rangedWeapons', u64],
+  ['siegeWeapons', u64],
+  ['heroSlot', u8],
+  ['teamId', u64],
+], 57);
 
 /** ~30,000 CU */
 /**
@@ -88,16 +109,16 @@ export interface SendReinforcementParams {
  * - hero_slot: u8 (1)
  * - team_id: u64 (8)
  */
-export function createSendReinforcementInstruction(
+export async function createSendReinforcementInstruction(
   accounts: SendReinforcementAccounts,
   params: SendReinforcementParams
-): Instruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  const [team] = deriveTeamPda(accounts.gameEngine, accounts.teamId);
+): Promise<Instruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+  const [team] = await deriveTeamPda(accounts.gameEngine, accounts.teamId);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: true },
@@ -116,26 +137,20 @@ export function createSendReinforcementInstruction(
     keys.push({ pubkey: accounts.heroNft, isSigner: false, isWritable: false });
   }
 
-  // Instruction data (57 bytes):
-  // - units_def_1: u64
-  // - units_def_2: u64
-  // - units_def_3: u64
-  // - melee_weapons: u64
-  // - ranged_weapons: u64
-  // - siege_weapons: u64
-  // - hero_slot: u8
-  // - team_id: u64
-  const writer = new BufferWriter(57);
-  writer.writeU64(params.defensiveUnit1);
-  writer.writeU64(params.defensiveUnit2);
-  writer.writeU64(params.defensiveUnit3);
-  writer.writeU64(params.meleeWeapons);
-  writer.writeU64(params.rangedWeapons);
-  writer.writeU64(params.siegeWeapons);
-  writer.writeU8(params.heroSlot);
-  writer.writeU64(accounts.teamId);
-
-  const data = createInstructionData(DISCRIMINATORS.REINFORCEMENT_SEND, writer.toBuffer());
+  // Instruction data (57 bytes)
+  const data = createInstructionData(
+    DISCRIMINATORS.REINFORCEMENT_SEND,
+    sendReinforcementArgs.encode({
+      defensiveUnit1: BigInt(params.defensiveUnit1),
+      defensiveUnit2: BigInt(params.defensiveUnit2),
+      defensiveUnit3: BigInt(params.defensiveUnit3),
+      meleeWeapons: BigInt(params.meleeWeapons),
+      rangedWeapons: BigInt(params.rangedWeapons),
+      siegeWeapons: BigInt(params.siegeWeapons),
+      heroSlot: params.heroSlot,
+      teamId: BigInt(accounts.teamId),
+    })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -208,13 +223,13 @@ export interface RecallReinforcementAccounts {
  *
  * On-chain data: None
  */
-export function createRecallReinforcementInstruction(
+export async function createRecallReinforcementInstruction(
   accounts: RecallReinforcementAccounts
-): Instruction {
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<Instruction> {
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: false },
@@ -263,13 +278,13 @@ export interface RelieveReinforcementAccounts {
  *
  * On-chain data: None
  */
-export function createRelieveReinforcementInstruction(
+export async function createRelieveReinforcementInstruction(
   accounts: RelieveReinforcementAccounts
-): Instruction {
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.senderOwner, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<Instruction> {
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.senderOwner, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   const keys = [
     { pubkey: accounts.destinationOwner, isSigner: true, isWritable: false },
@@ -345,6 +360,11 @@ export interface ReinforcementSpeedupParams {
   speedupTier: 1 | 2;
 }
 
+/** ReinforcementSpeedup args (1 byte) */
+const reinforcementSpeedupArgs = packed<{ speedupTier: number }>([
+  ['speedupTier', u8],
+], 1);
+
 /** ~5,000 CU */
 /**
  * Speed up reinforcement travel by spending gems.
@@ -365,12 +385,12 @@ export interface ReinforcementSpeedupParams {
  * On-chain data (1 byte):
  * - speedup_tier: u8
  */
-export function createReinforcementSpeedupInstruction(
+export async function createReinforcementSpeedupInstruction(
   accounts: ReinforcementSpeedupAccounts,
   params: ReinforcementSpeedupParams
-): Instruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+): Promise<Instruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: false },
@@ -380,10 +400,10 @@ export function createReinforcementSpeedupInstruction(
   ];
 
   // Instruction data (1 byte): speedup_tier
-  const writer = new BufferWriter(1);
-  writer.writeU8(params.speedupTier);
-
-  const data = createInstructionData(DISCRIMINATORS.REINFORCEMENT_SPEEDUP, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.REINFORCEMENT_SPEEDUP,
+    reinforcementSpeedupArgs.encode({ speedupTier: params.speedupTier })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

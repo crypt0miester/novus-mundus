@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
-import { Keypair, Transaction } from '@solana/web3.js';
+import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import BN from 'bn.js';
 
 import {
@@ -63,6 +63,9 @@ import {
   readSplTokenAmount,
 } from '../fixtures/svm';
 import { getAssociatedTokenAddressSync } from '../../src/index';
+
+/** A keypair's 32-byte pubkey doubles as a Pyth feed id (hex) for tests. */
+const pythFeedId = (pk: PublicKey): string => pk.toBuffer().toString('hex');
 import {
   PlayerFactory,
   type TestPlayer,
@@ -703,12 +706,9 @@ describe('Shop System', () => {
 
   describe('Allowed Payment Tokens', () => {
     const [testTokenMint] = deriveNoviMintPda(); // Use real on-chain NOVI mint (82 bytes)
-    // Synthetic Pyth feed: random pubkey + an account at that pubkey
-    // owned by the Pyth program with a minimally-valid `PythPriceAccount`
-    // header. Satisfies `validate_oracle_feed_at_config` (owner check +
-    // magic/version/atype check) without actually publishing a price.
-    const mockPythFeed = Keypair.generate().publicKey;
-    beforeAll(() => seedMockPythFeed(ctx.svm, mockPythFeed));
+    // A Pyth feed is a bare 32-byte feed id (no account). create_allowed_token
+    // just stores it, so these config-only tests need nothing seeded on-chain.
+    const mockPythFeedId = pythFeedId(Keypair.generate().publicKey);
 
     it('should create allowed token (DAO)', async () => {
       const ix = createCreateAllowedTokenInstruction(
@@ -720,7 +720,7 @@ describe('Shop System', () => {
           treasuryWallet: ctx.treasury.publicKey,
         },
         {
-          pythFeed: mockPythFeed,
+          pythFeed: mockPythFeedId,
           switchboardFeed: undefined,
           maxStalenessSlots: 100,
           confidenceThresholdBps: 500, // 5%
@@ -804,7 +804,7 @@ describe('Shop System', () => {
           treasuryWallet: ctx.treasury.publicKey,
         },
         {
-          pythFeed: mockPythFeed,
+          pythFeed: mockPythFeedId,
           switchboardFeed: undefined,
           maxStalenessSlots: 100,
           confidenceThresholdBps: 500,
@@ -843,7 +843,7 @@ describe('Shop System', () => {
           treasuryWallet: ctx.treasury.publicKey,
         },
         {
-          pythFeed: mockPythFeed,
+          pythFeed: mockPythFeedId,
           switchboardFeed: undefined,
           maxStalenessSlots: 100,
           confidenceThresholdBps: 500,
@@ -903,7 +903,7 @@ describe('Shop System', () => {
   describe('Payments', () => {
     it('should accept SOL payment for item', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const solBefore = await ctx.svm.getBalance(player.publicKey);
+      const solBefore = (await ctx.svm.getBalance(player.publicKey))!;
 
       const ix = createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
@@ -919,7 +919,7 @@ describe('Shop System', () => {
 
     it('should transfer payment to treasury', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const treasuryBefore = await ctx.svm.getBalance(ctx.treasury.publicKey);
+      const treasuryBefore = (await ctx.svm.getBalance(ctx.treasury.publicKey))!;
 
       const ix = createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
@@ -950,11 +950,12 @@ describe('Shop System', () => {
         mintAuthority: ctx.daoAuthority.publicKey,
       });
 
-      // Two distinct Pyth feeds: SOL/USD (shop config) and TOKEN/USD (allowed token).
+      // Two distinct Pyth feeds: SOL/USD (shop config) and TOKEN/USD (allowed
+      // token). Each keypair's pubkey doubles as the 32-byte feed id; the
+      // PriceUpdateV2 accounts are seeded with live prices just before the
+      // purchase (below).
       const solFeed = Keypair.generate().publicKey;
       const tokenFeed = Keypair.generate().publicKey;
-      seedMockPythFeed(ctx.svm, solFeed);   // header-only for the config-time gate
-      seedMockPythFeed(ctx.svm, tokenFeed);
 
       // Register the SOL feed in shop config (generous staleness so slot
       // drift between setup and purchase never trips the freshness check).
@@ -964,7 +965,7 @@ describe('Shop System', () => {
           createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             {
-              solPythFeed: solFeed,
+              solPythFeed: pythFeedId(solFeed),
               solMaxStalenessSlots: 1_000_000,
               solConfidenceThresholdBps: 1000,
             },
@@ -986,7 +987,7 @@ describe('Shop System', () => {
               treasuryWallet: ctx.treasury.publicKey,
             },
             {
-              pythFeed: tokenFeed,
+              pythFeed: pythFeedId(tokenFeed),
               switchboardFeed: undefined,
               maxStalenessSlots: 1_000_000,
               confidenceThresholdBps: 1000,
@@ -1015,8 +1016,8 @@ describe('Shop System', () => {
 
       // Re-seed the feeds with live prices + a fresh pub_slot right before the
       // purchase: SOL/USD = $150, TOKEN/USD = $1 (both at expo -8).
-      seedMockPythFeed(ctx.svm, solFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
-      seedMockPythFeed(ctx.svm, tokenFeed, { price: 100_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, solFeed, solFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, tokenFeed.toBuffer(), { price: 100_000_000, conf: 0, expo: -8 });
 
       await sendTransaction(
         ctx.svm,
@@ -1064,15 +1065,15 @@ describe('Shop System', () => {
 
       const solFeed = Keypair.generate().publicKey;
       const tokenFeed = Keypair.generate().publicKey;
-      seedMockPythFeed(ctx.svm, solFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
-      seedMockPythFeed(ctx.svm, tokenFeed, { price: 100_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, solFeed, solFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, tokenFeed.toBuffer(), { price: 100_000_000, conf: 0, expo: -8 });
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
           createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
-            { solPythFeed: solFeed, solMaxStalenessSlots: 1_000_000, solConfidenceThresholdBps: 1000 },
+            { solPythFeed: pythFeedId(solFeed), solMaxStalenessSlots: 1_000_000, solConfidenceThresholdBps: 1000 },
           ),
         ),
         [ctx.daoAuthority],
@@ -1090,7 +1091,7 @@ describe('Shop System', () => {
               treasuryWallet: ctx.treasury.publicKey,
             },
             {
-              pythFeed: tokenFeed,
+              pythFeed: pythFeedId(tokenFeed),
               switchboardFeed: undefined,
               maxStalenessSlots: 1_000_000,
               confidenceThresholdBps: 1000,
@@ -1265,7 +1266,6 @@ describe('Shop System', () => {
       // SOL feed = Pyth, token feed = Switchboard.
       const solPythFeed = Keypair.generate().publicKey;
       const tokenSbFeed = Keypair.generate().publicKey;
-      seedMockPythFeed(ctx.svm, solPythFeed);
       seedMockSwitchboardFeed(ctx.svm, tokenSbFeed);
 
       // Config registers the Pyth SOL feed...
@@ -1275,7 +1275,7 @@ describe('Shop System', () => {
           createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             {
-              solPythFeed: solPythFeed,
+              solPythFeed: pythFeedId(solPythFeed),
               solMaxStalenessSlots: 1_000_000,
               solConfidenceThresholdBps: 1000,
             },
@@ -1322,7 +1322,7 @@ describe('Shop System', () => {
         amount: 0n,
       });
 
-      seedMockPythFeed(ctx.svm, solPythFeed, { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, solPythFeed, solPythFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
       seedMockSwitchboardFeed(ctx.svm, tokenSbFeed, { value: 1n * E18 });
 
       // SOL feed is Pyth-owned, token feed is Switchboard-owned → the

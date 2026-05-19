@@ -7,7 +7,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopConfigAccount},
     validation::{require_signer, require_writable},
-    helpers::{consume_optional_feed_slot, OracleType},
+    helpers::consume_optional_switchboard_feed,
     utils::{read_bytes32, read_u16, read_u64, read_u8},
 };
 
@@ -29,8 +29,8 @@ pub const UPDATE_SOL_ORACLE: u8 = 32;
 /// - [writable] shop_config: ShopConfigAccount to update
 ///
 /// # Accounts (conditional, only when `UPDATE_SOL_ORACLE` flag is set)
-/// - [] sol_pyth_feed_account: Required iff the new `sol_pyth_feed` is non-zero
-/// - [] sol_switchboard_feed_account: Required iff the new `sol_switchboard_feed` is non-zero
+/// - [] sol_switchboard_feed_account: Required iff the new `sol_switchboard_feed`
+///   is non-zero. (The Pyth feed is a bare feed-id and consumes no account.)
 ///
 /// # Instruction Data
 /// - update_flags: u8 (bitmask)
@@ -129,11 +129,9 @@ pub fn process(
         let pyth_bytes = read_bytes32(instruction_data, offset, "sol_pyth_feed")?;
         let sb_bytes = read_bytes32(instruction_data, offset + 32, "sol_switchboard_feed")?;
 
-        // Walk the variable-length tail of feed accounts: pyth then
-        // switchboard, each slot consumed only if its pubkey is non-zero.
-        let mut feed_slot = 3usize;
-        feed_slot = consume_optional_feed_slot(accounts, feed_slot, &pyth_bytes, OracleType::Pyth)?;
-        let _ = consume_optional_feed_slot(accounts, feed_slot, &sb_bytes, OracleType::Switchboard)?;
+        // Pyth feeds are bare feed-ids (no account); only a Switchboard feed
+        // account is validated here, at index 3.
+        let _ = consume_optional_switchboard_feed(accounts, 3, &sb_bytes)?;
 
         config.sol_pyth_feed = Address::from(pyth_bytes);
         config.sol_switchboard_feed = Address::from(sb_bytes);

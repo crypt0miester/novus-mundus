@@ -6,23 +6,23 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader } from '../utils/deserialize';
+import { bytesToAddress } from '../crypto';
+import { reprC, pad, u8, u16, u32, u64, f64, i64, pubkey } from '../utils/codec';
 import { EncounterType } from '../types/enums';
 
 // Encounter Account Interface
 
 export interface EncounterAccount {
-  id: BN;
+  id: bigint;
   cityId: number;
   level: number;
   rarity: EncounterType;
   locationLat: number;
   locationLong: number;
-  spawnedAt: BN;
-  despawnAt: BN;
-  health: BN;
-  maxHealth: BN;
+  spawnedAt: bigint;
+  despawnAt: bigint;
+  health: bigint;
+  maxHealth: bigint;
   defense: number;
   attackerCount: number;
   bump: number;
@@ -38,57 +38,45 @@ export function calculateEncounterAccountSize(attackerCount: number): number {
   return ENCOUNTER_ACCOUNT_BASE_SIZE + attackerCount * 32;
 }
 
+// Codec
+
+/** EncounterAccount fixed-header fields (excludes the dynamic `attackers` array) */
+type EncounterHeader = Omit<EncounterAccount, 'attackers'>;
+
+/** EncounterAccount fixed-header `#[repr(C)]` codec */
+const encounterHeaderCodec = reprC<EncounterHeader>([
+  pad(1), // account_key discriminator
+  pad(32), // game_engine (Pubkey, not in interface)
+  ['id', u64],
+  ['cityId', u16],
+  ['level', u8],
+  ['rarity', u8],
+  ['locationLat', f64],
+  ['locationLong', f64],
+  ['spawnedAt', i64],
+  ['despawnAt', i64],
+  ['health', u64],
+  ['maxHealth', u64],
+  ['defense', u32],
+  pad(4), // _padding
+  ['attackerCount', u8],
+  ['bump', u8],
+], ENCOUNTER_ACCOUNT_BASE_SIZE);
+
 // Deserialization
 
 /** Deserialize EncounterAccount from raw bytes */
-export function deserializeEncounter(data: Uint8Array | Buffer): EncounterAccount {
-  const reader = new BufferReader(data);
+export function deserializeEncounter(data: Uint8Array): EncounterAccount {
+  const header = encounterHeaderCodec.decode(data);
 
-  reader.readU8(); // account_key discriminator
-  reader.skip(32); // game_engine (Pubkey, not in interface)
-  reader.skip(7); // implicit padding for u64 alignment (offset 33 -> 40)
-  const id = reader.readU64();
-  const cityId = reader.readU16();
-  const level = reader.readU8();
-  const rarityValue = reader.readU8();
-  const rarity = rarityValue as EncounterType;
-  reader.skip(4); // padding
-
-  const locationLat = reader.readF64();
-  const locationLong = reader.readF64();
-  const spawnedAt = reader.readI64();
-  const despawnAt = reader.readI64();
-  const health = reader.readU64();
-  const maxHealth = reader.readU64();
-  const defense = reader.readU32();
-  reader.skip(4); // padding
-
-  const attackerCount = reader.readU8();
-  const bump = reader.readU8();
-  reader.skip(6); // padding
-
-  // Read attackers dynamically
+  // Attackers are stored as a trailing array of pubkeys (32 bytes each)
   const attackers: Address[] = [];
-  for (let i = 0; i < attackerCount; i++) {
-    attackers.push(reader.readPubkey());
+  for (let i = 0; i < header.attackerCount; i++) {
+    const base = ENCOUNTER_ACCOUNT_BASE_SIZE + i * 32;
+    attackers.push(bytesToAddress(data.subarray(base, base + 32)));
   }
 
-  return {
-    id,
-    cityId,
-    level,
-    rarity,
-    locationLat,
-    locationLong,
-    spawnedAt,
-    despawnAt,
-    health,
-    maxHealth,
-    defense,
-    attackerCount,
-    bump,
-    attackers,
-  };
+  return { ...header, attackers };
 }
 
 /** Parse EncounterAccount from account info */
@@ -103,12 +91,12 @@ export function parseEncounter(accountInfo: { data: Uint8Array }): EncounterAcco
 
 /** Check if encounter is alive */
 export function isEncounterAlive(encounter: EncounterAccount): boolean {
-  return encounter.health.gtn(0);
+  return encounter.health > 0n;
 }
 
 /** Check if encounter has despawned */
 export function isEncounterDespawned(encounter: EncounterAccount, nowSeconds: number): boolean {
-  return nowSeconds >= encounter.despawnAt.toNumber();
+  return nowSeconds >= Number(encounter.despawnAt);
 }
 
 /** Check if player has already attacked this encounter */
@@ -118,6 +106,6 @@ export function hasPlayerAttacked(encounter: EncounterAccount, player: Address):
 
 /** Get health percentage (0-100) */
 export function getEncounterHealthPercent(encounter: EncounterAccount): number {
-  if (encounter.maxHealth.isZero()) return 0;
-  return encounter.health.muln(100).div(encounter.maxHealth).toNumber();
+  if (encounter.maxHealth === 0n) return 0;
+  return Number((encounter.health * 100n) / encounter.maxHealth);
 }

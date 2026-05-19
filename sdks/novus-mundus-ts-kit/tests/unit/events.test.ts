@@ -5,19 +5,22 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { generateKeyPairSigner, type Address } from '@solana/kit';
-import BN from 'bn.js';
+import { generateKeyPairSigner, type Address, getU64Encoder, getBase64Decoder } from '@solana/kit';
 import { addressBytes } from '../../src/crypto';
 
 /** Copy an Address's 32 raw bytes into `dst` at `offset`. */
-function copyAddress(addr: Address, dst: Buffer, offset: number): void {
-  Buffer.from(addressBytes(addr)).copy(dst, offset);
+function copyAddress(addr: Address, dst: Uint8Array, offset: number): void {
+  dst.set(addressBytes(addr), offset);
+}
+
+/** Encode a Uint8Array to a base64 string. */
+function toBase64(data: Uint8Array): string {
+  return getBase64Decoder().decode(data);
 }
 import {
   computeEventDiscriminator,
   discriminatorToHex,
   EVENT_DISCRIMINATORS,
-  EventBufferReader,
   parseNovusMundusEvent,
   parseEventFromBase64,
   parseEventsFromLogs,
@@ -123,132 +126,14 @@ describe('Event Discriminator', () => {
   });
 });
 
-describe('EventBufferReader', () => {
-  describe('integer reads', () => {
-    it('should read u8', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 127, 255]));
-      expect(reader.readU8()).toBe(0);
-      expect(reader.readU8()).toBe(127);
-      expect(reader.readU8()).toBe(255);
-    });
-
-    it('should read i8', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 127, 128, 255]));
-      expect(reader.readI8()).toBe(0);
-      expect(reader.readI8()).toBe(127);
-      expect(reader.readI8()).toBe(-128);
-      expect(reader.readI8()).toBe(-1);
-    });
-
-    it('should read u16 little-endian', () => {
-      const reader = new EventBufferReader(Buffer.from([0x34, 0x12]));
-      expect(reader.readU16()).toBe(0x1234);
-    });
-
-    it('should read i16', () => {
-      const buf = Buffer.alloc(2);
-      buf.writeInt16LE(-1000, 0);
-      const reader = new EventBufferReader(buf);
-      expect(reader.readI16()).toBe(-1000);
-    });
-
-    it('should read u32 little-endian', () => {
-      const reader = new EventBufferReader(Buffer.from([0x78, 0x56, 0x34, 0x12]));
-      expect(reader.readU32()).toBe(0x12345678);
-    });
-
-    it('should read i32', () => {
-      const buf = Buffer.alloc(4);
-      buf.writeInt32LE(-1000000, 0);
-      const reader = new EventBufferReader(buf);
-      expect(reader.readI32()).toBe(-1000000);
-    });
-
-    it('should read u64 as BN', () => {
-      const buf = Buffer.alloc(8);
-      new BN(1000000).toArrayLike(Buffer, 'le', 8).copy(buf);
-      const reader = new EventBufferReader(buf);
-      expect(reader.readU64().toNumber()).toBe(1000000);
-    });
-
-    it('should read i64 as BN', () => {
-      const buf = Buffer.alloc(8);
-      new BN(-1000000).add(new BN(1).shln(64)).toArrayLike(Buffer, 'le', 8).copy(buf);
-      const reader = new EventBufferReader(buf);
-      expect(reader.readI64().toNumber()).toBe(-1000000);
-    });
-  });
-
-  describe('bool and pubkey reads', () => {
-    it('should read bool', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 1]));
-      expect(reader.readBool()).toBe(false);
-      expect(reader.readBool()).toBe(true);
-    });
-
-    it('should read PublicKey', async () => {
-      const keypair = await generateKeyPairSigner();
-      const reader = new EventBufferReader(Buffer.from(addressBytes(keypair.address)));
-      expect(reader.readPubkey()).toBe(keypair.address);
-    });
-  });
-
-  describe('string reads', () => {
-    it('should read null-terminated string', () => {
-      const buf = Buffer.alloc(32);
-      buf.write('TestPlayer', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
-      expect(reader.readString(32)).toBe('TestPlayer');
-    });
-
-    it('should read Name32', () => {
-      const buf = Buffer.alloc(32);
-      buf.write('MyTeam', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
-      expect(reader.readName32()).toBe('MyTeam');
-    });
-
-    it('should read Name48', () => {
-      const buf = Buffer.alloc(48);
-      buf.write('LongerPlayerName', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
-      expect(reader.readName48()).toBe('LongerPlayerName');
-    });
-  });
-
-  describe('offset tracking', () => {
-    it('should track offset correctly', () => {
-      const reader = new EventBufferReader(Buffer.alloc(100));
-      expect(reader.getOffset()).toBe(0);
-
-      reader.readU8();
-      expect(reader.getOffset()).toBe(1);
-
-      reader.readU32();
-      expect(reader.getOffset()).toBe(5);
-
-      reader.readPubkey();
-      expect(reader.getOffset()).toBe(37);
-    });
-
-    it('should report remaining bytes', () => {
-      const reader = new EventBufferReader(Buffer.alloc(10));
-      expect(reader.remaining()).toBe(10);
-
-      reader.readU32();
-      expect(reader.remaining()).toBe(6);
-    });
-  });
-});
-
 describe('Event Parsing', () => {
   describe('parseNovusMundusEvent', () => {
     it('should return null for data too short', () => {
-      expect(parseNovusMundusEvent(Buffer.alloc(7))).toBeNull();
+      expect(parseNovusMundusEvent(new Uint8Array(7))).toBeNull();
     });
 
     it('should return null for unknown discriminator', () => {
-      const data = Buffer.alloc(100);
+      const data = new Uint8Array(100);
       // Unknown discriminator
       data.fill(0xff, 0, 8);
       expect(parseNovusMundusEvent(data)).toBeNull();
@@ -260,14 +145,14 @@ describe('Event Parsing', () => {
       const player = (await generateKeyPairSigner()).address;
       const user = (await generateKeyPairSigner()).address;
       const city = (await generateKeyPairSigner()).address;
-      const timestamp = new BN(Date.now() / 1000);
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
-      const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
-      Buffer.from(disc).copy(data, 0);
+      const data = new Uint8Array(8 + 32 + 32 + 32 + 8);
+      data.set(disc, 0);
       copyAddress(player, data, 8);
       copyAddress(user, data, 40);
       copyAddress(city, data, 72);
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      data.set(getU64Encoder().encode(timestamp), 104);
 
       const event = parseNovusMundusEvent(data);
 
@@ -283,31 +168,29 @@ describe('Event Parsing', () => {
       const team = (await generateKeyPairSigner()).address;
       const teamName = 'TestTeam';
       const founder = (await generateKeyPairSigner()).address;
-      const noviBurned = new BN(1000);
-      const timestamp = new BN(Date.now() / 1000);
+      const noviBurned = 1000n;
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
       // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
-      const data = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
+      const data = new Uint8Array(8 + 32 + 32 + 32 + 8 + 8);
       let offset = 0;
 
-      Buffer.from(disc).copy(data, offset);
+      data.set(disc, offset);
       offset += 8;
 
       copyAddress(team, data, offset);
       offset += 32;
 
-      const nameBuffer = Buffer.alloc(32);
-      nameBuffer.write(teamName, 0, 'utf8');
-      nameBuffer.copy(data, offset);
+      data.set(new TextEncoder().encode(teamName), offset);
       offset += 32;
 
       copyAddress(founder, data, offset);
       offset += 32;
 
-      noviBurned.toArrayLike(Buffer, 'le', 8).copy(data, offset);
+      data.set(getU64Encoder().encode(noviBurned), offset);
       offset += 8;
 
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, offset);
+      data.set(getU64Encoder().encode(timestamp), offset);
 
       const event = parseNovusMundusEvent(data);
 
@@ -316,7 +199,7 @@ describe('Event Parsing', () => {
       expect((event!.data as any).team).toBe(team);
       expect((event!.data as any).teamName).toBe(teamName);
       expect((event!.data as any).founder).toBe(founder);
-      expect((event!.data as any).noviBurned.toNumber()).toBe(1000);
+      expect(Number((event!.data as any).noviBurned)).toBe(1000);
     });
   });
 
@@ -326,17 +209,16 @@ describe('Event Parsing', () => {
       const player = (await generateKeyPairSigner()).address;
       const user = (await generateKeyPairSigner()).address;
       const city = (await generateKeyPairSigner()).address;
-      const timestamp = new BN(Date.now() / 1000);
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
-      const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
-      Buffer.from(disc).copy(data, 0);
+      const data = new Uint8Array(8 + 32 + 32 + 32 + 8);
+      data.set(disc, 0);
       copyAddress(player, data, 8);
       copyAddress(user, data, 40);
       copyAddress(city, data, 72);
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      data.set(getU64Encoder().encode(timestamp), 104);
 
-      const base64 = data.toString('base64');
-      const event = parseEventFromBase64(base64);
+      const event = parseEventFromBase64(toBase64(data));
 
       expect(event).not.toBeNull();
       expect(event!.name).toBe('PlayerCreated');
@@ -347,19 +229,18 @@ describe('Event Parsing', () => {
     it('should extract events from program logs', async () => {
       // Build a mock PlayerCreated event
       const disc = computeEventDiscriminator('PlayerCreated');
-      const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
-      Buffer.from(disc).copy(data, 0);
+      const data = new Uint8Array(8 + 32 + 32 + 32 + 8);
+      data.set(disc, 0);
       // Fill with random pubkeys and timestamp
       copyAddress((await generateKeyPairSigner()).address, data, 8);
       copyAddress((await generateKeyPairSigner()).address, data, 40);
       copyAddress((await generateKeyPairSigner()).address, data, 72);
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      data.set(getU64Encoder().encode(BigInt(Math.floor(Date.now() / 1000))), 104);
 
-      const base64 = data.toString('base64');
       const logs = [
         'Program NovUSMunDu5111111111111111111111111111111111 invoke [1]',
         'Program log: Instruction: InitPlayer',
-        `Program data: ${base64}`,
+        `Program data: ${toBase64(data)}`,
         'Program NovUSMunDu5111111111111111111111111111111111 success',
       ];
 
@@ -397,26 +278,26 @@ describe('Event Parsing', () => {
       // Create two different events
       const disc1 = computeEventDiscriminator('PlayerCreated');
       // player(32) + user(32) + city(32) + timestamp(8)
-      const data1 = Buffer.alloc(8 + 32 + 32 + 32 + 8);
-      Buffer.from(disc1).copy(data1, 0);
+      const data1 = new Uint8Array(8 + 32 + 32 + 32 + 8);
+      data1.set(disc1, 0);
       copyAddress((await generateKeyPairSigner()).address, data1, 8);
       copyAddress((await generateKeyPairSigner()).address, data1, 40);
       copyAddress((await generateKeyPairSigner()).address, data1, 72);
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data1, 104);
+      data1.set(getU64Encoder().encode(BigInt(Math.floor(Date.now() / 1000))), 104);
 
       const disc2 = computeEventDiscriminator('TeamCreated');
       // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
-      const data2 = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
-      Buffer.from(disc2).copy(data2, 0);
+      const data2 = new Uint8Array(8 + 32 + 32 + 32 + 8 + 8);
+      data2.set(disc2, 0);
       copyAddress((await generateKeyPairSigner()).address, data2, 8);
-      Buffer.alloc(32).copy(data2, 40); // team name
+      // team name left as zero bytes (40..72)
       copyAddress((await generateKeyPairSigner()).address, data2, 72);
-      new BN(0).toArrayLike(Buffer, 'le', 8).copy(data2, 104); // noviBurned
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data2, 112);
+      data2.set(getU64Encoder().encode(0n), 104); // noviBurned
+      data2.set(getU64Encoder().encode(BigInt(Math.floor(Date.now() / 1000))), 112);
 
       const logs = [
-        `Program data: ${data1.toString('base64')}`,
-        `Program data: ${data2.toString('base64')}`,
+        `Program data: ${toBase64(data1)}`,
+        `Program data: ${toBase64(data2)}`,
       ];
 
       const events = parseEventsFromLogs(logs);

@@ -6,8 +6,8 @@
  */
 
 import type { Address } from '@solana/kit';
-import type BN from 'bn.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { isNullPubkey } from '../utils/deserialize';
+import { reprC, pad, u8, u16, u32, u64, i32, i64, bool, pubkey } from '../utils/codec';
 import { ReinforcementStatus } from '../types/enums';
 
 // Reinforcement Target Type
@@ -31,14 +31,14 @@ export interface ReinforcementAccount {
   destinationCity: number;
 
   // Units sent
-  unitsDef1: BN;
-  unitsDef2: BN;
-  unitsDef3: BN;
+  unitsDef1: bigint;
+  unitsDef2: bigint;
+  unitsDef3: bigint;
 
   // Weapons sent
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
 
   // Hero
   hero: Address;
@@ -47,12 +47,12 @@ export interface ReinforcementAccount {
   heroArmorEffBps: number;
 
   // Travel timing
-  sentAt: BN;
+  sentAt: bigint;
   travelDuration: number;
-  arrivesAt: BN;
+  arrivesAt: bigint;
 
   // Return timing
-  returnStartedAt: BN;
+  returnStartedAt: bigint;
   returnDuration: number;
 
   // Wounded tracking (set during recall, transferred to estate on return)
@@ -65,104 +65,53 @@ export interface ReinforcementAccount {
   relievedByDestination: boolean;
 
   // Stats
-  combatsParticipated: BN;
+  combatsParticipated: bigint;
 }
 
 /** ReinforcementAccount size in bytes (repr(C) layout including account_key + game_engine) */
 export const REINFORCEMENT_ACCOUNT_SIZE = 256;
 
+// Codec
+
+/** ReinforcementAccount `#[repr(C)]` codec */
+const reinforcementCodec = reprC<ReinforcementAccount>([
+  pad(1), // account_key discriminator
+  pad(32), // game_engine (not in interface)
+  ['sender', pubkey],
+  ['destination', pubkey],
+  ['destinationType', u8],
+  ['bump', u8],
+  ['senderCity', u16],
+  ['destinationCity', u16],
+  pad(2), // explicit _padding_loc
+  ['unitsDef1', u64],
+  ['unitsDef2', u64],
+  ['unitsDef3', u64],
+  ['meleeWeapons', u64],
+  ['rangedWeapons', u64],
+  ['siegeWeapons', u64],
+  ['hero', pubkey],
+  ['heroDefenseBps', u16],
+  ['heroWeaponEffBps', u16],
+  ['heroArmorEffBps', u16],
+  ['sentAt', i64],
+  ['travelDuration', i32],
+  ['woundedDef1', u32],
+  ['arrivesAt', i64],
+  ['returnStartedAt', i64],
+  ['returnDuration', i32],
+  ['woundedDef2', u32],
+  ['status', u8],
+  ['relievedByDestination', bool],
+  ['woundedDef3', u32],
+  ['combatsParticipated', u64],
+], REINFORCEMENT_ACCOUNT_SIZE);
+
 // Deserialization
 
 /** Deserialize ReinforcementAccount from raw bytes */
-export function deserializeReinforcement(data: Uint8Array | Buffer): ReinforcementAccount {
-  const reader = new BufferReader(data);
-
-  reader.readU8(); // account_key discriminator
-
-  // Kingdom Reference (32 bytes)
-  reader.readPubkey(); // game_engine (skip, not in interface)
-
-  // Identity (64 bytes)
-  const sender = reader.readPubkey();
-  const destination = reader.readPubkey();
-
-  // Type & Location
-  const destinationTypeValue = reader.readU8();
-  const destinationType = destinationTypeValue as ReinforcementTargetType;
-  const bump = reader.readU8();
-  reader.skip(1); // implicit padding for u16 alignment (offset 99 -> 100)
-  const senderCity = reader.readU16();
-  const destinationCity = reader.readU16();
-  reader.skip(2); // explicit _padding_loc
-  reader.skip(6); // implicit padding for u64 alignment (offset 106 -> 112)
-
-  // Units (24 bytes)
-  const unitsDef1 = reader.readU64();
-  const unitsDef2 = reader.readU64();
-  const unitsDef3 = reader.readU64();
-
-  // Weapons (24 bytes)
-  const meleeWeapons = reader.readU64();
-  const rangedWeapons = reader.readU64();
-  const siegeWeapons = reader.readU64();
-
-  // Hero (40 bytes)
-  const hero = reader.readPubkey();
-  const heroDefenseBps = reader.readU16();
-  const heroWeaponEffBps = reader.readU16();
-  const heroArmorEffBps = reader.readU16();
-  reader.skip(2); // padding
-
-  // Travel timing (24 bytes)
-  const sentAt = reader.readI64();
-  const travelDuration = reader.readI32();
-  const woundedDef1 = reader.readU32(); // was padding
-  const arrivesAt = reader.readI64();
-
-  // Return timing (16 bytes)
-  const returnStartedAt = reader.readI64();
-  const returnDuration = reader.readI32();
-  const woundedDef2 = reader.readU32(); // was padding
-
-  // Status (8 bytes)
-  const statusValue = reader.readU8();
-  const status = statusValue as ReinforcementStatus;
-  const relievedByDestination = reader.readBool();
-  reader.skip(2); // padding
-  const woundedDef3 = reader.readU32(); // was padding
-
-  // Stats (8 bytes)
-  const combatsParticipated = reader.readU64();
-
-  return {
-    sender,
-    destination,
-    destinationType,
-    bump,
-    senderCity,
-    destinationCity,
-    unitsDef1,
-    unitsDef2,
-    unitsDef3,
-    meleeWeapons,
-    rangedWeapons,
-    siegeWeapons,
-    hero,
-    heroDefenseBps,
-    heroWeaponEffBps,
-    heroArmorEffBps,
-    sentAt,
-    travelDuration,
-    arrivesAt,
-    returnStartedAt,
-    returnDuration,
-    woundedDef1,
-    woundedDef2,
-    woundedDef3,
-    status,
-    relievedByDestination,
-    combatsParticipated,
-  };
+export function deserializeReinforcement(data: Uint8Array): ReinforcementAccount {
+  return reinforcementCodec.decode(data);
 }
 
 /** Parse ReinforcementAccount from account info */
@@ -176,13 +125,13 @@ export function parseReinforcement(accountInfo: { data: Uint8Array }): Reinforce
 // Helper Functions
 
 /** Get total units sent */
-export function getReinforcementTotalUnits(r: ReinforcementAccount): BN {
-  return r.unitsDef1.add(r.unitsDef2).add(r.unitsDef3);
+export function getReinforcementTotalUnits(r: ReinforcementAccount): bigint {
+  return (r.unitsDef1 + r.unitsDef2 + r.unitsDef3);
 }
 
 /** Get total weapons sent */
-export function getReinforcementTotalWeapons(r: ReinforcementAccount): BN {
-  return r.meleeWeapons.add(r.rangedWeapons).add(r.siegeWeapons);
+export function getReinforcementTotalWeapons(r: ReinforcementAccount): bigint {
+  return (r.meleeWeapons + r.rangedWeapons + r.siegeWeapons);
 }
 
 /** Check if reinforcement has hero */
@@ -212,18 +161,18 @@ export function isReinforcementCompleted(r: ReinforcementAccount): boolean {
 
 /** Check if reinforcement has arrived at destination */
 export function hasReinforcementArrived(r: ReinforcementAccount, nowSeconds: number): boolean {
-  return nowSeconds >= r.arrivesAt.toNumber();
+  return nowSeconds >= Number(r.arrivesAt);
 }
 
 /** Check if reinforcement has returned to sender */
 export function hasReinforcementReturned(r: ReinforcementAccount, nowSeconds: number): boolean {
-  if (r.returnStartedAt.toNumber() === 0) {
+  if (Number(r.returnStartedAt) === 0) {
     return false;
   }
-  return nowSeconds >= r.returnStartedAt.toNumber() + r.returnDuration;
+  return nowSeconds >= Number(r.returnStartedAt) + r.returnDuration;
 }
 
 /** Get return completion timestamp */
 export function getReinforcementReturnCompletesAt(r: ReinforcementAccount): number {
-  return r.returnStartedAt.toNumber() + r.returnDuration;
+  return Number(r.returnStartedAt) + r.returnDuration;
 }

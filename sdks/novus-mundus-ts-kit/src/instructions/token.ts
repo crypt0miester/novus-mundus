@@ -7,15 +7,20 @@
  */
 
 import type { Address, Instruction } from '@solana/kit';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { createInstructionData } from '../utils/serialize';
+import { packed, u64 } from '../utils/codec';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
   deriveUserPda,
 } from '../pda';
+
+/** Single-u64 amount args (8 bytes) — shared by reserved-to-locked and withdraw-reserved */
+const amountArgs = packed<{ amount: bigint }>([
+  ['amount', u64],
+], 8);
 import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Reserved to Locked
@@ -29,7 +34,7 @@ export interface ReservedToLockedAccounts {
 
 export interface ReservedToLockedParams {
   /** Amount of reserved NOVI to convert to locked */
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
 
 /** ~5,000 CU */
@@ -55,17 +60,17 @@ export interface ReservedToLockedParams {
  * 7. novi_mint - NOVI token mint
  * 8. token_program - SPL Token program
  */
-export function createReservedToLockedInstruction(
+export async function createReservedToLockedInstruction(
   accounts: ReservedToLockedAccounts,
   params: ReservedToLockedParams
-): Instruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // Token accounts are owned by PDAs, not the wallet
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
-  const lockedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const lockedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -79,10 +84,10 @@ export function createReservedToLockedInstruction(
   ];
 
   // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
-  writer.writeU64(params.amount);
-
-  const data = createInstructionData(DISCRIMINATORS.RESERVED_TO_LOCKED, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.RESERVED_TO_LOCKED,
+    amountArgs.encode({ amount: BigInt(params.amount) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }
@@ -98,7 +103,7 @@ export interface WithdrawReservedAccounts {
 
 export interface WithdrawReservedParams {
   /** Amount of reserved NOVI to withdraw */
-  amount: BN | number | bigint;
+  amount: bigint | number;
 }
 
 /** ~5,000 CU */
@@ -124,17 +129,17 @@ export interface WithdrawReservedParams {
  * 8. system_program - System program
  * 9. associated_token_program - Associated Token program
  */
-export function createWithdrawReservedInstruction(
+export async function createWithdrawReservedInstruction(
   accounts: WithdrawReservedAccounts,
   params: WithdrawReservedParams
-): Instruction {
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<Instruction> {
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // Reserved token account is owned by UserAccount PDA
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
   // User wallet token account is owned by user's wallet (standard ATA)
-  const userWalletTokenAccount = getAssociatedTokenAddressSync(noviMint, accounts.owner);
+  const userWalletTokenAccount = await getAssociatedTokenAddressSync(noviMint, accounts.owner);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
@@ -149,10 +154,10 @@ export function createWithdrawReservedInstruction(
   ];
 
   // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
-  writer.writeU64(params.amount);
-
-  const data = createInstructionData(DISCRIMINATORS.WITHDRAW_RESERVED, writer.toBuffer());
+  const data = createInstructionData(
+    DISCRIMINATORS.WITHDRAW_RESERVED,
+    amountArgs.encode({ amount: BigInt(params.amount) })
+  );
 
   return buildInstruction(PROGRAM_ID, keys, data);
 }

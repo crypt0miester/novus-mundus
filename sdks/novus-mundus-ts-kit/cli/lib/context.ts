@@ -153,9 +153,9 @@ export async function buildContext(args: ParsedArgs): Promise<CLIContext> {
   const rpcUrl = process.env.RPC_URL || RPC_URLS[args.env];
   const connection = new Connection(rpcUrl, 'confirmed');
 
-  const [gameEngine] = deriveGameEnginePda(args.kingdomId);
-  const [noviMint] = deriveNoviMintPda();
-  const [heroCollection] = deriveHeroCollectionPda();
+  const [gameEngine] = await deriveGameEnginePda(args.kingdomId);
+  const [noviMint] = await deriveNoviMintPda();
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const ctx: CLIContext = {
     connection,

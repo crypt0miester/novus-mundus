@@ -1,13 +1,13 @@
 /**
  * Instruction Parser
  *
- * Decodes Novus Mundus instruction data into structured objects.
- * Uses the discriminators from program.ts and the BufferReader from deserialize.ts.
+ * Decodes Novus Mundus instruction data into structured objects, using kit
+ * struct codecs keyed by the discriminators from program.ts.
  */
 
-import type BN from 'bn.js';
+import { getStructCodec, addCodecSizePrefix, getUtf8Codec, getBase64Encoder, type Decoder } from '@solana/kit';
 import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program';
-import { BufferReader } from '../utils/deserialize';
+import { packed, u8, u16, u32, i32, i64, u64, bool } from '../utils/codec';
 
 // Types
 
@@ -50,7 +50,7 @@ export interface InitCityData {
 // Economy
 export interface HireUnitsData {
   unitType: number;
-  noviAmount: BN;
+  noviAmount: bigint;
 }
 
 export interface CollectResourcesData {
@@ -59,7 +59,7 @@ export interface CollectResourcesData {
 
 export interface PurchaseEquipmentData {
   equipmentType: number;
-  amount: BN;
+  amount: bigint;
 }
 
 export interface PurchaseStaminaData {
@@ -67,11 +67,11 @@ export interface PurchaseStaminaData {
 }
 
 export interface TransferCashData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface VaultTransferData {
-  amount: BN;
+  amount: bigint;
   isDeposit: boolean;
 }
 
@@ -108,11 +108,11 @@ export interface TeamCreateData {
 }
 
 export interface TeamDepositTreasuryData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface TeamWithdrawTreasuryData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface TeamSetMotdData {
@@ -124,35 +124,35 @@ export interface TeamUpdateSettingsData {
 }
 
 export interface TreasuryRequestWithdrawData {
-  amount: BN;
+  amount: bigint;
   reason: string;
 }
 
 export interface TreasuryUpdateSettingsData {
   requiredApprovals: number;
-  maxWithdrawalWithoutApproval: BN;
+  maxWithdrawalWithoutApproval: bigint;
 }
 
 // Rally
 export interface RallyCreateData {
   targetType: number;
-  targetId: BN;
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  executionTime: BN;
+  targetId: bigint;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  executionTime: bigint;
 }
 
 export interface RallyJoinData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
 }
 
 export interface RallySpeedupData {
@@ -174,7 +174,7 @@ export interface MintHeroData {
 }
 
 export interface LevelUpHeroData {
-  xpToSpend: BN;
+  xpToSpend: bigint;
 }
 
 export interface AssignDefensiveHeroData {
@@ -183,7 +183,7 @@ export interface AssignDefensiveHeroData {
 
 // Sanctuary
 export interface StartMeditationData {
-  noviAmount: BN;
+  noviAmount: bigint;
 }
 
 // Shop
@@ -197,7 +197,7 @@ export interface PurchaseBundleData {
 }
 
 export interface PurchaseFlashSaleData {
-  saleId: BN;
+  saleId: bigint;
 }
 
 // Estate
@@ -230,9 +230,9 @@ export interface EquipCraftedData {
 
 // Reinforcement
 export interface SendReinforcementData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
 }
 
 export interface SpeedupReinforcementData {
@@ -242,8 +242,8 @@ export interface SpeedupReinforcementData {
 // Expedition
 export interface StartExpeditionData {
   expeditionType: number;
-  operatives: BN;
-  duration: BN;
+  operatives: bigint;
+  duration: bigint;
 }
 
 export interface ExpeditionStrikeData {
@@ -260,13 +260,13 @@ export interface JoinArenaSeasonData {
 }
 
 export interface UpdateArenaLoadoutData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  armor: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armor: bigint;
 }
 
 export interface ChallengePlayerData {
@@ -309,22 +309,22 @@ export interface InitiateUpgradeData {
 }
 
 export interface JoinGarrisonData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
 }
 
 export interface UpdateCastleConfigData {
   minLevel: number;
   minNetworthMillions: number;
   minTroopsThousands: number;
-  protectionDuration: BN;
-  kingNoviPerDay: BN;
-  kingCashPerDay: BN;
-  courtNoviPerDay: BN;
-  courtCashPerDay: BN;
-  memberNoviPerDay: BN;
-  memberCashPerDay: BN;
+  protectionDuration: bigint;
+  kingNoviPerDay: bigint;
+  kingCashPerDay: bigint;
+  courtNoviPerDay: bigint;
+  courtCashPerDay: bigint;
+  memberNoviPerDay: bigint;
+  memberCashPerDay: bigint;
 }
 
 // Instruction Category Mapping
@@ -343,7 +343,7 @@ function getCategory(discriminator: number): string {
   if (discriminator >= 100 && discriminator <= 109) return 'Subscription';
   if (discriminator >= 110 && discriminator <= 119) return 'Name';
   if (discriminator >= 120 && discriminator <= 129) return 'Research';
-  if (discriminator >= 130 && discriminator <= 139) return 'Hero';
+  if (discriminator >= 130 && discriminator <= 136) return 'Hero';
   if (discriminator >= 137 && discriminator <= 139) return 'Sanctuary';
   if (discriminator >= 140 && discriminator <= 159) return 'Shop';
   if (discriminator >= 160 && discriminator <= 179) return 'Estate';
@@ -357,380 +357,129 @@ function getCategory(discriminator: number): string {
   return 'Unknown';
 }
 
-// Individual Parsers
+// Argument Codecs
+//
+// Instruction data is packed (no alignment). Fixed-layout args use `packed`;
+// the four with a u8-length-prefixed UTF-8 string use kit's `getStructCodec`
+// with `addCodecSizePrefix`.
 
-function parseHireUnits(reader: BufferReader): HireUnitsData {
-  return {
-    unitType: reader.readU8(),
-    noviAmount: reader.readU64(),
-  };
-}
+/** u8-length-prefixed UTF-8 string. */
+const strU8 = addCodecSizePrefix(getUtf8Codec(), u8.codec);
 
-function parsePurchaseEquipment(reader: BufferReader): PurchaseEquipmentData {
-  return {
-    equipmentType: reader.readU8(),
-    amount: reader.readU64(),
-  };
-}
+const argCodecs: Record<number, Decoder<unknown>> = {
+  // Economy
+  [DISCRIMINATORS.HIRE_UNITS]: packed<HireUnitsData>([['unitType', u8], ['noviAmount', u64]]),
+  [DISCRIMINATORS.PURCHASE_EQUIPMENT]: packed<PurchaseEquipmentData>([['equipmentType', u8], ['amount', u64]]),
+  [DISCRIMINATORS.PURCHASE_STAMINA]: packed<PurchaseStaminaData>([['amount', u16]]),
+  [DISCRIMINATORS.TRANSFER_CASH]: packed<TransferCashData>([['amount', u64]]),
+  [DISCRIMINATORS.VAULT_TRANSFER]: packed<VaultTransferData>([['amount', u64], ['isDeposit', bool]]),
 
-function parsePurchaseStamina(reader: BufferReader): PurchaseStaminaData {
-  return {
-    amount: reader.readU16(),
-  };
-}
+  // Combat
+  [DISCRIMINATORS.ATTACK_PLAYER]: packed<AttackPlayerData>([['driveBy', bool]]),
 
-function parseTransferCash(reader: BufferReader): TransferCashData {
-  return {
-    amount: reader.readU64(),
-  };
-}
+  // Travel
+  [DISCRIMINATORS.INTERCITY_START]: packed<IntercityStartData>([['targetCityId', u16]]),
+  [DISCRIMINATORS.INTERCITY_TELEPORT]: packed<IntercityTeleportData>([['targetCityId', u16]]),
+  [DISCRIMINATORS.INTRACITY_START]: packed<IntracityStartData>([['targetLat', i32], ['targetLong', i32]]),
+  [DISCRIMINATORS.TRAVEL_SPEEDUP]: packed<TravelSpeedupData>([['gemsToSpend', u16]]),
 
-function parseVaultTransfer(reader: BufferReader): VaultTransferData {
-  return {
-    amount: reader.readU64(),
-    isDeposit: reader.readBool(),
-  };
-}
+  // Team
+  [DISCRIMINATORS.TEAM_CREATE]: getStructCodec([['name', strU8]]),
+  [DISCRIMINATORS.TEAM_DEPOSIT_TREASURY]: packed<TeamDepositTreasuryData>([['amount', u64]]),
+  [DISCRIMINATORS.TEAM_WITHDRAW_TREASURY]: packed<TeamWithdrawTreasuryData>([['amount', u64]]),
+  [DISCRIMINATORS.TEAM_SET_MOTD]: getStructCodec([['motd', strU8]]),
+  [DISCRIMINATORS.TEAM_UPDATE_SETTINGS]: packed<TeamUpdateSettingsData>([['settings', u8]]),
+  [DISCRIMINATORS.TEAM_TREASURY_REQUEST_WITHDRAW]: getStructCodec([['amount', u64.codec], ['reason', strU8]]),
+  [DISCRIMINATORS.TEAM_UPDATE_TREASURY_SETTINGS]: packed<TreasuryUpdateSettingsData>([
+    ['requiredApprovals', u8],
+    ['maxWithdrawalWithoutApproval', u64],
+  ]),
 
-function parseAttackPlayer(reader: BufferReader): AttackPlayerData {
-  return {
-    driveBy: reader.readBool(),
-  };
-}
+  // Rally
+  [DISCRIMINATORS.RALLY_CREATE]: packed<RallyCreateData>([
+    ['targetType', u8], ['targetId', u64], ['du1', u64], ['du2', u64], ['du3', u64],
+    ['meleeWeapons', u64], ['rangedWeapons', u64], ['siegeWeapons', u64], ['executionTime', i64],
+  ]),
+  [DISCRIMINATORS.RALLY_JOIN]: packed<RallyJoinData>([
+    ['du1', u64], ['du2', u64], ['du3', u64],
+    ['meleeWeapons', u64], ['rangedWeapons', u64], ['siegeWeapons', u64],
+  ]),
+  [DISCRIMINATORS.RALLY_SPEEDUP]: packed<RallySpeedupData>([['gemsToSpend', u16]]),
 
-function parseIntercityStart(reader: BufferReader): IntercityStartData {
-  return {
-    targetCityId: reader.readU16(),
-  };
-}
+  // Research
+  [DISCRIMINATORS.RESEARCH_START]: packed<StartResearchData>([['templateId', u16]]),
+  [DISCRIMINATORS.RESEARCH_SPEEDUP]: packed<SpeedUpResearchData>([['gemsToSpend', u16]]),
 
-function parseIntercityTeleport(reader: BufferReader): IntercityTeleportData {
-  return {
-    targetCityId: reader.readU16(),
-  };
-}
+  // Hero
+  [DISCRIMINATORS.HERO_MINT]: packed<MintHeroData>([['templateId', u16]]),
+  [DISCRIMINATORS.HERO_LEVEL_UP]: packed<LevelUpHeroData>([['xpToSpend', u64]]),
+  [DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE]: packed<AssignDefensiveHeroData>([['slot', u8]]),
 
-function parseIntracityStart(reader: BufferReader): IntracityStartData {
-  return {
-    targetLat: reader.readI32(),
-    targetLong: reader.readI32(),
-  };
-}
+  // Sanctuary
+  [DISCRIMINATORS.SANCTUARY_START_MEDITATION]: packed<StartMeditationData>([['noviAmount', u64]]),
 
-function parseTravelSpeedup(reader: BufferReader): TravelSpeedupData {
-  return {
-    gemsToSpend: reader.readU16(),
-  };
-}
+  // Shop
+  [DISCRIMINATORS.SHOP_PURCHASE_ITEM]: packed<PurchaseShopItemData>([['itemId', u32], ['quantity', u16]]),
+  [DISCRIMINATORS.SHOP_PURCHASE_BUNDLE]: packed<PurchaseBundleData>([['bundleId', u32]]),
+  [DISCRIMINATORS.SHOP_PURCHASE_FLASH_SALE]: packed<PurchaseFlashSaleData>([['saleId', u64]]),
 
-function parseTeamCreate(reader: BufferReader): TeamCreateData {
-  const nameLen = reader.readU8();
-  const nameBytes = reader.readBytes(nameLen);
-  return {
-    name: new TextDecoder().decode(nameBytes),
-  };
-}
+  // Estate
+  [DISCRIMINATORS.ESTATE_BUILD]: packed<EstateBuildData>([['buildingType', u8], ['plotIndex', u8]]),
+  [DISCRIMINATORS.ESTATE_UPGRADE]: packed<EstateUpgradeData>([['plotIndex', u8]]),
+  [DISCRIMINATORS.ESTATE_BUY_PLOT]: packed<EstateBuyPlotData>([['plotIndex', u8]]),
 
-function parseTeamDepositTreasury(reader: BufferReader): TeamDepositTreasuryData {
-  return {
-    amount: reader.readU64(),
-  };
-}
+  // Forge
+  [DISCRIMINATORS.FORGE_START_CRAFT]: packed<StartCraftData>([['equipmentSlot', u8], ['targetQuality', u8]]),
+  [DISCRIMINATORS.FORGE_STRIKE]: packed<ForgeStrikeData>([['intensity', u8]]),
+  [DISCRIMINATORS.FORGE_EQUIP]: packed<EquipCraftedData>([['slot', u8]]),
 
-function parseTeamWithdrawTreasury(reader: BufferReader): TeamWithdrawTreasuryData {
-  return {
-    amount: reader.readU64(),
-  };
-}
+  // Reinforcement
+  [DISCRIMINATORS.REINFORCEMENT_SEND]: packed<SendReinforcementData>([['du1', u64], ['du2', u64], ['du3', u64]]),
+  [DISCRIMINATORS.REINFORCEMENT_SPEEDUP]: packed<SpeedupReinforcementData>([['gemsToSpend', u16]]),
 
-function parseTeamSetMotd(reader: BufferReader): TeamSetMotdData {
-  const motdLen = reader.readU8();
-  const motdBytes = reader.readBytes(motdLen);
-  return {
-    motd: new TextDecoder().decode(motdBytes),
-  };
-}
+  // Expedition
+  [DISCRIMINATORS.EXPEDITION_START]: packed<StartExpeditionData>([
+    ['expeditionType', u8], ['operatives', u64], ['duration', i64],
+  ]),
+  [DISCRIMINATORS.EXPEDITION_STRIKE]: packed<ExpeditionStrikeData>([['intensity', u8]]),
+  [DISCRIMINATORS.EXPEDITION_SPEEDUP]: packed<SpeedupExpeditionData>([['gemsToSpend', u16]]),
 
-function parseTeamUpdateSettings(reader: BufferReader): TeamUpdateSettingsData {
-  return {
-    settings: reader.readU8(),
-  };
-}
+  // Arena
+  [DISCRIMINATORS.ARENA_UPDATE_LOADOUT]: packed<UpdateArenaLoadoutData>([
+    ['du1', u64], ['du2', u64], ['du3', u64],
+    ['meleeWeapons', u64], ['rangedWeapons', u64], ['siegeWeapons', u64], ['armor', u64],
+  ]),
 
-function parseTreasuryRequestWithdraw(reader: BufferReader): TreasuryRequestWithdrawData {
-  const amount = reader.readU64();
-  const reasonLen = reader.readU8();
-  const reasonBytes = reader.readBytes(reasonLen);
-  return {
-    amount,
-    reason: new TextDecoder().decode(reasonBytes),
-  };
-}
+  // Dungeon
+  [DISCRIMINATORS.DUNGEON_ENTER]: packed<EnterDungeonData>([['dungeonId', u16]]),
+  [DISCRIMINATORS.DUNGEON_ATTACK]: packed<DungeonAttackData>([['intensity', u8]]),
+  [DISCRIMINATORS.DUNGEON_ATTACK_MULTI]: packed<DungeonAttackMultiData>([['count', u8], ['intensity', u8]]),
+  [DISCRIMINATORS.DUNGEON_CHOOSE_RELIC]: packed<ChooseRelicData>([['relicChoice', u8]]),
 
-function parseTreasuryUpdateSettings(reader: BufferReader): TreasuryUpdateSettingsData {
-  return {
-    requiredApprovals: reader.readU8(),
-    maxWithdrawalWithoutApproval: reader.readU64(),
-  };
-}
-
-function parseRallyCreate(reader: BufferReader): RallyCreateData {
-  return {
-    targetType: reader.readU8(),
-    targetId: reader.readU64(),
-    du1: reader.readU64(),
-    du2: reader.readU64(),
-    du3: reader.readU64(),
-    meleeWeapons: reader.readU64(),
-    rangedWeapons: reader.readU64(),
-    siegeWeapons: reader.readU64(),
-    executionTime: reader.readI64(),
-  };
-}
-
-function parseRallyJoin(reader: BufferReader): RallyJoinData {
-  return {
-    du1: reader.readU64(),
-    du2: reader.readU64(),
-    du3: reader.readU64(),
-    meleeWeapons: reader.readU64(),
-    rangedWeapons: reader.readU64(),
-    siegeWeapons: reader.readU64(),
-  };
-}
-
-function parseRallySpeedup(reader: BufferReader): RallySpeedupData {
-  return {
-    gemsToSpend: reader.readU16(),
-  };
-}
-
-function parseStartResearch(reader: BufferReader): StartResearchData {
-  return {
-    templateId: reader.readU16(),
-  };
-}
-
-function parseSpeedUpResearch(reader: BufferReader): SpeedUpResearchData {
-  return {
-    gemsToSpend: reader.readU16(),
-  };
-}
-
-function parseMintHero(reader: BufferReader): MintHeroData {
-  return {
-    templateId: reader.readU16(),
-  };
-}
-
-function parseLevelUpHero(reader: BufferReader): LevelUpHeroData {
-  return {
-    xpToSpend: reader.readU64(),
-  };
-}
-
-function parseAssignDefensiveHero(reader: BufferReader): AssignDefensiveHeroData {
-  return {
-    slot: reader.readU8(),
-  };
-}
-
-function parseStartMeditation(reader: BufferReader): StartMeditationData {
-  return {
-    noviAmount: reader.readU64(),
-  };
-}
-
-function parsePurchaseShopItem(reader: BufferReader): PurchaseShopItemData {
-  return {
-    itemId: reader.readU32(),
-    quantity: reader.readU16(),
-  };
-}
-
-function parsePurchaseBundle(reader: BufferReader): PurchaseBundleData {
-  return {
-    bundleId: reader.readU32(),
-  };
-}
-
-function parsePurchaseFlashSale(reader: BufferReader): PurchaseFlashSaleData {
-  return {
-    saleId: reader.readU64(),
-  };
-}
-
-function parseEstateBuild(reader: BufferReader): EstateBuildData {
-  return {
-    buildingType: reader.readU8(),
-    plotIndex: reader.readU8(),
-  };
-}
-
-function parseEstateUpgrade(reader: BufferReader): EstateUpgradeData {
-  return {
-    plotIndex: reader.readU8(),
-  };
-}
-
-function parseEstateBuyPlot(reader: BufferReader): EstateBuyPlotData {
-  return {
-    plotIndex: reader.readU8(),
-  };
-}
-
-function parseStartCraft(reader: BufferReader): StartCraftData {
-  return {
-    equipmentSlot: reader.readU8(),
-    targetQuality: reader.readU8(),
-  };
-}
-
-function parseForgeStrike(reader: BufferReader): ForgeStrikeData {
-  return {
-    intensity: reader.readU8(),
-  };
-}
-
-function parseEquipCrafted(reader: BufferReader): EquipCraftedData {
-  return {
-    slot: reader.readU8(),
-  };
-}
-
-function parseSendReinforcement(reader: BufferReader): SendReinforcementData {
-  return {
-    du1: reader.readU64(),
-    du2: reader.readU64(),
-    du3: reader.readU64(),
-  };
-}
-
-function parseSpeedupReinforcement(reader: BufferReader): SpeedupReinforcementData {
-  return {
-    gemsToSpend: reader.readU16(),
-  };
-}
-
-function parseStartExpedition(reader: BufferReader): StartExpeditionData {
-  return {
-    expeditionType: reader.readU8(),
-    operatives: reader.readU64(),
-    duration: reader.readI64(),
-  };
-}
-
-function parseExpeditionStrike(reader: BufferReader): ExpeditionStrikeData {
-  return {
-    intensity: reader.readU8(),
-  };
-}
-
-function parseSpeedupExpedition(reader: BufferReader): SpeedupExpeditionData {
-  return {
-    gemsToSpend: reader.readU16(),
-  };
-}
-
-function parseUpdateArenaLoadout(reader: BufferReader): UpdateArenaLoadoutData {
-  return {
-    du1: reader.readU64(),
-    du2: reader.readU64(),
-    du3: reader.readU64(),
-    meleeWeapons: reader.readU64(),
-    rangedWeapons: reader.readU64(),
-    siegeWeapons: reader.readU64(),
-    armor: reader.readU64(),
-  };
-}
-
-function parseEnterDungeon(reader: BufferReader): EnterDungeonData {
-  return {
-    dungeonId: reader.readU16(),
-  };
-}
-
-function parseDungeonAttack(reader: BufferReader): DungeonAttackData {
-  return {
-    intensity: reader.readU8(),
-  };
-}
-
-function parseDungeonAttackMulti(reader: BufferReader): DungeonAttackMultiData {
-  return {
-    count: reader.readU8(),
-    intensity: reader.readU8(),
-  };
-}
-
-function parseChooseRelic(reader: BufferReader): ChooseRelicData {
-  return {
-    relicChoice: reader.readU8(),
-  };
-}
-
-function parseCreateCastle(reader: BufferReader): CreateCastleData {
-  const castleId = reader.readU16();
-  const nameLen = reader.readU8();
-  const nameBytes = reader.readBytes(nameLen);
-  const tier = reader.readU8();
-  const latitude = reader.readI32();
-  const longitude = reader.readI32();
-  return {
-    castleId,
-    name: new TextDecoder().decode(nameBytes),
-    tier,
-    latitude,
-    longitude,
-  };
-}
-
-function parseAppointCourt(reader: BufferReader): AppointCourtData {
-  return {
-    position: reader.readU8(),
-  };
-}
-
-function parseInitiateUpgrade(reader: BufferReader): InitiateUpgradeData {
-  return {
-    upgradeType: reader.readU8(),
-  };
-}
-
-function parseJoinGarrison(reader: BufferReader): JoinGarrisonData {
-  return {
-    du1: reader.readU64(),
-    du2: reader.readU64(),
-    du3: reader.readU64(),
-  };
-}
-
-function parseUpdateCastleConfig(reader: BufferReader): UpdateCastleConfigData {
-  return {
-    minLevel: reader.readU8(),
-    minNetworthMillions: reader.readU8(),
-    minTroopsThousands: reader.readU8(),
-    protectionDuration: reader.readI64(),
-    kingNoviPerDay: reader.readU64(),
-    kingCashPerDay: reader.readU64(),
-    courtNoviPerDay: reader.readU64(),
-    courtCashPerDay: reader.readU64(),
-    memberNoviPerDay: reader.readU64(),
-    memberCashPerDay: reader.readU64(),
-  };
-}
+  // Castle
+  [DISCRIMINATORS.CASTLE_CREATE]: getStructCodec([
+    ['castleId', u16.codec], ['name', strU8], ['tier', u8.codec],
+    ['latitude', i32.codec], ['longitude', i32.codec],
+  ]),
+  [DISCRIMINATORS.CASTLE_APPOINT_COURT]: packed<AppointCourtData>([['position', u8]]),
+  [DISCRIMINATORS.CASTLE_INITIATE_UPGRADE]: packed<InitiateUpgradeData>([['upgradeType', u8]]),
+  [DISCRIMINATORS.CASTLE_JOIN_GARRISON]: packed<JoinGarrisonData>([['du1', u64], ['du2', u64], ['du3', u64]]),
+  [DISCRIMINATORS.CASTLE_UPDATE_CONFIG]: packed<UpdateCastleConfigData>([
+    ['minLevel', u8], ['minNetworthMillions', u8], ['minTroopsThousands', u8],
+    ['protectionDuration', i64], ['kingNoviPerDay', u64], ['kingCashPerDay', u64],
+    ['courtNoviPerDay', u64], ['courtCashPerDay', u64], ['memberNoviPerDay', u64], ['memberCashPerDay', u64],
+  ]),
+};
 
 // Main Parser
 
 /** Parse raw instruction data into structured object */
-export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstruction | null {
+export function parseInstructionData(data: Uint8Array): ParsedInstruction | null {
   if (data.length < 2) {
     return null;
   }
 
-  // Safe to access after length check - use Buffer.readUInt16LE for clarity
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  const discriminator = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(0, true);
   const name = INSTRUCTION_NAMES[discriminator];
 
   if (!name) {
@@ -738,201 +487,15 @@ export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstructi
   }
 
   const category = getCategory(discriminator);
-  const reader = new BufferReader(data.slice(2));
+  const codec = argCodecs[discriminator];
 
   let parsedData: unknown = {};
-
-  try {
-    switch (discriminator) {
-      // Economy
-      case DISCRIMINATORS.HIRE_UNITS:
-        parsedData = parseHireUnits(reader);
-        break;
-      case DISCRIMINATORS.PURCHASE_EQUIPMENT:
-        parsedData = parsePurchaseEquipment(reader);
-        break;
-      case DISCRIMINATORS.PURCHASE_STAMINA:
-        parsedData = parsePurchaseStamina(reader);
-        break;
-      case DISCRIMINATORS.TRANSFER_CASH:
-        parsedData = parseTransferCash(reader);
-        break;
-      case DISCRIMINATORS.VAULT_TRANSFER:
-        parsedData = parseVaultTransfer(reader);
-        break;
-
-      // Combat
-      case DISCRIMINATORS.ATTACK_PLAYER:
-        parsedData = parseAttackPlayer(reader);
-        break;
-
-      // Travel
-      case DISCRIMINATORS.INTERCITY_START:
-        parsedData = parseIntercityStart(reader);
-        break;
-      case DISCRIMINATORS.INTERCITY_TELEPORT:
-        parsedData = parseIntercityTeleport(reader);
-        break;
-      case DISCRIMINATORS.INTRACITY_START:
-        parsedData = parseIntracityStart(reader);
-        break;
-      case DISCRIMINATORS.TRAVEL_SPEEDUP:
-        parsedData = parseTravelSpeedup(reader);
-        break;
-
-      // Team
-      case DISCRIMINATORS.TEAM_CREATE:
-        parsedData = parseTeamCreate(reader);
-        break;
-      case DISCRIMINATORS.TEAM_DEPOSIT_TREASURY:
-        parsedData = parseTeamDepositTreasury(reader);
-        break;
-      case DISCRIMINATORS.TEAM_WITHDRAW_TREASURY:
-        parsedData = parseTeamWithdrawTreasury(reader);
-        break;
-      case DISCRIMINATORS.TEAM_SET_MOTD:
-        parsedData = parseTeamSetMotd(reader);
-        break;
-      case DISCRIMINATORS.TEAM_UPDATE_SETTINGS:
-        parsedData = parseTeamUpdateSettings(reader);
-        break;
-      case DISCRIMINATORS.TEAM_TREASURY_REQUEST_WITHDRAW:
-        parsedData = parseTreasuryRequestWithdraw(reader);
-        break;
-      case DISCRIMINATORS.TEAM_UPDATE_TREASURY_SETTINGS:
-        parsedData = parseTreasuryUpdateSettings(reader);
-        break;
-
-      // Rally
-      case DISCRIMINATORS.RALLY_CREATE:
-        parsedData = parseRallyCreate(reader);
-        break;
-      case DISCRIMINATORS.RALLY_JOIN:
-        parsedData = parseRallyJoin(reader);
-        break;
-      case DISCRIMINATORS.RALLY_SPEEDUP:
-        parsedData = parseRallySpeedup(reader);
-        break;
-
-      // Research
-      case DISCRIMINATORS.RESEARCH_START:
-        parsedData = parseStartResearch(reader);
-        break;
-      case DISCRIMINATORS.RESEARCH_SPEEDUP:
-        parsedData = parseSpeedUpResearch(reader);
-        break;
-
-      // Hero
-      case DISCRIMINATORS.HERO_MINT:
-        parsedData = parseMintHero(reader);
-        break;
-      case DISCRIMINATORS.HERO_LEVEL_UP:
-        parsedData = parseLevelUpHero(reader);
-        break;
-      case DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE:
-        parsedData = parseAssignDefensiveHero(reader);
-        break;
-
-      // Sanctuary
-      case DISCRIMINATORS.SANCTUARY_START_MEDITATION:
-        parsedData = parseStartMeditation(reader);
-        break;
-
-      // Shop
-      case DISCRIMINATORS.SHOP_PURCHASE_ITEM:
-        parsedData = parsePurchaseShopItem(reader);
-        break;
-      case DISCRIMINATORS.SHOP_PURCHASE_BUNDLE:
-        parsedData = parsePurchaseBundle(reader);
-        break;
-      case DISCRIMINATORS.SHOP_PURCHASE_FLASH_SALE:
-        parsedData = parsePurchaseFlashSale(reader);
-        break;
-
-      // Estate
-      case DISCRIMINATORS.ESTATE_BUILD:
-        parsedData = parseEstateBuild(reader);
-        break;
-      case DISCRIMINATORS.ESTATE_UPGRADE:
-        parsedData = parseEstateUpgrade(reader);
-        break;
-      case DISCRIMINATORS.ESTATE_BUY_PLOT:
-        parsedData = parseEstateBuyPlot(reader);
-        break;
-
-      // Forge
-      case DISCRIMINATORS.FORGE_START_CRAFT:
-        parsedData = parseStartCraft(reader);
-        break;
-      case DISCRIMINATORS.FORGE_STRIKE:
-        parsedData = parseForgeStrike(reader);
-        break;
-      case DISCRIMINATORS.FORGE_EQUIP:
-        parsedData = parseEquipCrafted(reader);
-        break;
-
-      // Reinforcement
-      case DISCRIMINATORS.REINFORCEMENT_SEND:
-        parsedData = parseSendReinforcement(reader);
-        break;
-      case DISCRIMINATORS.REINFORCEMENT_SPEEDUP:
-        parsedData = parseSpeedupReinforcement(reader);
-        break;
-
-      // Expedition
-      case DISCRIMINATORS.EXPEDITION_START:
-        parsedData = parseStartExpedition(reader);
-        break;
-      case DISCRIMINATORS.EXPEDITION_STRIKE:
-        parsedData = parseExpeditionStrike(reader);
-        break;
-      case DISCRIMINATORS.EXPEDITION_SPEEDUP:
-        parsedData = parseSpeedupExpedition(reader);
-        break;
-
-      // Arena
-      case DISCRIMINATORS.ARENA_UPDATE_LOADOUT:
-        parsedData = parseUpdateArenaLoadout(reader);
-        break;
-
-      // Dungeon
-      case DISCRIMINATORS.DUNGEON_ENTER:
-        parsedData = parseEnterDungeon(reader);
-        break;
-      case DISCRIMINATORS.DUNGEON_ATTACK:
-        parsedData = parseDungeonAttack(reader);
-        break;
-      case DISCRIMINATORS.DUNGEON_ATTACK_MULTI:
-        parsedData = parseDungeonAttackMulti(reader);
-        break;
-      case DISCRIMINATORS.DUNGEON_CHOOSE_RELIC:
-        parsedData = parseChooseRelic(reader);
-        break;
-
-      // Castle
-      case DISCRIMINATORS.CASTLE_CREATE:
-        parsedData = parseCreateCastle(reader);
-        break;
-      case DISCRIMINATORS.CASTLE_APPOINT_COURT:
-        parsedData = parseAppointCourt(reader);
-        break;
-      case DISCRIMINATORS.CASTLE_INITIATE_UPGRADE:
-        parsedData = parseInitiateUpgrade(reader);
-        break;
-      case DISCRIMINATORS.CASTLE_JOIN_GARRISON:
-        parsedData = parseJoinGarrison(reader);
-        break;
-      case DISCRIMINATORS.CASTLE_UPDATE_CONFIG:
-        parsedData = parseUpdateCastleConfig(reader);
-        break;
-
-      // Instructions with no parameters - return empty object
-      default:
-        parsedData = {};
+  if (codec) {
+    try {
+      parsedData = codec.decode(data.subarray(2));
+    } catch (e) {
+      parsedData = { parseError: String(e) };
     }
-  } catch (e) {
-    // If parsing fails, return with empty data
-    parsedData = { parseError: String(e) };
   }
 
   return {
@@ -945,22 +508,25 @@ export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstructi
 
 /** Parse instruction from base64 string */
 export function parseInstructionFromBase64(base64Data: string): ParsedInstruction | null {
-  const buffer = Buffer.from(base64Data, 'base64');
+  let buffer: Uint8Array;
+  try {
+    buffer = new Uint8Array(getBase64Encoder().encode(base64Data));
+  } catch {
+    return null;
+  }
   return parseInstructionData(buffer);
 }
 
 /** Check if data is a Novus Mundus instruction */
-export function isNovusMundusInstruction(data: Buffer | Uint8Array): boolean {
+export function isNovusMundusInstruction(data: Uint8Array): boolean {
   if (data.length < 2) return false;
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  const discriminator = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(0, true);
   return INSTRUCTION_NAMES[discriminator] !== undefined;
 }
 
 /** Get instruction name from data without full parsing */
-export function getInstructionNameFromData(data: Buffer | Uint8Array): string | undefined {
+export function getInstructionNameFromData(data: Uint8Array): string | undefined {
   if (data.length < 2) return undefined;
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  const discriminator = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint16(0, true);
   return INSTRUCTION_NAMES[discriminator];
 }
