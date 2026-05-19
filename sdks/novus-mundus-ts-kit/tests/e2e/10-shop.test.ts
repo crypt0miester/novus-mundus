@@ -57,10 +57,13 @@ import {
 import {
   seedMockPythFeed,
   seedMockSwitchboardFeed,
+  seedMockSwitchboardQueue,
+  seedMockOracleQuote,
   seedSplMint,
   seedSplTokenAccount,
   readSplTokenAmount,
 } from '../fixtures/svm';
+import { PROGRAM_ID } from '../../src/program';
 import { getAssociatedTokenAddressSync } from '../../src/index';
 import { addressBytes } from '../../src/crypto';
 
@@ -1139,34 +1142,39 @@ describe('Shop System', () => {
     }, 60_000);
 
     it('should accept SPL token payment via Switchboard feeds', async () => {
-      // Same flow as the Pyth test, but both oracle feeds are Switchboard
-      // pull-feeds. process_token_payment_flow's detect_oracle_type picks the
-      // Switchboard branch off the feed-account owner, so this exercises
-      // calculate_token_amount_switchboard / read_switchboard_price — code
-      // never touched by the Pyth path. Switchboard prices are scaled to 10^18.
+      // Switchboard On-Demand path (Model B). Both SOL/USD and TOKEN/USD prices
+      // come from one program-owned OracleQuote PDA — kept fresh by a crank,
+      // here seeded directly (as a crank would leave it). The on-chain
+      // process_token_payment_flow verifies it via QuoteVerifier::verify_account
+      // — oracle-key authorization against the queue + slot-hash freshness —
+      // then reads both feeds. Switchboard feed values are scaled to 10^18.
       const E18 = 10n ** 18n;
 
-      const tokenMintKp = (await generateKeyPairSigner());
-      const tokenMint = tokenMintKp.address;
+      const tokenMint = (await generateKeyPairSigner()).address;
       seedSplMint(ctx.svm, tokenMint, {
         decimals: 9,
         mintAuthority: ctx.daoAuthority.address,
       });
 
-      const solFeed = (await generateKeyPairSigner()).address;
-      const tokenFeed = (await generateKeyPairSigner()).address;
-      // Discriminator-only seed satisfies the config-time validation gate.
-      seedMockSwitchboardFeed(ctx.svm, solFeed);
-      seedMockSwitchboardFeed(ctx.svm, tokenFeed);
+      // The Switchboard queue, the oracle ed25519 signing key, and the two
+      // 32-byte feed ids (SOL/USD in shop config, TOKEN/USD on the token).
+      const switchboardQueue = (await generateKeyPairSigner()).address;
+      const oracleSigningKey = addressBytes((await generateKeyPairSigner()).address);
+      const solFeedId = (await generateKeyPairSigner()).address;
+      const tokenFeedId = (await generateKeyPairSigner()).address;
 
-      // Register the SOL Switchboard feed in shop config.
+      // Mock queue — registers the oracle key the quote is authorized against.
+      seedMockSwitchboardQueue(ctx.svm, switchboardQueue, oracleSigningKey);
+
+      // Register the SOL Switchboard feed id + the queue in shop config.
       await sendInstructions(
         ctx.svm,
         [
           await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.address },
             {
-              solSwitchboardFeed: solFeed,
+              solSwitchboardFeed: solFeedId,
+              solSwitchboardQueue: switchboardQueue,
               solMaxStalenessSlots: 60_000,
               solConfidenceThresholdBps: 1000,
             },
@@ -1175,7 +1183,7 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      // Register the payment token + its TOKEN/USD Switchboard feed.
+      // Register the payment token + its TOKEN/USD Switchboard feed id.
       await sendInstructions(
         ctx.svm,
         [
@@ -1189,7 +1197,7 @@ describe('Shop System', () => {
             },
             {
               pythFeed: undefined,
-              switchboardFeed: tokenFeed,
+              switchboardFeed: tokenFeedId,
               maxStalenessSlots: 60_000,
               confidenceThresholdBps: 1000,
               discountBps: 0,
@@ -1214,9 +1222,18 @@ describe('Shop System', () => {
         amount: 0n,
       });
 
-      // Re-seed with live prices + fresh result_slot: SOL/USD = $150, TOKEN/USD = $1.
-      seedMockSwitchboardFeed(ctx.svm, solFeed, { value: 150n * E18 });
-      seedMockSwitchboardFeed(ctx.svm, tokenFeed, { value: 1n * E18 });
+      // Seed the OracleQuote PDA (as a crank would leave it) carrying
+      // SOL/USD = $150 and TOKEN/USD = $1, plus the matching SlotHashes entry.
+      // Done right before the purchase so recent_slot tracks the clock.
+      const oracleQuote = await seedMockOracleQuote(ctx.svm, {
+        programId: PROGRAM_ID,
+        queue: switchboardQueue,
+        oracleSigningKey,
+        feeds: [
+          { feedId: addressBytes(solFeedId), value: 150n * E18 },
+          { feedId: addressBytes(tokenFeedId), value: 1n * E18 },
+        ],
+      });
 
       await sendInstructions(
         ctx.svm,
@@ -1232,8 +1249,8 @@ describe('Shop System', () => {
                 tokenMint,
                 buyerTokenAta: buyerAta,
                 treasuryTokenAta: treasuryAta,
-                solOracleFeed: solFeed,
-                tokenOracleFeed: tokenFeed,
+                oracleQuote,
+                switchboardQueue,
               },
             },
             { quantity: 1, paymentType: 2 },

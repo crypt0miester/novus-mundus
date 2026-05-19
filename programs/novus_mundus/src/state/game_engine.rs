@@ -739,7 +739,7 @@ impl NoviPurchaseConfig {
             // DAO sets these when oracle feeds become available
             novi_pyth_feed: NULL_PUBKEY,
             novi_switchboard_feed: NULL_PUBKEY,
-            novi_max_staleness_slots: 60,           // 60s for Pyth / 60 slots for Switchboard
+            novi_max_staleness_slots: 30,           // ~12 seconds at 400ms slots
             novi_confidence_threshold_bps: 500,     // 5% max confidence interval
 
             _padding: [0; 4],

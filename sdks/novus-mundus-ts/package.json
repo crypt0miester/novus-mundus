@@ -29,10 +29,14 @@
     "start": "bun run terrain-builder/start.sh"
   },
   "devDependencies": {
+    "@switchboard-xyz/common": "^5.8.0",
+    "@switchboard-xyz/on-demand": "^3.9.0",
     "@types/bn.js": "^5.2.0",
     "@types/bun": "latest",
+    "@types/yargs": "^17.0.33",
     "litesvm": "0.6.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "yargs": "^17.7.2"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",

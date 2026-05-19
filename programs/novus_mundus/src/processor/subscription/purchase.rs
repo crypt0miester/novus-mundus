@@ -69,8 +69,9 @@ use crate::{
 /// - [] token_mint: SPL Token mint for payment
 /// - [writable] buyer_token_ata: Buyer's token account
 /// - [writable] treasury_token_ata: Treasury's token account
-/// - [] sol_oracle_feed: SOL/USD price feed (Pyth or Switchboard pull feed)
-/// - [] token_oracle_feed: TOKEN/USD price feed (same oracle program as sol)
+///   Then, by oracle program (see helpers::process_token_payment_flow):
+///   - Pyth (+2): sol `PriceUpdateV2`, token `PriceUpdateV2`
+///   - Switchboard (+3): oracle-quote PDA, Switchboard queue, SlotHashes sysvar
 ///
 /// # Instruction Data
 /// - payment_type: u8 (0 = ONCHAIN SOL, 1 = OFFCHAIN, 2 = TOKEN)

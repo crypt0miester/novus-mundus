@@ -101,6 +101,7 @@ export const SEEDS = {
   PLAYER_PURCHASE: Buffer.from('player_purchase'),
   INVENTORY: Buffer.from('inventory'),
   ALLOWED_TOKEN: Buffer.from('allowed_token'),
+  ORACLE_QUOTE: Buffer.from('oracle_quote'),
 
   // Estate system
   ESTATE: Buffer.from('estate'),
@@ -360,6 +361,10 @@ export const DISCRIMINATORS = {
 
   // Token Economy (300-309) - NOVI Purchases
   SHOP_PURCHASE_NOVI: 300,
+
+  // Switchboard Oracle Quote (301-309)
+  ORACLE_INIT_QUOTE: 301,
+  ORACLE_CRANK_QUOTE: 302,
 
   // Hero Burn & Supply (310-319)
   HERO_BURN: 310,

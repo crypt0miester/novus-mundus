@@ -37,3 +37,4 @@ pub mod expedition;
 pub mod arena;
 pub mod dungeon;
 pub mod castle;
+pub mod oracle;

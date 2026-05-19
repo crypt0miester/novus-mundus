@@ -8,6 +8,7 @@
 import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata } from 'litesvm';
 import { address, lamports, getProgramDerivedAddress, type Address } from '@solana/kit';
 import { addressBytes } from '../../src/crypto';
+import { deriveOracleQuotePda } from '../../src/index';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -261,6 +262,183 @@ export function seedMockSwitchboardFeed(
     programAddress: SWITCHBOARD_PROGRAM_ID,
     space: BigInt(data.length),
   });
+}
+
+// Switchboard On-Demand `OracleQuote` mocks (Model B)
+
+/** SlotHashes sysvar address. */
+const SLOT_HASHES_SYSVAR = address('SysvarS1otHashes111111111111111111111111111');
+/** Sysvar owner program. */
+const SYSVAR_OWNER = address('Sysvar1111111111111111111111111111111111111');
+
+/** `QueueAccountData` account length (8 discriminator + 6272 struct). */
+const QUEUE_ACCOUNT_LEN = 6280;
+/**
+ * Account offset of `ed25519_oracle_signing_keys[0]`:
+ * 8 (discriminator) + struct offset 4192 (authority 32 + mr_enclaves 1024 +
+ * oracle_keys 2496 + reserved1 40 + secp_oracle_signing_keys 600).
+ */
+const QUEUE_ED25519_KEYS_OFFSET = 4200;
+
+/**
+ * Seed a mock Switchboard `QueueAccountData` account.
+ *
+ * `verify_account` reads exactly one field — `ed25519_oracle_signing_keys` —
+ * and requires the account be exactly 6280 bytes; it checks neither the
+ * discriminator nor the owner. We register `oracleSigningKey` at index 0 so a
+ * quote signed by it passes the oracle-authorization check.
+ */
+export function seedMockSwitchboardQueue(
+  svm: LiteSVM,
+  queue: Address,
+  oracleSigningKey?: Buffer | Uint8Array,
+): void {
+  const data = Buffer.alloc(QUEUE_ACCOUNT_LEN);
+  // Real discriminator, purely for realism — verify() ignores it.
+  Buffer.from([217, 194, 55, 127, 184, 83, 138, 1]).copy(data, 0);
+  if (oracleSigningKey) {
+    Buffer.from(oracleSigningKey).copy(data, QUEUE_ED25519_KEYS_OFFSET);
+  }
+  svm.setAccount({
+    address: queue,
+    data,
+    executable: false,
+    lamports: lamports(1_000_000_000n),
+    programAddress: SWITCHBOARD_PROGRAM_ID,
+    space: BigInt(data.length),
+  });
+}
+
+/** One feed inside a mock `OracleQuote`. */
+export interface MockOracleQuoteFeed {
+  /** 32-byte feed id — Buffer/Uint8Array or a 64-hex string. */
+  feedId: Buffer | Uint8Array | string;
+  /** Feed value scaled to 10^18 (Switchboard fixed precision). */
+  value: bigint;
+}
+
+function feedId32(id: Buffer | Uint8Array | string): Buffer {
+  const buf =
+    typeof id === 'string'
+      ? Buffer.from(id.replace(/^0x/, ''), 'hex')
+      : Buffer.from(id);
+  if (buf.length !== 32) throw new Error(`feed id must be 32 bytes, got ${buf.length}`);
+  return buf;
+}
+
+/**
+ * Seed a mock program-owned `OracleQuote` PDA (the account a `crank_oracle_quote`
+ * would have written) plus a matching SlotHashes sysvar entry.
+ *
+ * Account layout (`OracleQuote::write`): `[SBOracle(8)][queue(32)][len u16]
+ * [ed25519 quote data]`. The ed25519 data mirrors Switchboard's `QuoteBuilder`
+ * (`test_utils.rs`): header + `Ed25519SignatureOffsets` + pubkey + signature +
+ * message (`signed_slothash` + `PackedFeedInfo`s) + suffix
+ * (`oracle_idxs` + slot + version + `SBOD`).
+ *
+ * The signature bytes are left zero: `verify_account` reads a *persisted*
+ * account and never re-checks the signature (the crank's transaction-time
+ * ed25519 precompile did). It verifies the signed slot hash against the
+ * SlotHashes sysvar and the signer against the queue — both seeded here.
+ *
+ * Returns the derived oracle-quote PDA address.
+ */
+export async function seedMockOracleQuote(
+  svm: LiteSVM,
+  opts: {
+    /** novus_mundus program id (the PDA owner). */
+    programId: Address;
+    /** Switchboard queue this quote belongs to. */
+    queue: Address;
+    /** Feeds carried by the quote (≤ 8). */
+    feeds: MockOracleQuoteFeed[];
+    /** Quote slot; defaults to the current LiteSVM slot. */
+    recentSlot?: bigint;
+    /** Oracle ed25519 signing key — must match the seeded queue. */
+    oracleSigningKey?: Buffer | Uint8Array;
+    /** 32-byte signed slot hash; defaults to a fixed pattern. */
+    signedSlothash?: Buffer | Uint8Array;
+  },
+): Promise<Address> {
+  if (opts.feeds.length === 0 || opts.feeds.length > 8) {
+    throw new Error('OracleQuote carries 1–8 feeds');
+  }
+  const recentSlot = opts.recentSlot ?? svm.getClock().slot;
+  const signedSlothash = opts.signedSlothash
+    ? Buffer.from(opts.signedSlothash)
+    : Buffer.alloc(32, 0x11);
+  const oracleKey = opts.oracleSigningKey
+    ? Buffer.from(opts.oracleSigningKey)
+    : Buffer.alloc(32);
+
+  const numSigs = 1;
+  const feedCount = opts.feeds.length;
+  const messageSize = 32 + 49 * feedCount;
+  const pubkeysOffset = 2 + 14 * numSigs; // 16
+  const signaturesOffset = pubkeysOffset + 32 * numSigs; // 48
+  const messageOffset = signaturesOffset + 64 * numSigs; // 112
+  const suffixLen = numSigs + 8 + 1 + 4; // oracle_idxs + slot + version + SBOD
+  const ed = Buffer.alloc(messageOffset + messageSize + suffixLen);
+
+  ed.writeUInt8(numSigs, 0);
+  // padding byte @1 stays 0
+  // Ed25519SignatureOffsets (14 bytes) for the one signature.
+  ed.writeUInt16LE(signaturesOffset, 2); // signature_offset
+  ed.writeUInt16LE(0, 4); // signature_instruction_index
+  ed.writeUInt16LE(pubkeysOffset, 6); // public_key_offset
+  ed.writeUInt16LE(0, 8); // public_key_instruction_index
+  ed.writeUInt16LE(messageOffset, 10); // message_data_offset
+  ed.writeUInt16LE(messageSize, 12); // message_data_size
+  ed.writeUInt16LE(0, 14); // message_instruction_index
+  oracleKey.copy(ed, pubkeysOffset);
+  // signature @signaturesOffset stays zero (see doc comment).
+  signedSlothash.copy(ed, messageOffset);
+  let f = messageOffset + 32;
+  for (const feed of opts.feeds) {
+    feedId32(feed.feedId).copy(ed, f);
+    writeI128LE(ed, feed.value, f + 32);
+    ed.writeUInt8(1, f + 48); // min_oracle_samples
+    f += 49;
+  }
+  const s = messageOffset + messageSize;
+  ed.writeUInt8(0, s); // oracle_idxs[0] = 0
+  ed.writeBigUInt64LE(recentSlot, s + 1);
+  ed.writeUInt8(1, s + 9); // version
+  Buffer.from('SBOD').copy(ed, s + 10);
+
+  // Persisted account: [SBOracle][queue][len u16][ed25519 data].
+  const data = Buffer.alloc(8 + 32 + 2 + ed.length);
+  Buffer.from('SBOracle').copy(data, 0);
+  Buffer.from(addressBytes(opts.queue)).copy(data, 8);
+  data.writeUInt16LE(ed.length, 40);
+  ed.copy(data, 42);
+
+  const [quotePda] = await deriveOracleQuotePda(opts.queue);
+  svm.setAccount({
+    address: quotePda,
+    data,
+    executable: false,
+    lamports: lamports(1_000_000_000n),
+    programAddress: opts.programId,
+    space: BigInt(data.length),
+  });
+
+  // SlotHashes sysvar: [count u64][slot u64][hash 32] — one entry, so the
+  // on-chain `find_slothash_in_sysvar` resolves `recentSlot` at index 0.
+  const sh = Buffer.alloc(8 + 40);
+  sh.writeBigUInt64LE(1n, 0);
+  sh.writeBigUInt64LE(recentSlot, 8);
+  signedSlothash.copy(sh, 16);
+  svm.setAccount({
+    address: SLOT_HASHES_SYSVAR,
+    data: sh,
+    executable: false,
+    lamports: lamports(1_000_000_000n),
+    programAddress: SYSVAR_OWNER,
+    space: BigInt(sh.length),
+  });
+
+  return quotePda;
 }
 
 /** SPL Token program — owner of mint and token accounts. */

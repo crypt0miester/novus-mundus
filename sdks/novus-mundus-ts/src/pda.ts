@@ -442,6 +442,20 @@ export function deriveAllowedTokenPda(
   );
 }
 
+/**
+ * Derive the program-owned Switchboard oracle-quote PDA, keyed by queue.
+ *
+ * On-chain seeds: `["oracle_quote", switchboard_queue]`.
+ */
+export function deriveOracleQuotePda(
+  switchboardQueue: PublicKey
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [SEEDS.ORACLE_QUOTE, switchboardQueue.toBuffer()],
+    PROGRAM_ID
+  );
+}
+
 // Estate System PDAs
 
 /** Derive Estate PDA (scoped to player PDA) */

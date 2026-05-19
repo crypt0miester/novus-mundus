@@ -1,6 +1,26 @@
 # Switchboard `OracleQuote` Migration Plan
 
-Status: **PROPOSAL — for review.** Nothing implemented yet.
+Status: **Phases 1–2 complete (2026-05-19).** Phase 1 — `sdks/p-switchboard` is
+the vendored & ported `OracleQuote` verifier (builds for SBF, smoke tests pass).
+Phase 2 — `novus_mundus` is wired for Model B: `state/oracle_quote.rs`,
+`processor/oracle/{init,crank}_quote` (ix 301/302), `token_ops.rs` +
+`purchase_novi` on `QuoteVerifier`, `ShopConfigAccount.switchboard_queue`,
+config writers updated — and the program **builds for SBF**.
+Phase 3 — TS SDK *interface* done (`deriveOracleQuotePda`, `instructions/oracle.ts`
+= `init`/`crank` builders, `ShopConfigAccount.solSwitchboardQueue`). The
+**cosigner crank** is implemented — `scripts/crank-oracle.ts` fetches a signed
+quote via `queue.fetchQuoteIx` (Switchboard gateway), submits
+`[ed25519 verify ix, crank_oracle_quote]`; typecheck-clean against
+`@switchboard-xyz/on-demand` 3.10.1. **Tested (2026-05-19):** e2e run found+fixed a real bug — the `updateShopConfig`
+SDK builder wasn't sending the new `switchboard_queue`. A mock-quote harness was
+then built (`tests/fixtures/svm.ts`: `seedMockSwitchboardQueue` + a 6280-byte
+`QueueAccountData`, `seedMockOracleQuote` crafting the persisted quote account +
+SlotHashes entry), and the `10-shop` Switchboard test rewritten for the
+OracleQuote model — it now exercises the on-chain `verify_account` path
+(oracle-key authorization against the queue, slot-hash verification, feed
+extraction, price math, token transfer). **Full e2e suite: 679/679 pass, 0
+skip** across 27 files. The off-chain crank script (`scripts/crank-oracle.ts`)
+still wants a live-gateway run; the on-chain verify path is now covered.
 Author: Claude · Date: 2026-05-19
 
 ---

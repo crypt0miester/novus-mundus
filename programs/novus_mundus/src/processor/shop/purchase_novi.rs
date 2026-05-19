@@ -12,7 +12,7 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
     events::shop::NoviPurchased,
-    helpers::{validate_token_account_owner, detect_oracle_type, read_pyth_price, pin_oracle_feed, read_switchboard_price, require_pyth_feed_configured, scale_ratio, OracleType},
+    helpers::{validate_token_account_owner, detect_oracle_type, read_pyth_price, verify_switchboard_quote, sb_feed_value, require_pyth_feed_configured, scale_ratio, OracleType},
     logic::safe_math::apply_bp_penalty,
     utils::{read_u64, read_u8, unlikely},
 };
@@ -42,10 +42,10 @@ use p_pyth::Price;
 /// 7. [] token_program - SPL Token program
 /// 8. [] system_program - System program
 ///
-/// # Accounts (Optional - Oracle Pricing, +3 accounts; Pyth or Switchboard)
-/// 9. [] shop_config - ShopConfigAccount (for SOL oracle config)
-/// 10. [] sol_oracle_feed - SOL/USD price feed (Pyth or Switchboard pull feed)
-/// 11. [] novi_oracle_feed - NOVI/USD price feed (Pyth or Switchboard pull feed)
+/// # Accounts (Optional - Oracle Pricing)
+/// 9. [] shop_config - ShopConfigAccount (SOL oracle config + switchboard_queue)
+///   Pyth (+3): 10 sol `PriceUpdateV2`, 11 novi `PriceUpdateV2`.
+///   Switchboard (+4): 10 oracle-quote PDA, 11 queue, 12 SlotHashes sysvar.
 ///
 /// # Instruction Data
 /// - package_index: u8 (0-4, which package to buy)
@@ -277,10 +277,10 @@ fn calculate_cost_lamports(
 
 /// Try to calculate price using oracle.
 ///
-/// `oracle_accounts`:
-/// - [0] shop_config
-/// - [1] sol_oracle_feed (Pyth price account or Switchboard pull feed)
-/// - [2] novi_oracle_feed (same oracle program as sol_oracle_feed)
+/// `oracle_accounts` by oracle program:
+/// - **Pyth** (≥ 3): [0] shop_config, [1] sol `PriceUpdateV2`, [2] novi `PriceUpdateV2`.
+/// - **Switchboard** (≥ 4): [0] shop_config, [1] oracle-quote PDA, [2] queue,
+///   [3] SlotHashes sysvar. A single quote carries both the SOL and NOVI feeds.
 fn try_oracle_price(
     base_amount: u64,
     novi_config: &crate::state::NoviPurchaseConfig,
@@ -291,22 +291,21 @@ fn try_oracle_price(
     current_timestamp: i64,
 ) -> Result<u64, ProgramError> {
     let shop_config_account = &oracle_accounts[0];
-    let sol_oracle_feed = &oracle_accounts[1];
-    let novi_oracle_feed = &oracle_accounts[2];
 
     require_owner(shop_config_account, program_id)?;
     let shop_config_data = shop_config_account.try_borrow()?;
     let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data) };
 
-    // Detect oracle type by feed owner; reject mixed Pyth+Switchboard.
-    let oracle_type = detect_oracle_type(sol_oracle_feed)?;
-    if unlikely(detect_oracle_type(novi_oracle_feed)? != oracle_type) {
-        pinocchio_log::log!("purchase_novi: mixed Pyth+Switchboard feeds rejected");
-        return Err(GameError::OracleUnavailable.into());
-    }
-
-    let price_lamports = match oracle_type {
+    // Slot [1] selects the oracle program: a Pyth feed account, or this
+    // program's oracle-quote PDA.
+    let price_lamports = match detect_oracle_type(&oracle_accounts[1])? {
         OracleType::Pyth => {
+            let sol_oracle_feed = &oracle_accounts[1];
+            let novi_oracle_feed = &oracle_accounts[2];
+            if unlikely(detect_oracle_type(novi_oracle_feed)? != OracleType::Pyth) {
+                pinocchio_log::log!("purchase_novi: mixed Pyth+Switchboard feeds rejected");
+                return Err(GameError::OracleUnavailable.into());
+            }
             // Pyth feeds are pinned by `feed_id` (verified inside read_pyth_price).
             let (sol_price, novi_price) = get_pyth_prices(
                 sol_oracle_feed,
@@ -318,22 +317,21 @@ fn try_oracle_price(
             calculate_lamports_from_pyth(base_amount, &sol_price, &novi_price)?
         }
         OracleType::Switchboard => {
-            // Switchboard feeds are persistent accounts: pin by address.
-            pin_oracle_feed(sol_oracle_feed, &shop_config.sol_switchboard_feed)?;
-            pin_oracle_feed(novi_oracle_feed, &novi_config.novi_switchboard_feed)?;
-            let sol_price = read_switchboard_price(
-                sol_oracle_feed,
+            // One program-owned quote PDA carries both the SOL and NOVI feeds.
+            if unlikely(oracle_accounts.len() < 4) {
+                return Err(ProgramError::NotEnoughAccountKeys);
+            }
+            let quote = verify_switchboard_quote(
+                &oracle_accounts[1],
+                &oracle_accounts[2],
+                &oracle_accounts[3],
+                &shop_config.switchboard_queue,
                 current_slot,
                 shop_config.sol_max_staleness_slots as u64,
-                shop_config.sol_confidence_threshold_bps,
             )?;
-            let novi_price = read_switchboard_price(
-                novi_oracle_feed,
-                current_slot,
-                novi_config.novi_max_staleness_slots as u64,
-                novi_config.novi_confidence_threshold_bps,
-            )?;
-            calculate_lamports_from_sb(base_amount, sol_price.value, novi_price.value)?
+            let sol_usd = sb_feed_value(&quote, shop_config.sol_switchboard_feed.as_array())?;
+            let novi_usd = sb_feed_value(&quote, novi_config.novi_switchboard_feed.as_array())?;
+            calculate_lamports_from_sb(base_amount, sol_usd, novi_usd)?
         }
     };
 

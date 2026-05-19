@@ -2,7 +2,7 @@
 name = "p-switchboard"
 version = "0.2.0"
 edition = "2021"
-description = "pinocchio/no_std port of the Switchboard On-Demand SDK (PullFeedAccountData)"
+description = "pinocchio/no_std port of Switchboard On-Demand OracleQuote verification (vendored from switchboard-on-demand 0.12.1)"
 license = "MIT"
 
 [lib]
@@ -14,3 +14,4 @@ no-panic-handler = []
 
 [dependencies]
 pinocchio = "0.10.2"
+five8_const = "0.1"

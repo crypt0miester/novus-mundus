@@ -160,6 +160,7 @@ pub fn process(
     // These should be set via update_config before enabling token payments
     config.sol_pyth_feed = Address::default();           // Set via update_config
     config.sol_switchboard_feed = Address::default();    // Set via update_config
+    config.switchboard_queue = Address::default();       // Set via update_config
     config.sol_max_staleness_slots = 30;                // ~12 seconds at 400ms slots
     config.sol_confidence_threshold_bps = 100;          // 1% max confidence interval
 

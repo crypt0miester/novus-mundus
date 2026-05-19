@@ -61,12 +61,16 @@ pub struct ShopConfigAccount {
     // State (8 bytes)
     pub next_flash_sale_id: u64,         // Incrementing ID for flash sales
 
-    // SOL Oracle Configuration (68 bytes)
+    // SOL Oracle Configuration (100 bytes)
     // Used for token payments: convert token USD price to SOL amount
     pub sol_pyth_feed: Address,           // Pyth SOL/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
-    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD pull-feed *account* pubkey (32 bytes)
-    pub sol_max_staleness_slots: u16,    // Max price age — SECONDS for Pyth, SLOTS for Switchboard
-    pub sol_confidence_threshold_bps: u16, // Max confidence interval (Pyth) / std deviation (Switchboard), bps
+    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
+    /// Switchboard On-Demand queue account pubkey. Pins the `queue` account
+    /// passed to `QuoteVerifier` and seeds the oracle-quote PDA
+    /// (`["oracle_quote", switchboard_queue]`). All-zero = not configured.
+    pub switchboard_queue: Address,
+    pub sol_max_staleness_slots: u16,    // Max price age — SECONDS for Pyth, SLOTS (quote max_age) for Switchboard
+    pub sol_confidence_threshold_bps: u16, // Max confidence interval, bps — Pyth only (Switchboard confidence is enforced inside the verified quote)
 
     // Reserved (8 bytes)
     pub _reserved: [u8; 8],
@@ -857,11 +861,11 @@ pub struct AllowedTokenAccount {
 
     // Dual Oracle Configuration (64 bytes)
     pub pyth_feed: Address,                 // Pyth TOKEN/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
-    pub switchboard_feed: Address,          // Switchboard TOKEN/USD pull-feed *account* pubkey
+    pub switchboard_feed: Address,          // Switchboard TOKEN/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
 
     // Pricing Parameters (8 bytes)
-    pub max_staleness_slots: u16,          // Max price age — SECONDS for Pyth, SLOTS for Switchboard
-    pub confidence_threshold_bps: u16,     // Max confidence interval (Pyth) / std deviation (Switchboard), bps
+    pub max_staleness_slots: u16,          // Max price age, SECONDS — Pyth only (Switchboard uses the shop-config quote max_age)
+    pub confidence_threshold_bps: u16,     // Max confidence interval, bps — Pyth only (see sol_confidence_threshold_bps)
     pub discount_bps: u16,                 // Discount for using this token
     pub _padding: [u8; 2],
 

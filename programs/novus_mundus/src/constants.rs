@@ -156,6 +156,9 @@ pub const DAO_PROMOTION_SEED: &[u8] = b"dao_promo";
 pub const PLAYER_PURCHASE_SEED: &[u8] = b"player_purchase";
 pub const INVENTORY_SEED: &[u8] = b"inventory";
 pub const ALLOWED_TOKEN_SEED: &[u8] = b"allowed_token";
+/// Seed for the program-owned Switchboard oracle-quote PDA
+/// (`["oracle_quote", switchboard_queue]`).
+pub const ORACLE_QUOTE_SEED: &[u8] = b"oracle_quote";
 
 // Estate System
 pub const ESTATE_SEED: &[u8] = b"estate";

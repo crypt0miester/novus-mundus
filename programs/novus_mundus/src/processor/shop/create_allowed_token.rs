@@ -9,7 +9,7 @@ use crate::{
     error::GameError,
     state::{GameEngine, AllowedTokenAccount},
     validation::{require_signer, require_writable, require_key_match},
-    helpers::{consume_optional_switchboard_feed, ZERO_PUBKEY},
+    helpers::ZERO_PUBKEY,
     token_helpers::create_associated_token_account,
     utils::{read_bytes32, read_u16},
 };
@@ -30,18 +30,13 @@ use crate::{
 /// - [] token_program: SPL Token program
 /// - [] associated_token_program: Associated Token program
 ///
-/// # Accounts (conditional, appended at index 9)
-/// - [] switchboard_feed_account: Required iff `switchboard_feed` in instruction
-///   data is non-zero. Owner-checked + `PullFeedAccountData`-validated.
-///
-/// Pyth feeds are configured as a bare 32-byte feed-id (no account), so a Pyth
-/// feed consumes no trailing account slot; only a Switchboard feed does.
-/// Without the Switchboard account, a junk pubkey would only fail later at
-/// purchase time.
+/// Both Pyth and Switchboard feeds are configured as bare 32-byte feed-ids
+/// (no account), so neither consumes a trailing account slot — feed-ids are
+/// verified at purchase time.
 ///
 /// # Instruction Data
 /// - pyth_feed: 32 bytes - Pyth TOKEN/USD feed id (Pyth feed identifier, 0 = unset)
-/// - switchboard_feed: Address (32 bytes) - Switchboard TOKEN/USD pull-feed account
+/// - switchboard_feed: 32 bytes - Switchboard TOKEN/USD OracleQuote feed id (0 = unset)
 /// - max_staleness_slots: u16 - Max price age (Pyth: seconds; Switchboard: slots)
 /// - confidence_threshold_bps: u16 - Max confidence interval / std deviation
 /// - discount_bps: u16 - Discount for using this token
@@ -127,9 +122,8 @@ pub fn process(
         return Err(GameError::OracleUnavailable.into());
     }
 
-    // Only a Switchboard feed has an account to validate at config time; a
-    // Pyth feed is a bare feed-id and is checked at purchase time instead.
-    let _ = consume_optional_switchboard_feed(accounts, 9, switchboard_feed.as_array())?;
+    // Both Pyth and Switchboard feeds are bare feed-ids verified at purchase
+    // time; there is no feed account to validate here.
 
     // 6b. Provision the treasury's ATA for this token (create if missing).
     // process_token_payment_flow pins treasury_token_ata to

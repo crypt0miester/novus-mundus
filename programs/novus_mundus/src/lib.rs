@@ -312,6 +312,10 @@ pub fn process_instruction(
         // Token Economy (300-309) - NOVI Purchases
         300 => { msg!("purchase novi"); processor::shop::purchase_novi::process(program_id, accounts, instruction_data) }
 
+        // Switchboard Oracle Quote (301-309)
+        301 => { msg!("init oracle quote"); processor::oracle::init_quote::process(program_id, accounts, instruction_data) }
+        302 => { msg!("crank oracle quote"); processor::oracle::crank_quote::process(program_id, accounts, instruction_data) }
+
         // Hero Burn & Supply (310-319)
         310 => { msg!("burn hero"); processor::hero::burn::process(program_id, accounts, instruction_data) }
         311 => { msg!("update supply cap"); processor::hero::update_supply_cap::process(program_id, accounts, instruction_data) }

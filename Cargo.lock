@@ -225,6 +225,7 @@ dependencies = [
 name = "p-switchboard"
 version = "0.2.0"
 dependencies = [
+ "five8_const 0.1.4",
  "pinocchio",
 ]
 

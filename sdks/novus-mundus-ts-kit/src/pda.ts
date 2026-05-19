@@ -340,6 +340,12 @@ export function deriveAllowedTokenPda(
   return pda(PROGRAM_ID, [SEEDS.ALLOWED_TOKEN, addressBytes(gameEngine), addressBytes(tokenMint)]);
 }
 
+// Derive the program-owned Switchboard oracle-quote PDA, keyed by queue.
+// Layout on-chain: ["oracle_quote", switchboard_queue].
+export function deriveOracleQuotePda(switchboardQueue: Address): Promise<[Address, number]> {
+  return pda(PROGRAM_ID, [SEEDS.ORACLE_QUOTE, addressBytes(switchboardQueue)]);
+}
+
 // Estate System PDAs
 
 // Derive Estate PDA (scoped to player PDA)

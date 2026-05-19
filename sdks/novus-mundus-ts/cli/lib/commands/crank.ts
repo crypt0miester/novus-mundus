@@ -10,6 +10,7 @@ import { crankArena } from '../cranks/arena';
 import { crankDungeons } from '../cranks/dungeons';
 import { crankCastles } from '../cranks/castles';
 import { crankRallies } from '../cranks/rallies';
+import { crankOracle } from '../cranks/oracle';
 
 interface CrankTarget {
   name: string;
@@ -24,6 +25,7 @@ const CRANK_TARGETS: CrankTarget[] = [
   { name: 'Dungeons',       key: 'dungeons',        fn: crankDungeons },
   { name: 'Castles',        key: 'castles',         fn: crankCastles },
   { name: 'Rallies',        key: 'rallies',         fn: crankRallies },
+  { name: 'Oracle',         key: 'oracle',          fn: crankOracle },
 ];
 
 export async function handleCrank(ctx: CLIContext, args: ParsedArgs): Promise<void> {

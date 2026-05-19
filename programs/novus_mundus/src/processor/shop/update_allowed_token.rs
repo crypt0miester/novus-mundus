@@ -7,7 +7,6 @@ use crate::{
     error::GameError,
     state::{GameEngine, AllowedTokenAccount},
     validation::{require_signer, require_writable, require_owner},
-    helpers::consume_optional_switchboard_feed,
     utils::{read_bytes32, read_u16, read_u8},
 };
 
@@ -45,15 +44,13 @@ impl AllowedTokenUpdateField {
 /// - [writable] allowed_token: Existing AllowedTokenAccount
 /// - [] token_mint: The SPL token mint (for PDA verification)
 ///
-/// # Accounts (conditional)
-/// - [] switchboard_feed_account: Required iff `field == SwitchboardFeed` AND the
-///   new pubkey is non-zero. Owner-checked + `PullFeedAccountData`-validated.
-///   (A Pyth feed is a bare feed-id and consumes no account slot.)
+/// `PythFeed` / `SwitchboardFeed` are bare 32-byte feed-ids — no feed account
+/// is passed; both are verified at purchase time.
 ///
 /// # Instruction Data
 /// - field: u8 (AllowedTokenUpdateField enum)
 /// - value: varies by field type
-///   - PythFeed: 32 bytes (Pyth feed id) / SwitchboardFeed: Address (32 bytes)
+///   - PythFeed / SwitchboardFeed: 32 bytes (feed id)
 ///   - MaxStalenessSlots/ConfidenceThresholdBps/DiscountBps: u16 (2 bytes)
 pub fn process(
     program_id: &Address,
@@ -116,10 +113,10 @@ pub fn process(
             allowed_token.pyth_feed = Address::from(new_pyth_feed);
         }
         AllowedTokenUpdateField::SwitchboardFeed => {
+            // A Switchboard feed is a bare 32-byte OracleQuote feed-id (no
+            // account to validate); it is matched against the verified quote
+            // at purchase time.
             let new_sb_feed = read_bytes32(instruction_data, 1, "switchboard_feed")?;
-            // Non-zero → require the feed account in slot 4 and validate it.
-            // Zero clears the feed and consumes no slot.
-            consume_optional_switchboard_feed(accounts, 4, &new_sb_feed)?;
             allowed_token.switchboard_feed = Address::from(new_sb_feed);
         }
         AllowedTokenUpdateField::MaxStalenessSlots => {

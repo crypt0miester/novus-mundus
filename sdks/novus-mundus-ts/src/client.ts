@@ -126,6 +126,18 @@ export interface TransactionBuildOptions {
   lookupTables?: AddressLookupTableAccount[];
 }
 
+/**
+ * Number of compute-budget instructions {@link NovusMundusClient.buildVersionedTransaction}
+ * prepends ahead of the caller's instructions (`SetComputeUnitLimit` +
+ * `SetComputeUnitPrice`).
+ *
+ * Callers that need the on-tx index of one of their instructions — e.g. the
+ * `ed25519` verify instruction whose position is embedded in
+ * `crank_oracle_quote` data and the Switchboard gateway request — must offset
+ * by this count. Keep in sync with the prefix `buildVersionedTransaction` builds.
+ */
+export const COMPUTE_BUDGET_PREFIX_IX_COUNT = 2;
+
 /** Result of transaction simulation */
 export interface SimulationResult {
   success: boolean;
@@ -1095,12 +1107,17 @@ export class NovusMundusClient {
     const computeUnits = options?.computeUnits ?? this.defaultComputeUnits;
     const computeUnitPrice = options?.computeUnitPrice ?? this.defaultComputeUnitPrice;
 
-    // Build instructions array with compute budget
-    const allInstructions = [
+    // Prepend the compute-budget prefix. This is exactly
+    // COMPUTE_BUDGET_PREFIX_IX_COUNT instructions — if you add or remove one,
+    // update that constant: callers offset on-tx instruction indices by it.
+    const computeBudgetPrefix = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }),
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: computeUnitPrice }),
-      ...instructions,
     ];
+    if (computeBudgetPrefix.length !== COMPUTE_BUDGET_PREFIX_IX_COUNT) {
+      throw new Error('COMPUTE_BUDGET_PREFIX_IX_COUNT is out of sync with buildVersionedTransaction');
+    }
+    const allInstructions = [...computeBudgetPrefix, ...instructions];
 
     // Get recent blockhash
     const blockhash = options?.recentBlockhash ??

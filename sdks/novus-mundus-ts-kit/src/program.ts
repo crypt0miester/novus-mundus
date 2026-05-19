@@ -99,6 +99,7 @@ export const SEEDS = {
   PLAYER_PURCHASE: enc('player_purchase'),
   INVENTORY: enc('inventory'),
   ALLOWED_TOKEN: enc('allowed_token'),
+  ORACLE_QUOTE: enc('oracle_quote'),
 
   // Estate system
   ESTATE: enc('estate'),
@@ -359,6 +360,10 @@ export const DISCRIMINATORS = {
 
   // Token Economy (300-309) - NOVI Purchases
   SHOP_PURCHASE_NOVI: 300,
+
+  // Switchboard Oracle Quote (301-309)
+  ORACLE_INIT_QUOTE: 301,
+  ORACLE_CRANK_QUOTE: 302,
 
   // Hero Burn & Supply (310-319)
   HERO_BURN: 310,

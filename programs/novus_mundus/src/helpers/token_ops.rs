@@ -179,43 +179,45 @@ pub fn transfer_tokens<'a>(
 // ORACLE & TOKEN PAYMENT HELPERS
 
 use p_pyth::{Price, PriceUpdateV2, PythError};
-use p_switchboard::{SwitchboardFeed, SwitchboardPrice};
-use crate::constants::{PYTH_PROGRAM_ID, PYTH_RECEIVER_PROGRAM_ID, SWITCHBOARD_PROGRAM_ID};
-use crate::state::{AllowedTokenAccount, ShopConfigAccount};
+use p_switchboard::{OracleQuote, QuoteVerifier, SbError};
+use crate::constants::{PYTH_PROGRAM_ID, PYTH_RECEIVER_PROGRAM_ID};
+use crate::state::{AllowedTokenAccount, OracleQuotePda, ShopConfigAccount};
 use crate::validation::require_key_match;
 use crate::logic::safe_math::apply_bp_penalty;
 use crate::utils::{unlikely, Pk};
 
-/// Oracle type, identified by the program that owns the feed account.
+/// Oracle program, identified by the account passed at the SOL-feed slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OracleType {
+    /// Pyth pull oracle — a `PriceUpdateV2` account per asset.
     Pyth,
+    /// Switchboard On-Demand — the program-owned `OracleQuote` PDA (Model B).
     Switchboard,
 }
 
-/// Detect oracle type from the feed account's owner program.
+/// Detect the oracle program from the SOL-feed-slot account's owner.
 ///
-/// Pyth pull-oracle accounts (`PriceUpdateV2`) are owned either by the Pyth
-/// price-feed program (sponsored feeds) or the Pyth Solana Receiver
-/// (caller-posted updates); both layouts are identical. Switchboard
-/// On-Demand feeds are owned by the Switchboard program.
+/// Pyth pull-oracle accounts (`PriceUpdateV2`) are owned by the Pyth price-feed
+/// program (sponsored feeds) or the Pyth Solana Receiver (caller-posted
+/// updates). The Switchboard path instead passes this program's own
+/// **oracle-quote PDA** (Model B — see `state/oracle_quote.rs`), owned by
+/// `crate::ID`.
 ///
 /// The owner check is what makes the data-format assumption safe: only the
-/// real oracle program can produce bytes that parse as its feed layout, so a
-/// buyer cannot pass an unrelated account whose bytes happen to match a
-/// discriminator.
-pub fn detect_oracle_type(oracle_account: &AccountView) -> Result<OracleType, ProgramError> {
-    let owner = unsafe { oracle_account.owner() };
+/// real Pyth program can produce bytes that parse as a Pyth feed, and only
+/// this program's `crank_oracle_quote` writes the oracle-quote PDA.
+pub fn detect_oracle_type(feed_or_quote: &AccountView) -> Result<OracleType, ProgramError> {
+    let owner = unsafe { feed_or_quote.owner() };
     let owner = owner.as_array();
     if owner == &PYTH_PROGRAM_ID || owner == &PYTH_RECEIVER_PROGRAM_ID {
         Ok(OracleType::Pyth)
-    } else if owner == &SWITCHBOARD_PROGRAM_ID {
+    } else if owner == crate::ID.as_array() {
         Ok(OracleType::Switchboard)
     } else {
         pinocchio_log::log!(
-            "detect_oracle_type: unrecognized feed owner {} (feed {})",
+            "detect_oracle_type: unrecognized feed/quote owner {} (account {})",
             Pk(owner),
-            Pk(oracle_account.address().as_array()),
+            Pk(feed_or_quote.address().as_array()),
         );
         Err(GameError::OracleUnavailable.into())
     }
@@ -225,26 +227,12 @@ pub fn detect_oracle_type(oracle_account: &AccountView) -> Result<OracleType, Pr
 pub const ZERO_PUBKEY: [u8; 32] = [0u8; 32];
 pub const ZERO_ADDRESS: Address = Address::new_from_array(ZERO_PUBKEY);
 
-/// Pin a user-supplied Switchboard feed account to the DAO-configured pubkey.
-///
-/// Switchboard On-Demand feeds are persistent accounts at fixed addresses, so
-/// the feed identity *is* the account address — pinning it (plus the owner
-/// check in [`detect_oracle_type`]) ties the price to the DAO-approved feed.
-/// Rejects an unconfigured (zero) pin or a mismatched account.
-#[inline(always)]
-pub fn pin_oracle_feed(feed: &AccountView, configured: &Address) -> Result<(), ProgramError> {
-    if unlikely(*configured == ZERO_ADDRESS || feed.address() != configured) {
-        return Err(GameError::OracleUnavailable.into());
-    }
-    Ok(())
-}
-
 /// Require that a Pyth feed id is configured (non-zero).
 ///
-/// Unlike Switchboard, Pyth pull-oracle accounts can be ephemeral, so the
-/// feed is pinned by its 32-byte `feed_id` — verified inside
-/// [`PriceUpdateV2::get_price_no_older_than`] — rather than by account
-/// address. The DAO stores that `feed_id` in the `*_pyth_feed` config field.
+/// Pyth pull-oracle accounts can be ephemeral, so the feed is pinned by its
+/// 32-byte `feed_id` — verified inside [`PriceUpdateV2::get_price_no_older_than`]
+/// — rather than by account address. The DAO stores that `feed_id` in the
+/// `*_pyth_feed` config field.
 #[inline(always)]
 pub fn require_pyth_feed_configured(feed_id: &[u8; 32]) -> Result<(), ProgramError> {
     if unlikely(feed_id == &ZERO_PUBKEY) {
@@ -253,62 +241,17 @@ pub fn require_pyth_feed_configured(feed_id: &[u8; 32]) -> Result<(), ProgramErr
     Ok(())
 }
 
-/// Config-time: validate a Switchboard feed account the DAO is registering.
+/// Require that a Switchboard feed id is configured (non-zero).
 ///
-/// Checks (in order):
-/// 1. `feed_account.address() == expected_pubkey`
-/// 2. `feed_account.owner() == SWITCHBOARD_PROGRAM_ID`
-/// 3. Account data parses as a `PullFeedAccountData`.
-///
-/// There is no Pyth equivalent: Pyth feeds are configured by a bare 32-byte
-/// `feed_id` with no associated account, so they cannot be validated at
-/// config time — the `feed_id` is instead verified at purchase time.
-pub fn validate_switchboard_feed_at_config(
-    feed_account: &AccountView,
-    expected_pubkey: &[u8; 32],
-) -> Result<(), ProgramError> {
-    if unlikely(feed_account.address().as_array() != expected_pubkey) {
-        pinocchio_log::log!(
-            "validate_switchboard_feed: account {} doesn't match instruction-data pubkey {}",
-            Pk(feed_account.address().as_array()),
-            Pk(expected_pubkey),
-        );
+/// Switchboard On-Demand `OracleQuote`s carry feeds keyed by a 32-byte
+/// `feed_id` (the feed hash). The DAO stores that id in the `*_switchboard_feed`
+/// config field; verification matches it against the feeds in the quote.
+#[inline(always)]
+pub fn require_switchboard_feed_configured(feed_id: &[u8; 32]) -> Result<(), ProgramError> {
+    if unlikely(feed_id == &ZERO_PUBKEY) {
         return Err(GameError::OracleUnavailable.into());
     }
-
-    let owner = unsafe { feed_account.owner() };
-    if unlikely(owner.as_array() != &SWITCHBOARD_PROGRAM_ID) {
-        pinocchio_log::log!(
-            "validate_switchboard_feed: expected Switchboard owner, got {}",
-            Pk(owner.as_array()),
-        );
-        return Err(GameError::OracleUnavailable.into());
-    }
-
-    let data = feed_account.try_borrow()?;
-    SwitchboardFeed::load(&data).map_err(|_| GameError::OracleUnavailable)?;
     Ok(())
-}
-
-/// DAO-time helper: consume the optional trailing Switchboard feed slot for
-/// `feed_pubkey`, if `feed_pubkey` is non-zero.
-///
-/// Used by `create_allowed_token` / `update_allowed_token` / shop
-/// `update_config`. Pyth feeds are bare `feed_id`s and consume no slot.
-///
-/// Returns the next slot cursor.
-#[inline]
-pub fn consume_optional_switchboard_feed(
-    accounts: &[AccountView],
-    slot: usize,
-    feed_pubkey: &[u8; 32],
-) -> Result<usize, ProgramError> {
-    if feed_pubkey == &ZERO_PUBKEY {
-        return Ok(slot);
-    }
-    let acct = accounts.get(slot).ok_or(ProgramError::NotEnoughAccountKeys)?;
-    validate_switchboard_feed_at_config(acct, feed_pubkey)?;
-    Ok(slot + 1)
 }
 
 /// Map a `p_pyth::PythError` onto a game error.
@@ -317,6 +260,15 @@ fn map_pyth_err(e: PythError) -> GameError {
         PythError::PriceTooOld => GameError::OraclePriceStale,
         PythError::ConfidenceTooWide => GameError::OracleConfidenceTooWide,
         // MismatchedFeedId, InsufficientVerificationLevel, parse failures.
+        _ => GameError::OracleUnavailable,
+    }
+}
+
+/// Map a `p_switchboard::SbError` onto a game error.
+fn map_sb_err(e: SbError) -> GameError {
+    match e {
+        SbError::QuoteTooOld => GameError::OraclePriceStale,
+        // Bad discriminator / queue / signatures / slot hash / feed lookup.
         _ => GameError::OracleUnavailable,
     }
 }
@@ -394,7 +346,7 @@ pub fn scale_ratio(
     Ok(num.checked_div(den).ok_or(GameError::OracleOverflow)?)
 }
 
-/// Calculate token amount for payment given oracle prices.
+/// Calculate token amount for payment given Pyth oracle prices.
 ///
 /// `token_amount = lamports * (sol_usd / token_usd) * 10^token_decimals / 10^9`
 /// — all powers of ten folded into one `net_expo` for [`scale_ratio`].
@@ -423,15 +375,6 @@ pub fn calculate_token_amount(
 }
 
 /// Process token payment transfer from buyer to treasury
-///
-/// # Arguments
-/// * `from` - Buyer's token account
-/// * `to` - Treasury's token account
-/// * `authority` - Transfer authority (buyer must sign)
-/// * `amount` - Token amount to transfer
-///
-/// # Returns
-/// Ok(()) on successful transfer
 pub fn process_token_payment<'a>(
     from: &'a AccountView,
     to: &'a AccountView,
@@ -443,32 +386,34 @@ pub fn process_token_payment<'a>(
 
 // UNIFIED TOKEN PAYMENT PROCESSOR
 
-/// Token payment accounts structure (7 accounts, identical for Pyth and Switchboard):
+/// Base token-payment accounts shared by both oracle programs:
 /// - [0] allowed_token: AllowedTokenAccount PDA
 /// - [1] token_mint: SPL Token mint
 /// - [2] buyer_token_ata: Buyer's token account (writable)
 /// - [3] treasury_token_ata: Treasury's token account (writable)
 /// - [4] token_program: SPL Token program
-/// - [5] sol_oracle_feed: SOL/USD price feed (Pyth `PriceUpdateV2` or Switchboard pull feed)
-/// - [6] token_oracle_feed: TOKEN/USD price feed (Pyth `PriceUpdateV2` or Switchboard pull feed)
 ///
-/// Both feeds must be owned by the same oracle program; mixing is rejected.
+/// Then, by oracle program:
+/// - **Pyth** (`TOKEN_PAYMENT_ACCOUNTS` = 7): [5] sol `PriceUpdateV2`,
+///   [6] token `PriceUpdateV2`.
+/// - **Switchboard** (`TOKEN_PAYMENT_ACCOUNTS_SB` = 8): [5] oracle-quote PDA,
+///   [6] Switchboard queue, [7] SlotHashes sysvar. A single quote carries
+///   both the SOL/USD and TOKEN/USD feeds.
 pub const TOKEN_PAYMENT_ACCOUNTS: usize = 7;
+/// Switchboard token-payment account count (see [`TOKEN_PAYMENT_ACCOUNTS`]).
+pub const TOKEN_PAYMENT_ACCOUNTS_SB: usize = 8;
 
 /// Process a complete token payment flow.
 ///
 /// Unified entry point for token payments across all purchase processors:
-/// detects oracle program (Pyth or Switchboard pull feed) from feed owner,
-/// fetches both prices, computes the token amount, and CPI-transfers.
-///
-/// `token_accounts` must be `TOKEN_PAYMENT_ACCOUNTS` (7) entries — see the
-/// constant's docstring for the slot order.
+/// detects the oracle program from the account at slot 5, verifies the
+/// price(s), computes the token amount, and CPI-transfers.
 ///
 /// `treasury_wallet` is the DAO-configured treasury (`game_engine.treasury_wallet`);
 /// the `treasury_token_ata` slot is pinned to it so a buyer cannot redirect
 /// payment to a token account they control.
 ///
-/// `current_slot` drives Switchboard staleness (slot-based); `current_timestamp`
+/// `current_slot` drives Switchboard quote freshness (slot-based); `current_timestamp`
 /// drives Pyth staleness (`publish_time`, seconds).
 pub fn process_token_payment_flow(
     token_accounts: &[AccountView],
@@ -483,7 +428,7 @@ pub fn process_token_payment_flow(
 ) -> ProgramResult {
     if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS) {
         pinocchio_log::log!(
-            "process_token_payment_flow: need {} accounts, got {}",
+            "process_token_payment_flow: need at least {} accounts, got {}",
             TOKEN_PAYMENT_ACCOUNTS as u64,
             token_accounts.len() as u64,
         );
@@ -495,8 +440,6 @@ pub fn process_token_payment_flow(
     let buyer_token_ata = &token_accounts[2];
     let treasury_token_ata = &token_accounts[3];
     let token_program = &token_accounts[4];
-    let sol_oracle_feed = &token_accounts[5];
-    let token_oracle_feed = &token_accounts[6];
 
     require_key_match(token_program, &pinocchio_token::ID)?;
 
@@ -517,36 +460,47 @@ pub fn process_token_payment_flow(
         program_id,
     ).map_err(|_| GameError::TokenNotAllowed)?;
 
-    // Pick oracle type by feed-account owner. Both feeds must come from
-    // the same program — mixing Pyth + Switchboard is rejected.
-    let oracle_type = detect_oracle_type(sol_oracle_feed)?;
-    if unlikely(detect_oracle_type(token_oracle_feed)? != oracle_type) {
-        pinocchio_log::log!("process_token_payment_flow: mixed Pyth+Switchboard feeds rejected");
-        return Err(GameError::OracleUnavailable.into());
-    }
-
-    let token_amount = match oracle_type {
-        OracleType::Pyth => calculate_token_amount_pyth(
-            sol_oracle_feed,
-            token_oracle_feed,
-            token_mint,
-            &allowed_token,
-            shop_config,
-            final_price_lamports,
-            current_timestamp,
-        )?,
-        OracleType::Switchboard => {
-            // Switchboard feeds are persistent accounts: pin by address.
-            pin_oracle_feed(sol_oracle_feed, &shop_config.sol_switchboard_feed)?;
-            pin_oracle_feed(token_oracle_feed, &allowed_token.switchboard_feed)?;
-            calculate_token_amount_switchboard(
-                sol_oracle_feed,
-                token_oracle_feed,
+    // Slot 5 selects the oracle program: a Pyth feed account, or this
+    // program's oracle-quote PDA.
+    let token_amount = match detect_oracle_type(&token_accounts[5])? {
+        OracleType::Pyth => {
+            // Pyth: slots 5,6 are the SOL and TOKEN `PriceUpdateV2` accounts.
+            if unlikely(detect_oracle_type(&token_accounts[6])? != OracleType::Pyth) {
+                pinocchio_log::log!("process_token_payment_flow: mixed Pyth+Switchboard feeds rejected");
+                return Err(GameError::OracleUnavailable.into());
+            }
+            calculate_token_amount_pyth(
+                &token_accounts[5],
+                &token_accounts[6],
                 token_mint,
                 &allowed_token,
                 shop_config,
                 final_price_lamports,
+                current_timestamp,
+            )?
+        }
+        OracleType::Switchboard => {
+            // Switchboard: slot 5 = quote PDA, 6 = queue, 7 = SlotHashes sysvar.
+            if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS_SB) {
+                return Err(ProgramError::NotEnoughAccountKeys);
+            }
+            let quote = verify_switchboard_quote(
+                &token_accounts[5],
+                &token_accounts[6],
+                &token_accounts[7],
+                &shop_config.switchboard_queue,
                 current_slot,
+                shop_config.sol_max_staleness_slots as u64,
+            )?;
+            let sol_usd = sb_feed_value(&quote, shop_config.sol_switchboard_feed.as_array())?;
+            let token_usd = sb_feed_value(&quote, allowed_token.switchboard_feed.as_array())?;
+            let mint_data = token_mint.try_borrow()?;
+            let token_decimals = read_token_decimals(&mint_data)?;
+            calculate_token_amount_from_sb_prices(
+                final_price_lamports,
+                sol_usd,
+                token_usd,
+                token_decimals,
             )?
         }
     };
@@ -608,88 +562,64 @@ fn calculate_token_amount_pyth(
     calculate_token_amount(final_price_lamports, &sol_price, &token_price, token_decimals)
 }
 
-/// Calculate token amount from Switchboard pull-feed prices (i128 @ 10^18).
-fn calculate_token_amount_switchboard(
-    sol_oracle_feed: &AccountView,
-    token_oracle_feed: &AccountView,
-    token_mint: &AccountView,
-    allowed_token: &AllowedTokenAccount,
-    shop_config: &ShopConfigAccount,
-    final_price_lamports: u64,
-    current_slot: u64,
-) -> Result<u64, ProgramError> {
-    let sol_price = read_switchboard_price(
-        sol_oracle_feed,
-        current_slot,
-        shop_config.sol_max_staleness_slots as u64,
-        shop_config.sol_confidence_threshold_bps,
-    )?;
-
-    let token_price = read_switchboard_price(
-        token_oracle_feed,
-        current_slot,
-        allowed_token.max_staleness_slots as u64,
-        allowed_token.confidence_threshold_bps,
-    )?;
-
-    let mint_data = token_mint.try_borrow()?;
-    let token_decimals = read_token_decimals(&mint_data)?;
-
-    calculate_token_amount_from_sb_prices(
-        final_price_lamports,
-        sol_price.value,
-        token_price.value,
-        token_decimals,
-    )
-}
-
-/// Read & validate a Switchboard pull-feed price (single feed account).
+/// Verify the program-owned Switchboard oracle-quote PDA and return the
+/// cryptographically verified quote.
 ///
-/// Uses the SDK `get_value` path: the median over oracle submissions made in
-/// the last `max_staleness_slots` slots, requiring at least the feed's own
-/// `min_sample_size` fresh submissions (floored to 1) and rejecting
-/// non-positive values. A non-zero `max_std_dev_bps` additionally gates on
-/// the aggregated standard deviation.
-///
-/// Caller is responsible for verifying the feed's address against the
-/// DAO-configured pubkey *and* that the feed is owned by the Switchboard
-/// on-demand program before calling this.
-pub fn read_switchboard_price(
-    feed_account: &AccountView,
+/// Pins the `queue` account to the DAO-configured `switchboard_queue`, pins
+/// `quote_pda` to `["oracle_quote", queue]`, and confirms `quote_pda` is owned
+/// by this program. `QuoteVerifier::verify_account` then performs the full
+/// check: ed25519 signature authorization against the queue's oracle keys,
+/// slot-hash freshness, and the `max_age_slots` bound.
+pub fn verify_switchboard_quote<'a>(
+    quote_pda: &'a AccountView,
+    queue: &'a AccountView,
+    slothashes_sysvar: &'a AccountView,
+    configured_queue: &Address,
     current_slot: u64,
-    max_staleness_slots: u64,
-    max_std_dev_bps: u16,
-) -> Result<SwitchboardPrice, ProgramError> {
-    let data = feed_account.try_borrow()?;
-    let feed = SwitchboardFeed::load(&data).map_err(|_| GameError::OracleUnavailable)?;
-
-    // The feed's own configured minimum-sample count, never below 1.
-    let min_samples = (feed.min_sample_size() as u32).max(1);
-
-    let value = feed
-        .get_value(current_slot, max_staleness_slots, min_samples, true)
-        .map_err(|_| GameError::OraclePriceStale)?;
-
-    let price = SwitchboardPrice {
-        value,
-        std_dev: feed.current_result_std_dev(),
-        result_slot: feed.current_result_slot(),
-    };
-
-    if !price.is_confidence_acceptable(max_std_dev_bps) {
-        return Err(GameError::OracleConfidenceTooWide.into());
+    max_age_slots: u64,
+) -> Result<OracleQuote<'a>, ProgramError> {
+    // Pin the queue to the DAO-configured Switchboard queue.
+    if unlikely(configured_queue == &ZERO_ADDRESS || queue.address() != configured_queue) {
+        return Err(GameError::OracleUnavailable.into());
+    }
+    // Pin the quote account to the canonical ["oracle_quote", queue] PDA.
+    let (expected_quote, _) = OracleQuotePda::derive_pda(queue.address());
+    if unlikely(quote_pda.address() != &expected_quote) {
+        return Err(GameError::OracleUnavailable.into());
+    }
+    // The quote PDA must be owned by this program (written only by the crank).
+    if unlikely(unsafe { quote_pda.owner() } != &crate::ID) {
+        return Err(GameError::OracleUnavailable.into());
     }
 
-    Ok(price)
+    let mut verifier = QuoteVerifier::new();
+    verifier
+        .queue(queue)
+        .slothash_sysvar(slothashes_sysvar)
+        .clock_slot(current_slot)
+        .max_age(max_age_slots);
+    verifier
+        .verify_account(quote_pda)
+        .map_err(|e| map_sb_err(e).into())
 }
 
-/// Calculate token amount from Switchboard i128 prices
+/// Pull a single feed's fixed-point value (i128 @ 1e18) from a verified quote.
 ///
-/// Switchboard prices are scaled to 18 decimals.
+/// Requires the feed id is configured (non-zero) and present in the quote.
+pub fn sb_feed_value(quote: &OracleQuote, feed_id: &[u8; 32]) -> Result<i128, ProgramError> {
+    require_switchboard_feed_configured(feed_id)?;
+    let info = quote.feed(feed_id).map_err(map_sb_err)?;
+    Ok(info.feed_value())
+}
+
+/// Calculate token amount from Switchboard `OracleQuote` prices (i128 @ 10^18).
 ///
-/// Formula: token_amount = (lamports * sol_usd) / token_usd
-/// Adjusted for token decimals and Switchboard's 18-decimal precision.
-fn calculate_token_amount_from_sb_prices(
+/// Switchboard prices are scaled to 18 decimals. SOL has 9 decimals (lamports).
+///
+/// Formula: `token_amount = (lamports * sol_usd * 10^token_decimals)
+///                          / (token_usd * 10^9)`
+/// — since `sol_usd` and `token_usd` share the 10^18 scale it cancels.
+pub fn calculate_token_amount_from_sb_prices(
     sol_price_lamports: u64,
     sol_usd_i128: i128,
     token_usd_i128: i128,
@@ -702,12 +632,6 @@ fn calculate_token_amount_from_sb_prices(
 
     let sol_usd = sol_usd_i128 as u128;
     let token_usd = token_usd_i128 as u128;
-
-    // Switchboard uses 18 decimal precision
-    // SOL has 9 decimals (lamports)
-    // Formula: (lamports * sol_usd * 10^token_decimals) / (token_usd * 10^9)
-    //
-    // Since both sol_usd and token_usd are in 18 decimals, they cancel out.
 
     let token_scale = 10u128.pow(token_decimals as u32);
     let sol_scale = 10u128.pow(9); // SOL has 9 decimals

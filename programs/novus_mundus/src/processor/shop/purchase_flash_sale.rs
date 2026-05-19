@@ -51,8 +51,9 @@ use crate::{
 /// - [writable] buyer_token_ata: Buyer's token account
 /// - [writable] treasury_token_ata: Treasury's token account
 /// - [] token_program: SPL Token program
-/// - [] sol_oracle_feed: SOL/USD price feed (Pyth or Switchboard)
-/// - [] token_oracle_feed: TOKEN/USD price feed (Pyth or Switchboard)
+///   Then, by oracle program (see helpers::process_token_payment_flow):
+///   - Pyth (+2): sol `PriceUpdateV2`, token `PriceUpdateV2`
+///   - Switchboard (+3): oracle-quote PDA, Switchboard queue, SlotHashes sysvar
 ///
 /// # Instruction Data
 /// - sale_id: u64

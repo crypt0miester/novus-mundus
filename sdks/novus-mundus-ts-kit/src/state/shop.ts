@@ -91,8 +91,12 @@ export interface ShopConfigAccount {
   nextFlashSaleId: bigint;
 
   // Oracle config
+  /** Pyth SOL/USD feed id (32-byte feed identifier, not an account). */
   solPythFeed: Address;
+  /** Switchboard SOL/USD OracleQuote feed id (32-byte feed hash). */
   solSwitchboardFeed: Address;
+  /** Switchboard On-Demand queue account; seeds the oracle-quote PDA. */
+  solSwitchboardQueue: Address;
   solMaxStalenessSlots: number;
   solConfidenceThresholdBps: number;
 
@@ -100,7 +104,7 @@ export interface ShopConfigAccount {
 }
 
 /** ShopConfigAccount size in bytes */
-export const SHOP_CONFIG_ACCOUNT_SIZE = 192;
+export const SHOP_CONFIG_ACCOUNT_SIZE = 224;
 
 // Shop Item Account Interface
 
@@ -223,6 +227,7 @@ const shopConfigCodec = reprC<ShopConfigAccount>([
   ['nextFlashSaleId', u64],
   ['solPythFeed', pubkey],
   ['solSwitchboardFeed', pubkey],
+  ['solSwitchboardQueue', pubkey],
   ['solMaxStalenessSlots', u16],
   ['solConfidenceThresholdBps', u16],
   pad(8), // _reserved

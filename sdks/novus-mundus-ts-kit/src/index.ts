@@ -62,6 +62,7 @@ export * from './instructions/event';
 export * from './instructions/subscription';
 export * from './instructions/name';
 export * from './instructions/shop';
+export * from './instructions/oracle';
 export * from './instructions/research';
 export * from './instructions/hero';
 export * from './instructions/sanctuary';

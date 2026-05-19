@@ -1,7 +1,7 @@
 /**
  * Shop Accounts
  *
- * ShopConfigAccount - Global shop settings (192 bytes with repr(C) padding)
+ * ShopConfigAccount - Global shop settings (224 bytes with repr(C) padding)
  * ShopItemAccount - Individual item definition (88 bytes with repr(C) padding)
  * BundleAccount - Pre-built bundle (152 bytes with repr(C) padding)
  * DailyDealAccount - Rotating daily deals (64 bytes with repr(C) padding)
@@ -92,8 +92,12 @@ export interface ShopConfigAccount {
   nextFlashSaleId: BN;
 
   // Oracle config
+  /** Pyth SOL/USD feed id (32-byte feed identifier, not an account). */
   solPythFeed: PublicKey;
+  /** Switchboard SOL/USD OracleQuote feed id (32-byte feed hash). */
   solSwitchboardFeed: PublicKey;
+  /** Switchboard On-Demand queue account; seeds the oracle-quote PDA. */
+  solSwitchboardQueue: PublicKey;
   solMaxStalenessSlots: number;
   solConfidenceThresholdBps: number;
 
@@ -101,7 +105,7 @@ export interface ShopConfigAccount {
 }
 
 /** ShopConfigAccount size in bytes */
-export const SHOP_CONFIG_ACCOUNT_SIZE = 192;
+export const SHOP_CONFIG_ACCOUNT_SIZE = 224;
 
 // Shop Item Account Interface
 
@@ -245,6 +249,7 @@ export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAcco
   // Oracle config
   const solPythFeed = reader.readPubkey();
   const solSwitchboardFeed = reader.readPubkey();
+  const solSwitchboardQueue = reader.readPubkey();
   const solMaxStalenessSlots = reader.readU16();
   const solConfidenceThresholdBps = reader.readU16();
 
@@ -280,6 +285,7 @@ export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAcco
     nextFlashSaleId,
     solPythFeed,
     solSwitchboardFeed,
+    solSwitchboardQueue,
     solMaxStalenessSlots,
     solConfidenceThresholdBps,
     bump,

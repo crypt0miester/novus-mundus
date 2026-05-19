@@ -12,6 +12,7 @@
  *   update <target>       Update existing accounts only
  *   crank <target|all>    Run permissionless crank operations
  *   flash-sale <sub>      Manage flash sales (create|close|activate|list)
+ *   oracle <sub>          Oracle & token-payment config (config|init-quote|allow-token|buy|status)
  *
  * Options:
  *   --env <localnet|devnet|mainnet>   Target environment (default: localnet)
@@ -29,6 +30,7 @@ import { handleStatus } from './lib/commands/status';
 import { handleUpdate } from './lib/commands/update';
 import { handleCrank } from './lib/commands/crank';
 import { handleFlashSale } from './lib/commands/flash-sale';
+import { handleOracle } from './lib/commands/oracle';
 import { handleShow } from './lib/commands/show';
 import { handleTerrain } from './lib/commands/terrain';
 import { handleCreatePlayer } from './lib/commands/create-player';
@@ -80,6 +82,9 @@ async function main(): Promise<void> {
       break;
     case 'flash-sale':
       await handleFlashSale(ctx, args);
+      break;
+    case 'oracle':
+      await handleOracle(ctx, args);
       break;
     case 'show':
       await handleShow(ctx, args);
@@ -140,11 +145,22 @@ Commands:
                             castle-config
   crank all                 Run all permissionless cranks
   crank <target>            Run specific: subscriptions, events,
-                            arena, dungeons, castles, rallies
+                            arena, dungeons, castles, rallies, oracle
   flash-sale create         Create flash sale (--item, --discount, --duration, etc.)
   flash-sale close          Close flash sale (--sale-id)
   flash-sale activate       Activate flash sale (--sale-id)
   flash-sale list           List all flash sales
+  oracle config             Set SOL/USD oracle (--pyth-feed, --switchboard-feed,
+                            --switchboard-queue, --staleness, --confidence)
+  oracle init-quote         Create the Switchboard oracle-quote PDA (--switchboard-queue)
+  oracle init-alt           Create the shop Address Lookup Table (one-time; for
+                            bundled crank+purchase txs — prints the env value)
+  oracle allow-token        Whitelist a payment token (--mint, --pyth-feed,
+                            --switchboard-feed, --staleness, --confidence, --discount)
+  oracle buy                Token-payment purchase (--buyer, --item, --mint,
+                            --payment <pyth|switchboard>, --quantity,
+                            --sol-feed, --token-feed for the Pyth path)
+  oracle status             Show oracle config + whitelisted tokens
   show player               List all players
   show player <pubkey>      Show player details
   show team                 List all teams

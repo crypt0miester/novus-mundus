@@ -15,6 +15,7 @@ import { addressBytes } from '../crypto';
 import { PROGRAM_ID, DISCRIMINATORS, SYSTEM_PROGRAM_ID } from '../program';
 import { buildInstruction } from '../instruction';
 import { createInstructionData } from '../utils/serialize';
+import { SLOT_HASHES_SYSVAR } from './oracle';
 import { concatBytes } from '../utils/bytes';
 import { packed, u8, u16, u32, u64, i64, bool, fixedString, array, bytes } from '../utils/codec';
 import {
@@ -363,12 +364,16 @@ export interface TokenPaymentAccounts {
   buyerTokenAta: Address;
   /** Treasury's ATA for `tokenMint` (writable). */
   treasuryTokenAta: Address;
-  /** SOL/USD price feed account — a Pyth `PriceUpdateV2` account or a
-   *  Switchboard pull feed (same oracle program as `tokenOracleFeed`). */
-  solOracleFeed: Address;
-  /** TOKEN/USD price feed account — a Pyth `PriceUpdateV2` account or a
-   *  Switchboard pull feed (same oracle program as `solOracleFeed`). */
-  tokenOracleFeed: Address;
+  /** Pyth path: SOL/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
+  solOracleFeed?: Address;
+  /** Pyth path: TOKEN/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
+  tokenOracleFeed?: Address;
+  /** Switchboard path: the program-owned oracle-quote PDA
+   *  (`deriveOracleQuotePda`). Set this + `switchboardQueue` instead of the
+   *  two Pyth feeds; the SlotHashes sysvar is appended automatically. */
+  oracleQuote?: Address;
+  /** Switchboard path: the Switchboard On-Demand queue account. */
+  switchboardQueue?: Address;
 }
 
 export interface PurchaseItemAccounts {
@@ -464,8 +469,22 @@ export async function createPurchaseItemInstruction(
     keys.push({ pubkey: tp.buyerTokenAta, isSigner: false, isWritable: true });
     keys.push({ pubkey: tp.treasuryTokenAta, isSigner: false, isWritable: true });
     keys.push({ pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+    if (tp.oracleQuote !== undefined) {
+      // Switchboard path: oracle-quote PDA + queue + SlotHashes sysvar.
+      if (tp.switchboardQueue === undefined) {
+        throw new Error('purchaseItem: switchboardQueue is required alongside oracleQuote');
+      }
+      keys.push({ pubkey: tp.oracleQuote, isSigner: false, isWritable: false });
+      keys.push({ pubkey: tp.switchboardQueue, isSigner: false, isWritable: false });
+      keys.push({ pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false });
+    } else {
+      // Pyth path: SOL and TOKEN `PriceUpdateV2` feed accounts.
+      if (tp.solOracleFeed === undefined || tp.tokenOracleFeed === undefined) {
+        throw new Error('purchaseItem: solOracleFeed + tokenOracleFeed required for the Pyth path');
+      }
+      keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
+      keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+    }
   }
 
   // Variable-length instruction data: fixed head + conditional discount fields.
@@ -1453,11 +1472,13 @@ export interface UpdateConfigAccounts {
 export interface UpdateConfigParams {
   /** SOL/USD Pyth feed id — 32-byte feed id as 64 hex chars (NOT an account). */
   solPythFeed?: string;
-  /** SOL/USD Switchboard pull-feed account address. */
+  /** SOL/USD Switchboard OracleQuote feed id — 32-byte feed hash (NOT an account). */
   solSwitchboardFeed?: Address;
-  /** Max price age — seconds for Pyth, slots for Switchboard. */
+  /** Switchboard On-Demand queue account; seeds the oracle-quote PDA. */
+  solSwitchboardQueue?: Address;
+  /** Max price age — seconds for Pyth, slots (quote max_age) for Switchboard. */
   solMaxStalenessSlots?: number;
-  /** Confidence threshold in basis points */
+  /** Confidence threshold in basis points (Pyth only). */
   solConfidenceThresholdBps?: number;
 }
 
@@ -1472,9 +1493,8 @@ const UPDATE_SOL_ORACLE = 32;
  * (other flags are pure DAO knobs not yet exposed). Layout matches the
  * Rust processor: `[update_flags: u8] + [...conditional sections...]`.
  *
- * The Pyth feed is a bare 32-byte feed id (no account). When a non-zero
- * Switchboard feed is set, its account is appended after the 3 base accounts
- * so the program can owner-check + layout-validate it at DAO config time.
+ * The Pyth and Switchboard SOL feeds, and the Switchboard queue, are all bare
+ * 32-byte pubkeys in the instruction data — no feed accounts are passed.
  */
 export async function createUpdateConfigInstruction(
   accounts: UpdateConfigAccounts,
@@ -1494,29 +1514,33 @@ export async function createUpdateConfigInstruction(
   const setsSolOracle =
     params.solPythFeed !== undefined ||
     params.solSwitchboardFeed !== undefined ||
+    params.solSwitchboardQueue !== undefined ||
     params.solMaxStalenessSlots !== undefined ||
     params.solConfidenceThresholdBps !== undefined;
 
   let updateFlags = 0;
   if (setsSolOracle) updateFlags |= UPDATE_SOL_ORACLE;
 
-  // 1 byte flags + 68 bytes SOL oracle section (when flagged).
+  // 1 byte flags + 100 bytes SOL oracle section (when flagged):
+  // pyth feed id (32) + switchboard feed id (32) + switchboard queue (32)
+  // + max staleness (u16) + confidence bps (u16).
   const chunks: Array<Uint8Array | ReadonlyUint8Array> = [u8.codec.encode(updateFlags)];
 
   if (setsSolOracle) {
-    // Pyth feed is a 32-byte feed id encoded into instruction data — it has
-    // no account and consumes no trailing key slot.
+    // All three are bare 32-byte values encoded into instruction data — they
+    // have no feed accounts and consume no trailing key slots.
     const pythFeed = params.solPythFeed
       ? feedIdBytes(params.solPythFeed)
       : new Uint8Array(32);
     const switchboardFeed = params.solSwitchboardFeed
       ? addressBytes(params.solSwitchboardFeed)
       : new Uint8Array(32);
-    if (params.solSwitchboardFeed) {
-      keys.push({ pubkey: params.solSwitchboardFeed, isSigner: false, isWritable: false });
-    }
+    const switchboardQueue = params.solSwitchboardQueue
+      ? addressBytes(params.solSwitchboardQueue)
+      : new Uint8Array(32);
     chunks.push(pythFeed);
     chunks.push(switchboardFeed);
+    chunks.push(switchboardQueue);
     chunks.push(u16.codec.encode(params.solMaxStalenessSlots ?? 0));
     chunks.push(u16.codec.encode(params.solConfidenceThresholdBps ?? 0));
   }

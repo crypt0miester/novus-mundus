@@ -7,7 +7,6 @@ use crate::{
     error::GameError,
     state::{GameEngine, ShopConfigAccount},
     validation::{require_signer, require_writable},
-    helpers::consume_optional_switchboard_feed,
     utils::{read_bytes32, read_u16, read_u64, read_u8},
 };
 
@@ -28,9 +27,9 @@ pub const UPDATE_SOL_ORACLE: u8 = 32;
 /// - [] game_engine: GameEngine account
 /// - [writable] shop_config: ShopConfigAccount to update
 ///
-/// # Accounts (conditional, only when `UPDATE_SOL_ORACLE` flag is set)
-/// - [] sol_switchboard_feed_account: Required iff the new `sol_switchboard_feed`
-///   is non-zero. (The Pyth feed is a bare feed-id and consumes no account.)
+/// `UPDATE_SOL_ORACLE` carries no extra accounts — both the Pyth and
+/// Switchboard SOL feeds, and the Switchboard queue, are bare 32-byte pubkeys
+/// in the instruction data.
 ///
 /// # Instruction Data
 /// - update_flags: u8 (bitmask)
@@ -124,19 +123,20 @@ pub fn process(
         offset += 8;
     }
 
-    // Update SOL oracle configuration (68 bytes: 2 x Address + 2 x u16)
+    // Update SOL oracle configuration (100 bytes: 3 x Address + 2 x u16)
     if update_flags & UPDATE_SOL_ORACLE != 0 {
         let pyth_bytes = read_bytes32(instruction_data, offset, "sol_pyth_feed")?;
         let sb_bytes = read_bytes32(instruction_data, offset + 32, "sol_switchboard_feed")?;
+        let queue_bytes = read_bytes32(instruction_data, offset + 64, "switchboard_queue")?;
 
-        // Pyth feeds are bare feed-ids (no account); only a Switchboard feed
-        // account is validated here, at index 3.
-        let _ = consume_optional_switchboard_feed(accounts, 3, &sb_bytes)?;
-
+        // `sol_pyth_feed` / `sol_switchboard_feed` are bare 32-byte feed-ids and
+        // `switchboard_queue` is the Switchboard On-Demand queue pubkey — all
+        // verified at purchase time, so no feed account is passed here.
         config.sol_pyth_feed = Address::from(pyth_bytes);
         config.sol_switchboard_feed = Address::from(sb_bytes);
-        config.sol_max_staleness_slots = read_u16(instruction_data, offset + 64, "sol_max_staleness_slots")?;
-        config.sol_confidence_threshold_bps = read_u16(instruction_data, offset + 66, "sol_confidence_threshold_bps")?;
+        config.switchboard_queue = Address::from(queue_bytes);
+        config.sol_max_staleness_slots = read_u16(instruction_data, offset + 96, "sol_max_staleness_slots")?;
+        config.sol_confidence_threshold_bps = read_u16(instruction_data, offset + 98, "sol_confidence_threshold_bps")?;
     }
 
     Ok(())

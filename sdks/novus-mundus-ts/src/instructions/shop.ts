@@ -36,6 +36,7 @@ import {
   deriveUserPda,
 } from '../pda';
 import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { SLOT_HASHES_SYSVAR } from './oracle';
 
 // Initialize Config (Admin)
 
@@ -321,10 +322,16 @@ export interface TokenPaymentAccounts {
   buyerTokenAta: PublicKey;
   /** Treasury's ATA for `tokenMint` (writable). */
   treasuryTokenAta: PublicKey;
-  /** SOL/USD oracle feed — must equal shop_config.sol_pyth_feed. */
-  solOracleFeed: PublicKey;
-  /** TOKEN/USD oracle feed — must equal allowed_token.pyth_feed. */
-  tokenOracleFeed: PublicKey;
+  /** Pyth path: SOL/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
+  solOracleFeed?: PublicKey;
+  /** Pyth path: TOKEN/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
+  tokenOracleFeed?: PublicKey;
+  /** Switchboard path: the program-owned oracle-quote PDA
+   *  (`deriveOracleQuotePda`). Set this + `switchboardQueue` instead of the
+   *  two Pyth feeds; the SlotHashes sysvar is appended automatically. */
+  oracleQuote?: PublicKey;
+  /** Switchboard path: the Switchboard On-Demand queue account. */
+  switchboardQueue?: PublicKey;
 }
 
 export interface PurchaseItemAccounts {
@@ -407,8 +414,22 @@ export function createPurchaseItemInstruction(
     keys.push({ pubkey: tp.buyerTokenAta, isSigner: false, isWritable: true });
     keys.push({ pubkey: tp.treasuryTokenAta, isSigner: false, isWritable: true });
     keys.push({ pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+    if (tp.oracleQuote !== undefined) {
+      // Switchboard path: oracle-quote PDA + queue + SlotHashes sysvar.
+      if (tp.switchboardQueue === undefined) {
+        throw new Error('purchaseItem: switchboardQueue is required alongside oracleQuote');
+      }
+      keys.push({ pubkey: tp.oracleQuote, isSigner: false, isWritable: false });
+      keys.push({ pubkey: tp.switchboardQueue, isSigner: false, isWritable: false });
+      keys.push({ pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false });
+    } else {
+      // Pyth path: SOL and TOKEN `PriceUpdateV2` feed accounts.
+      if (tp.solOracleFeed === undefined || tp.tokenOracleFeed === undefined) {
+        throw new Error('purchaseItem: solOracleFeed + tokenOracleFeed required for the Pyth path');
+      }
+      keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
+      keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+    }
   }
 
   // Instruction data
@@ -1273,11 +1294,13 @@ export interface UpdateConfigAccounts {
 export interface UpdateConfigParams {
   /** SOL/USD Pyth feed id — 32-byte feed id as 64 hex chars (NOT an account). */
   solPythFeed?: string;
-  /** SOL/USD Switchboard pull-feed account address. */
+  /** SOL/USD Switchboard OracleQuote feed id — 32-byte feed hash (NOT an account). */
   solSwitchboardFeed?: PublicKey;
-  /** Max price age — seconds for Pyth, slots for Switchboard. */
+  /** Switchboard On-Demand queue account; seeds the oracle-quote PDA. */
+  solSwitchboardQueue?: PublicKey;
+  /** Max price age — seconds for Pyth, slots (quote max_age) for Switchboard. */
   solMaxStalenessSlots?: number;
-  /** Confidence threshold in basis points */
+  /** Confidence threshold in basis points (Pyth only). */
   solConfidenceThresholdBps?: number;
 }
 
@@ -1307,9 +1330,8 @@ function feedIdBuffer(feedId: string): Buffer {
  * (other flags are pure DAO knobs not yet exposed). Layout matches the
  * Rust processor: `[update_flags: u8] + [...conditional sections...]`.
  *
- * The Pyth feed is a bare 32-byte feed id (no account). When a non-zero
- * Switchboard feed is set, its account is appended after the 3 base accounts
- * so the program can owner-check + layout-validate it at DAO config time.
+ * The Pyth and Switchboard SOL feeds, and the Switchboard queue, are all bare
+ * 32-byte pubkeys in the instruction data — no feed accounts are passed.
  */
 export function createUpdateConfigInstruction(
   accounts: UpdateConfigAccounts,
@@ -1317,8 +1339,8 @@ export function createUpdateConfigInstruction(
 ): TransactionInstruction {
     const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
 
-  // Rust order: dao_authority, game_engine, shop_config
-  // + trailing feed accounts for DAO-time validation when SOL oracle is being updated.
+  // Rust order: dao_authority, game_engine, shop_config. No trailing feed
+  // accounts — the SOL oracle feeds + queue ride in the instruction data.
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
@@ -1329,20 +1351,23 @@ export function createUpdateConfigInstruction(
   const setsSolOracle =
     params.solPythFeed !== undefined ||
     params.solSwitchboardFeed !== undefined ||
+    params.solSwitchboardQueue !== undefined ||
     params.solMaxStalenessSlots !== undefined ||
     params.solConfidenceThresholdBps !== undefined;
 
   let updateFlags = 0;
   if (setsSolOracle) updateFlags |= UPDATE_SOL_ORACLE;
 
-  // 1 byte flags + 68 bytes SOL oracle section (when flagged).
-  const dataLen = 1 + (setsSolOracle ? 68 : 0);
+  // 1 byte flags + 100 bytes SOL oracle section (when flagged):
+  // pyth feed id (32) + switchboard feed id (32) + switchboard queue (32)
+  // + max staleness (u16) + confidence bps (u16).
+  const dataLen = 1 + (setsSolOracle ? 100 : 0);
   const writer = new BufferWriter(dataLen);
   writer.writeU8(updateFlags);
 
   if (setsSolOracle) {
-    // Pyth feed is a 32-byte feed id encoded into instruction data — no
-    // account, no trailing key slot.
+    // All three are bare 32-byte values encoded into instruction data — they
+    // have no feed accounts and consume no trailing key slots.
     if (params.solPythFeed) {
       writer.writeBytes(feedIdBuffer(params.solPythFeed));
     } else {
@@ -1350,7 +1375,11 @@ export function createUpdateConfigInstruction(
     }
     if (params.solSwitchboardFeed) {
       writer.writePubkey(params.solSwitchboardFeed);
-      keys.push({ pubkey: params.solSwitchboardFeed, isSigner: false, isWritable: false });
+    } else {
+      writer.writeZeros(32);
+    }
+    if (params.solSwitchboardQueue) {
+      writer.writePubkey(params.solSwitchboardQueue);
     } else {
       writer.writeZeros(32);
     }
