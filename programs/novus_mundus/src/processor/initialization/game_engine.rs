@@ -369,8 +369,12 @@ fn create_default_game_engine(
             _reserved_drive_by: 0,                      // Reserved
             attack_base_effectiveness: 10000,           // 1.0x (NO RANDOMNESS - time provides variance)
             _reserved_attack: 0,                        // Reserved
-            // Armor mechanics: damage reduction per coverage, capped at max
-            armor_damage_reduction_bps: 500,            // 5% reduction per armor coverage point
+            // Armor mechanics: damage reduction per coverage, capped at max.
+            // Pre-fix value was 500 — at typical 50% armor coverage that gave a
+            // useless 2.5% reduction and the 50% cap was effectively unreachable
+            // (needed 10 armor per unit). 2000 means 50% coverage → 10% reduction
+            // and the cap is reachable at 2.5 armor per unit.
+            armor_damage_reduction_bps: 2000,           // 20% reduction per armor coverage point
             armor_damage_reduction_cap_bps: 5000,       // Max 50% damage reduction
             vehicle_capacity: 5,
             abandon_rate_happy: 50,                     // 0.5% (basis points)

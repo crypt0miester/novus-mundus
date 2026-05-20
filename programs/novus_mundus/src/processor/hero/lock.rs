@@ -164,6 +164,11 @@ pub fn process(
 
     player.set_slot_location_bonus_at(slot_index as usize, location_bonus_bps);
 
+    // Mirror the hero's ability cooldown stamp from the NFT into the slot.
+    // This closes the unlock+relock exploit — unlock writes the slot value
+    // back to the NFT, so cycling preserves cooldown across lock/unlock.
+    player.set_ability_last_used_at(slot_index as usize, parsed_hero.last_ability_used_at);
+
     // Add buffs using helper with location bonus applied
     add_hero_buffs_to_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
 

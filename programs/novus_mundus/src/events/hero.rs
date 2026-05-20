@@ -228,3 +228,38 @@ impl Event for SupplyCapUpdated {
         offset
     }
 }
+
+/// Emitted when a player triggers a hero's active ability
+pub struct HeroAbilityUsed {
+    pub hero_mint: Address,
+    pub hero_name: [u8; 32],
+    pub player: Address,
+    pub player_name: [u8; 48],
+    pub slot: u8,
+    pub ability_kind: u8,
+    pub ability_stat: u8,
+    pub ability_param1: u16,
+    pub ability_param2: u32,
+    pub cooldown_until: i64,
+    pub timestamp: i64,
+}
+
+impl Event for HeroAbilityUsed {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:HeroAbilityUsed");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.hero_mint.pack(&mut buf[offset..]);
+        offset += self.hero_name.pack(&mut buf[offset..]);
+        offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
+        offset += self.slot.pack(&mut buf[offset..]);
+        offset += self.ability_kind.pack(&mut buf[offset..]);
+        offset += self.ability_stat.pack(&mut buf[offset..]);
+        offset += self.ability_param1.pack(&mut buf[offset..]);
+        offset += self.ability_param2.pack(&mut buf[offset..]);
+        offset += self.cooldown_until.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}

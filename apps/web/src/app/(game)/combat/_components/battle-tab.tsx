@@ -15,7 +15,7 @@ import { StatBar } from "@/components/shared/StatBar";
 import { TabNav } from "@/components/shared/TabNav";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
-import { shortenAddress, bpsToPercent } from "@/lib/utils";
+import { shortenAddress, bpsToPercent, formatNumber } from "@/lib/utils";
 import {
   isTraveling,
   getEncounterStaminaCost,
@@ -159,33 +159,38 @@ export function BattleTab() {
       {/* Your Forces — compact */}
       {player && (
         <div className="card accent-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="min-w-0">
                 <div className="text-xl font-bold text-text-gold">
                   <GoldNumber value={power.total} />
                 </div>
                 <div className="text-[10px] text-text-muted">COMBAT POWER</div>
               </div>
-              <div className="h-8 w-px bg-border-default" />
-              <div>
+              <div className="hidden h-8 w-px bg-border-default sm:block" />
+              <div className="min-w-0">
                 <div className="text-sm font-bold text-text-secondary"><GoldNumber value={power.defense} size="sm" /></div>
                 <div className="text-[10px] text-text-muted">GARRISON</div>
               </div>
               {estimatedDamage != null && (
                 <>
-                  <div className="h-8 w-px bg-border-default" />
-                  <div>
-                    <div className="text-sm font-bold text-red-400">{estimatedDamage.toLocaleString()}</div>
+                  <div className="hidden h-8 w-px bg-border-default sm:block" />
+                  <div className="min-w-0">
+                    <div
+                      className="font-mono tabular-nums text-sm font-bold text-red-400"
+                      title={estimatedDamage.toLocaleString()}
+                    >
+                      {formatNumber(estimatedDamage, "compact")}
+                    </div>
                     <div className="text-[10px] text-text-muted">EST. DAMAGE</div>
                   </div>
                 </>
               )}
             </div>
-            <div className="flex items-center gap-3 text-xs text-text-muted">
-              <span>Stamina: <span className="font-mono text-text-gold">{playerStamina}</span></span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+              <span className="whitespace-nowrap">Stamina: <span className="font-mono text-text-gold">{playerStamina}</span></span>
               {attackTimeInfo && (
-                <span>
+                <span className="whitespace-nowrap">
                   {attackTimeInfo.name}
                   {attackTimeInfo.mult > 1 && (
                     <span className="ml-1 text-green-400">+{((attackTimeInfo.mult - 1) * 100).toFixed(0)}%</span>

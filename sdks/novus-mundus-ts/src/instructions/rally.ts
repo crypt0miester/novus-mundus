@@ -18,8 +18,9 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import BN from 'bn.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -32,6 +33,7 @@ import {
   deriveEstatePda,
   deriveHeroTemplatePda,
   deriveHeroCollectionPda,
+  deriveNoviMintPda,
 } from '../pda';
 import { RallyTargetType } from '../types/enums';
 
@@ -545,15 +547,18 @@ export interface RallyProcessReturnAccounts {
  * Awards loot directly to PlayerAccount (if attacker won).
  * Closes the RallyParticipant account.
  *
- * On-chain accounts (8):
+ * On-chain accounts (11 mandatory; optional hero block at 11-14):
  * 0. [writable] rally: RallyAccount PDA
  * 1. [writable] participant: RallyParticipant PDA
  * 2. [writable] player: PlayerAccount PDA (receiving loot)
  * 3. [writable] participant_owner: Participant's wallet (receives rent)
- * 4. [] game_engine: GameEngine PDA
+ * 4. [] game_engine: GameEngine PDA (also serves as mint authority)
  * 5. [] rally_city: CityAccount PDA
  * 6. [] home_city: CityAccount PDA
  * 7. [writable] estate: EstateAccount PDA (wounded tracking)
+ * 8. [writable] player_novi_ata: Participant's NOVI token account
+ * 9. [writable] novi_mint: NOVI mint
+ * 10. [] token_program: SPL Token program
  *
  * On-chain data: None
  */
@@ -567,6 +572,8 @@ export function createRallyProcessReturnInstruction(
   const [homeCity] = deriveCityPda(accounts.gameEngine, accounts.homeCityId);
 
   const [estate] = deriveEstatePda(player);
+  const [noviMint] = deriveNoviMintPda();
+  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
@@ -577,6 +584,9 @@ export function createRallyProcessReturnInstruction(
     { pubkey: rallyCity, isSigner: false, isWritable: false },
     { pubkey: homeCity, isSigner: false, isWritable: false },
     { pubkey: estate, isSigner: false, isWritable: true },
+    { pubkey: playerNoviAta, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Add optional hero accounts when participant had a committed hero

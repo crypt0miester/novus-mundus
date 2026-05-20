@@ -698,40 +698,27 @@ describe('inflictDamage', () => {
   });
 
   it('should concentrate damage on unit1 when unit2 and unit3 are 0', () => {
-    // When unit2=0 and unit3=0, damage1 = effectiveDamage = 50
-    // Then unit3===0 block also fires: damage1 += 50*2000*0.5/10000 = 5
-    // So total damage1 = 55, r1 = 100 - 55 = 45
+    // Per-tier HP = [2, 5, 12]. unit2/unit3 absent → damage1 = effectiveDamage = 50
+    // plus the unit3===0 redistribution leg (+5). damage1 = 55 → kills1 = 27, rem1 = 73.
+    // The unit3==0 leg also adds 5 damage to damage2; with unit2=0 that becomes 1 unit
+    // of overkill (5 dmg / 5 HP), which redistributes to the only survivor (unit1)
+    // killing 2 more (5 dmg / 2 HP). Final rem1 = 71.
     const [r1, r2, r3] = inflictDamage(100, 0, 0, 0, 50);
-    expect(r1).toBe(45);
+    expect(r1).toBe(71);
     expect(r2).toBe(0);
     expect(r3).toBe(0);
   });
 
   it('should respect default damage distribution (50/30/20)', () => {
-    // Large numbers, no armor, verify approximate split
+    // With per-tier HP = [2, 5, 12] and no missing tiers, the distribution
+    // splits cleanly: damage1=5000, damage2=3000, damage3=2000.
+    // kills1 = 5000/2 = 2500 → rem1 = 7500
+    // kills2 = 3000/5 = 600  → rem2 = 9400
+    // kills3 = 2000/12 = 166 → rem3 = 9834
     const [r1, r2, r3] = inflictDamage(10000, 10000, 10000, 0, 10000);
-    // Damage to unit1: 10000 * 0.5 = 5000 (but unit3 redistribution adds more)
-    // With redistribution from unit3 present: unit1 gets +10% of total, unit2 gets +10%
-    // Total actual damage per unit (with redistribution adjustments):
-    // damage1 = 10000*5000/10000 + 10000*2000*0.5/10000 = 5000 + 1000 = 6000
-    // damage2 = 10000*3000/10000 + 10000*2000*0.5/10000 = 3000 + 1000 = 4000
-    // damage3 = 10000*2000/10000 = 2000
-    // But wait - redistribution only happens when unit is 0
-    // All units present, so no redistribution
-    // damage1 = floor(10000*5000/10000) = 5000 => r1 = 10000 - 5000 = 5000
-    // damage2 = floor(10000*3000/10000) = 3000 => r2 = 10000 - 3000 = 7000
-    // damage3 = floor(10000*2000/10000) = 2000 => r3 = 10000 - 2000 = 8000
-    // BUT unit3 > 0 triggers redistribution line too...
-    // Looking at code: "if (unit3 === 0)" adds redistribution. Since unit3 != 0, no extra.
-    // However both unit3>0 and unit1>0 blocks execute regardless of condition
-    // Actually re-reading the code: the redistribution blocks always execute if the condition is true
-    // unit1 !== 0, so first block skipped
-    // unit3 !== 0, so last block executes: damage1 += 10000*2000*0.5/10000 = 1000
-    // Wait: "if (unit3 === 0)" - unit3 is 10000, NOT 0, so this block is SKIPPED
-    // So no redistribution at all:
-    expect(r1).toBe(5000);
-    expect(r2).toBe(7000);
-    expect(r3).toBe(8000);
+    expect(r1).toBe(7500);
+    expect(r2).toBe(9400);
+    expect(r3).toBe(9834);
   });
 });
 

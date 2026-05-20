@@ -319,6 +319,7 @@ pub fn process_instruction(
         // Hero Burn & Supply (310-319)
         310 => { msg!("burn hero"); processor::hero::burn::process(program_id, accounts, instruction_data) }
         311 => { msg!("update supply cap"); processor::hero::update_supply_cap::process(program_id, accounts, instruction_data) }
+        312 => { msg!("use hero ability"); processor::hero::use_ability::process(program_id, accounts, instruction_data) }
 
         _ => Err(ProgramError::InvalidInstructionData),
     }

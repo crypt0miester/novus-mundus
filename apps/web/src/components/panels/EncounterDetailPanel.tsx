@@ -21,6 +21,7 @@ import {
   TravelType,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useEncounters } from "@/lib/hooks/useEncounters";
 import { useNow } from "@/lib/hooks/useNow";
@@ -135,6 +136,7 @@ export function EncounterDetailPanel({
       },
       { encounterId: enc.id.toNumber() },
     );
+    const maxHealth = enc.maxHealth.toNumber();
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -143,7 +145,7 @@ export function EncounterDetailPanel({
         onPhase: reportPhase,
       })
       .then((r) => {
-        useCombatOutcome.getState().show(r.events, handleAttack);
+        useCombatOutcome.getState().show(r.events, handleAttack, { maxHealth });
         return r.signature;
       });
   };
@@ -173,6 +175,7 @@ export function EncounterDetailPanel({
       },
       { encounterId: enc.id.toNumber() },
     );
+    const maxHealth = enc.maxHealth.toNumber();
     return transact
       .mutateAsync({
         instructions: [staminaIx, attackIx],
@@ -181,7 +184,9 @@ export function EncounterDetailPanel({
         onPhase: reportPhase,
       })
       .then((r) => {
-        useCombatOutcome.getState().show(r.events, handleStaminaAndAttack);
+        useCombatOutcome.getState().show(r.events, handleStaminaAndAttack, {
+          maxHealth,
+        });
         return r.signature;
       });
   };
@@ -277,6 +282,28 @@ export function EncounterDetailPanel({
       })
       .then((r) => r.signature);
   };
+
+  // Hook order: must run before the early return below.
+  const morphActions =
+    !encounter || !player || playerTraveling
+      ? null
+      : [
+          {
+            id: "attack",
+            label: levelBand?.inBand === false ? "LEVEL GAP" : "Attack",
+            variant: "primary" as const,
+            disabled:
+              !hasStamina || !dist?.inRange || levelBand?.inBand === false,
+            onClick: handleAttack,
+          },
+          {
+            id: "stamina-attack",
+            label: "+Stamina & Attack",
+            disabled: !dist?.inRange || levelBand?.inBand === false,
+            onClick: handleStaminaAndAttack,
+          },
+        ];
+  useMorphActions(morphActions);
 
   if (!encounter || !dist || !player) {
     return (
@@ -433,9 +460,8 @@ export function EncounterDetailPanel({
         </div>
       )}
 
-      {/* Attack buttons */}
       {!playerTraveling && (
-        <div className="space-y-2">
+        <div className="hidden space-y-2 lg:block">
           <TxButton
             onClick={handleAttack}
             className="w-full py-3 text-base font-bold"

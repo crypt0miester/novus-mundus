@@ -14,6 +14,8 @@ import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { GemAction } from "@/components/shared/GemAction";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { useRightPanelStore } from "@/lib/store/right-panel";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import type { PanelAction } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import {
   derivePlayerPda,
@@ -91,6 +93,204 @@ export function ResearchPanel({
   const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
   const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
 
+  const handleStart = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const ix = createStartResearchInstruction({
+      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research started!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleComplete = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const ix = createCompleteResearchInstruction({
+      payer: publicKey, gameEngine: client.gameEngine, playerOwner: publicKey,
+      researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research complete!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleInstant = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const rt = template.researchType;
+    const buffName = getResearchName(rt);
+    const startIx = createStartResearchInstruction({ owner: publicKey, gameEngine: ge, researchType: rt });
+    const speedupIx = createSpeedUpResearchInstruction(
+      { owner: publicKey, gameEngine: ge, researchType: rt },
+      { speedUpSeconds: 0 },
+    );
+    const completeIx = createCompleteResearchInstruction({
+      payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
+    });
+    return transact.mutateAsync({
+      instructions: [startIx, speedupIx, completeIx],
+      invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${buffName} completed instantly!`, onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const rt = template.researchType;
+    const buffName = getResearchName(rt);
+    const speedUpSeconds = tier === 2 ? 0 : 3600;
+    const instructions = [
+      createSpeedUpResearchInstruction(
+        { owner: publicKey, gameEngine: ge, researchType: rt },
+        { speedUpSeconds },
+      ),
+    ];
+    if (tier === 2) {
+      instructions.push(
+        createCompleteResearchInstruction({
+          payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
+        }),
+      );
+    }
+    return transact.mutateAsync({
+      instructions, invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: tier === 2 ? `${buffName} completed instantly!` : "Research sped up!",
+      onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const ix = createCancelResearchInstruction({
+      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+    });
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: "Research cancelled!", onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const handleAscend = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !template) throw new Error("Wallet not connected");
+    const buffName = getResearchName(template.researchType);
+    const ix = createAscendInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { researchType: template.researchType },
+    );
+    return transact.mutateAsync({
+      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
+      successMessage: `${buffName} ascended!`, onPhase: reportPhase,
+    }).then((r) => r.signature);
+  };
+
+  const morphActions = useMemo<PanelAction[] | null>(() => {
+    if (!template) return null;
+    const currentLevel = progress ? getResearchLevel(progress, template.researchType) : 0;
+    const isActiveForThis = !!(
+      progress &&
+      isResearching(progress) &&
+      progress.currentResearch === template.researchType
+    );
+    const nowSec = Math.floor(Date.now() / 1000);
+    const isComplete = !!(progress && isActiveForThis && isResearchComplete(progress, nowSec));
+    const isAnyActive = progress ? isResearching(progress) : false;
+    const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
+    const academyLevel = estateData?.account
+      ? findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0
+      : 0;
+    const requiredAcademy = ACADEMY_REQUIRED[template.category] ?? 1;
+    const meetsAcademy = academyLevel >= requiredAcademy;
+    const buffName = getResearchName(template.researchType);
+    const nextLevelCost = currentLevel < template.maxLevel
+      ? calculateResearchCost(template.baseNoviCost.toNumber(), currentLevel + 1)
+      : 0;
+    const hasEnoughNovi = noviBalance >= nextLevelCost;
+
+    if (isComplete) {
+      return [
+        {
+          id: "claim-research",
+          label: "Claim Research",
+          variant: "primary" as const,
+          onClick: handleComplete,
+        },
+      ];
+    }
+    if (!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel) {
+      const baseTimeSec = template.baseTimeSeconds;
+      const instantGemCost = template.gemCostPerMinute * Math.ceil(baseTimeSec / 60);
+      const gems = playerData?.account?.gems?.toNumber?.() ?? 0;
+      return [
+        {
+          id: "start-research",
+          label: hasEnoughNovi
+            ? `Start Lv ${currentLevel + 1}`
+            : "Insufficient NOVI",
+          variant: "primary" as const,
+          disabled: !hasEnoughNovi,
+          onClick: handleStart,
+        },
+        {
+          id: "instant-research",
+          label: "Instant",
+          disabled: gems < instantGemCost,
+          onClick: handleInstant,
+        },
+      ];
+    }
+    if (!isAnyActive && currentLevel >= template.maxLevel) {
+      return [
+        {
+          id: "ascend",
+          label: `Ascend ${buffName}`,
+          variant: "primary" as const,
+          onClick: handleAscend,
+        },
+      ];
+    }
+    if (isActiveForThis && !isComplete) {
+      // Cancel stays inline (not in the morph bar) — destructive actions
+      // shouldn't share weight with the gem speedups.
+      const remainingMinutes = Math.max(1, Math.ceil(
+        (progress.completesAt.toNumber() - nowSec) / 60,
+      ));
+      const t1Gems = template.gemCostPerMinute * 60;
+      const t2Gems = template.gemCostPerMinute * remainingMinutes;
+      const gems = playerData?.account?.gems?.toNumber?.() ?? 0;
+      return [
+        {
+          id: "skip-hour",
+          label: "Skip 1h",
+          onClick: (rp) => handleSpeedup(1, rp),
+          disabled: gems < t1Gems,
+        },
+        {
+          id: "instant",
+          label: "Instant",
+          onClick: (rp) => handleSpeedup(2, rp),
+          disabled: gems < t2Gems,
+        },
+      ];
+    }
+    return null;
+  }, [
+    template,
+    progress,
+    estateData,
+    noviBalance,
+    playerData,
+    handleStart,
+    handleComplete,
+    handleAscend,
+    handleCancel,
+    handleSpeedup,
+    handleInstant,
+  ]);
+  useMorphActions(morphActions);
+
   if (!template) {
     return <div className="text-xs text-text-muted">Loading research data...</div>;
   }
@@ -150,99 +350,6 @@ export function ResearchPanel({
     },
   );
 
-  // Handlers
-  const handleStart = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createStartResearchInstruction({
-      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
-    });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research started!", onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleComplete = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createCompleteResearchInstruction({
-      payer: publicKey, gameEngine: client.gameEngine, playerOwner: publicKey,
-      researchType: template.researchType,
-    });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research complete!", onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleInstant = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const rt = template.researchType;
-    const startIx = createStartResearchInstruction({ owner: publicKey, gameEngine: ge, researchType: rt });
-    const speedupIx = createSpeedUpResearchInstruction(
-      { owner: publicKey, gameEngine: ge, researchType: rt },
-      { speedUpSeconds: 0 },
-    );
-    const completeIx = createCompleteResearchInstruction({
-      payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
-    });
-    return transact.mutateAsync({
-      instructions: [startIx, speedupIx, completeIx],
-      invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: `${buffName} completed instantly!`, onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const rt = template.researchType;
-    const speedUpSeconds = tier === 2 ? 0 : 3600;
-    const instructions = [
-      createSpeedUpResearchInstruction(
-        { owner: publicKey, gameEngine: ge, researchType: rt },
-        { speedUpSeconds },
-      ),
-    ];
-    // Tier 2 ("Instant") finishes the timer outright — claim it in the same
-    // transaction so the player doesn't have to click "Claim Research" after.
-    if (tier === 2) {
-      instructions.push(
-        createCompleteResearchInstruction({
-          payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
-        }),
-      );
-    }
-    return transact.mutateAsync({
-      instructions, invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: tier === 2 ? `${buffName} completed instantly!` : "Research sped up!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createCancelResearchInstruction({
-      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
-    });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research cancelled!", onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleAscend = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createAscendInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { researchType: template.researchType },
-    );
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: `${buffName} ascended!`, onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
   return (
     <div className="flex flex-col gap-4">
       {/* Template info */}
@@ -293,19 +400,10 @@ export function ResearchPanel({
         </div>
       )}
 
-      {/* Active research countdown */}
-      {isActiveForThis && !isComplete && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
-          <div className="text-xs text-text-muted">Researching...</div>
-          <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
-        </div>
-      )}
-
-      {/* Complete */}
       {isComplete && (
         <div className="rounded-lg border border-green-800/50 bg-green-900/20 p-3 text-center">
           <div className="mb-2 text-xs text-green-400">Research Complete!</div>
-          <TxButton onClick={handleComplete} className="w-full">Claim Research</TxButton>
+          <TxButton onClick={handleComplete} className="hidden w-full lg:block">Claim Research</TxButton>
         </div>
       )}
 
@@ -327,9 +425,16 @@ export function ResearchPanel({
         </div>
       </div>
 
-      {/* Start actions */}
+      {/* Active research countdown */}
+      {isActiveForThis && !isComplete && (
+        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
+          <div className="text-xs text-text-muted">Researching...</div>
+          <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
+        </div>
+      )}
+      
       {!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel && (
-        <div className="flex flex-col gap-2">
+        <div className="hidden flex-col gap-2 lg:flex">
           <TxButton onClick={handleStart} className="w-full" disabled={!hasEnoughNovi}>
             {hasEnoughNovi ? `Start ${buffName} Lv ${currentLevel + 1}` : "Insufficient NOVI"}
           </TxButton>
@@ -339,9 +444,8 @@ export function ResearchPanel({
         </div>
       )}
 
-      {/* Ascend */}
       {!isAnyActive && currentLevel >= template.maxLevel && (
-        <TxButton onClick={handleAscend} className="w-full border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50">
+        <TxButton onClick={handleAscend} className="hidden w-full border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50 lg:block">
           Ascend {buffName}
         </TxButton>
       )}

@@ -28,6 +28,35 @@ pub fn format_u32_to_bytes(value: u32, buf: &mut [u8; 10]) -> &[u8] {
     &buf[pos..10]
 }
 
+/// Convert i64 to byte slice for NFT attributes (unix timestamps).
+/// Buffer must be at least 20 bytes (max i64 = 19 digits + optional sign).
+/// Negative values write a leading '-'.
+#[inline]
+pub fn format_i64_to_bytes(value: i64, buf: &mut [u8; 20]) -> &[u8] {
+    if value == 0 {
+        buf[19] = b'0';
+        return &buf[19..20];
+    }
+
+    let negative = value < 0;
+    // Use absolute value via wrapping; handles i64::MIN safely.
+    let mut n: u64 = if negative { value.unsigned_abs() } else { value as u64 };
+    let mut pos = 20;
+
+    while n > 0 {
+        pos -= 1;
+        buf[pos] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+
+    if negative {
+        pos -= 1;
+        buf[pos] = b'-';
+    }
+
+    &buf[pos..20]
+}
+
 // Location Synergy - Buff Operations with Location Bonus
 
 /// Add one hero's buffs to player's cached totals with location bonus applied
@@ -215,6 +244,10 @@ pub struct HeroNftContext {
     // Buff configuration and values
     pub buff_values: [u64; 4],
     pub buff_configs: [BuffConfig; 4],
+
+    // Last ability cooldown stamp (mirrored to/from PlayerAccount slot
+    // on lock/unlock so the unlock+relock exploit is closed).
+    pub last_ability_used_at: i64,
 }
 
 impl HeroNftContext {
@@ -236,6 +269,8 @@ impl HeroNftContext {
             // Buff configuration and values at level 1
             buff_values: compute_buff_values(1, template),
             buff_configs: template.buffs,
+
+            last_ability_used_at: 0,
         }
     }
 
@@ -258,6 +293,8 @@ impl HeroNftContext {
 
             buff_values: compute_buff_values(parsed.level, template),
             buff_configs: template.buffs,
+
+            last_ability_used_at: parsed.last_ability_used_at,
         }
     }
 
@@ -272,6 +309,7 @@ impl HeroNftContext {
             origin_city: self.origin_city,
             buff_values: compute_buff_values(new_level, template),
             buff_configs: template.buffs,
+            last_ability_used_at: self.last_ability_used_at,
         }
     }
 
@@ -292,6 +330,22 @@ impl HeroNftContext {
             origin_city: self.origin_city,
             buff_values: compute_buff_values(level, template),
             buff_configs: template.buffs,
+            last_ability_used_at: self.last_ability_used_at,
+        }
+    }
+
+    /// Create with updated ability cooldown (for unlock_hero persistence)
+    #[inline]
+    pub fn with_ability_cooldown(&self, last_used_at: i64) -> Self {
+        Self {
+            level: self.level,
+            meditation_xp: self.meditation_xp,
+            template_id: self.template_id,
+            serial_number: self.serial_number,
+            origin_city: self.origin_city,
+            buff_values: self.buff_values,
+            buff_configs: self.buff_configs,
+            last_ability_used_at: last_used_at,
         }
     }
 }
@@ -301,8 +355,8 @@ impl HeroNftContext {
 /// Create on the stack, pass to `build_hero_nft_attributes`.
 /// Buffers must outlive the p-core CPI call.
 ///
-/// NFT-Only System: Buffers for all 9 possible attributes.
-/// (Level, XP, Template, Serial, Origin, + up to 4 buffs)
+/// NFT-Only System: Buffers for all 10 possible attributes.
+/// (Level, XP, Template, Serial, Origin, AbCD, + up to 4 buffs)
 pub struct HeroNftBuffers {
     // Mutable state
     pub level: [u8; 10],
@@ -312,6 +366,9 @@ pub struct HeroNftBuffers {
     pub template: [u8; 10],
     pub serial: [u8; 10],
     pub origin: [u8; 10],
+
+    // Ability cooldown stamp (i64 → up to 20 ASCII bytes including '-')
+    pub ab_cd: [u8; 20],
 
     // Buff values
     pub buff0: [u8; 10],
@@ -329,6 +386,7 @@ impl HeroNftBuffers {
             template: [0u8; 10],
             serial: [0u8; 10],
             origin: [0u8; 10],
+            ab_cd: [0u8; 20],
             buff0: [0u8; 10],
             buff1: [0u8; 10],
             buff2: [0u8; 10],
@@ -340,28 +398,21 @@ impl HeroNftBuffers {
 /// Build hero NFT attributes for p-core UpdatePluginV1/AddPluginV1
 ///
 /// NFT-Only System: All hero state is stored as NFT attributes.
-/// Returns the number of attributes written to the array (max 9).
+/// Returns the number of attributes written to the array (max 10).
 ///
-/// # Attributes
+/// # Attributes (10 max — at MPL Core's per-asset cap)
 /// - Level, XP (mutable state)
 /// - Template, Serial, Origin (immutable identity)
+/// - AbCD (ability cooldown unix timestamp; "0" if never used)
 /// - Up to 4 buff values (e.g., "Defense": "500")
 ///
 /// # Arguments
 /// - `buffers`: Pre-allocated buffers (must outlive CPI call)
-/// - `attributes`: Output array to fill (size 9)
+/// - `attributes`: Output array to fill (size 10)
 /// - `ctx`: Captured hero data from `HeroNftContext`
-///
-/// # Example
-/// ```ignore
-/// let ctx = HeroNftContext::new_mint(template, serial_number);
-/// let mut buffers = HeroNftBuffers::new();
-/// let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
-/// let count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
-/// ```
 pub fn build_hero_nft_attributes<'a>(
     buffers: &'a mut HeroNftBuffers,
-    attributes: &mut [(&'a [u8], &'a [u8]); 9],
+    attributes: &mut [(&'a [u8], &'a [u8]); 10],
     ctx: &HeroNftContext,
 ) -> usize {
     let mut idx = 0;
@@ -386,6 +437,11 @@ pub fn build_hero_nft_attributes<'a>(
 
     let origin_str = format_u32_to_bytes(ctx.origin_city as u32, &mut buffers.origin);
     attributes[idx] = (b"Origin", origin_str);
+    idx += 1;
+
+    // Ability cooldown stamp (always written so parser finds it; "0" if unused)
+    let ab_cd_str = format_i64_to_bytes(ctx.last_ability_used_at, &mut buffers.ab_cd);
+    attributes[idx] = (b"AbCD", ab_cd_str);
     idx += 1;
 
     // Buff values - unrolled to satisfy borrow checker

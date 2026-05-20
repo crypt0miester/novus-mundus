@@ -31,18 +31,32 @@ interface Row {
   highlight?: boolean;
 }
 
+interface HpAnim {
+  /** Pre-hit HP (damageDealt + healthRemaining). */
+  from: number;
+  /** Post-hit HP — what the on-chain event says is left. */
+  to: number;
+  /** Encounter max HP, used as the bar's full-width denominator. */
+  max: number;
+}
+
 interface OutcomeView {
   tone: Tone;
   heading: string;
   sub: string;
   rows: Row[];
   hint?: string;
+  /** Diminishing HP bar shown for encounter hits (PvE only). */
+  hpAnim?: HpAnim;
   /** The target is still standing — offer an Attack button, not just Continue. */
   canAttackAgain: boolean;
 }
 
 /** Reduce a combat tx's events into a single win/lose breakdown. */
-function buildView(events: NonNullable<ReturnType<typeof useCombatOutcome.getState>["events"]>): OutcomeView | null {
+function buildView(
+  events: NonNullable<ReturnType<typeof useCombatOutcome.getState>["events"]>,
+  maxHealth: number | undefined,
+): OutcomeView | null {
   const find = (name: string) =>
     (events.find((e) => e.name === name)?.data ?? null) as Record<string, unknown> | null;
 
@@ -103,14 +117,22 @@ function buildView(events: NonNullable<ReturnType<typeof useCombatOutcome.getSta
     sub = "The encounter survives — strike again to finish it.";
   }
 
+  let hpAnim: HpAnim | undefined;
   if (attacked) {
     rows.push({ label: "Damage dealt", value: fmt(attacked.damageDealt) });
-    if (!defeated) rows.push({ label: "Enemy HP left", value: fmt(attacked.healthRemaining) });
     if (num(attacked.staminaConsumed) > 0) {
       rows.push({ label: "Stamina spent", value: fmt(attacked.staminaConsumed) });
     }
     if (num(attacked.noviConsumed) > 0) {
       rows.push({ label: "NOVI spent", value: fmt(attacked.noviConsumed) });
+    }
+    const damage = num(attacked.damageDealt);
+    const remaining = num(attacked.healthRemaining);
+    // Fall back to pre-hit HP when the call site didn't supply max — gives a
+    // sensible "this hit took X% off" read even if it isn't full-encounter-HP.
+    const max = maxHealth && maxHealth > 0 ? maxHealth : damage + remaining;
+    if (max > 0) {
+      hpAnim = { from: damage + remaining, to: remaining, max };
     }
   }
 
@@ -124,7 +146,71 @@ function buildView(events: NonNullable<ReturnType<typeof useCombatOutcome.getSta
   // PvP can always be re-launched; an encounter only while it still lives.
   const canAttackAgain = Boolean(pvp) || (Boolean(attacked) && !defeated);
 
-  return { tone, heading, sub, rows, hint, canAttackAgain };
+  return { tone, heading, sub, rows, hint, hpAnim, canAttackAgain };
+}
+
+/**
+ * Diminishing HP bar — starts at pre-hit HP and animates down to the post-hit
+ * value via animejs. Width is normalised against the encounter's max HP so the
+ * bar reads "how much of the enemy is left" rather than "how much this hit took".
+ */
+function HpDiminishBar({ from, to, max }: HpAnim) {
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const numRef = useRef<HTMLSpanElement | null>(null);
+
+  const fromPct = Math.max(0, Math.min(100, (from / max) * 100));
+  const toPct = Math.max(0, Math.min(100, (to / max) * 100));
+  // Ramp colour to match the post-hit HP — red when critical, amber low, green healthy.
+  const fillColor = toPct > 50 ? "bg-emerald-500" : toPct > 25 ? "bg-amber-500" : "bg-red-500";
+
+  useEffect(() => {
+    if (!fillRef.current) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      fillRef.current.style.width = `${toPct}%`;
+      if (numRef.current) numRef.current.textContent = Math.round(to).toLocaleString();
+      return;
+    }
+
+    fillRef.current.style.width = `${fromPct}%`;
+    animate(fillRef.current, {
+      width: [`${fromPct}%`, `${toPct}%`],
+      duration: 900,
+      delay: 220,
+      ease: "outQuart",
+    });
+
+    const counter = { v: from };
+    animate(counter, {
+      v: to,
+      duration: 900,
+      delay: 220,
+      ease: "outQuart",
+      onUpdate: () => {
+        if (numRef.current) {
+          numRef.current.textContent = Math.round(counter.v).toLocaleString();
+        }
+      },
+    });
+  }, [from, to, fromPct, toPct]);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="text-text-muted">Enemy HP</span>
+        <span className="font-mono text-text-primary">
+          <span ref={numRef}>{Math.round(from).toLocaleString()}</span>
+          <span className="text-text-muted"> / {max.toLocaleString()}</span>
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          ref={fillRef}
+          className={`h-full rounded-full ${fillColor}`}
+          style={{ width: `${fromPct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 const TONE: Record<Tone, { ring: string; text: string; glow: string }> = {
@@ -141,12 +227,16 @@ const TONE: Record<Tone, { ring: string; text: string; glow: string }> = {
 export function CombatOutcomeModal() {
   const events = useCombatOutcome((s) => s.events);
   const onAttackAgain = useCombatOutcome((s) => s.onAttackAgain);
+  const context = useCombatOutcome((s) => s.context);
   const close = useCombatOutcome((s) => s.close);
 
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  const view = useMemo(() => (events ? buildView(events) : null), [events]);
+  const view = useMemo(
+    () => (events ? buildView(events, context.maxHealth) : null),
+    [events, context.maxHealth],
+  );
 
   // Pop the card in with a spring; fade the backdrop.
   useEffect(() => {
@@ -200,6 +290,12 @@ export function CombatOutcomeModal() {
           </div>
           <div className="mt-1 text-xs text-text-muted">{view.sub}</div>
         </div>
+
+        {view.hpAnim && (
+          <div className="mt-5">
+            <HpDiminishBar {...view.hpAnim} />
+          </div>
+        )}
 
         {view.rows.length > 0 && (
           <div className="mt-5 space-y-1.5">

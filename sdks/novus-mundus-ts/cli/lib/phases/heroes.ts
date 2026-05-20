@@ -74,6 +74,11 @@ export async function initHeroes(ctx: CLIContext): Promise<PhaseStats> {
             requiredPlayerLevel: template.requiredPlayerLevel,
             meditationCityId: template.meditationCityId,
             buffs: template.buffs,
+            abilityKind: template.abilityKind ?? 0,
+            abilityStat: template.abilityStat ?? 0,
+            abilityParam1: template.abilityParam1 ?? 0,
+            abilityParam2: template.abilityParam2 ?? 0,
+            abilityCooldownSecs: template.abilityCooldownSecs ?? 0,
           }
         );
         await sendWithRetry(ctx, ix, [ctx.daoAuthority]);

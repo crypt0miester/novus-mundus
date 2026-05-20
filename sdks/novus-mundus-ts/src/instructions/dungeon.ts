@@ -609,6 +609,8 @@ export function createFleeInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [dungeonRun] = deriveDungeonRunPda(player);
   const [heroCollection] = deriveHeroCollectionPda();
+  const [noviMint] = deriveNoviMintPda();
+  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -618,6 +620,10 @@ export function createFleeInstruction(
   // 4. hero_collection (read)
   // 5. system_program (read)
   // 6. mpl_core_program (for hero NFT transfer CPI)
+  // 7. player_novi_ata (writable, mint target)
+  // 8. novi_mint (writable)
+  // 9. game_engine (read, mint authority)
+  // 10. token_program (read)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -626,6 +632,10 @@ export function createFleeInstruction(
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: playerNoviAta, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.DUNGEON_FLEE);
@@ -670,6 +680,8 @@ export function createClaimDungeonInstruction(
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [dungeonRun] = deriveDungeonRunPda(player);
   const [heroCollection] = deriveHeroCollectionPda();
+  const [noviMint] = deriveNoviMintPda();
+  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -679,7 +691,11 @@ export function createClaimDungeonInstruction(
   // 4. hero_collection (read)
   // 5. system_program (read)
   // 6. mpl_core_program (for hero NFT transfer CPI)
-  // 7. leaderboard (optional, writable)
+  // 7. player_novi_ata (writable, mint target)
+  // 8. novi_mint (writable)
+  // 9. game_engine (read, mint authority)
+  // 10. token_program (read)
+  // 11. leaderboard (optional, writable)
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: player, isSigner: false, isWritable: true },
@@ -688,9 +704,13 @@ export function createClaimDungeonInstruction(
     { pubkey: heroCollection, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
+    { pubkey: playerNoviAta, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Add leaderboard if provided
+  // Add leaderboard if provided (optional, comes after the mandatory NOVI block)
   if (accounts.leaderboard) {
     keys.push({ pubkey: accounts.leaderboard, isSigner: false, isWritable: true });
   } else if (params?.templateId !== undefined && params?.weekNumber !== undefined) {

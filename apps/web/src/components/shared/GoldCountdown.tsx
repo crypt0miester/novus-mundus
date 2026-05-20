@@ -39,7 +39,6 @@ export function GoldCountdown({
         timerRef.current.textContent = remaining === 0 ? "READY" : formatTime(remaining, format);
       }
 
-      // Progress bar
       if (barRef.current && startedAt) {
         const total = endsAt - startedAt;
         const elapsed = now - startedAt;
@@ -47,13 +46,12 @@ export function GoldCountdown({
         barRef.current.style.width = `${pct}%`;
       }
 
-      // Urgent mode
       if (
         remaining > 0 &&
         remaining <= urgentThreshold &&
         timerRef.current
       ) {
-        timerRef.current.classList.add("text-red-400");
+        timerRef.current.classList.add("text-danger");
         timerRef.current.classList.remove("text-text-gold");
       }
 

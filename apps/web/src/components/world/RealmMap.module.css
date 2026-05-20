@@ -1,467 +1,601 @@
-/* ═══════════════════════════════════════════════════════════════
-   REALM MAP — Dark Command Console
-   Dark shell, monospace, tabular numerals. The ACCENT is not fixed:
-   it inherits the player's subscription tier (--tier-accent-bright,
-   set on <body data-tier> by useTierTheme) — bronze / silver / gold /
-   crimson. Falls back to cyan only before hydration.
-   ═══════════════════════════════════════════════════════════════ */
+/* REALM MAP — light: cream paper + sepia ink; dark: midnight vellum + cream
+   ink. The palette swaps in the body[data-theme="dark"] block at the bottom;
+   shape and motion are shared. The wax-seal accent inherits --tier-accent. */
 
 .root {
-  --bg: #090c0e;
-  --bg-panel: #0d1215;
-  --bg-raised: #121a1d;
+  /* parchment + ink (light mode defaults) */
+  --parchment: #efe2c4;
+  --parchment-warm: #e9d7b0;
+  --parchment-deep: #d9c293;
+  --parchment-edge: #b89a66;
+  --ink: #2e1f10;
+  --ink-soft: #6b4a2a;
+  --ink-faint: #b89a72;
 
-  /* Tier-driven accent */
-  --accent: var(--tier-accent-bright, #3ad6c4);
-  --glow: var(--tier-accent-glow, rgba(58, 214, 196, 0.18));
-  --line: color-mix(in srgb, var(--accent) 15%, transparent);
-  --line-soft: color-mix(in srgb, var(--accent) 7%, transparent);
+  /* Derived inks used as text halos and panel washes — kept as vars so the
+   * dark-mode block can swap them in lock-step with --parchment. */
+  --halo: rgba(239, 226, 196, 0.85);
+  --halo-soft: rgba(239, 226, 196, 0.7);
+  --kingdom-fill: rgba(118, 80, 36, 0.16);
+  --kingdom-stroke: rgba(70, 44, 18, 0.4);
+  --panel-tint: rgba(255, 255, 255, 0.15);
+  --readout-tint: rgba(255, 245, 220, 0.5);
+  --legend-divider: rgba(110, 70, 30, 0.2);
 
-  --text: #d4e4e1;
-  --text-dim: #708582;
-  --text-faint: #3c4b49;
+  /* wax-seal accent — defaults to the player's tier, falls back to gold */
+  --seal: var(--tier-accent-bright, #b45309);
+  --seal-glow: var(--tier-accent-glow, rgba(180, 83, 9, 0.25));
 
-  font-family: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  max-width: 1240px;
+  color: var(--ink);
+  font-family: var(--font-cinzel), Cinzel, "Trajan Pro", "Goudy Old Style", serif;
+  letter-spacing: 0.04em;
+  max-width: 1320px;
   margin: 0 auto;
 }
 
-.num { font-variant-numeric: tabular-nums; }
-
-/* ─── Top readout bar ─────────────────────────────────────────── */
-
-.topbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  padding: 0 0 0.9rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--line-soft);
+.numeral {
+  font-family: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
-.title {
-  font-size: 1.45rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: var(--text);
+/* Top cartouche */
+
+.cartouche {
+  text-align: center;
+  padding: 0.4rem 0 1.1rem;
+}
+.kingdom {
+  font-size: clamp(1.4rem, 2.3vw, 2rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: var(--ink);
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.titleMark {
-  width: 9px; height: 9px;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
-  animation: blink 2.4s steps(1) infinite;
-}
-.subtitle {
-  margin-top: 0.35rem;
-  font-size: 0.66rem;
-  letter-spacing: 0.18em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
-
-.readouts { display: flex; gap: 1.6rem; }
-.readout { text-align: right; }
-.readoutLabel {
-  font-size: 0.58rem;
-  letter-spacing: 0.16em;
-  color: var(--text-faint);
-  text-transform: uppercase;
-}
-.readoutValue {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--accent);
   line-height: 1.1;
-  text-shadow: 0 0 14px var(--glow);
+}
+.tagline {
+  margin-top: 0.45rem;
+  font-style: italic;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+}
+.tagline .rule {
+  display: inline-block;
+  width: 36px;
+  height: 1px;
+  background: currentColor;
+  vertical-align: middle;
+  margin: 0 0.6rem;
+  opacity: 0.5;
 }
 
-/* ─── Shell: map + intel panel ────────────────────────────────── */
+/* Shell */
 
 .shell {
   display: grid;
-  grid-template-columns: 1fr 328px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 1rem;
+  align-items: start;
 }
-@media (max-width: 880px) {
+@media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
 }
 
-/* ─── Map frame ───────────────────────────────────────────────── */
+/* Map sheet */
 
-.mapWrap {
+.sheet {
   position: relative;
-  aspect-ratio: 16 / 11;
+  aspect-ratio: 7 / 5;
   background:
-    radial-gradient(ellipse 70% 60% at 50% 42%, #11181b 0%, var(--bg) 78%);
-  border: 1px solid var(--line);
+    radial-gradient(120% 80% at 50% 25%, var(--parchment) 0%, var(--parchment-warm) 55%, var(--parchment-deep) 100%);
+  border: 1px solid var(--parchment-edge);
+  /* deckled, slightly varied edge feel via layered shadows */
+  box-shadow:
+    inset 0 0 90px rgba(110, 70, 30, 0.18),
+    inset 0 0 18px rgba(110, 70, 30, 0.12),
+    0 18px 40px -22px rgba(40, 24, 8, 0.4),
+    0 4px 10px -4px rgba(40, 24, 8, 0.25);
   overflow: hidden;
-  isolation: isolate;
+  cursor: crosshair;
 }
 
-/* coordinate grid */
-.mapGrid {
+.svg {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(var(--line-soft) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
-  background-size: 7.142% 9.09%, 7.142% 9.09%;
-  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-/* rotating radar sweep */
-.radar {
-  position: absolute;
-  left: 50%; top: 50%;
-  width: 160%; aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    color-mix(in srgb, var(--accent) 14%, transparent) 38deg,
-    transparent 60deg
-  );
-  animation: spin 9s linear infinite;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* drifting scanline */
-.scanline {
-  position: absolute;
-  left: 0; right: 0; height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 45%, transparent),
-    transparent
-  );
-  animation: sweep 6.5s linear infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.vignette {
+/* paper grain — a tiled SVG noise overlay */
+.grain {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 75% at 50% 50%, transparent 55%, rgba(0,0,0,0.65) 100%);
+  pointer-events: none;
+  opacity: 0.32;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.12  0 0 0 0 0.05  0 0 0 0.85 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* foxing / age spots */
+.foxing {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  mix-blend-mode: multiply;
+  background:
+    radial-gradient(circle at 18% 78%, rgba(120, 70, 20, 0.55) 0%, transparent 9%),
+    radial-gradient(circle at 88% 22%, rgba(120, 70, 20, 0.45) 0%, transparent 7%),
+    radial-gradient(circle at 76% 86%, rgba(120, 70, 20, 0.4) 0%, transparent 8%),
+    radial-gradient(circle at 8% 12%, rgba(120, 70, 20, 0.5) 0%, transparent 6%);
+}
+
+/* corner ornaments — small ink flourishes */
+.ornament {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-soft);
   pointer-events: none;
   z-index: 4;
 }
+.ornament svg { width: 100%; height: 100%; display: block; }
+.tl { top: 12px; left: 12px; }
+.tr { top: 12px; right: 12px; transform: scaleX(-1); }
+.bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
+.br { bottom: 12px; right: 12px; transform: scale(-1, -1); }
 
-/* corner brackets */
-.corner {
-  position: absolute;
-  width: 16px; height: 16px;
-  border: 1px solid var(--accent);
-  z-index: 5;
+/* SVG element styling */
+
+.kingdomShape {
+  fill: var(--kingdom-fill);
+  stroke: var(--kingdom-stroke);
+  stroke-width: 0.6;
+}
+
+.road {
+  stroke: var(--ink-soft);
+  stroke-width: 0.32;
+  stroke-dasharray: 1.4 0.9;
+  fill: none;
+  opacity: 0;
+  animation: roadIn 1.4s ease forwards;
+}
+
+.cityDot {
+  fill: var(--ink);
+  stroke: var(--parchment);
+  stroke-width: 0.6;
+  transition: transform 0.18s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.cityRing {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.32;
+  opacity: 0.35;
   pointer-events: none;
 }
-.corner:nth-child(1) { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
-.corner:nth-child(2) { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
-.corner:nth-child(3) { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
-.corner:nth-child(4) { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
-
-.mapTag {
-  position: absolute;
-  top: 12px; left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.56rem;
-  letter-spacing: 0.24em;
-  color: var(--text-faint);
-  z-index: 5;
-  text-transform: uppercase;
-}
-
-/* connection lines */
-.links { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-.link {
-  stroke: var(--accent);
-  stroke-width: 0.18;
-  stroke-dasharray: 1.4 1.1;
-  opacity: 0;
-  animation: linkIn 0.6s ease forwards;
-}
-
-/* ─── City nodes ──────────────────────────────────────────────── */
-
-.node {
-  position: absolute;
-  transform: translate(-50%, -50%) scale(0);
-  background: none;
-  border: 0;
-  padding: 0;
-  z-index: 3;
-  animation: nodeIn 0.5s cubic-bezier(0.34, 1.4, 0.5, 1) forwards;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transition: filter 0.2s ease;
-}
-.node:hover { filter: brightness(1.25); z-index: 8; }
-.node:focus-visible { outline: none; }
-
-.dot {
-  border-radius: 50%;
-  position: relative;
-  transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.5, 1);
-}
-.node:hover .dot { transform: scale(1.18); }
-.dotCore {
-  position: absolute;
-  inset: 30%;
-  border-radius: 50%;
-  background: #060809;
-  opacity: 0.55;
-}
-
-/* pulsing ring */
-.pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  animation: pulse 2.6s ease-out infinite;
-}
-
-.label {
-  margin-top: 5px;
-  font-size: 0.56rem;
-  letter-spacing: 0.1em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  white-space: nowrap;
-  transition: color 0.2s ease;
-}
-.node:hover .label { color: var(--text); }
-
-/* hover count chip */
-.chip {
-  position: absolute;
-  bottom: calc(100% + 7px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  color: var(--accent);
-  font-size: 0.58rem;
-  letter-spacing: 0.06em;
-  padding: 3px 7px;
-  white-space: nowrap;
-  opacity: 0;
+.cityGlyph {
+  fill: var(--ink);
+  font-family: var(--font-cinzel), serif;
+  font-weight: 700;
+  text-anchor: middle;
   pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease;
 }
-.node:hover .chip { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-.nodeSelected { z-index: 9; }
-.selRing {
-  position: absolute;
-  inset: -9px;
-  border-radius: 50%;
-  border: 1px solid var(--accent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.nodeSelected .label { color: var(--accent); }
-
-/* your-location marker */
-.home {
-  position: absolute;
-  width: 7px; height: 7px;
-  top: -13px; left: 50%;
-  transform: translateX(-50%) rotate(45deg);
-  background: var(--accent);
-  box-shadow: 0 0 9px var(--accent);
-  animation: bob 1.8s ease-in-out infinite;
-}
-
-/* ─── Intel panel ─────────────────────────────────────────────── */
-
-.panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-}
-.panelHead {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.7rem 0.85rem;
-  border-bottom: 1px solid var(--line-soft);
-  font-size: 0.62rem;
-  letter-spacing: 0.2em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
-.panelHead::before {
-  content: "";
-  width: 6px; height: 6px;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
-}
-.panelBody { padding: 0.95rem 0.9rem; flex: 1; }
-
 .cityName {
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  text-shadow: 0 0 16px var(--glow);
-  animation: fadeUp 0.3s ease;
-}
-.typeBadge {
-  display: inline-block;
-  margin-top: 0.5rem;
-  font-size: 0.58rem;
+  fill: var(--ink);
+  font-family: var(--font-cinzel), serif;
+  font-weight: 600;
   letter-spacing: 0.14em;
+  text-anchor: middle;
+  pointer-events: none;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border: 1px solid currentColor;
+  paint-order: stroke fill;
+  stroke: var(--halo);
+  stroke-width: 1.4; /* stronger halo lets stacked labels stay readable */
+}
+.cityCount {
+  fill: var(--ink-soft);
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke fill;
+  stroke: var(--halo-soft);
+  stroke-width: 1.0;
 }
 
-.statGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  margin-top: 1rem;
-  background: var(--line-soft);
-  border: 1px solid var(--line-soft);
-}
-.stat { background: var(--bg-raised); padding: 0.6rem 0.65rem; }
-.statLabel {
-  font-size: 0.55rem;
-  letter-spacing: 0.13em;
-  color: var(--text-faint);
-  text-transform: uppercase;
-}
-.statValue {
-  font-size: 1rem;
+/* Hovered / selected / capital / home — emphasise by darkening to full ink
+ * (drops the muted feel on non-anchor cities) and nudging up the weight. */
+.cityGroup.selected .cityName,
+.cityGroup.alwaysLabel .cityName,
+.cityGroup:hover .cityName {
   font-weight: 700;
-  color: var(--text);
-  margin-top: 2px;
 }
 
-.enter {
+/* home banner — small pennant above the home city */
+.homeFlag {
+  fill: var(--seal);
+  filter: drop-shadow(0 0 1.2px var(--seal-glow));
+  pointer-events: none;
+}
+
+/* selected city — double ring drawn on */
+.selectedOuter {
+  fill: none;
+  stroke: var(--seal);
+  stroke-width: 0.55;
+  opacity: 0.95;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: ringDraw 0.45s ease-out forwards;
+}
+.selectedInner {
+  fill: none;
+  stroke: var(--seal);
+  stroke-width: 0.28;
+  opacity: 0.75;
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: ringDraw 0.55s 0.08s ease-out forwards;
+}
+
+/* entrance — cities seep in like ink */
+.cityGroup {
+  opacity: 0;
+  animation: ink 0.7s ease-out forwards;
+  cursor: pointer;
+}
+.cityGroup:hover .cityDot { transform: scale(1.18); }
+
+@keyframes ink {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ringDraw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes roadIn {
+  to { opacity: 0.55; }
+}
+
+/* compass rose container — placed absolutely in the corner */
+.compass {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: 84px;
+  height: 84px;
+  pointer-events: none;
+  opacity: 0.78;
+  color: var(--ink);
+}
+
+/* Reset-zoom button — only rendered when zoomed > 1. Top-left mirrors the
+ * compass; same parchment chip vocabulary. */
+.resetBtn {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--parchment-edge);
+  background: var(--readout-tint);
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding: 0.65rem 0.8rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--line);
-  color: var(--accent);
-  font-size: 0.66rem;
+  justify-content: center;
+  z-index: 6;
+  opacity: 0.8;
+  transition: opacity 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  animation: fadeIn 0.2s ease;
+}
+.resetBtn:hover {
+  opacity: 1;
+  color: var(--ink);
+  transform: rotate(-30deg);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 0.8; transform: scale(1); }
+}
+.compass svg { width: 100%; height: 100%; display: block; }
+
+/* scale bar — bottom-left */
+.scale {
+  position: absolute;
+  bottom: 14px;
+  left: 18px;
+  font-size: 0.6rem;
+  font-style: italic;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.scaleBar {
+  display: inline-block;
+  width: 80px;
+  height: 6px;
+  background:
+    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) top/16px 2px repeat-x,
+    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) bottom/16px 2px repeat-x;
+  border-left: 1px solid var(--ink-soft);
+  border-right: 1px solid var(--ink-soft);
+}
+
+/* Scroll panel */
+
+.scroll {
+  position: relative;
+  background:
+    radial-gradient(120% 60% at 50% 0%, var(--parchment) 0%, var(--parchment-warm) 70%, var(--parchment-deep) 100%);
+  border: 1px solid var(--parchment-edge);
+  box-shadow:
+    inset 0 0 50px rgba(110, 70, 30, 0.16),
+    0 16px 36px -22px rgba(40, 24, 8, 0.4);
+  padding: 1.05rem 1rem 1.1rem;
+  color: var(--ink);
+}
+.scrollHead {
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--parchment-edge);
+}
+
+.detailName {
+  font-size: 1.3rem;
+  font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  text-decoration: none;
-  transition: background 0.18s ease, box-shadow 0.18s ease;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
 }
-.enter:hover {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+.detailType {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--ink-soft);
+  color: var(--ink);
+  background: var(--panel-tint);
+}
+.detailType .glyph { font-size: 0.95rem; line-height: 1; }
+.detailType.home { color: var(--seal); border-color: var(--seal); }
+
+.lineMeta {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+.lineMeta dt {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.lineMeta dd {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 0.25rem;
 }
 
-/* legend (default panel state) */
-.legendRow {
+.seal {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.42rem 0;
-  font-size: 0.7rem;
-  color: var(--text-dim);
-}
-.swatch {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  box-shadow: 0 0 8px currentColor;
-}
-.legendCount { margin-left: auto; color: var(--text); font-weight: 700; }
-
-.divider {
-  height: 1px;
-  background: var(--line-soft);
-  margin: 0.9rem 0;
-}
-.metaRow {
-  display: flex;
   justify-content: space-between;
-  font-size: 0.62rem;
-  padding: 0.3rem 0;
-  color: var(--text-dim);
+  margin-top: 1.1rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--readout-tint);
+  border: 1px solid var(--seal);
+  color: var(--seal);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  font-weight: 700;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
-.metaRow span:last-child { color: var(--text); }
+.seal:hover {
+  background: var(--seal);
+  color: var(--parchment);
+  transform: translateY(-1px);
+}
+
+/* Legend (default panel) */
+
+.legendRow {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: baseline;
+  padding: 0.34rem 0;
+  font-size: 0.78rem;
+  color: var(--ink);
+  border-bottom: 1px dotted var(--legend-divider);
+}
+.legendRow:last-of-type { border-bottom: 0; }
+.legendGlyph {
+  font-size: 0.95rem;
+  color: var(--ink);
+  text-align: center;
+}
+.legendCount {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.metaTable {
+  margin-top: 1rem;
+  border-top: 1px solid var(--parchment-edge);
+  padding-top: 0.7rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  row-gap: 0.35rem;
+  column-gap: 1rem;
+  font-size: 0.74rem;
+}
+.metaTable dt {
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+}
+.metaTable dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+}
 
 .hint {
-  margin-top: 0.9rem;
-  font-size: 0.6rem;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
-  line-height: 1.6;
+  margin-top: 1rem;
+  font-style: italic;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
-.hint b { color: var(--accent); font-weight: 400; }
+.hint::before {
+  content: "❦ ";
+  color: var(--ink-soft);
+  font-style: normal;
+}
 
-/* ─── States ──────────────────────────────────────────────────── */
+/* Header strip (small numeric chips above the sheet) */
+
+.readouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-bottom: 0.9rem;
+}
+.readout {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.32rem 0.7rem;
+  background: var(--readout-tint);
+  border: 1px solid var(--parchment-edge);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.readoutVal {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Loading state */
 
 .center {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 360px;
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.center span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.center span::before {
-  content: "";
-  width: 8px; height: 8px;
-  background: var(--accent);
-  animation: blink 1s steps(1) infinite;
-}
-
-/* ─── Keyframes ───────────────────────────────────────────────── */
-
-@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
-@keyframes sweep {
-  0% { top: -2%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { top: 102%; opacity: 0; }
-}
-@keyframes blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0.25; } }
-@keyframes nodeIn {
-  to { transform: translate(-50%, -50%) scale(1); }
-}
-@keyframes linkIn { to { opacity: 0.4; } }
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.7; }
-  100% { transform: scale(2.6); opacity: 0; }
-}
-@keyframes bob {
-  0%, 100% { transform: translateX(-50%) rotate(45deg) translateY(0); }
-  50% { transform: translateX(-50%) rotate(45deg) translateY(-3px); }
-}
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .radar, .scanline, .pulse, .home, .titleMark { animation: none; }
+  .road,
+  .cityGroup,
+  .selectedOuter,
+  .selectedInner {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Dark mode — aged leather / midnight vellum.
+   Cream "ink" on a deep brown ground, the look of an illuminated
+   manuscript opened by candlelight. Same shapes, swapped palette.
+   ═══════════════════════════════════════════════════════════════ */
+
+:global(body[data-theme="dark"]) .root {
+  --parchment: #1c130a;
+  --parchment-warm: #261a0e;
+  --parchment-deep: #110a04;
+  --parchment-edge: #4a3520;
+  --ink: #ead6a8;
+  --ink-soft: #b8966a;
+  --ink-faint: #5e482c;
+
+  --halo: rgba(28, 19, 10, 0.85);
+  --halo-soft: rgba(28, 19, 10, 0.65);
+  --kingdom-fill: rgba(218, 178, 110, 0.10);
+  --kingdom-stroke: rgba(218, 178, 110, 0.30);
+  --panel-tint: rgba(255, 240, 200, 0.05);
+  --readout-tint: rgba(35, 24, 12, 0.55);
+  --legend-divider: rgba(218, 178, 110, 0.18);
+}
+
+/* Soften the sheet's inner glow on dark — the warm shadow that gives the
+ * light parchment its weight reads as muddy black on a leather background. */
+:global(body[data-theme="dark"]) .sheet,
+:global(body[data-theme="dark"]) .scroll {
+  box-shadow:
+    inset 0 0 90px rgba(0, 0, 0, 0.45),
+    inset 0 0 18px rgba(0, 0, 0, 0.35),
+    0 18px 40px -22px rgba(0, 0, 0, 0.7);
+}
+
+/* Foxing reads as candle-soot stains on dark leather rather than age spots
+ * on paper — same blobs, slightly different intent. */
+:global(body[data-theme="dark"]) .foxing {
+  opacity: 0.28;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at 18% 78%, rgba(210, 160, 80, 0.35) 0%, transparent 9%),
+    radial-gradient(circle at 88% 22%, rgba(210, 160, 80, 0.30) 0%, transparent 7%),
+    radial-gradient(circle at 76% 86%, rgba(210, 160, 80, 0.25) 0%, transparent 8%),
+    radial-gradient(circle at 8% 12%, rgba(210, 160, 80, 0.30) 0%, transparent 6%);
+}
+
+/* Grain is darker dust on dark, lighter dust on light — invert the noise
+ * filter's colour matrix by switching blend mode. */
+:global(body[data-theme="dark"]) .grain {
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+/* The wax-seal CTA on dark: hover inverts to a cream fill so it always
+ * reads as "stamped onto the page". */
+:global(body[data-theme="dark"]) .seal:hover {
+  color: var(--parchment);
+}
+
+/* Cream-on-dark makes the visible weight of every dot heavier — drop the
+ * supporting ring further and give the dot a tiny dark inset stroke so the
+ * biggest cities don't look like miniature suns. */
+:global(body[data-theme="dark"]) .cityRing {
+  opacity: 0.18;
+}
+:global(body[data-theme="dark"]) .cityDot {
+  stroke: rgba(28, 19, 10, 0.55);
+  stroke-width: 0.5;
 }

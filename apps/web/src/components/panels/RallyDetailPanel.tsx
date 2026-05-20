@@ -36,6 +36,7 @@ import {
   WEAPON_LABELS,
 } from "@/components/shared/TripleCountInput";
 import { formatTime } from "@/lib/utils";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
 
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
 const ENCOUNTER_RARITY = [
@@ -296,6 +297,49 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   // Close only after the rally has ended and all participants returned.
   const closeable = canCloseRally(rally);
 
+  // Join is omitted from the morph bar — the sheet still needs the troop/weapon
+  // /hero inputs visible above the bar, and committing zero is the most common
+  // failure mode.
+  const morphActions = (() => {
+    if (isGathering && isCreator) {
+      return [
+        {
+          id: "march-rally",
+          label: !enoughForMarch
+            ? "March (missing participants)"
+            : !gatherDone
+              ? "March (after gather)"
+              : "March Rally",
+          variant: "primary" as const,
+          disabled: !canMarch,
+          onClick: handleMarch,
+        },
+        {
+          id: "cancel-rally",
+          label: "Cancel Rally",
+          variant: "danger" as const,
+          onClick: handleCancel,
+        },
+      ];
+    }
+    if (isReturning || isCompleted || isCancelled) {
+      return [
+        {
+          id: "resolve-rally",
+          label: closeable
+            ? "Close Rally"
+            : (rally.returnedCount ?? 0) + 1 >= joinedCount
+              ? "Return & Close"
+              : "Process Return",
+          variant: "primary" as const,
+          onClick: handleResolve,
+        },
+      ];
+    }
+    return null;
+  })();
+  useMorphActions(morphActions);
+
   // Post-gathering status line, shown in place of the gather window.
   const statusBanner = isCancelled
     ? { text: "This rally was cancelled.", tone: "text-red-400" }
@@ -478,14 +522,14 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </p>
           )}
 
-          <TxButton onClick={handleMarch} disabled={!canMarch}>
+          <TxButton onClick={handleMarch} disabled={!canMarch} className="hidden lg:block">
             {!enoughForMarch
               ? "March Rally (missing participants)"
               : !gatherDone
                 ? "March (after gather window)"
                 : "March Rally"}
           </TxButton>
-          <TxButton onClick={handleCancel} variant="danger">
+          <TxButton onClick={handleCancel} variant="danger" className="hidden lg:block">
             Cancel Rally
           </TxButton>
         </div>
@@ -508,7 +552,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
               step.
             </div>
           )}
-          <TxButton onClick={handleResolve}>
+          <TxButton onClick={handleResolve} className="hidden lg:block">
             {closeable
               ? "Close Rally"
               : (rally.returnedCount ?? 0) + 1 >= joinedCount

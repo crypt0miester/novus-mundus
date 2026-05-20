@@ -406,7 +406,7 @@ pub struct GameplayConfig {
     // Armor mechanics (basis points: 10000 = 100%)
     // Damage reduction: min(armor_coverage * reduction_per_armor, cap)
     // Example: 500 bp (5%) reduction per armor, 5000 bp (50%) cap
-    pub armor_damage_reduction_bps: u32,        // e.g., 500 (5% per armor coverage point)
+    pub armor_damage_reduction_bps: u32,        // e.g., 2000 (20% per armor coverage point)
     pub armor_damage_reduction_cap_bps: u32,    // e.g., 5000 (max 50% reduction)
 
     pub vehicle_capacity: u64,                  // e.g., 5 units per vehicle

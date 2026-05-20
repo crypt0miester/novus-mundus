@@ -26,6 +26,7 @@ import {
   OP1_POWER_COST,
   OP2_POWER_COST,
   OP3_POWER_COST,
+  DEFENSIVE_UNIT_HEALTH,
 } from './constants';
 
 // Weapon Set
@@ -305,6 +306,12 @@ export function calculateDamageOutput(
 /**
  * Inflict damage on units with armor damage reduction.
  *
+ * Mirrors Rust `logic/combat.rs::inflict_damage`. Casualties = damage / HP per
+ * tier (`DEFENSIVE_UNIT_HEALTH = [2, 5, 12]`). Overkill (damage that would have
+ * killed more than the surviving population of a tier) redistributes once to
+ * tiers that still have survivors, weighted by the same damage % the base pass
+ * used.
+ *
  * @param unit1 - Current unit_1 count
  * @param unit2 - Current unit_2 count
  * @param unit3 - Current unit_3 count
@@ -334,37 +341,31 @@ export function inflictDamage(
   equippedArmorBonusBps: number = 0
 ): [number, number, number] {
   const totalUnits = unit1 + unit2 + unit3;
+  if (totalUnits === 0 || totalDamage <= 0) {
+    return [unit1, unit2, unit3];
+  }
 
-  // Calculate armor damage reduction
+  // Armor reduction.
   let effectiveDamage = totalDamage;
-  if (totalUnits > 0 && armorPieces > 0) {
-    // Calculate base armor coverage in basis points
+  if (armorPieces > 0) {
     let armorCoverageBp = mulDiv(armorPieces, BPS_100, totalUnits);
-
-    // Apply hero armor efficiency buff
     if (heroArmorEfficiencyBps > 0) {
       armorCoverageBp = applyBpsBonus(armorCoverageBp, heroArmorEfficiencyBps);
     }
-
-    // Apply equipped armor bonus
     if (equippedArmorBonusBps > 0) {
       armorCoverageBp = applyBpsBonus(armorCoverageBp, equippedArmorBonusBps);
     }
-
-    // Calculate reduction
-    let reductionBp = applyBps(armorCoverageBp, armorDamageReductionBps);
+    const reductionBp = applyBps(armorCoverageBp, armorDamageReductionBps);
     const cappedReductionBp = Math.min(reductionBp, armorDamageReductionCapBps);
-
-    // Apply reduction
     effectiveDamage = (totalDamage * (BPS_100 - cappedReductionBp)) / BPS_100;
   }
 
-  // Calculate damage distribution
+  // Distribute damage across tiers (preserves the existing redistribution
+  // behaviour for missing tiers — same edge cases as the Rust path).
   let damage1 = unit1 > 0 ? (effectiveDamage * damageUnit1Percent) / BPS_100 : 0;
   let damage2 = unit2 > 0 ? (effectiveDamage * damageUnit2Percent) / BPS_100 : 0;
   let damage3 = unit3 > 0 ? (effectiveDamage * damageUnit3Percent) / BPS_100 : 0;
 
-  // Redistribute damage if certain unit types are missing
   if (unit1 === 0) {
     damage2 += (effectiveDamage * damageUnit1Percent * 0.5) / BPS_100;
     damage3 += (effectiveDamage * damageUnit1Percent * 0.5) / BPS_100;
@@ -380,12 +381,47 @@ export function inflictDamage(
     damage2 += (effectiveDamage * damageUnit3Percent * 0.5) / BPS_100;
   }
 
-  // Apply damage with floor and prevent negative
-  return [
-    Math.max(0, unit1 - Math.floor(damage1)),
-    Math.max(0, unit2 - Math.floor(damage2)),
-    Math.max(0, unit3 - Math.floor(damage3)),
-  ];
+  // Damage → casualties via per-tier HP.
+  const hp1 = Math.max(1, DEFENSIVE_UNIT_HEALTH[0]);
+  const hp2 = Math.max(1, DEFENSIVE_UNIT_HEALTH[1]);
+  const hp3 = Math.max(1, DEFENSIVE_UNIT_HEALTH[2]);
+
+  const kills1Raw = Math.floor(damage1 / hp1);
+  const kills2Raw = Math.floor(damage2 / hp2);
+  const kills3Raw = Math.floor(damage3 / hp3);
+
+  const kills1 = Math.min(kills1Raw, unit1);
+  const kills2 = Math.min(kills2Raw, unit2);
+  const kills3 = Math.min(kills3Raw, unit3);
+
+  // Overkill redistribution — same shape as the Rust pass.
+  const overkillDmg =
+    (kills1Raw - kills1) * hp1 +
+    (kills2Raw - kills2) * hp2 +
+    (kills3Raw - kills3) * hp3;
+
+  let rem1 = unit1 - kills1;
+  let rem2 = unit2 - kills2;
+  let rem3 = unit3 - kills3;
+
+  if (overkillDmg > 0) {
+    let weightSum = 0;
+    if (rem1 > 0) weightSum += damageUnit1Percent;
+    if (rem2 > 0) weightSum += damageUnit2Percent;
+    if (rem3 > 0) weightSum += damageUnit3Percent;
+
+    if (weightSum > 0) {
+      const extra1 = rem1 > 0 ? Math.floor(((overkillDmg * damageUnit1Percent) / weightSum) / hp1) : 0;
+      const extra2 = rem2 > 0 ? Math.floor(((overkillDmg * damageUnit2Percent) / weightSum) / hp2) : 0;
+      const extra3 = rem3 > 0 ? Math.floor(((overkillDmg * damageUnit3Percent) / weightSum) / hp3) : 0;
+
+      rem1 = Math.max(0, rem1 - extra1);
+      rem2 = Math.max(0, rem2 - extra2);
+      rem3 = Math.max(0, rem3 - extra3);
+    }
+  }
+
+  return [rem1, rem2, rem3];
 }
 
 // Infirmary Recovery

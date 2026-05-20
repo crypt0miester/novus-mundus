@@ -137,6 +137,14 @@ cash_from_vault  = unprotected_vault * loot_bps / 10000
 
 Operatives are only attacked when the **entire garrison is wiped** — all defensive tier-1/2/3 units (including reinforcements) reach 0. A second `inflict_damage` call then applies the same attacker damage against the defender's operative units with the same armor coverage.
 
+### Unit HP (per-tier)
+
+`inflict_damage` divides damage by `DEFENSIVE_UNIT_HEALTH = [2, 5, 12]` before
+deducting from each tier's population. Overkill on a wiped tier redistributes
+once to surviving tiers weighted by `damage_unit_N_percent`. See [combat-math
+§4.4](../05-formulas/combat-math.md#44-per-tier-hp--casualties) for the full
+formula and rationale.
+
 [Source: processor/combat/attack_player.rs](../../../programs/novus_mundus/src/processor/combat/attack_player.rs)
 
 ---

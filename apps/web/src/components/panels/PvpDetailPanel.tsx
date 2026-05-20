@@ -33,6 +33,8 @@ import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import type { PanelAction } from "@/lib/store/right-panel";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { ProximityGrid } from "@/components/shared/ProximityGrid";
@@ -263,6 +265,25 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
     target.account.operativeUnit2.toNumber() +
     target.account.operativeUnit3.toNumber();
 
+  const morphActions: PanelAction[] | null = playerTraveling
+    ? null
+    : [
+        {
+          id: "attack-player",
+          label: "Attack Player",
+          variant: "danger" as const,
+          disabled: !dist.inRange,
+          onClick: (rp) => handleAttack(false, rp),
+        },
+        {
+          id: "overrun",
+          label: canOverrun ? "Overrun (+27%)" : "Overrun (10k+)",
+          disabled: !dist.inRange || !canOverrun,
+          onClick: (rp) => handleAttack(true, rp),
+        },
+      ];
+  useMorphActions(morphActions);
+
   return (
     <div className="space-y-4">
       {/* Target header */}
@@ -403,9 +424,8 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
         </div>
       )}
 
-      {/* Attack — a standard strike, or an Overrun. Hidden while traveling. */}
       {!playerTraveling && (
-        <div className="space-y-2">
+        <div className="hidden space-y-2 lg:block">
           <TxButton
             onClick={(rp) => handleAttack(false, rp)}
             variant="danger"

@@ -244,6 +244,31 @@ pub fn process(
     // Include reinforcements from teammates
     let defender_defensive_total = defender_data.total_defense_with_reinforcements();
 
+    // Set BEFORE damage calc so the override flows into the formula.
+    let mut attacker_hero_attack_bps = attacker_data.hero_attack_bps();
+    let mut attacker_hero_crit_chance_bps = attacker_data.hero_crit_chance_bps();
+    match attacker_data.live_pending_effect(now) {
+        crate::state::PENDING_CRIT_NEXT => {
+            // Force 100% crit (10000 bps caps inside the formula's threshold)
+            attacker_hero_crit_chance_bps = attacker_hero_crit_chance_bps.saturating_add(10000);
+            attacker_data.clear_pending_effect();
+        }
+        crate::state::PENDING_BUFF_NEXT => {
+            let stat = attacker_data.pending_effect_stat();
+            let bps = attacker_data.pending_effect_param();
+            // Offensive stats: AttackPower(1), CritChance(7), EncounterDamage(14)
+            if matches!(stat, 1 | 7 | 14) {
+                match stat {
+                    1 | 14 => attacker_hero_attack_bps = attacker_hero_attack_bps.saturating_add(bps),
+                    7      => attacker_hero_crit_chance_bps = attacker_hero_crit_chance_bps.saturating_add(bps),
+                    _ => {}
+                }
+                attacker_data.clear_pending_effect();
+            }
+        }
+        _ => {}
+    }
+
     // 9. Calculate attacker damage output (PURE LOGIC)
     let gameplay_config = &game_engine_data.gameplay_config;
 
@@ -256,9 +281,9 @@ pub fn process(
         attacker_data.research_attack_bps(),
         attacker_data.research_crit_chance_bps(),
         attacker_data.research_crit_damage_bps(),
-        attacker_data.hero_attack_bps(),
+        attacker_hero_attack_bps,
         attacker_data.hero_weapon_efficiency_bps(),
-        attacker_data.hero_crit_chance_bps(),
+        attacker_hero_crit_chance_bps,
         attacker_data.equipped_weapon_bonus_bps(),
     );
 
@@ -309,10 +334,33 @@ pub fn process(
     // Defenders never get drive-by bonus, but do get defense research buffs and hero buffs
     // Include reinforcement weapons and use best hero buffs (max of own and reinforcement)
     let defender_total_weapons = defender_data.total_weapons_with_reinforcements();
-    let defender_hero_defense_bps = defender_data.hero_defense_bps()
+    let mut defender_hero_defense_bps = defender_data.hero_defense_bps()
         .max(defender_data.reinforcement_hero_defense_bps());
     let defender_hero_weapon_eff_bps = defender_data.hero_weapon_efficiency_bps()
         .max(defender_data.reinforcement_hero_weapon_eff_bps());
+
+    // ShieldNext doubles effective defense via additive bps. The formula uses
+    // (10000 + bps)/10000, so adding 10000 to the current value doubles the
+    // multiplier — benefits both inbound armor reduction and counter-damage.
+    match defender_data.live_pending_effect(now) {
+        crate::state::PENDING_SHIELD_NEXT => {
+            defender_hero_defense_bps = defender_hero_defense_bps.saturating_add(10000);
+            defender_data.clear_pending_effect();
+        }
+        crate::state::PENDING_BUFF_NEXT => {
+            let stat = defender_data.pending_effect_stat();
+            let bps = defender_data.pending_effect_param();
+            // Defensive stats: DefensePower(2), ArmorEfficiency(16)
+            if matches!(stat, 2 | 16) {
+                if stat == 2 {
+                    defender_hero_defense_bps = defender_hero_defense_bps.saturating_add(bps);
+                }
+                // TODO(armor-eff): apply ArmorEfficiency variant of BuffNext.
+                defender_data.clear_pending_effect();
+            }
+        }
+        _ => {}
+    }
 
     let base_defender_damage = calculate_damage_output(
         defender_defensive_total,

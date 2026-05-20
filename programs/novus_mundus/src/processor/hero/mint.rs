@@ -276,7 +276,7 @@ pub fn process(
     drop(template_data);
 
     let mut buffers = HeroNftBuffers::new();
-    let mut attributes: [(&[u8], &[u8]); 9] = [(b"", b""); 9];
+    let mut attributes: [(&[u8], &[u8]); 10] = [(b"", b""); 10];
     let attr_count = build_hero_nft_attributes(&mut buffers, &mut attributes, &ctx);
 
     p_core::instructions::AddPluginV1 {

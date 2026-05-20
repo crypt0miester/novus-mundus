@@ -24,7 +24,7 @@ function ShopContent() {
           <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">SHOP</h1>
           <TabNav tabs={TABS} activeTab={tab} onTabChange={setTab} />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
           {tab === "shop" && (
             <FeatureGate feature={FEATURES.SHOP_PURCHASE}>
               <ShopTab />

@@ -66,6 +66,16 @@ export interface CreateTemplateParams {
   meditationCityId: number;
   /** Buff configurations (max 4) */
   buffs: BuffConfig[];
+  /** Active ability kind (0=none, 1=BuffNext, 2=CritNext, 3=ShieldNext, 4=EncounterSkip, 5=InstantResource, 6=FragmentRefund) */
+  abilityKind?: number;
+  /** Stat targeted by BuffNext (BuffStat enum, else 0) */
+  abilityStat?: number;
+  /** Generic numeric param: bps for BuffNext, amount for InstantResource/FragmentRefund */
+  abilityParam1?: number;
+  /** Generic numeric param: duration secs for BuffNext, else 0 */
+  abilityParam2?: number;
+  /** Cooldown between uses, in seconds (must be > 0 if abilityKind != 0) */
+  abilityCooldownSecs?: number;
 }
 
 /** ~5,000 CU */
@@ -80,7 +90,7 @@ export interface CreateTemplateParams {
  * 2. [] game_engine: GameEngine (verify DAO)
  * 3. [] system_program
  *
- * On-chain data (73 bytes):
+ * On-chain data (85 bytes):
  * - [0..2] template_id: u16
  * - [2..34] name: [u8; 32]
  * - [34] hero_type: u8
@@ -92,6 +102,11 @@ export interface CreateTemplateParams {
  * - [50] required_player_level: u8
  * - [51..53] meditation_city_id: u16
  * - [53..73] buffs: 4 × BuffConfig (5 bytes each)
+ * - [73] ability_kind: u8
+ * - [74] ability_stat: u8
+ * - [75..77] ability_param1: u16
+ * - [77..81] ability_param2: u32
+ * - [81..85] ability_cooldown_secs: u32
  */
 export function createCreateTemplateInstruction(
   accounts: CreateTemplateAccounts,
@@ -106,8 +121,8 @@ export function createCreateTemplateInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: 73 bytes fixed
-  const writer = new BufferWriter(73);
+  // Instruction data: 85 bytes fixed
+  const writer = new BufferWriter(85);
 
   // [0..2] template_id: u16
   writer.writeU16(params.templateId);
@@ -148,6 +163,13 @@ export function createCreateTemplateInstruction(
     writer.writeU16(buff.baseBps);
     writer.writeU16(0); // reserved
   }
+
+  // [73..85] ability config (12 bytes)
+  writer.writeU8(params.abilityKind ?? 0);
+  writer.writeU8(params.abilityStat ?? 0);
+  writer.writeU16(params.abilityParam1 ?? 0);
+  writer.writeU32(params.abilityParam2 ?? 0);
+  writer.writeU32(params.abilityCooldownSecs ?? 0);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_CREATE_TEMPLATE, writer.toBuffer());
 
@@ -382,7 +404,7 @@ export interface UnlockHeroParams {
  * Transfers a hero NFT from the PlayerAccount PDA back to the player's wallet,
  * deactivating the hero's buffs. The NFT must currently be locked.
  *
- * On-chain accounts (8):
+ * On-chain accounts (9):
  * 0. [signer] owner: Player wallet
  * 1. [writable] player_account: PlayerAccount PDA
  * 2. [writable] hero_mint: Hero NFT mint account
@@ -391,6 +413,7 @@ export interface UnlockHeroParams {
  * 5. [] system_program: System program
  * 6. [] p_core_program: MPL Core program
  * 7. [writable] estate_account: EstateAccount PDA (to clear blessed_hero if needed)
+ * 8. [] game_engine: GameEngine PDA (signs UpdatePluginV1 that writes AbCD)
  *
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
@@ -411,6 +434,7 @@ export function createUnlockHeroInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: accounts.estateAccount, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: slot_index (u8)
@@ -671,6 +695,55 @@ export function createUpdateSupplyCapInstruction(
   writer.writeU32(params.newSupplyCap);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_UPDATE_SUPPLY_CAP, writer.toBuffer());
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
+// Use Hero Ability
+
+export interface UseHeroAbilityAccounts {
+  /** Hero owner's wallet (signer) */
+  owner: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+  /** Hero NFT mint (parsed for template_id) */
+  heroMint: PublicKey;
+  /** Hero template PDA for the locked hero */
+  heroTemplate: PublicKey;
+}
+
+export interface UseHeroAbilityParams {
+  /** Slot index (0-2) of the locked hero to use */
+  slotIndex: number;
+}
+
+/** Trigger a locked hero's active ability. ~10,000 CU.
+ *
+ * Reads ability config from the hero's template, checks per-slot cooldown
+ * (mirrored from the NFT AbCD attribute at lock time), and applies the effect.
+ * See `AbilityKind` for the dispatch.
+ */
+export function createUseHeroAbilityInstruction(
+  accounts: UseHeroAbilityAccounts,
+  params: UseHeroAbilityParams
+): TransactionInstruction {
+  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+
+  const keys = [
+    { pubkey: accounts.owner, isSigner: true, isWritable: false },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: accounts.heroMint, isSigner: false, isWritable: false },
+    { pubkey: accounts.heroTemplate, isSigner: false, isWritable: false },
+  ];
+
+  const writer = new BufferWriter(1);
+  writer.writeU8(params.slotIndex);
+
+  const data = createInstructionData(DISCRIMINATORS.HERO_USE_ABILITY, writer.toBuffer());
 
   return new TransactionInstruction({
     keys,

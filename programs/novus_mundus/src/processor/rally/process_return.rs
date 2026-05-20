@@ -7,10 +7,12 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::{INTRACITY_WALKING_SPEED_KMH, PLAYER_SEED},
+    constants::{GAME_ENGINE_SEED, INTRACITY_WALKING_SPEED_KMH, PLAYER_SEED},
     error::GameError,
     helpers::{
         close_account,
+        mint_tokens,
+        validate_token_account_owner,
         parse_hero_nft,
         add_hero_buffs_to_player_with_location,
         estate::{load_estate_for_player_mut, has_infirmary},
@@ -24,7 +26,7 @@ use crate::{
         RallyStatus, HeroTemplate, player::NULL_PUBKEY,
         tier_from_mint_cost, is_hero_at_home, location_bonus_for_tier,
     },
-    validation::{require_writable, require_owner},
+    validation::{require_writable, require_owner, require_key_match},
     emit,
     events::RallyParticipantReturned,
 };
@@ -55,12 +57,15 @@ use crate::{
 /// 6. `[]` home_city_account - CityAccount for home city (for return calculation)
 ///
 /// 7. `[WRITE]` estate_account - Participant's EstateAccount PDA (for wounded tracking)
+/// 8. `[WRITE]` player_novi_ata - Participant's NOVI token account (owned by player PDA)
+/// 9. `[WRITE]` novi_mint - NOVI mint
+/// 10. `[]` token_program - SPL Token program
 ///
 /// # Optional Hero Accounts (when participant had a committed hero)
-/// 8. `[WRITE*]` hero_mint - Hero NFT AssetV1 account (must match participant.hero, writable if transfer needed)
-/// 9. `[]` hero_template - HeroTemplate PDA
-/// 10. `[]` hero_collection - Hero collection PDA (only needed if all hero slots full, for NFT transfer)
-/// 11. `[]` system_program - System program (only needed if all hero slots full, for NFT transfer)
+/// 11. `[WRITE*]` hero_mint - Hero NFT AssetV1 account (must match participant.hero, writable if transfer needed)
+/// 12. `[]` hero_template - HeroTemplate PDA
+/// 13. `[]` hero_collection - Hero collection PDA (only needed if all hero slots full, for NFT transfer)
+/// 14. `[]` system_program - System program (only needed if all hero slots full, for NFT transfer)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -76,6 +81,9 @@ pub fn process(
         rally_city_account,
         home_city_account,
         estate_account,
+        player_novi_ata,
+        novi_mint,
+        token_program,
     ]);
 
     // 2. Validate basic account requirements
@@ -83,6 +91,16 @@ pub fn process(
     require_writable(rally_participant_account)?;
     require_writable(player_account)?;
     require_writable(participant_owner)?;
+    require_writable(player_novi_ata)?;
+    require_writable(novi_mint)?;
+    require_key_match(token_program, &pinocchio_token::ID)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "rally_process_return.novi_mint",
+        GameError::InvalidMint,
+    );
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load Clock
     let clock = Clock::get()?;
@@ -344,13 +362,14 @@ pub fn process(
     let committed_hero_key = participant.hero;
     let mut hero_needs_transfer = false;
     if committed_hero_key != NULL_PUBKEY {
-        // Need hero_mint and hero_template accounts (accounts 8 and 9)
-        // When all slots are full, also need hero_collection (10) and system_program (11)
-        if accounts.len() < 10 {
+        // Hero accounts come after the NOVI block. Need hero_mint (11) and
+        // hero_template (12). When all slots are full, also hero_collection (13)
+        // and system_program (14).
+        if accounts.len() < 13 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
-        let hero_mint = &accounts[8];
-        let hero_template_account = &accounts[9];
+        let hero_mint = &accounts[11];
+        let hero_template_account = &accounts[12];
 
         // Verify mint matches participant's committed hero
         if hero_mint.address() != &committed_hero_key {
@@ -431,21 +450,48 @@ pub fn process(
     let player_ge = player.game_engine;
     let player_bump = player.bump;
 
+    // Capture NOVI loot to mint after borrows drop (only credited on attacker win).
+    let novi_to_mint: u64 = if included_in_march && attacker_won {
+        participant.loot_locked_novi
+    } else {
+        0
+    };
+
     // Drop borrows before closing account
     drop(player);
     drop(participant_data_ref);
     drop(rally_data_ref);
     drop(game_engine);
 
+    // 11c. Mint NOVI to player's ATA so wallet balance tracks the locked_novi
+    //      bumped by rally loot above. Without this CPI the two drift apart,
+    //      causing later burns (hire/build) to fail with SPL InsufficientFunds.
+    if novi_to_mint > 0 {
+        let ge_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+        let ge_bump_seed = [ge_data.bump];
+        let ge_kid_bytes = ge_data.kingdom_id.to_le_bytes();
+        let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &ge_kid_bytes, &ge_bump_seed);
+        let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
+        drop(ge_data);
+
+        mint_tokens(
+            novi_mint,
+            player_novi_ata,
+            game_engine_account,
+            novi_to_mint,
+            &[ge_signer],
+        )?;
+    }
+
     // 12a. Transfer hero NFT to wallet if slots were full
     if hero_needs_transfer {
-        // Need hero_mint (8), hero_collection (10), system_program (11)
-        if accounts.len() < 12 {
+        // Need hero_mint (11), hero_collection (13), system_program (14)
+        if accounts.len() < 15 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
-        let hero_mint = &accounts[8];
-        let hero_collection = &accounts[10];
-        let system_program = &accounts[11];
+        let hero_mint = &accounts[11];
+        let hero_collection = &accounts[13];
+        let system_program = &accounts[14];
 
         require_writable(hero_mint)?;
 

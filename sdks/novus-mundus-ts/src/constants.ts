@@ -195,6 +195,9 @@ export const OPERATIVE_UNIT_3_POWER = 80;
 export const WEAPON_POWER_MULTIPLIER = 5;
 export const VEHICLE_POWER_MULTIPLIER = 20;
 
+/** HP per defensive unit by tier — mirrors `DEFENSIVE_UNIT_HEALTH` in Rust. */
+export const DEFENSIVE_UNIT_HEALTH = [2, 5, 12] as const;
+
 // Encounter Stamina System
 
 export const ENCOUNTER_STAMINA_COSTS = [10, 25, 50, 100, 250, 500] as const;

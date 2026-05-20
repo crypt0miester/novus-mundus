@@ -16,6 +16,7 @@ import { useCoSign } from "@/lib/cosign";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
 
 function n(v: { toNumber?: () => number } | number | null | undefined): number {
   if (v == null) return 0;
@@ -87,12 +88,39 @@ export function DungeonClaimPanel() {
       });
   };
 
+  const won = run?.status === DungeonStatus.Completed;
+  const failed = run?.status === DungeonStatus.Failed;
+  const morphActions = !run
+    ? null
+    : won
+      ? [
+          {
+            id: "claim-rewards",
+            label: "Claim Rewards",
+            variant: "primary" as const,
+            onClick: handleClaim,
+          },
+        ]
+      : failed
+        ? [
+            {
+              id: "resume-checkpoint",
+              label: "Resume from Checkpoint",
+              variant: "primary" as const,
+              onClick: handleResume,
+            },
+            {
+              id: "claim-exit",
+              label: "Claim & Exit",
+              onClick: handleClaim,
+            },
+          ]
+        : null;
+  useMorphActions(morphActions);
+
   if (!run) {
     return <p className="text-sm text-text-muted">No dungeon run to claim.</p>;
   }
-
-  const won = run.status === DungeonStatus.Completed;
-  const failed = run.status === DungeonStatus.Failed;
   const score =
     run.currentFloor * 10000 +
     run.enemiesKilled * 100 +
@@ -138,7 +166,7 @@ export function DungeonClaimPanel() {
       </div>
 
       {won && (
-        <TxButton onClick={handleClaim} className="w-full">
+        <TxButton onClick={handleClaim} className="hidden w-full lg:block">
           Claim Rewards
         </TxButton>
       )}
@@ -149,10 +177,10 @@ export function DungeonClaimPanel() {
             Resume from the last checkpoint (floor {run.lastCheckpoint ?? 0}) —
             costs gems — or claim what you carried.
           </p>
-          <TxButton onClick={handleResume} className="w-full">
+          <TxButton onClick={handleResume} className="hidden w-full lg:block">
             Resume from Checkpoint
           </TxButton>
-          <TxButton onClick={handleClaim} variant="secondary" className="w-full">
+          <TxButton onClick={handleClaim} variant="secondary" className="hidden w-full lg:block">
             Claim &amp; Exit
           </TxButton>
         </div>

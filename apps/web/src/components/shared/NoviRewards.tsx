@@ -132,17 +132,17 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     <div
       ref={containerRef}
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-emerald-900/40 bg-surface-raised p-6",
+        "card relative overflow-hidden",
         className
       )}
     >
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-900/40">
-            <span className="text-sm text-emerald-400">★</span>
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-900/40">
+            <span className="text-sm text-text-gold">★</span>
           </div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-text-gold">
             Earned Rewards
           </span>
         </div>
@@ -165,7 +165,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               size="lg"
               prefix="◆ "
               format="full"
-              className="text-emerald-400"
+              className="text-text-gold"
             />
           </div>
           {totalEarned > 0 && (
@@ -180,8 +180,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
           <div className="flex-shrink-0 text-right">
             {isVested ? (
               <div className="flex items-center gap-1.5">
-                <div className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span className="text-xs font-semibold text-emerald-400">
+                <div className="h-2 w-2 rounded-full bg-amber-400" />
+                <span className="text-xs font-semibold text-text-gold">
                   Fully Vested
                 </span>
               </div>
@@ -194,7 +194,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                 {/* Mini vesting bar */}
                 <div className="mt-1 h-1 w-20 overflow-hidden rounded-full bg-zinc-800">
                   <div
-                    className="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                    className="h-full rounded-full bg-amber-500 transition-all duration-1000"
                     style={{ width: `${vestingPct}%` }}
                   />
                 </div>
@@ -233,7 +233,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               className={cn(
                 "flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors",
                 activeTab === "withdraw"
-                  ? "bg-surface-raised text-emerald-400"
+                  ? "bg-surface-raised text-text-gold"
                   : "text-zinc-500 hover:text-zinc-400"
               )}
             >
@@ -291,16 +291,16 @@ export function NoviRewards({ className }: NoviRewardsProps) {
           {/* Withdraw Tab */}
           {activeTab === "withdraw" && (
             <div className="space-y-3">
-              <div className="rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-4 py-3">
+              <div className="rounded-lg border border-amber-900/30 bg-amber-950/10 px-4 py-3">
                 <div className="flex items-start gap-2">
-                  <span className="mt-0.5 text-emerald-500">↗</span>
+                  <span className="mt-0.5 text-amber-500">↗</span>
                   <div className="text-xs text-zinc-400">
                     Withdraw reserved NOVI to your{" "}
-                    <span className="font-semibold text-emerald-400">
+                    <span className="font-semibold text-text-gold">
                       wallet
                     </span>
                     . Requires a{" "}
-                    <span className="text-emerald-300">7-day vesting</span>{" "}
+                    <span className="text-amber-300">7-day vesting</span>{" "}
                     period after earning.
                   </div>
                 </div>
@@ -352,7 +352,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                       onClick={() =>
                         setWithdrawAmount(String(reservedBalance))
                       }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-[10px] font-bold text-emerald-400 hover:bg-emerald-900/20"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-[10px] font-bold text-text-gold hover:bg-amber-900/20"
                     >
                       MAX
                     </button>

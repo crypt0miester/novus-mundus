@@ -7,11 +7,11 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, DungeonRun, DungeonStatus, DungeonLeaderboard},
-    constants::DUNGEON_RUN_SEED,
-    helpers::close_account,
+    state::{PlayerAccount, DungeonRun, DungeonStatus, DungeonLeaderboard, GameEngine},
+    constants::{DUNGEON_RUN_SEED, GAME_ENGINE_SEED},
+    helpers::{close_account, mint_tokens, validate_token_account_owner},
     helpers::dungeon::{TimePeriod, calculate_novi_with_time},
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_signer, require_writable, require_owner, require_key_match},
     emit,
     events::DungeonCompleted,
 };
@@ -29,13 +29,18 @@ use crate::{
 /// - [writable] hero_mint: Hero NFT mint (MPL Core asset)
 /// - [] hero_collection: Hero collection PDA
 /// - [] system_program: System program
-/// - [writable, optional] leaderboard: DungeonLeaderboard PDA (only for victories)
+/// - [] p_core_program: MPL Core program
+/// - [writable] player_novi_ata: Player's NOVI token account (owned by player PDA)
+/// - [writable] novi_mint: NOVI mint
+/// - [] game_engine: GameEngine PDA (mint authority)
+/// - [] token_program: SPL Token program
+/// - [writable, optional] leaderboard: DungeonLeaderboard PDA at index 11 (victories only)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
     _data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse accounts (minimum 7 with mpl_core_program, optional leaderboard at index 7)
+    // 1. Parse accounts (11 mandatory; optional leaderboard at index 11)
     crate::extract_accounts!(accounts, [
         owner,
         player_account,
@@ -44,8 +49,12 @@ pub fn process(
         hero_collection,
         system_program,
         p_core_program,
+        player_novi_ata,
+        novi_mint,
+        game_engine,
+        token_program,
     ]);
-    let leaderboard_account = accounts.get(7);
+    let leaderboard_account = accounts.get(11);
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -53,6 +62,16 @@ pub fn process(
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
     require_writable(hero_mint)?;
+    require_writable(player_novi_ata)?;
+    require_writable(novi_mint)?;
+    require_key_match(token_program, &pinocchio_token::ID)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "dungeon_claim.novi_mint",
+        GameError::InvalidMint,
+    );
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
@@ -138,6 +157,19 @@ pub fn process(
     // Drop borrows before CPI
     drop(run);
     drop(player);
+
+    // 6a. Mint NOVI to player's ATA so wallet balance tracks locked_novi.
+    //     Without this CPI, future hire/build burns fail with SPL InsufficientFunds.
+    if novi > 0 {
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        let bump_seed = [game_engine_data.bump];
+        let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+        let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
+        drop(game_engine_data);
+
+        mint_tokens(novi_mint, player_novi_ata, game_engine, novi, &[ge_signer])?;
+    }
 
     // 7. Update leaderboard (only for victories)
     if is_victory {

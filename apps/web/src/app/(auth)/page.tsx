@@ -23,7 +23,14 @@ export default function LandingPage() {
       <Noise />
 
       {/* Title */}
-      <div className="text-center">
+      <div className="flex flex-col items-center text-center">
+        <img
+          src="/img/logo/logo-gold.svg"
+          alt="Novus Mundus"
+          className="mb-6 h-24 w-24 md:h-32 md:w-32"
+          width={128}
+          height={128}
+        />
         <h1 className="tier-title font-display text-5xl font-bold tracking-wider md:text-7xl">
           NOVUS MUNDUS
         </h1>

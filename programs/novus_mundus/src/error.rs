@@ -378,6 +378,10 @@ pub enum GameError {
     HeroIsLocked = 7769,            // Cannot burn a hero in an active slot
     HeroNotOwnedByCaller = 7770,    // NFT owner does not match signer
     SupplyCapCannotDecrease = 7771, // Supply cap can only be increased, not decreased
+    HeroAbilityNotConfigured = 7772, // Template has no active ability
+    HeroAbilityOnCooldown = 7773,   // Cooldown has not elapsed since last use
+    HeroAbilityInvalidKind = 7774,  // Unknown ability kind in template
+    HeroAbilityBadParams = 7775,    // Ability params out of range (e.g., zero amount)
 
     // Expedition System Errors (1800-1819)
     ExpeditionInProgress = 7800,    // Already on an expedition

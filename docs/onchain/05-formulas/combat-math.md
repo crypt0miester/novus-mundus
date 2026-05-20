@@ -199,11 +199,17 @@ flowchart TD
 Input:  unit_1, unit_2, unit_3: u64   (defender's three unit tiers)
         armor_pieces: u64
         total_damage: f64
-        gameplay_config.armor_damage_reduction_bps: u32   // e.g. 500 = 5 %/coverage point
-        gameplay_config.armor_damage_reduction_cap_bps: u32 // e.g. 5000 = max 50 % reduction
+        gameplay_config.armor_damage_reduction_bps: u32   // 2000 = 20 %/coverage point
+        gameplay_config.armor_damage_reduction_cap_bps: u32 // 5000 = max 50 % reduction
         hero_armor_efficiency_bps: u16
         equipped_armor_bonus_bps: u16
 ```
+
+> The reduction rate was `500` (5 %/coverage point) before the unit-HP rebalance.
+> At a typical 50 % armor coverage that yielded only 2.5 % reduction and the 50 %
+> cap was effectively unreachable (it required 10 armor per unit). With `2000`
+> the same 50 % coverage now gives 10 % reduction and the cap is reachable at
+> 2.5 armor per unit.
 
 ```
 total_units = unit_1 + unit_2 + unit_3
@@ -274,20 +280,47 @@ Redistribution config fields (basis points):
 | `damage_redistrib_unit3_to_unit1` | 3000 | 30 % of unit_3's share goes to unit_1 when unit_3 absent |
 | `damage_redistrib_unit3_to_unit2` | 7000 | 70 % of unit_3's share goes to unit_2 when unit_3 absent |
 
-### 4.4 Applying Casualties
+### 4.4 Per-tier HP → Casualties
+
+Each defensive unit absorbs `DEFENSIVE_UNIT_HEALTH[tier]` HP before dying.
+
+| Tier | HP | Where |
+|---|---|---|
+| 1 | 2 | `constants.rs::DEFENSIVE_UNIT_HEALTH` |
+| 2 | 5 | same |
+| 3 | 12 | same |
+
+Casualties are then computed in two passes:
 
 ```
-unit_3 = unit_3 - floor(damage_3)     // saturating_sub
-unit_2 = unit_2 - floor(damage_2)     // saturating_sub
-unit_1 = unit_1 - floor(damage_1)     // saturating_sub
+// Pass 1 — kill per tier (floor), uncapped to detect overkill
+kills_t_raw = floor(damage_t / hp_t)
 
-returns (unit_1, unit_2, unit_3)
+// Cap to live population
+kills_t = min(kills_t_raw, unit_t)
+
+// Pass 2 — sum "wasted" overkill damage and redistribute to surviving tiers
+overkill = Σ (kills_t_raw − kills_t) × hp_t
+
+// Weight overkill across tiers that still have survivors using the same
+// damage_unit_N_percent splits the base pass used
+weight_sum = Σ_{t: rem_t > 0} pct_t
+extra_t    = (overkill × pct_t / weight_sum) / hp_t      (only if rem_t > 0)
+
+returns (unit_1 − kills_1 − extra_1, ...)
 ```
 
-The f64 damage values are truncated to u64 before subtraction; fractional casualties
-are discarded.
+**Why per-tier HP**: pre-rebalance, every unit was effectively 1 HP and a typical
+14k starter attack wiped 100% of an opponent's tier-2 and tier-3 units in a single
+swing. Per-tier HP turns one-swing engagements into 5–10 round affairs at parity
+and makes tier-3 units actually durable. Ratios echo the dungeon model
+(`DUNGEON_UNIT_HEALTH = [100, 250, 600]`) scaled down ~30×.
 
-[Source: programs/novus_mundus/src/logic/combat.rs:424–514](../../../programs/novus_mundus/src/logic/combat.rs)
+**Why redistribute overkill**: previously, damage allocated to an already-dead
+tier was thrown away. Power-gap attacks now keep destructive against survivors
+without losing the kill weight that flowed into a wiped tier.
+
+[Source: programs/novus_mundus/src/logic/combat.rs:424–536](../../../programs/novus_mundus/src/logic/combat.rs)
 
 ---
 
@@ -569,16 +602,36 @@ normal attack effectiveness is used.
 
 ## 12. Encounter Stats Scaling
 
-Encounter health and defense scale linearly with level:
+Encounter health and defense scale linearly with level **and** by a per-rarity
+multiplier so high-rarity encounters stay tankier per level. Without the
+multiplier all rarities gained the same flat `+1000 HP/level`, collapsing the
+500× rarity gap at L1 to a ~6× gap by L100.
 
 ```
-health  = health_per_level × encounter.level
-          // gameplay_config.health_per_level: u64 (e.g. 1000)
+hp_mult_bps     = EncounterType::level_health_multiplier_bps()
+defense_mult_bps = EncounterType::level_defense_multiplier_bps()
 
-defense = defense_per_level × encounter.level   // in basis points
-          // gameplay_config.defense_per_level: u32 (e.g. 50 = 0.5 %/level)
-          // hard cap: min(computed_defense, 9000)   // 90 % max
+health  = base_health
+        + (level × health_per_level × hp_mult_bps / 10000)
+
+defense = (level × defense_per_level × defense_mult_bps / 10000)
+        capped at 9000      // 90 % max reduction
 ```
+
+Per-rarity multipliers (`programs/.../types.rs::EncounterType`):
+
+| Rarity     | HP mult | Defense mult |
+|------------|---------|--------------|
+| Common     | 1.0×    | 1.0×         |
+| Uncommon   | 1.5×    | 1.5×         |
+| Rare       | 2.0×    | 2.0×         |
+| Epic       | 3.0×    | 3.0×         |
+| Legendary  | 5.0×    | 5.0×         |
+| WorldEvent | 10.0×   | 10.0×        |
+
+`gameplay_config.health_per_level` (1000) and `defense_per_level` (50 bps)
+remain the base step; the multiplier scales the level-bonus only, not the
+`base_health` constant.
 
 Encounter loot scales exponentially with level:
 

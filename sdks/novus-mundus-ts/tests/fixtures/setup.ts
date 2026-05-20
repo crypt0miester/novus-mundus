@@ -295,6 +295,28 @@ export const HERO_TEMPLATES = [
       { stat: HERO_STAT_CRIT, baseBps: 1500 },
     ],
   },
+  // Template 6: Used by use_ability tests. Has an InstantResource ability
+  // (credits 5000 cash on use, 60s cooldown for quick test iteration).
+  {
+    templateId: 6,
+    name: 'Tribute',
+    heroType: 2,  // Economic
+    category: 0,
+    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    supplyCap: 0,
+    enabled: true,
+    eventExclusive: false,
+    requiredPlayerLevel: 1,
+    meditationCityId: 0,
+    buffs: [
+      { stat: HERO_STAT_ECONOMY, baseBps: 500 },
+    ],
+    abilityKind: 5,           // InstantResource
+    abilityStat: 0,
+    abilityParam1: 5000,      // 5,000 cash per use
+    abilityParam2: 0,
+    abilityCooldownSecs: 60,  // short cooldown for tests
+  },
 ];
 
 export const RESEARCH_TEMPLATES = [

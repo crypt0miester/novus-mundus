@@ -73,7 +73,7 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
   { id: BuildingId.Mine, name: "Mine", desc: buildingFraming(BuildingId.Mine).role, tier: 2, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_MINING, centerView: true, featureHint: "Mine" },
   { id: BuildingId.Dock, name: "Dock", desc: buildingFraming(BuildingId.Dock).role, tier: 1, category: "Exploration", primaryFeature: FEATURES.EXPEDITION_FISHING, centerView: true, featureHint: "Fish" },
   { id: BuildingId.Farm, name: "Farm", desc: buildingFraming(BuildingId.Farm).role, tier: 1, category: "Exploration", primaryFeature: FEATURES.COLLECT_FARMING, centerView: true, featureHint: "Farm" },
-  { id: BuildingId.Stables, name: "TransportBay", desc: "Travel gating", tier: 2, category: "Exploration", primaryFeature: FEATURES.INTERCITY_TRAVEL, featureHint: "Travel" },
+  { id: BuildingId.Stables, name: "Stable", desc: "Travel gating", tier: 2, category: "Exploration", primaryFeature: FEATURES.INTERCITY_TRAVEL, featureHint: "Travel" },
 ];
 
 /** Map from building ID to feature config */

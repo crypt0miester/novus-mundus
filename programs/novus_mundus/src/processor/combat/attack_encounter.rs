@@ -212,6 +212,37 @@ pub fn process(
         player_data.hero_attack_bps()
     };
 
+    // 12a. Consume pending hero ability for encounter combat.
+    //   CritNext        → +10000 bps to crit chance (forces crit)
+    //   BuffNext (off)  → +param bps to attack or crit depending on stat
+    //   EncounterSkip   → flag for one-shot success (consumed after damage calc)
+    let mut hero_attack_bps_final = boosted_hero_attack;
+    let mut hero_crit_chance_bps_final = player_data.hero_crit_chance_bps();
+    let mut force_encounter_skip = false;
+    match player_data.live_pending_effect(now) {
+        crate::state::PENDING_CRIT_NEXT => {
+            hero_crit_chance_bps_final = hero_crit_chance_bps_final.saturating_add(10000);
+            player_data.clear_pending_effect();
+        }
+        crate::state::PENDING_BUFF_NEXT => {
+            let stat = player_data.pending_effect_stat();
+            let bps = player_data.pending_effect_param();
+            if matches!(stat, 1 | 7 | 14) {
+                match stat {
+                    1 | 14 => hero_attack_bps_final = hero_attack_bps_final.saturating_add(bps),
+                    7      => hero_crit_chance_bps_final = hero_crit_chance_bps_final.saturating_add(bps),
+                    _ => {}
+                }
+                player_data.clear_pending_effect();
+            }
+        }
+        crate::state::PENDING_ENCOUNTER_SKIP => {
+            force_encounter_skip = true;
+            player_data.clear_pending_effect();
+        }
+        _ => {}
+    }
+
     // Apply research buffs and hero buffs for attacking encounters
     let base_damage = calculate_damage_output(
         total_defensive,
@@ -221,9 +252,9 @@ pub fn process(
         player_data.research_attack_bps(),
         player_data.research_crit_chance_bps(),
         player_data.research_crit_damage_bps(),
-        boosted_hero_attack,
+        hero_attack_bps_final,
         player_data.hero_weapon_efficiency_bps(),
-        player_data.hero_crit_chance_bps(),
+        hero_crit_chance_bps_final,
         player_data.equipped_weapon_bonus_bps(),
     );
 
@@ -271,6 +302,14 @@ pub fn process(
     // Example: 1000 damage vs 2500 defense (25%) = 1000 * 7500 / 10000 = 750
     let defense_factor = 10000u64.saturating_sub(effective_defense as u64);
     let damage_after_defense = apply_bp(damage, defense_factor).unwrap_or(0);
+
+    // EncounterSkip overrides damage to one-shot the encounter, after defense is
+    // computed (so loot/cash scales with encounter HP, not with attacker damage).
+    let damage_after_defense = if force_encounter_skip {
+        encounter_data.health
+    } else {
+        damage_after_defense
+    };
 
     if damage_after_defense == 0 {
         return Err(GameError::EncounterDefenseTooHigh.into());
@@ -720,15 +759,10 @@ pub fn process(
         }
     }
 
-    // Get stamina consumed for the encounter type
-    let stamina_consumed = match encounter_type {
-        EncounterType::Common => 1,
-        EncounterType::Uncommon => 2,
-        EncounterType::Rare => 3,
-        EncounterType::Epic => 5,
-        EncounterType::Legendary => 8,
-        EncounterType::WorldEvent => 10,
-    };
+    // Mirror the actual deduction performed earlier by `consume_stamina`
+    // (see logic/stamina.rs) so the emitted event matches what the player paid.
+    let stamina_consumed =
+        crate::constants::ENCOUNTER_STAMINA_COSTS[encounter_type as usize] as u16;
 
     // Emit EncounterAttacked event
     emit!(EncounterAttacked {

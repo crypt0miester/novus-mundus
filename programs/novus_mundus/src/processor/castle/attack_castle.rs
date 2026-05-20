@@ -270,10 +270,14 @@ pub fn process(
         attacker_damage
     };
 
-    // Calculate garrison casualties (distributed proportionally)
-    // For simplicity, calculate total casualties and distribute to accounts later
+    // Calculate garrison casualties (distributed proportionally).
+    // The `× 10` denominator is an implicit garrison-HP — each garrison unit
+    // soaks ~10 damage before dying. That's intentionally tankier than open-field
+    // troops (per-tier `DEFENSIVE_UNIT_HEALTH` averages 4–5 HP for the starter
+    // mix) because castle defenders fight from behind walls. Don't replace this
+    // with `inflict_damage` here: garrison aggregates multiple players and we
+    // don't carry per-tier breakdowns through the castle path.
     let garrison_casualty_ratio = if total_garrison_units > 0 && effective_attacker_damage > 0 {
-        // Simplified: damage / (units * 10) gives casualty ratio
         ((effective_attacker_damage as u128 * 10000) / (total_garrison_units as u128 * 10)).min(10000) as u64
     } else {
         0

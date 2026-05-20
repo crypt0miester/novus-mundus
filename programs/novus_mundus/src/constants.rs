@@ -202,6 +202,16 @@ pub const DEFENSIVE_UNIT_1_POWER: u64 = 10;
 pub const DEFENSIVE_UNIT_2_POWER: u64 = 25;
 pub const DEFENSIVE_UNIT_3_POWER: u64 = 60;
 
+/// HP per defensive unit by tier.
+///
+/// Without per-tier HP the overworld combat treats every unit as a 1-HP target,
+/// so any moderately buffed attacker wipes the entire garrison in one swing.
+/// These values give tier-3 units real durability and turn single-swing
+/// engagements into 5–10 round affairs at parity. Ratios echo the dungeon model
+/// (`DUNGEON_UNIT_HEALTH` = [100, 250, 600]) scaled down ~30× to keep stamina
+/// economics tractable.
+pub const DEFENSIVE_UNIT_HEALTH: [u64; 3] = [2, 5, 12];
+
 // Encounter Stamina System
 
 /// Stamina cost to attack encounters (by rarity)

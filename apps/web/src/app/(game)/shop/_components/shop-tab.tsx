@@ -14,6 +14,8 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { TabNav } from "@/components/shared/TabNav";
 import { DetailPanel } from "@/components/shared/DetailPanel";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import type { PanelAction } from "@/lib/store/right-panel";
 import {
   deriveShopItemPda,
   deriveBundlePda,
@@ -50,7 +52,7 @@ import type { PublicKey } from "@solana/web3.js";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { systemFraming } from "@/lib/narrative";
-import { bpsToPercent } from "@/lib/utils";
+import { bpsToPercent, formatNumber } from "@/lib/utils";
 
 const CARAVAN_FRAMING = systemFraming("shop");
 
@@ -90,12 +92,10 @@ function lamportsToSol(lamports: number): string {
   return (lamports / 1e9).toFixed(4);
 }
 
-/** Look up an item's itemType from the active items list by its PDA-derived itemId */
 function findItemType(activeItems: { itemId: number; account: { itemType: number } }[], itemId: number): number {
   return activeItems.find((i) => i.itemId === itemId)?.account.itemType ?? -1;
 }
 
-/** Reverse-lookup map: pubkey base58 -> numeric ID for PDA-derived accounts */
 function buildIdLookup(
   ge: PublicKey,
   deriveFn: (ge: PublicKey, id: number) => [PublicKey, number],
@@ -347,6 +347,108 @@ export function ShopTab() {
   const effectiveDeal = selectedDeal ?? (isDesktop && activeDailyDeals.length > 0 ? activeDailyDeals[0].slot : null);
   const itemPurchase = usePlayerPurchase(effectiveItem);
 
+  const morphActions = useMemo<PanelAction[] | null>(() => {
+    if (activeTab === "items" && effectiveItem != null) {
+      const item = activeItems.find((i) => i.itemId === effectiveItem);
+      if (!item) return null;
+      const hasStock = item.account.maxGlobalStock.eqn(0) || item.account.currentGlobalStock.gtn(0);
+      const qty = itemQuantities[effectiveItem] ?? 1;
+      return [
+        {
+          id: `buy-item-${effectiveItem}-${qty}`,
+          label: hasStock ? `Buy ${qty}x` : "Sold Out",
+          variant: "primary",
+          disabled: !hasStock,
+          onClick: (rp) => handlePurchaseItem(effectiveItem, qty, rp),
+        },
+      ];
+    }
+    if (activeTab === "bundles" && effectiveBundle != null) {
+      const bundle = activeBundles.find((b) => b.bundleId === effectiveBundle);
+      if (!bundle) return null;
+      // Bundles don't track global stock — gate on `isActive` + time window.
+      const nowSec = Math.floor(Date.now() / 1000);
+      const available =
+        bundle.account.isActive &&
+        bundle.account.availableFrom.toNumber() <= nowSec &&
+        (bundle.account.availableUntil.eqn(0) || bundle.account.availableUntil.toNumber() >= nowSec);
+      return [
+        {
+          id: `buy-bundle-${effectiveBundle}`,
+          label: available ? "Buy Bundle" : "Unavailable",
+          variant: "primary",
+          disabled: !available,
+          onClick: (rp) => handlePurchaseBundle(effectiveBundle, bundle.account.items, rp),
+        },
+      ];
+    }
+    if (activeTab === "flash" && effectiveSale != null) {
+      const sale = activeFlashSales.find((s) => s.saleId === effectiveSale);
+      if (!sale) return null;
+      const s = sale.account;
+      const hasStock = s.maxStock.eqn(0) || s.remainingStock.gtn(0);
+      const itemPda = s.isBundle
+        ? deriveBundlePda(ge, s.itemId)[0]
+        : deriveShopItemPda(ge, s.itemId)[0];
+      return [
+        {
+          id: `buy-flash-${effectiveSale}`,
+          label: hasStock ? "Claim Flash Sale" : "Sold Out",
+          variant: "primary",
+          disabled: !hasStock,
+          onClick: (rp) => handlePurchaseFlashSale(effectiveSale, itemPda, rp),
+        },
+      ];
+    }
+    if (activeTab === "daily" && effectiveDeal != null) {
+      const deal = activeDailyDeals.find((d) => d.slot === effectiveDeal);
+      if (!deal) return null;
+      const hasStock = deal.item.account.maxGlobalStock.eqn(0) || deal.item.account.currentGlobalStock.gtn(0);
+      return [
+        {
+          id: `claim-deal-${effectiveDeal}`,
+          label: hasStock ? "Claim Deal" : "Sold Out",
+          variant: "primary",
+          disabled: !hasStock,
+          onClick: (rp) => handlePurchaseDailyDeal(deal.item.itemId, deal.slot, rp),
+        },
+      ];
+    }
+    if (activeTab === "novi" && selectedPackage != null) {
+      const limitReached = dailyAllowance?.eqn(0) ?? false;
+      return [
+        {
+          id: `buy-novi-${selectedPackage}`,
+          label: limitReached ? "Daily limit reached" : "Buy NOVI",
+          variant: "primary",
+          disabled: limitReached,
+          onClick: handlePurchaseNovi,
+        },
+      ];
+    }
+    return null;
+  }, [
+    activeTab,
+    effectiveItem,
+    effectiveBundle,
+    effectiveSale,
+    effectiveDeal,
+    selectedPackage,
+    activeItems,
+    activeBundles,
+    activeFlashSales,
+    activeDailyDeals,
+    itemQuantities,
+    dailyAllowance,
+    handlePurchaseItem,
+    handlePurchaseBundle,
+    handlePurchaseFlashSale,
+    handlePurchaseDailyDeal,
+    handlePurchaseNovi,
+    ge,
+  ]);
+  useMorphActions(morphActions);
+
   return (
     <div className="space-y-6">
       <div>
@@ -557,7 +659,7 @@ export function ShopTab() {
 
                   <TxButton
                     onClick={(rp) => handlePurchaseItem(effectiveItem!, qty, rp)}
-                    className="w-full"
+                    className="hidden w-full lg:block"
                     disabled={!hasStock}
                   >
                     {hasStock ? `Buy ${qty}x for ${lamportsToSol(unitPrice * qty)} SOL` : "Sold Out"}
@@ -661,7 +763,7 @@ export function ShopTab() {
 
                   <TxButton
                     onClick={(rp) => handlePurchaseBundle(effectiveBundle!, b.items, rp)}
-                    className="w-full"
+                    className="hidden w-full lg:block"
                   >
                     Purchase for {solPrice} SOL
                   </TxButton>
@@ -761,7 +863,7 @@ export function ShopTab() {
 
                   <TxButton
                     onClick={(rp) => handlePurchaseFlashSale(effectiveSale!, itemPda, rp)}
-                    className="w-full"
+                    className="hidden w-full lg:block"
                     disabled={s.remainingStock.eqn(0)}
                   >
                     {s.remainingStock.eqn(0) ? "Sold Out" : `Buy for -${discountPct}%`}
@@ -879,7 +981,7 @@ export function ShopTab() {
 
                   <TxButton
                     onClick={(rp) => handlePurchaseDailyDeal(deal.item.itemId, deal.slot, rp)}
-                    className="w-full"
+                    className="hidden w-full lg:block"
                     disabled={!hasStock}
                   >
                     {hasStock ? `Claim deal for ${lamportsToSol(dealLamports)} SOL` : "Sold Out"}
@@ -1089,12 +1191,15 @@ export function ShopTab() {
                         }`}
                       >
                         {tierInfo && (
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                          <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-text-muted">
                             {tierInfo.name}
                           </div>
                         )}
-                        <div className="text-lg font-semibold text-text-gold">
-                          {noviAmount.toLocaleString()}
+                        <div
+                          className="font-semibold tabular-nums text-text-gold text-base sm:text-lg"
+                          title={noviAmount.toLocaleString()}
+                        >
+                          {formatNumber(noviAmount, "compact")}
                         </div>
                         <div className="text-[10px] text-text-muted">NOVI</div>
                         {bonusBps > 0 && (
@@ -1167,7 +1272,7 @@ export function ShopTab() {
 
                 <TxButton
                   onClick={handlePurchaseNovi}
-                  className="w-full"
+                  className="hidden w-full lg:block"
                   disabled={dailyAllowance?.eqn(0) ?? false}
                 >
                   {dailyAllowance?.eqn(0)

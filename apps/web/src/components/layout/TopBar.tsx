@@ -89,7 +89,14 @@ export function TopBar() {
   return (
     <header className="z-40 hidden md:flex h-10 items-center bg-[var(--nm-bg-bar)] border-b border-zinc-800/50 px-4 lg:px-6">
       {/* Logo */}
-      <Link href="/dashboard" className="flex-shrink-0">
+      <Link href="/dashboard" className="flex flex-shrink-0 items-center gap-2">
+        <img
+          src="/img/logo/logo-gold.svg"
+          alt="Novus Mundus"
+          className="h-6 w-6"
+          width={24}
+          height={24}
+        />
         <span className="tier-title font-display text-sm font-semibold tracking-wide">
           NovusMundus
         </span>

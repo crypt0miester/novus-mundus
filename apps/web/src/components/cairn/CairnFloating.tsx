@@ -6,6 +6,7 @@ import { animate, createDraggable, type Draggable } from "animejs";
 import { CairnOrb } from "./CairnOrb";
 import { CairnReport } from "./CairnReport";
 import { useAct } from "@/lib/hooks/useAct";
+import { useCairnNudge } from "@/lib/hooks/useCairnNudge";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { throughLine } from "@/lib/narrative";
 
@@ -59,7 +60,9 @@ function loadPos(): Pos {
  */
 export function CairnFloating() {
   const { act, mood, actDef, hasPlayer } = useAct();
-  const line = throughLine("place", act, mood);
+  // See CairnPresence for the nudge-overrides-through-line pattern.
+  const nudge = useCairnNudge();
+  const line = nudge ?? throughLine("place", act, mood);
   const show = useRightPanelStore((s) => s.show);
 
   const [mounted, setMounted] = useState(false); // is the popover in the DOM

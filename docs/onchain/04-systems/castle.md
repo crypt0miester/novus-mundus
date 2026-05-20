@@ -562,6 +562,14 @@ effective_attacker_damage = attacker_damage
 garrison_casualty_ratio = effective_attacker_damage / (garrison_units × 10)   [capped at 100%]
 ```
 
+> The `× 10` denominator is an **implicit garrison-HP**: each garrison unit
+> absorbs ~10 damage. Open-field combat (see [combat-math §4.4](../05-formulas/combat-math.md#44-per-tier-hp--casualties))
+> uses per-tier HP `[2, 5, 12]` averaging ~4–5 for a typical starter mix, so
+> castle defenders are intentionally ~2× tankier than the same units fighting
+> in the open. Garrison aggregates multiple players without carrying per-tier
+> breakdowns, which is why the castle path keeps a single scalar instead of
+> calling `inflict_damage`.
+
 ```mermaid
 flowchart TD
     A["attack_castle called<br/>(within 50 m, Vulnerable/Contest/expired Protected)"]

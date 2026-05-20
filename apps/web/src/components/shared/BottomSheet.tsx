@@ -303,7 +303,10 @@ export function BottomSheet({
             </div>
           )}
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-5">
+          {/* Bottom padding (`pb-24`) reserves clearance for the floating
+              MorphTabBar (h-14 pill + safe-area offset, ~80px). Without it
+              the bar at z-[60] would visually cover the tail of the content. */}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-24">
             {children}
           </div>
         </div>

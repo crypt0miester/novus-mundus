@@ -41,6 +41,8 @@ import {
 import { useAccountStore } from "@/lib/store/accounts";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useFeatureGate, FEATURES, BuildingId } from "@/lib/hooks/useFeatureGate";
+import { AbilityCard } from "@/components/heroes/AbilityCard";
+import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
 
 const MPL_CORE_PROGRAM_ID = new PublicKey(
   "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
@@ -452,6 +454,9 @@ export function HeroesTab() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* ── Left: lists ── */}
       <div className="space-y-4 lg:col-span-2">
+        {/* Pending ability effect status (only renders when an effect is armed) */}
+        <PendingEffectBadge variant="block" />
+
         {/* Buffs summary */}
         {heroBuffs.length > 0 && (
           <div className="flex flex-wrap gap-2">
@@ -659,6 +664,19 @@ export function HeroesTab() {
                 <div>Origin: <span className="font-mono">{selectedAttrs["Origin"]}</span></div>
               )}
             </div>
+
+            {(() => {
+              const tidStr = selectedAttrs["Template"];
+              if (!tidStr) return null;
+              const tpl = templates.find(
+                (e) => String(e.account.templateId) === tidStr
+              )?.account;
+              if (!tpl) return null;
+              const interactive = selected?.type === "locked"
+                ? { heroMint: selectedHero.address, slotIndex: (selected as { slot: number }).slot }
+                : undefined;
+              return <AbilityCard template={tpl} interactive={interactive} />;
+            })()}
 
             {/* Level Up */}
             {(() => {
@@ -891,6 +909,9 @@ export function HeroesTab() {
                   </div>
                 </div>
               )}
+
+              {/* Signature Ability (read-only on template detail) */}
+              <AbilityCard template={t.account} />
 
               {/* Mint action */}
               <div className="border-t border-border-default pt-3">

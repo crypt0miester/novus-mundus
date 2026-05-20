@@ -6,10 +6,11 @@ use pinocchio::{
 };
 
 use crate::{
+    constants::GAME_ENGINE_SEED,
     error::GameError,
-    state::{EstateAccount, PlayerAccount},
-    helpers::estate::require_mansion,
-    validation::{require_signer, require_writable, require_owner},
+    state::{EstateAccount, GameEngine, PlayerAccount},
+    helpers::{estate::require_mansion, mint_tokens, validate_token_account_owner},
+    validation::{require_signer, require_writable, require_owner, require_key_match},
     logic::safe_math::apply_bp_bonus,
     emit,
     events::estate::EstateDailyClaimed,
@@ -46,6 +47,10 @@ use crate::{
 /// - [writable, signer] owner: Player's wallet
 /// - [writable] player_account: PlayerAccount PDA
 /// - [writable] estate_account: EstateAccount PDA
+/// - [writable] player_novi_ata: Player's NOVI token account (owned by PlayerAccount PDA)
+/// - [writable] novi_mint: NOVI mint
+/// - [] game_engine: GameEngine PDA (mint authority)
+/// - [] token_program: SPL Token program
 ///
 /// # Instruction Data
 /// None
@@ -59,15 +64,30 @@ pub fn process(
         owner,
         player_account,
         estate_account,
+        player_novi_ata,
+        novi_mint,
+        game_engine,
+        token_program,
     ]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(estate_account)?;
+    require_writable(player_novi_ata)?;
+    require_writable(novi_mint)?;
     // Program-ownership gate (precedes the unsafe ::load calls below).
     require_owner(player_account, program_id)?;
     require_owner(estate_account, program_id)?;
+    // Token-program ID + NOVI mint identity + ATA owner must match.
+    require_key_match(token_program, &pinocchio_token::ID)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "daily_claim.novi_mint",
+        GameError::InvalidMint,
+    );
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load Accounts
     let mut player_data_ref = player_account.try_borrow_mut()?;
@@ -160,7 +180,7 @@ pub fn process(
 
     // 11. Check for milestone rewards (one-time)
     let streak = estate_data.login_streak;
-    grant_milestone_rewards(player_data, streak);
+    let milestone_novi = grant_milestone_rewards(player_data, streak);
 
     // 12. Update activity timestamp
     estate_data.last_activity = now;
@@ -174,40 +194,69 @@ pub fn process(
         timestamp: now,
     });
 
+    // 14. Mint NOVI to player's ATA so the wallet balance tracks locked_novi.
+    //     Without this CPI, locked_novi accounting drifts upward over time
+    //     while the ATA stays empty, causing later burns (hire/build/etc.) to
+    //     fail with SPL InsufficientFunds even though the UI shows balance.
+    drop(player_data_ref);
+    drop(estate_data_ref);
+
+    let total_novi = final_novi.saturating_add(milestone_novi);
+    if total_novi > 0 {
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        let bump_seed = [game_engine_data.bump];
+        let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+        let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let signer = pinocchio::cpi::Signer::from(&seeds);
+        drop(game_engine_data);
+
+        mint_tokens(
+            novi_mint,
+            player_novi_ata,
+            game_engine,
+            total_novi,
+            &[signer],
+        )?;
+    }
+
     Ok(())
 }
 
-/// Grant one-time milestone rewards based on streak
-fn grant_milestone_rewards(player: &mut PlayerAccount, streak: u16) {
+/// Grant one-time milestone rewards based on streak. Returns the NOVI amount
+/// added to locked_novi (raw units) so the caller can mint a matching amount
+/// to the player's ATA in the same instruction.
+fn grant_milestone_rewards(player: &mut PlayerAccount, streak: u16) -> u64 {
     // Check exact streak values for milestones
     // These are one-time grants, not cumulative
-    match streak {
+    let novi_grant: u64 = match streak {
         7 => {
-            player.locked_novi = player.locked_novi.saturating_add(500);
             player.set_uncommon_materials(player.uncommon_materials().saturating_add(100));
+            500
         }
         14 => {
-            player.locked_novi = player.locked_novi.saturating_add(1_000);
             player.set_rare_materials(player.rare_materials().saturating_add(50));
+            1_000
         }
         30 => {
-            player.locked_novi = player.locked_novi.saturating_add(5_000);
             player.set_epic_materials(player.epic_materials().saturating_add(25));
             // Title: "Dedicated" - would be stored in a separate system
+            5_000
         }
         60 => {
-            player.locked_novi = player.locked_novi.saturating_add(15_000);
             player.set_legendary_materials(player.legendary_materials().saturating_add(10));
             // Cosmetic unlock - would be stored in inventory
+            15_000
         }
         90 => {
-            player.locked_novi = player.locked_novi.saturating_add(30_000);
             // Artifact + "Unwavering" title - separate systems
+            30_000
         }
         180 => {
-            player.locked_novi = player.locked_novi.saturating_add(100_000);
             // Legendary artifact + permanent +5% - permanent_bonus_bps set in check_login_streak
+            100_000
         }
-        _ => {}
-    }
+        _ => 0,
+    };
+    player.locked_novi = player.locked_novi.saturating_add(novi_grant);
+    novi_grant
 }

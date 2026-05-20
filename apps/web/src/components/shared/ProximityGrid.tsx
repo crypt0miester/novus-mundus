@@ -170,8 +170,7 @@ export function ProximityGrid({
           className="w-full text-xs"
           disabled={disabled}
         >
-          Travel to cell ({selectedCell.distToTarget.toFixed(0)}m from target
-          {selectedCell.inRange ? " — IN RANGE" : ""})
+          Travel ({selectedCell.distToTarget.toFixed(0)}m)
         </TxButton>
       )}
 

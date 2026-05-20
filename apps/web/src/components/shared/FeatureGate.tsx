@@ -16,7 +16,25 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
   if (gate.loading) return null;
   if (gate.allowed) return <>{children}</>;
   if (fallback) return <>{fallback}</>;
+  if (!gate.available) return <ComingSoonCard />;
   return <LockedCard missing={gate.missing} />;
+}
+
+function ComingSoonCard() {
+  return (
+    <div className="rounded-lg border border-dashed border-amber-900/40 bg-surface-raised/60 p-6 text-center">
+      <div className="mb-3 text-2xl text-amber-200/40">&#8987;</div>
+      <p className="mb-1 text-[0.65rem] uppercase tracking-[0.18em] text-amber-200/60">
+        Coming soon
+      </p>
+      <h3 className="font-display text-lg font-semibold text-text-secondary">
+        The road is being charted
+      </h3>
+      <p className="mt-2 text-sm leading-relaxed text-text-muted">
+        This way is not yet open. Return when the path is laid.
+      </p>
+    </div>
+  );
 }
 
 function LockedCard({ missing }: { missing: MissingRequirement[] }) {

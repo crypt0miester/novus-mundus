@@ -113,14 +113,14 @@ Novus Mundus uses a two-account economy:
 
 ### Unit Types
 
-| Slot | Role | Power (combat) |
-|---|---|---|
-| Defensive Unit 1 | Attack + Defend | `DEFENSIVE_UNIT_1_POWER = 10` |
-| Defensive Unit 2 | Attack + Defend | `DEFENSIVE_UNIT_2_POWER = 25` |
-| Defensive Unit 3 | Attack + Defend | `DEFENSIVE_UNIT_3_POWER = 60` |
-| Operative Unit 1 | Economy (mining/data) | N/A — used for collection / expedition |
-| Operative Unit 2 | Economy (trade) | N/A |
-| Operative Unit 3 | Economy (farming/labor) | N/A |
+| Slot | Role | Power (combat) | HP (defense) |
+|---|---|---|---|
+| Defensive Unit 1 | Attack + Defend | `DEFENSIVE_UNIT_1_POWER = 10` | `DEFENSIVE_UNIT_HEALTH[0] = 2` |
+| Defensive Unit 2 | Attack + Defend | `DEFENSIVE_UNIT_2_POWER = 25` | `DEFENSIVE_UNIT_HEALTH[1] = 5` |
+| Defensive Unit 3 | Attack + Defend | `DEFENSIVE_UNIT_3_POWER = 60` | `DEFENSIVE_UNIT_HEALTH[2] = 12` |
+| Operative Unit 1 | Economy (mining/data) | N/A — used for collection / expedition | — |
+| Operative Unit 2 | Economy (trade) | N/A | — |
+| Operative Unit 3 | Economy (farming/labor) | N/A | — |
 
 Units are hired with locked NOVI. Theme-flexible: visual names change per kingdom theme, mechanics are identical.
 

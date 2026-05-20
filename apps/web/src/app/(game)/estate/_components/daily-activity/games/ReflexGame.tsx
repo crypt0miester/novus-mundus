@@ -37,15 +37,16 @@ interface Sweep {
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+// Gold ramp only — no green/emerald rating.
 function reactionTag(ms: number): { label: string; tone: string } {
-  if (ms <= 220) return { label: "⚡ Razor sharp", tone: "text-emerald-300" };
+  if (ms <= 220) return { label: "⚡ Razor sharp", tone: "text-text-gold" };
   if (ms <= 320) return { label: "Sharp", tone: "text-amber-300" };
   if (ms <= 470) return { label: "Steady", tone: "text-amber-400" };
   return { label: "Slow off the mark", tone: "text-zinc-400" };
 }
 
 function precisionTag(fraction: number): { label: string; tone: string } {
-  if (fraction >= 0.95) return { label: "⚒ Optimal heat", tone: "text-emerald-300" };
+  if (fraction >= 0.95) return { label: "⚒ Optimal heat", tone: "text-text-gold" };
   if (fraction >= 0.6) return { label: "Close", tone: "text-amber-300" };
   if (fraction >= 0.25) return { label: "Off the mark", tone: "text-amber-400" };
   return { label: "Furnace cold", tone: "text-zinc-400" };
@@ -288,7 +289,7 @@ function ReactArena({
       onClick={onTap}
       className={`flex min-h-[220px] w-full select-none flex-col items-center justify-center rounded-2xl border-2 transition-transform duration-100 ${
         phase === "go"
-          ? "scale-[1.015] border-emerald-300 bg-emerald-500 text-emerald-950"
+          ? "scale-[1.015] border-amber-300 bg-amber-500 text-amber-950"
           : falseStart
             ? "border-red-500/70 bg-red-950/30"
             : "border-border-default bg-surface-raised"
@@ -426,8 +427,8 @@ function PrecisionArena({
         className={`w-full select-none rounded-xl border-2 py-4 font-display text-lg font-bold tracking-wider transition-colors ${
           phase === "sweeping"
             ? inBand
-              ? "border-emerald-300 bg-emerald-500/90 text-emerald-950"
-              : "border-amber-500 bg-amber-900/30 text-text-gold"
+              ? "border-amber-300 bg-amber-500/90 text-amber-950"
+              : "border-amber-700 bg-amber-900/30 text-text-gold"
             : "border-border-default text-text-muted"
         }`}
       >

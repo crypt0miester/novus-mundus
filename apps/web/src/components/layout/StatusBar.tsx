@@ -15,6 +15,7 @@ import { getTierInfo, getCachedTier } from "@/lib/hooks/useTierTheme";
 import { useDomainName } from "@/lib/hooks/useDomainName";
 import { formatNumber } from "@/lib/utils";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
+import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
 import {
   createUpdateLockedNoviInstruction,
   getEffectiveTier,
@@ -159,6 +160,11 @@ export function StatusBar() {
           showValues={false}
           color="tier"
         />
+      </div>
+
+      {/* Pending hero ability effect (renders only when armed) */}
+      <div className="hidden md:block">
+        <PendingEffectBadge variant="inline" />
       </div>
 
       {/* Spacer */}

@@ -8,7 +8,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{GameEngine, HeroTemplate, BuffConfig},
+    state::{GameEngine, HeroTemplate, BuffConfig, AbilityKind},
     utils::{read_u8, read_u16, read_u32, read_u64},
     validation::{
         require_signer,
@@ -16,6 +16,9 @@ use crate::{
         require_key_match,
     },
 };
+
+const ABILITY_DATA_LEN: usize = 12; // kind(1) + stat(1) + param1(2) + param2(4) + cooldown_secs(4)
+const CREATE_TEMPLATE_IX_LEN: usize = 73 + ABILITY_DATA_LEN; // 85
 
 /// Initialize a hero template (DAO only)
 ///
@@ -29,7 +32,7 @@ use crate::{
 /// - [] system_program
 ///
 /// # Instruction Data (Deterministic System)
-/// Layout (73 bytes total):
+/// Layout (85 bytes total):
 /// - [0..2]   template_id: u16
 /// - [2..34]  name: [u8; 32]
 /// - [34]     hero_type: u8
@@ -41,6 +44,11 @@ use crate::{
 /// - [50]     required_player_level: u8
 /// - [51..53] meditation_city_id: u16 (0 = any city, else specific city required)
 /// - [53..73] buffs: [BuffConfig; 4] - 4 buffs × 5 bytes = 20 bytes
+/// - [73]     ability_kind: u8       (0 = no ability)
+/// - [74]     ability_stat: u8       (BuffStat for InstantBuff, else 0)
+/// - [75..77] ability_param1: u16
+/// - [77..81] ability_param2: u32    (duration secs for InstantBuff)
+/// - [81..85] ability_cooldown_secs: u32
 ///
 /// Note: No buff_ranges needed - hero progression is deterministic using √φ scaling
 pub fn process(
@@ -66,7 +74,7 @@ pub fn process(
     }
 
     // 4. Parse instruction data (Deterministic System - no buff_ranges needed)
-    if instruction_data.len() != 73 {
+    if instruction_data.len() != CREATE_TEMPLATE_IX_LEN {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -104,6 +112,22 @@ pub fn process(
         };
     }
     // Note: No buff_ranges parsing - hero buffs scale deterministically using √φ
+
+    // Parse ability (12 bytes)
+    let ability_kind = read_u8(instruction_data, 73, "create_template.ability_kind")?;
+    let ability_stat = read_u8(instruction_data, 74, "create_template.ability_stat")?;
+    let ability_param1 = read_u16(instruction_data, 75, "create_template.ability_param1")?;
+    let ability_param2 = read_u32(instruction_data, 77, "create_template.ability_param2")?;
+    let ability_cooldown_secs = read_u32(instruction_data, 81, "create_template.ability_cooldown_secs")?;
+
+    // Validate ability config (reject unknown kinds; 0 = no ability)
+    if !AbilityKind::is_valid(ability_kind) {
+        return Err(GameError::HeroAbilityInvalidKind.into());
+    }
+    // If kind is configured, cooldown must be > 0 to prevent spam
+    if ability_kind != 0 && ability_cooldown_secs == 0 {
+        return Err(GameError::HeroAbilityBadParams.into());
+    }
 
     // 5. Derive and verify PDA
     let (expected_template, bump) = HeroTemplate::derive_pda(template_id);
@@ -147,6 +171,13 @@ pub fn process(
     template.buffs = buffs;
     template.bump = bump;
     template._padding = [0; 3];
+
+    template.ability_kind = ability_kind;
+    template.ability_stat = ability_stat;
+    template.ability_param1 = ability_param1;
+    template.ability_param2 = ability_param2;
+    template.ability_cooldown_secs = ability_cooldown_secs;
+    template._ability_padding = [0; 4];
 
     Ok(())
 }

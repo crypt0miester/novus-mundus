@@ -4,9 +4,13 @@ import { useMemo, useState, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useEstateActions } from "@/lib/hooks/useEstateActions";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import type { PanelAction } from "@/lib/store/right-panel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { cn } from "@/lib/utils";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
@@ -68,20 +72,110 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
     [getUpgradeCostPreview, buildingId]
   );
 
+  const morphActions = useMemo<PanelAction[] | null>(() => {
+    if (!config) return null;
+    if (isConstructing) {
+      if (ready) {
+        return [
+          {
+            id: "complete-building",
+            label: `Complete ${config.name}`,
+            variant: "primary" as const,
+            onClick: (rp) => handleCompleteBuilding(buildingId, rp),
+          },
+        ];
+      }
+      const remainingMinutes = Math.max(1, Math.ceil(remainingSec / 60));
+      const t1Cost = remainingMinutes;
+      const t2Cost = remainingMinutes * 2;
+      return [
+        {
+          id: "hasten-building",
+          label: "Hasten",
+          onClick: (rp) => handleBuildingSpeedup(buildingId, 1, rp),
+          disabled: gemBalance < t1Cost,
+        },
+        {
+          id: "rush-building",
+          label: "Rush",
+          onClick: (rp) => handleBuildingSpeedup(buildingId, 2, rp),
+          disabled: gemBalance < t2Cost,
+        },
+      ];
+    }
+    const ci = costInfo;
+    if (!ci || ci.atMaxLevel) return null;
+    const hasEnough = noviBalance >= (ci.baseCost ?? 0);
+    return [
+      {
+        id: "build-upgrade",
+        label: !hasEnough
+          ? "Insufficient NOVI"
+          : ci.isUpgrade
+            ? `Upgrade → Lv ${(ci.level ?? 0) + 1}`
+            : `Build ${config.name}`,
+        variant: "primary" as const,
+        disabled: !hasEnough,
+        onClick: (rp) => handleBuildOrUpgrade(buildingId, rp),
+      },
+    ];
+  }, [
+    config,
+    isConstructing,
+    ready,
+    remainingSec,
+    costInfo,
+    noviBalance,
+    gemBalance,
+    buildingId,
+    handleCompleteBuilding,
+    handleBuildOrUpgrade,
+    handleBuildingSpeedup,
+  ]);
+  useMorphActions(morphActions);
+
   if (!config) return null;
 
-  // ── Under construction → speed up, or complete once the timer is done ──
   if (isConstructing) {
+    const constructionEndsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
+    const constructionStartedAt = slot?.constructionStarted?.toNumber?.() ?? undefined;
     return (
       <div className="flex flex-col gap-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Speed Up {config.name}
-        </h3>
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-5 text-center",
+            ready
+              ? "tier-accent-border tier-accent-glow bg-surface-raised/40"
+              : "border-border-default bg-surface-raised/60",
+          )}
+        >
+          <div
+            className={cn(
+              "mb-2 text-[10px] font-semibold uppercase tracking-[0.18em]",
+              ready ? "tier-accent-text" : "text-text-muted",
+            )}
+          >
+            {ready ? "Construction Complete" : `Constructing ${config.name}`}
+          </div>
+          {ready ? (
+            <p className="text-sm font-semibold text-text-gold">
+              Ready to break ground.
+            </p>
+          ) : (
+            <GoldCountdown
+              endsAt={constructionEndsAt}
+              startedAt={constructionStartedAt}
+              format="full"
+              size="lg"
+              showProgress
+            />
+          )}
+        </div>
 
         {ready ? (
           <TxButton
             onClick={(rp) => handleCompleteBuilding(buildingId, rp)}
-            className="px-6 w-full"
+            className="hidden px-6 w-full lg:block"
           >
             Complete {config.name}
           </TxButton>
@@ -99,7 +193,6 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
     );
   }
 
-  // ── Detail / build / upgrade mode ──
   const isUpgrade = costInfo?.isUpgrade ?? false;
   const cost = costInfo?.baseCost ?? 0;
   const tier = costInfo?.tier ?? config.tier;
@@ -210,7 +303,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       ) : (
         <TxButton
           onClick={(rp: (p: TxPhase) => void) => handleBuildOrUpgrade(buildingId, rp)}
-          className="w-full"
+          className="hidden w-full lg:block"
           disabled={!hasEnough}
         >
           {!hasEnough

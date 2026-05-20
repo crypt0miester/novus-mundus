@@ -3,6 +3,7 @@ use crate::constants::{
     WEAPON_LOOT_RATE_BPS,
     ARMORY_RAID_WITH_OPERATIVES_BPS, ARMORY_RAID_UNDEFENDED_BPS,
     DAMAGE_PER_SIEGE_WEAPON, SIEGE_CAPTURE_RATE_BPS,
+    DEFENSIVE_UNIT_HEALTH,
 };
 
 // Weapon Set - Tracks melee, ranged, siege weapons
@@ -398,118 +399,142 @@ pub fn calculate_damage_output(
     chain_bp(sum_of_units, &[weapon_coeff as u64, coeff as u64]).unwrap_or(0)
 }
 
-/// Inflict damage on units with armor damage reduction
-/// Damage distribution controlled by GameplayConfig (using basis points)
-/// Returns (remaining_unit_1, remaining_unit_2, remaining_unit_3)
+/// Inflict damage on units with armor damage reduction.
+/// Returns (remaining_unit_1, remaining_unit_2, remaining_unit_3).
 ///
-/// # Armor Mechanics
-/// - Armor coverage = armor_pieces / total_defensive_units
-/// - Damage reduction = min(coverage * reduction_per_armor, cap)
-/// - Effective damage = total_damage * (1 - reduction)
+/// # Per-tier HP (overworld combat)
+/// Each defensive unit absorbs `DEFENSIVE_UNIT_HEALTH[tier]` HP of damage before
+/// dying (tier 1 = 2, tier 2 = 5, tier 3 = 12). Prior to this change every unit
+/// died at 1 HP, which made a 14k-damage starter attack one-shot all tier 2 and
+/// tier 3 units of another starter in a single swing — the user's "instant kill"
+/// complaint. The dungeon system already uses the same per-tier HP model.
 ///
-/// # Armor Efficiency Stacking (multiplicative):
-/// 1. Base armor coverage from armor_pieces
-/// 2. × Hero armor efficiency buff (increases effective armor)
-/// 3. × Equipped armor bonus (increases effective armor)
+/// # Overkill redistribution
+/// When a tier's allocated damage exceeds the HP of its surviving units, the
+/// surplus ("overkill") used to be wasted. It now redistributes once, weighted
+/// by `damage_unit_N_percent` across the tiers that still have survivors,
+/// keeping power-gap fights destructive without throwing away damage.
+///
+/// # Armor mechanics
+/// - Armor coverage = armor_pieces × 10000 / total_defensive_units (basis points).
+/// - Hero armor efficiency and equipped armor multiply coverage.
+/// - `reduction_bp = coverage_bp × armor_damage_reduction_bps / 10000`, capped at
+///   `armor_damage_reduction_cap_bps`. With the post-fix `2000` rate, 50%
+///   coverage yields 10% reduction (was 2.5%) and the 50% cap is reachable.
 ///
 /// # Arguments
-/// * `unit_1` - Current unit_1 count
-/// * `unit_2` - Current unit_2 count
-/// * `unit_3` - Current unit_3 count
-/// * `armor_pieces` - Total armor pieces protecting defenders
-/// * `total_damage` - Total damage to distribute
-/// * `gameplay_config` - GameEngine gameplay configuration
-/// * `hero_armor_efficiency_bps` - Hero armor efficiency buff in basis points (0-65535)
-/// * `equipped_armor_bonus_bps` - Equipped armor item bonus in basis points (0-65535)
+/// * `unit_1`, `unit_2`, `unit_3` — Current tier populations.
+/// * `armor_pieces` — Total armor protecting the defender.
+/// * `total_damage` — Damage to distribute (post buffs, pre armor).
+/// * `gameplay_config` — Live config (distribution %, armor rates, caps).
+/// * `hero_armor_efficiency_bps`, `equipped_armor_bonus_bps` — Multiplicative
+///   buffs to armor coverage.
 pub fn inflict_damage(
-    mut unit_1: u64,
-    mut unit_2: u64,
-    mut unit_3: u64,
+    unit_1: u64,
+    unit_2: u64,
+    unit_3: u64,
     armor_pieces: u64,
     total_damage: f64,
     gameplay_config: &crate::state::GameplayConfig,
     hero_armor_efficiency_bps: u16,
     equipped_armor_bonus_bps: u16,
 ) -> (u64, u64, u64) {
-    let total_units = unit_1 + unit_2 + unit_3;
+    let total_units = unit_1.saturating_add(unit_2).saturating_add(unit_3);
+    if total_units == 0 || total_damage <= 0.0 {
+        return (unit_1, unit_2, unit_3);
+    }
 
-    // Calculate armor damage reduction with efficiency bonuses (no u128!)
-    let effective_damage = if total_units > 0 && armor_pieces > 0 {
-        // Calculate base armor coverage (armor per unit, in basis points for precision)
+    // Armor reduction.
+    let effective_damage = if armor_pieces > 0 {
         let mut armor_coverage_bp = mul_div(armor_pieces, 10000, total_units).unwrap_or(0) as u32;
-
-        // Apply hero armor efficiency buff (multiplicative - no u128!)
         if hero_armor_efficiency_bps > 0 {
             armor_coverage_bp = apply_bp_bonus(armor_coverage_bp as u64, hero_armor_efficiency_bps)
                 .unwrap_or(armor_coverage_bp as u64) as u32;
         }
-
-        // Apply equipped armor bonus (multiplicative - no u128!)
         if equipped_armor_bonus_bps > 0 {
             armor_coverage_bp = apply_bp_bonus(armor_coverage_bp as u64, equipped_armor_bonus_bps)
                 .unwrap_or(armor_coverage_bp as u64) as u32;
         }
-
-        // Calculate reduction: coverage * reduction_per_armor (no u128!)
         let reduction_bp = apply_bp(armor_coverage_bp as u64, gameplay_config.armor_damage_reduction_bps as u64)
             .unwrap_or(0) as u32;
-
-        // Cap the reduction
         let capped_reduction_bp = reduction_bp.min(gameplay_config.armor_damage_reduction_cap_bps);
-
-        // Apply reduction: damage * (10000 - reduction) / 10000
         total_damage * (10000 - capped_reduction_bp) as f64 / 10000.0
     } else {
         total_damage
     };
 
-    let mut damage_1 = 0.0;
-    let mut damage_2 = 0.0;
-    let mut damage_3 = 0.0;
-
-    // Get damage distribution percentages from config (convert from basis points)
+    // Damage share per tier (preserves the existing config-driven redistribution
+    // for missing tiers — no behaviour change here).
     let pct_1 = gameplay_config.damage_unit_1_percent as f64 / 10000.0;
     let pct_2 = gameplay_config.damage_unit_2_percent as f64 / 10000.0;
     let pct_3 = gameplay_config.damage_unit_3_percent as f64 / 10000.0;
 
-    // Get redistribution percentages from config (convert from basis points)
-    let redis_unit1_to_unit2 = gameplay_config.damage_redistrib_unit1_to_unit2 as f64 / 10000.0;
-    let redis_unit1_to_unit3 = gameplay_config.damage_redistrib_unit1_to_unit3 as f64 / 10000.0;
-    let redis_unit3_to_unit1 = gameplay_config.damage_redistrib_unit3_to_unit1 as f64 / 10000.0;
-    let redis_unit3_to_unit2 = gameplay_config.damage_redistrib_unit3_to_unit2 as f64 / 10000.0;
+    let redis_u1_to_u2 = gameplay_config.damage_redistrib_unit1_to_unit2 as f64 / 10000.0;
+    let redis_u1_to_u3 = gameplay_config.damage_redistrib_unit1_to_unit3 as f64 / 10000.0;
+    let redis_u3_to_u1 = gameplay_config.damage_redistrib_unit3_to_unit1 as f64 / 10000.0;
+    let redis_u3_to_u2 = gameplay_config.damage_redistrib_unit3_to_unit2 as f64 / 10000.0;
 
-    // Base distribution (only if units exist) - using effective_damage after armor reduction
-    if unit_1 > 0 {
-        damage_1 = effective_damage * pct_1;
-    }
-    if unit_2 > 0 {
-        damage_2 = effective_damage * pct_2;
-    }
-    if unit_3 > 0 {
-        damage_3 = effective_damage * pct_3;
-    }
+    let mut damage_1 = if unit_1 > 0 { effective_damage * pct_1 } else { 0.0 };
+    let mut damage_2 = if unit_2 > 0 { effective_damage * pct_2 } else { 0.0 };
+    let mut damage_3 = if unit_3 > 0 { effective_damage * pct_3 } else { 0.0 };
 
-    // Redistribute damage if certain unit types are missing (using config values)
     if unit_1 == 0 {
-        damage_2 += effective_damage * pct_1 * redis_unit1_to_unit2;
-        damage_3 += effective_damage * pct_1 * redis_unit1_to_unit3;
+        damage_2 += effective_damage * pct_1 * redis_u1_to_u2;
+        damage_3 += effective_damage * pct_1 * redis_u1_to_u3;
     }
     if unit_1 == 0 && unit_2 == 0 {
-        damage_3 += effective_damage; // All damage to unit_3
+        damage_3 += effective_damage;
     }
     if unit_2 == 0 && unit_3 == 0 {
-        damage_1 += effective_damage; // All damage to unit_1
+        damage_1 += effective_damage;
     }
     if unit_3 == 0 {
-        damage_1 += effective_damage * pct_3 * redis_unit3_to_unit1;
-        damage_2 += effective_damage * pct_3 * redis_unit3_to_unit2;
+        damage_1 += effective_damage * pct_3 * redis_u3_to_u1;
+        damage_2 += effective_damage * pct_3 * redis_u3_to_u2;
     }
 
-    // Apply damage (use saturating_sub to prevent underflow)
-    unit_3 = unit_3.saturating_sub(damage_3 as u64);
-    unit_2 = unit_2.saturating_sub(damage_2 as u64);
-    unit_1 = unit_1.saturating_sub(damage_1 as u64);
+    // Convert damage → casualties via per-tier HP. `_raw` is uncapped so we can
+    // measure overkill before clipping to live populations.
+    let hp_1 = DEFENSIVE_UNIT_HEALTH[0].max(1) as f64;
+    let hp_2 = DEFENSIVE_UNIT_HEALTH[1].max(1) as f64;
+    let hp_3 = DEFENSIVE_UNIT_HEALTH[2].max(1) as f64;
 
-    (unit_1, unit_2, unit_3)
+    let kills_1_raw = (damage_1 / hp_1) as u64;
+    let kills_2_raw = (damage_2 / hp_2) as u64;
+    let kills_3_raw = (damage_3 / hp_3) as u64;
+
+    let kills_1 = kills_1_raw.min(unit_1);
+    let kills_2 = kills_2_raw.min(unit_2);
+    let kills_3 = kills_3_raw.min(unit_3);
+
+    // Overkill damage that would have killed already-dead units. Redistribute
+    // once across surviving tiers, weighted by the same damage % the config
+    // uses for the base allocation.
+    let overkill_dmg = ((kills_1_raw - kills_1) as f64) * hp_1
+        + ((kills_2_raw - kills_2) as f64) * hp_2
+        + ((kills_3_raw - kills_3) as f64) * hp_3;
+
+    let mut rem_1 = unit_1 - kills_1;
+    let mut rem_2 = unit_2 - kills_2;
+    let mut rem_3 = unit_3 - kills_3;
+
+    if overkill_dmg > 0.0 {
+        let mut weight_sum = 0.0;
+        if rem_1 > 0 { weight_sum += pct_1; }
+        if rem_2 > 0 { weight_sum += pct_2; }
+        if rem_3 > 0 { weight_sum += pct_3; }
+
+        if weight_sum > 0.0 {
+            let extra_1 = if rem_1 > 0 { ((overkill_dmg * pct_1 / weight_sum) / hp_1) as u64 } else { 0 };
+            let extra_2 = if rem_2 > 0 { ((overkill_dmg * pct_2 / weight_sum) / hp_2) as u64 } else { 0 };
+            let extra_3 = if rem_3 > 0 { ((overkill_dmg * pct_3 / weight_sum) / hp_3) as u64 } else { 0 };
+
+            rem_1 = rem_1.saturating_sub(extra_1);
+            rem_2 = rem_2.saturating_sub(extra_2);
+            rem_3 = rem_3.saturating_sub(extra_3);
+        }
+    }
+
+    (rem_1, rem_2, rem_3)
 }
 

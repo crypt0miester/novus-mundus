@@ -304,6 +304,10 @@ pub struct ParsedHeroNft {
     pub serial_number: u32,
     pub origin_city: u16,
 
+    // Ability cooldown unix timestamp (0 if never used or legacy NFT
+    // minted before AbCD attribute existed)
+    pub last_ability_used_at: i64,
+
     // Buff values (parsed from NFT, not computed)
     pub buffs: [ParsedBuff; 4],
     pub buff_count: u8,
@@ -420,6 +424,18 @@ fn parse_hero_attributes_data(data: &[u8], offset: usize) -> Option<ParsedHeroNf
             b"Template" => result.template_id = parsed_value.min(u16::MAX as u64) as u16,
             b"Serial" => result.serial_number = parsed_value.min(u32::MAX as u64) as u32,
             b"Origin" => result.origin_city = parsed_value.min(u16::MAX as u64) as u16,
+            b"AbCD" => {
+                // Unix timestamp; clamp to i64 range. Negative values are
+                // re-parsed by inspecting the first byte (parse_decimal returns
+                // u64, so we sign-flip if the source string had a leading '-').
+                let signed = if value_bytes.first() == Some(&b'-') {
+                    let mag = parse_decimal(&value_bytes[1..]).unwrap_or(0);
+                    -(mag.min(i64::MAX as u64) as i64)
+                } else {
+                    parsed_value.min(i64::MAX as u64) as i64
+                };
+                result.last_ability_used_at = signed;
+            }
             _ => {
                 // Check if it's a buff attribute
                 let stat = key_to_buff_stat(key);

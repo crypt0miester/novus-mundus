@@ -140,6 +140,39 @@ impl EncounterType {
         }
     }
 
+    /// Per-rarity multiplier applied to `gameplay_config.health_per_level`, in bps.
+    ///
+    /// Before this multiplier all rarities gained the same flat +1k HP/level, so
+    /// the 500× HP gap between Common (1k) and Legendary (500k) at L1 collapsed
+    /// to a ~6× gap by L100. Now Legendaries scale 10× faster per level than
+    /// Commons, keeping the rarity power curve intact at high levels.
+    pub fn level_health_multiplier_bps(self) -> u32 {
+        match self {
+            Self::Common => 10_000,      // 1.0×
+            Self::Uncommon => 15_000,    // 1.5×
+            Self::Rare => 20_000,        // 2.0×
+            Self::Epic => 30_000,        // 3.0×
+            Self::Legendary => 50_000,   // 5.0×
+            Self::WorldEvent => 100_000, // 10.0×
+        }
+    }
+
+    /// Per-rarity multiplier applied to `gameplay_config.defense_per_level`, in bps.
+    ///
+    /// Same motivation as the HP multiplier: a L30 Common shouldn't have the
+    /// same defense as a L30 Legendary. Capped downstream at 9000 bps (90%) so
+    /// extreme-level Legendaries don't become unkillable.
+    pub fn level_defense_multiplier_bps(self) -> u32 {
+        match self {
+            Self::Common => 10_000,      // 1.0×
+            Self::Uncommon => 15_000,    // 1.5×
+            Self::Rare => 20_000,        // 2.0×
+            Self::Epic => 30_000,        // 3.0×
+            Self::Legendary => 50_000,   // 5.0×
+            Self::WorldEvent => 100_000, // 10.0×
+        }
+    }
+
     /// Get despawn duration in seconds
     pub fn despawn_duration(self) -> i64 {
         match self {

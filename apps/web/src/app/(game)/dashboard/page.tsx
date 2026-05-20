@@ -6,6 +6,7 @@ import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useLoot } from "@/lib/hooks/useLoot";
+import { useNoviBalance } from "@/lib/hooks/useNoviBalance";
 import { useStamina } from "@/lib/hooks/useStamina";
 import {
   useCombatPower,
@@ -50,6 +51,7 @@ export default function DashboardPage() {
   const sub = useSubscriptionStatus();
   const daily = useDailyRewards();
   const stamina = useStamina(player);
+  const novi = useNoviBalance();
   const showPanel = useRightPanelStore((s) => s.show);
 
   const nowSec = Math.floor(Date.now() / 1000);
@@ -177,8 +179,22 @@ export default function DashboardPage() {
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">NOVI</span>
-                          <GoldNumber value={player.lockedNovi.toNumber()} prefix="◆ " delta />
+                          <GoldNumber value={novi.raw} prefix="◆ " delta />
                         </div>
+                        {/* Surface a desync between the wallet's spendable
+                            NOVI (ATA balance — what hire/build burn from) and
+                            the game-state accounting (player.lockedNovi).
+                            They should match; when they don't, the spendable
+                            number is the wallet's, not the accounting's. */}
+                        {!novi.loading &&
+                          player.lockedNovi.toNumber() !== novi.raw && (
+                            <div className="flex justify-between text-[11px] text-text-muted">
+                              <span>Vault accounting</span>
+                              <span className="font-mono tabular-nums">
+                                ◆ {player.lockedNovi.toNumber().toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Cash</span>
                           <GoldNumber value={player.cashOnHand.toNumber()} prefix="$ " format="full" />

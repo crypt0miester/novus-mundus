@@ -34,10 +34,20 @@ export interface HeroTemplateAccount {
   meditationCityId: number;
   buffs: HeroBuffConfig[];
   bump: number;
+  /** Active ability kind (0=none, 1=BuffNext, 2=CritNext, 3=ShieldNext, 4=EncounterSkip, 5=InstantResource, 6=FragmentRefund) */
+  abilityKind: number;
+  /** Stat targeted by BuffNext (BuffStat enum, else 0) */
+  abilityStat: number;
+  /** Generic param: bps for BuffNext, amount for InstantResource/FragmentRefund */
+  abilityParam1: number;
+  /** Generic param: duration secs for BuffNext, else 0 */
+  abilityParam2: number;
+  /** Cooldown between uses, in seconds */
+  abilityCooldownSecs: number;
 }
 
 /** HeroTemplate size in bytes (repr(C) layout with alignment padding) */
-export const HERO_TEMPLATE_SIZE = 96;
+export const HERO_TEMPLATE_SIZE = 112;
 
 // Deserialization
 
@@ -79,6 +89,14 @@ export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplate
   const bump = reader.readU8();
   reader.skip(3); // _padding
 
+  // Ability config (12 bytes; struct grew here)
+  const abilityKind = reader.readU8();
+  const abilityStat = reader.readU8();
+  const abilityParam1 = reader.readU16();
+  const abilityParam2 = reader.readU32();
+  const abilityCooldownSecs = reader.readU32();
+  reader.skip(4); // _ability_padding
+
   return {
     templateId,
     name,
@@ -93,6 +111,11 @@ export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplate
     meditationCityId,
     buffs,
     bump,
+    abilityKind,
+    abilityStat,
+    abilityParam1,
+    abilityParam2,
+    abilityCooldownSecs,
   };
 }
 

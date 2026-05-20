@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { animate, createSpring, createTimeline, stagger } from "animejs";
 import { CairnOrb } from "./CairnOrb";
 import { useAct } from "@/lib/hooks/useAct";
+import { useCairnNudge } from "@/lib/hooks/useCairnNudge";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { throughLine } from "@/lib/narrative";
 
@@ -25,7 +26,11 @@ function reducedMotion(): boolean {
  */
 export function CairnPresence() {
   const { act, mood, actDef, hasPlayer } = useAct();
-  const line = throughLine("place", act, mood);
+  // A one-off nudge (e.g. the L1 stall) takes over the bubble for a window,
+  // then dissolves back to the through-line via the same re-speak animation
+  // that drives every other line change.
+  const nudge = useCairnNudge();
+  const line = nudge ?? throughLine("place", act, mood);
   const show = useRightPanelStore((s) => s.show);
 
   // The line currently painted in the bubble — updated mid-animation so the

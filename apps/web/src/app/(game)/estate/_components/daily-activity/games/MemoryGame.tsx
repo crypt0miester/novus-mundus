@@ -20,15 +20,16 @@ interface MemoryMoveResult {
 }
 
 const SYMBOLS = ["◆", "●", "▲", "■", "★", "✦", "❖", "⬟"];
+// Pairs match on symbol+color, so all 8 colours must be distinct.
 const SYMBOL_COLORS = [
   "text-amber-300",
   "text-sky-300",
-  "text-emerald-300",
+  "text-teal-300",
   "text-rose-300",
   "text-violet-300",
-  "text-cyan-300",
-  "text-lime-300",
-  "text-orange-300",
+  "text-zinc-300",
+  "text-orange-500",
+  "text-fuchsia-300",
 ];
 
 interface MemoryGameProps {
@@ -120,7 +121,7 @@ export function MemoryGame({
               onClick={() => flip(i)}
               className={`flex aspect-square items-center justify-center rounded-lg border text-2xl font-bold transition-all ${
                 isMatched
-                  ? "border-emerald-700/50 bg-emerald-900/15 opacity-60"
+                  ? "border-amber-800/50 bg-amber-950/30 opacity-60"
                   : shown
                     ? "border-amber-600 bg-amber-900/20"
                     : "border-border-default bg-surface-raised hover:border-amber-800/50"

@@ -18,3 +18,4 @@ pub mod level_up;
 pub mod assign_defensive;
 pub mod burn;
 pub mod update_supply_cap;
+pub mod use_ability;

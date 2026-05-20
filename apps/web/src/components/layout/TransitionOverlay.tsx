@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createTimeline } from "animejs";
 import { useTransitionStore } from "@/lib/store/transition";
+import { BootRing } from "@/components/loading/BootRing";
 
 const ENTER_MS = 340;
 const HOLD_MS = 550;
@@ -39,7 +40,6 @@ export function TransitionOverlay() {
     const lineBot = lineBotRef.current;
     if (!overlay || !title || !lineTop || !lineBot) return;
 
-    // Reset initial state
     overlay.style.opacity = "0";
     overlay.style.display = "flex";
     title.style.opacity = "0";
@@ -163,10 +163,12 @@ export function TransitionOverlay() {
       className="fixed inset-0 z-[10001] flex flex-col items-center justify-center bg-surface"
       style={{ display: "none", opacity: 0 }}
     >
-      {/* Top gold line */}
+      {/* Fades in/out via opacity inheritance from the overlay's own timeline. */}
+      <BootRing />
+
       <div
         ref={lineTopRef}
-        className="absolute left-[10%] right-[10%] top-[38%] h-px origin-center"
+        className="absolute left-[10%] right-[10%] top-[38%] z-10 h-px origin-center"
         style={{
           background:
             "linear-gradient(90deg, transparent, #92400e 20%, #fbbf24 50%, #92400e 80%, transparent)",
@@ -175,11 +177,10 @@ export function TransitionOverlay() {
         }}
       />
 
-      {/* Center content */}
       {isActBeat && (
         <p
           ref={eyebrowRef}
-          className="tier-title mb-3 font-mono text-xs uppercase tracking-[0.3em]"
+          className="tier-title relative z-10 mb-3 font-mono text-xs uppercase tracking-[0.3em]"
           style={{ opacity: 0 }}
         >
           {actName}
@@ -189,8 +190,8 @@ export function TransitionOverlay() {
         ref={titleRef}
         className={
           isActBeat
-            ? "max-w-2xl px-6 text-center font-display text-2xl font-semibold leading-snug tracking-wide text-text-primary md:text-3xl"
-            : "tier-title font-display text-4xl font-bold tracking-wider md:text-5xl"
+            ? "relative z-10 max-w-2xl px-6 text-center font-display text-2xl font-semibold leading-snug tracking-wide text-text-primary md:text-3xl"
+            : "tier-title relative z-10 font-display text-4xl font-bold tracking-wider md:text-5xl"
         }
         style={{ opacity: 0 }}
       >
@@ -199,17 +200,16 @@ export function TransitionOverlay() {
       {!isActBeat && (
         <p
           ref={subtitleRef}
-          className="mt-3 font-mono text-sm tracking-widest text-text-muted"
+          className="relative z-10 mt-3 font-mono text-sm tracking-widest text-text-muted"
           style={{ opacity: 0 }}
         >
           {message}
         </p>
       )}
 
-      {/* Bottom gold line */}
       <div
         ref={lineBotRef}
-        className="absolute bottom-[38%] left-[10%] right-[10%] h-px origin-center"
+        className="absolute bottom-[38%] left-[10%] right-[10%] z-10 h-px origin-center"
         style={{
           background:
             "linear-gradient(90deg, transparent, #92400e 20%, #fbbf24 50%, #92400e 80%, transparent)",

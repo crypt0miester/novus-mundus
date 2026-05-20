@@ -7,13 +7,15 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, DungeonRun, DungeonStatus},
-    constants::DUNGEON_RUN_SEED,
+    state::{PlayerAccount, DungeonRun, DungeonStatus, GameEngine},
+    constants::{DUNGEON_RUN_SEED, GAME_ENGINE_SEED},
     helpers::{
         close_account,
+        mint_tokens,
+        validate_token_account_owner,
         dungeon::{get_flee_penalty_bps, apply_reward_penalty},
     },
-    validation::{require_signer, require_writable},
+    validation::{require_signer, require_writable, require_key_match},
     emit,
     events::DungeonFled,
 };
@@ -36,6 +38,11 @@ use crate::{
 /// - [writable] hero_mint: Hero NFT mint (MPL Core asset)
 /// - [] hero_collection: Hero collection PDA
 /// - [] system_program: System program
+/// - [] p_core_program: MPL Core program
+/// - [writable] player_novi_ata: Player's NOVI token account (owned by player PDA)
+/// - [writable] novi_mint: NOVI mint
+/// - [] game_engine: GameEngine PDA (mint authority)
+/// - [] token_program: SPL Token program
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -50,6 +57,10 @@ pub fn process(
         hero_collection,
         system_program,
         p_core_program,
+        player_novi_ata,
+        novi_mint,
+        game_engine,
+        token_program,
     ]);
 
     // 2. Validate signer
@@ -58,6 +69,16 @@ pub fn process(
     require_writable(player_account)?;
     require_writable(dungeon_run_account)?;
     require_writable(hero_mint)?;
+    require_writable(player_novi_ata)?;
+    require_writable(novi_mint)?;
+    require_key_match(token_program, &pinocchio_token::ID)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "dungeon_flee.novi_mint",
+        GameError::InvalidMint,
+    );
+    validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
     let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
@@ -110,6 +131,20 @@ pub fn process(
     // Drop borrows before CPI
     drop(run);
     drop(player);
+
+    // 7a. Mint NOVI to the player's ATA so the wallet balance tracks the
+    //     locked_novi accounting bumped above. Without this CPI the two
+    //     drift and later burns (hire/build) fail with SPL InsufficientFunds.
+    if novi > 0 {
+        let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        let bump_seed = [game_engine_data.bump];
+        let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
+        let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
+        drop(game_engine_data);
+
+        mint_tokens(novi_mint, player_novi_ata, game_engine, novi, &[ge_signer])?;
+    }
 
     // 7. Transfer hero back from DungeonRun PDA to owner using MPL Core
     let run_bump_seed = [run_bump];

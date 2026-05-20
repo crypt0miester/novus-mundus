@@ -5,7 +5,7 @@
  * Arrival, §7.2), every estate building (§6.1–6.8), and the standalone systems
  * — the House, the Castle, the Shop (§6.5–6.7). Pure data; the screens read it.
  */
-import { BuildingId } from "@/lib/hooks/useFeatureGate";
+import { BuildingId } from "@/lib/buildings";
 
 /** Framing for one city type. `type` matches the on-chain `cityType` (0–3). */
 export interface CityTypeFraming {

@@ -144,7 +144,7 @@ export function BuildingGrid({
         <div className="rounded-lg border border-amber-700/60 bg-amber-900/10 px-4 py-2">
           <div className="flex items-center gap-2 text-xs">
             <span className="font-semibold text-amber-500">
-              {constructingBuildings.length} building{constructingBuildings.length > 1 ? "s" : ""} under construction
+              {constructingBuildings.length} rising
             </span>
             <span className="text-text-muted">
               {constructingBuildings

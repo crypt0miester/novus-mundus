@@ -7,11 +7,14 @@ use pinocchio::{
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, HeroTemplate, EstateAccount, NULL_PUBKEY, require_extension, EXT_HEROES},
+    state::{PlayerAccount, HeroTemplate, EstateAccount, GameEngine, NULL_PUBKEY, require_extension, EXT_HEROES},
     constants::{PLAYER_SEED, HERO_TEMPLATE_SEED},
     helpers::{
         subtract_hero_buffs_from_player_with_location,
         parse_hero_nft,
+        HeroNftContext,
+        HeroNftBuffers,
+        build_hero_nft_attributes,
     },
     utils::read_u8,
     validation::{
@@ -38,6 +41,7 @@ use crate::{
 /// - [] system_program: System program
 /// - [] p_core_program: MPL Core program
 /// - [writable] estate_account: EstateAccount PDA (to clear blessed_hero if needed)
+/// - [] game_engine: GameEngine PDA (UpdatePluginV1 authority — writes AbCD)
 ///
 /// # Instruction Data
 /// - [0] slot_index: u8 (0-2)
@@ -47,7 +51,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, hero_collection, system_program, p_core_program, estate_account]);
+    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, hero_collection, system_program, p_core_program, estate_account, game_engine]);
 
     // 2. Validate accounts
     require_signer(owner)?;
@@ -176,19 +180,53 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 12. Location Synergy: Get stored location bonus and subtract with same bonus
+    // 12. Persist ability cooldown to the NFT's AbCD attribute.
+    // This is what closes the unlock+relock cooldown reset exploit:
+    // the next lock will read AbCD back into the slot.
+    let cooldown_to_persist = player.ability_last_used_at(slot_index as usize);
+    let nft_ctx = HeroNftContext::from_parsed(&parsed_hero, template)
+        .with_ability_cooldown(cooldown_to_persist);
+
+    // 13. Location Synergy: Get stored location bonus and subtract with same bonus
     let location_bonus_bps = player.slot_location_bonus_at(slot_index as usize);
 
     subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
 
-    // Clear location bonus for this slot
+    // Clear location bonus + slot cooldown cache for this slot
     player.set_slot_location_bonus_at(slot_index as usize, 0);
+    player.set_ability_last_used_at(slot_index as usize, 0);
 
     let hero_name = template.name;
     let player_name = player.name;
 
     drop(template_data);
     drop(player_data);
+
+    // 14. Write AbCD attribute to NFT via UpdatePluginV1 (game_engine signed)
+    let (ge_bump, kingdom_id_bytes) = {
+        let ge = GameEngine::load_checked_by_key(game_engine, program_id)?;
+        (ge.bump, ge.kingdom_id.to_le_bytes())
+    };
+
+    let ge_bump_seed = [ge_bump];
+    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
+
+    let mut buffers = HeroNftBuffers::new();
+    let mut attributes: [(&[u8], &[u8]); 10] = [(b"", b""); 10];
+    let attr_count = build_hero_nft_attributes(&mut buffers, &mut attributes, &nft_ctx);
+
+    p_core::instructions::UpdatePluginV1 {
+        asset: hero_mint,
+        collection: hero_collection,
+        payer: owner,
+        authority: game_engine,
+        system_program,
+        log_wrapper: p_core_program,
+        update: p_core::instructions::PluginUpdateData::AttributesSet {
+            attributes: &attributes[..attr_count],
+        },
+    }.invoke_signed(&[ge_signer])?;
 
     // 13. Emit HeroUnlocked event
     let clock = Clock::get()?;

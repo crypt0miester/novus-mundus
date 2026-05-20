@@ -1,5 +1,12 @@
 # Hero System Design
 
+> **STALE — design intent only.** Source of truth for the live roster is
+> `sdks/novus-mundus-ts/cli/data/heroes.ts`, which exports two consts:
+> `HERO_TEMPLATES` (active, seeded on-chain) and `RESERVE_HEROES` (designed
+> but not seeded; activate by moving entries into `HERO_TEMPLATES`).
+> The narrative framing for historical-name heroes is **Champions of
+> Aeondral** — see `WORLD_LORE.md` §XII.
+
 ## Overview
 
 Heroes are personal NFTs (MPL-Core) that provide combat and economic buffs to players. Players can own unlimited heroes but can only have 3 active at a time. Heroes gain levels through fragment investment, with unlimited progression (u32::MAX). Each level-up randomly increases buff power based on the hero's template configuration.

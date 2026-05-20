@@ -389,17 +389,25 @@ pub fn process(
         is_auto_spawn,
     )?;
 
-    // Calculate level-scaled health
+    // Level-scaled health, multiplied by rarity. With the rarity multiplier
+    // (Common 1×, Legendary 5×, WorldEvent 10×) high-rarity encounters scale
+    // tankier per level so they don't collapse to commodity HP at L100.
     let base_health = encounter_type.base_health();
+    let health_mult_bps = encounter_type.level_health_multiplier_bps() as u64;
     let level_health_bonus = (encounter_level as u64)
-        .saturating_mul(game_engine_data.gameplay_config.health_per_level);
+        .saturating_mul(game_engine_data.gameplay_config.health_per_level)
+        .saturating_mul(health_mult_bps)
+        / 10000;
     let total_health = base_health.saturating_add(level_health_bonus);
 
-    // Calculate level-scaled defense (damage reduction in basis points)
-    // Defense reduces incoming damage: damage_taken = damage * (10000 - defense) / 10000
-    let defense = (encounter_level as u32)
-        .saturating_mul(game_engine_data.gameplay_config.defense_per_level)
-        .min(9000); // Cap at 90% reduction to keep encounters beatable
+    // Level-scaled defense (damage reduction in basis points), also rarity-multiplied.
+    // Defense reduces incoming damage: damage_taken = damage * (10000 - defense) / 10000.
+    let defense_mult_bps = encounter_type.level_defense_multiplier_bps() as u64;
+    let defense = ((encounter_level as u64)
+        .saturating_mul(game_engine_data.gameplay_config.defense_per_level as u64)
+        .saturating_mul(defense_mult_bps)
+        / 10000)
+        .min(9000) as u32; // Cap at 90% reduction to keep encounters beatable
 
     *encounter_data = EncounterAccount {
         account_key: crate::state::AccountKey::Encounter as u8,

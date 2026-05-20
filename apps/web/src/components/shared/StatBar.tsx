@@ -13,8 +13,11 @@ interface StatBarProps {
   className?: string;
 }
 
+// `gold` routes through --color-text-gold so the bar tracks per-tier overrides
+// from globals.css (bronze/silver/gold), staying in lock-step with sibling
+// gold text rather than hardcoding amber-500.
 const colorMap = {
-  gold: "bg-amber-500",
+  gold: "bg-[var(--color-text-gold)]",
   green: "bg-emerald-500",
   red: "bg-red-500",
   blue: "bg-blue-500",

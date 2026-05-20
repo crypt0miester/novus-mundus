@@ -10,10 +10,12 @@ import {
   type ActivityStatus,
 } from "./useDailyActivities";
 
-/** Dot colour per activity status — the at-a-glance progress strip. */
+/** Dot colour per activity status — the at-a-glance progress strip.
+ *  Available is the active golden chip; done is the deeper golden chip
+ *  (filled but quieter). Generic green broke the gold theme. */
 const DOT_TONE: Record<ActivityStatus, string> = {
   available: "bg-amber-400",
-  done: "bg-emerald-400",
+  done: "bg-amber-700",
   later: "bg-border-default",
   missed: "bg-border-default",
   unbuilt: "bg-border-default",

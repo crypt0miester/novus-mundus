@@ -101,7 +101,7 @@ export function SpeedupPanel({
           {gemBalance != null && (
             <div className="mt-1 flex items-center justify-between text-xs">
               <span className="text-zinc-500">Your Gems</span>
-              <span className="font-mono tabular-nums text-emerald-400">
+              <span className="font-mono tabular-nums text-text-gold">
                 {gemBalance.toLocaleString()}
               </span>
             </div>
@@ -109,33 +109,25 @@ export function SpeedupPanel({
         </div>
       )}
 
-      {/* Gem balance — inline mode only */}
       {inline && gemBalance != null && (
         <div className="mb-3 flex items-center justify-between text-xs rounded-lg bg-surface/60 px-3 py-2">
           <span className="text-zinc-500">Your Gems</span>
-          <span className="font-mono tabular-nums text-emerald-400">
+          <span className="font-mono tabular-nums text-text-gold">
             {gemBalance.toLocaleString()}
           </span>
         </div>
       )}
 
-      {/* Tier buttons */}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tiers.length}, 1fr)` }}>
         {tiers.map((t) => {
           const cost = t.gemCost ?? costForTier(t.tier);
           const canAfford = gemBalance == null || gemBalance >= cost;
-
-          return (
-            <TxButton
-              key={t.tier}
-              onClick={(reportPhase: (p: TxPhase) => void) => onSpeedup(t.tier, reportPhase)}
-              variant="secondary"
-              disabled={!canAfford}
-              className={cn(
-                "flex w-full flex-col items-center gap-1 rounded-lg border border-border-default p-3",
-                !canAfford && "opacity-40",
-              )}
-            >
+          const cardClass = cn(
+            "w-full flex-col items-center gap-1 rounded-lg border border-border-default p-3",
+            !canAfford && "opacity-40",
+          );
+          const content = (
+            <>
               <span className="text-sm font-bold text-text-primary">{t.label}</span>
               <span className="text-[10px] text-zinc-500">{t.description}</span>
               <span className="font-mono text-lg font-bold text-text-primary">
@@ -144,7 +136,22 @@ export function SpeedupPanel({
               <span className="text-[10px] text-zinc-500">
                 {canAfford ? "gems" : "Not enough gems"}
               </span>
-            </TxButton>
+            </>
+          );
+          return (
+            <div key={t.tier}>
+              <TxButton
+                onClick={(reportPhase: (p: TxPhase) => void) => onSpeedup(t.tier, reportPhase)}
+                variant="secondary"
+                disabled={!canAfford}
+                className={cn(cardClass, "hidden lg:flex")}
+              >
+                {content}
+              </TxButton>
+              <div className={cn(cardClass, "flex lg:hidden bg-surface-raised/40")}>
+                {content}
+              </div>
+            </div>
           );
         })}
       </div>

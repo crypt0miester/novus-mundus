@@ -4,7 +4,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { MorphTabBar } from "@/components/layout/MorphTabBar";
 import { LeftPanel, LeftPanelMobile } from "@/components/layout/LeftPanel";
 import { CairnFloating } from "@/components/cairn/CairnFloating";
 import { CairnPresence } from "@/components/cairn/CairnPresence";
@@ -55,12 +55,14 @@ export default function GameLayout({
         <aside className="hidden lg:block lg:w-72 flex-shrink-0 overflow-y-auto border-r border-border-default bg-[var(--nm-bg-bar)]">
           <LeftPanel />
         </aside>
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-x-clip overflow-y-auto px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 lg:p-6">
+          {children}
+        </main>
         <RightPanel />
       </div>
       {/* Desktop: the Cairn rests at the foot of the left sidebar */}
       <CairnPresence />
-      <BottomNav />
+      <MorphTabBar />
       {/* Centered win/lose breakdown after an attack */}
       <CombatOutcomeModal />
     </div>

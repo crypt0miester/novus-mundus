@@ -11,6 +11,7 @@ import { useAccountStore } from "@/lib/store/accounts";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { Badge } from "@/components/shared/Badge";
 import { WeaponGrid } from "@/components/shared/WeaponGrid";
 
@@ -89,6 +90,18 @@ export function InventoryPanel() {
       });
   };
 
+  const morphActions = lootItems.length > 0
+    ? [
+        {
+          id: "claim-all-loot",
+          label: `Claim All (${Math.min(lootItems.length, 5)})`,
+          variant: "primary" as const,
+          onClick: handleClaimAll,
+        },
+      ]
+    : null;
+  useMorphActions(morphActions);
+
   return (
     <div className="space-y-4">
       {/* Unclaimed loot — the claim-rewards section */}
@@ -98,7 +111,7 @@ export function InventoryPanel() {
             Unclaimed Loot ({lootItems.length})
           </h3>
           {lootItems.length > 0 && (
-            <TxButton onClick={handleClaimAll} className="text-[11px] px-2.5 py-1">
+            <TxButton onClick={handleClaimAll} className="hidden text-[11px] px-2.5 py-1 lg:inline-flex">
               Claim All
             </TxButton>
           )}

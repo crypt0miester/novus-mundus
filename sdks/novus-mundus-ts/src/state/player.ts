@@ -37,7 +37,7 @@ export const RESEARCH_SIZE = 48;
 export const INVENTORY_SIZE = 144;
 export const TEAM_SIZE = 112;
 export const RALLY_SIZE = 80;
-export const HEROES_SIZE = 168;
+export const HEROES_SIZE = 208;
 export const COSMETICS_SIZE = 80;
 export const COURT_SIZE = 48;
 
@@ -235,6 +235,12 @@ export interface PlayerCore {
   blessedHeroBonusBps: number;
   slotLocationBonus: number[];
   meditationStartedAt: BN;
+  // Ability state
+  abilityLastUsedAt: BN[];        // per slot
+  pendingEffectKind: number;       // 0=none, else AbilityKind discriminant
+  pendingEffectStat: number;       // BuffStat for BuffNext
+  pendingEffectParam: number;      // bps for BuffNext
+  pendingEffectExpiresAt: BN;      // 0 if not set
 
   // Team + Reinforcement
   team: PublicKey;
@@ -510,6 +516,12 @@ interface HeroesSection {
   blessedHeroBonusBps: number;
   slotLocationBonus: number[];
   meditationStartedAt: BN;
+  // Ability state (new — must match on-chain HeroesSection layout)
+  abilityLastUsedAt: BN[];
+  pendingEffectKind: number;
+  pendingEffectStat: number;
+  pendingEffectParam: number;
+  pendingEffectExpiresAt: BN;
 }
 
 function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
@@ -540,7 +552,14 @@ function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
   // _pad_bonus[2] + 4 bytes implicit padding that 8-byte-aligns the i64 below.
   reader.skip(6);
   const meditationStartedAt = reader.readI64();
-  // remaining 4 bytes _reserved + 4 bytes tail padding
+  reader.skip(4); // _reserved[4]
+  // Ability state (48 bytes: 3×i64 + u8 + u8 + u16 + 4 padding + i64)
+  const abilityLastUsedAt = [reader.readI64(), reader.readI64(), reader.readI64()];
+  const pendingEffectKind = reader.readU8();
+  const pendingEffectStat = reader.readU8();
+  const pendingEffectParam = reader.readU16();
+  reader.skip(4); // _pending_pad
+  const pendingEffectExpiresAt = reader.readI64();
   return {
     activeHeroes, defensiveHeroSlot, meditatingHeroSlot,
     heroAttackBps, heroDefenseBps, heroEconomyBps, heroXpGainBps,
@@ -550,6 +569,8 @@ function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
     heroLootBonusBps, heroSynchronyBonusBps, heroResourceCapacityBps,
     heroUnitCapacityBps, blessedHeroBonusBps,
     slotLocationBonus, meditationStartedAt,
+    abilityLastUsedAt, pendingEffectKind, pendingEffectStat,
+    pendingEffectParam, pendingEffectExpiresAt,
   };
 }
 
@@ -580,6 +601,11 @@ function defaultHeroesProjection() {
     heroUnitCapacityBps: 0, blessedHeroBonusBps: 0,
     slotLocationBonus: [0, 0, 0],
     meditationStartedAt: BN0.clone(),
+    abilityLastUsedAt: [BN0.clone(), BN0.clone(), BN0.clone()],
+    pendingEffectKind: 0,
+    pendingEffectStat: 0,
+    pendingEffectParam: 0,
+    pendingEffectExpiresAt: BN0.clone(),
   };
 }
 

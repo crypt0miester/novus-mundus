@@ -301,11 +301,18 @@ export function createDailyClaimInstruction(
 ): TransactionInstruction {
   const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [estate] = deriveEstatePda(player);
+  const [noviMint] = deriveNoviMintPda();
+  // NOVI ATA is owned by the PlayerAccount PDA.
+  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: estate, isSigner: false, isWritable: true },
+    { pubkey: playerNoviAta, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_DAILY_CLAIM);

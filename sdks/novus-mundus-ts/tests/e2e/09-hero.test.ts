@@ -22,6 +22,7 @@ import {
   createCreateCollectionInstruction,
   createBurnHeroInstruction,
   createUpdateSupplyCapInstruction,
+  createUseHeroAbilityInstruction,
   createTeamCreateInstruction,
   createRallyCreateInstruction,
   derivePlayerPda,
@@ -1377,6 +1378,156 @@ describe('Hero System', () => {
       // Verify hero is locked in player's active_heroes
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
+    });
+  });
+
+  // Use Ability Tests
+  // Template 6 ("Tribute") = InstantResource ability: +5000 cash, cd 60s.
+
+  describe('Hero Ability', () => {
+    it('should credit cash on InstantResource ability use', async () => {
+      const player = await createHeroReadyPlayer(ctx, factory);
+
+      // Mint + lock the ability-bearing hero (template 6)
+      const { heroMint, templateId } = await mintHero(ctx, player, 6);
+      const [heroTemplate] = deriveHeroTemplatePda(templateId);
+      const [estateAccount] = deriveEstatePda(player.playerPda);
+
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createLockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(playerBefore).not.toBeNull();
+      const cashBefore = playerBefore!.cashOnHand;
+
+      // Trigger the ability
+      const useIx = createUseHeroAbilityInstruction(
+        { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+        { slotIndex: 0 }
+      );
+      await sendTransaction(ctx.svm, new Transaction().add(useIx), [player.keypair]);
+
+      const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
+      const cashAfter = playerAfter!.cashOnHand;
+
+      // Template 6 grants 5000 cash per use
+      assertBnEquals(cashAfter.sub(cashBefore), new BN(5000));
+    });
+
+    it('should reject ability use while on cooldown', async () => {
+      const player = await createHeroReadyPlayer(ctx, factory);
+
+      const { heroMint, templateId } = await mintHero(ctx, player, 6);
+      const [heroTemplate] = deriveHeroTemplatePda(templateId);
+      const [estateAccount] = deriveEstatePda(player.playerPda);
+
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createLockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      // First use succeeds
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createUseHeroAbilityInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      // Immediate second use must fail (cooldown 60s)
+      await expectTransactionToFail(ctx.svm,
+        new Transaction().add(createUseHeroAbilityInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+    });
+
+    it('should reject ability use on hero without ability config', async () => {
+      const player = await createHeroReadyPlayer(ctx, factory);
+
+      // Template 1 (Warrior) has no ability configured
+      const { heroMint, templateId } = await mintHero(ctx, player, 1);
+      const [heroTemplate] = deriveHeroTemplatePda(templateId);
+      const [estateAccount] = deriveEstatePda(player.playerPda);
+
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createLockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      await expectTransactionToFail(ctx.svm,
+        new Transaction().add(createUseHeroAbilityInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+    });
+
+    it('should persist cooldown across unlock+relock (no exploit)', async () => {
+      const player = await createHeroReadyPlayer(ctx, factory);
+
+      const { heroMint, templateId } = await mintHero(ctx, player, 6);
+      const [heroTemplate] = deriveHeroTemplatePda(templateId);
+      const [estateAccount] = deriveEstatePda(player.playerPda);
+
+      // Lock + use ability
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createLockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createUseHeroAbilityInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      // Unlock (cooldown should persist into NFT AbCD attribute)
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createUnlockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      // Relock (should re-cache cooldown from NFT)
+      await sendTransaction(ctx.svm,
+        new Transaction().add(createLockHeroInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
+
+      // Attempt to use ability again — must STILL fail because the cooldown
+      // was preserved through the unlock+relock cycle.
+      await expectTransactionToFail(ctx.svm,
+        new Transaction().add(createUseHeroAbilityInstruction(
+          { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate },
+          { slotIndex: 0 }
+        )),
+        [player.keypair]
+      );
     });
   });
 });

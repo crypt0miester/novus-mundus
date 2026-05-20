@@ -1,26 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
+import { isTraveling } from "novus-mundus-sdk";
 import { usePlayer } from "./usePlayer";
 import { useEstate } from "./useEstate";
 import { buildingFraming } from "@/lib/narrative";
+// Re-exported via the leaf module to avoid the narrative TDZ cycle.
+import { BuildingId, BuildingName } from "@/lib/buildings";
+export { BuildingId, BuildingName };
 
-// ─── Building IDs (matches Rust BuildingType enum) ───────────
-export const BuildingId = {
-  Mansion: 0, Barracks: 1, Workshop: 2, Vault: 3, Dock: 4,
-  Forge: 5, Market: 6, Academy: 7, Arena: 8, Sanctuary: 9,
-  Observatory: 10, Treasury: 11, Citadel: 12, Camp: 13,
-  Mine: 14, Catacombs: 15, Farm: 16, Stables: 17, Infirmary: 18,
-} as const;
-
-export const BuildingName: Record<number, string> = {
-  0: "Mansion", 1: "Barracks", 2: "Workshop", 3: "Vault", 4: "Dock",
-  5: "Forge", 6: "Market", 7: "Academy", 8: "Arena", 9: "Sanctuary",
-  10: "Observatory", 11: "Treasury", 12: "Citadel", 13: "Camp",
-  14: "Mine", 15: "Catacombs", 16: "Farm", 17: "TransportBay", 18: "Infirmary",
-};
-
-// ─── Extension flags (matches SDK ExtensionFlags) ────────────
+// Extension flags (matches SDK ExtensionFlags)
 const Ext = {
   RESEARCH:  1 << 0,
   HEROES:    1 << 1,
@@ -29,16 +18,16 @@ const Ext = {
   TEAM:      1 << 4,
 } as const;
 
-// ─── Requirement type ────────────────────────────────────────
 interface Requirement {
   estate?: boolean;
   building?: { type: number; level: number };
   extension?: number;
   team?: boolean;
   researchFlag?: "hasMining" | "hasFishing";
+  /** When true, the action is blocked while the player is in transit between cities. */
+  notTraveling?: boolean;
 }
 
-// ─── Feature keys ────────────────────────────────────────────
 export const FEATURES = {
   // Economy
   HIRE_DEFENSIVE: "hire_defensive",
@@ -86,7 +75,11 @@ export const FEATURES = {
   SUBSCRIPTION: "subscription",
 } as const;
 
-// ─── Requirements map ────────────────────────────────────────
+// Distinct from REQUIREMENTS (player progression): this map answers "is this
+// feature shipped at all?" `false` short-circuits to "coming soon" regardless
+// of player state. Flip to `true` (or remove the entry) when ready.
+const FEATURE_AVAILABLE: Record<string, boolean> = {};
+
 const REQUIREMENTS: Record<string, Requirement[]> = {
   [FEATURES.HIRE_DEFENSIVE]: [
     { estate: true },
@@ -120,10 +113,16 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { estate: true },
     { building: { type: BuildingId.Vault, level: 5 } },
   ],
-  [FEATURES.ATTACK_ENCOUNTER]: [{ estate: true }],
+  [FEATURES.ATTACK_ENCOUNTER]: [
+    { estate: true },
+    { building: { type: BuildingId.Stables, level: 1 } },
+    { notTraveling: true },
+  ],
   [FEATURES.ATTACK_PLAYER]: [
     { estate: true },
+    { building: { type: BuildingId.Stables, level: 1 } },
     { extension: Ext.RESEARCH },
+    { notTraveling: true },
   ],
   [FEATURES.INTERCITY_TRAVEL]: [
     { estate: true },
@@ -149,7 +148,14 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { estate: true },
     // hero/lock.rs gates on Sanctuary (require_sanctuary), not Citadel.
     { building: { type: BuildingId.Sanctuary, level: 1 } },
-    { extension: Ext.RALLY },
+    // No extension gate. `lock.rs:65` calls `unlock_extension_if_eligible(
+    // EXT_HEROES)` BEFORE its `require_extension` check, and
+    // `unlock_extension_if_eligible` cascades through the prerequisite chain
+    // (RESEARCH → INVENTORY → TEAM → RALLY → HEROES), allocating every
+    // missing section in one shot. So calling lock_hero on a wallet with
+    // none of those extensions still succeeds — the processor sets them all.
+    // The earlier `Ext.RALLY` gate was the worst of both: rallies depend on
+    // locked heroes, not the reverse.
   ],
   [FEATURES.HERO_LEVEL_UP]: [
     { estate: true },
@@ -197,7 +203,6 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
   [FEATURES.SUBSCRIPTION]: [],
 };
 
-// ─── Extension name helper ───────────────────────────────────
 const EXT_NAMES: Record<number, string> = {
   [Ext.RESEARCH]: "Research Extension",
   [Ext.HEROES]: "Heroes Extension",
@@ -236,7 +241,6 @@ const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: str
   },
 };
 
-// ─── Result types ────────────────────────────────────────────
 export interface MissingRequirement {
   label: string;
   detail: string;
@@ -247,11 +251,12 @@ export interface MissingRequirement {
 
 interface GateResult {
   allowed: boolean;
+  /** False when the feature is not shipped yet — UI should show "coming soon". */
+  available: boolean;
   missing: MissingRequirement[];
   loading: boolean;
 }
 
-// ─── Building check helper (inline, no SDK import needed) ────
 function hasBuildingAtLevel(
   buildings: Array<{ buildingType: number; status: number; level: number }>,
   type: number,
@@ -262,7 +267,6 @@ function hasBuildingAtLevel(
   );
 }
 
-// ─── Evaluate single requirement ─────────────────────────────
 function evaluateReq(
   req: Requirement,
   hasEstate: boolean,
@@ -324,6 +328,15 @@ function evaluateReq(
         "This is past the reach of one pair of hands. It waits on a House at your back.",
     };
   }
+  if (req.notTraveling && playerAccount && isTraveling(playerAccount)) {
+    return {
+      label: "Finish your journey",
+      detail: "You are between cities — wait until you arrive",
+      href: "/map",
+      narrative:
+        "You are on the road between cities. Steel is for those who have arrived; finish the journey first.",
+    };
+  }
   if (req.researchFlag && playerAccount) {
     // Research flags are stored as BN — check truthy
     const val = playerAccount[req.researchFlag];
@@ -341,31 +354,37 @@ function evaluateReq(
   return null;
 }
 
-// ─── Main hook ───────────────────────────────────────────────
+const CREATE_PLAYER_MISSING: MissingRequirement = {
+  label: "Create a Player",
+  detail: "You need to create a player first",
+  href: "/dashboard",
+  narrative:
+    "No one has come up the road to claim this. The climb begins with a lord to make it.",
+};
+
 export function useFeatureGate(feature: string): GateResult {
   const { data: playerData, isLoading: playerLoading } = usePlayer();
   const { data: estateData, isLoading: estateLoading } = useEstate();
 
   return useMemo(() => {
     const loading = playerLoading || estateLoading;
+
+    // Feature not shipped yet — short-circuit ahead of player checks.
+    if (FEATURE_AVAILABLE[feature] === false) {
+      return { allowed: false, available: false, missing: [], loading };
+    }
+
     const reqs = REQUIREMENTS[feature];
     if (!reqs || reqs.length === 0) {
-      return { allowed: true, missing: [], loading };
+      return { allowed: true, available: true, missing: [], loading };
     }
 
     const player = playerData?.account;
     if (!player) {
       return {
         allowed: false,
-        missing: [
-          {
-            label: "Create a Player",
-            detail: "You need to create a player first",
-            href: "/dashboard",
-            narrative:
-              "No one has come up the road to claim this. The climb begins with a lord to make it.",
-          },
-        ],
+        available: true,
+        missing: [CREATE_PLAYER_MISSING],
         loading,
       };
     }
@@ -382,11 +401,11 @@ export function useFeatureGate(feature: string): GateResult {
       if (miss) missing.push(miss);
     }
 
-    return { allowed: missing.length === 0, missing, loading };
+    return { allowed: missing.length === 0, available: true, missing, loading };
   }, [feature, playerData, estateData, playerLoading, estateLoading]);
 }
 
-// ─── Multi-feature hook (page-level: allowed if ANY feature passes) ──
+// Page-level gate: allowed if ANY feature passes.
 function usePageGate(features: string[]): GateResult {
   const { data: playerData, isLoading: playerLoading } = usePlayer();
   const { data: estateData, isLoading: estateLoading } = useEstate();
@@ -397,15 +416,8 @@ function usePageGate(features: string[]): GateResult {
     if (!player) {
       return {
         allowed: false,
-        missing: [
-          {
-            label: "Create a Player",
-            detail: "You need to create a player first",
-            href: "/dashboard",
-            narrative:
-              "No one has come up the road to claim this. The climb begins with a lord to make it.",
-          },
-        ],
+        available: true,
+        missing: [CREATE_PLAYER_MISSING],
         loading,
       };
     }
@@ -418,8 +430,14 @@ function usePageGate(features: string[]): GateResult {
 
     const allMissing: MissingRequirement[] = [];
     let anyAllowed = false;
+    let anyAvailable = false;
 
     for (const feature of features) {
+      // Skip features the system has marked as not-yet-shipped — they can't
+      // unlock a page even if requirements would otherwise pass.
+      if (FEATURE_AVAILABLE[feature] === false) continue;
+      anyAvailable = true;
+
       const reqs = REQUIREMENTS[feature];
       if (!reqs || reqs.length === 0) {
         anyAllowed = true;
@@ -439,6 +457,6 @@ function usePageGate(features: string[]): GateResult {
       }
     }
 
-    return { allowed: anyAllowed, missing: allMissing, loading };
+    return { allowed: anyAllowed, available: anyAvailable, missing: allMissing, loading };
   }, [features, playerData, estateData, playerLoading, estateLoading]);
 }

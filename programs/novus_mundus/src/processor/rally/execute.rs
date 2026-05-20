@@ -567,7 +567,11 @@ pub fn process(
                 total_damage
             };
 
-            // Calculate garrison casualties
+            // Calculate garrison casualties.
+            // Mirrors the castle path: implicit garrison-HP of 10, intentionally
+            // tankier than per-tier `DEFENSIVE_UNIT_HEALTH` (avg ~4–5) because
+            // garrison fights from fortifications. See `attack_castle.rs` for the
+            // matching comment.
             let garrison_casualty_ratio = if total_garrison_units > 0 && effective_total_damage > 0 {
                 ((effective_total_damage as u128 * 10000) / (total_garrison_units as u128 * 10)).min(10000) as u64
             } else {

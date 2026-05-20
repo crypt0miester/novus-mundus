@@ -298,6 +298,14 @@ Each building upgrade reveals more about the ruin beneath:
 When a new kingdom becomes available:
 > *"Sailors report new land visible on the eastern horizon — a landmass that wasn't there a month ago. The seabed has risen. The old-world ruins are already visible along the new coastline, half-crusted with coral and barnacle. The first ships are being prepared. The race begins."*
 
+### Champions of Aeondral
+
+Some salvage runs uncover more than stone. Deep in collapsed vaults, sealed beneath drowned cities, survivors occasionally find **tomb-crystals** — black-veined shards that hum when touched. These are not relics of any war Novus Mundus remembers. They are the bound memory-echoes of Aeondral's greatest figures: warriors, scholars, oracles, kings.
+
+A survivor who cracks the seal does not summon a person. They wake a **remembrance** — bound to fight, build, or guide whoever broke the crystal. The names that surface from these echoes — Alexander, Caesar, Zeus, Cleopatra, Sun Wukong, Satoshi — are what survives in the song-fragments of Aeondral. Whether any of them lived as the stories tell is no longer knowable. The crystals are what's left.
+
+The strongest sleep in the cities of their final stand. Most can be woken anywhere; some require a pilgrimage to the ruins where their tomb was sealed. The crystals are rare. The crystals are finite. And like NOVI, every one spent is a question: are we waking what should have stayed asleep?
+
 ---
 
 ## XIII. The Unwritten Rules of Novus Mundus

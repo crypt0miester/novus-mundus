@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { animate, spring } from "animejs";
 import { cn, formatNumber } from "@/lib/utils";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -41,6 +42,10 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
   const pendingRef = useRef<HTMLSpanElement>(null);
   const rateRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
+  const ringContainerRef = useRef<HTMLDivElement>(null);
+  const gemRef = useRef<HTMLDivElement>(null);
+  // Detect upward crossings of pendingNovi so the beat only fires on growth.
+  const prevPendingRef = useRef(0);
 
   // Real-time ticking state (combined to avoid cascading setState)
   const [ticker, setTicker] = useState({ displayNovi: 0, pendingNovi: 0, fillPct: 0, nextIntervalIn: 0 });
@@ -96,6 +101,52 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     ringRef.current.style.strokeDashoffset = String(offset);
   }, [fillPct]);
 
+  // Fires on upward crossings only. Respects prefers-reduced-motion.
+  useEffect(() => {
+    const prev = prevPendingRef.current;
+    prevPendingRef.current = pendingNovi;
+    if (pendingNovi <= prev) return;
+    if (typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const ringContainer = ringContainerRef.current;
+    if (ringContainer) {
+      animate(ringContainer, {
+        scale: [1, 1.08, 1],
+        filter: [
+          "drop-shadow(0 0 0 transparent)",
+          "drop-shadow(0 0 14px var(--tier-accent-bright))",
+          "drop-shadow(0 0 0 transparent)",
+        ],
+        duration: 720,
+        ease: "outQuad",
+      });
+    }
+
+    const gem = gemRef.current;
+    if (gem) {
+      animate(gem, {
+        scale: [1, 1.45, 1],
+        rotate: [0, 180, 360],
+        duration: 800,
+        ease: spring({ stiffness: 180, damping: 14 }),
+      });
+    }
+
+    const pending = pendingRef.current;
+    if (pending) {
+      animate(pending, {
+        opacity: [0.3, 1],
+        scale: [1.35, 1],
+        translateY: [-6, 0],
+        duration: 420,
+        ease: "outBack",
+      });
+    }
+  }, [pendingNovi]);
+
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const geKey = client.gameEngine;
@@ -143,7 +194,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
       <div
         ref={containerRef}
         className={cn(
-          "relative flex items-center gap-3 rounded-xl border border-amber-900/40 bg-surface-raised px-4 py-3",
+          "card relative flex items-center gap-3",
           className
         )}
       >
@@ -189,7 +240,8 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
             {pendingNovi > 0 && (
               <span
                 ref={pendingRef}
-                className="text-xs font-medium text-emerald-400"
+                className="text-xs font-medium text-text-gold"
+                style={{ willChange: "transform, opacity" }}
               >
                 +{formatNumber(pendingNovi, "compact")}
               </span>
@@ -217,14 +269,17 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     <div
       ref={containerRef}
       className={cn(
-        "@container relative overflow-hidden rounded-2xl border border-amber-900/40 bg-surface-raised p-6",
+        "card @container relative overflow-hidden",
         className
       )}
     >
-      {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-900/40">
+          <div
+            ref={gemRef}
+            className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-900/40"
+            style={{ willChange: "transform" }}
+          >
             <span className="text-sm">◆</span>
           </div>
           <span className="text-xs font-semibold uppercase tracking-wider text-text-gold">
@@ -239,13 +294,13 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
       </div>
 
-      {/* Central Display — stacks vertically on a narrow card, side-by-side
-          once the container is wide enough (@sm = 24rem). */}
       <div className="flex flex-col @sm:flex-row items-center justify-center gap-4 @sm:gap-8">
-        {/* Progress Ring */}
-        <div className="relative h-32 w-32 flex-shrink-0">
+        <div
+          ref={ringContainerRef}
+          className="relative h-32 w-32 flex-shrink-0"
+          style={{ willChange: "transform, filter" }}
+        >
           <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-            {/* Track */}
             <circle
               cx="60"
               cy="60"
@@ -255,7 +310,6 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
               strokeWidth="4"
               className="text-zinc-800"
             />
-            {/* Fill */}
             <circle
               ref={ringRef}
               cx="60"
@@ -269,52 +323,36 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
               style={{ stroke: "var(--tier-accent-bright)", transition: "stroke-dashoffset 0.8s ease-out" }}
             />
           </svg>
-          {/* Center text */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold tabular-nums text-text-gold">
-              {Math.floor(fillPct)}%
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-2">
+            <span className="font-mono text-2xl font-bold leading-none tabular-nums text-text-gold">
+              {formatNumber(displayNovi, "compact")}
             </span>
-            <span className="text-[9px] text-zinc-500">CAPACITY</span>
+            <span className="mt-1 font-mono text-[10px] tabular-nums text-zinc-500">
+              / {formatNumber(maxCap, "compact")}
+            </span>
           </div>
         </div>
 
-        {/* Numbers */}
-        <div className="flex flex-col gap-1 items-center text-center @sm:items-start @sm:text-left">
-          {/* Main NOVI count */}
-          <div ref={numberRef} className="relative">
-            <div className="font-mono text-[clamp(1.5rem,8cqw,2.25rem)] font-bold leading-tight tabular-nums text-text-primary">
-              {displayNovi.toLocaleString()}
-            </div>
-            <div className="text-[10px] text-zinc-500">
-              / {maxCap.toLocaleString()} cap
-            </div>
-          </div>
-
-          {/* Pending claim */}
-          {pendingNovi > 0 && (
+        {pendingNovi > 0 && (
+          <div
+            ref={numberRef}
+            className="flex flex-col gap-2 items-center text-center @sm:items-start @sm:text-left"
+          >
             <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
               <span
                 ref={pendingRef}
-                className="font-mono text-lg font-bold tabular-nums text-emerald-400"
+                className="font-mono text-2xl font-bold leading-none tabular-nums text-text-gold"
+                style={{ willChange: "transform, opacity" }}
               >
-                +{pendingNovi.toLocaleString()}
+                +{formatNumber(pendingNovi, "compact")}
               </span>
-              <span className="text-xs text-emerald-600">claimable</span>
+              <span className="text-xs text-amber-700">claimable</span>
             </div>
-          )}
-
-          {isFull && (
-            <div className="flex items-center gap-1.5 text-text-gold">
-              <span className="text-xs font-bold uppercase tracking-wider animate-pulse">
-                Generator Full
-              </span>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Stats Row */}
       <div className="mt-5 grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-zinc-500">Rate</div>
@@ -336,7 +374,6 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
       </div>
 
-      {/* Claim Button */}
       <div className="mt-5 flex justify-center">
         {pendingNovi > 0 ? (
           <TxButton

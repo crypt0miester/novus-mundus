@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { animate, stagger } from "animejs";
+import { BootRing } from "./BootRing";
 
 interface LoadingStep {
   label: string;
@@ -31,7 +32,20 @@ export function LoadingSequence({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const allDone = steps.every((s) => completedKeys.has(s.key));
+  const dataDone = steps.every((s) => completedKeys.has(s.key));
+
+  // Hold the boot scene for a minimum interval even when queries resolve
+  // instantly from cache — without this, `LoadingSequence` unmounts inside
+  // the same React commit and `BootRing`'s Three.js renderer never gets a
+  // frame to paint. The ritual reads as a flash of nothing; the ring is
+  // wasted. 900ms is short enough to not annoy on warm caches, long enough
+  // for the rings to draw two full breathing cycles.
+  const [minHeld, setMinHeld] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setMinHeld(true), 900);
+    return () => clearTimeout(id);
+  }, []);
+  const allDone = dataDone && minHeld;
 
   // Stagger step entrances
   useEffect(() => {
@@ -80,12 +94,13 @@ export function LoadingSequence({
   return (
     <div
       ref={containerRef}
-      className="flex min-h-[60vh] flex-col items-center justify-center gap-6"
+      className="relative flex min-h-[60vh] flex-col items-center justify-center gap-6"
     >
-      <h2 className="tier-title font-display text-2xl font-semibold tracking-wide">
+      <BootRing />
+      <h2 className="tier-title font-display relative z-10 text-2xl font-semibold tracking-wide">
         NOVUS MUNDUS
       </h2>
-      <div className="flex w-80 flex-col gap-3">
+      <div className="relative z-10 flex w-80 flex-col gap-3">
         {steps.map((step, i) => {
           const done = completedKeys.has(step.key);
           return (

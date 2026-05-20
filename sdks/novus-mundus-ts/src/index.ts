@@ -16,6 +16,7 @@ export * from './types/common';
 
 // Utility exports
 export * from './utils/deserialize';
+export * from './utils/ability';
 
 // State account exports
 export * from './state/game-engine';

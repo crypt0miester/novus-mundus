@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { DailyActivityPanel } from "./DailyActivityPanel";
@@ -61,7 +62,7 @@ export function DailyActivityListPanel() {
                 </span>
               )}
               {g.complete && (
-                <span className="text-[10px] font-normal normal-case text-emerald-400">
+                <span className="text-[10px] font-normal normal-case text-text-gold">
                   ✦ complete
                 </span>
               )}
@@ -109,7 +110,7 @@ function ActivityRow({
         available
           ? "border-amber-700/50 bg-amber-900/10 hover:border-amber-600 hover:bg-amber-900/20"
           : status === "done"
-            ? "border-emerald-800/40 bg-emerald-900/10"
+            ? "border-amber-900/30 bg-amber-950/20"
             : "border-border-default opacity-70"
       }`}
     >
@@ -124,7 +125,7 @@ function ActivityRow({
           available
             ? "text-text-gold"
             : status === "done"
-              ? "text-emerald-400"
+              ? "text-amber-600"
               : "text-text-muted"
         }`}
       >
@@ -152,24 +153,38 @@ function ActivityModal({
   building: number;
   onClose: () => void;
 }) {
-  return (
+  // Mount guard so SSR renders nothing — createPortal needs document.body.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) return null;
+
+  // Portal to document.body so the modal escapes the BottomSheet's CSS
+  // transform — `position: fixed` is broken by any transformed ancestor, so
+  // without the portal the modal positions relative to the sheet, not the
+  // viewport, and ends up off-screen on mobile.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] animate-in fade-in duration-200 sm:px-4 sm:pt-4 md:pb-4"
       onClick={onClose}
     >
       <div
-        className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border-gold bg-surface-raised p-5 shadow-2xl"
+        className="relative flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border-gold bg-surface-raised shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 text-text-muted transition-colors hover:text-text-primary"
+          className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-surface-raised/80 text-text-muted backdrop-blur transition-colors hover:text-text-primary"
         >
           ✕
         </button>
-        <DailyActivityPanel building={building} onClose={onClose} />
+        <div className="overflow-y-auto overscroll-contain p-4 sm:p-5">
+          <DailyActivityPanel building={building} onClose={onClose} />
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

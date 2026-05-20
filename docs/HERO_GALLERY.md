@@ -1,5 +1,13 @@
 # Hero Gallery
 
+> **STALE — illustrative only.** The on-chain roster lives in
+> `sdks/novus-mundus-ts/cli/data/heroes.ts`. Two consts:
+> - `HERO_TEMPLATES` — active roster (46 heroes), seeded by `cli/lib/phases/heroes.ts`
+> - `RESERVE_HEROES` — designed but not seeded (36 heroes), activate by moving entries
+>
+> When buff math, city ids, or tier costs change, edit the `.ts` file.
+> Narrative framing for historical-name heroes lives in `WORLD_LORE.md` §XII (Champions of Aeondral).
+
 Complete reference for all heroes in Novus Mundus, including buff configurations, tiers, and template data for easy creation.
 
 ---

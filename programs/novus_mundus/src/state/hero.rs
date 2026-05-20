@@ -5,6 +5,59 @@ use pinocchio::{
 use crate::constants::HERO_TEMPLATE_SEED;
 use crate::logic::safe_math::exp_growth;
 
+/// Active ability kind. 0 = no ability. Player triggers via use_ability ix.
+///
+/// Kinds 1-4 set a pending one-shot effect that combat sites consume.
+/// Kinds 5-6 take effect immediately (credit player balance), no pending state.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum AbilityKind {
+    None = 0,
+    BuffNext = 1,         // next combat action: +param1 bps to stat
+    CritNext = 2,         // next outgoing attack: auto-crit
+    ShieldNext = 3,       // next incoming defense: ×2
+    EncounterSkip = 4,    // next encounter: auto-success
+    InstantResource = 5,  // immediate: cash_on_hand += param1
+    FragmentRefund = 6,   // immediate: fragments += param1
+}
+
+impl AbilityKind {
+    #[inline]
+    pub const fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::BuffNext,
+            2 => Self::CritNext,
+            3 => Self::ShieldNext,
+            4 => Self::EncounterSkip,
+            5 => Self::InstantResource,
+            6 => Self::FragmentRefund,
+            _ => Self::None,
+        }
+    }
+
+    #[inline]
+    pub const fn is_valid(v: u8) -> bool {
+        v <= 6
+    }
+
+    /// True when this kind sets a pending one-shot effect (consumed at combat).
+    /// False for instant kinds that take effect inline in use_ability.
+    #[inline]
+    pub const fn is_pending_one_shot(self) -> bool {
+        matches!(
+            self,
+            Self::BuffNext | Self::CritNext | Self::ShieldNext | Self::EncounterSkip,
+        )
+    }
+}
+
+/// Pending one-shot effect discriminants — match AbilityKind variants.
+/// Combat sites compare against these when consuming.
+pub const PENDING_BUFF_NEXT: u8 = 1;
+pub const PENDING_CRIT_NEXT: u8 = 2;
+pub const PENDING_SHIELD_NEXT: u8 = 3;
+pub const PENDING_ENCOUNTER_SKIP: u8 = 4;
+
 /// Hero type categories
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -146,6 +199,14 @@ pub struct HeroTemplate {
 
     pub bump: u8,
     pub _padding: [u8; 3],             // Reduced from 6 to 3 (added 2 bytes for city_id, 1 for alignment)
+
+    // ability_kind: see AbilityKind enum above; 0 = no ability.
+    pub ability_kind: u8,
+    pub ability_stat: u8,              // BuffStat for kind=1, else 0
+    pub ability_param1: u16,           // bps/amount depending on kind
+    pub ability_param2: u32,           // duration secs for kind=1, else 0
+    pub ability_cooldown_secs: u32,    // cooldown between uses (per slot)
+    pub _ability_padding: [u8; 4],     // alignment
 }
 
 impl HeroTemplate {

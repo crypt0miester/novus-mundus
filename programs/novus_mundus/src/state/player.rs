@@ -31,7 +31,7 @@ pub const RESEARCH_SIZE: usize  = 48;
 pub const INVENTORY_SIZE: usize = 144;
 pub const TEAM_SIZE: usize      = 112;
 pub const RALLY_SIZE: usize     = 80;
-pub const HEROES_SIZE: usize    = 168;
+pub const HEROES_SIZE: usize    = 208;
 pub const COSMETICS_SIZE: usize = 80;
 pub const COURT_SIZE: usize     = 48;
 
@@ -415,6 +415,23 @@ pub struct HeroesSection {
     // → 156
 
     pub _reserved: [u8; 4],
+    // → 160
+
+    // Active ability state. Player triggers via use_ability ix; combat
+    // sites consume the pending one-shot.
+    //
+    // Cooldown is mirrored from each hero's NFT "AbCD" attribute at lock
+    // time and written back at unlock, so unlock+relock cannot reset it.
+    pub ability_last_used_at: [i64; 3],      // 24 per-slot, cached from NFT
+    // → 184
+
+    // Single pending one-shot effect (set by use_ability, consumed at combat)
+    pub pending_effect_kind: u8,             // 1   AbilityKind discriminant (0 = none)
+    pub pending_effect_stat: u8,             // 1   BuffStat for BuffNext kind
+    pub pending_effect_param: u16,           // 2   bps for BuffNext kind
+    pub _pending_pad: [u8; 4],               // 4   align
+    pub pending_effect_expires_at: i64,      // 8   24h auto-expire so it doesn't sit forever
+    // → 200
 }
 
 impl HeroesSection {
@@ -438,6 +455,12 @@ impl HeroesSection {
             _pad_bonus: [0; 2],
             meditation_started_at: 0,
             _reserved: [0; 4],
+            ability_last_used_at: [0; 3],
+            pending_effect_kind: 0,
+            pending_effect_stat: 0,
+            pending_effect_param: 0,
+            _pending_pad: [0; 4],
+            pending_effect_expires_at: 0,
         }
     }
 
@@ -880,6 +903,46 @@ impl PlayerCore {
     #[inline] pub fn set_hero_unit_capacity_bps(&mut self, v: u16) { if let Some(h) = self.heroes_mut() { h.hero_unit_capacity_bps = v; } }
     #[inline] pub fn blessed_hero_bonus_bps(&self) -> u16          { self.heroes().map_or(0, |h| h.blessed_hero_bonus_bps) }
     #[inline] pub fn set_blessed_hero_bonus_bps(&mut self, v: u16) { if let Some(h) = self.heroes_mut() { h.blessed_hero_bonus_bps = v; } }
+
+    // ABILITY FIELDS
+
+    #[inline] pub fn ability_last_used_at(&self, slot: usize) -> i64 {
+        self.heroes().map_or(0, |h| h.ability_last_used_at[slot])
+    }
+    #[inline] pub fn set_ability_last_used_at(&mut self, slot: usize, v: i64) {
+        if let Some(h) = self.heroes_mut() { h.ability_last_used_at[slot] = v; }
+    }
+
+    #[inline] pub fn pending_effect_kind(&self) -> u8        { self.heroes().map_or(0, |h| h.pending_effect_kind) }
+    #[inline] pub fn pending_effect_stat(&self) -> u8        { self.heroes().map_or(0, |h| h.pending_effect_stat) }
+    #[inline] pub fn pending_effect_param(&self) -> u16      { self.heroes().map_or(0, |h| h.pending_effect_param) }
+    #[inline] pub fn pending_effect_expires_at(&self) -> i64 { self.heroes().map_or(0, |h| h.pending_effect_expires_at) }
+    #[inline] pub fn set_pending_effect(&mut self, kind: u8, stat: u8, param: u16, expires_at: i64) {
+        if let Some(h) = self.heroes_mut() {
+            h.pending_effect_kind = kind;
+            h.pending_effect_stat = stat;
+            h.pending_effect_param = param;
+            h.pending_effect_expires_at = expires_at;
+        }
+    }
+    #[inline] pub fn clear_pending_effect(&mut self) {
+        if let Some(h) = self.heroes_mut() {
+            h.pending_effect_kind = 0;
+            h.pending_effect_stat = 0;
+            h.pending_effect_param = 0;
+            h.pending_effect_expires_at = 0;
+        }
+    }
+
+    /// Returns the pending one-shot effect kind if not expired, else 0.
+    /// Caller is responsible for clearing via clear_pending_effect after consuming.
+    #[inline]
+    pub fn live_pending_effect(&self, now: i64) -> u8 {
+        let kind = self.pending_effect_kind();
+        if kind == 0 { return 0; }
+        if self.pending_effect_expires_at() <= now { return 0; }
+        kind
+    }
 
     // TEAM + REINFORCEMENT FIELDS
     #[inline] pub fn team_address(&self) -> Address                { self.team_section().map_or(NULL_PUBKEY, |t| t.team) }

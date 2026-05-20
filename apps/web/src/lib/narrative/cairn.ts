@@ -99,6 +99,8 @@ const MEDIEVAL: CairnContent = {
       "Stake by stake, stone by stone, the climb has its answer. A crown. A seat. A court of your own people around it. The place is yours — and the realm will have to come and take it to learn otherwise.",
     everyReturn:
       "You are back. The holding kept turning while you were gone.",
+    level1Stall:
+      "You grow by walking the road, and by the fight, and by what is hauled out of the dark. Not by raising walls.",
   },
 };
 
