@@ -12,6 +12,7 @@ import { GoldNumber } from "@/components/shared/GoldNumber";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
+import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES, useFeatureGate } from "@/lib/hooks/useFeatureGate";
 import { buildingFraming } from "@/lib/narrative";
 import {
@@ -137,16 +138,14 @@ export function BarracksTab() {
               <span className="text-zinc-500">Your NOVI</span>
               <span className="font-mono tabular-nums text-text-gold">{noviBalance.toLocaleString()}</span>
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-text-muted">NOVI to spend</label>
-              <input
-                type="number"
-                value={hireNoviAmount}
-                onChange={(e) => setHireNoviAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary tabular-nums"
-                min={1}
-              />
-            </div>
+            <NumberField
+              label="NOVI to spend"
+              value={hireNoviAmount}
+              onChange={setHireNoviAmount}
+              min={1}
+              max={noviBalance}
+              suffix="NOVI"
+            />
             <div className="flex flex-col gap-2 sm:flex-row">
               <TxButton onClick={handleHire} className="flex-1" disabled={noviBalance < hireNoviAmount}>
                 {noviBalance >= hireNoviAmount ? `Hire ${selectedUnit.label}` : "Insufficient NOVI"}

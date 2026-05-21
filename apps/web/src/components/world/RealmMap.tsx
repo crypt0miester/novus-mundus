@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { GameIcon } from "@/components/shared/GameIcon";
 import {
   useWorldCities,
   useWorldPlayers,
@@ -12,6 +13,7 @@ import {
 import { convexHull, inflate, smoothClosedPath, type Pt } from "./util/hull";
 import { useZoomPan } from "./util/useZoomPan";
 import styles from "./RealmMap.module.css";
+import { getCityLore } from "@/lib/cityLore";
 
 export { styles as realmMapStyles };
 
@@ -46,14 +48,16 @@ export interface RealmMapSelectedContext {
   isHome: boolean;
 }
 
-/* City type → glyph + label. Index must match the on-chain CityType enum:
- * Capital=0, Resource=1, Combat=2, Trade=3. Colour is deliberately absent
- * — type is signalled by the glyph engraved beside each city's dot. */
+/* City type → glyph + label + icon. Index must match the on-chain CityType
+ * enum: Capital=0, Resource=1, Combat=2, Trade=3. Colour is deliberately
+ * absent — type is signalled by the glyph engraved beside each city's dot.
+ * `glyph` stays for the tiny in-SVG markers; `icon` is the engraved GameIcon
+ * used in the HTML legend and detail panels. */
 const TYPE_META = [
-  { label: "Capital", glyph: "♛" },
-  { label: "Resource", glyph: "⛏" },
-  { label: "Combat", glyph: "⚔" },
-  { label: "Trade", glyph: "◆" },
+  { label: "Capital", glyph: "♛", icon: "map-capital" },
+  { label: "Resource", glyph: "⛏", icon: "map-resource" },
+  { label: "Combat", glyph: "⚔", icon: "map-combat" },
+  { label: "Trade", glyph: "◆", icon: "map-trade" },
 ] as const;
 
 const THEMES = ["Medieval", "Cyberpunk", "Sci-Fi", "Modern", "Post-Apocalyptic"];
@@ -502,16 +506,25 @@ export function DefaultSelectedPanel({
 }: RealmMapSelectedContext) {
   const c = node.city;
   const meta = TYPE_META[typeIdx(c.cityType)];
+  const lore = getCityLore(c.cityId);
   return (
     <>
       <div className={styles.detailName}>{c.name}</div>
       <span className={`${styles.detailType} ${isHome ? styles.home : ""}`}>
-        <span className={styles.glyph}>{meta.glyph}</span>
+        <GameIcon id={meta.icon} title={meta.label} size={15} />
         {meta.label}
         {isHome ? " — your seat" : ""}
       </span>
 
+      {lore && <p className={styles.hint}>{lore.lore}</p>}
+
       <dl className={styles.lineMeta}>
+        {lore && (
+          <>
+            <dt>Region</dt>
+            <dd>{lore.region}</dd>
+          </>
+        )}
         <dt>People present</dt>
         <dd className={styles.numeral}>{c.playersPresent.toLocaleString()}</dd>
         <dt>Wilds about it</dt>
@@ -546,7 +559,7 @@ export function DefaultRealmPanel({
     <>
       {TYPE_META.map((m, i) => (
         <div className={styles.legendRow} key={m.label}>
-          <span className={styles.legendGlyph}>{m.glyph}</span>
+          <GameIcon id={m.icon} title={m.label} size={16} />
           <span>{m.label}</span>
           <span className={styles.legendCount}>{typeCounts[i]}</span>
         </div>

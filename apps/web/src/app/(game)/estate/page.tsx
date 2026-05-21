@@ -64,11 +64,6 @@ function EstateContent() {
     };
   }, [player, now]);
 
-  const travelWarning = useMemo(() => {
-    if (!player) return null;
-    return isTraveling(player) ? "Cannot build while traveling" : null;
-  }, [player]);
-
   // Building counts
   const activeCount = estate?.buildings?.filter(
     (b: BuildingSlot) =>
@@ -109,8 +104,11 @@ function EstateContent() {
   }, [arrivalState, playerReady, estateReady, playerData, estateData]);
 
   if (arrivalState === "pending") {
+    // Full-screen cover (matches the Arrival container) so the game shell —
+    // TopBar, sidebars, tab bar — never flashes before we know whether this
+    // is a returning estate or a first-time Arrival.
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="fixed inset-0 z-9000 flex items-center justify-center bg-surface">
         <div className="h-56 w-56">
           <MagicRings color="#92400e" colorTwo="#fbbf24" />
         </div>
@@ -144,12 +142,6 @@ function EstateContent() {
   return (
     <PageTransition>
       <div className="flex h-full flex-col gap-3">
-        {travelWarning && (
-          <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-sm text-amber-300">
-            {travelWarning}
-          </div>
-        )}
-
         {/* No holding yet — the ground is unclaimed */}
         {!estateData?.exists && estateReady && (
           <div className="card accent-border text-center">

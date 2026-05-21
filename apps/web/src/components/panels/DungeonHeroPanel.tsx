@@ -1,6 +1,7 @@
 "use client";
 
 import { getBuffStatByAttrKey } from "novus-mundus-sdk";
+import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
 import { useUnlockedHeroes } from "@/lib/hooks/useUnlockedHeroes";
 import { useDungeonHeroStore } from "@/lib/store/dungeon-hero";
 import { useRightPanelStore } from "@/lib/store/right-panel";
@@ -65,14 +66,23 @@ export function DungeonHeroPanel() {
             </div>
             {buffs.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {buffs.map(([k, v]) => (
-                  <span
-                    key={k}
-                    className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted"
-                  >
-                    {getBuffStatByAttrKey(k)?.abbr ?? k} {v}
-                  </span>
-                ))}
+                {buffs.map(([k, v]) => {
+                  const meta = getBuffStatByAttrKey(k);
+                  const icon = meta ? buffStatIcon(meta.stat) : undefined;
+                  return (
+                    <span
+                      key={k}
+                      className="flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] text-text-muted"
+                    >
+                      {icon ? (
+                        <GameIcon id={icon} title={meta?.name} size={15} />
+                      ) : (
+                        <>{meta?.abbr ?? k}</>
+                      )}
+                      <span className="font-mono">{v}</span>
+                    </span>
+                  );
+                })}
               </div>
             )}
           </button>

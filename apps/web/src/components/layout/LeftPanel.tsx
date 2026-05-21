@@ -1,41 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useStamina } from "@/lib/hooks/useStamina";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { getTierInfo, getCachedTier } from "@/lib/hooks/useTierTheme";
 import { useDomainName } from "@/lib/hooks/useDomainName";
-import { formatNumber } from "@/lib/utils";
+import { useNoviGenerator } from "@/lib/hooks/useNoviGenerator";
+import { cn, formatNumber } from "@/lib/utils";
+import { useSheetStore } from "@/lib/store/sheet";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { CairnReport } from "@/components/cairn/CairnReport";
-import {
-  createUpdateLockedNoviInstruction,
-  getEffectiveTier,
-  findBuilding,
-  type SubscriptionTierConfig,
-} from "novus-mundus-sdk";
-
-const INTERVAL_SECONDS = 300;
+import { createUpdateLockedNoviInstruction } from "novus-mundus-sdk";
 
 /** Desktop left sidebar — vertical card stack with player data + resources. */
 export function LeftPanel() {
   const { publicKey } = useWallet();
   const { data: playerData } = usePlayer();
-  const { data: geData } = useGameEngine();
   const { data: estateData } = useEstate();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const player = playerData?.account;
-  const ge = geData?.account;
   const estate = estateData?.account;
 
   const stamina = useStamina(player);
@@ -53,42 +46,8 @@ export function LeftPanel() {
     : getCachedTier();
   const tierInfo = getTierInfo(tier);
 
-  // ── Mini NOVI generator state ──
-  const [pendingNovi, setPendingNovi] = useState(0);
-
-  const getTierConfig = useCallback((): SubscriptionTierConfig | null => {
-    if (!ge || !player) return null;
-    const now = Math.floor(Date.now() / 1000);
-    const t = getEffectiveTier(player, now);
-    return ge.subscriptionTiers[t] ?? null;
-  }, [ge, player]);
-
-  useEffect(() => {
-    if (!player || !ge) return;
-
-    const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const tierConfig = getTierConfig();
-      if (!tierConfig) return;
-
-      const lastUpdated = player.lastUpdatedTokensAt.toNumber();
-      const elapsed = Math.max(0, now - lastUpdated);
-      const intervals = Math.floor(elapsed / INTERVAL_SECONDS);
-      const genRate = tierConfig.generationMultiplier.toNumber();
-      const maxCap = tierConfig.maxLockedNovi.toNumber();
-      const currentLocked = player.lockedNovi.toNumber();
-
-      const pending =
-        currentLocked >= maxCap
-          ? 0
-          : Math.min(intervals * genRate, maxCap - currentLocked);
-      setPendingNovi(Math.max(0, pending));
-    };
-
-    tick();
-    const id = setInterval(tick, 5000);
-    return () => clearInterval(id);
-  }, [player, ge, getTierConfig]);
+  // NOVI accrual ticker — shared with the status bar and mobile sidebar.
+  const { pendingNovi } = useNoviGenerator();
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -139,7 +98,10 @@ export function LeftPanel() {
       {/* Stamina */}
       <div className="rounded-lg border border-border-default bg-surface-raised p-3">
         <div className="mb-1 flex items-center justify-between text-xs">
-          <span className="text-text-muted">Stamina</span>
+          <span className="flex items-center gap-1.5 text-text-muted">
+            <GameIcon id="resource-stamina" size={14} />
+            Stamina
+          </span>
           <span className="font-mono tabular-nums text-text-secondary">
             {stamina.current}/{stamina.max}
           </span>
@@ -156,7 +118,10 @@ export function LeftPanel() {
       {/* NOVI + Claim */}
       <div className="rounded-lg border border-border-default bg-surface-raised p-3">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-text-muted">NOVI</span>
+          <span className="flex items-center gap-1.5 text-text-muted">
+            <GameIcon id="resource-novi" size={14} />
+            NOVI
+          </span>
           <GoldNumber
             value={player.lockedNovi.toNumber()}
             size="sm"
@@ -181,7 +146,10 @@ export function LeftPanel() {
       {/* Cash + Gems */}
       <div className="rounded-lg border border-border-default bg-surface-raised p-3 space-y-1.5">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-text-muted">Cash</span>
+          <span className="flex items-center gap-1.5 text-text-muted">
+            <GameIcon id="resource-cash" size={14} />
+            Cash
+          </span>
           <GoldNumber
             value={player.cashOnHand.toNumber()}
             size="sm"
@@ -189,7 +157,10 @@ export function LeftPanel() {
           />
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="text-text-muted">Gems</span>
+          <span className="flex items-center gap-1.5 text-text-muted">
+            <GameIcon id="resource-gem" size={14} />
+            Gems
+          </span>
           <GoldNumber
             value={player.gems.toNumber()}
             size="sm"
@@ -234,11 +205,9 @@ export function LeftPanel() {
 export function LeftPanelMobile() {
   const { publicKey } = useWallet();
   const { data: playerData } = usePlayer();
-  const { data: geData } = useGameEngine();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const player = playerData?.account;
-  const ge = geData?.account;
 
   const stamina = useStamina(player);
 
@@ -257,42 +226,21 @@ export function LeftPanelMobile() {
 
   const [expanded, setExpanded] = useState(false);
 
-  // ── NOVI generator ──
-  const [pendingNovi, setPendingNovi] = useState(0);
+  // A bottom sheet drops a full-screen backdrop; lift this bar above it for as
+  // long as the sheet is painted so it never flashes dark behind the overlay.
+  const sheetMounted = useSheetStore((s) => s.mounted > 0);
 
-  const getTierConfig = useCallback((): SubscriptionTierConfig | null => {
-    if (!ge || !player) return null;
-    const now = Math.floor(Date.now() / 1000);
-    const t = getEffectiveTier(player, now);
-    return ge.subscriptionTiers[t] ?? null;
-  }, [ge, player]);
-
+  // Open intent drops the instant a sheet is dismissed (before its close
+  // animation): drop the full data panel down while a detail sheet is open —
+  // the player is mid-decision and wants resources in view — and collapse it
+  // the moment the sheet closes, with no lingering delay.
+  const sheetOpen = useSheetStore((s) => s.open > 0);
   useEffect(() => {
-    if (!player || !ge) return;
+    setExpanded(sheetOpen);
+  }, [sheetOpen]);
 
-    const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const tierConfig = getTierConfig();
-      if (!tierConfig) return;
-
-      const lastUpdated = player.lastUpdatedTokensAt.toNumber();
-      const elapsed = Math.max(0, now - lastUpdated);
-      const intervals = Math.floor(elapsed / INTERVAL_SECONDS);
-      const genRate = tierConfig.generationMultiplier.toNumber();
-      const maxCap = tierConfig.maxLockedNovi.toNumber();
-      const currentLocked = player.lockedNovi.toNumber();
-
-      const pending =
-        currentLocked >= maxCap
-          ? 0
-          : Math.min(intervals * genRate, maxCap - currentLocked);
-      setPendingNovi(Math.max(0, pending));
-    };
-
-    tick();
-    const id = setInterval(tick, 5000);
-    return () => clearInterval(id);
-  }, [player, ge, getTierConfig]);
+  // NOVI accrual ticker — shared via useNoviGenerator (see LeftPanel above).
+  const { pendingNovi } = useNoviGenerator();
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -314,7 +262,12 @@ export function LeftPanelMobile() {
   if (!player) return null;
 
   return (
-    <div className="border-b border-border-default bg-[var(--nm-bg-bar)]">
+    <div
+      className={cn(
+        "border-b border-border-default bg-[var(--nm-bg-bar)]",
+        sheetMounted && "relative z-[55]",
+      )}
+    >
       <div className="flex h-10 w-full items-center gap-2 px-4 text-xs">
         <button
           onClick={() => setExpanded(!expanded)}
@@ -361,7 +314,10 @@ export function LeftPanelMobile() {
           {/* Resources row */}
           <div className="grid grid-cols-4 gap-3 text-xs">
             <div>
-              <div className="text-text-muted">NOVI</div>
+              <div className="flex items-center gap-1 text-text-muted">
+                <GameIcon id="resource-novi" size={12} />
+                NOVI
+              </div>
               <GoldNumber
                 value={player.lockedNovi.toNumber()}
                 size="sm"
@@ -369,7 +325,10 @@ export function LeftPanelMobile() {
               />
             </div>
             <div>
-              <div className="text-text-muted">Cash</div>
+              <div className="flex items-center gap-1 text-text-muted">
+                <GameIcon id="resource-cash" size={12} />
+                Cash
+              </div>
               <GoldNumber
                 value={player.cashOnHand.toNumber()}
                 size="sm"
@@ -377,7 +336,10 @@ export function LeftPanelMobile() {
               />
             </div>
             <div>
-              <div className="text-text-muted">Gems</div>
+              <div className="flex items-center gap-1 text-text-muted">
+                <GameIcon id="resource-gem" size={12} />
+                Gems
+              </div>
               <GoldNumber
                 value={player.gems.toNumber()}
                 size="sm"
@@ -385,7 +347,10 @@ export function LeftPanelMobile() {
               />
             </div>
             <div>
-              <div className="text-text-muted">Stamina</div>
+              <div className="flex items-center gap-1 text-text-muted">
+                <GameIcon id="resource-stamina" size={12} />
+                Stamina
+              </div>
               <div className="font-mono tabular-nums text-text-secondary">
                 {stamina.current}/{stamina.max}
               </div>

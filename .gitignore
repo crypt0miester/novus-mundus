@@ -24,3 +24,7 @@ apps/web/playwright-report/
 apps/web/blob-report/
 apps/web/.last-run.json
 .env.*
+
+# Icon source generations — 1024px Krea raws. Re-export from these via
+# images/scripts/export-icons-to-app.sh; never shipped to the client.
+images/icons/raw/

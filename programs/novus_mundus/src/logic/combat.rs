@@ -284,8 +284,8 @@ pub fn update_happiness_operative(
         return 0.0;
     }
 
-    let food_coeff = (produce / sum_of_units) as f64;
-    f32::min(1.0, libm::round(food_coeff) as f32)
+    // Happy (1.0) when there's at least one produce per unit, else 0.0.
+    if produce >= sum_of_units { 1.0 } else { 0.0 }
 }
 
 /// Consume produce based on unit count

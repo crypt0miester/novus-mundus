@@ -10,6 +10,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
 import { GoldNumber } from "./GoldNumber";
+import { GameIcon } from "./GameIcon";
+import { NumberField } from "./NumberField";
 import {
   createReservedToLockedInstruction,
   createWithdrawReservedInstruction,
@@ -34,8 +36,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // State
-  const [convertAmount, setConvertAmount] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [convertAmount, setConvertAmount] = useState(0);
+  const [withdrawAmount, setWithdrawAmount] = useState(0);
   const [activeTab, setActiveTab] = useState<"convert" | "withdraw">("convert");
   const [vestingRemaining, setVestingRemaining] = useState(0);
 
@@ -61,7 +63,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
   const handleConvert = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const amount = parseInt(convertAmount);
+    const amount = convertAmount;
     if (!amount || amount <= 0) throw new Error("Invalid amount");
 
     const geKey = client.gameEngine;
@@ -77,14 +79,14 @@ export function NoviRewards({ className }: NoviRewardsProps) {
         onPhase: reportPhase,
       })
       .then((r) => {
-        setConvertAmount("");
+        setConvertAmount(0);
         return r.signature;
       });
   };
 
   const handleWithdraw = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const amount = parseInt(withdrawAmount);
+    const amount = withdrawAmount;
     if (!amount || amount <= 0) throw new Error("Invalid amount");
 
     const geKey = client.gameEngine;
@@ -100,7 +102,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
         onPhase: reportPhase,
       })
       .then((r) => {
-        setWithdrawAmount("");
+        setWithdrawAmount(0);
         return r.signature;
       });
   };
@@ -114,8 +116,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
   const isVested = vestingRemaining === 0 && reservedBalance > 0;
   const hasReserved = reservedBalance > 0;
 
-  const convertNum = parseInt(convertAmount) || 0;
-  const withdrawNum = parseInt(withdrawAmount) || 0;
+  const convertNum = convertAmount;
+  const withdrawNum = withdrawAmount;
 
   // Vesting progress (0-100)
   const vestingPct =
@@ -159,11 +161,11 @@ export function NoviRewards({ className }: NoviRewardsProps) {
           <div className="text-[10px] uppercase tracking-wider text-zinc-500">
             Reserved NOVI
           </div>
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-1.5">
+            <GameIcon id="resource-novi" title="NOVI" size={22} />
             <GoldNumber
               value={reservedBalance}
               size="lg"
-              prefix="◆ "
               format="full"
               className="text-text-gold"
             />
@@ -246,7 +248,12 @@ export function NoviRewards({ className }: NoviRewardsProps) {
             <div className="space-y-3">
               <div className="rounded-lg border border-amber-900/30 bg-amber-950/10 px-4 py-3">
                 <div className="flex items-start gap-2">
-                  <span className="mt-0.5 text-text-gold">◆</span>
+                  <GameIcon
+                    id="resource-novi"
+                    title="NOVI"
+                    size={14}
+                    className="mt-0.5"
+                  />
                   <div className="text-xs text-zinc-400">
                     Convert reserved NOVI into{" "}
                     <span className="font-semibold text-text-gold">
@@ -259,24 +266,15 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    value={convertAmount}
-                    onChange={(e) => setConvertAmount(e.target.value)}
-                    placeholder="Amount"
-                    min={1}
-                    max={reservedBalance}
-                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2.5 pr-16 font-mono text-sm text-text-primary placeholder:text-zinc-600"
-                  />
-                  <button
-                    onClick={() => setConvertAmount(String(reservedBalance))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-[10px] font-bold text-text-gold hover:bg-amber-900/20"
-                  >
-                    MAX
-                  </button>
-                </div>
+              <div className="flex items-end gap-3">
+                <NumberField
+                  className="flex-1"
+                  value={convertAmount}
+                  onChange={setConvertAmount}
+                  min={1}
+                  max={reservedBalance}
+                  suffix="NOVI"
+                />
                 <TxButton
                   onClick={handleConvert}
                   disabled={convertNum <= 0 || convertNum > reservedBalance}
@@ -337,26 +335,15 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
-                  <div className="relative flex-1">
-                    <input
-                      type="number"
-                      value={withdrawAmount}
-                      onChange={(e) => setWithdrawAmount(e.target.value)}
-                      placeholder="Amount"
-                      min={1}
-                      max={reservedBalance}
-                      className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2.5 pr-16 font-mono text-sm text-text-primary placeholder:text-zinc-600"
-                    />
-                    <button
-                      onClick={() =>
-                        setWithdrawAmount(String(reservedBalance))
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-[10px] font-bold text-text-gold hover:bg-amber-900/20"
-                    >
-                      MAX
-                    </button>
-                  </div>
+                <div className="flex items-end gap-3">
+                  <NumberField
+                    className="flex-1"
+                    value={withdrawAmount}
+                    onChange={setWithdrawAmount}
+                    min={1}
+                    max={reservedBalance}
+                    suffix="NOVI"
+                  />
                   <TxButton
                     onClick={handleWithdraw}
                     disabled={

@@ -1,0 +1,339 @@
+"use client";
+
+import Link from "next/link";
+import { useWallet } from "@solana/wallet-adapter-react";
+import type { TransactionInstruction } from "@solana/web3.js";
+import {
+  deriveLocationPda,
+  toGrid,
+  calculateDistanceMeters,
+  createIntracityStartInstruction,
+  createIntracityCompleteInstruction,
+  createIntracityCancelInstruction,
+  createTravelSpeedupInstruction,
+  isTraveling,
+  hasArrived,
+  TravelType,
+} from "novus-mundus-sdk";
+import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useNow } from "@/lib/hooks/useNow";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import { useTransact } from "@/lib/hooks/useTransact";
+import type { PanelAction } from "@/lib/store/right-panel";
+import { useNovusMundusClient } from "@/lib/solana/provider";
+import { TxButton } from "@/components/shared/TxButton";
+import type { TxPhase } from "@/components/shared/TxButton";
+import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { ProximityGrid } from "@/components/shared/ProximityGrid";
+import styles from "./TargetTravel.module.css";
+
+/**
+ * Shared travel block for the encounter / PvP target detail panels. Holds the
+ * derived travel state, the intracity start/complete/cancel + speedup handlers,
+ * and renders the out-of-range ProximityGrid plus the in-transit controls. The
+ * two panels differ only in the target's coordinates and the attack range, so
+ * those are passed in; everything else here is identical between them.
+ */
+export function TargetTravel({
+  targetLat,
+  targetLong,
+  range,
+  inRange,
+  proximityDisabled = false,
+  onArriveAttack,
+}: {
+  targetLat: number;
+  targetLong: number;
+  range: number;
+  /** When already in range, the proximity grid is hidden. */
+  inRange: boolean;
+  proximityDisabled?: boolean;
+  /**
+   * Submits the host panel's attack with the passed instructions prepended,
+   * as one transaction. When the player arrives intracity within strike
+   * range, the travel block fires this with an `intracity_complete` prepended
+   * so settling + attacking land together. Omit it to keep arrival as a plain
+   * "Complete Travel" (e.g. when the panel can't attack — no stamina, level
+   * gap).
+   */
+  onArriveAttack?: (
+    reportPhase: (p: TxPhase) => void,
+    prepend: TransactionInstruction[],
+  ) => Promise<string>;
+}) {
+  const { publicKey } = useWallet();
+  const client = useNovusMundusClient();
+  const transact = useTransact();
+  const { data: playerData } = usePlayer();
+  const player = playerData?.account;
+  const { data: geData } = useGameEngine();
+
+  const playerTraveling = player ? isTraveling(player) : false;
+  // Ticks each second while traveling so arrival registers on its own.
+  const now = useNow(playerTraveling);
+  const isIntracity = player?.travelType === TravelType.Intracity;
+  const playerArrived = player ? hasArrived(player, now) : false;
+  const travelRemaining =
+    player && playerTraveling && !playerArrived
+      ? Math.max(0, player.arrivalTime.toNumber() - now)
+      : 0;
+
+  // ── Handlers ──
+
+  const handleTravelCloser = async (
+    destLat: number,
+    destLong: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey || !player) throw new Error("Not ready");
+    const ge = client.gameEngine;
+    const cityId = player.currentCity;
+    const [originLocation] = deriveLocationPda(
+      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
+    );
+    const [destinationLocation] = deriveLocationPda(
+      ge, cityId, toGrid(destLat), toGrid(destLong),
+    );
+    const originCreatorRefund = geData?.account?.authority ?? publicKey;
+    const ix = createIntracityStartInstruction(
+      { owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, originCreatorRefund },
+      { destinationLat: destLat, destinationLong: destLong },
+    );
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Traveling closer to target!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  const buildCompleteIx = () => {
+    if (!publicKey || !player) throw new Error("Not ready");
+    const ge = client.gameEngine;
+    const cityId = player.currentCity;
+    const [destinationLocation] = deriveLocationPda(
+      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+    );
+    return createIntracityCompleteInstruction({
+      owner: publicKey, gameEngine: ge, cityId, destinationLocation,
+    });
+  };
+
+  const handleIntracityComplete = async (reportPhase: (p: TxPhase) => void) => {
+    return transact
+      .mutateAsync({
+        instructions: [buildCompleteIx()],
+        invalidateKeys: [["player"]],
+        successMessage: "Arrived at destination!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  const handleIntracityCancel = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !player) throw new Error("Not ready");
+    const ge = client.gameEngine;
+    const cityId = player.currentCity;
+    const [originLocation] = deriveLocationPda(
+      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
+    );
+    const [destinationLocation] = deriveLocationPda(
+      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+    );
+    // The travel destination's `location_creator` is the player — intracity_start
+    // sets `dest_location.location_creator = owner`. intracity_cancel refunds the
+    // closed destination's rent to that creator and rejects any other recipient,
+    // so the refund must go to the player, not the game authority.
+    const destinationCreatorRefund = publicKey;
+    const ix = createIntracityCancelInstruction({
+      owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, destinationCreatorRefund,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Travel cancelled!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  const handleTravelSpeedup = async (
+    tier: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ix = createTravelSpeedupInstruction(
+      { owner: publicKey, gameEngine: client.gameEngine },
+      { speedupTier: tier as 1 | 2 },
+    );
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Travel sped up!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  // Whether the cell the player is walking toward sits within strike range —
+  // distinct from `inRange`, which reflects the player's *current* position
+  // (still the origin until intracity_complete settles them).
+  const destInRange =
+    !!player &&
+    playerTraveling &&
+    calculateDistanceMeters(
+      player.travelingToLat,
+      player.travelingToLong,
+      targetLat,
+      targetLong,
+    ) <= range;
+  // On arrival within range, fold the settle (intracity_complete) into the
+  // host panel's attack so both land in a single transaction.
+  const canArriveAttack =
+    playerArrived && isIntracity && destInRange && !!onArriveAttack;
+  const handleArriveAttack = (rp: (p: TxPhase) => void) =>
+    onArriveAttack!(rp, [buildCompleteIx()]);
+
+  // Surface the in-transit actions on the mobile morph bar. The SpeedupPanel
+  // tier cards are display-only on mobile, so without this the speed-ups are
+  // unreachable on a phone. Mutually exclusive with the host panel's attack
+  // actions: the panel registers `null` while traveling and this registers
+  // `null` while not, so only one morph slot is ever populated.
+  const remainingMinutes = Math.ceil(travelRemaining / 60);
+  const gemsPerMinute =
+    geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1;
+  const gemBalance = player?.gems?.toNumber?.();
+  const canAfford = (tier: number) =>
+    gemBalance == null ||
+    gemBalance >= remainingMinutes * gemsPerMinute * tier;
+
+  let travelActions: PanelAction[] | null = null;
+  if (playerTraveling && playerArrived) {
+    // Arrived within range → one-tap "Attack" (settles + strikes in one tx).
+    // Otherwise intracity still needs a tx to settle; intercity finishes on
+    // the map.
+    if (canArriveAttack) {
+      travelActions = [
+        {
+          id: "arrive-attack",
+          label: "Attack",
+          variant: "primary",
+          onClick: handleArriveAttack,
+        },
+      ];
+    } else if (isIntracity) {
+      travelActions = [
+        {
+          id: "complete-travel",
+          label: "Complete Travel",
+          variant: "primary",
+          onClick: handleIntracityComplete,
+        },
+      ];
+    }
+  } else if (playerTraveling) {
+    const acts: PanelAction[] = [
+      {
+        id: "hasten",
+        label: "Hasten",
+        variant: "primary",
+        disabled: !canAfford(1),
+        onClick: (rp) => handleTravelSpeedup(1, rp),
+      },
+      {
+        id: "rush",
+        label: "Rush",
+        disabled: !canAfford(2),
+        onClick: (rp) => handleTravelSpeedup(2, rp),
+      },
+    ];
+    // Only intracity travel can be cancelled mid-route.
+    if (isIntracity) {
+      acts.push({
+        id: "stop-travel",
+        label: "Cancel",
+        variant: "danger",
+        onClick: handleIntracityCancel,
+      });
+    }
+    travelActions = acts;
+  }
+  useMorphActions(travelActions);
+
+  if (!player) return null;
+
+  return (
+    <>
+      {!inRange && (
+        <ProximityGrid
+          targetLat={targetLat}
+          targetLong={targetLong}
+          playerLat={player.currentLat}
+          playerLong={player.currentLong}
+          cityId={player.currentCity}
+          attackRange={range}
+          onTravel={handleTravelCloser}
+          disabled={playerTraveling || proximityDisabled}
+        />
+      )}
+      {/* Travel controls — a parchment "map inset" so travel reads as the
+          cartographer's view, matching the world map. */}
+      {playerTraveling && (
+        <div className="space-y-3">
+          <div className={`${styles.inset} space-y-2`}>
+            <div className="flex items-center justify-between">
+              <span className={styles.label}>
+                {isIntracity ? "Traveling within city" : "Traveling between cities"}
+              </span>
+              {playerArrived ? (
+                <span className={styles.arrived}>Arrived</span>
+              ) : (
+                <GoldCountdown
+                  endsAt={player.arrivalTime.toNumber()}
+                  startedAt={player.departureTime.toNumber()}
+                  showProgress
+                  format="compact"
+                  size="sm"
+                />
+              )}
+            </div>
+            {isIntracity && playerArrived &&
+              (canArriveAttack ? (
+                <TxButton onClick={handleArriveAttack} className="w-full text-xs">
+                  Attack
+                </TxButton>
+              ) : (
+                <TxButton onClick={handleIntracityComplete} className="w-full text-xs">
+                  Complete Travel
+                </TxButton>
+              ))}
+            {isIntracity && !playerArrived && (
+              <TxButton onClick={handleIntracityCancel} variant="secondary" className="w-full text-xs">
+                Cancel Travel
+              </TxButton>
+            )}
+            {!isIntracity && (
+              <Link href="/map" className={styles.seal}>
+                Walk the road
+              </Link>
+            )}
+          </div>
+          <SpeedupPanel
+            visible={!playerArrived}
+            remainingSeconds={travelRemaining}
+            onSpeedup={handleTravelSpeedup}
+            gemsPerMinute={geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1}
+            gemBalance={player.gems?.toNumber?.()}
+            variant="parchment"
+          />
+        </div>
+      )}
+    </>
+  );
+}

@@ -9,6 +9,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useAccountStore } from "@/lib/store/accounts";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
@@ -138,14 +139,16 @@ export function InventoryPanel() {
                     </span>
                   </div>
                   <div className="mt-2 flex gap-4 text-xs">
-                    <span>
-                      <span className="text-text-muted">Cash </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-text-muted">Cash</span>
+                      <GameIcon id="resource-cash" size={14} />
                       <span className="text-text-gold">
-                        ${loot.account.cash.toNumber()}
+                        {loot.account.cash.toNumber()}
                       </span>
                     </span>
-                    <span>
-                      <span className="text-text-muted">Gems </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="text-text-muted">Gems</span>
+                      <GameIcon id="resource-gem" size={14} />
                       <span className="text-text-primary">
                         {loot.account.gems.toNumber()}
                       </span>
@@ -191,7 +194,10 @@ export function InventoryPanel() {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[10px] text-text-muted">Fragments</div>
-              <GoldNumber value={player.fragments?.toNumber?.() ?? 0} prefix="◇ " />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-fragments" size={14} />
+                <GoldNumber value={player.fragments?.toNumber?.() ?? 0} />
+              </span>
             </div>
             <div>
               <div className="text-[10px] text-text-muted">Common</div>

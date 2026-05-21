@@ -48,7 +48,7 @@ button:not(:disabled) {
   --shadow-gold-md: 0 0 16px rgba(251, 191, 36, 0.2);
   --shadow-gold-lg: 0 0 32px rgba(251, 191, 36, 0.3);
   /* Fonts */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
   --font-display: var(--font-cinzel), serif;
 }
@@ -375,5 +375,77 @@ body[data-theme="dark"] .cairn-orb {
 
 @media (prefers-reduced-motion: reduce) {
   .cairn-orb { animation: none; }
+}
+
+/* ─── NumberField slider ─── */
+
+.nm-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nm-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.nm-slider:focus {
+  outline: none;
+}
+
+/* Track — accent fill up to `--nm-fill`, neutral channel after it. */
+.nm-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--tier-accent) var(--nm-fill, 0%),
+    var(--color-surface-overlay) var(--nm-fill, 0%)
+  );
+}
+
+.nm-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--tier-accent) var(--nm-fill, 0%),
+    var(--color-surface-overlay) var(--nm-fill, 0%)
+  );
+}
+
+/* Thumb — `margin-top` centres it on the 6px track. */
+.nm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--tier-accent-bright);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--tier-accent);
+  transition: box-shadow 0.15s ease;
+}
+
+.nm-slider::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--tier-accent-bright);
+  border: 2px solid var(--color-surface);
+  box-shadow: 0 0 0 1px var(--tier-accent);
+}
+
+.nm-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--tier-accent), 0 0 0 5px var(--tier-accent-glow);
+}
+
+.nm-slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 1px var(--tier-accent), 0 0 0 5px var(--tier-accent-glow);
 }
 

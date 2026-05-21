@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useStamina } from "@/lib/hooks/useStamina";
+import { useNoviGenerator } from "@/lib/hooks/useNoviGenerator";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -16,23 +16,16 @@ import { useDomainName } from "@/lib/hooks/useDomainName";
 import { formatNumber } from "@/lib/utils";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
-import {
-  createUpdateLockedNoviInstruction,
-  getEffectiveTier,
-  type SubscriptionTierConfig,
-} from "novus-mundus-sdk";
-
-const INTERVAL_SECONDS = 300;
+import { createUpdateLockedNoviInstruction } from "novus-mundus-sdk";
 
 /** Persistent status bar at the bottom of the viewport. Shows player info + resources + mini NOVI generator. */
 export function StatusBar() {
   const { publicKey } = useWallet();
   const { data: playerData, isSuccess } = usePlayer();
-  const { data: geData } = useGameEngine();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const player = playerData?.account;
-  const ge = geData?.account;
+  const { pendingNovi } = useNoviGenerator();
 
   const stamina = useStamina(player);
 
@@ -46,40 +39,6 @@ export function StatusBar() {
       : 0;
   })() : getCachedTier();
   const tierInfo = getTierInfo(tier);
-
-  // ── Mini NOVI generator state ──
-  const [pendingNovi, setPendingNovi] = useState(0);
-
-  const getTierConfig = useCallback((): SubscriptionTierConfig | null => {
-    if (!ge || !player) return null;
-    const now = Math.floor(Date.now() / 1000);
-    const t = getEffectiveTier(player, now);
-    return ge.subscriptionTiers[t] ?? null;
-  }, [ge, player]);
-
-  useEffect(() => {
-    if (!player || !ge) return;
-
-    const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const tierConfig = getTierConfig();
-      if (!tierConfig) return;
-
-      const lastUpdated = player.lastUpdatedTokensAt.toNumber();
-      const elapsed = Math.max(0, now - lastUpdated);
-      const intervals = Math.floor(elapsed / INTERVAL_SECONDS);
-      const genRate = tierConfig.generationMultiplier.toNumber();
-      const maxCap = tierConfig.maxLockedNovi.toNumber();
-      const currentLocked = player.lockedNovi.toNumber();
-
-      const pending = currentLocked >= maxCap ? 0 : Math.min(intervals * genRate, maxCap - currentLocked);
-      setPendingNovi(Math.max(0, pending));
-    };
-
-    tick();
-    const id = setInterval(tick, 5000); // tick every 5s is fine for the status bar
-    return () => clearInterval(id);
-  }, [player, ge, getTierConfig]);
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -116,7 +75,7 @@ export function StatusBar() {
       {/* Resources */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-1">
-          <span className="text-text-muted">⚡</span>
+          <GameIcon id="resource-stamina" title="Stamina" size={15} />
           <GoldNumber
             value={stamina.current}
             size="sm"
@@ -124,7 +83,7 @@ export function StatusBar() {
           />
         </div>
         <div className="hidden items-center gap-1 sm:flex">
-          <span className="text-text-muted">◆</span>
+          <GameIcon id="resource-novi" title="Locked NOVI" size={15} />
           <GoldNumber
             value={player.lockedNovi.toNumber()}
             size="sm"
@@ -132,7 +91,7 @@ export function StatusBar() {
           />
         </div>
         <div className="hidden items-center gap-1 sm:flex">
-          <span className="text-text-muted">$</span>
+          <GameIcon id="resource-cash" title="Cash" size={15} />
           <GoldNumber
             value={player.cashOnHand.toNumber()}
             size="sm"
@@ -140,7 +99,7 @@ export function StatusBar() {
           />
         </div>
         <div className="hidden items-center gap-1 sm:flex">
-          <span className="text-text-muted">✦</span>
+          <GameIcon id="resource-gem" title="Gems" size={15} />
           <GoldNumber
             value={player.gems.toNumber()}
             size="sm"

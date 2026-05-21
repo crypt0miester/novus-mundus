@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
+import type { TransactionInstruction } from "@solana/web3.js";
 import {
   derivePlayerPda,
   deriveLootPda,
@@ -10,21 +10,14 @@ import {
   toGrid,
   createAttackEncounterInstruction,
   createPurchaseStaminaInstruction,
-  createIntracityStartInstruction,
-  createIntracityCompleteInstruction,
-  createIntracityCancelInstruction,
-  createTravelSpeedupInstruction,
   isTraveling,
-  hasArrived,
   getEncounterStaminaCost,
   calculateDistanceMeters,
-  TravelType,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useEncounters } from "@/lib/hooks/useEncounters";
-import { useNow } from "@/lib/hooks/useNow";
 import { useStamina } from "@/lib/hooks/useStamina";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
@@ -32,9 +25,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
-import { ProximityGrid } from "@/components/shared/ProximityGrid";
+import { TargetTravel } from "@/components/panels/TargetTravel";
 
 const RARITY_LABELS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 const RARITY_COLORS = [
@@ -74,14 +65,6 @@ export function EncounterDetailPanel({
   );
 
   const playerTraveling = player ? isTraveling(player) : false;
-  // Ticks each second while traveling so arrival registers on its own.
-  const now = useNow(playerTraveling);
-  const isIntracity = player?.travelType === TravelType.Intracity;
-  const playerArrived = player ? hasArrived(player, now) : false;
-  const travelRemaining =
-    player && playerTraveling && !playerArrived
-      ? Math.max(0, player.arrivalTime.toNumber() - now)
-      : 0;
 
   const maxLevelDiff =
     geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
@@ -115,7 +98,10 @@ export function EncounterDetailPanel({
 
   // ── Handlers ──
 
-  const handleAttack = async (reportPhase: (p: TxPhase) => void) => {
+  const handleAttack = async (
+    reportPhase: (p: TxPhase) => void,
+    prepend: TransactionInstruction[] = [],
+  ) => {
     if (!publicKey || !player || !encounter) throw new Error("No target");
     const ge = client.gameEngine;
     const enc = encounter.account;
@@ -139,7 +125,7 @@ export function EncounterDetailPanel({
     const maxHealth = enc.maxHealth.toNumber();
     return transact
       .mutateAsync({
-        instructions: [ix],
+        instructions: [...prepend, ix],
         invalidateKeys: [["player"], ["encounters"], ["loot"]],
         successMessage: "Attack landed!",
         onPhase: reportPhase,
@@ -189,98 +175,6 @@ export function EncounterDetailPanel({
         });
         return r.signature;
       });
-  };
-
-  const handleTravelCloser = async (
-    targetLat: number,
-    targetLong: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(targetLat), toGrid(targetLong),
-    );
-    const originCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createIntracityStartInstruction(
-      { owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, originCreatorRefund },
-      { destinationLat: targetLat, destinationLong: targetLong },
-    );
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Traveling closer to target!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleIntracityComplete = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
-    );
-    const ix = createIntracityCompleteInstruction({
-      owner: publicKey, gameEngine: ge, cityId, destinationLocation,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Arrived at destination!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleIntracityCancel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
-    );
-    const destinationCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createIntracityCancelInstruction({
-      owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, destinationCreatorRefund,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Travel cancelled!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleTravelSpeedup = async (
-    tier: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createTravelSpeedupInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { speedupTier: tier as 1 | 2 },
-    );
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Travel sped up!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
   };
 
   // Hook order: must run before the early return below.
@@ -382,76 +276,24 @@ export function EncounterDetailPanel({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
-            <div className="text-xs font-semibold text-red-400">Out of range</div>
-            <div className="text-[10px] text-red-600">
-              {dist.distance.toFixed(1)}m away (max {ENCOUNTER_RANGE}m)
-            </div>
+        <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
+          <div className="text-xs font-semibold text-red-400">Out of range</div>
+          <div className="text-[10px] text-red-600">
+            {dist.distance.toFixed(1)}m away (max {ENCOUNTER_RANGE}m)
           </div>
-          <ProximityGrid
-            targetLat={encounter.account.locationLat}
-            targetLong={encounter.account.locationLong}
-            playerLat={player.currentLat}
-            playerLong={player.currentLong}
-            cityId={player.currentCity}
-            attackRange={ENCOUNTER_RANGE}
-            onTravel={handleTravelCloser}
-            disabled={playerTraveling || levelBand?.inBand === false}
-          />
         </div>
       )}
 
-      {/* Travel controls — shown when traveling */}
-      {playerTraveling && (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-300">
-                {isIntracity ? "Traveling within city" : "Traveling between cities"}
-              </span>
-              {playerArrived ? (
-                <span className="rounded-full bg-green-900/40 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-                  ARRIVED
-                </span>
-              ) : (
-                <GoldCountdown
-                  endsAt={player.arrivalTime.toNumber()}
-                  startedAt={player.departureTime.toNumber()}
-                  showProgress
-                  format="compact"
-                  size="sm"
-                />
-              )}
-            </div>
-            {isIntracity && playerArrived && (
-              <TxButton onClick={handleIntracityComplete} className="w-full text-xs">
-                Complete Travel
-              </TxButton>
-            )}
-            {isIntracity && !playerArrived && (
-              <TxButton onClick={handleIntracityCancel} variant="secondary" className="w-full text-xs">
-                Cancel Travel
-              </TxButton>
-            )}
-            {!isIntracity && (
-              <Link
-                href="/map"
-                className="block rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-1.5 text-center text-xs font-medium text-text-gold hover:bg-amber-900/40"
-              >
-                Go to Travel
-              </Link>
-            )}
-          </div>
-          <SpeedupPanel
-            visible={!playerArrived}
-            remainingSeconds={travelRemaining}
-            onSpeedup={handleTravelSpeedup}
-            gemsPerMinute={geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1}
-            gemBalance={player.gems?.toNumber?.()}
-          />
-        </div>
-      )}
+      <TargetTravel
+        targetLat={encounter.account.locationLat}
+        targetLong={encounter.account.locationLong}
+        range={ENCOUNTER_RANGE}
+        inRange={dist.inRange}
+        proximityDisabled={levelBand?.inBand === false}
+        onArriveAttack={
+          hasStamina && levelBand?.inBand !== false ? handleAttack : undefined
+        }
+      />
 
       {/* Stamina warning */}
       {!hasStamina && !playerTraveling && (

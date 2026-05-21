@@ -108,9 +108,12 @@ export function calculateTotalHiringCost(
 // Purchase Costs
 
 /**
- * Calculate equipment purchase cost with time bonus.
+ * Calculate equipment purchase cost with the time-of-day multiplier.
  *
- * Purchasing follows same pattern as hiring - better during day.
+ * The multiplier is applied DIRECTLY — matching the on-chain
+ * purchase_equipment.rs (`base_total_cost * cost_multiplier`): purchasing is
+ * dearest at Midday (1.618×) and cheapest at DeepNight / Evening (0.618×).
+ * It is NOT inverted.
  *
  * @param baseCost - Base cost per item
  * @param quantity - Number of items to purchase
@@ -127,8 +130,7 @@ export function calculatePurchaseCost(
   discountBps: number = 0
 ): number {
   const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
-  const multiplier = getActivityMultiplier(ActivityType.Purchasing, timeOfDay);
-  const costMultiplier = 1 / multiplier;
+  const costMultiplier = getActivityMultiplier(ActivityType.Purchasing, timeOfDay);
 
   let totalCost = Math.floor(baseCost * quantity * costMultiplier);
 

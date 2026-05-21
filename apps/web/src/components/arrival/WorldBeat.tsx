@@ -28,6 +28,24 @@ export function WorldBeat({ onContinue }: WorldBeatProps) {
 
   return (
     <div ref={rootRef} className="mx-auto flex max-w-xl flex-col items-center text-center">
+      {/* The mark, masked from the canonical vector logo so it tints to the
+          bronze accent — a gold logo would wash out on the parchment bg. */}
+      <span
+        data-reveal
+        aria-hidden
+        className="mb-7 block h-16 w-16 text-text-gold opacity-0"
+        style={{
+          backgroundColor: "currentColor",
+          maskImage: "url(/img/logo/logo.svg)",
+          WebkitMaskImage: "url(/img/logo/logo.svg)",
+          maskRepeat: "no-repeat",
+          WebkitMaskRepeat: "no-repeat",
+          maskPosition: "center",
+          WebkitMaskPosition: "center",
+          maskSize: "contain",
+          WebkitMaskSize: "contain",
+        }}
+      />
       <BeatEyebrow reveal className="mb-9">
         Novus Mundus
       </BeatEyebrow>

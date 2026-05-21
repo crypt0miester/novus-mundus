@@ -2,7 +2,7 @@
 
 **Status**: Not started. Planning document, no code yet.
 **Owner**: TBD.
-**Estimate**: ~1.5 weeks to v1 (team scope, encrypted), +1 week per additional scope variant.
+**Estimate**: ~1 week to v1 (team scope, encrypted), +0.5 week per additional scope variant.
 
 ## Goal
 
@@ -17,19 +17,32 @@ The war-table is *not* a replacement for gameplay state. Rallies, attacks, and c
 
 ## Non-goals
 
-- **Not** a generic chat product. Threads exist only as overlays on game entities (no free-form channels).
-- **Not** a fix for `novus_forum`. That program is referenced as a design ancestor; we're not modifying or deploying it. The model is reused; the storage isn't.
-- **Not** trying to hide *metadata*. Sender wallet + thread PDA + timing remain public. Privacy applies to message bodies. Metadata-anonymity is a v2+ conversation (sealed-sender).
+- **Not** a generic chat product. Threads exist only as overlays on game entities.
+- **Not** a fix for `novus_forum`. Referenced as a design ancestor; we're not modifying or deploying it.
+- **Not** end-to-end encrypted in the strict sense. See [Trust model](#trust-model) — bodies are protected against passive chain observers (rival players), not against the game server itself.
+- **Not** trying to hide metadata. Sender wallet, thread PDA, and timing remain public.
 
 ## Decision summary
 
-**Build it on the existing `novus_mundus` program. Emit messages as `sol_log_data` from a single new instruction. Encrypt bodies per-recipient with hybrid (ECDH wraps a per-message symmetric key) inline in the same log entry — the `novus_forum` 2022 model with N ciphertexts collapsed into one log instead of N accounts. Read via Triton's `getTransactionsForAddress`. Real-time via `logsSubscribe`. No new accounts, no new programs, no off-chain backend, no indexer, no shared keys to rotate.**
+**Build it on the existing `novus_mundus` program. Emit messages as `sol_log_data` from a single new instruction. Encrypt the body once with a per-thread symmetric key `K_thread` held in the game API's Redis. Clients fetch `K_thread` from the API (auth'd by session key); the API authorises by checking on-chain scope membership. Read via Triton's `getTransactionsForAddress`. Real-time via `logsSubscribe`. Public scopes (encounter) skip encryption entirely.**
 
-Cost: ~$0.00025 per message, paid by the sender's wallet. Zero infrastructure cost to us.
+Cost: ~$0.00025 per message, paid by sender. One API call per session per thread to bootstrap the key — none per message after that.
 
-### Why encryption is in v1, not v2
+## Trust model
 
-It's a *war* table. The threat model is "the opposing team is reading the chain." Strategic coordination that's globally readable is not strategic coordination. Anything that goes through this surface — pledges, raid timing, target selection, trash-talk — must default to unreadable by non-members of the scope.
+What this design does and does not protect.
+
+| | Protected? |
+|---|---|
+| Rival players reading the chain to learn rally plans | yes — they don't have `K_thread` |
+| A passive observer of public RPC | yes |
+| A Redis dump / snapshot / replica / backup leak | yes — Redis holds no secret key material (see [Key custody](#key-custody-admin-side-security)) |
+| A malicious or compromised game-server operator | **no — server can derive any thread key via KMS** |
+| Loss of a single member's device | yes — they only had cached keys, no thread-key material leaks beyond what they could read |
+| Censorship by the chain | yes — chain accepts the post regardless |
+| Censorship by the API | partial — API can refuse to hand over keys, but ciphertext on chain is recoverable when access is restored |
+
+This is the same trust model the rest of the game already uses. Players trust the game server with their wallet integration, NOVI balance, hero state, oracle prices, and everything else. Trusting it with team chat is consistent. For a future scope that genuinely can't trust the server (DAO governance, treasury secrets), the design preserves an upgrade path — see [Future: per-scope server-untrusted mode](#future-per-scope-server-untrusted-mode).
 
 ## Options considered (and why we rejected them)
 
@@ -37,101 +50,91 @@ It's a *war* table. The threat model is "the opposing team is reading the chain.
 |---|---|
 | Fork `novus_forum` as-is (Anchor 0.26, per-recipient accounts) | Per-message-per-recipient account creation costs ~0.005 SOL/msg. Doesn't scale. |
 | Postgres + WebSocket | User explicitly didn't want to operate a DB. |
-| Redis Streams + Pub/Sub + SSE | Already have Redis (used by minigame sessions), but too centralised for the game's on-chain ethos. Censorship + single point of failure. |
-| Solana Memo program + thread PDA | Works but no on-chain auth. Anyone can post to any thread; membership enforced only at render. Misses the `novus_forum` semantics. |
-| State compression / Bubblegum cNFTs + DAS | Cheap (~$0.0001/msg) but 2–3 weeks of engineering, requires DAS indexer, and the cNFT-as-message data model is a hack. |
-| Custom Merkle tree via SPL Account Compression | Same as above, more flexible, more engineering. |
-| **`novus_mundus` instruction emitting `sol_log_data` + Triton read API** | ✅ Picked. One new instruction, zero new accounts, zero new infra. |
+| Redis Streams + Pub/Sub for storage | API down = chat down, history gone. Rejected. |
+| Solana Memo program + thread PDA | Works but no on-chain auth — anyone can post to any thread. |
+| State compression / Bubblegum cNFTs | 2–3 weeks of engineering, requires DAS indexer. |
+| `novus_mundus` instruction + per-recipient hybrid (`novus_forum` 2022 model) | Sound but heavy: HKDF + ECDH + ed25519↔x25519 + attestations + fan-out for teams > 10. Useful when we don't trust the server; overkill for in-team chat. **Archived for future server-untrusted scopes.** |
+| **`novus_mundus` instruction + API-held `K_thread`** | ✅ Picked. Same on-chain shape, no client crypto beyond AEAD, no fan-out, new members read history, member-leave actually revokes future access. |
 
 ## Architecture
 
 ```
 Player wallet
-   │ signs fixed challenge (one-time per session)
+   │ signs fixed challenge once (no popup per read after that)
    ▼
-Session ed25519 keypair                      // also convertible to x25519 for ECDH
+Session ed25519 keypair                 // only used to auth to game API
    │
-   ├─ signs every message body
-   └─ x25519 form used as the recipient pubkey when others encrypt to them
    ▼
-Sender, for each message:
-   1. fetch current scope membership (e.g. team.members[])
-   2. fetch each member's session_pubkey (cached after first sighting)
-   3. generate random per-message symmetric key K
-   4. encrypt body with K (XChaCha20-Poly1305)
-   5. wrap K once per recipient (sealed_box-style to each x25519 pubkey)
-   6. sign the whole envelope with session_key
+First-time: POST /wt/register
+   │ wallet_sig over (session_pubkey, expiry) → API caches in Redis
+   ▼
+Bootstrap thread: GET /wt/key/{thread_pda}
+   │ session-signed challenge → API verifies session→wallet binding,
+   │ reads chain to confirm wallet ∈ scope, returns current K_thread + recent versions
+   ▼
+Sending (encrypted scope):
+   1. body_nonce = random 24 bytes
+   2. ciphertext = XChaCha20-Poly1305(K_thread, body_nonce, plaintext)
+   3. Wallet-signed tx → novus_mundus::post_war_table_message
    ▼
 novus_mundus::post_war_table_message
-   │ verifies sender ∈ scope(thread_pda)
-   │ emits sol_log_data(["wt1", thread, sender, envelope...])
+   │ verifies sender (tx signer) ∈ scope(thread_pda)
+   │ verifies envelope.thread_pda == passed thread account
+   │ verifies envelope.sender_wallet == tx signer
+   │ emits sol_log_data(envelope_bytes)
    ▼
 Solana tx log
    │
    ├──> getTransactionsForAddress(thread_pda) ──> envelopes
    │       ↓ recipient client side
-   │       finds own wrap → decrypts K → decrypts body → verifies sig
+   │       look up K_thread by key_version (cache or API) → AEAD-open → plaintext
    └──> logsSubscribe(thread_pda)              ──> real-time push (same decrypt path)
 ```
 
-The **thread PDA** is *any existing game entity*. There are no new PDAs to create. Every team, rally, castle, encounter, and player already has a PDA on chain; that PDA becomes the addressable thread marker.
+The **thread PDA** is *any existing game entity*. Every team, rally, castle, encounter, and player already has a PDA on chain; that PDA is the addressable thread marker on chain *and* the Redis index for `K_thread`.
 
 ### Scopes
 
-Each scope maps to a different entity PDA and a different access-control predicate. The post instruction dispatches on the target PDA type:
-
 | Scope | Thread PDA | Who can post | Encryption |
 |---|---|---|---|
-| Team | `TeamAccount` PDA | Members in `team.members` | Per-recipient hybrid |
-| Rally war-room | `RallyAccount` PDA | The rally creator + all joined participants | Per-recipient hybrid |
-| Castle siege | `CastleAccount` PDA | Current garrison + attackers within siege window | Per-recipient hybrid (membership snapshot at post time) |
-| Encounter | `EncounterAccount` PDA | Any player in the same kingdom (open-channel) | Plaintext (intel-sharing is the point) |
-| Player DM | Recipient's `PlayerAccount` PDA | Anyone | Per-recipient (just two) |
+| Team | `TeamAccount` PDA | Members in `team.members` | API-held `K_thread` |
+| Rally war-room | `RallyAccount` PDA | Rally creator + joined participants | API-held `K_thread` |
+| Castle siege | `CastleAccount` PDA | Garrison + attackers within siege window | API-held `K_thread` |
+| Encounter | `EncounterAccount` PDA | Any player in the same kingdom (open channel) | **Plaintext** (no key, no API call) |
+| Player DM | Recipient's `PlayerAccount` PDA | Anyone | API-held `K_thread` (members = sender + recipient) |
 
-Scope is parsed from the account discriminator on the thread account. Different access predicates live as separate helper functions in `processor/war_table/access.rs`.
+Scope is parsed from the account discriminator on the thread account. Access predicates live in `processor/war_table/access.rs`.
 
 ## Data model (log schema)
 
-Every `post_war_table_message` instruction emits one `sol_log_data` call. The message body is encrypted once with a random per-message symmetric key K; K is then wrapped per recipient. The envelope is signed by the sender's session key.
+Every `post_war_table_message` instruction emits one `sol_log_data` call. Wire format is uniform for encrypted and plaintext envelopes; only `flags` and the interpretation of `body` differ.
 
 ```
 [
-  b"wt1",                              // protocol discriminator (version 1)
-  thread_pda.as_ref(),                 // 32 bytes — index redundancy
-  sender_wallet.as_ref(),              // 32 bytes — author wallet (gate by chain auth)
-  sender_session_pubkey.as_ref(),      // 32 bytes — ed25519, signs envelope
-  ephemeral_x25519_pubkey.as_ref(),    // 32 bytes — per-message ephemeral, used to wrap K
-  &nonce_24,                           // 24 bytes — XChaCha20-Poly1305 nonce for ciphertext
-  &ciphertext,                         //    variable — body encrypted with K
-  &recipients_blob,                    //    variable — see "Recipients blob" below
-  &signature_64,                       // 64 bytes — sender_session_key.sign(everything above)
+  b"wt1",                              //  3 bytes — protocol discriminator (v1)
+  flags: u8,                           //  1 byte  — bit 0: encrypted body
+  thread_pda: [u8; 32],                // 32 bytes — replay-across-threads defence
+  sender_wallet: [u8; 32],             // 32 bytes — must equal tx signer
+  key_version: u32,                    //  4 bytes — which K_thread version; 0 if plaintext
+  body_nonce: [u8; 24],                // 24 bytes — AEAD nonce; zero if plaintext
+  body_len: u16,                       //  2 bytes — length of body field
+  body: [u8; body_len],                // var      — ciphertext if encrypted, plaintext otherwise
 ]
 ```
 
-### Recipients blob
+**Fixed overhead: 98 bytes.** After tx skeleton, body budget is ~860 bytes per single tx. Same for any scope size — no recipient blob, no fan-out, no multi-page assembly.
 
-```
-recipients_count: u16          // N members of the scope at post time
-for i in 0..N:
-  recipient_session_pubkey: [u8; 32]   // x25519 pubkey of recipient (their session key, curve-converted)
-  wrapped_K:                   [u8; 48]   // XChaCha20-Poly1305(K) under ECDH(ephemeral × recipient)
-                                          // = 32 bytes ciphertext (K is 32) + 16 byte Poly1305 tag
-                                          // (nonce is derived from ephemeral_x25519_pubkey ‖ i, so omitted)
-```
+**No envelope signature.** Authorship is established by the chain transaction signature: the tx is signed by `sender_wallet`, and the program enforces `envelope.sender_wallet == tx signer`. Session keys exist only to authenticate to the game API — they have no role in on-chain authentication.
 
-Linear scan on receive is fine — scopes are bounded by team size (≤ 50 in v1) and other-thread membership stays in single digits. Recipient pubkey lookup is `O(N)` per message; N is tiny.
-
-### Body schema (inside the ciphertext)
-
-Once decrypted, the plaintext follows the same binary layout the unencrypted v0 draft used:
+### Body schema (inside `body`)
 
 | Offset | Field | Bytes | Notes |
 |---|---|---|---|
 | 0 | `version: u8` | 1 | `0x01` |
-| 1 | `kind: u8` | 1 | 0=text, 1=pledge, 2=system, 3=reply, 4=tombstone, 5=attestation |
-| 2 | `created_at: i64` | 8 | Unix seconds (client-stamped, verified ≤ slot time) |
-| 10 | `parent_id?: [u8; 12]` | 12 | (slot, tx_index, log_index) of parent if reply; zeros otherwise |
-| 22 | `payload: &[u8]` | variable | Kind-specific |
+| 1 | `kind: u8` | 1 | 0=text, 1=pledge, 2=system, 3=reply, 4=tombstone |
+| 2 | `created_at: i64` | 8 | Unix seconds, client-stamped |
+| 10 | `parent_id?: [u8; 12]` | 12 | `(slot, tx_index, log_index)` of parent if reply; zeros otherwise |
+| 22 | `payload: &[u8]` | var | Kind-specific |
 
 **Per-kind payloads:**
 
@@ -140,170 +143,185 @@ Once decrypted, the plaintext follows the same binary layout the unencrypted v0 
 - `system(2)`: structured event reference (e.g., `RallyExecuted` slot+sig)
 - `reply(3)`: same as text but `parent_id` set
 - `tombstone(4)`: superseded message's id; UI hides the original
-- `attestation(5)`: first-touch session key declaration, see [Encryption](#encryption)
 
-**Message ID** (stable, not stored on chain): `(slot, tx_index_in_block, log_index_in_tx)`. Twelve bytes total, monotonically ordered, deterministic across re-reads.
+**Message ID** (stable, not stored on chain): `(slot, tx_index_in_block, log_index_in_tx)` — 12 bytes, monotonically ordered, deterministic across re-reads.
 
-### Wire-format size budget
+## Auth model
 
-The crypto overhead is fixed per-message regardless of body length:
+### Session key derivation (one wallet popup, then silent)
 
-| Component | Bytes |
-|---|---|
-| `wt1` + thread + sender_wallet + session + ephemeral | 32+32+32+32 + 3 = ~131 |
-| nonce | 24 |
-| signature | 64 |
-| `recipients_count` + per-recipient (32 + 48) | 2 + 80·N |
-| **Fixed at N=1** | ~301 bytes |
-| **Fixed at N=10** | ~1021 bytes |
-
-The Solana tx data limit is ~1232 bytes total. After accounts list and auth overhead, real budget for `sol_log_data` is ~900 bytes. **At ten recipients the envelope is already at the limit before any ciphertext.**
-
-Two implications:
-
-1. **Body budget shrinks with member count.** At N=5 (~ a small team) we have ~500 bytes of ciphertext = ~480 bytes of plaintext after Poly1305 tag. At N=20 (a large team) the envelope no longer fits — we need to split.
-2. **Above ~12 recipients we send the envelope across multiple `sol_log_data` entries in the same tx** (one "header" + N "recipient pages"). This keeps the per-message cost bounded by tx fee, not by linear recipient blowup.
-
-For Phase 1 (team chat, max 50 members) the splitting path is required. The decoder reassembles by `(thread, sender_session, ephemeral, slot, tx_index)`.
-
-### Why binary instead of JSON
-
-`sol_log_data` is base64-encoded; binary halves byte count, which matters because of the envelope overhead above.
-
-## Auth model: session keys
-
-Borrowed from `novus_forum`'s 2022 design and extended for the encryption layer. The wallet signs *once* per session; from there a derived keypair both signs every message body **and** serves as the recipient identity for incoming encrypted messages. No wallet popup during a raid.
-
-The session keypair is ed25519 (Solana-native, used for signing). The same scalar is converted to x25519 (Curve25519) for ECDH — this is the standard `ed25519_pk_to_curve25519` / `ed25519_sk_to_curve25519` conversion that nacl/libsodium expose. One keypair, two views.
-
-### One-time derivation (client)
+The wallet signs a fixed challenge once per browser session:
 
 ```ts
-async function deriveSessionKey(wallet: Wallet): Promise<SessionKey> {
-  // Sign a fixed message — same input + same wallet = same session key, every time.
+async function deriveSessionKey(wallet: Wallet): Promise<Keypair> {
   const challenge = new TextEncoder().encode("novus-mundus war-table session v1");
   const sig = await wallet.signMessage(challenge);
-  // Hash the signature into a 32-byte seed.
   const seed = sha256(sig);
-  const signKp = nacl.sign.keyPair.fromSeed(seed);
-  // Same secret, x25519 view — used for ECDH wrapping/unwrapping.
-  const ecdhSk = ed25519SkToCurve25519(signKp.secretKey);
-  const ecdhPk = ed25519PkToCurve25519(signKp.publicKey);
-  return { signKp, ecdhSk, ecdhPk };
+  return nacl.sign.keyPair.fromSeed(seed);
 }
 ```
 
-The session key never leaves the browser. Loss = re-derive from wallet sig, free.
+Same wallet → same session key, every time. No cross-device sync needed. The session secret never leaves the browser.
 
-### Per-message signing
+### Session registration (one POST after first derive)
 
-The session ed25519 key signs the full envelope (everything but the signature itself). This binds the encrypted body, the recipient list, the ephemeral pubkey, and the nonce to a single authenticated unit.
+Before fetching any thread key, the client registers the session→wallet binding with the API:
 
 ```ts
-function signEnvelope(session: SessionKey, envelopeWithoutSig: Uint8Array): Uint8Array {
-  return nacl.sign.detached(envelopeWithoutSig, session.signKp.secretKey);
+async function registerSession(wallet: Wallet, session: Keypair, expiry: number) {
+  const payload = serialize({ session_pubkey: session.publicKey, expiry });
+  const wallet_sig = await wallet.signMessage(payload);
+  await api.post("/wt/register", {
+    wallet: wallet.publicKey.toBase58(),
+    session_pubkey: session.publicKey.toBase58(),
+    expiry,
+    wallet_sig: base58(wallet_sig),
+  });
 }
 ```
 
-### Verification on read
+API verifies `wallet_sig` under `wallet`, then stores `(session_pubkey → wallet, expiry, wallet_sig)` in Redis. The stored `wallet_sig` is re-verified every time the binding is consumed, so the record is self-authenticating: a Redis *write* compromise cannot forge a session→wallet binding (the attacker cannot produce a valid wallet signature). All later key requests use a session-key signature on a short-lived nonce — no wallet involvement on reads.
 
-```ts
-function verifyEnvelope(msg: ParsedEnvelope): boolean {
-  return nacl.sign.detached.verify(
-    msg.envelopeWithoutSig,
-    msg.signature,
-    msg.senderSessionPubkey,
-  );
-}
-```
+This replaces on-chain attestations entirely. The wallet↔session binding lived on chain in the per-recipient design because every reader needed to verify it independently. Now that the API mediates key access, the binding lives in Redis where the API checks it directly.
 
-That verifies the envelope came from whoever holds `senderSessionPubkey`. Tying that session pubkey to the claimed `senderWallet` is the job of the **attestation** layer below.
+### Per-post authorship
 
-### Session attestation (v1, required)
-
-Each session's *first* post to a thread is a `kind=attestation(5)` envelope whose plaintext body is a wallet-signed declaration:
-
-```
-attestation payload = {
-  session_pubkey: [u8; 32],
-  ecdh_pubkey:    [u8; 32],
-  not_after:      i64,             // unix seconds, e.g. now + 24h
-  scope_root:     [u8; 32],        // thread_pda OR all-zeros for "any thread"
-  wallet_sig:     [u8; 64],        // wallet.signMessage over the bytes above
-}
-```
-
-Readers cache attestations per `(wallet, session_pubkey)` and reject envelopes whose session pubkey lacks a current, valid attestation. This is what makes "session key impersonation" infeasible — an attacker would need a wallet popup signature from the victim, not just access to the victim's browser session.
-
-`novus_forum` skipped this in 2022 because per-recipient encryption already bound posts to the session key. In our setting we keep the bind, and we add the attestation because session keys are persisted in IndexedDB rather than ephemeral.
-
-### Distribution of session pubkeys (first-touch)
-
-Encrypting to a recipient requires knowing their `ecdh_pubkey`. The simplest, scheme-with-no-schema-changes approach:
-
-- The first time player A reads the thread, they see B's attestation log (kind=5) — that envelope is **broadcast-unencrypted to the thread's membership** (`recipients[]` lists every member's `ecdh_pubkey`, but the *attestation body* itself is not the secret being protected; it's the public key declaration). Strictly speaking the attestation can also be sent plaintext-in-log under a known constant key.
-- A caches B's session pubkeys in IndexedDB.
-- When A composes a message, the client iterates `team.members[]`, looks up the cached attestation for each, and includes them in `recipients[]`. Any member without a cached attestation is excluded — the client surfaces this as "X hasn't joined the war-table yet" in the compose box.
-
-This means a brand-new member sees historical messages they weren't a recipient of as opaque — by design. They can only read traffic posted after their attestation is visible. Same property `novus_forum` had, same property modern E2E group chats have (Signal "missing key material" UX).
-
-If we want forward-readable history for new joiners later, we'd add a per-thread re-encrypt-on-join helper (out of scope for v1).
+Posting still requires a wallet-signed transaction — the program checks `sender == envelope.sender_wallet`. For active raids, players enable Phantom/Backpack's auto-approve toggle so posts are silent. Without auto-approve, every post is a popup; acceptable for v1. A relayer + on-chain session delegation would reintroduce the complexity we just removed.
 
 ## Encryption
 
-### Construction (per message)
+### Construction
 
 ```
-K  = random 32 bytes                                  // per-message symmetric key
-ε  = nacl.box.keyPair()                               // per-message ephemeral x25519
-nonce_body = random 24 bytes
-ct_body = xchacha20poly1305(K, nonce_body, plaintext) // body, encrypted once
-
-for each recipient r in scope_members:
-  shared_r  = ECDH(ε.secret, r.ecdh_pubkey)           // 32 bytes
-  wrap_key_r = HKDF(shared_r, info = ε.pub || r.pub)  // 32 bytes
-  nonce_wrap_r = blake3(ε.pub || u16(index_r))[..24]  // deterministic per (msg, slot)
-  wrapped_K_r = xchacha20poly1305(wrap_key_r, nonce_wrap_r, K)
+K_thread     = HMAC(K_master, "wt1" ‖ thread_pda ‖ u32(key_version))   // derived inside KMS by the
+                                                                       // API; delivered + cached locally
+body_nonce   = random 24 bytes per message
+ciphertext   = xchacha20poly1305(K_thread, body_nonce, plaintext)
 ```
 
-Envelope-without-sig = all bytes from `wt1` through the recipients blob.
-`signature = ed25519_sign(sender_session_signing_secret, envelope-without-sig)`.
+That's the entire client-side crypto. No HKDF, no ECDH, no curve conversion, no recipient blob, no signature. See [Key custody](#key-custody-admin-side-security) for how `K_thread` is derived and protected.
 
-Same scheme `novus_forum` used in 2022 (nacl.box per recipient), repackaged into a single log entry and with an ephemeral pubkey instead of reusing the sender's session pubkey. The ephemeral matters for forward secrecy: compromising the long-lived session key later doesn't unlock prior message keys, because each prior message's K was wrapped under an ECDH that mixes in `ε.secret`, which doesn't exist after the message was sent.
-
-### Decryption (per recipient)
+### Decryption
 
 ```
-1. find my entry in recipients[]:  i such that recipient_session_pubkey[i] == my.ecdh_pubkey
-2. shared    = ECDH(my.ecdh_secret, ephemeral_x25519_pubkey)
-3. wrap_key  = HKDF(shared, info = ε.pub || my.pub)
-4. nonce_wrap = blake3(ε.pub || u16(i))[..24]
-5. K         = xchacha20poly1305_open(wrap_key, nonce_wrap, wrapped_K[i])
-6. plaintext = xchacha20poly1305_open(K, nonce_body, ciphertext)
-7. verify signature on envelope-without-sig
+1. K_thread = local_cache.get((thread_pda, envelope.key_version))
+            ?? await api.getKey(thread_pda, envelope.key_version)
+2. plaintext = xchacha20poly1305_open(K_thread, envelope.body_nonce, envelope.body)
 ```
 
-If you're not in `recipients[]`: you see the metadata (sender, slot, recipient count) but no plaintext. By design.
+A miss on `key_version` (e.g., the user is reading history from before they joined and the API doesn't expose that version to them) yields an unreadable message — the UI surfaces "not available for this account."
 
-### Threat model
+### Plaintext path (encounters, future public scopes)
 
-| Threat | Mitigation |
-|---|---|
-| Opposing team reads chain to learn rally plans | Bodies encrypted, only `recipients[]` decrypt |
-| Compromise of session key reveals all prior chat | Per-message ephemeral → forward secrecy on body |
-| Adversary forges a message as another player | Envelope signed by session key; session key bound to wallet via attestation |
-| Adversary replaces wrapped K to substitute their own | Signature covers `recipients[]`; tamper invalidates sig |
-| Adversary swaps sender identity | `sender_wallet` must match the on-chain transaction signer; program checks this |
-| Adversary adds themselves to `recipients[]` after the fact | Logs are immutable; attempt fails |
-| Two devices for same wallet — out-of-band sync | Both derive identical session keys from the same wallet sig + challenge; no sync needed |
-| **Non-mitigations** | |
-| Hiding *who* talked to *who* | Metadata is in the clear by definition of being on chain |
-| Hiding *when* a thread is active | Same |
-| Preventing a removed member from reading historical messages they were a recipient of | Out of scope — they already had K |
+```
+flags.encrypted = 0
+key_version     = 0
+body_nonce      = 0       // padded for uniform parsing
+body            = plaintext
+```
+
+No API call. The chain tx signature still authenticates the author.
 
 ### Library choice
 
-`@noble/ciphers` for XChaCha20-Poly1305 (audited, tree-shakeable), `@noble/curves/ed25519` for the curve conversion and ECDH. Both already in the React/Vite supply chain. No new heavy deps.
+`@noble/ciphers` for XChaCha20-Poly1305. That's the entire crypto dependency.
+
+## Key custody (admin-side security)
+
+The design has exactly one long-lived secret: `K_master`. Everything else is derived from it or is public. This section is the admin-side threat model.
+
+### Principle: Redis holds nothing worth stealing
+
+Redis values are not encrypted at rest, so assume any Redis contents can leak — RDB/AOF snapshot, replica, backup file, `MONITOR`, memory dump. The design therefore puts **no secret key material in Redis**:
+
+- Thread keys are **derived, not stored**: `K_thread_v = HMAC(K_master, "wt1" ‖ thread_pda ‖ u32(version))`.
+- Redis holds only the current version integer per thread and session↔wallet bindings — none of it secret.
+- A full Redis dump yields version counters and public-key correlations. Nothing in it decrypts a message.
+
+This is strictly stronger than storing KMS-wrapped keys in Redis: there is no wrapped blob to pair with a future KMS compromise.
+
+### Principle: `K_master` never leaves the HSM
+
+`K_master` is a non-exportable HMAC key in a managed KMS / Cloud HSM (AWS KMS HMAC keys, GCP Cloud KMS MAC keys — both GA). The API never fetches it. To derive a thread key the API calls `GenerateMac(key_id, "wt1" ‖ thread_pda ‖ version)`; the HMAC is computed **inside** the HSM and only the 32-byte result returns.
+
+Consequences:
+
+- The API process never holds `K_master`. An API memory dump cannot exfiltrate it.
+- Every derivation is a logged KMS call (CloudTrail / Cloud Audit Logs). Bulk derivation — an attacker dumping every thread key — is visible.
+- Access is revocable instantly: disable the KMS key and all decryption stops. This is the breach kill-switch (it stops chat too — the correct trade under active compromise).
+- The API caches derived `K_thread` in memory with a short TTL (~5 min) so it isn't calling KMS on every read. A deliberate, bounded exposure: an API memory dump reveals only the keys cached in that window.
+
+Use a separate KMS key per environment (dev / staging / prod). Never share.
+
+### Redis integrity, not just confidentiality
+
+A leak is one risk; an attacker who can *write* to Redis is another. The dangerous write is forging a session↔wallet binding (`wt:session:{attacker_session} → victim_wallet`), which would make the API hand victim-scoped keys to the attacker.
+
+Defence: the binding stores the original `wallet_sig`, and the API re-verifies it under the named wallet every time the binding is consumed. A binding that did not come from a genuine `/wt/register` — i.e. lacks a valid wallet signature over `session_pubkey ‖ expiry` — is rejected. The record is self-authenticating; its trust does not depend on Redis being trusted.
+
+### The key still leaves your servers — harden the client
+
+`K_thread` is delivered to clients and cached in IndexedDB. That cache is encrypted at rest under `HKDF(session_secret, "wt-cache-v1")`; the session secret is re-derived in-browser from a wallet signature and never persisted, so a stolen IndexedDB file alone is useless. This stops at-rest theft (shared computer, offline malware) — it does **not** stop code executing in the page (XSS, malicious extension), which reaches live keys regardless. Keep the IndexedDB key-cache TTL short.
+
+### Hardening checklists
+
+**Redis** (defence in depth, even though it holds no secrets):
+- ACL users per service, minimal command set; strong `requirepass`.
+- `rename-command` to disable `MONITOR`, `DEBUG`, `KEYS`, `FLUSHALL`, `CONFIG`.
+- TLS for client and replication traffic; bind to a private network; never publicly reachable.
+- A dedicated logical DB or instance for war-table data.
+
+**KMS:**
+- Key policy grants only the API's workload identity `GenerateMac`; no human role has it in prod.
+- Audit logging on; alarm on anomalous derivation volume.
+- Multi-region replica of the KMS key for DR — losing `K_master` bricks every thread.
+- No long-lived IAM keys; use instance / workload identity.
+
+### The honest ceiling
+
+What this design cannot eliminate:
+
+- **API host RCE.** An attacker on the API host can call KMS to derive any thread key for as long as they hold the host. Detectable (audit logs), revocable (disable the KMS key), non-exfiltratable (`K_master` stays in the HSM) — but not prevented. To shrink this further, split the membership-check service from the key-derivation service so an RCE on the user-facing one can't directly derive.
+- **Client-side compromise.** XSS or a malicious extension leaks the keys that client held — bounded to that user's threads, not global.
+- **Malicious insider.** Anyone with production KMS access can derive everything. Irreducible — the "you trust the operator" property already stated in the [Trust model](#trust-model). Audit logs make it detectable after the fact; only per-recipient client-to-client encryption removes it ([Future: per-scope server-untrusted mode](#future-per-scope-server-untrusted-mode)).
+
+The achievable guarantee: **a Redis compromise — the cheapest, most common breach — yields zero readable messages.** Decryption requires live KMS access, which is logged and revocable.
+
+## Key rotation
+
+`K_thread` rotates when scope membership changes — a kicked team member, a finished rally, a conquered castle. Old versions are kept indefinitely so historical messages remain readable to members who were present at the time. New versions are unreachable for members who lost access.
+
+### Trigger sources
+
+Rotation fires only on access-*loss* events — never on join. Adding a member can't compromise anyone (the new member learning the current key is the point); removing a member is the only thing that demands a key they don't know. Rotating on join would also pointlessly bar the new member from reading history they're now entitled to.
+
+The API runs a chain-event listener that subscribes to `novus_mundus` via `logsSubscribe` at `processed` commitment. On these events it rotates `K_thread`:
+
+- `TeamMemberRemoved`, `TeamDisbanded`
+- `RallyEnded`, `RallyCanceled`
+- `CastleConquered`, `CastleAbandoned`
+
+Rotation = bump `current_version` in `wt:thread:{thread_pda}`. Nothing else happens — the new key is `HMAC(K_master, "wt1" ‖ thread_pda ‖ new_version)`, derived on demand. Old versions are not "kept"; they are simply re-derivable forever from `K_master`. Rotation only makes *newer* messages unreadable to whoever lost access.
+
+### Race window (leaver fetches key one more time)
+
+Between the on-chain kick tx confirming and the API rotating, a kicked member could fetch the old key. Mitigations:
+
+- API watches at `processed` commitment — sub-second latency from tx submission to rotation.
+- Per-session-per-thread fetch rate-limit: 1 fetch per minute. A leaver can't poll faster than rotation lands.
+- Even in the worst case, the leaker gets the old K, which is being rotated *out*; they can't decrypt anything sent after rotation. They could have already received any pre-rotation message anyway.
+
+Acceptable for v1.
+
+### Versioning: reading old messages after a rotation
+
+Every envelope records the `key_version` it was encrypted under. Decryption always uses *that* version — a message posted under v3 decrypts with `HMAC(K_master, "wt1" ‖ thread ‖ 3)` forever, no matter how many rotations followed.
+
+- **Old versions are never lost** because they are never stored — every version is re-derivable from `K_master` on demand. The retention invariant collapses to a single one: **never lose `K_master`** (see [Key custody](#key-custody-admin-side-security)).
+- **A current scope member can fetch every version** via `GET /wt/key/{thread}` and read the entire thread back to its first message — including history from before they joined.
+- **A removed member** keeps whatever versions are already in their local cache, so old messages they previously had access to still render. They cannot fetch the post-removal version, and cannot re-fetch anything if they clear their cache — the API only serves current members.
+
+There is no decryption "grace period." After a rotation a client may briefly still *encrypt* under the prior `current` version until it refreshes the pointer (a ~60s poll, or a `logsSubscribe` rotation hint). Those posts are still perfectly decryptable — they just sit one version behind. The only effect is a marginally wider race window for a just-removed member, already covered under [Race window](#race-window-leaver-fetches-key-one-more-time).
 
 ## Program changes
 
@@ -314,21 +332,25 @@ If you're not in `recipients[]`: you see the metadata (sender, slot, recipient c
 Single instruction `post_war_table_message`. Accepts:
 
 - **Accounts**:
-  - `thread` (the target PDA — rally / castle / encounter / team / player)
+  - `thread` (target PDA — rally / castle / encounter / team / player)
   - `sender` (signer, wallet)
   - `player` (sender's `PlayerAccount`, for kingdom-scope auth)
   - Optional gate accounts: `TeamAccount`, `RallyAccount`, `CastleAccount` depending on scope
-- **Data**: the opaque envelope blob (the program does not parse the ciphertext)
+- **Data**: the envelope blob (program does not parse the body)
 
 Behavior:
 
 1. Parse the `thread` account discriminator to detect scope.
-2. Dispatch to the right access predicate (see `access.rs`).
-3. Sanity-check the envelope shape: minimum length, `wt1` magic, thread bytes match the passed thread account. The program does *not* verify the body signature (that's a client job — chain space is too expensive to spend on it).
-4. If allowed, emit `sol_log_data` with the envelope payload.
-5. No state mutation. Tx cost is base fee + compute. No rent.
+2. Dispatch to the right access predicate (see `access.rs`); require sender ∈ scope.
+3. Validate envelope shape:
+   - first 3 bytes == `wt1`
+   - `envelope.thread_pda` == `thread.key` (anti-replay across threads)
+   - `envelope.sender_wallet` == `sender.key` (anti-impersonation)
+   - declared `body_len` matches actual data length
+4. Emit `sol_log_data` with the envelope payload.
+5. No state mutation. Tx cost = base fee + compute. No rent.
 
-Note: the program is intentionally agnostic to the encryption — it cares only that the sender is in the scope. Crypto is end-to-end between clients.
+The program is intentionally crypto-agnostic — it sees the envelope as opaque bytes and only checks that the sender is in the scope and the envelope honestly names them as author. Whether the body is `K_thread`-encrypted, plaintext, or in some future per-recipient format is invisible to the chain.
 
 ### New file
 
@@ -343,20 +365,67 @@ Pure predicates:
 
 ### Instruction index
 
-Adds one new instruction at the next free discriminator. No state schema changes anywhere else in `novus_mundus`. Backwards-compatible. **No `share_war_table_key` or epoch rotation instruction** — keys live in envelopes, not on chain.
+Adds one new instruction at the next free discriminator. No state schema changes anywhere else in `novus_mundus`. Backwards-compatible.
+
+## API surface
+
+New module in the existing game API: `apps/api/src/wartable/`.
+
+### Redis layout
+
+Redis holds **no secret key material** — see [Key custody](#key-custody-admin-side-security). Thread keys are derived from KMS on demand, never stored.
+
+```
+wt:session:{session_pubkey}   → JSON { wallet, expiry, wallet_sig }   TTL = expiry
+wt:thread:{thread_pda}        → JSON { current_version, scope_type, created_at, rotated_at }
+```
+
+`current_version` is a plain integer; `wt:thread:{thread_pda}` is lazily created (version 1) on first access. `wallet_sig` makes the session binding self-authenticating — the API re-verifies it on use, so a Redis *write* compromise cannot forge a binding. A full Redis dump yields only version counters and public session↔wallet correlations: nothing that decrypts a message.
+
+### Endpoints
+
+```
+POST /wt/register
+  body: { wallet, session_pubkey, expiry, wallet_sig }
+  effect: verify wallet_sig under wallet over (session_pubkey || expiry); store binding
+
+GET /wt/key/{thread_pda}?from_version=<n>
+  headers: { X-Session-Sig: base58 sig over short-lived server-issued nonce }
+  effect: look up session → wallet (re-verify stored wallet_sig), read chain for scope
+          membership, derive the requested versions via KMS GenerateMac, return
+          { current_version, keys: [{ version, K_base64 }, ...] }
+  default response window: current version + last 10. Older requested via from_version.
+
+(internal) chain-event listener
+  subscribes to novus_mundus logs; rotates K_thread on membership-change events
+```
+
+### Rate limiting
+
+- `POST /wt/register`: 1 per wallet per day.
+- `GET /wt/key/{thread_pda}`: 1 per session per thread per minute.
+
+Tight enough to close the leaver race window; loose enough that legitimate clients (mobile users switching networks) can re-fetch on session revival.
+
+### Failure modes
+
+- **Redis down**: API returns 503 on key fetch. Cached keys still work; new sessions can't bootstrap. Chat degrades to "read-ciphertext-only" until Redis returns.
+- **Chain RPC down**: API can't verify scope membership; new key fetches blocked. Existing posts on chain remain encrypted-but-readable for sessions that already have the key.
+- **Chain-event listener down**: rotations stop. Leavers retain key access for the outage window. Operationally critical; alert on listener heartbeat.
+- **KMS down**: API can't derive thread keys. API-side cache serves the TTL window; clients with cached keys keep working; new derivations blocked until KMS returns.
 
 ## Client SDK
 
 `sdks/novus-mundus-ts/src/wartable.ts`
 
 ```ts
-// Send (resolves recipients from scope membership, encrypts, signs, posts)
+// Send (encrypts with cached K_thread, posts via novus_mundus)
 postMessage(thread: PublicKey, body: Uint8Array, opts?: {
   kind?: MessageKind;
   parent?: MessageId;
 }): Promise<MessageId>;
 
-// Read (decrypts what's addressed to us; renders opaque metadata for the rest)
+// Read (decrypts with cached K_thread; fetches from API on cache miss)
 readThread(thread: PublicKey, opts?: {
   limit?: number;
   before?: PaginationCursor;
@@ -365,19 +434,15 @@ readThread(thread: PublicKey, opts?: {
 // Real-time
 subscribeThread(
   thread: PublicKey,
-  onMessage: (m: Message) => void
+  onMessage: (m: Message) => void,
 ): Unsubscribe;
 
-// Session-key helpers
-deriveSessionKey(wallet: Wallet): Promise<SessionKey>;     // cached in IndexedDB
-postAttestation(thread: PublicKey): Promise<MessageId>;    // call once per scope
-getMemberKeys(thread: PublicKey): Promise<MemberKeyMap>;   // attestation cache lookup
+// Session bootstrap
+deriveSessionKey(wallet: Wallet): Promise<Keypair>;   // cached in IndexedDB
+registerSession(wallet: Wallet): Promise<void>;       // POST /wt/register; idempotent
 
-// Crypto helpers
-encryptForScope(body: Uint8Array, members: MemberKeyMap): Promise<Envelope>;
-decryptEnvelope(env: Envelope, session: SessionKey): Promise<Uint8Array | null>;
-verifyEnvelope(env: Envelope): boolean;
-parseScope(thread: PublicKey, accountFetcher: AccountFetcher): Promise<Scope>;
+// Key cache (surfaced for diagnostics)
+getThreadKey(thread: PublicKey, version?: number): Promise<Uint8Array>;
 ```
 
 ### Read path (Triton)
@@ -391,154 +456,167 @@ async function readThread(thread, { limit = 50, before } = {}) {
       sortOrder: "desc",
       details: "full",
       encoding: "base64+zstd",
-      filters: {
-        programIds: [NOVUS_MUNDUS_PROGRAM_ID.toBase58()],
-        excludeFailed: true,
-      },
+      filters: { programIds: [NOVUS_MUNDUS_PROGRAM_ID.toBase58()], excludeFailed: true },
       paginationToken: before,
       commitment: "confirmed",
       maxSupportedTransactionVersion: 0,
     },
   ]);
+  const envelopes = res.result.transactions.flatMap(extractWarTableLogs);
   return {
-    messages: res.result.transactions
-      .flatMap(extractWarTableLogs)
-      .filter(verifyMessage),
+    messages: await Promise.all(envelopes.map(decryptEnvelope)),
     cursor: res.result.paginationToken,
   };
 }
 ```
 
-One round-trip. ~150ms latency on a warm Triton RPC. Falls back to `getSignaturesForAddress` + batched `getTransaction` on vanilla RPC at ~1.5s latency.
-
 ### Real-time
 
 ```ts
 function subscribeThread(thread, onMessage) {
-  return connection.onLogs(
-    thread,
-    (logs) => {
-      extractWarTableLogs(logs).forEach(onMessage);
-    },
-    "confirmed",
-  );
+  return connection.onLogs(thread, (logs) => {
+    extractWarTableLogs(logs).forEach(async (env) => onMessage(await decryptEnvelope(env)));
+  }, "confirmed");
 }
 ```
 
 ### Caching
 
-Client maintains an IndexedDB cache of `(thread_pda, last_seen_signature) → Message[]`. On open, read cache → render → fetch only newer signatures via `getTransactionsForAddress` with `paginationToken` of the last-seen tx. Cold loads only happen on first visit per browser.
+Two IndexedDB caches per origin:
+
+- `(thread_pda, last_seen_signature) → Message[]` for instant cold-load.
+- `(thread_pda, key_version) → K_thread` to avoid re-fetching from the API every page load.
+
+**The key cache is encrypted at rest** under `HKDF(session_secret, "wt-cache-v1")` — the session secret is re-derived in-browser from a wallet signature and never persisted, so a stolen IndexedDB file is useless without the wallet. This protects against at-rest theft only; code running in the page (XSS, malicious extension) can still reach the live keys. Both caches are cleared on session expiry or wallet change; keep the key-cache TTL short.
 
 ## UI integration
 
 The war-table is a **thread renderer** that lives inside existing detail panels:
 
 - `RallyDetailPanel` → embed thread bound to `rally_pda`
-- `EncounterDetailPanel` → embed thread bound to `encounter_pda`
+- `EncounterDetailPanel` → embed thread bound to `encounter_pda` (plaintext)
 - `PvpDetailPanel` → embed thread bound to defender's `player_pda`
 - Castle detail (TBD) → embed thread bound to `castle_pda`
 - Team page → embed thread bound to `team_pda`
 
 The thread component:
-1. Reads `useWarTable(thread_pda)` — hook that combines `readThread` + `subscribeThread` with IndexedDB caching.
+1. Reads `useWarTable(thread_pda)` — hook combining `readThread` + `subscribeThread` with IndexedDB caching and on-demand key fetches.
 2. Renders chronological mix of user messages + system messages (decoded from the same tx history).
 3. Surfaces a compose box (text or pledge picker) at the bottom.
-4. Render-filters by membership predicate (defense in depth — auth is already enforced on chain).
+4. Render-filters by membership predicate (defense in depth — auth is already enforced on chain and at the API).
 
 ## Phases
 
 ### Phase 1 — Team chat (v1)
 
-- One scope only: team-scoped threads, thread PDA = `TeamAccount` PDA
-- Text messages only (`kind=0`) + attestations (`kind=5`); no replies, no pledges yet
-- **Full encryption layer in v1.** Per-recipient hybrid envelope, session keys, attestations.
-- Add `post_war_table_message` instruction to `novus_mundus`
-- Client SDK with `deriveSessionKey`, `postAttestation`, `postMessage`, `readThread`, `subscribeThread`
-- Embed in the team page
+- One scope only: team-scoped threads, thread PDA = `TeamAccount` PDA.
+- Text messages only (`kind=0`).
+- Add `post_war_table_message` instruction to `novus_mundus`.
+- API: `POST /wt/register`, `GET /wt/key/{thread}`, chain-event listener for team membership.
+- Client SDK with `deriveSessionKey`, `registerSession`, `postMessage`, `readThread`, `subscribeThread`.
+- Embed in the team page.
 
-**Ships in ~1.5 weeks. Smallest possible thing that proves the architecture *and* keeps the bodies private.**
+**Ships in ~1 week.** Client crypto is one AEAD call; everything else is REST + chain reads.
 
 ### Phase 2 — Rally war-room
 
-- Add rally scope (access predicate, scope detection)
-- Add `pledge` kind to body schema
-- Pledges appear as a sidebar widget in the rally thread, summed and rendered live
-- Pledges are *non-binding hints* — the rally's actual `join` ix is still the only commitment
+- Add rally scope (access predicate, scope detection in program; API rotation triggers on rally lifecycle events).
+- Add `pledge` kind to body schema.
+- Pledges appear as a sidebar widget in the rally thread, summed and rendered live.
+- Pledges are *non-binding hints* — the rally's actual `join` ix is still the only commitment.
 
 ### Phase 3 — Castle siege + encounter coordination
 
-- Add castle scope (garrison + attacker access)
-- Add encounter scope (open kingdom). For encounters specifically, evaluate whether to send plaintext bodies (kingdom-wide intel-share is the point) vs encrypt-to-kingdom (re-broadcast to N members of a kingdom is expensive). Likely answer: encounter scope uses a public-channel mode (no `recipients[]`, body is unencrypted); program differentiates by scope flag.
-- Surface system messages from existing on-chain events (`RallyExecuted`, `CastleConquered`, `EncounterDefeated`) by indexing the same tx history client-side and merging into the timeline
+- Add castle scope (garrison + attacker access; API rotation on garrison-*loss* events — a departing defender, never a joining one).
+- Add encounter scope (open kingdom; plaintext; no API involvement).
+- Surface system messages from existing on-chain events (`RallyExecuted`, `CastleConquered`, `EncounterDefeated`) by indexing the same tx history client-side and merging into the timeline.
 
 ### Phase 4 — DM + polish
 
-- Player-to-player DMs (open by default, render-filtered) — encryption trivially extends (recipient list = [you, them])
-- Reply chains (`kind=3`, `parent_id` set)
-- Tombstones (`kind=4`) for soft-delete in UI
-- Multi-page envelope assembly for scopes >12 members
+- Player-to-player DMs (open by default, render-filtered).
+- Reply chains (`kind=3`, `parent_id` set).
+- Tombstones (`kind=4`) for soft-delete in UI.
 
 ### Phase 5 — Optional, far future
 
-- If permanence / archival becomes a real requirement: write a one-way exporter that snapshots a thread's tx history into a Bubblegum-compressed tree as a "frozen archive." Same data, different storage. The live system stays as-is.
+- Permanent archival: snapshot a thread's tx history (with K_thread versions exported alongside) into a Bubblegum tree as a "frozen archive."
 - Sealed-sender / metadata privacy if the threat model ever shifts.
+- **Per-scope server-untrusted mode** for scopes that genuinely can't trust the server. See below.
+
+## Future: per-scope server-untrusted mode
+
+If a future scope (DAO governance coordination, treasury secrets, anything where "the dev can read this" is unacceptable) needs confidentiality against the game server itself, swap that one scope's encryption layer for per-recipient hybrid — the `novus_forum` 2022 model.
+
+The on-chain side is identical: same instruction, same wire format, same `flags` byte signalling encryption. Only the SDK's encrypt/decrypt path branches on scope type.
+
+What the per-recipient mode adds (kept out of v1):
+
+- ECDH between sender's session ECDH key (ed25519↔x25519) and each recipient's
+- HKDF-SHA256 wrap-key derivation
+- Per-recipient wrapped-K blob in the envelope (~80 bytes/recipient)
+- Fan-out across ⌈N/10⌉ txs for scopes with > 10 members
+- On-chain attestation logs to publish wallet→session bindings without API mediation
+
+This stays archived as an internal SDK module until needed. Wire format is forward-compatible — a new flag bit (`flags.per_recipient = 1`) signals a per-recipient envelope, and the parser branches.
 
 ## Open questions
 
-1. **Pagination cursor format.** Triton's `paginationToken` is opaque — confirm it's stable across reconnects and use it directly. Otherwise fall back to `(slot, signature)` pair.
+1. **Pagination cursor format.** Triton's `paginationToken` is opaque — confirm it's stable across reconnects.
 
-2. **Body size budget vs. member count.** With encryption, each recipient adds ~80 bytes to the envelope. At N=5 the body budget is ~480 plaintext bytes; at N=12 it's near zero. Phase 1 (teams up to 50) **requires** the multi-page envelope path described in "Wire-format size budget." Spec out the page header format and decoder state machine before starting Phase 1.
+2. **Rate limiting on posts.** Enforce a 2s cooldown in `post_war_table_message`? Probably no — client throttle + chain cost are enough.
 
-3. **Rate limiting.** Should we enforce a cooldown in `post_war_table_message` (e.g., reject if sender posted within last 2s to the same thread)? Cheaper alternative: client-side throttle + chain cost of spam as natural deterrent. Lean toward no on-chain rate limit in v1.
+3. **System message extraction.** Two options for surfacing on-chain events in the timeline:
+   - (a) Client-side: walk the same tx history, detect known event signatures, render as system messages.
+   - (b) Server-side relay: indexer posts a synthetic `kind=2` message.
+   v1: (a).
 
-4. **System message extraction.** Two options for surfacing on-chain events in the timeline:
-   - (a) Client-side: walk the same tx history, detect known event signatures, render as system messages. Zero new code.
-   - (b) Server-side relay: a one-off indexer that watches and posts a synthetic `kind=2` message. More work, but cleaner timeline ordering.
-   v1: do (a).
+4. **Encounter spam.** Encounters are open-kingdom — anyone can post. Counter: render-side rate limit per sender.
 
-5. **Encounter scope spam.** Encounters are open-kingdom — anyone can post. That's by design (intel sharing), but worst-case a griefer spams an encounter thread. Counter: render-side rate limit per sender. If it becomes a real problem, add a `kingdom_membership` check (already implicit in `player.kingdom == encounter.kingdom`).
+5. **Wallet compatibility.** Both Phantom and Backpack support `signMessage`. Hardware wallets vary — fall back to per-message wallet popups.
 
-6. **Session key persistence.** Cached in IndexedDB per-origin. On a new device, user re-derives — same input (wallet + challenge string) yields same key. No sync needed.
+6. **Auto-approve and posting UX.** Encourage Phantom auto-approve toggle for active raids. Document the trade-off.
 
-7. **Wallet compatibility.** Both Phantom and Backpack support `signMessage`. Hardware wallets vary — some don't. For hardware-only users, fall back to "wallet signs every message" mode with a clear UX (popup per send). For encryption: those users still need an ECDH keypair; derive deterministically from a one-time wallet signature, accept the friction of a single popup at session start.
+7. **KMS choice for key-at-rest encryption.** AWS KMS, GCP KMS, or local HSM. Decide at deploy time.
 
-8. **Attestation refresh cadence.** `not_after` defaults to 24h. Re-posting an attestation costs one tx every 24h per session per scope. Acceptable if active; effectively zero for idle users. Consider longer (7d) if the wallet UX cost is the bigger pain point.
+8. **Breach posture.** Redis exfiltration alone exposes nothing — no secret material (see [Key custody](#key-custody-admin-side-security)). The real exposure is `K_master`: anyone who can call the KMS derivation key can derive any thread key. Mitigate with least-privilege KMS policy, audit logging, an anomaly alarm on derivation volume, and the documented kill-switch (disable the KMS key to halt all decryption instantly).
 
-9. **Member removed mid-thread.** When a player leaves a team, future messages won't include them in `recipients[]`. They retain whatever K's they already decrypted — same property every group chat has. If we want forward-secrecy-on-removal, add a re-key-on-membership-change protocol (out of scope v1).
+9. **Chain reorgs and rotation.** A reorg could un-confirm a membership-change tx after we rotated. API would over-rotate — extra version, no harm. Stays correct.
+
+10. **`K_master` durability.** With derived keys there are no stored versions to retain — but `K_master` becomes the single point of total data loss: lose it and every encrypted thread bricks at once. It must be a non-exportable KMS key with multi-region replication and proper DR. Never a copy-pasteable secret, never exported.
 
 ## Migration notes
 
-If the project ever decides to leave Triton or migrate to a self-hosted indexer:
+If the project ever leaves Triton or migrates to a self-hosted indexer:
 
-- The on-chain side is unchanged — messages stay in tx logs.
+- On-chain side unchanged — envelopes stay in tx logs.
 - Read path switches to vanilla `getSignaturesForAddress` + batched `getTransaction`. Same data, slower.
-- Or stand up a custom indexer (Geyser plugin or `logsSubscribe` + Postgres) that watches `novus_mundus` and materialises threads. Same data, faster reads, our infrastructure to operate.
-- The migration is read-side only. No on-chain state changes, no client-side schema change. Drop-in.
+- Or stand up a custom indexer (Geyser plugin or `logsSubscribe` + Postgres) materialising threads. Same data, faster reads, our infrastructure.
 
-If the project ever wants permanent archival of threads:
+If the project ever wants to drop API trust for a specific scope:
 
-- Run a one-off batch job that reads all messages for a thread and writes them as leaves into a Bubblegum tree.
-- After archival, the thread is frozen and visible via DAS. Live system continues unaffected.
-- This is opt-in, per-thread, and far-future.
+- Implement the per-recipient hybrid SDK path described in [Future](#future-per-scope-server-untrusted-mode).
+- Set a new flag bit in `flags` to mark per-recipient envelopes.
+- Existing API-encrypted messages remain readable from their K_thread versions; new posts in that scope use per-recipient.
 
 ## References
 
-- `sdks/novus_forum/` — the 2022 ancestor design. Same domain model (forum/header/message), same per-recipient `nacl.box` encryption, same session-keypair derivation trick. Storage layer is what we're replacing.
+- `sdks/novus_forum/` — 2022 ancestor. The wallet→session derivation trick comes from here. The per-recipient encryption is archived for the future server-untrusted mode.
 - `programs/novus_mundus/src/processor/rally/execute.rs` — the on-chain commitment surface that pledges compile into.
 - Triton `getTransactionsForAddress` — https://docs.triton.one/chains/solana/gettransactionsforaddress
-- `@noble/ciphers` (XChaCha20-Poly1305), `@noble/curves/ed25519` (curve conversion + ECDH).
-- SPL Memo program (not used, considered): `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr`
-- SPL Account Compression (not used, considered): https://docs.solana.com/developing/runtime-facilities/spl-account-compression
+- `@noble/ciphers` — XChaCha20-Poly1305. That's the entire crypto dependency.
 
 ## What we explicitly are not doing
 
-- Not running Redis for chat.
-- Not running Postgres for chat.
+- Not running Postgres for chat (chain is storage).
+- Not running Redis for chat *storage*, and not storing keys in Redis (only non-secret version counters + self-authenticating session bindings).
 - Not running a DAS indexer.
 - Not minting cNFTs for messages.
 - Not creating a separate `novus_forum` v2 program.
-- Not storing shared epoch keys on chain. Not rotating shared keys. Not adding a `share_war_table_key` ix.
-- Not hiding metadata (sender, recipient count, timing). That's a different threat model.
+- Not posting on-chain attestations (replaced by API session registration).
+- Not doing per-recipient encryption in v1 (archived for future server-untrusted scopes).
+- Not signing the envelope with a session key (chain tx signature covers authorship).
+- Not claiming end-to-end encryption. See [Trust model](#trust-model).
+- Not hiding metadata (sender, thread, timing remain public).
 - Not adding new account types to `novus_mundus`.
 
 The smallest viable surface that does the job, no more.

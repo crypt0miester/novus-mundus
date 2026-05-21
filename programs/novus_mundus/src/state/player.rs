@@ -643,10 +643,6 @@ impl PlayerCore {
         if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
-        let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
         let data = account.try_borrow()?;
         super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_ptr() as *const Self;
@@ -657,8 +653,10 @@ impl PlayerCore {
         if &loaded.game_engine != game_engine {
             return Err(crate::error::GameError::KingdomMismatch.into());
         }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, expected_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
@@ -672,10 +670,6 @@ impl PlayerCore {
         if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
-        let (expected_pda, bump) = Self::derive_pda(game_engine, expected_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
         let mut data = account.try_borrow_mut()?;
         super::AccountKey::validate(&data, super::AccountKey::Player)?;
         let ptr = data.as_mut_ptr() as *mut Self;
@@ -686,9 +680,29 @@ impl PlayerCore {
         if &loaded.game_engine != game_engine {
             return Err(crate::error::GameError::KingdomMismatch.into());
         }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, expected_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
+        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+    }
+
+    /// Re-borrow an already-validated Player account mutably without re-deriving
+    /// the PDA. Sound only when this exact account was already verified via
+    /// load_checked / load_checked_mut earlier in the same instruction — account
+    /// identity is invariant within an instruction. Used to reacquire the handle
+    /// after a CPI forced an intervening drop.
+    pub fn load_mut_unchecked<'a>(
+        account: &'a AccountView,
+        program_id: &Address,
+    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
+        if unsafe { account.owner() } != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+        let mut data = account.try_borrow_mut()?;
+        super::AccountKey::validate(&data, super::AccountKey::Player)?;
+        let ptr = data.as_mut_ptr() as *mut Self;
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }
 
@@ -1400,10 +1414,6 @@ impl UserAccount {
         if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
         let data = account.try_borrow()?;
         super::AccountKey::validate(&data, super::AccountKey::User)?;
         let ptr = data.as_ptr() as *const Self;
@@ -1411,8 +1421,10 @@ impl UserAccount {
         if &loaded.owner != expected_owner {
             return Err(crate::error::GameError::Unauthorized.into());
         }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(expected_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
         Ok(unsafe { super::Loaded::new(data, ptr) })
     }
@@ -1425,10 +1437,6 @@ impl UserAccount {
         if unsafe { account.owner() } != program_id {
             return Err(ProgramError::IllegalOwner);
         }
-        let (expected_pda, bump) = Self::derive_pda(expected_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
         let mut data = account.try_borrow_mut()?;
         super::AccountKey::validate(&data, super::AccountKey::User)?;
         let ptr = data.as_mut_ptr() as *mut Self;
@@ -1436,8 +1444,10 @@ impl UserAccount {
         if &loaded.owner != expected_owner {
             return Err(crate::error::GameError::Unauthorized.into());
         }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(expected_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }

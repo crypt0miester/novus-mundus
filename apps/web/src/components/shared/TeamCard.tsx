@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cn, formatTime } from "@/lib/utils";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { Badge } from "@/components/shared/Badge";
 import { DomainName } from "@/components/shared/DomainName";
 import type { TeamAccount } from "novus-mundus-sdk";
@@ -66,7 +67,10 @@ export function TeamCard({
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="text-right">
             <div className="text-[10px] text-text-muted">{treasuryLabel}</div>
-            <GoldNumber value={team.treasury.toNumber()} size="sm" prefix="$" />
+            <span className="inline-flex items-center justify-end gap-1">
+              <GameIcon id="resource-cash" size={14} />
+              <GoldNumber value={team.treasury.toNumber()} size="sm" />
+            </span>
           </div>
           {actions && <div>{actions}</div>}
         </div>

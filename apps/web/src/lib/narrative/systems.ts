@@ -26,9 +26,9 @@ export const CITY_TYPES: readonly CityTypeFraming[] = [
   },
   {
     type: 1,
-    name: "Trade",
-    icon: "◆",
-    line: "A crossroads. Coin and rumor move through these gates — and soon enough, word of you.",
+    name: "Resource",
+    icon: "⛏",
+    line: "Built over what the old world buried. The digging is rich — and the digging is where the danger sleeps.",
   },
   {
     type: 2,
@@ -38,9 +38,9 @@ export const CITY_TYPES: readonly CityTypeFraming[] = [
   },
   {
     type: 3,
-    name: "Resource",
-    icon: "⛏",
-    line: "Built over what the old world buried. The digging is rich — and the digging is where the danger sleeps.",
+    name: "Trade",
+    icon: "◆",
+    line: "A crossroads. Coin and rumor move through these gates — and soon enough, word of you.",
   },
 ];
 

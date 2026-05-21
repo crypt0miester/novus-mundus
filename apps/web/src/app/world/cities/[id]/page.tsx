@@ -13,6 +13,7 @@ import { Badge } from "@/components/shared/Badge";
 import { PlayerCard } from "@/components/shared/PlayerCard";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { cn } from "@/lib/utils";
+import { getCityLore } from "@/lib/cityLore";
 import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 
 // Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
@@ -112,6 +113,7 @@ export default function CityRosterPage({
   }
 
   const c = city.account;
+  const lore = getCityLore(cityId);
   const typeIndex = Math.min(c.cityType, 3);
   const isCurrentCity =
     citizen.isCitizen &&
@@ -142,12 +144,23 @@ export default function CityRosterPage({
                   <Badge variant="success">You are here</Badge>
                 )}
               </div>
+              {lore && (
+                <div className="mt-1 text-xs uppercase tracking-wider text-text-muted">
+                  {lore.region}
+                </div>
+              )}
             </div>
             <div className="text-right">
               <div className="text-xs text-text-muted">Players Present</div>
               <GoldNumber value={c.playersPresent} size="lg" />
             </div>
           </div>
+
+          {lore && (
+            <p className="mt-4 text-sm italic leading-relaxed text-text-secondary">
+              {lore.lore}
+            </p>
+          )}
 
           <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
             <div>

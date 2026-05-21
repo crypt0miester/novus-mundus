@@ -90,28 +90,6 @@ pub fn deterministic_encounter_level(min_level: u8, max_level: u8, spawn_index: 
     min_level + position.min(range) as u8
 }
 
-/// Apply multiplier to base value and convert to integer
-///
-/// Final step in calculations - converts f64 result to u64.
-///
-/// # Arguments
-/// * `base` - Base value
-/// * `multiplier` - f64 multiplier
-///
-/// # Returns
-/// Result as u64, saturated at u64::MAX
-#[inline]
-pub fn apply_multiplier(base: u64, multiplier: f64) -> u64 {
-    let result = base as f64 * multiplier;
-    if result >= u64::MAX as f64 {
-        u64::MAX
-    } else if result < 0.0 {
-        0
-    } else {
-        result as u64
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

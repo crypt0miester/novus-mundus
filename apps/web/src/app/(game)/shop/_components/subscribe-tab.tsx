@@ -320,7 +320,7 @@ export function SubscribeTab() {
               )}
 
               {/* Name */}
-              <div className="text-xl font-bold" style={{ color: th.bright }}>
+              <div className="text-base font-bold" style={{ color: th.bright }}>
                 {t.name}
               </div>
 
@@ -328,7 +328,7 @@ export function SubscribeTab() {
               <div className="mt-1 flex items-baseline gap-2">
                 {priceKnown ? (
                   <>
-                    <span className="text-3xl font-bold leading-none text-text-gold">
+                    <span className="text-lg font-bold leading-none text-text-gold">
                       {formatLamportsAsSol(costLamports)}
                     </span>
                     <span className="text-[11px] text-text-muted">
@@ -349,7 +349,7 @@ export function SubscribeTab() {
                 style={{ background: `${th.accent}1a` }}
               >
                 <div
-                  className="font-mono text-4xl font-bold leading-none tabular-nums"
+                  className="font-mono text-xl font-bold leading-none tabular-nums"
                   style={{ color: th.bright }}
                 >
                   {genRatio != null

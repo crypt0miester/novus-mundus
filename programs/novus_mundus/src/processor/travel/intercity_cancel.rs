@@ -256,6 +256,12 @@ pub fn process(
     player_data.destination_city = player_data.origin_city; // Going back now
     player_data.departure_time = now; // Reset departure to now
     player_data.arrival_time = now + return_travel_time_seconds;
+    // Repoint the stored destination at the reserved return cell (origin city
+    // centre). intercity_complete and any later cancel re-derive the
+    // LocationAccount from these fields; left stale they would still target
+    // the original forward cell, which this instruction just closed.
+    player_data.traveling_to_lat = LocationAccount::from_grid(return_grid_lat);
+    player_data.traveling_to_long = LocationAccount::from_grid(return_grid_long);
 
     // 13. Increment origin city player count (they're coming back)
 

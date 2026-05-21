@@ -108,17 +108,11 @@ export function TxButton({
         className="absolute inset-y-0 left-0 bg-white/10"
         style={{ width: "0%" }}
       />
-
-      {/* Spinner — while a tx is in flight it just joins the button's own
-          flex layout, so the action label/content keeps its exact placement
-          (the button never swaps to a "Confirming..." text). */}
-      {isWorking && (
-        <Loader2 className="relative z-10 h-4 w-4 shrink-0 animate-spin" />
-      )}
-
-      {/* Label — kept through the working phases; only outcomes swap text. */}
-      <span className="relative z-10 contents">
+      <span className="relative z-10 flex items-center gap-1.5">
         {phase === "idle" || isWorking ? children : phaseLabels[phase]}
+        {isWorking && (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+        )}
       </span>
     </button>
   );

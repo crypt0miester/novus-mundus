@@ -12,6 +12,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import {
   derivePlayerPda,
@@ -212,14 +213,21 @@ export function ResearchTab() {
                 Active Research Buffs
               </h3>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {buffs.map((buff) => (
-                  <div key={buff.label} className="rounded-lg border border-zinc-800 p-3 text-center">
+                {buffs.map((buff) => {
+                  const icon = buff.stat ? buffStatIcon(buff.stat) : undefined;
+                  return (
+                  <div
+                    key={buff.label}
+                    className="flex flex-col items-center gap-0.5 rounded-lg border border-zinc-800 p-3 text-center"
+                  >
+                    {icon && <GameIcon id={icon} title={buff.label} size={20} />}
                     <div className="text-xs text-text-muted">{buff.label}</div>
                     <div className="text-lg font-bold text-text-gold">
                       +{(buff.bps / 100).toFixed(1)}%
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

@@ -16,6 +16,7 @@ import {
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
+  ActivityType,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -23,7 +24,9 @@ import { useAllCities } from "@/lib/hooks/useAllCities";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useTravelProgress } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import type { PanelAction } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
@@ -107,10 +110,7 @@ export function MapTab() {
       costPer100km,
     );
     const tod = getCurrentTimeOfDay(Math.floor(Date.now() / 1000), origin.longitude);
-    const travelMult = getActivityMultiplier(
-      "traveling" as Parameters<typeof getActivityMultiplier>[0],
-      tod,
-    );
+    const travelMult = getActivityMultiplier(ActivityType.Traveling, tod);
     return {
       distanceKm: Math.round(distanceKm),
       travelTimeSec,
@@ -148,19 +148,31 @@ export function MapTab() {
       originCreatorRefund: ge?.authority ?? publicKey,
     });
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: `Traveling to ${destName}!`,
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
+    const res = await transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"]],
+      successMessage: `Traveling to ${destName}!`,
+      onPhase: reportPhase,
+    });
+    // Clear the destination selection so the map drops back to renderDefault —
+    // the "En route" panel — instead of the now-stale selected-city view.
+    setDestinationCity(null);
+    setDestCell(null);
+    return res.signature;
   };
 
   const completeTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
     const geKey = client.gameEngine;
+    // intercity_cancel sends the player back to the origin city CENTRE and
+    // sets destination_city = current_city, but leaves traveling_to_lat/long
+    // pointing at the original forward destination. On that return leg the
+    // reserved cell is the city centre — deriving from traveling_to_lat/long
+    // would pass a non-existent (System-owned) PDA and the ix would fail.
+    const returningHome = player.destinationCity === player.currentCity;
+    const homeCity = currentCityData?.account;
+    if (returningHome && !homeCity)
+      throw new Error("Origin city not loaded");
     const ix = createIntercityCompleteInstruction({
       owner: publicKey,
       gameEngine: geKey,
@@ -169,8 +181,8 @@ export function MapTab() {
       destinationLocation: deriveLocationPda(
         geKey,
         player.destinationCity,
-        toGrid(player.travelingToLat),
-        toGrid(player.travelingToLong),
+        toGrid(returningHome ? homeCity!.latitude : player.travelingToLat),
+        toGrid(returningHome ? homeCity!.longitude : player.travelingToLong),
       )[0],
     });
     return transact
@@ -205,7 +217,10 @@ export function MapTab() {
         toGrid(player.travelingToLat),
         toGrid(player.travelingToLong),
       )[0],
-      destinationCreatorRefund: ge?.authority ?? publicKey,
+      // intercity_start stamps the destination cell's location_creator with
+      // the traveling player's wallet and intercity_cancel refunds its rent
+      // there — any other account trips GameError::InvalidParameter (6007).
+      destinationCreatorRefund: publicKey,
     });
     return transact
       .mutateAsync({
@@ -241,14 +256,16 @@ export function MapTab() {
       )[0],
     });
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: `Teleported to ${destName}!`,
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
+    const res = await transact.mutateAsync({
+      instructions: [ix],
+      invalidateKeys: [["player"]],
+      successMessage: `Teleported to ${destName}!`,
+      onPhase: reportPhase,
+    });
+    // Arrived — drop the stale destination selection (see startTravel).
+    setDestinationCity(null);
+    setDestCell(null);
+    return res.signature;
   };
 
   const speedup = async (
@@ -304,19 +321,77 @@ export function MapTab() {
       { speedupTier: tier as 1 | 2 },
     );
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
-    return transact
-      .mutateAsync({
-        instructions: [startIx, speedupIx],
-        invalidateKeys: [["player"]],
-        successMessage: `Traveling to ${destName} (sped up)!`,
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
+    const res = await transact.mutateAsync({
+      instructions: [startIx, speedupIx],
+      invalidateKeys: [["player"]],
+      successMessage: `Traveling to ${destName} (sped up)!`,
+      onPhase: reportPhase,
+    });
+    // Travel started — drop the selection so the "En route" panel shows.
+    setDestinationCity(null);
+    setDestCell(null);
+    return res.signature;
   };
 
   const travelRemaining = travel.traveling
     ? Math.max(0, travel.endsAt - Math.floor(Date.now() / 1000))
     : 0;
+
+  // Mobile surfaces the travel CTAs through the MorphTabBar — the realm-map
+  // scroll panel is desktop-only for actions (its inline buttons are hidden
+  // below md). Rebuilt each render; useMorphActions diffs before registering.
+  const morphActions: PanelAction[] = [];
+  if (travel.traveling) {
+    if (travel.pct >= 100) {
+      morphActions.push({
+        id: "complete",
+        label: "Step through the gate",
+        onClick: completeTravel,
+        variant: "primary",
+      });
+    } else {
+      morphActions.push({
+        id: "turn-back",
+        label: "Turn back",
+        onClick: cancelTravel,
+        variant: "danger",
+      });
+    }
+  } else if (destinationCity != null && destinationCity !== player?.currentCity) {
+    morphActions.push(
+      {
+        id: "walk",
+        label: "Walk",
+        onClick: startTravel,
+        variant: "primary",
+        disabled: !destCell,
+      },
+      {
+        id: "hasten",
+        label: "Hasten",
+        onClick: (rp) => startAndSpeedup(1, rp),
+        variant: "secondary",
+        disabled: !destCell,
+      },
+      {
+        id: "rush",
+        label: "Rush",
+        onClick: (rp) => startAndSpeedup(2, rp),
+        variant: "secondary",
+        disabled: !destCell,
+      },
+    );
+    if (canTeleport) {
+      morphActions.push({
+        id: "teleport",
+        label: "Teleport",
+        onClick: teleport,
+        variant: "secondary",
+        disabled: !destCell,
+      });
+    }
+  }
+  useMorphActions(morphActions);
 
   const renderSelected = ({ node, isHome }: RealmMapSelectedContext) => {
     const meta = TYPE_META[typeIdx(node.city.cityType)];
@@ -413,55 +488,61 @@ export function MapTab() {
               />
             </div>
 
-            <div style={{ marginTop: "0.9rem" }}>
-              <TxButton
-                onClick={startTravel}
-                disabled={!destCell}
-                className={styles.seal}
-              >
-                <span>Walk the road</span>
-                <span>›</span>
-              </TxButton>
-            </div>
-
-            <div
-              style={{
-                marginTop: "0.6rem",
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "0.4rem",
-              }}
-            >
-              <TxButton
-                onClick={(rp) => startAndSpeedup(1, rp)}
-                disabled={!destCell}
-                variant="secondary"
-                className="w-full text-xs"
-              >
-                Hasten (+50%)
-              </TxButton>
-              <TxButton
-                onClick={(rp) => startAndSpeedup(2, rp)}
-                disabled={!destCell}
-                variant="secondary"
-                className="w-full text-xs"
-              >
-                Rush (+75%)
-              </TxButton>
-            </div>
-
-            {canTeleport ? (
-              <div style={{ marginTop: "0.5rem" }}>
+            {/* Desktop keeps the inline CTAs; on mobile they're hidden and
+                the MorphTabBar carries them (see useMorphActions above). */}
+            <div className="hidden md:block">
+              <div style={{ marginTop: "0.9rem" }}>
                 <TxButton
-                  onClick={teleport}
+                  onClick={startTravel}
+                  disabled={!destCell}
+                  className={styles.seal}
+                >
+                  <span>Walk the road</span>
+                  <span>›</span>
+                </TxButton>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "0.6rem",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "0.4rem",
+                }}
+              >
+                <TxButton
+                  onClick={(rp) => startAndSpeedup(1, rp)}
                   disabled={!destCell}
                   variant="secondary"
                   className="w-full text-xs"
                 >
-                  Teleport (instant · NOVI)
+                  Hasten (+50%)
+                </TxButton>
+                <TxButton
+                  onClick={(rp) => startAndSpeedup(2, rp)}
+                  disabled={!destCell}
+                  variant="secondary"
+                  className="w-full text-xs"
+                >
+                  Rush (+75%)
                 </TxButton>
               </div>
-            ) : (
+
+              {canTeleport && (
+                <div style={{ marginTop: "0.5rem" }}>
+                  <TxButton
+                    onClick={teleport}
+                    disabled={!destCell}
+                    variant="secondary"
+                    className="w-full text-xs"
+                  >
+                    Teleport (instant · NOVI)
+                  </TxButton>
+                </div>
+              )}
+            </div>
+
+            {!canTeleport && (
               <p
                 style={{
                   marginTop: "0.6rem",
@@ -504,7 +585,8 @@ export function MapTab() {
               size="md"
             />
           </div>
-          <div style={{ marginTop: "1rem", display: "grid", gap: "0.4rem" }}>
+          {/* Desktop only — on mobile the MorphTabBar carries these. */}
+          <div className="hidden md:block" style={{ marginTop: "1rem" }}>
             {arrived ? (
               <TxButton onClick={completeTravel} className={styles.seal}>
                 <span>Step through the gate</span>

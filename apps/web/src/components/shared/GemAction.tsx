@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
+import { GameIcon } from "./GameIcon";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
 import Link from "next/link";
@@ -76,8 +77,9 @@ export function GemAction({
       <TxButton onClick={onClick} disabled={disabled}>
         <span className="flex items-center gap-2">
           {children}
-          <span className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[10px] opacity-80">
-            {gemCost.toLocaleString()} ✦
+          <span className="inline-flex items-center gap-1 rounded bg-black/20 px-1.5 py-0.5 font-mono text-[10px] opacity-80">
+            {gemCost.toLocaleString()}
+            <GameIcon id="resource-gem" title="gems" size={13} />
           </span>
         </span>
       </TxButton>

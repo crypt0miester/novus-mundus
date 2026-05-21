@@ -9,6 +9,7 @@ import {
   useCitizenStatus,
 } from "@/lib/hooks/world";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { Badge } from "@/components/shared/Badge";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { DomainName } from "@/components/shared/DomainName";
@@ -137,7 +138,10 @@ export default function TeamDetailPage({
             </div>
             <div className="text-right">
               <div className="text-xs text-text-muted">Treasury</div>
-              <GoldNumber value={team.treasury.toNumber()} prefix="$" size="lg" />
+              <span className="inline-flex items-center justify-end gap-1">
+                <GameIcon id="resource-cash" size={14} />
+                <GoldNumber value={team.treasury.toNumber()} size="lg" />
+              </span>
             </div>
           </div>
 

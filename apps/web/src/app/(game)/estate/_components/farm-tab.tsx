@@ -9,9 +9,11 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
+import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES, useFeatureGate } from "@/lib/hooks/useFeatureGate";
 import { buildingFraming } from "@/lib/narrative";
 import {
@@ -108,8 +110,9 @@ export function FarmTab() {
         </div>
         <div className="card">
           <div className="text-[10px] uppercase tracking-wider text-text-muted">Taken Back</div>
-          <div className="mt-1">
-            <GoldNumber value={produce} prefix="⚘ " size="sm" glow={produce > 0} />
+          <div className="mt-1 flex items-center gap-1.5">
+            <GameIcon id="resource-produce" title="Produce" size={16} />
+            <GoldNumber value={produce} size="sm" glow={produce > 0} />
           </div>
         </div>
       </div>
@@ -120,19 +123,17 @@ export function FarmTab() {
             Work the Ground
           </h4>
           <div className="space-y-3">
-            <div className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "bg-green-900/30 text-green-400" : "bg-red-900/20 text-red-400"}`}>
+            <div className={`rounded-lg bg-surface-overlay px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "tier-accent-text" : "text-text-muted"}`}>
               {operativeUnits > 0 ? `Operative Units: ${operativeUnits.toLocaleString()}` : "No operative units"}
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-text-muted">NOVI to spend</label>
-              <input
-                type="number"
-                value={collectNoviAmount}
-                onChange={(e) => setCollectNoviAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary tabular-nums"
-                min={1}
-              />
-            </div>
+            <NumberField
+              label="NOVI to spend"
+              value={collectNoviAmount}
+              onChange={setCollectNoviAmount}
+              min={1}
+              max={noviBalance}
+              suffix="NOVI"
+            />
             <div className="flex flex-col gap-2 sm:flex-row">
               <TxButton onClick={handleCollect} disabled={operativeUnits === 0 || !hasEnough} className="flex-1">
                 {hasEnough ? "Harvest Produce" : "Insufficient NOVI"}

@@ -9,6 +9,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { NumberField } from "@/components/shared/NumberField";
 import { bpsToPercent } from "@/lib/utils";
 import {
   createRecoverTroopsInstruction,
@@ -151,37 +152,21 @@ export function InfirmaryTab() {
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Recover {woundedCounts[recoverUnitType]?.label}
               </h3>
-              <div className="flex items-center gap-6">
-                <div>
-                  <label className="mb-1 block text-xs text-text-muted">Amount</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={recoverAmount}
-                      onChange={(e) => setRecoverAmount(
-                        Math.max(1, Math.min(selectedWoundedMax, parseInt(e.target.value) || 1))
-                      )}
-                      className="w-24 rounded border border-border-default bg-surface px-2 py-1 text-sm text-text-primary"
-                      min={1}
-                      max={selectedWoundedMax}
-                    />
-                    <button
-                      onClick={() => setRecoverAmount(selectedWoundedMax)}
-                      className="rounded border border-border-default px-2 py-1 text-xs text-text-muted hover:text-text-secondary"
-                    >
-                      Max ({selectedWoundedMax.toLocaleString()})
-                    </button>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-text-muted">Estimated Cost</div>
-                  <div className="text-sm font-semibold text-text-gold">
-                    {recoveryCostPreview != null ? recoveryCostPreview.toLocaleString() : "—"} NOVI
-                  </div>
-                  <div className="text-[11px] text-text-muted">
-                    50% of hire cost{estate?.infirmaryRecoveryDailyBps ? ` + ${bpsToPercent(estate.infirmaryRecoveryDailyBps)} daily buff` : ""}
-                  </div>
-                </div>
+              <NumberField
+                label="Amount"
+                value={recoverAmount}
+                onChange={setRecoverAmount}
+                min={1}
+                max={selectedWoundedMax}
+              />
+              <div className="mt-3 flex items-baseline justify-between text-xs">
+                <span className="text-text-muted">Estimated Cost</span>
+                <span className="text-sm font-semibold text-text-gold">
+                  {recoveryCostPreview != null ? recoveryCostPreview.toLocaleString() : "—"} NOVI
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-text-muted">
+                50% of hire cost{estate?.infirmaryRecoveryDailyBps ? ` + ${bpsToPercent(estate.infirmaryRecoveryDailyBps)} daily buff` : ""}
               </div>
               <div className="mt-4">
                 <TxButton

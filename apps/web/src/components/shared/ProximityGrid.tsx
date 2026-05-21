@@ -10,6 +10,8 @@ import {
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { cn } from "@/lib/utils";
+import styles from "./parchment-travel.module.css";
 
 /**
  * A 3×3 grid of the cells around a target — shows which neighbouring cells are
@@ -94,16 +96,25 @@ export function ProximityGrid({
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const selectedCell = selectedIdx != null ? cells[selectedIdx] : null;
   const selectedEmpty = selectedIdx != null && occupancy[selectedIdx] === false;
+  // The trip the player actually walks — from their position to the chosen
+  // cell. Distinct from `distToTarget`, which is how close to the target the
+  // cell sits once arrived.
+  const selectedTravelDist = selectedCell
+    ? calculateDistanceMeters(
+        playerLat,
+        playerLong,
+        selectedCell.centerLat,
+        selectedCell.centerLong,
+      )
+    : 0;
 
   const anyEmpty = cells.some((c, i) => occupancy[i] === false && !c.isTarget);
   const doneLoading = occupancy.every((o) => o !== null);
 
   return (
-    <div className="space-y-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-        Nearby Cells
-      </div>
-      <div className="grid grid-cols-3 gap-1">
+    <div className={styles.grid}>
+      <div className={styles.gridLabel}>Nearby Cells</div>
+      <div className={styles.cells}>
         {cells.map((cell, i) => {
           const occupied = occupancy[i];
           const loading = occupied === null;
@@ -111,42 +122,33 @@ export function ProximityGrid({
           const isSelected = selectedIdx === i;
           const canClick = isEmpty && !cell.isTarget && !disabled;
 
-          let style: string;
-          if (cell.isTarget) {
-            style = "border-red-600 bg-red-900/30 text-red-400";
-          } else if (cell.isPlayer) {
-            style = "border-amber-600 bg-amber-900/30 text-amber-400";
-          } else if (isSelected) {
-            style = "border-amber-500 bg-amber-900/40 text-amber-300 ring-1 ring-amber-500/50";
-          } else if (loading) {
-            style = "border-zinc-800 bg-surface/40 text-zinc-600 animate-pulse";
-          } else if (!isEmpty) {
-            style = "border-zinc-800 bg-zinc-900/50 text-zinc-600 opacity-50";
-          } else if (cell.inRange) {
-            style = "border-green-700 bg-green-900/20 text-green-400 hover:bg-green-900/40 cursor-pointer";
-          } else {
-            style = "border-yellow-800 bg-yellow-900/10 text-yellow-500 hover:bg-yellow-900/30 cursor-pointer";
-          }
+          let stateClass: string;
+          if (cell.isTarget) stateClass = styles.cellTarget;
+          else if (cell.isPlayer) stateClass = styles.cellPlayer;
+          else if (loading) stateClass = styles.cellLoading;
+          else if (!isEmpty) stateClass = styles.cellOccupied;
+          else if (cell.inRange) stateClass = styles.cellInRange;
+          else stateClass = styles.cellClose;
 
           return (
             <button
               key={i}
               disabled={!canClick}
-              onClick={() => canClick ? setSelectedIdx(i) : undefined}
-              className={`aspect-square rounded border flex flex-col items-center justify-center text-[9px] font-mono transition-all ${style}`}
+              onClick={() => (canClick ? setSelectedIdx(i) : undefined)}
+              className={cn(styles.cell, stateClass, isSelected && styles.cellSelected)}
             >
               {cell.isTarget ? (
                 <span className="text-xs">&#9760;</span>
               ) : cell.isPlayer ? (
-                <span className="text-[10px] font-bold">YOU</span>
+                <span className="text-[10px]">YOU</span>
               ) : loading ? (
-                <span className="text-[10px]">...</span>
+                <span className="text-[10px]">&#8230;</span>
               ) : !isEmpty ? (
                 <span className="text-[10px]">&#9632;</span>
               ) : (
                 <>
                   <span>{cell.distToTarget.toFixed(0)}m</span>
-                  {cell.inRange && <span className="text-[7px] text-green-500">IN RANGE</span>}
+                  {cell.inRange && <span className={styles.inRangeTag}>IN RANGE</span>}
                 </>
               )}
             </button>
@@ -155,11 +157,11 @@ export function ProximityGrid({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-text-muted">
-        <span><span className="text-red-400">&#9760;</span> Target</span>
-        <span><span className="text-green-400">&#10003;</span> In range</span>
-        <span><span className="text-yellow-500">&#9679;</span> Close</span>
-        <span><span className="text-zinc-600">&#9632;</span> Occupied</span>
+      <div className={styles.legend}>
+        <span><span style={{ color: "var(--crimson)" }}>&#9760;</span> Target</span>
+        <span><span style={{ color: "var(--seal)" }}>&#10003;</span> In range</span>
+        <span><span style={{ color: "var(--ink-soft)" }}>&#9679;</span> Close</span>
+        <span><span style={{ color: "var(--ink-faint)" }}>&#9632;</span> Occupied</span>
       </div>
 
       {/* Travel button for selected cell */}
@@ -170,14 +172,15 @@ export function ProximityGrid({
           className="w-full text-xs"
           disabled={disabled}
         >
-          Travel ({selectedCell.distToTarget.toFixed(0)}m)
+          Travel here · {selectedTravelDist.toFixed(0)}m trip
+          {selectedCell.inRange
+            ? " — in range"
+            : ` — ${selectedCell.distToTarget.toFixed(0)}m from target`}
         </TxButton>
       )}
 
       {doneLoading && !anyEmpty && (
-        <div className="text-[10px] text-red-400 text-center">
-          All nearby cells are occupied
-        </div>
+        <div className={styles.allOccupied}>All nearby cells are occupied</div>
       )}
     </div>
   );

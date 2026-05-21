@@ -9,6 +9,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
@@ -123,7 +124,7 @@ export function ExpeditionTab() {
         fragments,
         cost,
         resourceLabel: "Gems",
-        resourceIcon: "\u25C7",
+        resourceIcon: "resource-gem" as GameIconId,
       };
     } else {
       // Fishing
@@ -138,7 +139,7 @@ export function ExpeditionTab() {
         fragments,
         cost,
         resourceLabel: "Produce",
-        resourceIcon: "\uD83C\uDF3E",
+        resourceIcon: "resource-produce" as GameIconId,
       };
     }
   }, [selectedType, expeditionTier, expeditionOps]);
@@ -160,7 +161,7 @@ export function ExpeditionTab() {
         estimated: Math.floor(ops * gemsPerOpHour * hours),
         fragments,
         label: "Gems",
-        icon: "\u25C7",
+        icon: "resource-gem" as GameIconId,
       };
     } else {
       const hours = FISHING_DURATION_HOURS[tier] ?? 1;
@@ -170,7 +171,7 @@ export function ExpeditionTab() {
         estimated: Math.floor(ops * producePerOpHour * hours),
         fragments,
         label: "Produce",
-        icon: "\uD83C\uDF3E",
+        icon: "resource-produce" as GameIconId,
       };
     }
   }, [expedition]);
@@ -364,8 +365,9 @@ export function ExpeditionTab() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-xs text-text-muted">{activeRewardInfo.label}</div>
-                  <div className="text-text-gold">
-                    {activeRewardInfo.icon} <GoldNumber value={activeRewardInfo.estimated} />
+                  <div className="flex items-center gap-1 text-text-gold">
+                    <GameIcon id={activeRewardInfo.icon} title={activeRewardInfo.label} size={14} />
+                    <GoldNumber value={activeRewardInfo.estimated} />
                   </div>
                 </div>
                 <div>
@@ -527,8 +529,9 @@ export function ExpeditionTab() {
                   </div>
                   <div>
                     <div className="text-xs text-text-muted">Est. {rewardPreview.resourceLabel}</div>
-                    <div className="text-text-gold text-sm">
-                      {rewardPreview.resourceIcon} <GoldNumber value={rewardPreview.estimatedGems} size="sm" />
+                    <div className="flex items-center gap-1 text-text-gold text-sm">
+                      <GameIcon id={rewardPreview.resourceIcon} title={rewardPreview.resourceLabel} size={14} />
+                      <GoldNumber value={rewardPreview.estimatedGems} size="sm" />
                     </div>
                   </div>
                   <div>

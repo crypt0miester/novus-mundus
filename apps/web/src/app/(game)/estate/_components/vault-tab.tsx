@@ -10,11 +10,13 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { FeatureGate } from "@/components/shared/FeatureGate";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NoviRewards } from "@/components/shared/NoviRewards";
+import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES } from "@/lib/hooks/useFeatureGate";
 import { buildingFraming } from "@/lib/narrative";
 import {
@@ -133,11 +135,17 @@ export function VaultTab() {
           <div className="mb-4 grid gap-2 grid-cols-2">
             <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
               <div className="text-[10px] uppercase tracking-wider text-text-muted">On Hand</div>
-              <GoldNumber value={cashOnHand} prefix="$ " format="compact" size="sm" />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-cash" size={14} />
+                <GoldNumber value={cashOnHand} format="compact" size="sm" />
+              </span>
             </div>
             <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
               <div className="text-[10px] uppercase tracking-wider text-text-muted">In Vault</div>
-              <GoldNumber value={cashInVault} prefix="$ " format="compact" size="sm" glow={false} />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-cash" size={14} />
+                <GoldNumber value={cashInVault} format="compact" size="sm" glow={false} />
+              </span>
             </div>
           </div>
           <div className="mb-4 flex gap-2">
@@ -158,18 +166,18 @@ export function VaultTab() {
               Vault &rarr; Hand
             </button>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <input
-              type="number"
+          <div className="space-y-3">
+            <NumberField
+              label="Amount"
               value={vaultAmount}
-              onChange={(e) => setVaultAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary sm:w-32"
-              placeholder="Amount"
+              onChange={setVaultAmount}
+              min={0}
+              max={vaultDirection === "deposit" ? cashOnHand : cashInVault}
             />
             <TxButton
               onClick={handleVaultTransfer}
               disabled={vaultAmount <= 0 || !!vaultValidation}
-              className="w-full sm:w-auto"
+              className="w-full"
             >
               {vaultDirection === "deposit" ? "Deposit" : "Withdraw"} ${vaultAmount.toLocaleString()}
             </TxButton>
@@ -190,19 +198,17 @@ export function VaultTab() {
             Set your operative workforce to turn locked NOVI into cash on hand.
           </p>
           <div className="space-y-3">
-            <div className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "bg-amber-900/30 text-amber-400" : "bg-red-900/20 text-red-400"}`}>
+            <div className={`rounded-lg bg-surface-overlay px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "tier-accent-text" : "text-text-muted"}`}>
               {operativeUnits > 0 ? `Operative Units: ${operativeUnits.toLocaleString()}` : "No operative units"}
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-text-muted">NOVI to spend</label>
-              <input
-                type="number"
-                value={collectNoviAmount}
-                onChange={(e) => setCollectNoviAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary tabular-nums"
-                min={1}
-              />
-            </div>
+            <NumberField
+              label="NOVI to spend"
+              value={collectNoviAmount}
+              onChange={setCollectNoviAmount}
+              min={1}
+              max={noviBalance}
+              suffix="NOVI"
+            />
             <div className="flex flex-col gap-2 sm:flex-row">
               <TxButton onClick={handleCollectCash} disabled={operativeUnits === 0 || !hasEnoughForCollect} className="flex-1">
                 {hasEnoughForCollect ? "Collect Cash" : "Insufficient NOVI"}
@@ -325,18 +331,18 @@ function SendCashPanel({ player }: { player: any }) {
               );
             })}
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <input
-              type="number"
+          <div className="space-y-3">
+            <NumberField
+              label="Amount"
               value={amount}
-              onChange={(e) => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary sm:w-40"
-              placeholder="Amount"
+              onChange={setAmount}
+              min={0}
+              max={cashOnHand}
             />
             <TxButton
               onClick={handleSend}
               disabled={!recipient || amount <= 0 || !!amountError}
-              className="w-full sm:w-auto"
+              className="w-full"
             >
               Send ${amount.toLocaleString()}
             </TxButton>

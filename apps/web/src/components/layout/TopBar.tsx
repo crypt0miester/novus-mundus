@@ -7,6 +7,7 @@ import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useRightPanelStore } from "@/lib/store/right-panel";
+import { useSheetStore } from "@/lib/store/sheet";
 import { cn } from "@/lib/utils";
 import { PRIMARY, SECONDARY } from "./nav-config";
 
@@ -65,6 +66,9 @@ export function TopBar() {
   const { data: estateData } = useEstate();
   const player = playerData?.account;
   const showPanel = useRightPanelStore((s) => s.show);
+  // Lift above a bottom sheet's backdrop (tablet widths still show this bar) —
+  // for as long as it is painted, including the close animation.
+  const sheetOpen = useSheetStore((s) => s.mounted > 0);
 
   // Lock checks
   const hasPlayer = !!player;
@@ -87,7 +91,12 @@ export function TopBar() {
   const disabled = isSuccess && !hasPlayer;
 
   return (
-    <header className="z-40 hidden md:flex h-10 items-center bg-[var(--nm-bg-bar)] border-b border-zinc-800/50 px-4 lg:px-6">
+    <header
+      className={cn(
+        "hidden md:flex h-10 items-center bg-[var(--nm-bg-bar)] border-b border-zinc-800/50 px-4 lg:px-6",
+        sheetOpen ? "z-[55]" : "z-40",
+      )}
+    >
       {/* Logo */}
       <Link href="/dashboard" className="flex flex-shrink-0 items-center gap-2">
         <img

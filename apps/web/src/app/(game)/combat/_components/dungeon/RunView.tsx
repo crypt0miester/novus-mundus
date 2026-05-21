@@ -632,13 +632,15 @@ export function RunView({
                         key={relicId}
                         onClick={(rp) => handleChooseRelic(relicId, rp)}
                         variant="secondary"
-                        className="flex-col py-2"
+                        className="py-2"
                       >
-                        <span className="text-sm">
-                          🔮 {info?.name ?? `Relic #${relicId}`}
-                        </span>
-                        <span className="mt-0.5 block text-[10px] font-normal text-text-muted">
-                          {info?.effect ?? ""}
+                        <span className="flex flex-col items-center gap-0.5">
+                          <span className="text-sm">
+                            🔮 {info?.name ?? `Relic #${relicId}`}
+                          </span>
+                          <span className="text-[10px] font-normal text-text-muted">
+                            {info?.effect ?? ""}
+                          </span>
                         </span>
                       </TxButton>
                     );
@@ -689,9 +691,6 @@ export function RunView({
                 </TxButton>
                 <TxButton onClick={handleFlee} variant="secondary">
                   Flee
-                </TxButton>
-                <TxButton onClick={handleClaim} variant="secondary">
-                  Claim &amp; Exit
                 </TxButton>
               </div>
               {isCombat &&

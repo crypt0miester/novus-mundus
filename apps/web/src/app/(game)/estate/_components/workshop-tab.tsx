@@ -10,6 +10,7 @@ import { BuildingId } from "@/lib/hooks/useFeatureGate";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { NumberField } from "@/components/shared/NumberField";
 import { createConvertMaterialsInstruction } from "novus-mundus-sdk";
 
 const MATERIAL_TIERS = [
@@ -141,24 +142,21 @@ export function WorkshopTab() {
         </div>
 
         {/* Amount + action */}
-        <div className="flex items-end gap-4">
-          <div>
-            <label className="mb-1 block text-xs text-text-muted">Conversions</label>
-            <input
-              type="number"
-              value={convertAmount}
-              onChange={(e) => setConvertAmount(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-24 rounded-lg border border-border-default bg-surface px-3 py-2 text-sm text-text-primary"
-              min={1}
-            />
-          </div>
+        <div className="space-y-3">
+          <NumberField
+            label="Conversions"
+            value={convertAmount}
+            onChange={setConvertAmount}
+            min={1}
+            max={maxConversions}
+          />
           <div className="text-xs text-text-muted">
             = {(convertAmount * 100).toLocaleString()} {fromMat?.name} &rarr; {(convertAmount * 20).toLocaleString()} {toName}
           </div>
           <TxButton
             onClick={handleConvertMaterials}
             disabled={convertAmount > maxConversions || !workshopOk}
-            className="px-6 w-64 ml-auto"
+            className="w-full"
           >
             Convert
           </TxButton>

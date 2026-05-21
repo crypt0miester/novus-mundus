@@ -8,6 +8,8 @@ import type { PlayerAccount } from "novus-mundus-sdk";
 interface PlayerCardProps {
   address: string;
   player: PlayerAccount;
+  /** Shown when the player has no on-chain name (e.g. a resolved domain). */
+  displayName?: string;
   rank?: number;
   showCity?: boolean;
   cityName?: string;
@@ -25,6 +27,7 @@ const TIER_VARIANTS = ["default", "info", "epic", "legendary"] as const;
 export function PlayerCard({
   address,
   player,
+  displayName,
   rank,
   showCity,
   cityName,
@@ -35,7 +38,7 @@ export function PlayerCard({
   highlight,
   className,
 }: PlayerCardProps) {
-  const name = player.name || "Unnamed Warrior";
+  const name = player.name || displayName || "Unnamed Warrior";
   const tierIndex = Math.min(player.subscriptionTier, 3);
 
   return (

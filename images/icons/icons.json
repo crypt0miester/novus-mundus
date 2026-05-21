@@ -1,0 +1,74 @@
+{
+  "_comment": "Domain icon manifest for Novus Mundus. Two sets: 'relief' (rich bronze-medallion PNGs for showcase surfaces — buffs, resources, currency) and 'flat' (2-tone heraldic glyphs traced to SVG for dense utility surfaces — weapon types, map cells). generate-icons.sh reads this; export-icons-to-app.sh post-processes raw output into apps/web/public/img/icons/. Each icon has a fixed seed so re-runs are deterministic and regenerating one icon never disturbs the rest.",
+
+  "defaults": {
+    "model": "ideogram/ideogram-3",
+    "width": 1024,
+    "height": 1024
+  },
+
+  "preamble": "Single game UI icon. One isolated symbolic subject, centered, no scene.",
+
+  "style": {
+    "relief": "Style: the subject rendered as a single raised bronze relief object — one sculpted bronze item alone, with subtle metallic depth and micro-shadows, lit warmly from the upper left. Absolutely NO coin, no disc, no circle, no medallion, no round plate, no frame, nothing behind it — only the item itself, floating isolated in empty space. Color: warm polished bronze and aged gold (#C9A961) on a pure flat solid black background.",
+    "flat": "Style: a single engraved heraldic glyph and nothing else — no coin, no disc, no enclosing circle, no border or frame. Single-weight clean crisp vector-like line work, flat with no gradient and no shading, bold and legible when shrunk to a small size. Color: solid antique gold (#C9A961) on a pure solid black background.",
+    "nav": "Style: an extremely minimal navigation icon — one bold, simple silhouette built from as few single-weight line strokes as possible. No internal detail, no double lines, no flourishes, no fill, no shading. Drawn like a modern app tab-bar icon that stays crisp and unmistakable when shrunk to 20 pixels. Color: a clean solid antique gold (#C9A961) line on a pure flat solid black background.",
+    "nav-filled": "Style: a bold minimal navigation icon built from SOLID FILLED shapes — every shape is a solid filled silhouette, completely filled in, never a hollow outline and never thin line work. Flat, no shading, no gradient. Simple and legible when shrunk to 20 pixels. Color: solid antique gold (#C9A961) filled shapes on a pure flat solid black background."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1, the icon fills the central portion of the frame on a clean uniform solid black background. Icon only — absolutely no text, no letters, no numbers, no clutter, one subject only.",
+
+  "icons": [
+    { "id": "buff-attack-power",           "set": "relief", "seed": 1701, "subject": "A single upright broadsword blade, edge catching the light." },
+    { "id": "buff-defense-power",           "set": "relief", "seed": 1762, "subject": "A heavy heraldic tower shield, face forward." },
+    { "id": "buff-cash-collection-rate",    "set": "relief", "seed": 1703, "subject": "A drawstring coin pouch, plump and overflowing with coins at the mouth." },
+    { "id": "buff-xp-gain",                 "set": "relief", "seed": 1704, "subject": "A radiant rising star with a trailing upward spark." },
+    { "id": "buff-training-cost-reduction", "set": "relief", "seed": 1765, "subject": "A blacksmith's anvil." },
+    { "id": "buff-rally-capacity",          "set": "relief", "seed": 1706, "subject": "A war banner on a pole, cloth furled by wind." },
+    { "id": "buff-critical-hit-chance",     "set": "relief", "seed": 1707, "subject": "A concentric target struck dead-center by an arrowhead." },
+    { "id": "buff-synchrony-bonus",         "set": "relief", "seed": 1708, "subject": "Two interlocking gear wheels meshed together." },
+    { "id": "buff-resource-capacity",       "set": "relief", "seed": 1709, "subject": "A bound treasure chest, lid closed, iron-strapped and full." },
+    { "id": "buff-weapon-efficiency",       "set": "relief", "seed": 1710, "subject": "A whetstone with a dagger blade drawn across it, sparks rising." },
+    { "id": "buff-stamina-regen",           "set": "relief", "seed": 1711, "subject": "A winged boot, single feathered wing at the heel." },
+    { "id": "buff-produce-generation",      "set": "relief", "seed": 1712, "subject": "A tied sheaf of ripe wheat stalks." },
+    { "id": "buff-unit-capacity",           "set": "relief", "seed": 1713, "subject": "A tight fan of three upright infantry spears." },
+    { "id": "buff-encounter-damage",        "set": "relief", "seed": 1714, "subject": "A fanged beast skull pierced through by a spearhead." },
+    { "id": "buff-loot-bonus",              "set": "relief", "seed": 1715, "subject": "An open treasure chest with faceted gems spilling over the rim." },
+    { "id": "buff-armor-efficiency",        "set": "relief", "seed": 1766, "subject": "A polished knight's breastplate cuirass, front view." },
+    { "id": "buff-mining-affinity",         "set": "relief", "seed": 1717, "subject": "A miner's pickaxe crossed over a raw ore nugget." },
+    { "id": "buff-fishing-affinity",        "set": "relief", "seed": 1718, "subject": "A fish hooked on a curved fishing hook." },
+
+    { "id": "resource-novi",                "set": "relief", "seed": 1760, "source": "asset", "sourceImage": "images/logo/novus-mundus-logo-1024-on-black.png", "subject": "The Novus Mundus logo mark — the NOVI token icon, placed from the canonical bronze logo asset (no coin)." },
+    { "id": "resource-gem",                 "set": "relief", "seed": 1851, "subject": "a single faceted brilliant-cut gemstone" },
+    { "id": "resource-cash",                "set": "relief", "seed": 1862, "subject": "a small heap of three or four overlapping round coins, a clear realistic pile of gold money (not abstract, not a glyph)" },
+    { "id": "resource-produce",             "set": "relief", "seed": 1853, "subject": "a single tied sheaf of ripe wheat" },
+    { "id": "resource-stamina",             "set": "relief", "seed": 1854, "subject": "a single bold lightning bolt" },
+    { "id": "resource-fragments",           "set": "relief", "seed": 1855, "subject": "a small cluster of three jagged crystal shards" },
+
+    { "id": "weapon-melee",                 "set": "flat",   "seed": 1801, "subject": "Two swords crossed in a saltire." },
+    { "id": "weapon-ranged",                "set": "flat",   "seed": 1802, "subject": "A drawn longbow with a single nocked arrow." },
+    { "id": "weapon-siege",                 "set": "flat",   "seed": 1803, "subject": "A torsion catapult with its throwing arm cocked back." },
+    { "id": "weapon-armor",                 "set": "flat",   "seed": 1804, "subject": "A plain heater shield, face forward." },
+
+    { "id": "map-capital",                  "set": "flat",   "seed": 1820, "subject": "A five-point heraldic crown." },
+    { "id": "map-resource",                 "set": "flat",   "seed": 1821, "subject": "A single miner's pickaxe, head up." },
+    { "id": "map-combat",                   "set": "flat",   "seed": 1822, "subject": "Two crossed war axes." },
+    { "id": "map-trade",                    "set": "flat",   "seed": 1823, "subject": "A merchant's balance scale with two pans hanging level." },
+
+    { "id": "nav-home",                     "set": "nav",    "seed": 1901, "source": "asset", "sourceImage": "apps/web/public/img/logo/logo.svg", "subject": "The Novus Mundus logo mark — used as the home/brand anchor tab, copied from the canonical vector logo, not generated." },
+    { "id": "nav-combat",                   "set": "nav",    "seed": 1902, "subject": "Two crossed swords forming a simple X, each sword one clean stroke." },
+    { "id": "nav-estate",                   "set": "nav",    "seed": 1903, "subject": "A single castle tower with a few blocky crenellations on top." },
+    { "id": "nav-map",                      "set": "nav",    "seed": 1904, "subject": "A compass rose — a radial star with a prominent north point and cardinal spokes." },
+    { "id": "nav-team",                     "set": "nav",    "style": "nav-filled", "seed": 1921, "subject": "Four heraldic shields in a tight two-by-two overlapping cluster — two shields on the upper row and two on the lower row, overlapping and layered into one compact square block. Each shield a SOLID FILLED shape, flat-topped with a pointed bottom." },
+    { "id": "nav-shop",                     "set": "nav",    "style": "nav-filled", "seed": 1922, "subject": "A shopping bag with two curved handles — a bold solid filled silhouette." },
+    { "id": "nav-inventory",                "set": "nav",    "seed": 1907, "subject": "A treasure chest." },
+    { "id": "nav-events",                   "set": "nav",    "seed": 1908, "subject": "A calendar page." },
+    { "id": "nav-leaderboard",              "set": "nav",    "seed": 1909, "subject": "A two-handled trophy cup." },
+    { "id": "nav-settings",                 "set": "nav",    "seed": 1910, "subject": "A single gear cog wheel." },
+    { "id": "nav-heroes",                   "set": "nav",    "seed": 1911, "subject": "A crested knight's helmet." },
+    { "id": "nav-dungeon",                  "set": "nav",    "seed": 1912, "subject": "A human skull." },
+    { "id": "nav-arena",                    "set": "nav",    "seed": 1913, "subject": "A three-pronged trident." },
+    { "id": "nav-rally",                    "set": "nav",    "seed": 1914, "subject": "A triangular pennant flag on a pole." },
+    { "id": "nav-subscription",             "set": "nav",    "seed": 1915, "subject": "A simple crown." }
+  ]
+}

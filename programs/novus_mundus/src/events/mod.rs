@@ -227,8 +227,10 @@ pub trait Event {
 /// Maximum event buffer size (increased for name fields)
 pub const MAX_EVENT_SIZE: usize = 512;
 
-/// Emit an event via sol_log_data
-#[inline]
+/// Emit an event via sol_log_data.
+/// `#[inline(never)]` keeps the 512-byte serialization buffer in its own stack
+/// frame rather than inlining it into large processor functions.
+#[inline(never)]
 pub fn emit_event<E: Event>(event: &E) {
     let mut buf = [0u8; MAX_EVENT_SIZE];
     buf[..8].copy_from_slice(&E::DISCRIMINATOR);

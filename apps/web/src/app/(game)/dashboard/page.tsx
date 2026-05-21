@@ -15,10 +15,12 @@ import {
   useDailyRewards,
 } from "@/lib/hooks/useDerived";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
+import { ProgressRing } from "@/components/shared/ProgressRing";
+import { useNoviGenerator } from "@/lib/hooks/useNoviGenerator";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { StatBar } from "@/components/shared/StatBar";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
@@ -32,7 +34,7 @@ import { useRightPanelStore } from "@/lib/store/right-panel";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
-import { bpsToMultiplier, formatTime } from "@/lib/utils";
+import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
 import {
   xpRequiredForLevel, levelProgressPercent,
   getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier,
@@ -52,6 +54,7 @@ export default function DashboardPage() {
   const daily = useDailyRewards();
   const stamina = useStamina(player);
   const novi = useNoviBalance();
+  const noviGen = useNoviGenerator();
   const showPanel = useRightPanelStore((s) => s.show);
 
   const nowSec = Math.floor(Date.now() / 1000);
@@ -61,6 +64,7 @@ export default function DashboardPage() {
   const xpForNext = player ? xpRequiredForLevel(player.level + 1) : 0;
   const xpProgress = player ? levelProgressPercent(player.level, player.currentXp.toNumber()) : 0;
   const networth = player ? player.networth.toNumber() : 0;
+  const staminaPct = stamina.max > 0 ? (stamina.current / stamina.max) * 100 : 0;
 
   const [completedKeys] = useState(() => new Set<string>());
   if (playerReady) completedKeys.add("player");
@@ -107,6 +111,9 @@ export default function DashboardPage() {
                   <Link href="/shop" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
                     Shop
                   </Link>
+                  <Link href="/shop?tab=subscribe" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
+                    Subscribe
+                  </Link>
                 </div>
               )}
             </div>
@@ -118,17 +125,23 @@ export default function DashboardPage() {
               {(travel.traveling || lootCount > 0) && (
                 <div className="card flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                   {travel.traveling && (
-                    <div className="flex flex-1 items-center justify-between">
-                      <span className="text-sm text-text-secondary">
-                        Traveling to City {player.destinationCity}
-                      </span>
-                      <GoldCountdown
-                        endsAt={travel.endsAt}
-                        startedAt={travel.startedAt}
-                        showProgress
-                        format="compact"
-                        size="sm"
-                      />
+                    <div className="flex flex-1 items-center gap-3">
+                      <ProgressRing percent={travel.pct} size={44} strokeWidth={8}>
+                        <span className="text-[9px] font-bold tabular-nums text-text-gold">
+                          {Math.floor(travel.pct)}%
+                        </span>
+                      </ProgressRing>
+                      <div className="flex flex-1 items-center justify-between gap-2">
+                        <span className="text-sm text-text-secondary">
+                          Traveling to City {player.destinationCity}
+                        </span>
+                        <GoldCountdown
+                          endsAt={travel.endsAt}
+                          startedAt={travel.startedAt}
+                          format="compact"
+                          size="sm"
+                        />
+                      </div>
                     </div>
                   )}
                   {lootCount > 0 && (
@@ -146,40 +159,69 @@ export default function DashboardPage() {
 
               {/* Main grid: player stuff (left 2/3) + NOVI stuff (right 1/3) */}
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                {/* Left column: Player Card → Treasury/Power → Activity → Game Info */}
-                <div className="flex flex-col gap-3 lg:col-span-2">
-                  <div className="card accent-border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-base font-semibold text-text-primary">
-                          {player.name || "Unnamed Warrior"}
-                        </div>
-                        <div className="mt-1 flex items-center gap-3 text-xs text-text-muted">
-                          <span>City {player.currentCity}</span>
-                          <span>{sub.tierName} {sub.active ? "♛" : ""}</span>
+                {/* Left column. On mobile the wrapper is `display:contents` so
+                    its cards join the page grid directly and `order-*` can
+                    interleave them with the right column; lg restores the
+                    two-column layout (`lg:order-none` clears the mobile order). */}
+                <div className="contents lg:flex lg:flex-col lg:gap-3 lg:col-span-2">
+                  {/* Vitals — Level (XP) and Stamina rings. Identity
+                      (name/city/tier) omitted; the left panel and status bar
+                      already carry it. */}
+                  <div className="card accent-border order-3 lg:order-none">
+                    <div className="flex flex-wrap items-center justify-around gap-3">
+                      <div className="flex flex-col items-center gap-2">
+                        <ProgressRing percent={xpProgress} size={96}>
+                          <span className="font-mono text-2xl font-bold leading-none tabular-nums text-text-gold">
+                            {player.level}
+                          </span>
+                          <span className="mt-0.5 text-[9px] uppercase tracking-wider text-text-muted">
+                            Level
+                          </span>
+                        </ProgressRing>
+                        <div className="text-center text-[11px] text-text-muted">
+                          <span className="font-mono tabular-nums text-text-secondary">
+                            {formatNumber(player.currentXp.toNumber(), "compact")}
+                          </span>
+                          {" "}/ {formatNumber(xpForNext, "compact")} XP
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-3xl font-bold text-text-gold">{player.level}</div>
-                        <div className="text-[10px] text-text-muted">LEVEL</div>
+                      <div className="flex flex-col items-center gap-2">
+                        <ProgressRing percent={staminaPct} size={96}>
+                          <span className="font-mono text-2xl font-bold leading-none tabular-nums text-text-gold">
+                            {stamina.current}
+                          </span>
+                          <span className="mt-0.5 text-[9px] uppercase tracking-wider text-text-muted">
+                            / {stamina.max}
+                          </span>
+                        </ProgressRing>
+                        <div className="text-center text-[11px] text-text-muted">Stamina</div>
                       </div>
-                    </div>
-                    <div className="mt-2">
-                      <StatBar current={player.currentXp.toNumber()} max={xpForNext} label="XP" color="gold" />
-                      <div className="mt-0.5 flex justify-between text-[10px] text-text-muted">
-                        <span>{player.currentXp.toNumber().toLocaleString()} / {xpForNext.toLocaleString()}</span>
-                        <span>{xpProgress.toFixed(1)}%</span>
+                      <div className="flex flex-col items-center gap-2">
+                        <ProgressRing percent={noviGen.fillPct} size={96}>
+                          <span className="font-mono text-xl font-bold leading-none tabular-nums text-text-gold">
+                            {formatNumber(noviGen.displayNovi, "compact")}
+                          </span>
+                          <span className="mt-0.5 text-[9px] uppercase tracking-wider text-text-muted">
+                            NOVI
+                          </span>
+                        </ProgressRing>
+                        <div className="text-center text-[11px] text-text-muted">
+                          {Math.floor(noviGen.fillPct)}% to cap
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 order-4 lg:order-none">
                     <div className="card">
                       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Treasury</h3>
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">NOVI</span>
-                          <GoldNumber value={novi.raw} prefix="◆ " delta />
+                          <span className="flex items-center gap-1">
+                            <GameIcon id="resource-novi" size={14} />
+                            <GoldNumber value={novi.raw} delta />
+                          </span>
                         </div>
                         {/* Surface a desync between the wallet's spendable
                             NOVI (ATA balance — what hire/build burn from) and
@@ -197,19 +239,31 @@ export default function DashboardPage() {
                           )}
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Cash</span>
-                          <GoldNumber value={player.cashOnHand.toNumber()} prefix="$ " format="full" />
+                          <span className="flex items-center gap-1">
+                            <GameIcon id="resource-cash" size={14} />
+                            <GoldNumber value={player.cashOnHand.toNumber()} format="full" />
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Vault</span>
-                          <GoldNumber value={player.cashInVault.toNumber()} prefix="$ " format="full" glow={false} />
+                          <span className="flex items-center gap-1">
+                            <GameIcon id="resource-cash" size={14} />
+                            <GoldNumber value={player.cashInVault.toNumber()} format="full" glow={false} />
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Gems</span>
-                          <GoldNumber value={player.gems.toNumber()} prefix="✦ " />
+                          <span className="flex items-center gap-1">
+                            <GameIcon id="resource-gem" size={14} />
+                            <GoldNumber value={player.gems.toNumber()} />
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Fragments</span>
-                          <GoldNumber value={player.fragments.toNumber()} prefix="◇ " glow={false} />
+                          <span className="flex items-center gap-1">
+                            <GameIcon id="resource-fragments" size={14} />
+                            <GoldNumber value={player.fragments.toNumber()} glow={false} />
+                          </span>
                         </div>
                         <div className="mt-1.5 border-t border-border-default pt-1.5 flex justify-between text-sm">
                           <span className="text-text-secondary">Net Worth</span>
@@ -239,13 +293,16 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <ActivityFeed />
+                  <div className="order-6 lg:order-none">
+                    <ActivityFeed />
+                  </div>
 
                   {geData?.account && (() => {
                     const ge = geData.account;
                     const gp = ge.gameplayConfig;
                     const tm = ge.themeConfig.themeMultipliers;
                     return (
+                      <div className="order-7 lg:order-none">
                       <GameInfoPanel>
                         <InfoGrid items={[
                           { label: "Kingdom", value: ge.kingdomName, highlight: true },
@@ -259,15 +316,23 @@ export default function DashboardPage() {
                           { label: "Collection Mult", value: bpsToMultiplier(tm.collectionMultiplier) },
                         ]} />
                       </GameInfoPanel>
+                      </div>
                     );
                   })()}
                 </div>
 
-                {/* Right column: NOVI Generator + Rewards */}
-                <div className="flex flex-col gap-3">
-                  <NoviGenerator />
-                  <NoviRewards />
-                  <DailyRewardCard daily={daily} />
+                {/* Right column — `display:contents` on mobile (see left
+                    column note) so these interleave with the left cards. */}
+                <div className="contents lg:flex lg:flex-col lg:gap-3">
+                  <div className="order-2 lg:order-none">
+                    <NoviGenerator />
+                  </div>
+                  <div className="order-5 lg:order-none">
+                    <NoviRewards />
+                  </div>
+                  <div className="order-1 lg:order-none">
+                    <DailyRewardCard daily={daily} />
+                  </div>
                 </div>
               </div>
             </>
@@ -282,7 +347,7 @@ export default function DashboardPage() {
 function DailyRewardCard({
   daily,
 }: {
-  daily: { available: boolean; cooldownEnds: number; hasDailyRewards: boolean };
+  daily: ReturnType<typeof useDailyRewards>;
 }) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
@@ -306,26 +371,50 @@ function DailyRewardCard({
       .then((r) => r.signature);
   };
 
+  // Fill the ring across the window between the last claim and the next one.
+  const cooldownPct = (() => {
+    if (daily.available) return 100;
+    const span = daily.cooldownEnds - daily.cooldownStartedAt;
+    if (span <= 0) return 0;
+    const elapsed = Math.floor(Date.now() / 1000) - daily.cooldownStartedAt;
+    return Math.max(0, Math.min(100, (elapsed / span) * 100));
+  })();
+
   return (
     <div className="card accent-border">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
         Daily Reward
       </h3>
-      {daily.available ? (
-        <>
-          <p className="mb-3 text-sm text-text-secondary">
-            Your daily login reward is ready to claim.
-          </p>
-          <TxButton onClick={handleClaim} className="w-full">
-            Claim Daily Reward
-          </TxButton>
-        </>
-      ) : (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">Next reward</span>
-          <GoldCountdown endsAt={daily.cooldownEnds} format="compact" size="sm" />
+      <div className="flex items-center gap-4">
+        <ProgressRing percent={cooldownPct} size={76}>
+          {daily.available ? (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-gold">
+              Ready
+            </span>
+          ) : (
+            <span className="font-mono text-sm font-bold tabular-nums text-text-gold">
+              {Math.floor(cooldownPct)}%
+            </span>
+          )}
+        </ProgressRing>
+        <div className="min-w-0 flex-1">
+          {daily.available ? (
+            <>
+              <p className="mb-2 text-sm text-text-secondary">
+                Your daily reward is ready to claim.
+              </p>
+              <TxButton onClick={handleClaim} className="w-full">
+                Claim Daily Reward
+              </TxButton>
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-text-muted">Next reward in</div>
+              <GoldCountdown endsAt={daily.cooldownEnds} format="compact" size="sm" />
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

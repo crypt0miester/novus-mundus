@@ -357,7 +357,7 @@ export function SanctuaryTab() {
                   <div className="space-y-3">
                     <div className="flex justify-center">
                       <TxButton onClick={handleStartMeditation} disabled={traveling} className="px-8 py-3 text-lg">
-                        Begin Meditation (Slot {selectedSlot})
+                        Begin Meditation
                       </TxButton>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2">

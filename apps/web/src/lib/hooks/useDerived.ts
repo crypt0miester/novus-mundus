@@ -67,21 +67,23 @@ export function useResearchBuffs() {
   return useMemo(() => {
     if (!player) return [];
 
-    const buffs: { label: string; bps: number }[] = [];
+    // `stat` ties a buff to its GameIcon; Crit Damage has no BuffStat (and no
+    // icon), so it stays undefined and renders icon-less.
+    const buffs: { label: string; bps: number; stat?: BuffStat }[] = [];
     if (player.researchAttackBps > 0)
-      buffs.push({ label: "Attack", bps: player.researchAttackBps });
+      buffs.push({ label: "Attack", bps: player.researchAttackBps, stat: BuffStat.AttackPower });
     if (player.researchDefenseBps > 0)
-      buffs.push({ label: "Defense", bps: player.researchDefenseBps });
+      buffs.push({ label: "Defense", bps: player.researchDefenseBps, stat: BuffStat.DefensePower });
     if (player.researchCritChanceBps > 0)
-      buffs.push({ label: "Crit Chance", bps: player.researchCritChanceBps });
+      buffs.push({ label: "Crit Chance", bps: player.researchCritChanceBps, stat: BuffStat.CriticalHitChance });
     if (player.researchCritDamageBps > 0)
       buffs.push({ label: "Crit Damage", bps: player.researchCritDamageBps });
     if (player.researchLootBonusBps > 0)
-      buffs.push({ label: "Loot Bonus", bps: player.researchLootBonusBps });
+      buffs.push({ label: "Loot Bonus", bps: player.researchLootBonusBps, stat: BuffStat.LootBonus });
     if (player.researchStaminaBonusBps > 0)
-      buffs.push({ label: "Stamina", bps: player.researchStaminaBonusBps });
+      buffs.push({ label: "Stamina", bps: player.researchStaminaBonusBps, stat: BuffStat.StaminaRegen });
     if (player.researchCollectionBonusBps > 0)
-      buffs.push({ label: "Collection", bps: player.researchCollectionBonusBps });
+      buffs.push({ label: "Collection", bps: player.researchCollectionBonusBps, stat: BuffStat.CashCollectionRate });
 
     return buffs;
   }, [player]);
@@ -95,10 +97,10 @@ export function useHeroBuffs() {
   return useMemo(() => {
     if (!player) return [];
 
-    const buffs: { label: string; bps: number }[] = [];
+    const buffs: { label: string; bps: number; stat: BuffStat }[] = [];
     const add = (stat: BuffStat, bps: number) => {
       if (bps > 0) {
-        buffs.push({ label: getBuffStatMeta(stat)?.name ?? `Stat ${stat}`, bps });
+        buffs.push({ label: getBuffStatMeta(stat)?.name ?? `Stat ${stat}`, bps, stat });
       }
     };
     add(BuffStat.AttackPower, player.heroAttackBps);
@@ -141,7 +143,12 @@ export function useDailyRewards() {
 
   return useMemo(() => {
     if (!player)
-      return { available: false, cooldownEnds: 0, hasDailyRewards: false };
+      return {
+        available: false,
+        cooldownEnds: 0,
+        cooldownStartedAt: 0,
+        hasDailyRewards: false,
+      };
 
     const now = Math.floor(Date.now() / 1000);
     const lastClaim = player.lastDailyClaim.toNumber();
@@ -151,6 +158,7 @@ export function useDailyRewards() {
     return {
       available: player.hasDailyRewards && now >= cooldownEnds,
       cooldownEnds,
+      cooldownStartedAt: lastClaim,
       hasDailyRewards: player.hasDailyRewards,
     };
   }, [player]);

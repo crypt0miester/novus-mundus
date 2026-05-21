@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
+import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import { StatBar } from "@/components/shared/StatBar";
+import { NumberField } from "@/components/shared/NumberField";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { FEATURES, useFeatureGate, BuildingId } from "@/lib/hooks/useFeatureGate";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
@@ -19,13 +22,19 @@ import {
   createPurchaseEquipmentInstruction,
   createPurchaseStaminaInstruction,
   createUpdateLockedNoviInstruction,
+  EquipmentType,
+  findBuilding,
+  BuildingType,
+  ActivityType,
+  getCurrentTimeOfDay,
+  getActivityMultiplier,
 } from "novus-mundus-sdk";
 
 const EQUIPMENT = [
-  { label: "Melee Weapons", field: "meleeWeapons" as const },
-  { label: "Ranged Weapons", field: "rangedWeapons" as const },
-  { label: "Siege Weapons", field: "siegeWeapons" as const },
-  { label: "Armor Pieces", field: "armorPieces" as const },
+  { label: "Melee Weapons", field: "meleeWeapons" as const, type: EquipmentType.MeleeWeapons },
+  { label: "Ranged Weapons", field: "rangedWeapons" as const, type: EquipmentType.RangedWeapons },
+  { label: "Siege Weapons", field: "siegeWeapons" as const, type: EquipmentType.SiegeWeapons },
+  { label: "Armor Pieces", field: "armorPieces" as const, type: EquipmentType.Armor },
 ];
 
 type MarketSection = "equip" | "provisions";
@@ -38,6 +47,7 @@ const SECTIONS: { key: MarketSection; label: string }[] = [
 export function MarketTab() {
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
+  const { data: geData } = useGameEngine();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();
@@ -50,12 +60,60 @@ export function MarketTab() {
 
   const equipGate = useFeatureGate(FEATURES.PURCHASE_EQUIPMENT);
 
+  // Per-unit equipment price, mirroring the on-chain purchase_equipment math:
+  //   base = economicConfig.{melee|ranged|siege|armor}WeaponCost  (by equipType)
+  //   adjusted = base × costMultiplier / 10000        (DAO cost multiplier)
+  //   time-adjusted = adjusted × purchasingMultiplier (Midday peak = 1.618x,
+  //                   DeepNight/Evening trough = 0.618x — applied DIRECTLY, the
+  //                   chain does not invert it; calculatePurchaseCost() does, so
+  //                   it is deliberately NOT used here)
+  //   final = time-adjusted × (10000 − marketDiscountBps) / 10000
+  // Returns null until config/estate load — the field then stays disabled.
+  const unitPrice = useMemo(() => {
+    const ec = geData?.account?.economicConfig;
+    const estate = estateData?.account;
+    const longitude = playerData?.account?.currentLong;
+    if (!ec || !estate || longitude == null) return null;
+
+    // Index aligns with the EQUIPMENT array order: melee, ranged, siege, armor.
+    const baseCosts = [
+      ec.meleeWeaponCost,
+      ec.rangedWeaponCost,
+      ec.siegeWeaponCost,
+      ec.armorCost,
+    ];
+    const baseCost = baseCosts[equipType]?.toNumber?.() ?? 0;
+    if (baseCost <= 0) return null;
+
+    const costMultiplierBps = ec.costMultiplier?.toNumber?.() ?? 10000;
+    const adjusted = Math.floor((baseCost * costMultiplierBps) / 10000);
+
+    const tod = getCurrentTimeOfDay(Math.floor(Date.now() / 1000), longitude);
+    const timeMult = getActivityMultiplier(ActivityType.Purchasing, tod);
+    const timeAdjusted = Math.floor(adjusted * timeMult);
+
+    const market = findBuilding(estate, BuildingType.Market);
+    const discountBps =
+      market && market.level > 0 ? Math.min(market.level * 100, 2000) : 0;
+    const final =
+      discountBps > 0
+        ? Math.floor((timeAdjusted * (10000 - discountBps)) / 10000)
+        : timeAdjusted;
+
+    return final > 0 ? final : null;
+  }, [
+    geData?.account?.economicConfig,
+    estateData?.account,
+    playerData?.account?.currentLong,
+    equipType,
+  ]);
+
   const handlePurchaseEquipment = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
     const ix = createPurchaseEquipmentInstruction(
       { owner: publicKey, gameEngine: ge },
-      { equipmentType: equipType, quantity: equipAmount, payWithCash: equipPayCash }
+      { equipmentType: EQUIPMENT[equipType]?.type ?? 0, quantity: equipAmount, payWithCash: equipPayCash }
     );
     return transact.mutateAsync({
       instructions: [ix],
@@ -71,7 +129,7 @@ export function MarketTab() {
     const claimIx = createUpdateLockedNoviInstruction({ owner: publicKey, gameEngine: ge });
     const equipIx = createPurchaseEquipmentInstruction(
       { owner: publicKey, gameEngine: ge },
-      { equipmentType: equipType, quantity: equipAmount, payWithCash: equipPayCash }
+      { equipmentType: EQUIPMENT[equipType]?.type ?? 0, quantity: equipAmount, payWithCash: equipPayCash }
     );
     return transact.mutateAsync({
       instructions: [claimIx, equipIx],
@@ -124,6 +182,7 @@ export function MarketTab() {
   const selectedEquip = EQUIPMENT[equipType] ?? null;
   const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
   const cashBalance = player.cashOnHand?.toNumber?.() ?? 0;
+  const payBalance = equipPayCash ? cashBalance : noviBalance;
 
   return (
     <div className="space-y-4">
@@ -197,28 +256,54 @@ export function MarketTab() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-zinc-500">Your {equipPayCash ? "Cash" : "NOVI"}</span>
-                  <span className="font-mono tabular-nums text-text-gold">
+                  <span className="flex items-center gap-1 font-mono tabular-nums text-text-gold">
+                    <GameIcon id={equipPayCash ? "resource-cash" : "resource-novi"} size={13} />
                     {(equipPayCash ? cashBalance : noviBalance).toLocaleString()}
                   </span>
                 </div>
-                <button
-                  onClick={() => setEquipPayCash(!equipPayCash)}
-                  className={`w-full rounded-lg px-3 py-2 text-xs transition-colors ${
-                    equipPayCash ? "bg-green-900/30 text-green-400" : "bg-amber-900/30 text-text-gold"
-                  }`}
-                >
-                  {equipPayCash ? "Pay with: Cash" : "Pay with: NOVI"}
-                </button>
-                <div>
-                  <label className="mb-1 block text-xs text-text-muted">Quantity</label>
-                  <input
-                    type="number"
-                    value={equipAmount}
-                    onChange={(e) => setEquipAmount(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary tabular-nums"
-                    min={1}
-                  />
+                <div className="flex gap-1 rounded-lg bg-surface p-1">
+                  <button
+                    onClick={() => setEquipPayCash(true)}
+                    className={`flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      equipPayCash ? "bg-surface-raised text-text-gold" : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    <GameIcon id="resource-cash" size={14} />
+                    Pay with Cash
+                  </button>
+                  <button
+                    onClick={() => setEquipPayCash(false)}
+                    className={`flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      !equipPayCash ? "bg-surface-raised text-text-gold" : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    <GameIcon id="resource-novi" size={14} />
+                    Pay with NOVI
+                  </button>
                 </div>
+                <NumberField
+                  label="Quantity"
+                  value={equipAmount}
+                  onChange={setEquipAmount}
+                  min={1}
+                  max={
+                    unitPrice != null
+                      ? Math.max(1, Math.floor(payBalance / unitPrice))
+                      : 1
+                  }
+                />
+                {unitPrice != null && (
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="text-text-muted">Total Cost</span>
+                    <span className="flex items-center gap-1 text-sm font-semibold text-text-gold">
+                      <GameIcon
+                        id={equipPayCash ? "resource-cash" : "resource-novi"}
+                        size={13}
+                      />
+                      {(unitPrice * equipAmount).toLocaleString()}
+                    </span>
+                  </div>
+                )}
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <TxButton onClick={handlePurchaseEquipment} className="flex-1">
                     Buy {equipAmount} {selectedEquip.label}

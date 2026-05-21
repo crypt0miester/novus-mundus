@@ -8,6 +8,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
@@ -214,7 +215,10 @@ export function ForgeTab() {
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div>
               <div className="text-xs text-text-muted">Fragments</div>
-              <GoldNumber value={player.fragments?.toNumber?.() ?? 0} prefix="\u25C7 " />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-fragments" size={14} />
+                <GoldNumber value={player.fragments?.toNumber?.() ?? 0} />
+              </span>
             </div>
             <div>
               <div className="text-xs text-text-muted">Common</div>

@@ -1,7 +1,7 @@
 use crate::{
     error::GameError,
     state::PlayerAccount,
-    logic::{get_time_of_day, get_time_multiplier, ActivityType, safe_math::apply_bp},
+    logic::{get_time_of_day, get_time_multiplier_bp, ActivityType, safe_math::apply_bp},
 };
 
 /// XP required to advance *into* `level` (the per-level cost, deducted on level-up).
@@ -43,8 +43,8 @@ pub fn grant_xp_with_time_bonus(
     now: i64,
 ) -> Result<(u8, u8, u64), GameError> {
     let time_of_day = get_time_of_day(now, player.current_long);
-    let xp_multiplier = get_time_multiplier(time_of_day, ActivityType::XPGain);
-    let time_xp = ((base_xp as f64) * xp_multiplier) as u64;
+    let xp_bp = get_time_multiplier_bp(time_of_day, ActivityType::XPGain) as u64;
+    let time_xp = apply_bp(base_xp, xp_bp).unwrap_or(base_xp);
 
     // Apply hero XP gain buff (multiplicative)
     // Formula: xp × (10000 + hero_xp_gain_bps) / 10000

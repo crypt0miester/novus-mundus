@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { animate, spring } from "animejs";
+import { useSheetStore } from "@/lib/store/sheet";
 
 // The content area hugs its content but never grows past this slice of the
 // viewport; taller content scrolls inside instead.
@@ -184,6 +185,25 @@ export function BottomSheet({
     },
     [],
   );
+
+  // While the sheet is painted — including the spring-shut animation — lift the
+  // mobile top bars above the backdrop so they never flash dark behind it.
+  useEffect(() => {
+    if (!mounted) return;
+    const { acquireMounted, releaseMounted } = useSheetStore.getState();
+    acquireMounted();
+    return releaseMounted;
+  }, [mounted]);
+
+  // Open intent is tracked separately — it drops the instant the sheet is
+  // dismissed, before the close animation, so the mobile data bar collapses
+  // immediately instead of lingering until the spring settles.
+  useEffect(() => {
+    if (!open) return;
+    const { acquireOpen, releaseOpen } = useSheetStore.getState();
+    acquireOpen();
+    return releaseOpen;
+  }, [open]);
 
   if (!mounted) return null;
 

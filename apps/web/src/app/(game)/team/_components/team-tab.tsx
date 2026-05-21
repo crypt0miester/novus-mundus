@@ -12,14 +12,19 @@ import { PublicKey } from "@solana/web3.js";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useTransitionStore } from "@/lib/store/transition";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
 import { DomainPicker } from "@/components/shared/DomainPicker";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import { NumberField } from "@/components/shared/NumberField";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
-import { formatTime } from "@/lib/utils";
+import { formatTime, shortenAddress } from "@/lib/utils";
+import { useWorldPlayers } from "@/lib/hooks/world";
+import { useDomainNames } from "@/lib/hooks/useDomainNames";
+import { matchesPlayerQuery } from "@/lib/players";
 import {
   derivePlayerPda,
   deriveTreasuryRequestPda,
@@ -178,21 +183,22 @@ export function TeamTab() {
   const [depositAmount, setDepositAmount] = useState(0);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
   const [motd, setMotd] = useState("");
-  const [inviteAddress, setInviteAddress] = useState("");
   const [requestWithdrawAmount, setRequestWithdrawAmount] = useState(0);
 
   const teamInvites = useAccountStore((s) => s.teamInvites);
   const treasuryRequests = useAccountStore((s) => s.treasuryRequests);
 
-  const isValidInviteAddress = useMemo(() => {
-    if (!inviteAddress.trim()) return false;
-    try {
-      new PublicKey(inviteAddress.trim());
-      return true;
-    } catch {
-      return false;
+  // Player PDAs this team has already invited — excluded from the picker.
+  const myTeamInvitePdas = useMemo(() => {
+    const set = new Set<string>();
+    if (!teamPubkey) return set;
+    for (const inv of teamInvites.values()) {
+      if (inv.account.team.equals(teamPubkey)) {
+        set.add(inv.account.invitee.toBase58());
+      }
     }
-  }, [inviteAddress]);
+    return set;
+  }, [teamInvites, teamPubkey]);
 
   const currentTeamDomainName = useMemo(() => {
     if (!team || !team.name || !team.name.includes(".")) return null;
@@ -302,16 +308,13 @@ export function TeamTab() {
     }).then((r) => r.signature);
   };
 
-  const handleInvite = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || !player || !inviteAddress.trim()) throw new Error("Missing data");
+  const handleInvite = async (
+    inviteeWallet: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
+    if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    let inviteePlayerPda: PublicKey;
-    try {
-      const inviteeWallet = new PublicKey(inviteAddress.trim());
-      [inviteePlayerPda] = derivePlayerPda(ge, inviteeWallet);
-    } catch {
-      throw new Error("Invalid address");
-    }
+    const [inviteePlayerPda] = derivePlayerPda(ge, inviteeWallet);
     const ix = createTeamInviteInstruction({
       inviter: publicKey,
       gameEngine: ge,
@@ -325,10 +328,7 @@ export function TeamTab() {
       invalidateKeys: [["team"]],
       successMessage: "Invite sent!",
       onPhase: reportPhase,
-    }).then((r) => {
-      setInviteAddress("");
-      return r.signature;
-    });
+    }).then((r) => r.signature);
   };
 
   const handleTeamNameSet = (domain: string, tld: string) => {
@@ -814,7 +814,10 @@ export function TeamTab() {
               <div className="flex items-center gap-6">
                 <div className="text-right">
                   <div className="text-xs text-text-muted">Treasury</div>
-                  <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                  <span className="inline-flex items-center gap-1">
+                    <GameIcon id="resource-cash" size={14} />
+                    <GoldNumber value={team.treasury.toNumber()} />
+                  </span>
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-text-muted">Members</div>
@@ -996,20 +999,21 @@ export function TeamTab() {
                     {/* Balance */}
                     <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
                       <div className="text-[10px] text-text-muted">Treasury Balance</div>
-                      <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                      <span className="inline-flex items-center gap-1">
+                        <GameIcon id="resource-cash" size={14} />
+                        <GoldNumber value={team.treasury.toNumber()} />
+                      </span>
                     </div>
 
                     {/* Deposit / Withdraw */}
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={depositAmount}
-                          onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                          placeholder="Amount"
-                          className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                        />
-                      </div>
+                      <NumberField
+                        label="Amount"
+                        value={depositAmount}
+                        onChange={setDepositAmount}
+                        min={0}
+                        max={player?.cashOnHand?.toNumber?.() ?? 0}
+                      />
                       {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
                         <p className="text-xs text-red-400">Exceeds cash on hand</p>
                       )}
@@ -1028,15 +1032,13 @@ export function TeamTab() {
                       <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                         Request Withdrawal
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={requestWithdrawAmount}
-                          onChange={(e) => setRequestWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                          placeholder="Amount"
-                          className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                        />
-                      </div>
+                      <NumberField
+                        label="Amount"
+                        value={requestWithdrawAmount}
+                        onChange={setRequestWithdrawAmount}
+                        min={0}
+                        max={team.treasury.toNumber()}
+                      />
                       <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
                         Request
                       </TxButton>
@@ -1081,25 +1083,13 @@ export function TeamTab() {
                 {/* Settings */}
                 {sidebarSection === "settings" && (
                   <div className="space-y-4">
-                    {/* Invite */}
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                        Invite Player
-                      </div>
-                      <input
-                        type="text"
-                        value={inviteAddress}
-                        onChange={(e) => setInviteAddress(e.target.value)}
-                        placeholder="Wallet address..."
-                        className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary placeholder-text-muted"
-                      />
-                      {inviteAddress.trim() && !isValidInviteAddress && (
-                        <p className="text-xs text-red-400">Invalid address</p>
-                      )}
-                      <TxButton onClick={handleInvite} variant="secondary" className="w-full text-xs" disabled={!isValidInviteAddress || (team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}>
-                        Invite
-                      </TxButton>
-                    </div>
+                    <InvitePlayerPanel
+                      teamFull={(team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}
+                      invitedPdas={myTeamInvitePdas}
+                      gameEngine={client.gameEngine}
+                      selfWallet={publicKey}
+                      onInvite={handleInvite}
+                    />
 
                     {/* Pending Invites */}
                     {Array.from(teamInvites.values()).length > 0 && (
@@ -1207,19 +1197,20 @@ export function TeamTab() {
               <div className="space-y-4">
                 <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
                   <div className="text-[10px] text-text-muted">Treasury Balance</div>
-                  <GoldNumber value={team.treasury.toNumber()} prefix="$ " />
+                  <span className="inline-flex items-center gap-1">
+                    <GameIcon id="resource-cash" size={14} />
+                    <GoldNumber value={team.treasury.toNumber()} />
+                  </span>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                      placeholder="Amount"
-                      className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                    />
-                  </div>
+                  <NumberField
+                    label="Amount"
+                    value={depositAmount}
+                    onChange={setDepositAmount}
+                    min={0}
+                    max={player?.cashOnHand?.toNumber?.() ?? 0}
+                  />
                   {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
                     <p className="text-xs text-red-400">Exceeds cash on hand</p>
                   )}
@@ -1237,15 +1228,13 @@ export function TeamTab() {
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Request Withdrawal
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={requestWithdrawAmount}
-                      onChange={(e) => setRequestWithdrawAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                      placeholder="Amount"
-                      className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                    />
-                  </div>
+                  <NumberField
+                    label="Amount"
+                    value={requestWithdrawAmount}
+                    onChange={setRequestWithdrawAmount}
+                    min={0}
+                    max={team.treasury.toNumber()}
+                  />
                   <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
                     Request
                   </TxButton>
@@ -1289,24 +1278,13 @@ export function TeamTab() {
             {/* Settings */}
             {sidebarSection === "settings" && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                    Invite Player
-                  </div>
-                  <input
-                    type="text"
-                    value={inviteAddress}
-                    onChange={(e) => setInviteAddress(e.target.value)}
-                    placeholder="Wallet address..."
-                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm font-mono text-text-primary placeholder-text-muted"
-                  />
-                  {inviteAddress.trim() && !isValidInviteAddress && (
-                    <p className="text-xs text-red-400">Invalid address</p>
-                  )}
-                  <TxButton onClick={handleInvite} variant="secondary" className="w-full text-xs" disabled={!isValidInviteAddress || (team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}>
-                    Invite
-                  </TxButton>
-                </div>
+                <InvitePlayerPanel
+                  teamFull={(team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}
+                  invitedPdas={myTeamInvitePdas}
+                  gameEngine={client.gameEngine}
+                  selfWallet={publicKey}
+                  onInvite={handleInvite}
+                />
 
                 {Array.from(teamInvites.values()).length > 0 && (
                   <div className="space-y-2">
@@ -1380,6 +1358,153 @@ export function TeamTab() {
 
 // ─── Team Settings Sub-Panel ────────────────────────────────
 
+/**
+ * Searchable player picker for team invites. Replaces hand-typing a 44-char
+ * wallet address: filter every player by name / domain / address, one tap to
+ * invite. Yourself, players already on a team, and players this team has
+ * already invited are excluded; a pasted address still works for accounts not
+ * yet in the directory.
+ */
+function InvitePlayerPanel({
+  teamFull,
+  invitedPdas,
+  gameEngine,
+  selfWallet,
+  onInvite,
+}: {
+  teamFull: boolean;
+  invitedPdas: Set<string>;
+  gameEngine: PublicKey;
+  selfWallet: PublicKey | null;
+  onInvite: (
+    wallet: PublicKey,
+    reportPhase: (p: TxPhase) => void,
+  ) => Promise<string>;
+}) {
+  const { data: players } = useWorldPlayers();
+  const [query, setQuery] = useState("");
+
+  const owners = useMemo(
+    () => (players ?? []).map((p) => p.account.owner),
+    [players],
+  );
+  const domains = useDomainNames(owners);
+  const knownOwners = useMemo(
+    () => new Set(owners.map((o) => o.toBase58())),
+    [owners],
+  );
+
+  const candidates = useMemo(() => {
+    if (!players) return [];
+    const selfStr = selfWallet?.toBase58();
+    const matched = players.filter((p) => {
+      const addr = p.account.owner.toBase58();
+      if (addr === selfStr) return false;
+      if (!isNullPubkey(p.account.team)) return false;
+      return matchesPlayerQuery(p.account, addr, domains.get(addr), query);
+    });
+    // Derive PDAs only for the few we'll show, to drop already-invited players.
+    const result: typeof matched = [];
+    for (const p of matched) {
+      if (invitedPdas.size > 0) {
+        const [pda] = derivePlayerPda(gameEngine, p.account.owner);
+        if (invitedPdas.has(pda.toBase58())) continue;
+      }
+      result.push(p);
+      if (result.length >= 8) break;
+    }
+    return result;
+  }, [players, query, domains, invitedPdas, gameEngine, selfWallet]);
+
+  // A pasted wallet address still works for accounts not in the directory yet.
+  const pastedWallet = useMemo(() => {
+    const q = query.trim();
+    if (q.length < 32) return null;
+    try {
+      return new PublicKey(q);
+    } catch {
+      return null;
+    }
+  }, [query]);
+  const showPasted = !!pastedWallet && !knownOwners.has(pastedWallet.toBase58());
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+        Invite Player
+      </div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by name, domain, or address..."
+        className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+      />
+
+      {teamFull ? (
+        <p className="text-xs text-amber-400">
+          Your House is full — free a slot before inviting.
+        </p>
+      ) : !players ? (
+        <p className="text-xs text-text-muted">Loading players...</p>
+      ) : (
+        <div className="space-y-1">
+          {candidates.map((p) => {
+            const addr = p.account.owner.toBase58();
+            const label =
+              p.account.name || domains.get(addr) || shortenAddress(addr, 4);
+            return (
+              <div
+                key={addr}
+                className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-1.5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-text-primary">
+                    {label}
+                  </div>
+                  <div className="text-[10px] text-text-muted">
+                    Lv {p.account.level}
+                  </div>
+                </div>
+                <TxButton
+                  onClick={(rp) => onInvite(p.account.owner, rp)}
+                  variant="secondary"
+                  className="shrink-0 text-xs"
+                >
+                  Invite
+                </TxButton>
+              </div>
+            );
+          })}
+
+          {showPasted && pastedWallet && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-1.5">
+              <span className="truncate font-mono text-xs text-text-primary">
+                {shortenAddress(pastedWallet.toBase58(), 6)}
+              </span>
+              <TxButton
+                onClick={(rp) => onInvite(pastedWallet, rp)}
+                variant="secondary"
+                className="shrink-0 text-xs"
+              >
+                Invite
+              </TxButton>
+            </div>
+          )}
+
+          {candidates.length === 0 && !showPasted && (
+            <p className="text-xs text-text-muted">
+              {query.trim()
+                ? "No players match that search."
+                : "No players available to invite."}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TeamSettingsPanel({
   team,
   onSave,
@@ -1417,18 +1542,13 @@ function TeamSettingsPanel({
         />
         <span className="text-sm text-text-primary">Public (anyone can join)</span>
       </label>
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-text-muted">Min Level:
-          <input
-            type="number"
-            value={minLevel}
-            onChange={(e) => setMinLevel(Math.max(1, Math.min(255, parseInt(e.target.value) || 1)))}
-            className="w-20 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-            min={1}
-            max={255}
-          />
-        </label>
-      </div>
+      <NumberField
+        label="Min Level"
+        value={minLevel}
+        onChange={setMinLevel}
+        min={1}
+        max={30}
+      />
       <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
         Save Settings
       </TxButton>
@@ -1447,6 +1567,7 @@ function TreasurySettingsPanel({
   compact,
 }: {
   team: {
+    treasury: { toNumber: () => number };
     treasuryInstantLimit: { toNumber: () => number }[];
     treasuryDailyCap: { toNumber: () => number }[];
     treasuryCooldownHours: number;
@@ -1490,48 +1611,40 @@ function TreasurySettingsPanel({
           Treasury Settings
         </h3>
       )}
-      <div className="grid grid-cols-3 gap-2 text-xs text-text-muted">
-        <span>Rank</span>
-        <span>Instant Limit</span>
-        <span>Daily Cap</span>
-      </div>
       {RANK_NAMES.map((name, i) => (
-        <div key={name} className="grid grid-cols-3 gap-2 items-center">
-          <span className={compact ? "text-xs text-text-primary" : "text-sm text-text-primary"}>{name}</span>
-          <input
-            type="number"
+        <div key={name} className="space-y-2 border-t border-border-default pt-2 first:border-t-0 first:pt-0">
+          <span className={compact ? "text-xs font-semibold text-text-primary" : "text-sm font-semibold text-text-primary"}>{name}</span>
+          <NumberField
+            label="Instant Limit"
             value={limits[i]}
-            onChange={(e) => {
-              const next = [...limits] as [number, number, number, number];
-              next[i] = Math.max(0, parseInt(e.target.value) || 0);
-              setLimits(next);
+            onChange={(next) => {
+              const updated = [...limits] as [number, number, number, number];
+              updated[i] = next;
+              setLimits(updated);
             }}
-            className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
+            min={0}
+            max={team.treasury.toNumber()}
           />
-          <input
-            type="number"
+          <NumberField
+            label="Daily Cap"
             value={caps[i]}
-            onChange={(e) => {
-              const next = [...caps] as [number, number, number, number];
-              next[i] = Math.max(0, parseInt(e.target.value) || 0);
-              setCaps(next);
+            onChange={(next) => {
+              const updated = [...caps] as [number, number, number, number];
+              updated[i] = next;
+              setCaps(updated);
             }}
-            className="rounded-lg border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
+            min={0}
+            max={team.treasury.toNumber()}
           />
         </div>
       ))}
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-text-muted">Cooldown (hours):
-          <input
-            type="number"
-            value={cooldown}
-            onChange={(e) => setCooldown(Math.max(1, Math.min(72, parseInt(e.target.value) || 1)))}
-            className="w-20 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-            min={1}
-            max={72}
-          />
-        </label>
-      </div>
+      <NumberField
+        label="Cooldown (hours)"
+        value={cooldown}
+        onChange={setCooldown}
+        min={1}
+        max={72}
+      />
       <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
         Save Treasury Settings
       </TxButton>
@@ -1598,7 +1711,10 @@ function TreasuryRequestsPanel({
                 <DomainName pubkey={r.requesterPda} chars={4} />
                 {r.isMine && <span className="ml-1 text-text-gold">(you)</span>}
               </span>
-              <GoldNumber value={r.account.amount.toNumber()} prefix="$ " size="sm" />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-cash" size={14} />
+                <GoldNumber value={r.account.amount.toNumber()} size="sm" />
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-text-muted">

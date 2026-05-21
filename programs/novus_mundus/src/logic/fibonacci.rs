@@ -25,32 +25,22 @@ fn is_perfect_square(n: u128) -> bool {
     sqrt * sqrt == n
 }
 
-/// Calculate integer square root using binary search
+/// Calculate integer square root using Newton's method
 fn integer_sqrt(n: u128) -> u128 {
-    if n == 0 {
-        return 0;
+    if n < 2 {
+        return n;
     }
 
-    let mut low = 1u128;
-    let mut high = n;
-    let mut result = 0u128;
-
-    while low <= high {
-        let mid = low + (high - low) / 2;
-        let mid_squared = mid.saturating_mul(mid);
-
-        if mid_squared == n {
-            return mid;
-        } else if mid_squared < n {
-            low = mid + 1;
-            result = mid;
-        } else {
-            if mid == 0 {
-                break;
-            }
-            high = mid - 1;
+    // Seed at 2^ceil(bits/2) >= sqrt(n); Newton then converges monotonically
+    // down to floor(sqrt(n)) in ~6 iterations (vs ~128 for binary search).
+    let bits = 128 - n.leading_zeros();
+    let mut x = 1u128 << ((bits + 1) / 2);
+    loop {
+        let y = (x + n / x) / 2;
+        if y >= x {
+            break;
         }
+        x = y;
     }
-
-    result
+    x
 }

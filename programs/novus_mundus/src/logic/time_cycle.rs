@@ -297,13 +297,97 @@ pub fn get_time_multiplier(time: TimeOfDay, activity: ActivityType) -> f64 {
     }
 }
 
+/// Time-of-day multiplier in basis points (10000 = 1.0x). Integer-only twin of
+/// [`get_time_multiplier`] for the compute-metered hot path — avoids soft-float.
+/// Values: φ = 16180, √φ = 12720, 1.0 = 10000, 1/φ = 6180.
+/// Keep the arms in sync with `get_time_multiplier` above.
+pub fn get_time_multiplier_bp(time: TimeOfDay, activity: ActivityType) -> u16 {
+    match activity {
+        ActivityType::Hiring | ActivityType::Purchasing => match time {
+            TimeOfDay::DeepNight => 6180,
+            TimeOfDay::Dawn => 10000,
+            TimeOfDay::Morning => 12720,
+            TimeOfDay::Midday => 16180,
+            TimeOfDay::Afternoon => 12720,
+            TimeOfDay::Dusk => 10000,
+            TimeOfDay::Evening => 6180,
+        },
+        ActivityType::Collecting => match time {
+            TimeOfDay::DeepNight => 6180,
+            TimeOfDay::Evening => 6180,
+            _ => 10000,
+        },
+        ActivityType::Mining => match time {
+            TimeOfDay::DeepNight => 16180,
+            _ => 10000,
+        },
+        ActivityType::Fishing => match time {
+            TimeOfDay::Dawn => 16180,
+            _ => 10000,
+        },
+        ActivityType::Attacking => match time {
+            TimeOfDay::DeepNight => 16180,
+            TimeOfDay::Dawn => 12720,
+            _ => 10000,
+        },
+        ActivityType::Defending => match time {
+            TimeOfDay::DeepNight => 6180,
+            TimeOfDay::Dawn => 10000,
+            TimeOfDay::Morning => 12720,
+            TimeOfDay::Midday => 16180,
+            TimeOfDay::Afternoon => 12720,
+            TimeOfDay::Dusk => 10000,
+            TimeOfDay::Evening => 10000,
+        },
+        ActivityType::Traveling => match time {
+            TimeOfDay::DeepNight => 16180,
+            TimeOfDay::Dawn => 12720,
+            TimeOfDay::Morning => 6180,
+            TimeOfDay::Afternoon => 6180,
+            _ => 10000,
+        },
+        ActivityType::Consuming => match time {
+            TimeOfDay::DeepNight => 6180,
+            TimeOfDay::Dawn => 12720,
+            TimeOfDay::Evening => 6180,
+            _ => 10000,
+        },
+        ActivityType::Researching => match time {
+            TimeOfDay::DeepNight => 16180,
+            TimeOfDay::Dawn => 12720,
+            TimeOfDay::Morning => 12720,
+            TimeOfDay::Midday => 6180,
+            TimeOfDay::Afternoon => 6180,
+            _ => 10000,
+        },
+        ActivityType::XPGain => match time {
+            TimeOfDay::DeepNight => 12720,
+            TimeOfDay::Evening => 12720,
+            _ => 10000,
+        },
+        ActivityType::StaminaRegen => match time {
+            TimeOfDay::DeepNight => 16180,
+            TimeOfDay::Dawn => 12720,
+            TimeOfDay::Midday => 6180,
+            TimeOfDay::Afternoon => 6180,
+            _ => 10000,
+        },
+        ActivityType::LootDrop => match time {
+            TimeOfDay::DeepNight => 12720,
+            TimeOfDay::Morning => 16180,
+            TimeOfDay::Evening => 12720,
+            _ => 10000,
+        },
+    }
+}
+
 /// Apply a time multiplier to a base value (u64)
 ///
 /// Uses the golden ratio multiplier for the given time and activity.
 #[inline]
 pub fn apply_time_multiplier(base: u64, time: TimeOfDay, activity: ActivityType) -> u64 {
-    let multiplier = get_time_multiplier(time, activity);
-    crate::logic::apply_multiplier(base, multiplier)
+    let bp = get_time_multiplier_bp(time, activity) as u64;
+    crate::logic::safe_math::apply_bp(base, bp).unwrap_or(base)
 }
 
 // Encounter Spawn Timing
@@ -430,5 +514,49 @@ mod tests {
         assert!(can_spawn_rarity_at_time(TimeOfDay::Evening, 4));
         assert!(!can_spawn_rarity_at_time(TimeOfDay::Midday, 4));
         assert!(!can_spawn_rarity_at_time(TimeOfDay::Morning, 4));
+    }
+
+    /// `get_time_multiplier_bp` is a hand-maintained integer twin of the f64
+    /// `get_time_multiplier` — guard against the two tables drifting apart.
+    #[test]
+    fn time_multiplier_bp_matches_float() {
+        let times = [
+            TimeOfDay::DeepNight,
+            TimeOfDay::Dawn,
+            TimeOfDay::Morning,
+            TimeOfDay::Midday,
+            TimeOfDay::Afternoon,
+            TimeOfDay::Dusk,
+            TimeOfDay::Evening,
+        ];
+        let activities = [
+            ActivityType::Hiring,
+            ActivityType::Purchasing,
+            ActivityType::Collecting,
+            ActivityType::Mining,
+            ActivityType::Fishing,
+            ActivityType::Attacking,
+            ActivityType::Defending,
+            ActivityType::Traveling,
+            ActivityType::Consuming,
+            ActivityType::Researching,
+            ActivityType::XPGain,
+            ActivityType::StaminaRegen,
+            ActivityType::LootDrop,
+        ];
+        for &t in &times {
+            for &a in &activities {
+                let bp = get_time_multiplier_bp(t, a) as f64 / 10000.0;
+                let f = get_time_multiplier(t, a);
+                assert!(
+                    (bp - f).abs() < 0.001,
+                    "time multiplier drift for {:?}/{:?}: bp={} float={}",
+                    t,
+                    a,
+                    bp,
+                    f,
+                );
+            }
+        }
     }
 }

@@ -10,25 +10,8 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { animate, spring, stagger } from "animejs";
-import {
-  Home,
-  Castle,
-  Swords,
-  Sword,
-  Users,
-  ShoppingBag,
-  Map as MapIcon,
-  Calendar,
-  Trophy,
-  Settings,
-  Backpack,
-  Plus,
-  Sparkles,
-  Skull,
-  Flag,
-  Crown,
-  type LucideIcon,
-} from "lucide-react";
+import { Plus } from "lucide-react";
+import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
@@ -41,23 +24,23 @@ import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
 import { PRIMARY, SECONDARY } from "./nav-config";
 
-const ICON_BY_LABEL: Record<string, LucideIcon> = {
-  Home,
-  Estate: Castle,
-  Combat: Swords,
-  Team: Users,
-  Shop: ShoppingBag,
-  Inventory: Backpack,
-  Map: MapIcon,
-  Events: Calendar,
-  Leaderboard: Trophy,
-  Settings,
+const ICON_BY_LABEL: Record<string, GameIconId> = {
+  Home: "nav-home",
+  Estate: "nav-estate",
+  Combat: "nav-combat",
+  Team: "nav-team",
+  Shop: "nav-shop",
+  Inventory: "nav-inventory",
+  Map: "nav-map",
+  Events: "nav-events",
+  Leaderboard: "nav-leaderboard",
+  Settings: "nav-settings",
   // Sub-page deep links
-  Heroes: Sparkles,
-  Dungeon: Skull,
-  Arena: Sword,
-  Rally: Flag,
-  Subscription: Crown,
+  Heroes: "nav-heroes",
+  Dungeon: "nav-dungeon",
+  Arena: "nav-arena",
+  Rally: "nav-rally",
+  Subscription: "nav-subscription",
 };
 
 const SPRING_OPEN = spring({ stiffness: 220, damping: 22 });
@@ -89,7 +72,10 @@ export function MorphTabBar() {
   const { data: estateData } = useEstate();
   const showPanel = useRightPanelStore((s) => s.show);
   const open = useRightPanelStore((s) => s.open);
-  const actions = useRightPanelStore((s) => s.actions);
+  const morphActions = useRightPanelStore((s) => s.morphActions);
+  // The most recently registered panel owns the bar; any earlier panels wait
+  // their turn beneath it. With no entries the bar shows its nav tabs.
+  const actions = morphActions[morphActions.length - 1]?.actions ?? [];
 
   const player = playerData?.account;
   const hasPlayer = !!player;
@@ -143,12 +129,25 @@ export function MorphTabBar() {
   // the right-panel store and also want to surface actions. `useMorphActions`
   // clears on unmount so stale callers don't leak.
   const mode: Mode = actions.length > 0 ? "actions" : "nav";
+  // A panel with 3+ actions can't fit the centered pill — the bar drops to a
+  // full-width row of even segments so every action stays visible and tappable.
+  // The pill is kept for nav and for 1-2 actions.
+  const wide = mode === "actions" && actions.length >= 3;
 
   // Refs the morph animations write to.
   const pillRef = useRef<HTMLDivElement | null>(null);
   const navLayerRef = useRef<HTMLDivElement | null>(null);
   const actionLayerRef = useRef<HTMLDivElement | null>(null);
   const prevMode = useRef<Mode>("nav");
+
+  // Width-morph bookkeeping. The pill animates its width between modes —
+  // CSS can't transition a content-driven `auto` width — so anime.js drives
+  // it. `restWidth` is the pill's settled width (tracked by the ResizeObserver
+  // below); `widthAnimating` gates that tracking off while our animation owns
+  // the width.
+  const widthAnim = useRef<ReturnType<typeof animate> | null>(null);
+  const widthAnimating = useRef(false);
+  const restWidth = useRef(0);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement | null>(null);
@@ -220,6 +219,9 @@ export function MorphTabBar() {
     if (!pill || !pop) return;
     const sync = () => {
       pop.style.width = `${pill.offsetWidth}px`;
+      // Remember the pill's settled width so a morph can animate *from* it,
+      // but not while our own width animation is the one resizing it.
+      if (!widthAnimating.current) restWidth.current = pill.offsetWidth;
     };
     sync();
     const ro = new ResizeObserver(sync);
@@ -227,26 +229,56 @@ export function MorphTabBar() {
     return () => ro.disconnect();
   }, []);
 
-  // Run the cross-fade whenever `mode` flips. The active layer is `relative`
-  // (in flow, drives the pill's auto-width), the inactive layer is `absolute`
-  // (overlays, doesn't fight for space). Width is driven by CSS — the pill
-  // has a `transition: width` on it, so:
-  //   - swapping modes → in-flow layer's natural width changes → pill follows
-  //   - TxButton phase swap (spinner / Failed / Success!) → in-flow layer's
-  //     natural width changes → pill follows
-  // anime.js does the visible motion: cross-fade + translateY + scale on the
-  // layers, and a staggered "speed dial" on the incoming children.
+  // Morph whenever `mode` flips. The active layer is `relative` (in flow, so
+  // its natural width is the pill's resting width); the inactive layer is
+  // `absolute` (overlays, doesn't fight for space). Three things move:
+  //   - the pill's width — animated between the two layers' resting widths,
+  //     since CSS can't transition a content-driven `auto` width;
+  //   - the layers — cross-fade + translateY + scale;
+  //   - the incoming children — a staggered "speed dial".
+  // The pill is handed back to `width: auto` once the morph settles, so a
+  // later TxButton phase swap (spinner / Failed / Success!) still resizes it.
   useLayoutEffect(() => {
     const from = prevMode.current;
     const to = mode;
     prevMode.current = to;
     if (from === to) return;
 
+    const reduce = prefersReducedMotion();
+
+    // Width morph — from the pill's old resting width to the new one. While a
+    // previous morph is still animating, `offsetWidth` is the live value to
+    // continue from; at rest it has already snapped to the new content, so
+    // the old width comes from `restWidth` instead.
+    const pill = pillRef.current;
+    if (pill) {
+      const fromW = widthAnimating.current
+        ? pill.offsetWidth
+        : restWidth.current;
+      pill.style.width = "auto";
+      const toW = pill.offsetWidth;
+      if (reduce || fromW <= 0 || fromW === toW) {
+        pill.style.width = "auto";
+      } else {
+        widthAnim.current?.pause();
+        widthAnimating.current = true;
+        pill.style.width = `${fromW}px`;
+        widthAnim.current = animate(pill, {
+          width: [fromW, toW],
+          ease: SPRING_OPEN,
+          onComplete: () => {
+            widthAnimating.current = false;
+            pill.style.width = "auto";
+          },
+        });
+      }
+    }
+
     const navLayer = navLayerRef.current;
     const actionLayer = actionLayerRef.current;
     if (!navLayer || !actionLayer) return;
 
-    if (prefersReducedMotion()) {
+    if (reduce) {
       navLayer.style.opacity = to === "nav" ? "1" : "0";
       actionLayer.style.opacity = to === "actions" ? "1" : "0";
       return;
@@ -271,6 +303,7 @@ export function MorphTabBar() {
     incoming.style.opacity = "0";
     animate(incoming, {
       opacity: [0, 1],
+      translateY: [8, 0],
       scale: [0.94, 1],
       duration: ENTER_MS,
       delay: EXIT_MS - 40,
@@ -291,6 +324,24 @@ export function MorphTabBar() {
 
   // Render — note both layers are always in the DOM. The hidden measurement
   // copies live off-screen so we can size the pill before showing the morph.
+  // Wide mode: a full-width bar of equal flex segments. Self-contained — it
+  // doesn't touch the pill's width-morph machinery, so the pill path stays
+  // unchanged for nav / single-action panels.
+  if (wide) {
+    return (
+      <div
+        className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center md:hidden"
+        style={{ bottom: "max(12px, env(safe-area-inset-bottom))" }}
+      >
+        <div className="pointer-events-auto flex h-14 w-[calc(100vw-1rem)] items-center gap-2 rounded-full border border-border-default bg-[var(--nm-bg-bar)]/95 px-3 shadow-xl shadow-black/40 backdrop-blur">
+          {actions.map((a) => (
+            <ActionButton key={a.id} action={a} wide />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center md:hidden"
@@ -317,7 +368,7 @@ export function MorphTabBar() {
       >
         <div className="grid grid-cols-4 gap-1">
           {SECONDARY.map((item) => {
-            const Icon = ICON_BY_LABEL[item.label] ?? Settings;
+            const iconId = ICON_BY_LABEL[item.label] ?? "nav-settings";
             const locked = item.feature ? !!featureLocks[item.feature] : false;
 
             const tileClass = cn(
@@ -339,7 +390,12 @@ export function MorphTabBar() {
                   }}
                   className={cn(tileClass, "disabled:opacity-40")}
                 >
-                  <Icon className="h-5 w-5 shrink-0" />
+                  <GameIcon
+                    id={iconId}
+                    title={item.label}
+                    size={16}
+                    className="shrink-0"
+                  />
                   <span className="w-full truncate text-center text-[10px] font-medium">
                     {item.label}
                   </span>
@@ -354,7 +410,12 @@ export function MorphTabBar() {
                 onClick={() => setOverflowOpen(false)}
                 className={tileClass}
               >
-                <Icon className="h-5 w-5 shrink-0" />
+                <GameIcon
+                  id={iconId}
+                  title={item.label}
+                  size={16}
+                  className="shrink-0"
+                />
                 <span className="w-full truncate text-center text-[10px] font-medium">
                   {item.label}
                 </span>
@@ -364,17 +425,14 @@ export function MorphTabBar() {
         </div>
       </div>
 
-      {/* The pill — one element, two layers stacked inside.
-          Width is owned by CSS: the active layer is `relative` (in flow) and
-          the pill's `transition: width` smooths every change — including
-          TxButton phase swaps that resize a button's content. */}
+      {/* The pill — one element, two layers stacked inside. Its resting width
+          is `auto` (it shrink-wraps whichever layer is in flow); the morph
+          animates that width via anime.js, then hands it back. `justify-center`
+          keeps the in-flow layer centred while the width is mid-animation. */}
       <div
         ref={pillRef}
-        className="pointer-events-auto relative flex h-14 items-center overflow-hidden rounded-full border border-border-default bg-[var(--nm-bg-bar)]/95 shadow-xl shadow-black/40 backdrop-blur"
-        style={{
-          width: "auto",
-          transition: "width 380ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-        }}
+        className="pointer-events-auto relative flex h-14 items-center justify-center overflow-hidden rounded-full border border-border-default bg-[var(--nm-bg-bar)]/95 shadow-xl shadow-black/40 backdrop-blur"
+        style={{ width: "auto" }}
       >
         {/* NAV layer — `relative` when active so it drives the pill's
             auto-width, `absolute` when inactive so it doesn't fight the
@@ -392,7 +450,7 @@ export function MorphTabBar() {
           }}
         >
           {PRIMARY.map((item) => {
-            const Icon = ICON_BY_LABEL[item.label] ?? Home;
+            const iconId = ICON_BY_LABEL[item.label] ?? "nav-home";
             const active = isActive(item.href);
             const locked = !!pageLocked[item.href];
             const cls = cn(
@@ -411,7 +469,7 @@ export function MorphTabBar() {
                   aria-label={item.label}
                   className={cn(cls, "opacity-40")}
                 >
-                  <Icon className="h-5 w-5" />
+                  <GameIcon id={iconId} title={item.label} size={16} />
                 </span>
               );
             }
@@ -423,7 +481,7 @@ export function MorphTabBar() {
                 data-morph-item
                 className={cls}
               >
-                <Icon className="h-5 w-5" />
+                <GameIcon id={iconId} title={item.label} size={16} />
               </Link>
             );
           })}
@@ -446,11 +504,10 @@ export function MorphTabBar() {
           </button>
         </div>
 
-        {/* ACTION layer — same positioning rule inverted: drives width when
-            active, overlays when inactive. The pill auto-fits whichever layer
-            is in flow, and the CSS `transition: width` on the pill smooths
-            both the mode swap *and* any per-frame width change from a
-            TxButton's phase swap (spinner / "Failed" / "Success!"). */}
+        {/* ACTION layer — same positioning rule inverted: `relative` (drives
+            the pill's resting width) when active, `absolute` overlay when
+            inactive. A TxButton phase swap (spinner / "Failed" / "Success!")
+            resizes it; the pill's `auto` width snaps to follow. */}
         <div
           ref={actionLayerRef}
           className={cn(
@@ -475,21 +532,31 @@ export function MorphTabBar() {
   );
 }
 
-function ActionButton({ action }: { action: PanelAction }) {
+function ActionButton({
+  action,
+  wide,
+}: {
+  action: PanelAction;
+  wide?: boolean;
+}) {
   const variant = action.variant ?? "secondary";
   // Override TxButton's default `rounded-lg w-full px-4 py-2 text-sm` with
   // pill geometry, and lay tweaks for the secondary/danger fills on top of
   // its own variant base. `cn`+tailwind-merge picks the later class, so the
-  // overrides win.
+  // overrides win. In `wide` mode the wrapper is the flex segment, so keep
+  // TxButton's `w-full` (drop the `w-auto` override) and tighten the padding.
   const override = cn(
-    "h-10 w-auto rounded-full px-5",
+    wide ? "h-10 min-w-0 rounded-full px-3 text-xs" : "h-10 w-auto rounded-full px-5",
     variant === "secondary" &&
       "border border-border-default bg-surface-raised/80 text-text-secondary hover:bg-surface-overlay/60",
     variant === "danger" &&
       "border border-red-700 bg-red-600 text-white hover:bg-red-700",
   );
   return (
-    <span data-morph-item className="inline-flex">
+    <span
+      data-morph-item
+      className={cn("inline-flex", wide && "min-w-0 flex-1")}
+    >
       <TxButton
         onClick={action.onClick}
         variant={variant}

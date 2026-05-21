@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Cinzel } from "next/font/google";
+import { JetBrains_Mono, Cinzel } from "next/font/google";
 import { GameProviders } from "@/lib/solana/provider";
 import { NotificationToast } from "@/components/layout/NotificationToast";
 import { TransitionOverlay } from "@/components/layout/TransitionOverlay";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 const cinzel = Cinzel({ subsets: ["latin"], variable: "--font-cinzel" });
 
@@ -20,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrains.variable} ${cinzel.variable}`}>
+    <html lang="en" className={`${jetbrains.variable} ${cinzel.variable}`}>
       <body className="min-h-screen bg-surface font-mono">
         <GameProviders>
           {children}

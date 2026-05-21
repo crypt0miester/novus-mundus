@@ -125,22 +125,19 @@ impl EventAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
         let data = account.try_borrow()?;
         super::AccountKey::validate(&data, super::AccountKey::Event)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
         if &loaded.game_engine != game_engine {
             return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, event_id, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         Ok(unsafe { super::Loaded::new(data, ptr) })
@@ -157,22 +154,19 @@ impl EventAccount {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
         let mut data = account.try_borrow_mut()?;
         super::AccountKey::validate(&data, super::AccountKey::Event)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
         if &loaded.game_engine != game_engine {
             return Err(crate::error::GameError::KingdomMismatch.into());
+        }
+
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, event_id, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
@@ -262,18 +256,15 @@ impl EventParticipation {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id, player_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
         let data = account.try_borrow()?;
         super::AccountKey::validate(&data, super::AccountKey::EventParticipation)?;
         let ptr = data.as_ptr() as *const Self;
         let loaded = unsafe { &*ptr };
 
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, event_id, player_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         Ok(unsafe { super::Loaded::new(data, ptr) })
@@ -291,18 +282,15 @@ impl EventParticipation {
             return Err(ProgramError::IllegalOwner);
         }
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, event_id, player_owner);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
         let mut data = account.try_borrow_mut()?;
         super::AccountKey::validate(&data, super::AccountKey::EventParticipation)?;
         let ptr = data.as_mut_ptr() as *mut Self;
         let loaded = unsafe { &*ptr };
 
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
+        // Verify the canonical PDA from the stored bump (one hash, no find loop).
+        let expected_pda = Self::create_pda(game_engine, event_id, player_owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
         }
 
         Ok(unsafe { super::LoadedMut::new(data, ptr) })

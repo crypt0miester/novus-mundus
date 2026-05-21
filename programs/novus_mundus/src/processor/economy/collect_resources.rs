@@ -138,6 +138,10 @@ pub fn process(
         return Err(GameError::InsufficientUnits.into());
     }
 
+    // Load estate once — reused for the collection-type gate, the Observatory
+    // bonus, and the per-building bonus below.
+    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
+
     // 6a. Validate collection type is unlocked
     match collection_type {
         CollectionType::Mining => {
@@ -145,7 +149,6 @@ pub fn process(
                 return Err(GameError::FeatureLocked.into());
             }
             // Mining requires Mine building (split from Workshop)
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             require_mine(estate, 1)?;
         },
         CollectionType::Fishing => {
@@ -153,12 +156,10 @@ pub fn process(
                 return Err(GameError::FeatureLocked.into());
             }
             // Fishing requires Dock building (minimum level 1)
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             require_dock(estate, 1)?;
         },
         CollectionType::Farming => {
             // Farming requires Farm building
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             require_farm(estate, 1)?;
         },
         CollectionType::Cash => {}, // Always unlocked
@@ -367,7 +368,6 @@ pub fn process(
 
     // 8b. Apply Observatory building bonus (BUILDING BONUS)
     // Observatory increases all collection output
-    let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
     let loot_bonus_bps = observatory_loot_bonus_bps(estate);
 
     // Apply bonus: output × (10000 + bonus_bps) / 10000
@@ -399,13 +399,15 @@ pub fn process(
         gameplay_config,
     );
 
-    // Apply abandonment (proportionally distributed across unit types)
+    // Apply abandonment (proportionally distributed across unit types).
+    // Integer round-half-up of unit × units_to_abandon / total_operative.
     if units_to_abandon > 0 {
-        let abandon_pct = units_to_abandon as f64 / total_operative as f64;
-
-        let abandon_unit_1 = libm::round(player_data.operative_unit_1 as f64 * abandon_pct) as u64;
-        let abandon_unit_2 = libm::round(player_data.operative_unit_2 as f64 * abandon_pct) as u64;
-        let abandon_unit_3 = libm::round(player_data.operative_unit_3 as f64 * abandon_pct) as u64;
+        let share = |units: u64| -> u64 {
+            (units.saturating_mul(units_to_abandon) + total_operative / 2) / total_operative
+        };
+        let abandon_unit_1 = share(player_data.operative_unit_1);
+        let abandon_unit_2 = share(player_data.operative_unit_2);
+        let abandon_unit_3 = share(player_data.operative_unit_3);
 
         player_data.operative_unit_1 = player_data.operative_unit_1.saturating_sub(abandon_unit_1);
         player_data.operative_unit_2 = player_data.operative_unit_2.saturating_sub(abandon_unit_2);
@@ -435,13 +437,15 @@ pub fn process(
         &[player_signer],
     )?;
 
-    // Re-load player data after CPI (mutations from before drop are preserved in buffer)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
+    // Re-load player data after CPI (mutations from before drop are preserved in
+    // the buffer). Identity was verified pre-CPI — skip PDA re-derivation.
+    let mut player_data = PlayerAccount::load_mut_unchecked(player, program_id)?;
 
     // 12. Transfer resources based on collection type
     // (clock already obtained above for time-of-day calculation)
 
     // Track total resources for XP and event scoring
+    let mut fragments_earned: u64 = 0;
     let total_resources_collected = match collection_type {
         CollectionType::Cash => {
             // Apply research buff for cash generation
@@ -479,7 +483,6 @@ pub fn process(
             }
 
             // Apply Mine building bonus (split from Workshop)
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             let mine_bonus = mine_mining_bonus_bps(estate);
             if mine_bonus > 0 {
                 let mine_multiplier = 10000u64 + mine_bonus as u64;
@@ -501,6 +504,7 @@ pub fn process(
                 player_data.fragments = player_data.fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
+                fragments_earned = fragments;
             }
             buffed_output
         },
@@ -520,7 +524,6 @@ pub fn process(
             }
 
             // Apply Dock building bonus
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             let dock_bonus = dock_fishing_bonus_bps(estate);
             if dock_bonus > 0 {
                 let dock_multiplier = 10000u64 + dock_bonus as u64;
@@ -542,6 +545,7 @@ pub fn process(
                 player_data.fragments = player_data.fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
+                fragments_earned = fragments;
             }
             buffed_output
         },
@@ -561,7 +565,6 @@ pub fn process(
             }
 
             // Apply Farm building bonus
-            let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
             let farm_bonus = farm_produce_bonus_bps(estate);
             if farm_bonus > 0 {
                 let farm_multiplier = 10000u64 + farm_bonus as u64;
@@ -582,6 +585,7 @@ pub fn process(
                 player_data.fragments = player_data.fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
+                fragments_earned = fragments;
             }
             buffed_output
         }
@@ -679,28 +683,10 @@ pub fn process(
         }
     }
 
-    // Calculate gems and fragments earned for event
-    let (gems_earned, fragments_earned) = match collection_type {
-        CollectionType::Mining => {
-            // NOTE: `gems` is reported through the local u32 path here for
-            // event-internal accounting (saturating cast). The emitted
-            // `ResourcesCollected.gems_earned` field is u64 and receives the
-            // widened value below, so no precision is lost on-chain — only
-            // the intermediate event-scoring counter saturates if a single
-            // mining session ever collects more than u32::MAX resources.
-            let gems = total_resources_collected.min(u32::MAX as u64) as u32;
-            let frags = if player_data.has_fragment_drops() { 2u16 } else { 0 };
-            (gems, frags)
-        },
-        CollectionType::Fishing => {
-            let frags = if player_data.has_fragment_drops() { 1u16 } else { 0 };
-            (0, frags)
-        },
-        CollectionType::Farming => {
-            let frags = if player_data.has_fragment_drops() { 1u16 } else { 0 };
-            (0, frags)
-        },
-        CollectionType::Cash => (0, 0),
+    // Gems earned (mining yields gems; other collection types yield none).
+    let gems_earned = match collection_type {
+        CollectionType::Mining => total_resources_collected,
+        _ => 0,
     };
 
     // Emit ResourcesCollected event
@@ -711,8 +697,8 @@ pub fn process(
         novi_consumed: novi_amount,
         base_output,
         final_output: total_resources_collected,
-        gems_earned: gems_earned as u64,
-        fragments_earned: fragments_earned as u64,
+        gems_earned,
+        fragments_earned,
         xp_gained: xp_amount,
         timestamp: now,
     });

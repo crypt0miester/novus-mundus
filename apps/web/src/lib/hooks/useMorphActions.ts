@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useRightPanelStore, type PanelAction } from "@/lib/store/right-panel";
 
 /**
@@ -11,6 +11,10 @@ import { useRightPanelStore, type PanelAction } from "@/lib/store/right-panel";
  * Pass `null` to leave the bar in its nav state — useful when a panel has no
  * meaningful actions yet (e.g. mid-load).
  *
+ * Each caller holds its own slot in the store, keyed by a stable `useId`, so
+ * panels whose lifetimes overlap don't clobber each other: the bar shows the
+ * most recently registered panel and falls back to the next when one closes.
+ *
  * @example
  * useMorphActions([
  *   { id: "attack", label: "Attack", onClick: handleAttack, variant: "primary" },
@@ -18,26 +22,49 @@ import { useRightPanelStore, type PanelAction } from "@/lib/store/right-panel";
  * ]);
  */
 export function useMorphActions(actions: PanelAction[] | null | undefined) {
-  const setActions = useRightPanelStore((s) => s.setActions);
-  const clearActions = useRightPanelStore((s) => s.clearActions);
+  const owner = useId();
+  const register = useRightPanelStore((s) => s.registerMorphActions);
+  const unregister = useRightPanelStore((s) => s.unregisterMorphActions);
 
+  // The caller rebuilds the list every render, but the effect below only
+  // re-registers when an action's id/label/variant/disabled changes — never
+  // for a handler rebuilt with the same signature. So keep the live list in a
+  // ref and have each registered onClick delegate to it; otherwise the bar
+  // could fire a handler that closed over stale state (e.g. an account that
+  // hadn't loaded yet at registration time).
+  const latest = useRef(actions);
+  latest.current = actions;
+
+  // Sync this panel's actions into its own slot whenever the signature
+  // changes. Deliberately no cleanup here: a re-run must upsert in place, not
+  // unregister-then-append (which would jump the panel ahead of others in the
+  // stack).
   useEffect(() => {
-    if (actions && actions.length > 0) {
-      setActions(actions);
-    } else {
-      clearActions();
+    const list = actions ?? [];
+    if (list.length === 0) {
+      unregister(owner);
+      return;
     }
-    return () => {
-      clearActions();
-    };
-    // The action list is rebuilt every render by the caller; rather than
-    // deep-equal the array, depend on a stable signature so we only re-sync
-    // when the contents actually changed.
+    register(
+      owner,
+      list.map((a) => ({
+        ...a,
+        onClick: (reportPhase) =>
+          ((latest.current ?? []).find((x) => x.id === a.id) ?? a).onClick(
+            reportPhase,
+          ),
+      })),
+    );
   }, [
-    setActions,
-    clearActions,
+    owner,
+    register,
+    unregister,
     JSON.stringify(
       (actions ?? []).map((a) => [a.id, a.label, a.variant, a.disabled]),
     ),
   ]);
+
+  // Drop this panel's slot on unmount — and only its own, so other open
+  // panels keep theirs.
+  useEffect(() => () => unregister(owner), [owner, unregister]);
 }

@@ -11,15 +11,24 @@ export interface PanelAction {
   disabled?: boolean;
 }
 
+/** One panel's claim on the morph bar's action slot. `owner` is a stable id
+ * per `useMorphActions` call site, so panels whose lifetimes overlap each hold
+ * their own entry instead of clobbering one shared array. */
+interface MorphActionEntry {
+  owner: string;
+  actions: PanelAction[];
+}
+
 interface RightPanelState {
   open: boolean;
   title: string;
   contentKey: string | null;
   contentProps: Record<string, any>;
-  actions: PanelAction[];
+  /** Stacked action claims; the last entry owns the morph bar. */
+  morphActions: MorphActionEntry[];
   show(title: string, key: string, props?: Record<string, any>): void;
-  setActions(actions: PanelAction[]): void;
-  clearActions(): void;
+  registerMorphActions(owner: string, actions: PanelAction[]): void;
+  unregisterMorphActions(owner: string): void;
   close(): void;
 }
 
@@ -28,14 +37,33 @@ export const useRightPanelStore = create<RightPanelState>((set) => ({
   title: "",
   contentKey: null,
   contentProps: {},
-  actions: [],
+  morphActions: [],
 
   show: (title, key, props = {}) =>
-    set({ open: true, title, contentKey: key, contentProps: props, actions: [] }),
+    set({ open: true, title, contentKey: key, contentProps: props }),
 
-  setActions: (actions) => set({ actions }),
-  clearActions: () => set({ actions: [] }),
+  // Upsert: an existing owner keeps its slot — a panel re-rendering its
+  // actions must not jump ahead of a panel that opened on top of it — while a
+  // new owner is appended, so the most recently opened panel owns the bar.
+  registerMorphActions: (owner, actions) =>
+    set((s) => {
+      const i = s.morphActions.findIndex((e) => e.owner === owner);
+      if (i === -1) {
+        return { morphActions: [...s.morphActions, { owner, actions }] };
+      }
+      const next = s.morphActions.slice();
+      next[i] = { owner, actions };
+      return { morphActions: next };
+    }),
+
+  // Remove only this owner's entry; the bar falls back to the next claim
+  // still standing, or to its nav tabs when none remain.
+  unregisterMorphActions: (owner) =>
+    set((s) => {
+      const next = s.morphActions.filter((e) => e.owner !== owner);
+      return next.length === s.morphActions.length ? s : { morphActions: next };
+    }),
 
   close: () =>
-    set({ open: false, title: "", contentKey: null, contentProps: {}, actions: [] }),
+    set({ open: false, title: "", contentKey: null, contentProps: {} }),
 }));

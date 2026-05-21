@@ -3,6 +3,14 @@
 import { useState, useMemo } from "react";
 import { useWorldTeams, useCitizenStatus } from "@/lib/hooks/world";
 import { TeamCard } from "@/components/shared/TeamCard";
+import { Badge } from "@/components/shared/Badge";
+import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
+import { DomainName } from "@/components/shared/DomainName";
+import { ViewToggle } from "@/components/shared/ViewToggle";
+import { DataTable, type Column } from "@/components/shared/DataTable";
+import { useViewMode } from "@/lib/hooks/useViewMode";
+import Link from "next/link";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -22,6 +30,7 @@ export function TeamBrowser() {
   const [search, setSearch] = useState("");
   const [publicOnly, setPublicOnly] = useState(false);
   const [sort, setSort] = useState<SortOption>("members");
+  const [view, setView] = useViewMode("teams");
 
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
@@ -102,6 +111,87 @@ export function TeamBrowser() {
       });
   };
 
+  const columns: Column<(typeof filtered)[number]>[] = [
+    {
+      key: "house",
+      header: "House",
+      cell: (t) => {
+        const isPublic = (t.account.settings & 1) !== 0;
+        return (
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/world/teams/${t.account.id.toNumber()}`}
+              className="font-medium text-text-primary transition-colors hover:text-text-gold"
+            >
+              {t.account.name || `Team #${t.account.id.toNumber()}`}
+            </Link>
+            <Badge
+              variant={isPublic ? "success" : "default"}
+              className="px-1 py-0 text-[10px]"
+            >
+              {isPublic ? "Public" : "Private"}
+            </Badge>
+          </div>
+        );
+      },
+    },
+    {
+      key: "members",
+      header: "Sworn Blades",
+      align: "center",
+      className: "w-32",
+      cell: (t) => (
+        <span>
+          {t.account.memberCount}/{t.account.maxMembers}
+          {t.account.minLevelToJoin > 1 && (
+            <span className="ml-1 text-text-muted">
+              · Lv {t.account.minLevelToJoin}+
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "treasury",
+      header: "War-chest",
+      align: "right",
+      className: "hidden w-28 sm:table-cell",
+      cell: (t) => (
+        <span className="inline-flex items-center justify-end gap-1">
+          <GameIcon id="resource-cash" size={14} />
+          <GoldNumber value={t.account.treasury.toNumber()} size="sm" />
+        </span>
+      ),
+    },
+    {
+      key: "leader",
+      header: "Leader",
+      className: "hidden w-28 md:table-cell",
+      cell: (t) => <DomainName pubkey={t.account.leader} chars={4} />,
+    },
+  ];
+  if (citizen.isCitizen && !citizenHasTeam) {
+    columns.push({
+      key: "action",
+      header: "",
+      align: "right",
+      className: "w-24",
+      cell: (t) => {
+        const isPublic = (t.account.settings & 1) !== 0;
+        if (!isPublic) return null;
+        return (
+          <TxButton
+            onClick={(rp) => handleJoin(t, rp)}
+            variant="secondary"
+            className="text-xs"
+          >
+            Swear In
+          </TxButton>
+        );
+      },
+    });
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-text-muted">
@@ -147,43 +237,55 @@ export function TeamBrowser() {
           <option value="name">Name (A-Z)</option>
           <option value="newest">Newest Banner</option>
         </select>
+        <ViewToggle mode={view} onChange={setView} className="ml-auto" />
       </div>
 
-      {/* Grid */}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((t) => {
-          const isPublic = (t.account.settings & 1) !== 0;
-          const canJoin =
-            citizen.isCitizen && !citizenHasTeam && isPublic;
+      {/* Grid / Table */}
+      {view === "grid" ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((t) => {
+              const isPublic = (t.account.settings & 1) !== 0;
+              const canJoin =
+                citizen.isCitizen && !citizenHasTeam && isPublic;
 
-          return (
-            <TeamCard
-              key={t.pubkey.toBase58()}
-              teamId={t.account.id.toNumber()}
-              team={t.account}
-              lordlyLabels
-              actions={
-                canJoin ? (
-                  <TxButton
-                    onClick={(rp) => handleJoin(t, rp)}
-                    variant="secondary"
-                    className="text-xs"
-                  >
-                    Swear In
-                  </TxButton>
-                ) : undefined
-              }
-            />
-          );
-        })}
-      </div>
+              return (
+                <TeamCard
+                  key={t.pubkey.toBase58()}
+                  teamId={t.account.id.toNumber()}
+                  team={t.account}
+                  lordlyLabels
+                  actions={
+                    canJoin ? (
+                      <TxButton
+                        onClick={(rp) => handleJoin(t, rp)}
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        Swear In
+                      </TxButton>
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </div>
 
-      {filtered.length === 0 && (
-        <div className="card">
-          <p className="text-sm text-text-muted">
-            No House answers to that search.
-          </p>
-        </div>
+          {filtered.length === 0 && (
+            <div className="card">
+              <p className="text-sm text-text-muted">
+                No House answers to that search.
+              </p>
+            </div>
+          )}
+        </>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          rowKey={(t) => t.pubkey.toBase58()}
+          empty="No House answers to that search."
+        />
       )}
 
       {citizen.isCitizen && !citizenHasTeam && (

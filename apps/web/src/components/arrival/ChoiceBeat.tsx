@@ -4,12 +4,22 @@ import { useState } from "react";
 import { useAllCities } from "@/lib/hooks/useAllCities";
 import { cityType } from "@/lib/narrative";
 import { cn } from "@/lib/utils";
+import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 import { BeatButton, BeatEyebrow } from "./Beat";
 import type { CityChoice } from "./Arrival";
 
 interface ChoiceBeatProps {
   onChoose: (city: CityChoice) => void;
 }
+
+/** City-type icon, indexed by the on-chain CityType enum (SDK):
+ *  0 Capital · 1 Resource · 2 Combat · 3 Trade. */
+const CITY_TYPE_ICON: readonly GameIconId[] = [
+  "map-capital",
+  "map-resource",
+  "map-combat",
+  "map-trade",
+];
 
 /** Beat 2 of the Arrival — where you make your stand. */
 export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
@@ -49,8 +59,13 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
                     : "border-border-default bg-surface-raised hover:border-border-gold",
                 )}
               >
-                <span className="text-sm font-semibold text-text-primary">
-                  {t.icon} {acc.name}
+                <span className="flex items-center gap-0.5 text-sm font-semibold text-text-primary">
+                  <GameIcon
+                    id={CITY_TYPE_ICON[acc.cityType] ?? "map-capital"}
+                    title={t.name}
+                    size={32}
+                  />
+                  {acc.name}
                 </span>
                 <span className="text-[11px] text-text-muted">
                   {t.name} · {acc.playersPresent} here

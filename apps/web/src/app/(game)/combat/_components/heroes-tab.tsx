@@ -13,6 +13,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DetailPanel } from "@/components/shared/DetailPanel";
+import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
   derivePlayerPda,
@@ -128,7 +129,7 @@ export function HeroesTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<Selection>(null);
-  const [lockSlot, setLockSlot] = useState(0);
+  const lockSlot = 0;
 
   const traveling = player ? isTraveling(player) : false;
   const fragments = player?.fragments?.toNumber?.() ?? 0;
@@ -460,12 +461,18 @@ export function HeroesTab() {
         {/* Buffs summary */}
         {heroBuffs.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {heroBuffs.map((buff) => (
-              <div key={buff.label} className="rounded-md border border-zinc-800 bg-surface px-2.5 py-1 text-center">
-                <span className="text-[10px] text-text-muted">{buff.label}</span>{" "}
-                <span className="text-xs font-bold text-text-gold">+{(buff.bps / 100).toFixed(1)}%</span>
-              </div>
-            ))}
+            {heroBuffs.map((buff) => {
+              const icon = buffStatIcon(buff.stat);
+              return (
+                <div
+                  key={buff.label}
+                  className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-surface px-2.5 py-1"
+                >
+                  {icon && <GameIcon id={icon} title={buff.label} size={16} />}
+                  <span className="text-xs font-bold text-text-gold">+{(buff.bps / 100).toFixed(1)}%</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -591,12 +598,22 @@ export function HeroesTab() {
                     </div>
                     {buffs.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
-                        {buffs.map((b) => (
-                          <span key={b.stat} className="rounded bg-surface px-1 py-0.5 text-[10px] text-text-muted">
-                            {getBuffStatMeta(b.stat)?.abbr ?? "?"}{" "}
-                            <span className="font-mono text-text-secondary">{b.baseBps}</span>
-                          </span>
-                        ))}
+                        {buffs.map((b) => {
+                          const icon = buffStatIcon(b.stat);
+                          return (
+                            <span
+                              key={b.stat}
+                              className="flex items-center gap-1 rounded bg-surface px-1 py-0.5 text-[10px] text-text-muted"
+                            >
+                              {icon ? (
+                                <GameIcon id={icon} title={getBuffStatMeta(b.stat)?.name} size={13} />
+                              ) : (
+                                <>{getBuffStatMeta(b.stat)?.abbr ?? "?"}</>
+                              )}
+                              <span className="font-mono text-text-secondary">{b.baseBps}</span>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -642,12 +659,19 @@ export function HeroesTab() {
               <div>
                 <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Buffs</div>
                 <div className="space-y-1">
-                  {selectedBuffs.map(([key, value]) => (
+                  {selectedBuffs.map(([key, value]) => {
+                    const meta = getBuffStatByAttrKey(key);
+                    const icon = meta ? buffStatIcon(meta.stat) : undefined;
+                    return (
                     <div key={key} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                      <span className="text-xs text-text-secondary">{getBuffStatByAttrKey(key)?.name ?? key}</span>
+                      <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        {icon && <GameIcon id={icon} title={meta?.name} size={18} />}
+                        {meta?.name ?? key}
+                      </span>
                       <span className="font-mono text-xs font-semibold text-text-primary">{value}</span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -730,7 +754,7 @@ export function HeroesTab() {
                         variant="secondary"
                         className="mt-2 w-full text-xs"
                       >
-                        Level Up ({cost === Infinity ? "MAX" : cost} frags)
+                        Level Up
                       </TxButton>
                     </>
                   )}
@@ -756,7 +780,7 @@ export function HeroesTab() {
                     variant="secondary"
                     className="w-full text-xs"
                   >
-                    Unlock from Slot {(selected as { slot: number }).slot}
+                    Unlock from Slot
                   </TxButton>
                 </div>
               ) : (
@@ -764,17 +788,6 @@ export function HeroesTab() {
                   {lockGate.allowed ? (
                     <>
                       <div className="flex items-end gap-2">
-                        <div>
-                          <label className="block text-[10px] text-text-muted">Slot</label>
-                          <input
-                            type="number"
-                            value={lockSlot}
-                            onChange={(e) => setLockSlot(Math.max(0, Math.min(2, parseInt(e.target.value) || 0)))}
-                            className="w-14 rounded border border-zinc-800 bg-surface px-2 py-1.5 text-xs font-mono text-text-primary"
-                            min={0}
-                            max={2}
-                          />
-                        </div>
                         <TxButton
                           onClick={(rp) => {
                             const templateId = parseInt(selectedHero.asset.attributes["Template"] || "0");
@@ -783,7 +796,7 @@ export function HeroesTab() {
                           disabled={emptySlots === 0}
                           className="flex-1 text-xs"
                         >
-                          Lock to Slot {lockSlot}
+                          Lock to Slot
                         </TxButton>
                       </div>
                       {emptySlots === 0 && <p className="text-[10px] text-amber-400">Unlock a slot first</p>}
@@ -898,14 +911,20 @@ export function HeroesTab() {
                     Base Buffs
                   </div>
                   <div className="space-y-1">
-                    {buffs.map((b) => (
+                    {buffs.map((b) => {
+                      const icon = buffStatIcon(b.stat);
+                      return (
                       <div key={b.stat} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                        <span className="text-xs text-text-secondary">{getBuffStatMeta(b.stat)?.name ?? `Stat ${b.stat}`}</span>
+                        <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+                          {icon && <GameIcon id={icon} title={getBuffStatMeta(b.stat)?.name} size={18} />}
+                          {getBuffStatMeta(b.stat)?.name ?? `Stat ${b.stat}`}
+                        </span>
                         <span className="font-mono text-xs font-semibold text-text-primary">
                           +{(b.baseBps / 100).toFixed(1)}%
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -920,7 +939,7 @@ export function HeroesTab() {
                   disabled={!mintable || traveling}
                   className="w-full"
                 >
-                  {t.minted ? "Already Minted" : `Mint for ${costSol} SOL`}
+                  {t.minted ? "Already Minted" : `Mint`}
                 </TxButton>
                 {!mintable && !t.minted && (
                   <p className="mt-1 text-center text-[10px] text-amber-400">

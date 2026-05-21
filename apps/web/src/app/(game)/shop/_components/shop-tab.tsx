@@ -1,18 +1,21 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useShopConfig, useShopItems, useBundles, useFlashSales, useDailyDeals, useWeeklySale, useSeasonalSale, useDaoPromotions, usePlayerPurchase } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { TabNav } from "@/components/shared/TabNav";
+import { NumberField } from "@/components/shared/NumberField";
 import { DetailPanel } from "@/components/shared/DetailPanel";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import type { PanelAction } from "@/lib/store/right-panel";
@@ -80,12 +83,14 @@ const RARITY_LABELS: Record<number, string> = {
   [ShopItemRarity.Legendary]: "Legendary",
 };
 
+// Gold-intensity rarity ladder: mundane tiers stay neutral grey, precious
+// tiers climb through bronze -> gold -> bright gold. No off-palette hues.
 const RARITY_COLORS: Record<number, string> = {
-  [ShopItemRarity.Common]: "text-zinc-400",
-  [ShopItemRarity.Uncommon]: "text-green-400",
-  [ShopItemRarity.Rare]: "text-blue-400",
-  [ShopItemRarity.Epic]: "text-fuchsia-400",
-  [ShopItemRarity.Legendary]: "text-amber-400",
+  [ShopItemRarity.Common]: "text-zinc-500",
+  [ShopItemRarity.Uncommon]: "text-zinc-300",
+  [ShopItemRarity.Rare]: "text-amber-600",
+  [ShopItemRarity.Epic]: "text-amber-400",
+  [ShopItemRarity.Legendary]: "text-amber-200",
 };
 
 function lamportsToSol(lamports: number): string {
@@ -123,6 +128,14 @@ export function ShopTab() {
   const { data: daoPromotions } = useDaoPromotions();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
+  // Wallet SOL balance (lamports) — caps how many SOL-priced wares are affordable.
+  const { data: solLamports = 0 } = useQuery({
+    queryKey: ["solBalance", publicKey?.toBase58()],
+    queryFn: () => connection.getBalance(publicKey!),
+    enabled: !!publicKey,
+    staleTime: 30_000,
+  });
   const transact = useTransact();
 
   const player = playerData?.account;
@@ -464,11 +477,17 @@ export function ShopTab() {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <div className="text-xs text-text-muted">Cash</div>
-              <GoldNumber value={player.cashOnHand.toNumber()} prefix="$ " format="compact" />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-cash" size={14} />
+                <GoldNumber value={player.cashOnHand.toNumber()} format="compact" />
+              </span>
             </div>
             <div>
               <div className="text-xs text-text-muted">Gems</div>
-              <GoldNumber value={player.gems.toNumber()} />
+              <span className="inline-flex items-center gap-1">
+                <GameIcon id="resource-gem" size={14} />
+                <GoldNumber value={player.gems.toNumber()} />
+              </span>
             </div>
             <div>
               <div className="text-xs text-text-muted">NOVI</div>
@@ -481,7 +500,7 @@ export function ShopTab() {
                 {timeInfo.isGolden ? "\u2726 " : ""}{timeInfo.name}
               </span>
               {timeInfo.purchasingMult > 1.05 ? (
-                <span className="text-[11px] text-green-400">
+                <span className="text-[11px] text-amber-400">
                   Purchasing bonus active ({((timeInfo.purchasingMult - 1) * 100).toFixed(0)}% discount)
                 </span>
               ) : timeInfo.purchasingMult < 0.95 ? (
@@ -628,7 +647,7 @@ export function ShopTab() {
                       {hasDiscount ? (
                         <span>
                           <span className="text-text-muted line-through mr-1">{lamportsToSol(baseLamports)}</span>
-                          <span className="text-green-400">{lamportsToSol(discountedLamports)} SOL</span>
+                          <span className="text-text-gold">{lamportsToSol(discountedLamports)} SOL</span>
                         </span>
                       ) : (
                         <span className="font-mono tabular-nums text-text-gold">{lamportsToSol(baseLamports)} SOL</span>
@@ -642,20 +661,19 @@ export function ShopTab() {
                     )}
                   </div>
 
-                  <div>
-                    <label className="mb-1 block text-xs text-text-muted">Quantity</label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setItemQuantities((prev) => ({ ...prev, [effectiveItem!]: Math.max(1, qty - 1) }))}
-                        className="flex h-8 w-8 items-center justify-center rounded border border-zinc-700 text-sm text-text-muted hover:border-zinc-600"
-                      >−</button>
-                      <span className="w-8 text-center font-mono text-sm text-text-primary">{qty}</span>
-                      <button
-                        onClick={() => setItemQuantities((prev) => ({ ...prev, [effectiveItem!]: Math.min(100, qty + 1) }))}
-                        className="flex h-8 w-8 items-center justify-center rounded border border-zinc-700 text-sm text-text-muted hover:border-zinc-600"
-                      >+</button>
-                    </div>
-                  </div>
+                  <NumberField
+                    label="Quantity"
+                    value={qty}
+                    onChange={(n) =>
+                      setItemQuantities((prev) => ({ ...prev, [effectiveItem!]: n }))
+                    }
+                    min={1}
+                    max={
+                      unitPrice > 0
+                        ? Math.max(1, Math.floor(solLamports / unitPrice))
+                        : 1
+                    }
+                  />
 
                   <TxButton
                     onClick={(rp) => handlePurchaseItem(effectiveItem!, qty, rp)}
@@ -697,7 +715,7 @@ export function ShopTab() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-semibold text-text-gold">Lot #{bundle.bundleId}</span>
                         {b.savingsBps > 0 && (
-                          <span className="text-[10px] text-green-400">{(b.savingsBps / 100).toFixed(0)}% off</span>
+                          <span className="text-[10px] text-text-gold">{(b.savingsBps / 100).toFixed(0)}% off</span>
                         )}
                       </div>
                       <div className="text-xs text-text-muted">Tier {b.tier} &middot; {b.itemCount} items</div>
@@ -731,7 +749,7 @@ export function ShopTab() {
                   </div>
 
                   {b.savingsBps > 0 && (
-                    <div className="rounded-lg bg-green-900/20 px-3 py-1.5 text-xs font-semibold text-green-400">
+                    <div className="rounded-lg bg-amber-900/20 px-3 py-1.5 text-xs font-semibold text-amber-400">
                       {(b.savingsBps / 100).toFixed(0)}% savings
                     </div>
                   )}
@@ -901,7 +919,7 @@ export function ShopTab() {
                           : "border-amber-800/40 hover:border-amber-700/60"
                       }`}
                     >
-                      <span className="text-[10px] font-semibold uppercase text-green-400">−{discountPct}% today</span>
+                      <span className="text-[10px] font-semibold uppercase text-text-gold">−{discountPct}% today</span>
                       <div className="text-sm font-semibold text-text-primary truncate">
                         {getShopItemName(a.itemType, a.quantityPerPurchase)}
                       </div>
@@ -950,7 +968,7 @@ export function ShopTab() {
                   <div className="rounded-lg bg-surface/60 px-3 py-2 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Deal discount</span>
-                      <span className="text-green-400">−{discountPct}%</span>
+                      <span className="text-text-gold">−{discountPct}%</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Claimed today</span>
@@ -971,7 +989,7 @@ export function ShopTab() {
                       <span className="text-zinc-500">Price</span>
                       <span>
                         <span className="text-text-muted line-through mr-1">{lamportsToSol(base)}</span>
-                        <span className="text-green-400">{lamportsToSol(dealLamports)} SOL</span>
+                        <span className="text-text-gold">{lamportsToSol(dealLamports)} SOL</span>
                       </span>
                     </div>
                     <p className="mt-1 text-[10px] text-zinc-500">
@@ -1030,7 +1048,7 @@ export function ShopTab() {
                         bps > 0 ? (
                           <div key={i} className="rounded bg-surface/60 px-2 py-1.5 text-center">
                             <div className="text-[10px] text-text-muted">{CATEGORY_LABELS[i] ?? `Category ${i}`}</div>
-                            <div className="text-sm font-semibold text-green-400">−{bpsToPercent(bps)}</div>
+                            <div className="text-sm font-semibold text-text-gold">−{bpsToPercent(bps)}</div>
                           </div>
                         ) : null,
                       )}
@@ -1053,7 +1071,7 @@ export function ShopTab() {
                       {seasonal.globalDiscountBps > 0 && (
                         <div className="flex justify-between">
                           <span className="text-text-muted">Storewide discount</span>
-                          <span className="text-green-400">−{bpsToPercent(seasonal.globalDiscountBps)}</span>
+                          <span className="text-text-gold">−{bpsToPercent(seasonal.globalDiscountBps)}</span>
                         </div>
                       )}
                       {seasonal.featuredCount > 0 && (
@@ -1092,7 +1110,7 @@ export function ShopTab() {
                         {rows.map(([label, bps]) => (
                           <div key={label} className="rounded bg-surface/60 px-2 py-1.5 text-center">
                             <div className="text-[10px] text-text-muted">{label}</div>
-                            <div className="text-sm font-semibold text-green-400">−{bpsToPercent(bps)}</div>
+                            <div className="text-sm font-semibold text-text-gold">−{bpsToPercent(bps)}</div>
                           </div>
                         ))}
                       </div>
@@ -1147,7 +1165,7 @@ export function ShopTab() {
               {streakInfo && (
                 <div className="flex items-center gap-2">
                   <span className="text-text-muted">Streak:</span>
-                  <span className={`text-sm font-semibold ${streakInfo.streakDay >= 5 ? "text-amber-400" : streakInfo.streakDay >= 3 ? "text-green-400" : "text-text-secondary"}`}>
+                  <span className={`text-sm font-semibold ${streakInfo.streakDay >= 5 ? "text-amber-400" : streakInfo.streakDay >= 3 ? "text-text-gold" : "text-text-secondary"}`}>
                     Day {streakInfo.streakDay}/7
                   </span>
                   {streakInfo.bonusBps > 0 && (
@@ -1203,7 +1221,7 @@ export function ShopTab() {
                         </div>
                         <div className="text-[10px] text-text-muted">NOVI</div>
                         {bonusBps > 0 && (
-                          <div className="mt-1 text-[10px] text-green-400">
+                          <div className="mt-1 text-[10px] text-text-gold">
                             +{(bonusBps / 100).toFixed(0)}%
                           </div>
                         )}
@@ -1229,25 +1247,25 @@ export function ShopTab() {
                     {!noviPreview.bulkBonus.eqn(0) && (
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-zinc-500">Bulk bonus</span>
-                        <span className="text-green-400">+{formatNoviAmount(noviPreview.bulkBonus)} NOVI</span>
+                        <span className="text-text-gold">+{formatNoviAmount(noviPreview.bulkBonus)} NOVI</span>
                       </div>
                     )}
                     {!noviPreview.subscriptionBonus.eqn(0) && (
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-zinc-500">Subscription bonus</span>
-                        <span className="text-green-400">+{formatNoviAmount(noviPreview.subscriptionBonus)} NOVI</span>
+                        <span className="text-text-gold">+{formatNoviAmount(noviPreview.subscriptionBonus)} NOVI</span>
                       </div>
                     )}
                     {!noviPreview.streakBonus.eqn(0) && (
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-zinc-500">Streak (Day {streakInfo?.streakDay ?? 1})</span>
-                        <span className="text-green-400">+{formatNoviAmount(noviPreview.streakBonus)} NOVI</span>
+                        <span className="text-text-gold">+{formatNoviAmount(noviPreview.streakBonus)} NOVI</span>
                       </div>
                     )}
                     {noviPreview.totalBonusBps > 0 && (
                       <div className="flex items-center justify-between text-xs border-t border-zinc-800 pt-1">
                         <span className="text-zinc-500">Total bonus</span>
-                        <span className="text-green-400">+{(noviPreview.totalBonusBps / 100).toFixed(1)}%</span>
+                        <span className="text-text-gold">+{(noviPreview.totalBonusBps / 100).toFixed(1)}%</span>
                       </div>
                     )}
                   </div>

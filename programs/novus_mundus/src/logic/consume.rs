@@ -29,10 +29,10 @@ use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::Econo
 ///
 /// # Example
 /// ```ignore
-/// let power = consume_novi_logic(100, 1.0, &economic_config);
+/// let power = consume_novi_logic(100, 10000, &economic_config);
 /// // power is fully deterministic
 /// ```
-pub fn consume_novi_logic(novi_amount: u64, synchrony: f32, economic_config: &EconomicConfig) -> u64 {
+pub fn consume_novi_logic(novi_amount: u64, synchrony_bp: u32, economic_config: &EconomicConfig) -> u64 {
     // Base multiplier: Direct from config (deterministic, no min/max!)
     // Default: 137500 bp = 13.75x
     let base_mult_bp = economic_config.novi_consumption_base;
@@ -41,12 +41,9 @@ pub fn consume_novi_logic(novi_amount: u64, synchrony: f32, economic_config: &Ec
     // Default: 12720 bp = √φ = 1.272x (golden ratio harmony)
     let secondary_mult_bp = economic_config.secondary_multiplier_base as u64;
 
-    // Convert synchrony to basis points for integer math
-    let synchrony_bp = (synchrony * 10000.0) as u64;
-
     // Calculate base consumption value using interleaved multiply/divide (no u128!)
     // Formula: novi × base_mult / 10000 × secondary_mult / 10000 × synchrony / 10000
-    let base_value = chain_bp(novi_amount, &[base_mult_bp, secondary_mult_bp, synchrony_bp])
+    let base_value = chain_bp(novi_amount, &[base_mult_bp, secondary_mult_bp, synchrony_bp as u64])
         .unwrap_or(0);
 
     // Apply Fibonacci bonus deterministically using golden ratio from config
@@ -87,7 +84,7 @@ pub fn calculate_synchrony(
     gameplay_config: &crate::state::GameplayConfig,
     subscription_tiers: &[crate::state::SubscriptionTier; 4],
     now: i64,
-) -> f32 {
+) -> u32 {
     let mut synchrony_bp = 10000u32; // Start at 100% = 1.0x (in basis points)
 
     // 1. Subscription tier bonus (from tier config, using effective tier for expiration)
@@ -120,7 +117,6 @@ pub fn calculate_synchrony(
         .saturating_mul(gameplay_config.level_synchrony_bonus_per_level);
     synchrony_bp += level_bonus;
 
-    // Convert from basis points to f32 multiplier
-    // Example: 15000 basis points = 15000 / 10000 = 1.5x
-    synchrony_bp as f32 / 10000.0
+    // Synchrony multiplier in basis points (10000 = 1.0x).
+    synchrony_bp
 }

@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/world", label: "Overview", exact: true },
-  { href: "/world/leaderboard", label: "Leaderboard" },
+  { href: "/world/players", label: "Players" },
   { href: "/world/teams", label: "Teams" },
   { href: "/world/cities", label: "Cities" },
+  { href: "/world/leaderboard", label: "Leaderboard" },
 ];
 
 export function WorldNav() {

@@ -1,0 +1,181 @@
+/* Parchment cartography skin for the travel widgets (ProximityGrid,
+   SpeedupPanel) so they read as one piece with the world map. Palette
+   mirrors RealmMap.module.css. Each root class (`.grid`, `.panel`)
+   redeclares the vars so it works standalone — children inherit. */
+
+.grid,
+.panel {
+  --pch: #efe2c4;
+  --pch-deep: #d9c293;
+  --pch-shade: #c8af7d;
+  --pch-edge: #b89a66;
+  --ink: #2e1f10;
+  --ink-soft: #6b4a2a;
+  --ink-faint: #a98f63;
+  --seal: var(--tier-accent-bright, #b45309);
+  --crimson: #8a2f1a;
+}
+
+/* ── ProximityGrid ── */
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gridLabel {
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.cells {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+}
+
+.cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--pch-edge);
+  background: var(--pch);
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.56rem;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+/* Empty, out of range — a plain plot you can still walk to. */
+.cellClose {
+  cursor: pointer;
+}
+.cellClose:hover {
+  background: var(--pch-deep);
+}
+
+/* Empty, within strike range — marked like a charted approach. */
+.cellInRange {
+  border-color: var(--seal);
+  background: var(--pch-deep);
+  color: var(--ink);
+  cursor: pointer;
+}
+.cellInRange:hover {
+  background: #e7d09d;
+}
+
+/* Held by someone — hatched like impassable terrain. */
+.cellOccupied {
+  background: repeating-linear-gradient(
+      45deg,
+      transparent 0 3px,
+      rgba(110, 80, 40, 0.18) 3px 5px
+    ),
+    var(--pch-shade);
+  color: var(--ink-faint);
+}
+
+.cellLoading {
+  background: var(--pch-deep);
+  color: var(--ink-faint);
+  animation: pchPulse 1.1s ease-in-out infinite;
+}
+@keyframes pchPulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.cellTarget {
+  border-color: var(--crimson);
+  background: var(--pch-shade);
+  color: var(--crimson);
+}
+
+.cellPlayer {
+  border-color: var(--ink);
+  background: var(--pch-deep);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.cellSelected {
+  border-color: var(--seal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--seal) 45%, transparent);
+}
+
+.inRangeTag {
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-size: 0.44rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--seal);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.56rem;
+  color: var(--ink-faint);
+}
+
+.allOccupied {
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--crimson);
+}
+
+/* ── SpeedupPanel ── */
+
+.panel {
+  border: 1px solid var(--pch-edge);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  color: var(--ink);
+  background: radial-gradient(
+    125% 110% at 28% 0%,
+    var(--pch) 0%,
+    var(--pch-deep) 100%
+  );
+  box-shadow: inset 0 0 26px rgba(120, 86, 42, 0.2);
+}
+
+.panelHeader {
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.panelIcon {
+  color: var(--seal);
+}
+
+.infoBox {
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--pch-edge) 32%, transparent);
+}
+
+.infoLabel {
+  color: var(--ink-soft);
+}
+
+.infoValue {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}

@@ -1,4 +1,4 @@
-import { clampInt } from "@/lib/utils";
+import { NumberField } from "@/components/shared/NumberField";
 
 /** Defensive unit slots, in on-chain order (defensiveUnit1/2/3). */
 export const DEFENSIVE_UNIT_LABELS: [string, string, string] = [
@@ -41,24 +41,27 @@ export function TripleCountInput({
   return (
     <div className="mt-1 grid grid-cols-3 gap-2">
       {labels.map((label, i) => (
-        <label key={label} className="block text-[10px] text-text-muted">
-          {label}{" "}
-          <span className="text-text-secondary">
-            / {available[i].toLocaleString()}
-          </span>
-          <input
-            type="number"
+        <div key={label} className="block">
+          <div className="text-[10px] text-text-muted">
+            {label}{" "}
+            <span className="text-text-secondary">
+              / {available[i].toLocaleString()}
+            </span>
+          </div>
+          <NumberField
+            className="mt-0.5"
+            showSlider={false}
+            showMax={false}
             min={0}
             max={available[i]}
             value={value[i]}
-            onChange={(e) => {
+            onChange={(n) => {
               const next = [...value] as [number, number, number];
-              next[i] = clampInt(e.target.value, available[i]);
+              next[i] = n;
               onChange(next);
             }}
-            className="mt-0.5 w-full rounded border border-zinc-800 bg-surface px-2 py-1 text-sm text-text-primary"
           />
-        </label>
+        </div>
       ))}
     </div>
   );

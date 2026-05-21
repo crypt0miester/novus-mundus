@@ -1,44 +1,37 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  deriveLocationPda,
-  toGrid,
   createAttackPlayerInstruction,
-  createIntracityStartInstruction,
-  createIntracityCompleteInstruction,
-  createIntracityCancelInstruction,
-  createTravelSpeedupInstruction,
   isTraveling,
-  hasArrived,
   calculateDistanceMeters,
   calculateDefensivePower,
   calculateDamageOutput,
   getTotalDefensiveUnits,
   getTotalOperativeUnits,
-  TravelType,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useCityPlayers } from "@/lib/hooks/useCityPlayers";
-import { useNow } from "@/lib/hooks/useNow";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
 import { GoldNumber } from "@/components/shared/GoldNumber";
-import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import type { PanelAction } from "@/lib/store/right-panel";
 import { UnitGrid } from "@/components/shared/UnitGrid";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
-import { ProximityGrid } from "@/components/shared/ProximityGrid";
+import { TargetTravel } from "@/components/panels/TargetTravel";
 import { shortenAddress } from "@/lib/utils";
+
+// Mirrors the program's PVP_ATTACK_RANGE_METERS (attack_player.rs) — the
+// program enforces this constant, not GameEngine.combatConfig, so the panel
+// must too or the proximity grid will offer cells the chain rejects.
+const PVP_RANGE = 15;
 
 /**
  * The PvP target detail — opened in the RightPanel from the combat tab's
@@ -51,7 +44,6 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   const transact = useTransact();
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
-  const { data: geData } = useGameEngine();
   const { data: cityPlayers } = useCityPlayers(player?.currentCity);
 
   const targetKey = useMemo(() => {
@@ -75,16 +67,8 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   );
   const domainNames = useDomainNames(ownerList);
 
-  const pvpRange = geData?.account?.combatConfig?.pvpAttackRangeMeters ?? 15;
+  const pvpRange = PVP_RANGE;
   const playerTraveling = player ? isTraveling(player) : false;
-  // Ticks each second while traveling so arrival registers on its own.
-  const now = useNow(playerTraveling);
-  const isIntracity = player?.travelType === TravelType.Intracity;
-  const playerArrived = player ? hasArrived(player, now) : false;
-  const travelRemaining =
-    player && playerTraveling && !playerArrived
-      ? Math.max(0, player.arrivalTime.toNumber() - now)
-      : 0;
 
   const dist = useMemo(() => {
     if (!player || !target) return null;
@@ -119,6 +103,7 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   const handleAttack = async (
     overrun: boolean,
     reportPhase: (p: TxPhase) => void,
+    prepend: TransactionInstruction[] = [],
   ) => {
     if (!publicKey || !player || !target || !targetKey) throw new Error("No target");
     const ix = createAttackPlayerInstruction(
@@ -133,7 +118,7 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
     );
     return transact
       .mutateAsync({
-        instructions: [ix],
+        instructions: [...prepend, ix],
         invalidateKeys: [["player"], ["cityPlayers"]],
         successMessage: overrun ? "Overrun launched!" : "Attack executed!",
         onPhase: reportPhase,
@@ -144,98 +129,6 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
           .show(r.events, (reportPhase) => handleAttack(overrun, reportPhase));
         return r.signature;
       });
-  };
-
-  const handleTravelCloser = async (
-    targetLat: number,
-    targetLong: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(targetLat), toGrid(targetLong),
-    );
-    const originCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createIntracityStartInstruction(
-      { owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, originCreatorRefund },
-      { destinationLat: targetLat, destinationLong: targetLong },
-    );
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Traveling closer to target!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleIntracityComplete = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
-    );
-    const ix = createIntracityCompleteInstruction({
-      owner: publicKey, gameEngine: ge, cityId, destinationLocation,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Arrived at destination!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleIntracityCancel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
-    );
-    const destinationCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createIntracityCancelInstruction({
-      owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, destinationCreatorRefund,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Travel cancelled!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  const handleTravelSpeedup = async (
-    tier: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createTravelSpeedupInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { speedupTier: tier as 1 | 2 },
-    );
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Travel sped up!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
   };
 
   if (!target || !dist || !player) {
@@ -302,7 +195,10 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
         </div>
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Cash on Hand</div>
-          <GoldNumber value={target.account.cashOnHand.toNumber()} prefix="$" size="sm" />
+          <span className="inline-flex items-center gap-1">
+            <GameIcon id="resource-cash" size={14} />
+            <GoldNumber value={target.account.cashOnHand.toNumber()} size="sm" />
+          </span>
         </div>
       </div>
 
@@ -342,25 +238,21 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
-            <div className="text-xs font-semibold text-red-400">Out of range</div>
-            <div className="text-[10px] text-red-600">
-              {dist.distance.toFixed(1)}m away (max {pvpRange}m)
-            </div>
+        <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
+          <div className="text-xs font-semibold text-red-400">Out of range</div>
+          <div className="text-[10px] text-red-600">
+            {dist.distance.toFixed(1)}m away (max {pvpRange}m)
           </div>
-          <ProximityGrid
-            targetLat={target.account.currentLat}
-            targetLong={target.account.currentLong}
-            playerLat={player.currentLat}
-            playerLong={player.currentLong}
-            cityId={player.currentCity}
-            attackRange={pvpRange}
-            onTravel={handleTravelCloser}
-            disabled={playerTraveling}
-          />
         </div>
       )}
+
+      <TargetTravel
+        targetLat={target.account.currentLat}
+        targetLong={target.account.currentLong}
+        range={pvpRange}
+        inRange={dist.inRange}
+        onArriveAttack={(rp, prepend) => handleAttack(false, rp, prepend)}
+      />
 
       {/* Operative exposure hint */}
       {targetOps > 0 &&
@@ -373,56 +265,6 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
           </div>
         )}
 
-      {/* Travel controls — shown when traveling */}
-      {playerTraveling && (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-300">
-                {isIntracity ? "Traveling within city" : "Traveling between cities"}
-              </span>
-              {playerArrived ? (
-                <span className="rounded-full bg-green-900/40 px-2 py-0.5 text-[10px] font-semibold text-green-400">
-                  ARRIVED
-                </span>
-              ) : (
-                <GoldCountdown
-                  endsAt={player.arrivalTime.toNumber()}
-                  startedAt={player.departureTime.toNumber()}
-                  showProgress
-                  format="compact"
-                  size="sm"
-                />
-              )}
-            </div>
-            {isIntracity && playerArrived && (
-              <TxButton onClick={handleIntracityComplete} className="w-full text-xs">
-                Complete Travel
-              </TxButton>
-            )}
-            {isIntracity && !playerArrived && (
-              <TxButton onClick={handleIntracityCancel} variant="secondary" className="w-full text-xs">
-                Cancel Travel
-              </TxButton>
-            )}
-            {!isIntracity && (
-              <Link
-                href="/map"
-                className="block rounded-md border border-amber-800/50 bg-amber-900/20 px-3 py-1.5 text-center text-xs font-medium text-text-gold hover:bg-amber-900/40"
-              >
-                Go to Travel
-              </Link>
-            )}
-          </div>
-          <SpeedupPanel
-            visible={!playerArrived}
-            remainingSeconds={travelRemaining}
-            onSpeedup={handleTravelSpeedup}
-            gemsPerMinute={geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1}
-            gemBalance={player.gems?.toNumber?.()}
-          />
-        </div>
-      )}
 
       {!playerTraveling && (
         <div className="hidden space-y-2 lg:block">
@@ -438,13 +280,15 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
             onClick={(rp) => handleAttack(true, rp)}
             variant="secondary"
             disabled={!dist.inRange || !canOverrun}
-            className="flex w-full flex-col items-center gap-0.5 py-2.5"
+            className="w-full py-2.5"
           >
-            <span className="text-sm font-bold">Overrun</span>
-            <span className="text-[10px] font-normal text-text-muted">
-              {canOverrun
-                ? "10k+ host · +27% damage"
-                : "Requires a 10,000+ host"}
+            <span className="flex flex-col items-center gap-0.5">
+              <span className="text-sm font-bold">Overrun</span>
+              <span className="text-[10px] font-normal text-text-muted">
+                {canOverrun
+                  ? "10k+ host · +27% damage"
+                  : "Requires a 10,000+ host"}
+              </span>
             </span>
           </TxButton>
         </div>

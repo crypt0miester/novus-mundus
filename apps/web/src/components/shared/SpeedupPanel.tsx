@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
+import styles from "./parchment-travel.module.css";
 
 interface SpeedupTier {
   tier: number;
@@ -28,6 +29,8 @@ interface SpeedupPanelProps {
   inline?: boolean;
   /** Optional className */
   className?: string;
+  /** Visual theme — `parchment` matches the world-map travel skin */
+  variant?: "default" | "parchment";
 }
 
 const DEFAULT_TIERS: SpeedupTier[] = [
@@ -58,10 +61,21 @@ export function SpeedupPanel({
   gemBalance,
   inline,
   className,
+  variant = "default",
 }: SpeedupPanelProps) {
   if (!visible || remainingSeconds <= 0) return null;
 
+  const parchment = variant === "parchment";
   const remainingMinutes = Math.ceil(remainingSeconds / 60);
+  const headerCls = parchment
+    ? styles.panelHeader
+    : "text-xs font-semibold uppercase tracking-wider text-text-gold";
+  const boxCls = parchment ? styles.infoBox : "rounded-lg bg-surface/60 px-3 py-2";
+  const labelCls = parchment ? styles.infoLabel : "text-zinc-500";
+  const valueCls = cn(
+    "font-mono tabular-nums",
+    parchment ? styles.infoValue : "text-text-gold",
+  );
 
   /** Cost for a given tier multiplier */
   function costForTier(tier: number): number {
@@ -71,28 +85,33 @@ export function SpeedupPanel({
   return (
     <div
       className={cn(
-        !inline && "rounded-xl border border-amber-900/40 bg-surface-raised p-4",
+        !inline &&
+          (parchment
+            ? styles.panel
+            : "rounded-xl border border-amber-900/40 bg-surface-raised p-4"),
         className,
       )}
     >
       {/* Header — hidden in inline mode */}
       {!inline && (
         <div className="mb-3 flex items-center gap-2">
-          <svg className="h-4 w-4 text-text-gold" viewBox="0 0 16 16" fill="none">
+          <svg
+            className={cn("h-4 w-4", parchment ? styles.panelIcon : "text-text-gold")}
+            viewBox="0 0 16 16"
+            fill="none"
+          >
             <path d="M8.5 1L3 9h4.5l-1 6L13 7H8.5l1-6z" fill="currentColor" />
           </svg>
-          <span className="text-xs font-semibold uppercase tracking-wider text-text-gold">
-            Speed Up
-          </span>
+          <span className={headerCls}>Speed Up</span>
         </div>
       )}
 
       {/* Time remaining + gem balance context — hidden in inline mode */}
       {!inline && (
-        <div className="mb-3 rounded-lg bg-surface/60 px-3 py-2">
+        <div className={cn("mb-3", boxCls)}>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-500">Time Remaining</span>
-            <span className="font-mono tabular-nums text-text-gold">
+            <span className={labelCls}>Time Remaining</span>
+            <span className={valueCls}>
               {remainingMinutes >= 60
                 ? `${Math.floor(remainingMinutes / 60)}h ${remainingMinutes % 60}m`
                 : `${remainingMinutes}m`}
@@ -100,21 +119,17 @@ export function SpeedupPanel({
           </div>
           {gemBalance != null && (
             <div className="mt-1 flex items-center justify-between text-xs">
-              <span className="text-zinc-500">Your Gems</span>
-              <span className="font-mono tabular-nums text-text-gold">
-                {gemBalance.toLocaleString()}
-              </span>
+              <span className={labelCls}>Your Gems</span>
+              <span className={valueCls}>{gemBalance.toLocaleString()}</span>
             </div>
           )}
         </div>
       )}
 
       {inline && gemBalance != null && (
-        <div className="mb-3 flex items-center justify-between text-xs rounded-lg bg-surface/60 px-3 py-2">
-          <span className="text-zinc-500">Your Gems</span>
-          <span className="font-mono tabular-nums text-text-gold">
-            {gemBalance.toLocaleString()}
-          </span>
+        <div className={cn("mb-3 flex items-center justify-between text-xs", boxCls)}>
+          <span className={labelCls}>Your Gems</span>
+          <span className={valueCls}>{gemBalance.toLocaleString()}</span>
         </div>
       )}
 
@@ -127,7 +142,7 @@ export function SpeedupPanel({
             !canAfford && "opacity-40",
           );
           const content = (
-            <>
+            <span className="flex flex-col items-center gap-1">
               <span className="text-sm font-bold text-text-primary">{t.label}</span>
               <span className="text-[10px] text-zinc-500">{t.description}</span>
               <span className="font-mono text-lg font-bold text-text-primary">
@@ -136,7 +151,7 @@ export function SpeedupPanel({
               <span className="text-[10px] text-zinc-500">
                 {canAfford ? "gems" : "Not enough gems"}
               </span>
-            </>
+            </span>
           );
           return (
             <div key={t.tier}>
@@ -148,7 +163,13 @@ export function SpeedupPanel({
               >
                 {content}
               </TxButton>
-              <div className={cn(cardClass, "flex lg:hidden bg-surface-raised/40")}>
+              <div
+                className={cn(
+                  cardClass,
+                  "flex lg:hidden",
+                  parchment ? "bg-surface-raised" : "bg-surface-raised/40",
+                )}
+              >
                 {content}
               </div>
             </div>
