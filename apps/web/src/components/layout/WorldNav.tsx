@@ -28,8 +28,8 @@ export function WorldNav() {
             className={cn(
               "whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
               active
-                ? "bg-amber-900/40 text-text-gold"
-                : "text-text-muted hover:bg-surface-overlay hover:text-text-secondary"
+                ? "bg-accent/40 text-text-gold"
+                : "text-text-muted hover:bg-surface-overlay hover:text-text-secondary",
             )}
           >
             {item.label}

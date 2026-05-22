@@ -1,6 +1,6 @@
 # Instruction Map
 
-> Complete reference of all 181 Novus Mundus instructions. Source of truth: `programs/novus_mundus/src/lib.rs`.
+> Complete reference of all 187 Novus Mundus instructions. Source of truth: `programs/novus_mundus/src/lib.rs`.
 
 ## Instruction Format
 
@@ -13,9 +13,9 @@ Byte 2+  : instruction-specific payload (passed as &data[2..])
 
 The `msg!` string in each match arm (e.g. `"init game engine"`) is the canonical instruction name. There is no IDL.
 
-**Total: 181 instructions across 24 systems.**
+**Total: 187 instructions across 25 systems.**
 
-Discriminant **gaps** (reserved for future use): 9, 22–29, 35–39, 43–49, 68–69, 72–79, 84–89, 91–99, 103–109, 116–119, 128–129, 170–179, 185–189, 196–199, 205–209, 222–229, 237–249, 261–269, 291–299, 301–309, 312+.
+Discriminant **gaps** (reserved for future use): 9, 22–29, 35–39, 43–49, 68–69, 73–79, 84–89, 91–99, 103–109, 116–119, 128–129, 172–179, 185–189, 196–199, 205–209, 222–229, 237–249, 261–269, 291–299, 303–309.
 
 [Source: lib.rs](../../../programs/novus_mundus/src/lib.rs)
 
@@ -34,11 +34,11 @@ graph TD
         ECON["Economy<br/>8 ix"]
         TOK["Token Ops<br/>2 ix"]
     end
-    subgraph "World & Combat (20–21, 30–42, 70–71)"
+    subgraph "World & Combat (20–21, 30–42, 70–72)"
         CMB["Combat<br/>2 ix"]
         TRV["Travel Intercity<br/>5 ix"]
         TRI["Travel Intracity<br/>3 ix"]
-        ENC["Encounter + Loot<br/>2 ix"]
+        ENC["Encounter + Loot<br/>3 ix"]
     end
     subgraph "Social (50–59, 210–221, 60–67)"
         TM["Team core<br/>10 ix"]
@@ -52,14 +52,14 @@ graph TD
         NAM["Name<br/>6 ix"]
         RES["Research<br/>8 ix"]
     end
-    subgraph "Heroes & Gear (130–139, 180–184, 310–311)"
-        HRO["Hero<br/>9 ix"]
+    subgraph "Heroes & Gear (130–139, 180–184, 310–312)"
+        HRO["Hero<br/>10 ix"]
         SAN["Sanctuary<br/>3 ix"]
         FRG["Forge<br/>5 ix"]
     end
-    subgraph "Base Building (140–169)"
+    subgraph "Base Building (140–171)"
         SHP["Shop<br/>21 ix"]
-        EST["Estate<br/>10 ix"]
+        EST["Estate<br/>12 ix"]
     end
     subgraph "Late Game (190–204, 230–290)"
         RNF["Reinforcement<br/>6 ix"]
@@ -67,6 +67,9 @@ graph TD
         ARN["Arena<br/>7 ix"]
         DNG["Dungeon<br/>11 ix"]
         CAS["Castle<br/>21 ix"]
+    end
+    subgraph "Oracle (301–302)"
+        ORC["Oracle<br/>2 ix"]
     end
 ```
 
@@ -84,17 +87,17 @@ graph TD
 | [Travel — Intracity](#travel--intracity-4042) | 40–42 | 3 |
 | [Team (core)](#team-core-5059) | 50–59 | 10 |
 | [Rally](#rally-6067) | 60–67 | 8 |
-| [Encounter](#encounter-70) | 70 | 1 |
+| [Encounter](#encounter-70-72) | 70, 72 | 2 |
 | [Loot](#loot-71) | 71 | 1 |
 | [Events](#events-8083) | 80–83 | 4 |
 | [Progression](#progression-90) | 90 | 1 |
 | [Subscription](#subscription-100102) | 100–102 | 3 |
 | [Name](#name-110115) | 110–115 | 6 |
 | [Research](#research-120127) | 120–127 | 8 |
-| [Hero](#hero-130136-310311) | 130–136, 310–311 | 9 |
+| [Hero](#hero-130136-310312) | 130–136, 310–312 | 10 |
 | [Sanctuary](#sanctuary-137139) | 137–139 | 3 |
 | [Shop](#shop-140159-300) | 140–159, 300 | 21 |
-| [Estate](#estate-160169) | 160–169 | 10 |
+| [Estate](#estate-160171) | 160–171 | 12 |
 | [Forge](#forge-180184) | 180–184 | 5 |
 | [Reinforcement](#reinforcement-190195) | 190–195 | 6 |
 | [Expedition](#expedition-200204) | 200–204 | 5 |
@@ -102,6 +105,7 @@ graph TD
 | [Arena](#arena-230236) | 230–236 | 7 |
 | [Dungeon](#dungeon-250260) | 250–260 | 11 |
 | [Castle](#castle-270290) | 270–290 | 21 |
+| [Oracle](#oracle-301302) | 301–302 | 2 |
 
 ---
 
@@ -250,13 +254,14 @@ Gaps 68–69 reserved.
 
 ---
 
-## Encounter (70)
+## Encounter (70, 72)
 
-**1 instruction.**
+**2 instructions.**
 
 | ID | Canonical name | Processor | Description |
 |----|---------------|-----------|-------------|
 | 70 | `spawn encounter` | `processor::encounter::spawn` | DAO/game server spawns a PvE `EncounterAccount` at a location |
+| 72 | `cleanup encounter` | `processor::encounter::cleanup` | Permissionless garbage-collection; closes a terminal `EncounterAccount` past `despawn_at + ENCOUNTER_CLEANUP_GRACE`, decrements the city's `active_encounters` counter, releases the grid cell, and refunds rent to the cell's `location_creator` (or `game_engine.authority` if the cell is already closed). No instruction data |
 
 [Source: processor/encounter/](../../../programs/novus_mundus/src/processor/encounter/)
 
@@ -270,7 +275,7 @@ Gaps 68–69 reserved.
 |----|---------------|-----------|-------------|
 | 71 | `claim loot` | `processor::loot::claim` | Claim a `LootAccount` created by a successful encounter attack |
 
-Gaps 72–79 reserved.
+Gaps 73–79 reserved.
 
 [Source: processor/loot/](../../../programs/novus_mundus/src/processor/loot/)
 
@@ -363,9 +368,9 @@ Gaps 128–129 reserved.
 
 ---
 
-## Hero (130–136, 310–311)
+## Hero (130–136, 310–312)
 
-**9 instructions.** MPL Core hero NFT lifecycle.
+**10 instructions.** MPL Core hero NFT lifecycle.
 
 | ID | Canonical name | Processor | Description |
 |----|---------------|-----------|-------------|
@@ -380,6 +385,7 @@ Gaps 128–129 reserved.
 | *…* | | | |
 | 310 | `burn hero` | `processor::hero::burn` | Burn a hero NFT via MPL Core; decrements `minted_count` on `HeroTemplate` |
 | 311 | `update supply cap` | `processor::hero::update_supply_cap` | DAO updates the `supply_cap` on a `HeroTemplate` |
+| 312 | `use hero ability` | `processor::hero::use_ability` | Activate a locked hero's active ability for a given slot; reads ability config from `HeroTemplate`, enforces the per-slot cooldown, then either arms a pending one-shot combat effect (`BuffNext`/`CritNext`/`ShieldNext`/`EncounterSkip`) or instantly credits a balance (`InstantResource`→cash, `FragmentRefund`→fragments). Data: `[0]` `slot_index: u8` (0–2) |
 
 [Source: processor/hero/](../../../programs/novus_mundus/src/processor/hero/) | [System doc](../04-systems/heroes.md)
 
@@ -427,15 +433,13 @@ Gaps 128–129 reserved.
 | 159 | `close allowed token` | `processor::shop::close_allowed_token` | DAO removes an SPL token from the whitelist |
 | 300 | `purchase novi` | `processor::shop::purchase_novi` | SOL → locked NOVI swap; Pyth or Switchboard oracle pricing; `max_lamports` slippage protection; purchase streak discount |
 
-Gaps 170–179 reserved.
-
 [Source: processor/shop/](../../../programs/novus_mundus/src/processor/shop/) | [System doc](../04-systems/shop.md)
 
 ---
 
-## Estate (160–169)
+## Estate (160–171)
 
-**10 instructions.** Player base with 19 buildings and time-locked construction.
+**12 instructions.** Player base with 19 buildings and time-locked construction.
 
 | ID | Canonical name | Processor | Description |
 |----|---------------|-----------|-------------|
@@ -449,8 +453,10 @@ Gaps 170–179 reserved.
 | 167 | `convert materials` | `processor::estate::convert_materials` | Convert between produce, fragments, and other materials |
 | 168 | `speedup estate` | `processor::estate::speedup` | Spend gems to reduce remaining construction time |
 | 169 | `recover troops` | `processor::estate::recover_troops` | Recover wounded units using Infirmary building; costs NOVI (50% of normal hire cost) |
+| 170 | `init building template` | `processor::estate::initialize_building_template` | DAO creates a `BuildingTemplate` PDA (one per building type) defining build cost/time. Data (19 bytes): `[0]` `building_type: u8` (0–18), `[1]` `tier: u8` (1–3), `[2]` `max_level: u8`, `[3..7]` `base_time_seconds: u32`, `[7..15]` `base_novi_cost: u64`, `[15..17]` `cost_growth_bps: u16`, `[17..19]` `time_growth_bps: u16` |
+| 171 | `update building template` | `processor::estate::update_building_template` | DAO retunes a single `BuildingTemplate` field. Data: `[0]` `field_to_update: u8` (0=`base_time_seconds` u32, 1=`base_novi_cost` u64, 2=`cost_growth_bps` u16, 3=`time_growth_bps` u16, 4=`is_active` bool, 5=`max_level` u8, 6=`tier` u8), `[1..]` new value (size depends on field) |
 
-Gaps 170–179 reserved.
+Gaps 172–179 reserved.
 
 [Source: processor/estate/](../../../programs/novus_mundus/src/processor/estate/) | [System doc](../04-systems/estates.md)
 
@@ -669,15 +675,26 @@ graph LR
 
 Handled under [Shop](#shop-140159-300) (ix 300 = `purchase novi`).
 
-Gaps 301–309 reserved.
+---
+
+## Oracle (301–302)
+
+**2 instructions.** Switchboard On-Demand oracle-quote PDA lifecycle, feeding shop/NOVI purchase pricing.
+
+| ID | Canonical name | Processor | Description |
+|----|---------------|-----------|-------------|
+| 301 | `init oracle quote` | `processor::oracle::init_quote` | DAO creates the program-owned `OracleQuote` PDA (one per Switchboard queue, derived `["oracle_quote", switchboard_queue]`); requires `game_engine.authority` signer. No instruction data |
+| 302 | `crank oracle quote` | `processor::oracle::crank_quote` | Persist a fresh oracle-signed quote into the `OracleQuote` PDA; cranker must equal `game_engine.game_authority`; the transaction pairs an ed25519 verify instruction whose quote is extracted via `OracleQuote::write_from_ix` (enforces slot freshness + anti-replay). Data: optional `[0]` `ed25519_ix_index: u8` (default 0) |
+
+Gaps 303–309 reserved.
+
+[Source: processor/oracle/](../../../programs/novus_mundus/src/processor/oracle/)
 
 ---
 
-## Hero Burn and Supply (310–311)
+## Hero Burn and Supply (310–312)
 
-Handled under [Hero](#hero-130136-310311) (ix 310 = `burn hero`, ix 311 = `update supply cap`).
-
-Gaps 312+ reserved.
+Handled under [Hero](#hero-130136-310312) (ix 310 = `burn hero`, ix 311 = `update supply cap`, ix 312 = `use hero ability`).
 
 ---
 
@@ -695,7 +712,7 @@ Counts by system (verified against `lib.rs` match arms):
 | Travel Intracity | 40–42 | 3 |
 | Team (core) | 50–59 | 10 |
 | Rally | 60–67 | 8 |
-| Encounter | 70 | 1 |
+| Encounter | 70, 72 | 2 |
 | Loot | 71 | 1 |
 | Events | 80–83 | 4 |
 | Progression | 90 | 1 |
@@ -705,7 +722,7 @@ Counts by system (verified against `lib.rs` match arms):
 | Hero (core) | 130–136 | 7 |
 | Sanctuary | 137–139 | 3 |
 | Shop | 140–159 | 20 |
-| Estate | 160–169 | 10 |
+| Estate | 160–171 | 12 |
 | Forge | 180–184 | 5 |
 | Reinforcement | 190–195 | 6 |
 | Expedition | 200–204 | 5 |
@@ -714,5 +731,6 @@ Counts by system (verified against `lib.rs` match arms):
 | Dungeon | 250–260 | 11 |
 | Castle | 270–290 | 21 |
 | Shop (NOVI purchase) | 300 | 1 |
-| Hero (burn/supply) | 310–311 | 2 |
-| **Total** | | **181** |
+| Oracle | 301–302 | 2 |
+| Hero (burn/supply) | 310–312 | 3 |
+| **Total** | | **187** |

@@ -10,7 +10,7 @@ Error codes start at **6000** (`GamePaused`). The enum is `#[repr(u32)]` and con
 
 ## Overview
 
-The 421 error variants are grouped into numeric ranges by system. Use the map below to orient quickly — each band corresponds to one section in this document.
+The 426 error variants are grouped into numeric ranges by system. Use the map below to orient quickly — each band corresponds to one section in this document.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#1e293b", "primaryTextColor": "#f8fafc", "primaryBorderColor": "#475569", "lineColor": "#64748b", "secondaryColor": "#0f172a", "tertiaryColor": "#0f172a"}}}%%
@@ -32,7 +32,7 @@ gantt
     section City & Travel
     6420–6430 City & Travel    : 6420, 11
     section Encounter
-    6500–6514 Encounter        : 6500, 15
+    6500–6515 Encounter        : 6500, 16
     section Event
     6600–6612 Event            : 6600, 13
     section Subscription
@@ -66,7 +66,7 @@ gantt
     section Forge
     7740–7743 Forge            : 7740, 4
     section Hero
-    7760–7771 Hero             : 7760, 12
+    7760–7775 Hero             : 7760, 16
     section Expedition
     7800–7812 Expedition       : 7800, 13
     section Arena
@@ -253,7 +253,7 @@ gantt
 
 ---
 
-## Encounter Errors (6500–6514)
+## Encounter Errors (6500–6515)
 
 | Code | Variant | Meaning |
 |------|---------|---------|
@@ -272,6 +272,7 @@ gantt
 | 6512 | `NotSelectedForRandomEncounter` | Player was not selected for random encounter |
 | 6513 | `InsufficientStamina` | Not enough stamina to attack |
 | 6514 | `WrongTimeForEncounter` | Legendary/Epic encounters only spawn at specific times |
+| 6515 | `EncounterStillActive` | Cleanup attempted before `despawn_at` + cleanup grace period |
 
 ---
 
@@ -555,7 +556,7 @@ gantt
 
 ---
 
-## Hero & Meditation Errors (7760–7771)
+## Hero & Meditation Errors (7760–7775)
 
 | Code | Variant | Meaning |
 |------|---------|---------|
@@ -571,6 +572,10 @@ gantt
 | 7769 | `HeroIsLocked` | Cannot burn a hero that is in an active slot |
 | 7770 | `HeroNotOwnedByCaller` | NFT owner does not match signer |
 | 7771 | `SupplyCapCannotDecrease` | Supply cap can only be increased, not decreased |
+| 7772 | `HeroAbilityNotConfigured` | Template has no active ability |
+| 7773 | `HeroAbilityOnCooldown` | Cooldown has not elapsed since last use |
+| 7774 | `HeroAbilityInvalidKind` | Unknown ability kind in template |
+| 7775 | `HeroAbilityBadParams` | Ability params out of range (e.g., zero amount) |
 
 ---
 

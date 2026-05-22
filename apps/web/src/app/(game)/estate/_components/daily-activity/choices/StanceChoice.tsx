@@ -45,12 +45,10 @@ export function StanceChoice({ submitting, onChoose }: StanceChoiceProps) {
           key={s.id}
           disabled={submitting}
           onClick={() => onChoose(s.id)}
-          className="card text-left transition-colors hover:border-amber-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+          className="card text-left transition-colors hover:border-border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <div className="text-2xl">{s.glyph}</div>
-          <div className="mt-1 font-display font-semibold text-text-primary">
-            {s.name}
-          </div>
+          <div className="mt-1 font-display font-semibold text-text-primary">{s.name}</div>
           <p className="mt-1 text-xs text-text-muted">{s.desc}</p>
         </button>
       ))}

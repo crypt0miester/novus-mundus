@@ -38,8 +38,7 @@ export function DailyActivityListPanel() {
           <span>windows closed</span>
         ) : nextAt !== null ? (
           <span>
-            {WINDOW_LABEL[cw]} · next in{" "}
-            {formatTime(Math.max(0, nextAt - now), "compact")}
+            {WINDOW_LABEL[cw]} · next in {formatTime(Math.max(0, nextAt - now), "compact")}
           </span>
         ) : (
           <span>{WINDOW_LABEL[cw]}</span>
@@ -82,10 +81,7 @@ export function DailyActivityListPanel() {
       </div>
 
       {openBuilding !== null && (
-        <ActivityModal
-          building={openBuilding}
-          onClose={() => setOpenBuilding(null)}
-        />
+        <ActivityModal building={openBuilding} onClose={() => setOpenBuilding(null)} />
       )}
     </>
   );
@@ -108,51 +104,39 @@ function ActivityRow({
       onClick={onPlay}
       className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-default ${
         available
-          ? "border-amber-700/50 bg-amber-900/10 hover:border-amber-600 hover:bg-amber-900/20"
+          ? "border-border-gold/50 bg-accent/10 hover:border-border-gold hover:bg-accent/20"
           : status === "done"
-            ? "border-amber-900/30 bg-amber-950/20"
+            ? "border-border-gold/30 bg-accent/20"
             : "border-border-default opacity-70"
       }`}
     >
       <div className="min-w-0">
-        <div className="truncate text-sm font-semibold text-text-primary">
-          {meta.title}
-        </div>
+        <div className="truncate text-sm font-semibold text-text-primary">{meta.title}</div>
         <div className="truncate text-[11px] text-text-muted">{meta.tagline}</div>
       </div>
       <span
         className={`shrink-0 text-[11px] font-semibold ${
-          available
-            ? "text-text-gold"
-            : status === "done"
-              ? "text-amber-600"
-              : "text-text-muted"
+          available ? "text-text-gold" : status === "done" ? "text-text-gold" : "text-text-muted"
         }`}
       >
-        {status === "available"
-          ? (
-              <span className="inline-flex items-center gap-0.5">
-                Play
-                <ChevronRight className="h-3 w-3" />
-              </span>
-            )
-          : status === "done"
-            ? "✓ Done"
-            : status === "later"
-              ? "Later"
-              : "Missed"}
+        {status === "available" ? (
+          <span className="inline-flex items-center gap-0.5">
+            Play
+            <ChevronRight className="h-3 w-3" />
+          </span>
+        ) : status === "done" ? (
+          "✓ Done"
+        ) : status === "later" ? (
+          "Later"
+        ) : (
+          "Missed"
+        )}
       </span>
     </button>
   );
 }
 
-function ActivityModal({
-  building,
-  onClose,
-}: {
-  building: number;
-  onClose: () => void;
-}) {
+function ActivityModal({ building, onClose }: { building: number; onClose: () => void }) {
   // Mount guard so SSR renders nothing — createPortal needs document.body.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {

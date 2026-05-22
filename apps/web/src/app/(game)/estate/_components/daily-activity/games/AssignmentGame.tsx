@@ -20,15 +20,9 @@ interface AssignmentGameProps {
  * Assignment game UI. Each item shows a value; the player taps the bin it
  * belongs in, then submits once every item is sorted.
  */
-export function AssignmentGame({
-  presentation,
-  submitting,
-  onSubmit,
-}: AssignmentGameProps) {
+export function AssignmentGame({ presentation, submitting, onSubmit }: AssignmentGameProps) {
   const { instruction, valueLabel, bins, items } = presentation;
-  const [assigned, setAssignedAt] = useIndexedSelection<number | null>(() =>
-    items.map(() => null),
-  );
+  const [assigned, setAssignedAt] = useIndexedSelection<number | null>(() => items.map(() => null));
 
   const sorted = assigned.filter((a) => a !== null).length;
   const allSorted = sorted === items.length;
@@ -45,14 +39,9 @@ export function AssignmentGame({
       </div>
       <div className="space-y-2">
         {items.map((it, i) => (
-          <div
-            key={i}
-            className="card flex flex-wrap items-center justify-between gap-2"
-          >
+          <div key={i} className="card flex flex-wrap items-center justify-between gap-2">
             <div>
-              <span className="text-sm font-semibold text-text-primary">
-                {it.label}
-              </span>
+              <span className="text-sm font-semibold text-text-primary">{it.label}</span>
               <span className="ml-2 text-[11px] tabular-nums text-text-muted">
                 {valueLabel} {it.value}
               </span>
@@ -66,8 +55,8 @@ export function AssignmentGame({
                   onClick={() => setAssignedAt(i, bi)}
                   className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
                     assigned[i] === bi
-                      ? "border-amber-600 bg-amber-900/30 text-text-gold"
-                      : "border-border-default text-text-secondary hover:border-amber-800/50"
+                      ? "border-border-gold bg-accent/30 text-text-gold"
+                      : "border-border-default text-text-secondary hover:border-border-gold/50"
                   }`}
                 >
                   {b.label}

@@ -172,7 +172,7 @@ export function CastleTab() {
           position: c.position,
           account: c.account,
           ownerWallet: wallets.get(c.account.holder.toBase58()) ?? null,
-        }))
+        })),
       );
     })().catch(() => {
       if (!cancelled) setCourtRoster([]);
@@ -209,7 +209,7 @@ export function CastleTab() {
         parsedList.map((g) => ({
           account: g,
           ownerWallet: wallets.get(g.contributor.toBase58()) ?? null,
-        }))
+        })),
       );
     })().catch(() => {
       if (!cancelled) setGarrisonRoster([]);
@@ -269,15 +269,17 @@ export function CastleTab() {
       gameEngine: ge,
       claimer: publicKey,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Castle claimed!",
-      onPhase: reportPhase,
-    }).then((r) => {
-      useTransitionStore.getState().triggerActBeat({ act: 5, phase: "coronation" });
-      return r.signature;
-    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Castle claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        useTransitionStore.getState().triggerActBeat({ act: 5, phase: "coronation" });
+        return r.signature;
+      });
   };
 
   const handleJoinGarrison = async (reportPhase: (p: TxPhase) => void) => {
@@ -297,14 +299,16 @@ export function CastleTab() {
         heroTemplateId: hero?.templateId,
       },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: hero
-        ? `Joined garrison with hero ${hero.name}!`
-        : `Joined garrison with ${garrisonUnits.reduce((a, b) => a + b, 0).toLocaleString()} units!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: hero
+          ? `Joined garrison with hero ${hero.name}!`
+          : `Joined garrison with ${garrisonUnits.reduce((a, b) => a + b, 0).toLocaleString()} units!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleLeaveGarrison = async (reportPhase: (p: TxPhase) => void) => {
@@ -316,12 +320,14 @@ export function CastleTab() {
       gameEngine: ge,
       owner: publicKey,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Left garrison.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Left garrison.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleAppointCourt = async (reportPhase: (p: TxPhase) => void) => {
@@ -340,14 +346,16 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { position: appointPosition }
+      { position: appointPosition },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Court member appointed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Court member appointed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleDismissCourt = async (
@@ -365,14 +373,16 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { position }
+      { position },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Court member dismissed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Court member dismissed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleResignCourt = async (reportPhase: (p: TxPhase) => void) => {
@@ -385,14 +395,16 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { position: resignPosition }
+      { position: resignPosition },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Resigned from court.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Resigned from court.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleInitiateUpgrade = async (reportPhase: (p: TxPhase) => void) => {
@@ -405,14 +417,16 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { upgradeType }
+      { upgradeType },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Upgrade initiated!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Upgrade initiated!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleCancelUpgrade = async (reportPhase: (p: TxPhase) => void) => {
@@ -424,12 +438,14 @@ export function CastleTab() {
       cityId,
       castleId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Upgrade cancelled.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Upgrade cancelled.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleCompleteUpgrade = async (reportPhase: (p: TxPhase) => void) => {
@@ -441,12 +457,14 @@ export function CastleTab() {
       cityId,
       castleId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"]],
-      successMessage: "Upgrade completed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"]],
+        successMessage: "Upgrade completed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleRelieveGarrison = async (
@@ -462,12 +480,14 @@ export function CastleTab() {
       cityId,
       castleId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Garrison member relieved.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Garrison member relieved.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleClaimGarrisonLoot = async (reportPhase: (p: TxPhase) => void) => {
@@ -479,12 +499,14 @@ export function CastleTab() {
       cityId,
       castleId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: "Garrison loot claimed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "Garrison loot claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleAttackCastle = async (reportPhase: (p: TxPhase) => void) => {
@@ -497,22 +519,23 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { driveBy }
+      { driveBy },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["castle"], ["player"]],
-      successMessage: driveBy ? "Drive-by attack launched!" : "Castle attacked!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: driveBy ? "Drive-by attack launched!" : "Castle attacked!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   if (!hasTeam) {
     return (
       <div className="card text-center">
         <p className="text-text-muted">
-          A seat is held by a House, not a lone hand. Swear to a House before you
-          contest a castle.
+          A seat is held by a House, not a lone hand. Swear to a House before you contest a castle.
         </p>
       </div>
     );
@@ -624,8 +647,8 @@ export function CastleTab() {
                 <h4 className="text-xs font-semibold text-text-muted">Appoint Court Member</h4>
                 {courtCandidates.length === 0 ? (
                   <p className="text-xs italic text-text-muted">
-                    A court is your own people — a House must stand behind you
-                    first. Swear members to your House, then call them to court.
+                    A court is your own people — a House must stand behind you first. Swear members
+                    to your House, then call them to court.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -635,7 +658,9 @@ export function CastleTab() {
                       className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                     >
                       {COURT_POSITIONS.map((pos, i) => (
-                        <option key={pos} value={i}>{pos}</option>
+                        <option key={pos} value={i}>
+                          {pos}
+                        </option>
                       ))}
                     </select>
                     <select
@@ -668,10 +693,14 @@ export function CastleTab() {
                     className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                   >
                     {COURT_POSITIONS.map((pos, i) => (
-                      <option key={pos} value={i}>{pos}</option>
+                      <option key={pos} value={i}>
+                        {pos}
+                      </option>
                     ))}
                   </select>
-                  <TxButton onClick={handleResignCourt} variant="danger">Resign</TxButton>
+                  <TxButton onClick={handleResignCourt} variant="danger">
+                    Resign
+                  </TxButton>
                 </div>
               </div>
             )}
@@ -686,23 +715,33 @@ export function CastleTab() {
               <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                 <div>
                   <div className="text-xs text-text-muted">Fortification</div>
-                  <div className="text-sm font-semibold text-text-primary">Lv {castle.fortificationLevel ?? 0}</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    Lv {castle.fortificationLevel ?? 0}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Treasury</div>
-                  <div className="text-sm font-semibold text-text-primary">Lv {castle.treasuryLevel ?? 0}</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    Lv {castle.treasuryLevel ?? 0}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Chambers</div>
-                  <div className="text-sm font-semibold text-text-primary">Lv {castle.chambersLevel ?? 0}</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    Lv {castle.chambersLevel ?? 0}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Watchtower</div>
-                  <div className="text-sm font-semibold text-text-primary">Lv {castle.watchtowerLevel ?? 0}</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    Lv {castle.watchtowerLevel ?? 0}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Armory</div>
-                  <div className="text-sm font-semibold text-text-primary">Lv {castle.armoryLevel ?? 0}</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    Lv {castle.armoryLevel ?? 0}
+                  </div>
                 </div>
               </div>
 
@@ -710,8 +749,11 @@ export function CastleTab() {
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
                     <span className="text-xs text-text-muted">
-                      Upgrading: {UPGRADE_TYPES.find((u) => u.value === castle.upgradeType)?.label ?? "Unknown"}
-                      {" to Lv "}{castle.upgradeTargetLevel ?? "?"}
+                      Upgrading:{" "}
+                      {UPGRADE_TYPES.find((u) => u.value === castle.upgradeType)?.label ??
+                        "Unknown"}
+                      {" to Lv "}
+                      {castle.upgradeTargetLevel ?? "?"}
                     </span>
                     <GoldCountdown
                       endsAt={castle.upgradeEndAt?.toNumber?.() ?? 0}
@@ -720,8 +762,12 @@ export function CastleTab() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <TxButton onClick={handleCancelUpgrade} variant="danger">Cancel Upgrade</TxButton>
-                    <TxButton onClick={handleCompleteUpgrade} variant="secondary">Complete Upgrade</TxButton>
+                    <TxButton onClick={handleCancelUpgrade} variant="danger">
+                      Cancel Upgrade
+                    </TxButton>
+                    <TxButton onClick={handleCompleteUpgrade} variant="secondary">
+                      Complete Upgrade
+                    </TxButton>
                   </div>
                 </div>
               ) : (
@@ -732,7 +778,9 @@ export function CastleTab() {
                     className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                   >
                     {UPGRADE_TYPES.map((u) => (
-                      <option key={u.value} value={u.value}>{u.label}</option>
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
                     ))}
                   </select>
                   <TxButton onClick={handleInitiateUpgrade}>Initiate Upgrade</TxButton>
@@ -795,7 +843,9 @@ export function CastleTab() {
                 onClick={handleJoinGarrison}
                 variant="secondary"
                 className="mt-3 w-full"
-                disabled={garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0)}
+                disabled={
+                  garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0)
+                }
               >
                 Join Garrison
               </TxButton>
@@ -853,9 +903,7 @@ export function CastleTab() {
 
           {/* Actions */}
           <div className="flex flex-wrap gap-3">
-            {castle.status === 0 && (
-              <TxButton onClick={handleClaimVacant}>Claim Castle</TxButton>
-            )}
+            {castle.status === 0 && <TxButton onClick={handleClaimVacant}>Claim Castle</TxButton>}
             <div className="flex items-center gap-2">
               <TxButton onClick={handleAttackCastle} variant="danger">
                 Attack Castle
@@ -863,7 +911,7 @@ export function CastleTab() {
               <button
                 onClick={() => setDriveBy(!driveBy)}
                 className={`rounded-lg px-3 py-2 text-sm ${
-                  driveBy ? "bg-amber-900/30 text-text-gold" : "text-text-muted"
+                  driveBy ? "bg-accent/30 text-text-gold" : "text-text-muted"
                 }`}
               >
                 Drive-by
@@ -878,27 +926,49 @@ export function CastleTab() {
       )}
 
       {/* Game Parameters */}
-      {geData?.account && (() => {
-        const cc = geData.account.castleConfig;
-        return (
-          <GameInfoPanel>
-            <InfoGrid items={[
-              { label: "King NOVI/Day", value: cc.kingNoviPerDay.toNumber().toLocaleString(), highlight: true },
-              { label: "King Cash/Day", value: cc.kingCashPerDay.toNumber().toLocaleString() },
-              { label: "Court NOVI/Day", value: cc.courtNoviPerDay.toNumber().toLocaleString() },
-              { label: "Court Cash/Day", value: cc.courtCashPerDay.toNumber().toLocaleString() },
-              { label: "Member NOVI/Day", value: cc.memberNoviPerDay.toNumber().toLocaleString() },
-              { label: "Member Cash/Day", value: cc.memberCashPerDay.toNumber().toLocaleString() },
-              { label: "King Loot Cut", value: bpsToPercent(cc.kingLootCutBps) },
-              { label: "Protection", value: formatTime(cc.protectionDuration.toNumber(), "compact") },
-              { label: "Garrison T0", value: cc.garrisonCapByTier[0]?.toString() ?? "—" },
-              { label: "Garrison T1", value: cc.garrisonCapByTier[1]?.toString() ?? "—" },
-              { label: "Garrison T2", value: cc.garrisonCapByTier[2]?.toString() ?? "—" },
-              { label: "Max Fortification", value: cc.maxFortificationLevel.toString() },
-            ]} />
-          </GameInfoPanel>
-        );
-      })()}
+      {geData?.account &&
+        (() => {
+          const cc = geData.account.castleConfig;
+          return (
+            <GameInfoPanel>
+              <InfoGrid
+                items={[
+                  {
+                    label: "King NOVI/Day",
+                    value: cc.kingNoviPerDay.toNumber().toLocaleString(),
+                    highlight: true,
+                  },
+                  { label: "King Cash/Day", value: cc.kingCashPerDay.toNumber().toLocaleString() },
+                  {
+                    label: "Court NOVI/Day",
+                    value: cc.courtNoviPerDay.toNumber().toLocaleString(),
+                  },
+                  {
+                    label: "Court Cash/Day",
+                    value: cc.courtCashPerDay.toNumber().toLocaleString(),
+                  },
+                  {
+                    label: "Member NOVI/Day",
+                    value: cc.memberNoviPerDay.toNumber().toLocaleString(),
+                  },
+                  {
+                    label: "Member Cash/Day",
+                    value: cc.memberCashPerDay.toNumber().toLocaleString(),
+                  },
+                  { label: "King Loot Cut", value: bpsToPercent(cc.kingLootCutBps) },
+                  {
+                    label: "Protection",
+                    value: formatTime(cc.protectionDuration.toNumber(), "compact"),
+                  },
+                  { label: "Garrison T0", value: cc.garrisonCapByTier[0]?.toString() ?? "—" },
+                  { label: "Garrison T1", value: cc.garrisonCapByTier[1]?.toString() ?? "—" },
+                  { label: "Garrison T2", value: cc.garrisonCapByTier[2]?.toString() ?? "—" },
+                  { label: "Max Fortification", value: cc.maxFortificationLevel.toString() },
+                ]}
+              />
+            </GameInfoPanel>
+          );
+        })()}
     </div>
   );
 }

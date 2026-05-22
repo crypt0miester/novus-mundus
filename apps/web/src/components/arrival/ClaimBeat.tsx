@@ -65,7 +65,7 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
 
       let playerIx: TransactionInstruction | null = null;
       if (!playerData?.exists) {
-        if (!city) throw new Error("No ground was chosen.");
+        if (!city) throw new Error("no ground was chosen.");
         playerIx = createInitPlayerInstruction({
           owner: publicKey,
           gameEngine: ge,
@@ -78,11 +78,8 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
       let estateIx: TransactionInstruction | null = null;
       if (!estateData?.exists) {
         const cityId = city?.cityId ?? playerData?.account?.currentCity;
-        if (cityId === undefined) throw new Error("No city chosen for the estate.");
-        estateIx = createCreateEstateInstruction(
-          { owner: publicKey, gameEngine: ge },
-          { cityId },
-        );
+        if (cityId === undefined) throw new Error("no city chosen for the estate.");
+        estateIx = createCreateEstateInstruction({ owner: publicKey, gameEngine: ge }, { cityId });
       }
 
       const instructions = [userIx, playerIx, estateIx].filter(
@@ -107,18 +104,15 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
 
         setStepLabel(
           hasName && hasEstate
-            ? "Driving the stakes, raising the estate…"
+            ? "driving the stakes, raising the estate…"
             : hasEstate
-              ? "Raising the estate…"
-              : "Driving the stakes…",
+              ? "raising the estate…"
+              : "driving the stakes…",
         );
 
         const invalidateKeys: string[][] = [];
         if (hasName) {
-          invalidateKeys.push(
-            ["user", publicKey.toBase58()],
-            ["player", publicKey.toBase58()],
-          );
+          invalidateKeys.push(["user", publicKey.toBase58()], ["player", publicKey.toBase58()]);
         }
         if (hasEstate) invalidateKeys.push(["estate"], ["player"]);
 
@@ -127,10 +121,10 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
           invalidateKeys,
           successMessage:
             hasName && hasEstate
-              ? "Your name is on the land, and the estate is yours."
+              ? "your name is on the land, and the estate is yours."
               : hasEstate
-                ? "The estate is yours."
-                : "Your name is on the land.",
+                ? "the estate is yours."
+                : "your name is on the land.",
         });
       }
 
@@ -138,30 +132,35 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
     } catch (e) {
       setPhase("error");
       setStepLabel(null);
-      setError(e instanceof Error ? e.message : "The claim did not hold. Try again.");
+      setError(e instanceof Error ? e.message : "the claim did not hold. Try again.");
     }
   };
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center text-center">
-      <BeatEyebrow className="mb-2">The Claim</BeatEyebrow>
+      <BeatEyebrow className="mb-2">the claim</BeatEyebrow>
       <h2 className="tier-title mb-3 font-display text-2xl font-bold tracking-wide">
-        Drive your stakes
+        drive your stakes
       </h2>
       <p className="mb-7 text-sm leading-relaxed text-text-secondary">
-        A dozen came up this road before you and counted gold they did not have.
-        You will not. You drive your stakes into the dirt — and the ground becomes
-        a thing with an edge: yours within it, the world without.
+        a dozen came up this road before you and counted gold they did not have.
+      </p>
+      <p className="mb-7 text-sm leading-relaxed text-text-secondary">you will not.</p>
+      <p className="mb-4 text-sm leading-relaxed text-text-secondary">
+        you drive your stakes into the dirt, and the ground becomes a thing with an edge:
+      </p>
+      <p className="mb-4 text-sm leading-relaxed text-text-secondary">
+        yours within it, the world without.
       </p>
 
       {stepLabel && (
-        <p className="mb-4 animate-pulse font-mono text-sm text-text-gold">{stepLabel}</p>
+        <p className="mb-4 animate-pulse font-mono text-sm text-text-gold lowercase">{stepLabel}</p>
       )}
-      {error && <p className="mb-4 max-w-sm text-sm text-red-500">{error}</p>}
 
       <BeatButton disabled={!ready} onClick={run}>
-        {busy ? "Hold…" : phase === "error" ? "Drive them again" : "Claim this ground"}
+        {busy ? "hold…" : phase === "error" ? "drive them again" : "claim this ground"}
       </BeatButton>
+      {error && <p className="mt-4 max-w-sm text-sm text-red-500 lowercase">{error}</p>}
     </div>
   );
 }

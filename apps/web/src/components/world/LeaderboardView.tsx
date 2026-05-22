@@ -2,12 +2,16 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useWorldPlayers, useWorldCities, useWorldTeams, useCitizenStatus } from "@/lib/hooks/world";
+import {
+  useWorldPlayers,
+  useWorldCities,
+  useWorldTeams,
+  useCitizenStatus,
+} from "@/lib/hooks/world";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { cn, shortenAddress } from "@/lib/utils";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
-import { calculateDefensivePower } from "novus-mundus-sdk";
-import type { PlayerAccount } from "novus-mundus-sdk";
+import { playerScore } from "@/lib/players";
 
 const TABS = [
   { key: "networth", label: "Networth" },
@@ -21,27 +25,6 @@ const TABS = [
 type SortKey = (typeof TABS)[number]["key"];
 
 const PAGE_SIZE = 50;
-
-function getScore(player: PlayerAccount, key: SortKey): number {
-  switch (key) {
-    case "networth":
-      return player.networth.toNumber();
-    case "combat":
-      return calculateDefensivePower(
-        player.defensiveUnit1.toNumber(),
-        player.defensiveUnit2.toNumber(),
-        player.defensiveUnit3.toNumber(),
-      );
-    case "level":
-      return player.level;
-    case "reputation":
-      return player.reputation.toNumber();
-    case "attacks":
-      return player.totalAttacks.toNumber();
-    case "encounters":
-      return player.totalEncounterAttacks.toNumber();
-  }
-}
 
 export function LeaderboardView() {
   const { data: players, isLoading } = useWorldPlayers();
@@ -75,17 +58,14 @@ export function LeaderboardView() {
   const sorted = useMemo(() => {
     if (!players) return [];
     return [...players].sort(
-      (a, b) => getScore(b.account, activeTab) - getScore(a.account, activeTab)
+      (a, b) => playerScore(b.account, activeTab) - playerScore(a.account, activeTab),
     );
   }, [players, activeTab]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const pageData = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const pageOwners = useMemo(
-    () => pageData.map((p) => p.account.owner),
-    [pageData],
-  );
+  const pageOwners = useMemo(() => pageData.map((p) => p.account.owner), [pageData]);
   const domainNames = useDomainNames(pageOwners);
 
   if (isLoading) {
@@ -103,8 +83,10 @@ export function LeaderboardView() {
         <div className="card accent-border">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-text-muted">Your {TABS.find((t) => t.key === activeTab)?.label}</div>
-              <GoldNumber value={getScore(citizen.player, activeTab)} prefix="◆ " />
+              <div className="text-xs text-text-muted">
+                Your {TABS.find((t) => t.key === activeTab)?.label}
+              </div>
+              <GoldNumber value={playerScore(citizen.player, activeTab)} prefix="◆ " />
             </div>
             <div className="text-right">
               <div className="text-xs text-text-muted">Level</div>
@@ -119,12 +101,15 @@ export function LeaderboardView() {
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setPage(0); }}
+            onClick={() => {
+              setActiveTab(tab.key);
+              setPage(0);
+            }}
             className={cn(
               "whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
               activeTab === tab.key
                 ? "bg-surface-raised text-text-gold"
-                : "text-text-muted hover:text-text-secondary"
+                : "text-text-muted hover:text-text-secondary",
             )}
           >
             {tab.label}
@@ -154,20 +139,20 @@ export function LeaderboardView() {
                 key={p.pubkey.toBase58()}
                 className={cn(
                   "flex items-center gap-4 rounded-lg px-2 py-2",
-                  rank <= 3 && "bg-amber-900/10",
-                  isSelf && "accent-border-bright"
+                  rank <= 3 && "bg-accent/10",
+                  isSelf && "accent-border-bright",
                 )}
               >
                 <span
                   className={cn(
                     "w-12 text-center text-sm font-bold",
                     rank === 1
-                      ? "text-amber-400"
+                      ? "text-gold-400"
                       : rank === 2
                         ? "text-zinc-300"
                         : rank === 3
-                          ? "text-amber-700"
-                          : "text-text-muted"
+                          ? "text-gold-700"
+                          : "text-text-muted",
                   )}
                 >
                   {rank}
@@ -176,7 +161,9 @@ export function LeaderboardView() {
                   href={`/world/players/${p.account.owner.toBase58()}`}
                   className="flex-1 truncate text-sm text-text-secondary hover:text-text-gold transition-colors"
                 >
-                  {p.account.name || domainNames.get(p.account.owner.toBase58()) || shortenAddress(p.account.owner.toBase58())}
+                  {p.account.name ||
+                    domainNames.get(p.account.owner.toBase58()) ||
+                    shortenAddress(p.account.owner.toBase58())}
                   {(p.account.name || domainNames.get(p.account.owner.toBase58())) && (
                     <span className="ml-1 text-text-muted">Lv{p.account.level}</span>
                   )}
@@ -184,11 +171,15 @@ export function LeaderboardView() {
                 <span className="hidden w-24 truncate text-right text-xs sm:block">
                   {(() => {
                     const teamPda = p.account.team.toBase58();
-                    if (teamPda === "11111111111111111111111111111111") return <span className="text-text-muted">-</span>;
+                    if (teamPda === "11111111111111111111111111111111")
+                      return <span className="text-text-muted">-</span>;
                     const tInfo = teamMap.get(teamPda);
                     if (!tInfo) return <span className="text-text-muted">-</span>;
                     return (
-                      <Link href={`/world/teams/${tInfo.id}`} className="text-text-secondary hover:text-text-gold transition-colors">
+                      <Link
+                        href={`/world/teams/${tInfo.id}`}
+                        className="text-text-secondary hover:text-text-gold transition-colors"
+                      >
                         {tInfo.name || `#${tInfo.id}`}
                       </Link>
                     );
@@ -199,7 +190,7 @@ export function LeaderboardView() {
                 </span>
                 <span className="w-24 text-right">
                   <GoldNumber
-                    value={getScore(p.account, activeTab)}
+                    value={playerScore(p.account, activeTab)}
                     size="sm"
                     glow={rank <= 3}
                   />

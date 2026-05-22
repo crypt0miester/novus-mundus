@@ -12,7 +12,7 @@
  *   novus encounters cleanup --all
  */
 
-import { PublicKey } from '@solana/web3.js';
+import { address, type Address } from '@solana/kit';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { sendWithRetry, log } from '../helpers';
@@ -94,9 +94,9 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   let nearGrid: { lat: number; long: number } | null = null;
   let nearCityId: number | undefined;
   if (nearFlag !== undefined) {
-    let owner: PublicKey;
+    let owner: Address;
     try {
-      owner = new PublicKey(nearFlag);
+      owner = address(nearFlag);
     } catch {
       log.error(`Invalid --near pubkey: ${nearFlag}`);
       return;

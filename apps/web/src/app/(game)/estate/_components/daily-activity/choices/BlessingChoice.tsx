@@ -13,11 +13,7 @@ interface BlessingChoiceProps {
   onChoose: (heroMint: string) => void;
 }
 
-export function BlessingChoice({
-  heroes,
-  submitting,
-  onChoose,
-}: BlessingChoiceProps) {
+export function BlessingChoice({ heroes, submitting, onChoose }: BlessingChoiceProps) {
   if (heroes.length === 0) {
     return (
       <div className="card text-center text-sm text-text-muted">
@@ -33,18 +29,14 @@ export function BlessingChoice({
           key={mint}
           disabled={submitting}
           onClick={() => onChoose(mint)}
-          className="card text-left transition-colors hover:border-amber-700/60 disabled:cursor-not-allowed disabled:opacity-50"
+          className="card text-left transition-colors hover:border-border-gold/60 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <div className="text-2xl">🦅</div>
-          <div className="mt-1 font-display font-semibold text-text-primary">
-            Hero {i + 1}
-          </div>
+          <div className="mt-1 font-display font-semibold text-text-primary">Hero {i + 1}</div>
           <p className="mt-1 font-mono text-[11px] text-text-muted">
             {mint.slice(0, 4)}…{mint.slice(-4)}
           </p>
-          <p className="mt-1 text-xs text-text-muted">
-            +25% effectiveness for the day
-          </p>
+          <p className="mt-1 text-xs text-text-muted">+25% effectiveness for the day</p>
         </button>
       ))}
     </div>

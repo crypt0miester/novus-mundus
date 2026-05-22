@@ -10,7 +10,11 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import {
+  SpeedupPanel,
+  researchGemsPerMinute,
+  maxResearchHastenCount,
+} from "@/components/shared/SpeedupPanel";
 import { GemAction } from "@/components/shared/GemAction";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { useRightPanelStore } from "@/lib/store/right-panel";
@@ -39,19 +43,16 @@ import {
   getResearchCategoryName,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
+import { GameIcon } from "../shared/GameIcon";
 
 // Category icons are UI-only; node names/descriptions come from the SDK catalog.
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
 
 /** Minimum Academy level to start research, by category (Battle/Economy/Growth). */
-const ACADEMY_REQUIRED: Record<number, number> = { 0: 1, 1: 5, 2: 10 };
+const ACADEMY_REQUIRED: Record<number, number> = { 0: 1, 1: 2, 2: 3 };
 
 /** Standalone research detail panel for the right panel store. */
-export function ResearchPanel({
-  researchType,
-}: {
-  researchType: number;
-}) {
+export function ResearchPanel({ researchType }: { researchType: number }) {
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
   const client = useNovusMundusClient();
@@ -96,24 +97,36 @@ export function ResearchPanel({
   const handleStart = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !template) throw new Error("Wallet not connected");
     const ix = createStartResearchInstruction({
-      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      researchType: template.researchType,
     });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research started!", onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: "Research started!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleComplete = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !template) throw new Error("Wallet not connected");
     const ix = createCompleteResearchInstruction({
-      payer: publicKey, gameEngine: client.gameEngine, playerOwner: publicKey,
+      payer: publicKey,
+      gameEngine: client.gameEngine,
+      playerOwner: publicKey,
       researchType: template.researchType,
     });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research complete!", onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: "Research complete!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleInstant = async (reportPhase: (p: TxPhase) => void) => {
@@ -121,56 +134,96 @@ export function ResearchPanel({
     const ge = client.gameEngine;
     const rt = template.researchType;
     const buffName = getResearchName(rt);
-    const startIx = createStartResearchInstruction({ owner: publicKey, gameEngine: ge, researchType: rt });
+    const startIx = createStartResearchInstruction({
+      owner: publicKey,
+      gameEngine: ge,
+      researchType: rt,
+    });
     const speedupIx = createSpeedUpResearchInstruction(
       { owner: publicKey, gameEngine: ge, researchType: rt },
       { speedUpSeconds: 0 },
     );
     const completeIx = createCompleteResearchInstruction({
-      payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
+      payer: publicKey,
+      gameEngine: ge,
+      playerOwner: publicKey,
+      researchType: rt,
     });
-    return transact.mutateAsync({
-      instructions: [startIx, speedupIx, completeIx],
-      invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: `${buffName} completed instantly!`, onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [startIx, speedupIx, completeIx],
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: `${buffName} completed instantly!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
-  const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+  const handleSpeedup = async (
+    tier: number,
+    reportPhase: (p: TxPhase) => void,
+    count: number = 1,
+  ) => {
     if (!publicKey || !template) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
     const rt = template.researchType;
     const buffName = getResearchName(rt);
-    const speedUpSeconds = tier === 2 ? 0 : 3600;
-    const instructions = [
+    // Tier 2 is a one-shot "skip all" — speedUpSeconds 0 collapses the timer,
+    // then complete claims it. Tier 1 "Hasten" skips a fixed 3600s; hold-to-
+    // charge packs `count` of those into one tx, each reading the live timer.
+    if (tier === 2) {
+      return transact
+        .mutateAsync({
+          instructions: [
+            createSpeedUpResearchInstruction(
+              { owner: publicKey, gameEngine: ge, researchType: rt },
+              { speedUpSeconds: 0 },
+            ),
+            createCompleteResearchInstruction({
+              payer: publicKey,
+              gameEngine: ge,
+              playerOwner: publicKey,
+              researchType: rt,
+            }),
+          ],
+          invalidateKeys: [["research-progress"], ["player"]],
+          successMessage: `${buffName} completed instantly!`,
+          onPhase: reportPhase,
+        })
+        .then((r) => r.signature);
+    }
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
       createSpeedUpResearchInstruction(
         { owner: publicKey, gameEngine: ge, researchType: rt },
-        { speedUpSeconds },
+        { speedUpSeconds: 3600 },
       ),
-    ];
-    if (tier === 2) {
-      instructions.push(
-        createCompleteResearchInstruction({
-          payer: publicKey, gameEngine: ge, playerOwner: publicKey, researchType: rt,
-        }),
-      );
-    }
-    return transact.mutateAsync({
-      instructions, invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: tier === 2 ? `${buffName} completed instantly!` : "Research sped up!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    );
+    return transact
+      .mutateAsync({
+        instructions,
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: n > 1 ? `Research sped up ×${n}!` : "Research sped up!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !template) throw new Error("Wallet not connected");
     const ix = createCancelResearchInstruction({
-      owner: publicKey, gameEngine: client.gameEngine, researchType: template.researchType,
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      researchType: template.researchType,
     });
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: "Research cancelled!", onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: "Research cancelled!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleAscend = async (reportPhase: (p: TxPhase) => void) => {
@@ -180,10 +233,14 @@ export function ResearchPanel({
       { owner: publicKey, gameEngine: client.gameEngine },
       { researchType: template.researchType },
     );
-    return transact.mutateAsync({
-      instructions: [ix], invalidateKeys: [["research-progress"], ["player"]],
-      successMessage: `${buffName} ascended!`, onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["research-progress"], ["player"]],
+        successMessage: `${buffName} ascended!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const morphActions = useMemo<PanelAction[] | null>(() => {
@@ -199,14 +256,15 @@ export function ResearchPanel({
     const isAnyActive = progress ? isResearching(progress) : false;
     const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
     const academyLevel = estateData?.account
-      ? findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0
+      ? (findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0)
       : 0;
     const requiredAcademy = ACADEMY_REQUIRED[template.category] ?? 1;
     const meetsAcademy = academyLevel >= requiredAcademy;
     const buffName = getResearchName(template.researchType);
-    const nextLevelCost = currentLevel < template.maxLevel
-      ? calculateResearchCost(template.baseNoviCost.toNumber(), currentLevel + 1)
-      : 0;
+    const nextLevelCost =
+      currentLevel < template.maxLevel
+        ? calculateResearchCost(template.baseNoviCost.toNumber(), currentLevel + 1)
+        : 0;
     const hasEnoughNovi = noviBalance >= nextLevelCost;
 
     if (isComplete) {
@@ -220,15 +278,16 @@ export function ResearchPanel({
       ];
     }
     if (!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel) {
-      const baseTimeSec = template.baseTimeSeconds;
-      const instantGemCost = template.gemCostPerMinute * Math.ceil(baseTimeSec / 60);
+      // "Instant" starts the next level then skips its full level-scaled timer
+      // — price it at that level's banded gem rate, not the flat template field.
+      const startLevel = currentLevel + 1;
+      const instantSec = template.baseTimeSeconds * Math.pow(1.5, startLevel);
+      const instantGemCost = researchGemsPerMinute(startLevel) * Math.ceil(instantSec / 60);
       const gems = playerData?.account?.gems?.toNumber?.() ?? 0;
       return [
         {
           id: "start-research",
-          label: hasEnoughNovi
-            ? `Start Lv ${currentLevel + 1}`
-            : "Insufficient NOVI",
+          label: hasEnoughNovi ? `Start Lv ${currentLevel + 1}` : "Insufficient NOVI",
           variant: "primary" as const,
           disabled: !hasEnoughNovi,
           onClick: handleStart,
@@ -252,19 +311,33 @@ export function ResearchPanel({
       ];
     }
     if (isActiveForThis && !isComplete) {
-      // Cancel stays inline (not in the morph bar) — destructive actions
-      // shouldn't share weight with the gem speedups.
-      const remainingMinutes = Math.max(1, Math.ceil(
-        (progress.completesAt.toNumber() - nowSec) / 60,
-      ));
-      const t1Gems = template.gemCostPerMinute * 60;
-      const t2Gems = template.gemCostPerMinute * remainingMinutes;
+      const remainingSec = Math.max(0, progress.completesAt.toNumber() - nowSec);
+      const remainingMinutes = Math.max(1, Math.ceil(remainingSec / 60));
+      // Research speedups are priced at the chain's level-banded gem rate.
+      const researchRate = researchGemsPerMinute(progress.currentLevel);
+      const t1Gems = researchRate * 60;
+      const t2Gems = researchRate * remainingMinutes;
       const gems = playerData?.account?.gems?.toNumber?.() ?? 0;
+      // Tier-1 hold cap — `count` 1-hour skips one tx can hold (timer-collapse
+      // ∧ gem affordability). Tier 2 stays a one-shot "skip all", so no hold.
+      const t1HoldMax = maxResearchHastenCount({
+        remainingSeconds: remainingSec,
+        currentLevel: progress?.currentLevel ?? 1,
+        gemBalance: gems,
+      });
       return [
+        {
+          id: "cancel-research",
+          label: "Cancel",
+          variant: "danger" as const,
+          onClick: handleCancel,
+        },
         {
           id: "skip-hour",
           label: "Skip 1h",
           onClick: (rp) => handleSpeedup(1, rp),
+          onHold: (rp, count) => handleSpeedup(1, rp, count),
+          holdMax: t1HoldMax,
           disabled: gems < t1Gems,
         },
         {
@@ -300,34 +373,40 @@ export function ResearchPanel({
     ? isResearching(progress) && progress.currentResearch === template.researchType
     : false;
   const nowSec = Math.floor(Date.now() / 1000);
-  const isComplete = progress
-    ? isActiveForThis && isResearchComplete(progress, nowSec)
-    : false;
+  const isComplete = progress ? isActiveForThis && isResearchComplete(progress, nowSec) : false;
   const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
   const isAnyActive = progress ? isResearching(progress) : false;
-  const remainingSeconds = isActiveForThis && progress
-    ? Math.max(0, progress.completesAt.toNumber() - nowSec)
-    : 0;
+  const remainingSeconds =
+    isActiveForThis && progress ? Math.max(0, progress.completesAt.toNumber() - nowSec) : 0;
   const buffName = getResearchName(template.researchType);
   const categoryName = getResearchCategoryName(template.category);
   const description = getResearchNode(template.researchType)?.description;
 
   // Academy-level gate — research is hard-gated on-chain by the Academy
-  // building level (Battle ≥1, Economy ≥5, Growth ≥10). Surface it like a
+  // building level (Battle ≥1, Economy ≥2, Growth ≥3). Surface it like a
   // prerequisite so the player sees it before clicking Start, not as an
   // on-chain "building level too low" error after.
   const academyLevel = estateData?.account
-    ? findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0
+    ? (findBuilding(estateData.account, BuildingId.Academy)?.level ?? 0)
     : 0;
   const requiredAcademy = ACADEMY_REQUIRED[template.category] ?? 1;
   const meetsAcademy = academyLevel >= requiredAcademy;
 
   const baseCost = template.baseNoviCost.toNumber();
   const baseTime = template.baseTimeSeconds;
-  const nextLevelCost = currentLevel < template.maxLevel
-    ? calculateResearchCost(baseCost, currentLevel + 1)
-    : 0;
+  const nextLevelCost =
+    currentLevel < template.maxLevel ? calculateResearchCost(baseCost, currentLevel + 1) : 0;
   const hasEnoughNovi = noviBalance >= nextLevelCost;
+
+  // Research speedups are priced at the chain's level-banded gem rate (see
+  // researchGemsPerMinute). `activeResearchRate` covers the level in progress;
+  // `instantGemCost` is starting the next level then skipping its full
+  // level-scaled timer in one shot.
+  const activeResearchRate = researchGemsPerMinute(progress?.currentLevel ?? 1);
+  const instantStartLevel = currentLevel + 1;
+  const instantGemCost =
+    researchGemsPerMinute(instantStartLevel) *
+    Math.ceil((baseTime * Math.pow(1.5, instantStartLevel)) / 60);
 
   // Cost preview — a rolling window of up to 6 *upcoming* levels starting at
   // the next one to research, so a mid-progress node shows what is ahead
@@ -357,8 +436,12 @@ export function ResearchPanel({
         <span className="text-3xl">{CATEGORY_ICONS[template.category] ?? "?"}</span>
         <div>
           <div className="text-sm font-semibold text-text-primary">{buffName}</div>
-          <div className="text-xs text-text-muted">{categoryName} &middot; +{(template.buffPerLevelBps / 100).toFixed(1)}% per level</div>
-          <div className="text-[11px] text-text-gold">Level {currentLevel}/{template.maxLevel}</div>
+          <div className="text-xs text-text-muted">
+            {categoryName} &middot; +{(template.buffPerLevelBps / 100).toFixed(1)}% per level
+          </div>
+          <div className="text-[11px] text-text-gold">
+            Level {currentLevel}/{template.maxLevel}
+          </div>
         </div>
       </div>
 
@@ -371,25 +454,41 @@ export function ResearchPanel({
       <div className="rounded-lg bg-surface/60 px-3 py-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-zinc-500">Your NOVI</span>
-          <span className={`font-mono tabular-nums ${hasEnoughNovi || isActiveForThis ? "text-text-gold" : "text-red-400"}`}>
+          <span
+            className={`font-mono tabular-nums ${hasEnoughNovi || isActiveForThis ? "text-text-gold" : "text-red-400"}`}
+          >
+            <GameIcon id="resource-novi" size={14} className="mr-2" />
             {noviBalance.toLocaleString()}
           </span>
         </div>
+
+        {/* Active research countdown */}
+        {isActiveForThis && !isComplete && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Researching..</span>
+            <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
+          </div>
+        )}
         {currentLevel < template.maxLevel && !isActiveForThis && (
           <div className="mt-1 flex items-center justify-between text-xs">
             <span className="text-zinc-500">Lv {currentLevel + 1} Cost</span>
-            <span className="font-mono tabular-nums text-text-muted">{nextLevelCost.toLocaleString()} NOVI</span>
+            <span className="font-mono tabular-nums text-text-muted">
+              {nextLevelCost.toLocaleString()} NOVI
+            </span>
           </div>
         )}
         {!hasEnoughNovi && !isActiveForThis && currentLevel < template.maxLevel && (
-          <div className="mt-1 text-[11px] text-red-400">Need {(nextLevelCost - noviBalance).toLocaleString()} more NOVI</div>
+          <div className="mt-1 text-[11px] text-red-400">
+            Need {(nextLevelCost - noviBalance).toLocaleString()} more NOVI
+          </div>
         )}
       </div>
 
       {/* Prerequisite warning */}
       {!canMeetPrereqs && (
         <div className="rounded-lg border border-red-800/50 bg-red-900/20 p-2 text-xs text-red-300">
-          Requires {getResearchName(template.prerequisiteResearch)} at level {template.prerequisiteLevel}
+          Requires {getResearchName(template.prerequisiteResearch)} at level{" "}
+          {template.prerequisiteLevel}
         </div>
       )}
 
@@ -403,20 +502,29 @@ export function ResearchPanel({
       {isComplete && (
         <div className="rounded-lg border border-green-800/50 bg-green-900/20 p-3 text-center">
           <div className="mb-2 text-xs text-green-400">Research Complete!</div>
-          <TxButton onClick={handleComplete} className="hidden w-full lg:block">Claim Research</TxButton>
+          <TxButton onClick={handleComplete} className="hidden w-full lg:block">
+            Claim Research
+          </TxButton>
         </div>
       )}
 
       {/* Cost Preview */}
       <div className="rounded-lg border border-zinc-800 bg-surface/50 p-3">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Cost Preview</div>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          Cost Preview
+        </div>
         <div className="flex flex-wrap gap-2">
           {costPreview.map((r) => (
-            <div key={r.level} className={`rounded border px-2 py-1 text-center ${
-              r.level === currentLevel + 1 ? "border-amber-600 bg-amber-900/20"
-                : r.level <= currentLevel ? "border-green-800/50 bg-green-900/10"
-                : "border-zinc-800"
-            }`}>
+            <div
+              key={r.level}
+              className={`rounded border px-2 py-1 text-center ${
+                r.level === currentLevel + 1
+                  ? "border-border-gold bg-accent/20"
+                  : r.level <= currentLevel
+                    ? "border-green-800/50 bg-green-900/10"
+                    : "border-zinc-800"
+              }`}
+            >
               <div className="text-[11px] text-text-muted">Lv {r.level}</div>
               <div className="text-xs font-semibold text-text-gold">{r.cost.toLocaleString()}</div>
               <div className="text-[11px] text-text-muted">~{r.timeHours}h</div>
@@ -425,45 +533,55 @@ export function ResearchPanel({
         </div>
       </div>
 
-      {/* Active research countdown */}
-      {isActiveForThis && !isComplete && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-center">
-          <div className="text-xs text-text-muted">Researching...</div>
-          <GoldCountdown endsAt={progress!.completesAt.toNumber()} format="full" />
-        </div>
-      )}
-      
       {!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel && (
         <div className="hidden flex-col gap-2 lg:flex">
           <TxButton onClick={handleStart} className="w-full" disabled={!hasEnoughNovi}>
-            {hasEnoughNovi ? `Start ${buffName} Lv ${currentLevel + 1}` : "Insufficient NOVI"}
+            {hasEnoughNovi ? `Start Lv ${currentLevel + 1}` : "Insufficient NOVI"}
           </TxButton>
-          <GemAction onClick={handleInstant} gemCost={template.gemCostPerMinute * Math.ceil(baseTime / 60)} gemBalance={gemBalance}>
-            Instant Research
+          <GemAction onClick={handleInstant} gemCost={instantGemCost} gemBalance={gemBalance}>
+            Instant
           </GemAction>
         </div>
       )}
 
       {!isAnyActive && currentLevel >= template.maxLevel && (
-        <TxButton onClick={handleAscend} className="hidden w-full border-amber-500 bg-amber-900/30 text-text-gold hover:bg-amber-900/50 lg:block">
+        <TxButton
+          onClick={handleAscend}
+          className="hidden w-full border-border-gold-bright bg-accent/30 text-text-gold hover:bg-accent/50 lg:block"
+        >
           Ascend {buffName}
         </TxButton>
       )}
 
-      {/* In-progress actions */}
+      {/* In-progress actions — tier 1 "Skip" holds to charge multiple 1-hour
+          skips into one tx; tier 2 "Instant" stays a one-shot (no maxCount). */}
       {isActiveForThis && !isComplete && (
         <>
           <SpeedupPanel
             visible
             remainingSeconds={remainingSeconds}
-            onSpeedup={handleSpeedup}
+            onSpeedup={(tier, rp, count) => handleSpeedup(tier, rp, count)}
             tiers={[
-              { tier: 1, label: "Skip 1 Hour", description: "Skip 1 hour of research time", gemCost: template.gemCostPerMinute * 60 },
-              { tier: 2, label: "Instant", description: "Complete all remaining time", gemCost: template.gemCostPerMinute * Math.ceil(remainingSeconds / 60) },
+              {
+                tier: 1,
+                label: "Skip",
+                description: "Skip 1 hour of research time",
+                gemCost: activeResearchRate * 60,
+                maxCount: maxResearchHastenCount({
+                  remainingSeconds,
+                  currentLevel: progress?.currentLevel ?? 1,
+                  gemBalance,
+                }),
+              },
+              {
+                tier: 2,
+                label: "Instant",
+                description: "Complete all remaining time",
+                gemCost: activeResearchRate * Math.ceil(remainingSeconds / 60),
+              },
             ]}
             gemBalance={gemBalance}
           />
-          <TxButton onClick={handleCancel} variant="danger" className="w-full">Cancel Research</TxButton>
         </>
       )}
 

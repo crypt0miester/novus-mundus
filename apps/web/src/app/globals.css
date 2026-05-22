@@ -34,6 +34,12 @@ button:not(:disabled) {
   --color-border-gold: #92400e;
   --color-border-gold-bright: #b45309;
 
+  /* Tier accent — follows the player's subscription tier (copper→crimson).
+     Rebound to --tier-accent on <body>; defaults here are paper / tier 0.
+     Use for accent chrome (bg-accent, border-accent, ring-accent). */
+  --color-accent: var(--tier-accent);
+  --color-accent-bright: var(--tier-accent-bright);
+
   --color-text-primary: #1a1a1a;
   --color-text-secondary: #4a4a4a;
   --color-text-gold: #92400e;
@@ -114,26 +120,8 @@ body[data-theme="dark"] {
   --color-primary-hover: #f59e0b;
 }
 
-body[data-tier="0"] {
-  --nm-accent: #92400e;
-  --nm-accent-bright: #92400e;
-}
-body[data-tier="1"] {
-  --nm-accent: #B87333;
-  --nm-accent-bright: #D4944A;
-}
-body[data-tier="2"] {
-  --nm-accent: #C0C0C0;
-  --nm-accent-bright: #D4D4D4;
-}
-body[data-tier="3"] {
-  --nm-accent: #daa520;
-  --nm-accent-bright: #f1af09;
-}
-body[data-tier="4"] {
-  --nm-accent: #820000;
-  --nm-accent-bright: #9a2222;
-}
+/* --nm-accent / --nm-accent-bright follow --tier-accent (aliased in :root) —
+   single source of truth, no per-tier overrides. */
 
 body[data-tier="1"] {
   --tier-accent: #CD7F32;
@@ -185,7 +173,6 @@ body[data-tier="4"] {
 body {
   @apply bg-surface text-text-primary antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  --color-border-default: var(--tier-border);
   --color-border-gold: var(--tier-accent);
   --color-border-gold-bright: var(--tier-accent-bright);
   --color-text-gold: var(--tier-accent-bright);

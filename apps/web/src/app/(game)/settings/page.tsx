@@ -161,7 +161,9 @@ export default function SettingsPage() {
           {/* Left column: Account + Subscription */}
           <div className="flex flex-col gap-3 lg:overflow-y-auto">
             <div className="card accent-border">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Account</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Account
+              </h3>
               <div className="space-y-2">
                 {publicKey && <CopyableAddress label="Wallet" address={publicKey.toBase58()} />}
                 {!publicKey && (
@@ -171,7 +173,9 @@ export default function SettingsPage() {
                   </div>
                 )}
                 {userPda && <CopyableAddress label="User Account" address={userPda.toBase58()} />}
-                {playerData?.pubkey && <CopyableAddress label="Player Account" address={playerData.pubkey.toBase58()} />}
+                {playerData?.pubkey && (
+                  <CopyableAddress label="Player Account" address={playerData.pubkey.toBase58()} />
+                )}
                 {player && (
                   <>
                     <div className="flex justify-between text-sm">
@@ -199,7 +203,9 @@ export default function SettingsPage() {
             </div>
 
             <div className="card">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Subscription</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Subscription
+              </h3>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Tier</span>
@@ -222,7 +228,9 @@ export default function SettingsPage() {
 
             {/* Danger Zone */}
             <div className="card border-red-900/50">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400">Danger Zone</h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400">
+                Danger Zone
+              </h3>
               <button
                 onClick={() => disconnect()}
                 className="rounded-lg border border-red-800 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/40"
@@ -235,152 +243,155 @@ export default function SettingsPage() {
           {/* Right column: Display, Theme, Explorer, Transaction */}
           <div className="flex flex-col gap-3 lg:overflow-y-auto">
             <div className="card">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Display</h3>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className="text-text-primary">Number Format</span>
-                <p className="text-xs text-text-muted">How large numbers are displayed</p>
-              </div>
-              <div className="flex rounded-lg border border-zinc-800">
-                {(["compact", "full"] as const).map((fmt) => (
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Display
+              </h3>
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <span className="text-text-primary">Number Format</span>
+                    <p className="text-xs text-text-muted">How large numbers are displayed</p>
+                  </div>
+                  <div className="flex rounded-lg border border-zinc-800">
+                    {(["compact", "full"] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => setNumberFormat(fmt)}
+                        className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                          numberFormat === fmt
+                            ? "bg-accent/30 text-text-gold"
+                            : "text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        {fmt === "compact" ? "1.2K" : "1,200"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <span className="text-text-primary">Animations</span>
+                    <p className="text-xs text-text-muted">Page transitions and number rolling</p>
+                  </div>
                   <button
-                    key={fmt}
-                    onClick={() => setNumberFormat(fmt)}
-                    className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                      numberFormat === fmt
-                        ? "bg-amber-900/30 text-text-gold"
-                        : "text-text-muted hover:text-text-primary"
+                    onClick={() => setAnimationsEnabled(!animationsEnabled)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                      animationsEnabled ? "bg-primary" : "bg-zinc-700"
                     }`}
                   >
-                    {fmt === "compact" ? "1.2K" : "1,200"}
+                    <span
+                      className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        animationsEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
                   </button>
-                ))}
+                </div>
               </div>
             </div>
-            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className="text-text-primary">Animations</span>
-                <p className="text-xs text-text-muted">Page transitions and number rolling</p>
-              </div>
-              <button
-                onClick={() => setAnimationsEnabled(!animationsEnabled)}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                  animationsEnabled ? "bg-amber-600" : "bg-zinc-700"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-                    animationsEnabled ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* Theme */}
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Theme
-          </h3>
-          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <span className="text-text-primary">Appearance</span>
-              <p className="text-xs text-text-muted">Paper uses a light parchment background</p>
-            </div>
-            <div className="flex rounded-lg border border-zinc-800">
-              {(["paper", "auto", "dark"] as ThemePreference[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setThemePreference(t)}
-                  className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                    themePreference === t
-                      ? "bg-amber-900/30 text-text-gold"
-                      : "text-text-muted hover:text-text-primary"
-                  }`}
-                >
-                  {t === "auto" ? "Auto" : t === "paper" ? "Paper" : "Dark"}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Explorer */}
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Explorer
-          </h3>
-          <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <span className="text-text-primary">Transaction Explorer</span>
-              <p className="text-xs text-text-muted">Where transaction links open</p>
-            </div>
-            <div className="flex rounded-lg border border-zinc-800">
-              {EXPLORER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setExplorer(opt.value)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    explorer === opt.value
-                      ? "bg-amber-900/30 text-text-gold"
-                      : "text-text-muted hover:text-text-primary"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Transaction */}
-        <div className="card">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Transaction
-          </h3>
-          <div className="space-y-3">
-            <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className="text-text-primary">Priority Fee</span>
-                <p className="text-xs text-text-muted">Higher fees help transactions land faster</p>
-              </div>
-              <div className="flex rounded-lg border border-zinc-800">
-                {PRIORITY_PRESETS.map((preset) => (
-                  <button
-                    key={preset.value}
-                    onClick={() => setPriorityFee(preset.value)}
-                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                      priorityFee === preset.value
-                        ? "bg-amber-900/30 text-text-gold"
-                        : "text-text-muted hover:text-text-primary"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
+            {/* Theme */}
+            <div className="card">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Theme
+              </h3>
+              <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <span className="text-text-primary">Appearance</span>
+                  <p className="text-xs text-text-muted">Paper uses a light parchment background</p>
+                </div>
+                <div className="flex rounded-lg border border-zinc-800">
+                  {(["paper", "auto", "dark"] as ThemePreference[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setThemePreference(t)}
+                      className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                        themePreference === t
+                          ? "bg-accent/30 text-text-gold"
+                          : "text-text-muted hover:text-text-primary"
+                      }`}
+                    >
+                      {t === "auto" ? "Auto" : t === "paper" ? "Paper" : "Dark"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-text-muted">Estimated cost per tx</span>
-              <span className="font-mono text-text-primary">
-                {solCostEstimate < 0.000001
-                  ? "< 0.000001"
-                  : solCostEstimate.toFixed(6)}{" "}
-                SOL
-              </span>
-            </div>
-          </div>
-        </div>
 
-        {/* DEV: Tier Preview */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="card">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Dev Tools</h3>
-            <TierSwitcher />
-          </div>
-        )}
+            {/* Explorer */}
+            <div className="card">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Explorer
+              </h3>
+              <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <span className="text-text-primary">Transaction Explorer</span>
+                  <p className="text-xs text-text-muted">Where transaction links open</p>
+                </div>
+                <div className="flex rounded-lg border border-zinc-800">
+                  {EXPLORER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setExplorer(opt.value)}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        explorer === opt.value
+                          ? "bg-accent/30 text-text-gold"
+                          : "text-text-muted hover:text-text-primary"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Transaction */}
+            <div className="card">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Transaction
+              </h3>
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <span className="text-text-primary">Priority Fee</span>
+                    <p className="text-xs text-text-muted">
+                      Higher fees help transactions land faster
+                    </p>
+                  </div>
+                  <div className="flex rounded-lg border border-zinc-800">
+                    {PRIORITY_PRESETS.map((preset) => (
+                      <button
+                        key={preset.value}
+                        onClick={() => setPriorityFee(preset.value)}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          priorityFee === preset.value
+                            ? "bg-accent/30 text-text-gold"
+                            : "text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-text-muted">Estimated cost per tx</span>
+                  <span className="font-mono text-text-primary">
+                    {solCostEstimate < 0.000001 ? "< 0.000001" : solCostEstimate.toFixed(6)} SOL
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* DEV: Tier Preview */}
+            {process.env.NODE_ENV === "development" && (
+              <div className="card">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Dev Tools
+                </h3>
+                <TierSwitcher />
+              </div>
+            )}
           </div>
         </div>
       </div>

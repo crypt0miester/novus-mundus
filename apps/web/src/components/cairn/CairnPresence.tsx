@@ -51,10 +51,7 @@ export function CairnPresence() {
   const breathAnim = useRef<ReturnType<typeof animate> | null>(null);
 
   const wordEls = useCallback(
-    () =>
-      Array.from(
-        lineRef.current?.querySelectorAll<HTMLElement>(".cairn-word") ?? [],
-      ),
+    () => Array.from(lineRef.current?.querySelectorAll<HTMLElement>(".cairn-word") ?? []),
     [],
   );
 
@@ -243,13 +240,11 @@ export function CairnPresence() {
           ))}
         </p>
         <div ref={actRef} className="mt-1 flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-            {actDef.name}
-          </span>
+          <span className="text-[10px] font-medium lowercase text-text-muted">{actDef.name}</span>
           <button
             type="button"
             onClick={() => show("The Chronicle", "chronicle")}
-            className="pointer-events-auto inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
+            className="pointer-events-auto inline-flex items-center gap-0.5 text-[10px] font-medium lowercase text-text-muted transition-colors hover:text-text-gold"
           >
             the climb
             <ChevronRight className="h-3 w-3" />

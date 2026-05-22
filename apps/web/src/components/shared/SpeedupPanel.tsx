@@ -10,6 +10,9 @@ interface SpeedupTier {
   label: string;
   description: string;
   gemCost?: number;
+  /** Hold-to-charge cap — most speedup instructions one tx can hold for this
+   *  tier (timer-collapse ∧ gem affordability). Omitted → plain one-shot. */
+  maxCount?: number;
 }
 
 interface SpeedupPanelProps {
@@ -17,8 +20,11 @@ interface SpeedupPanelProps {
   visible: boolean;
   /** Remaining seconds until completion */
   remainingSeconds: number;
-  /** Handler that receives the selected tier and reportPhase callback, returns a tx promise */
-  onSpeedup: (tier: number, reportPhase: (p: TxPhase) => void) => Promise<string>;
+  /**
+   * Handler for a speedup — receives the tier, a phase reporter, and `count`
+   * (the held charge; 1 on a tap). Returns a tx promise.
+   */
+  onSpeedup: (tier: number, reportPhase: (p: TxPhase) => void, count?: number) => Promise<string>;
   /** Available tiers — defaults to standard Tier 1 / Tier 2 */
   tiers?: SpeedupTier[];
   /** Gem cost per minute (used for dynamic cost calculation) */
@@ -47,6 +53,132 @@ const DEFAULT_TIERS: SpeedupTier[] = [
 ];
 
 /**
+ * How many speedup instructions of one tier are worth packing into a single
+ * transaction — the lesser of (a) collapsing the timer to zero (a speedup past
+ * that fails on-chain) and (b) what the player's gems cover. Replays the
+ * processor's truncating math, so the cap matches the chain exactly.
+ */
+export function maxSpeedupCount(opts: {
+  remainingSeconds: number;
+  /** Fraction of time left after one speedup (0.5 = a 50%-cut tier). */
+  timeMultiplier: number;
+  /** Gem-cost multiplier for the tier, per the processor's tier table. */
+  costMultiplier: number;
+  gemsPerMinute: number;
+  gemBalance: number;
+  /** Hard ceiling so one tx can't overflow size / compute budget. */
+  hardCap?: number;
+}): number {
+  const {
+    remainingSeconds,
+    timeMultiplier,
+    costMultiplier,
+    gemsPerMinute,
+    gemBalance,
+    hardCap = 40,
+  } = opts;
+  let remaining = Math.max(0, Math.floor(remainingSeconds));
+  let spentGems = 0;
+  let count = 0;
+  while (remaining > 0 && count < hardCap) {
+    const minutes = Math.ceil(remaining / 60);
+    const cost = minutes * gemsPerMinute * costMultiplier;
+    if (spentGems + cost > gemBalance) break; // next speedup is unaffordable
+    spentGems += cost;
+    count++;
+    remaining = Math.floor(remaining * timeMultiplier);
+  }
+  return count;
+}
+
+/**
+ * Hold-to-charge cap for the EXPEDITION speedup — its processor prices a
+ * speedup on the time it *removes*, not the time remaining, and floors the
+ * minute count differently. Replays `expedition/speedup.rs`; the cap is the
+ * lesser of collapsing the timer and gem affordability.
+ */
+export function maxExpeditionSpeedupCount(opts: {
+  remainingSeconds: number;
+  /** Tier time-reduction in basis points (5000 = 50%, 7500 = 75%). */
+  reductionBps: number;
+  /** Gem-cost multiplier for the tier (1x / 2x). */
+  costMultiplier: number;
+  /** Flat gems-per-minute rate (the processor's EXPEDITION constant). */
+  gemsPerMinute: number;
+  gemBalance: number;
+  hardCap?: number;
+}): number {
+  const {
+    remainingSeconds,
+    reductionBps,
+    costMultiplier,
+    gemsPerMinute,
+    gemBalance,
+    hardCap = 40,
+  } = opts;
+  let remaining = Math.max(0, Math.floor(remainingSeconds));
+  let spentGems = 0;
+  let count = 0;
+  while (remaining > 0 && count < hardCap) {
+    const secondsToReduce = Math.floor((remaining * reductionBps) / 10000);
+    // The processor floors then clamps to >= 1 minute of charged cost.
+    const minutesToReduce = Math.max(1, Math.floor(secondsToReduce / 60));
+    const cost = minutesToReduce * gemsPerMinute * costMultiplier;
+    if (spentGems + cost > gemBalance) break; // next speedup is unaffordable
+    spentGems += cost;
+    count++;
+    // A 0-second reduction can't collapse the timer — stop to avoid looping.
+    if (secondsToReduce <= 0) break;
+    remaining -= secondsToReduce;
+  }
+  return count;
+}
+
+/** Each tier-1 "Hasten" research speedup skips this many seconds. */
+const RESEARCH_HASTEN_STEP = 3600;
+
+/**
+ * Research speedup gem cost is level-banded — `speed_up_research.rs` prices it
+ * via `calculate_gem_cost(_, current_level)`, not the template's flat rate.
+ * Mirrored here so the hold cap matches the chain.
+ */
+export function researchGemsPerMinute(level: number): number {
+  if (level <= 5) return 1;
+  if (level <= 10) return 2;
+  if (level <= 15) return 5;
+  if (level <= 20) return 10;
+  return 20;
+}
+
+/**
+ * Hold-to-charge cap for the research "Hasten" speedup — it skips a fixed
+ * `RESEARCH_HASTEN_STEP` per step (not a time-%, so `maxSpeedupCount` doesn't
+ * fit). The cap is the lesser of collapsing the timer and what gems cover.
+ */
+export function maxResearchHastenCount(opts: {
+  remainingSeconds: number;
+  /** Level being researched — sets the on-chain per-minute gem rate. */
+  currentLevel: number;
+  gemBalance: number;
+  hardCap?: number;
+}): number {
+  const { remainingSeconds, currentLevel, gemBalance, hardCap = 40 } = opts;
+  const gemsPerMinute = researchGemsPerMinute(currentLevel);
+  let remaining = Math.max(0, Math.floor(remainingSeconds));
+  let spentGems = 0;
+  let count = 0;
+  while (remaining > 0 && count < hardCap) {
+    const skipped = Math.min(RESEARCH_HASTEN_STEP, remaining);
+    const cost = Math.ceil(skipped / 60) * gemsPerMinute;
+    if (spentGems + cost > gemBalance) break; // next skip is unaffordable
+    spentGems += cost;
+    count++;
+    remaining -= skipped;
+  }
+  return count;
+}
+
+/**
  * Reusable speedup panel with tier selection.
  *
  * Calculates gem costs dynamically from remaining time and shows
@@ -72,10 +204,7 @@ export function SpeedupPanel({
     : "text-xs font-semibold uppercase tracking-wider text-text-gold";
   const boxCls = parchment ? styles.infoBox : "rounded-lg bg-surface/60 px-3 py-2";
   const labelCls = parchment ? styles.infoLabel : "text-zinc-500";
-  const valueCls = cn(
-    "font-mono tabular-nums",
-    parchment ? styles.infoValue : "text-text-gold",
-  );
+  const valueCls = cn("font-mono tabular-nums", parchment ? styles.infoValue : "text-text-gold");
 
   /** Cost for a given tier multiplier */
   function costForTier(tier: number): number {
@@ -88,7 +217,7 @@ export function SpeedupPanel({
         !inline &&
           (parchment
             ? styles.panel
-            : "rounded-xl border border-amber-900/40 bg-surface-raised p-4"),
+            : "rounded-xl border border-border-gold/40 bg-surface-raised p-4"),
         className,
       )}
     >
@@ -156,7 +285,9 @@ export function SpeedupPanel({
           return (
             <div key={t.tier}>
               <TxButton
-                onClick={(reportPhase: (p: TxPhase) => void) => onSpeedup(t.tier, reportPhase)}
+                onClick={(reportPhase) => onSpeedup(t.tier, reportPhase, 1)}
+                onHold={(reportPhase, count) => onSpeedup(t.tier, reportPhase, count)}
+                holdMax={t.maxCount}
                 variant="secondary"
                 disabled={!canAfford}
                 className={cn(cardClass, "hidden lg:flex")}

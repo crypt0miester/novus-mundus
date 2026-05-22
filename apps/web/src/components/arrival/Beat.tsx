@@ -14,7 +14,7 @@ export function BeatEyebrow({ children, className, reveal = false }: BeatEyebrow
     <p
       data-reveal={reveal || undefined}
       className={cn(
-        "font-mono text-[11px] uppercase tracking-[0.3em] text-text-muted",
+        "font-mono text-[11px] lowercase tracking-[0.3em] text-text-muted",
         reveal && "opacity-0",
         className,
       )}

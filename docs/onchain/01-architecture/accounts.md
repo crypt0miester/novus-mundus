@@ -1,6 +1,6 @@
 # Accounts
 
-> Master index of all 48 on-chain account types: discriminators, PDA seeds, sizes, and system ownership.
+> Master index of all 49 on-chain account types: discriminators, PDA seeds, sizes, and system ownership.
 
 ## Account Discriminator Pattern
 
@@ -12,8 +12,8 @@ Every on-chain account stores its `AccountKey` enum value in **byte 0** as a `u8
 pub enum AccountKey {
     GameEngine = 1,
     Player     = 2,
-    // ... 48 variants total (1–48)
-    SanctuaryMeditation = 48,
+    // ... 49 variants total (1–49)
+    BuildingTemplate = 49,
 }
 ```
 
@@ -22,7 +22,7 @@ pub enum AccountKey {
 ```mermaid
 flowchart LR
     RAW["Raw account bytes"] --> B0["Read byte 0"]
-    B0 --> AK["Match AccountKey (1–48)"]
+    B0 --> AK["Match AccountKey (1–49)"]
     AK -->|"Loaded::new_validated"| VAL["AccountKey::validate ✓"]
     AK -->|"unsafe T::load (~161 sites)"| SKIP["Skip discriminator check ⚠"]
     VAL --> DEREF["Deref → &T / &mut T"]
@@ -45,11 +45,11 @@ Offset  Size  Section           Flag constant
 576     144   InventorySection  EXT_INVENTORY  = 0x04
 720     112   TeamSection       EXT_TEAM       = 0x10
 832      80   RallySection      EXT_RALLY      = 0x08
-912     168   HeroesSection     EXT_HEROES     = 0x02
-1080     80   CosmeticsSection  EXT_COSMETICS  = 0x20
-1160     48   CourtSection      EXT_COURT      = 0x40
+912     208   HeroesSection     EXT_HEROES     = 0x02
+1120     80   CosmeticsSection  EXT_COSMETICS  = 0x20
+1200     48   CourtSection      EXT_COURT      = 0x40
 ──────────────────────────────────────────────
-1208        MAX_SIZE (all sections present)
+1248        MAX_SIZE (all sections present)
 ```
 
 The `extensions: u32` bitfield in `PlayerCore` records which sections are allocated. Sections are appended in the **offset order above** (Research → Inventory → Team → Rally → Heroes → Cosmetics → Court); an earlier section must exist before a later one can be added. Sizes are verified by compile-time `static_assert`s in `state/player.rs`.
@@ -63,7 +63,7 @@ graph LR
     IS["InventorySection<br/>144 b<br/>0x04"]
     TS["TeamSection<br/>112 b<br/>0x10"]
     RA["RallySection<br/>80 b<br/>0x08"]
-    HS["HeroesSection<br/>168 b<br/>0x02"]
+    HS["HeroesSection<br/>208 b<br/>0x02"]
     CS["CosmeticsSection<br/>80 b<br/>0x20"]
     CT["CourtSection<br/>48 b<br/>0x40"]
 
@@ -224,7 +224,7 @@ Seed notation: string literals are UTF-8 bytes; integers use little-endian (LE) 
 | Key | AccountKey | Seeds | Approx size | Purpose | Docs |
 |-----|-----------|-------|-------------|---------|------|
 | `GameEngine` | 1 | `["game_engine", kingdom_id:u16 LE]` | ~3 KB | Per-kingdom config, embedded sub-configs, authority keys | [Onboarding](../02-player-journey/onboarding.md) |
-| `Player` | 2 | `["player", game_engine, owner]` | 528–1208 b | Per-player state + extension sections | [Player Journey](../02-player-journey/onboarding.md) |
+| `Player` | 2 | `["player", game_engine, owner]` | 528–1248 b | Per-player state + extension sections | [Player Journey](../02-player-journey/onboarding.md) |
 | `User` | 3 | `["user", owner]` | ~120 b | Per-wallet reserved-NOVI vesting + purchase streak | [Currencies](../03-economy/currencies.md) |
 | `City` | 4 | `["city", game_engine, city_id:u16 LE]` | ~250 b | City metadata + terrain anchors | [Travel](../04-systems/travel.md) |
 
@@ -304,8 +304,11 @@ Heroes themselves are **MPL Core assets** — not program-owned accounts. Level 
 | Key | AccountKey | Seeds | Approx size | Purpose | Docs |
 |-----|-----------|-------|-------------|---------|------|
 | `Estate` | 32 | `["estate", player_account]` | ~350 b–1 KB | 19 embedded building slots + construction state | [Estates](../04-systems/estates.md) |
+| `BuildingTemplate` | 49 | `["building_template", building_type:u8]` | 32 b | DAO-tunable per-building cost/time configuration | [Estates](../04-systems/estates.md) |
 
 `EstateAccount` is seeded by the **player-account PDA** (not the wallet). All 19 `BuildingType` slots are inline (no separate building accounts). Building IDs (`BuildingType::from_u8`): 0 Mansion, 1 Barracks, 2 Workshop, 3 Vault, 4 Dock, 5 Forge, 6 Market, 7 Academy, 8 Arena, 9 MeditationChamber, 10 Observatory, 11 Treasury, 12 Citadel, 13 Camp, 14 Mine, 15 DungeonEntry, 16 Farm, 17 TransportBay, 18 Infirmary.
+
+`BuildingTemplate` is **not** kingdom-scoped — its seed is the single `building_type` byte (one PDA per building type, 0–18). Build/upgrade processors read it instead of hardcoded per-tier values, so costs are tunable without a program redeploy. It stores `base_novi_cost`, `base_time_seconds`, per-level `cost_growth_bps`/`time_growth_bps`, `max_level`, and an `is_active` flag the DAO can use to disable a building. The 32-byte zero-copy layout is `static_assert`-verified.
 
 ### Expedition System
 
@@ -388,6 +391,16 @@ graph LR
 
 > `AccountKey` values 45, 46, and 48 exist in the enum for routing/historical reasons, but the program never creates standalone PDAs for them. Forge state is the `CraftedEquipmentAccount` (seeded `["crafted_equipment", owner]`); meditation state is fields on `PlayerAccount`.
 
+### Untagged Program-Owned Accounts
+
+Not every program-owned account carries an `AccountKey` discriminator. The following accounts deliberately sit **outside** the AccountKey-indexed tables above.
+
+| Account | Seeds | Size | Purpose | Docs |
+|---------|-------|------|---------|------|
+| `OracleQuote` | `["oracle_quote", switchboard_queue:32]` | 1064 b | Switchboard On-Demand price quote cache | [Oracle](../04-systems/oracle.md) |
+
+> `OracleQuote` (`state/oracle_quote.rs`, `ORACLE_QUOTE_ACCOUNT_LEN = 1064`) has **no `AccountKey` tag**. Under "Model B", an off-chain crank (`crank_oracle_quote`, ix 302) writes a verified Switchboard `OracleQuote` into this program-owned account; purchase instructions then read it via `p_switchboard::QuoteVerifier::verify_account`. Its first 8 bytes are the Switchboard `SBOracle` discriminator, not a game discriminator — the layout is `[SBOracle(8)][queue(32)][len(2)][ed25519 quote data]`. It is keyed by the 32-byte Switchboard queue address, so it is **not** kingdom-scoped.
+
 ---
 
 ## PDA Seeds Quick Reference
@@ -431,6 +444,7 @@ AllowedToken       ["allowed_token", game_engine, token_mint]
 PlayerPurchase     ["player_purchase", player, item_id:u32 LE]
 Inventory          ["inventory", player]
 Estate             ["estate", player_account]
+BuildingTemplate   ["building_template", building_type:u8]        ← global; no kingdom_id
 CraftedEquipment   ["crafted_equipment", owner]
 Expedition         ["expedition", player_account]
 ArenaSeason        ["arena_season", game_engine, season_id:u32 LE]
@@ -444,6 +458,7 @@ CastleGarrison     ["garrison", castle, contributor]
 KingRegistry       ["king_registry", king]                       ← global; no kingdom_id
 CourtPosition      ["court", castle, position_type:u8]
 TeamCastleReward   ["team_castle_reward", castle, member]
+OracleQuote        ["oracle_quote", switchboard_queue]            ← global; no kingdom_id; no AccountKey tag
 ```
 
 > **Note:** Every PDA bump is stored on its account. `load_checked_*` currently re-derives with `find_program_address` (~3000 CU) rather than `create_program_address` with the stored bump (~500 CU) — a known optimization opportunity.
@@ -457,10 +472,10 @@ TeamCastleReward   ["team_castle_reward", castle, member]
 | Account | Size | Notes |
 |---------|------|-------|
 | `GameEngine` | ~3 KB | All sub-configs embedded |
-| `PlayerAccount` | 528–1208 b | `PlayerCore` + up to 7 extension sections |
+| `PlayerAccount` | 528–1248 b | `PlayerCore` + up to 7 extension sections |
 | `UserAccount` | ~120 b | |
 | `CityAccount` | ~250 b | With terrain anchors |
-| `TeamAccount` | 280 b | `static_assert`-verified |
+| `TeamAccount` | 280 b | |
 | `TeamMemberSlot` | ~104 b | |
 | `ResearchProgress` | ~144 b | |
 | `ResearchTemplate` | ~32 b | |

@@ -14,11 +14,7 @@ import { isNullPubkey, calculateDefensivePower } from "novus-mundus-sdk";
 const TIER_LABELS = ["Rookie", "Expert", "Epic", "Legendary"] as const;
 const TIER_VARIANTS = ["default", "info", "epic", "legendary"] as const;
 
-export default function PlayerProfilePage({
-  params,
-}: {
-  params: Promise<{ address: string }>;
-}) {
+export default function PlayerProfilePage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
   const { data: result, isLoading } = useWorldPlayer(address);
   const { data: cities } = useWorldCities();
@@ -72,7 +68,10 @@ export default function PlayerProfilePage({
               No player account found for address{" "}
               <span className="font-mono text-text-secondary">{shortenAddress(address, 8)}</span>.
             </p>
-            <Link href="/world" className="mt-3 inline-block text-sm text-text-gold hover:underline">
+            <Link
+              href="/world"
+              className="mt-3 inline-block text-sm text-text-gold hover:underline"
+            >
               Back to Realm Overview
             </Link>
           </div>
@@ -95,10 +94,7 @@ export default function PlayerProfilePage({
     player.defensiveUnit3.toNumber(),
   );
 
-  const isSelf =
-    citizen.isCitizen &&
-    citizen.player &&
-    citizen.player.owner.toBase58() === address;
+  const isSelf = citizen.isCitizen && citizen.player && citizen.player.owner.toBase58() === address;
 
   const sameCity =
     citizen.isCitizen &&
@@ -117,9 +113,7 @@ export default function PlayerProfilePage({
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge variant="gold">Lv {player.level}</Badge>
                 {tierIndex > 0 && (
-                  <Badge variant={TIER_VARIANTS[tierIndex] as any}>
-                    {TIER_LABELS[tierIndex]}
-                  </Badge>
+                  <Badge variant={TIER_VARIANTS[tierIndex] as any}>{TIER_LABELS[tierIndex]}</Badge>
                 )}
                 {isProtected && <Badge variant="info">Protected</Badge>}
                 {player.flaggedByGovernance && <Badge variant="danger">Flagged</Badge>}
@@ -131,7 +125,7 @@ export default function PlayerProfilePage({
                 onClick={copyAddress}
                 className="font-mono transition-colors hover:text-text-secondary"
               >
-                {copied ? "Copied!" : domain ?? shortenAddress(address, 6)}
+                {copied ? "Copied!" : (domain ?? shortenAddress(address, 6))}
               </button>
               <div className="mt-1">Joined {createdDate}</div>
             </div>
@@ -151,7 +145,8 @@ export default function PlayerProfilePage({
                 href={`/world/teams/${teamInfo.id}`}
                 className="text-text-secondary hover:text-text-gold transition-colors"
               >
-                Team: <span className="text-text-gold">{teamInfo.name || `Team #${teamInfo.id}`}</span>
+                Team:{" "}
+                <span className="text-text-gold">{teamInfo.name || `Team #${teamInfo.id}`}</span>
               </Link>
             )}
           </div>
@@ -239,7 +234,7 @@ export default function PlayerProfilePage({
               </Link>
               <Link
                 href={`/estate?tab=market&transfer=${address}`}
-                className="rounded-md border border-border-gold bg-amber-900/20 px-4 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+                className="rounded-md border border-border-gold bg-accent/20 px-4 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
               >
                 Send Cash
               </Link>

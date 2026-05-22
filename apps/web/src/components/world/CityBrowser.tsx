@@ -12,12 +12,7 @@ import { cn } from "@/lib/utils";
 import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 
 // Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
-const CITY_TYPE_VARIANTS: readonly BadgeVariant[] = [
-  "legendary",
-  "success",
-  "danger",
-  "gold",
-];
+const CITY_TYPE_VARIANTS: readonly BadgeVariant[] = ["legendary", "success", "danger", "gold"];
 
 export function CityBrowser() {
   const { data: cities, isLoading } = useWorldCities();
@@ -26,13 +21,10 @@ export function CityBrowser() {
 
   const sorted = useMemo(() => {
     if (!cities) return [];
-    return [...cities].sort(
-      (a, b) => b.account.playersPresent - a.account.playersPresent
-    );
+    return [...cities].sort((a, b) => b.account.playersPresent - a.account.playersPresent);
   }, [cities]);
 
-  const isHere = (cityId: number) =>
-    citizen.isCitizen && citizen.player?.currentCity === cityId;
+  const isHere = (cityId: number) => citizen.isCitizen && citizen.player?.currentCity === cityId;
 
   const columns: Column<(typeof sorted)[number]>[] = [
     {
@@ -45,9 +37,7 @@ export function CityBrowser() {
         >
           {c.account.name}
           {isHere(c.account.cityId) && (
-            <span className="ml-2 text-[10px] font-semibold text-text-gold">
-              You are here
-            </span>
+            <span className="ml-2 text-[10px] font-semibold text-text-gold">You are here</span>
           )}
         </Link>
       ),
@@ -58,19 +48,14 @@ export function CityBrowser() {
       className: "w-28",
       cell: (c) => {
         const i = Math.min(c.account.cityType, 3);
-        return (
-          <Badge variant={CITY_TYPE_VARIANTS[i]}>
-            {CITY_TYPE_NAMES[i]}
-          </Badge>
-        );
+        return <Badge variant={CITY_TYPE_VARIANTS[i]}>{CITY_TYPE_NAMES[i]}</Badge>;
       },
     },
     {
       key: "encounters",
       header: "Encounters",
       className: "hidden w-32 sm:table-cell",
-      cell: (c) =>
-        `Lv ${c.account.minEncounterLevel}-${c.account.maxEncounterLevel}`,
+      cell: (c) => `Lv ${c.account.minEncounterLevel}-${c.account.maxEncounterLevel}`,
     },
     {
       key: "players",
@@ -111,16 +96,11 @@ export function CityBrowser() {
                 <Link
                   key={c.pubkey.toBase58()}
                   href={`/world/cities/${city.cityId}`}
-                  className={cn(
-                    "card transition-all",
-                    isCurrentCity && "accent-border-bright"
-                  )}
+                  className={cn("card transition-all", isCurrentCity && "accent-border-bright")}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-sm font-semibold text-text-primary">
-                        {city.name}
-                      </div>
+                      <div className="text-sm font-semibold text-text-primary">{city.name}</div>
                       <div className="mt-1 flex items-center gap-2">
                         <Badge variant={CITY_TYPE_VARIANTS[typeIndex]}>
                           {CITY_TYPE_NAMES[typeIndex]}
@@ -138,9 +118,8 @@ export function CityBrowser() {
                     </div>
                   </div>
                   <div className="mt-2 text-[10px] text-text-muted">
-                    ({city.latitude.toFixed(2)}, {city.longitude.toFixed(2)})
-                    &middot; Lv {city.minEncounterLevel}-{city.maxEncounterLevel}{" "}
-                    encounters
+                    ({city.latitude.toFixed(2)}, {city.longitude.toFixed(2)}) &middot; Lv{" "}
+                    {city.minEncounterLevel}-{city.maxEncounterLevel} encounters
                   </div>
                 </Link>
               );
@@ -158,7 +137,7 @@ export function CityBrowser() {
           columns={columns}
           rows={sorted}
           rowKey={(c) => c.pubkey.toBase58()}
-          rowClassName={(c) => (isHere(c.account.cityId) ? "bg-amber-900/10" : "")}
+          rowClassName={(c) => (isHere(c.account.cityId) ? "bg-accent/10" : "")}
           empty="No cities found."
         />
       )}

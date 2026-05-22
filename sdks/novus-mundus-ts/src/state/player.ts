@@ -552,8 +552,11 @@ function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
   // _pad_bonus[2] + 4 bytes implicit padding that 8-byte-aligns the i64 below.
   reader.skip(6);
   const meditationStartedAt = reader.readI64();
-  reader.skip(4); // _reserved[4]
-  // Ability state (48 bytes: 3×i64 + u8 + u8 + u16 + 4 padding + i64)
+  // _reserved[4], then 4 bytes of implicit repr(C) padding that 8-byte-aligns
+  // the i64 array below — without skipping it the whole ability block is read
+  // 4 bytes early and decodes to garbage.
+  reader.skip(8);
+  // Ability state (40 bytes: 3×i64 + u8 + u8 + u16 + 4 padding + i64)
   const abilityLastUsedAt = [reader.readI64(), reader.readI64(), reader.readI64()];
   const pendingEffectKind = reader.readU8();
   const pendingEffectStat = reader.readU8();

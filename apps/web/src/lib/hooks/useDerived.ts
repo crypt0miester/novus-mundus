@@ -49,10 +49,7 @@ export function useTravelProgress() {
       // True for the whole journey — including arrived-but-not-completed,
       // which is exactly when the "Complete Journey" button must show.
       traveling: true,
-      pct:
-        departure > 0
-          ? Math.min(100, ((now - departure) / (arrival - departure)) * 100)
-          : 0,
+      pct: departure > 0 ? Math.min(100, ((now - departure) / (arrival - departure)) * 100) : 0,
       endsAt: arrival,
       startedAt: departure,
     };
@@ -75,15 +72,31 @@ export function useResearchBuffs() {
     if (player.researchDefenseBps > 0)
       buffs.push({ label: "Defense", bps: player.researchDefenseBps, stat: BuffStat.DefensePower });
     if (player.researchCritChanceBps > 0)
-      buffs.push({ label: "Crit Chance", bps: player.researchCritChanceBps, stat: BuffStat.CriticalHitChance });
+      buffs.push({
+        label: "Crit Chance",
+        bps: player.researchCritChanceBps,
+        stat: BuffStat.CriticalHitChance,
+      });
     if (player.researchCritDamageBps > 0)
       buffs.push({ label: "Crit Damage", bps: player.researchCritDamageBps });
     if (player.researchLootBonusBps > 0)
-      buffs.push({ label: "Loot Bonus", bps: player.researchLootBonusBps, stat: BuffStat.LootBonus });
+      buffs.push({
+        label: "Loot Bonus",
+        bps: player.researchLootBonusBps,
+        stat: BuffStat.LootBonus,
+      });
     if (player.researchStaminaBonusBps > 0)
-      buffs.push({ label: "Stamina", bps: player.researchStaminaBonusBps, stat: BuffStat.StaminaRegen });
+      buffs.push({
+        label: "Stamina",
+        bps: player.researchStaminaBonusBps,
+        stat: BuffStat.StaminaRegen,
+      });
     if (player.researchCollectionBonusBps > 0)
-      buffs.push({ label: "Collection", bps: player.researchCollectionBonusBps, stat: BuffStat.CashCollectionRate });
+      buffs.push({
+        label: "Collection",
+        bps: player.researchCollectionBonusBps,
+        stat: BuffStat.CashCollectionRate,
+      });
 
     return buffs;
   }, [player]);
@@ -120,8 +133,7 @@ export function useSubscriptionStatus() {
   const player = data?.account;
 
   return useMemo(() => {
-    if (!player)
-      return { tier: 0, active: false, expiresAt: 0, tierName: "Free" };
+    if (!player) return { tier: 0, active: false, expiresAt: 0, tierName: "Free" };
 
     const now = Math.floor(Date.now() / 1000);
     const end = player.subscriptionEnd.toNumber();

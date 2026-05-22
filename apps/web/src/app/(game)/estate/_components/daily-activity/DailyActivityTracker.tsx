@@ -14,8 +14,8 @@ import {
  *  Available is the active golden chip; done is the deeper golden chip
  *  (filled but quieter). Generic green broke the gold theme. */
 const DOT_TONE: Record<ActivityStatus, string> = {
-  available: "bg-amber-400",
-  done: "bg-amber-700",
+  available: "bg-gold-400",
+  done: "bg-accent",
   later: "bg-border-default",
   missed: "bg-border-default",
   unbuilt: "bg-border-default",
@@ -40,7 +40,7 @@ export function DailyActivityTracker() {
     <button
       type="button"
       onClick={() => show("Daily Activities", "daily-activities")}
-      className="card accent-border w-full text-left transition-colors hover:border-amber-700/60"
+      className="card accent-border w-full text-left transition-colors hover:border-border-gold/60"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -48,10 +48,7 @@ export function DailyActivityTracker() {
             Daily Activities
           </h2>
           {hasActionable && (
-            <span
-              className="relative flex h-2.5 w-2.5"
-              aria-label="activity available to play"
-            >
+            <span className="relative flex h-2.5 w-2.5" aria-label="activity available to play">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
             </span>
@@ -68,7 +65,7 @@ export function DailyActivityTracker() {
             <span
               key={a.meta.building}
               className={`h-2 w-2 rounded-full ${DOT_TONE[a.status]} ${
-                a.status === "available" ? "ring-1 ring-amber-400/50" : ""
+                a.status === "available" ? "ring-1 ring-gold-400/50" : ""
               }`}
             />
           ))}
@@ -84,7 +81,10 @@ export function DailyActivityTracker() {
                   )}`
                 : `${WINDOW_GLYPH[cw]} ${WINDOW_LABEL[cw]}`}
           </span>
-          <span className="inline-flex items-center gap-0.5 font-semibold text-text-gold">tap<ChevronRight className="h-3 w-3" /></span>
+          <span className="inline-flex items-center gap-0.5 font-semibold text-text-gold">
+            tap
+            <ChevronRight className="h-3 w-3" />
+          </span>
         </span>
       </div>
     </button>

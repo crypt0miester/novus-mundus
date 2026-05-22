@@ -79,9 +79,12 @@ const VB_H = 720;
 const PAD = 80;
 
 /** Project city lat/long into the viewBox, north up. */
-function project(
-  cities: { account: { latitude: number; longitude: number } }[],
-): { lat0: number; lon0: number; latR: number; lonR: number } {
+function project(cities: { account: { latitude: number; longitude: number } }[]): {
+  lat0: number;
+  lon0: number;
+  latR: number;
+  lonR: number;
+} {
   const lats = cities.map((c) => c.account.latitude);
   const lons = cities.map((c) => c.account.longitude);
   const lat0 = Math.min(...lats);
@@ -148,18 +151,13 @@ export function RealmMap({
   const nodes = useMemo(() => {
     if (!cities || cities.length === 0) return [];
     const { lat0, lon0, latR, lonR } = project(cities);
-    const maxPlayers = Math.max(
-      1,
-      ...cities.map((c) => c.account.playersPresent),
-    );
+    const maxPlayers = Math.max(1, ...cities.map((c) => c.account.playersPresent));
     const placed = cities.map((c) => ({
       city: c.account,
       key: c.pubkey.toBase58(),
       x: PAD + ((c.account.longitude - lon0) / lonR) * (VB_W - 2 * PAD),
       // Invert Y so north is up.
-      y:
-        PAD +
-        (1 - (c.account.latitude - lat0) / latR) * (VB_H - 2 * PAD),
+      y: PAD + (1 - (c.account.latitude - lat0) / latR) * (VB_H - 2 * PAD),
       size: 5 + 5 * Math.sqrt(c.account.playersPresent / maxPlayers),
     }));
 
@@ -199,10 +197,7 @@ export function RealmMap({
   }, [cities]);
 
   // Larger dots first so smaller (later-painted) dots stay clickable.
-  const renderOrder = useMemo(
-    () => [...nodes].sort((a, b) => b.size - a.size),
-    [nodes],
-  );
+  const renderOrder = useMemo(() => [...nodes].sort((a, b) => b.size - a.size), [nodes]);
 
   const labelSide = useMemo(() => {
     const NEIGHBOR_R = 110;
@@ -266,8 +261,8 @@ export function RealmMap({
       <header className={styles.cartouche}>
         <h1 className={styles.kingdom}>{kingdomName}</h1>
         <div className={styles.tagline}>
-          <span className={styles.rule} />a chart of {nodes.length} cities, drawn in
-          the {theme.toLowerCase()} hand
+          <span className={styles.rule} />a chart of {nodes.length} cities, drawn in the{" "}
+          {theme.toLowerCase()} hand
           <span className={styles.rule} />
         </div>
       </header>
@@ -303,139 +298,112 @@ export function RealmMap({
             aria-label={`Map of ${kingdomName}`}
           >
             <g transform={zoom.transform}>
-            {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
+              {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
 
-            <g>
-              {roads.map((l, i) => (
-                <line
-                  key={l.key}
-                  className={styles.road}
-                  x1={l.x1}
-                  y1={l.y1}
-                  x2={l.x2}
-                  y2={l.y2}
-                  style={{ animationDelay: `${0.25 + i * 0.035}s` }}
-                />
-              ))}
-            </g>
+              <g>
+                {roads.map((l, i) => (
+                  <line
+                    key={l.key}
+                    className={styles.road}
+                    x1={l.x1}
+                    y1={l.y1}
+                    x2={l.x2}
+                    y2={l.y2}
+                    style={{ animationDelay: `${0.25 + i * 0.035}s` }}
+                  />
+                ))}
+              </g>
 
-            <g>
-              {renderOrder.map((n, i) => {
-                const meta = TYPE_META[typeIdx(n.city.cityType)];
-                const isSel = n.city.cityId === selectedId;
-                const isHome = n.city.cityId === homeCity;
-                const isCapital = typeIdx(n.city.cityType) === 0;
-                const always = isCapital || isHome || isSel;
-                const hitR = Math.max(n.size + 3, 10);
-                const groupClass = [
-                  styles.cityGroup,
-                  always ? styles.alwaysLabel : "",
-                  isSel ? styles.selected : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ");
-                return (
-                  <g
-                    key={n.key}
-                    className={groupClass}
-                    style={{ animationDelay: `${0.1 + i * 0.04}s` }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedId(isSel ? null : n.city.cityId);
-                    }}
-                    role="button"
-                    aria-label={`${n.city.name}, ${meta.label} city`}
-                  >
-                    {isSel && (
-                      <>
-                        <circle
-                          className={styles.selectedOuter}
-                          cx={n.x}
-                          cy={n.y}
-                          r={n.size + 9}
-                        />
-                        <circle
-                          className={styles.selectedInner}
-                          cx={n.x}
-                          cy={n.y}
-                          r={n.size + 4}
-                        />
-                      </>
-                    )}
-
-                    <circle
-                      className={styles.cityRing}
-                      cx={n.x}
-                      cy={n.y}
-                      r={n.size + 2.5}
-                    />
-
-                    {/* Transparent hit target — pointer-events catches the
-                        +3 unit margin around the visible dot. */}
-                    <circle
-                      cx={n.x}
-                      cy={n.y}
-                      r={hitR}
-                      fill="transparent"
-                    />
-
-                    <circle
-                      className={styles.cityDot}
-                      cx={n.x}
-                      cy={n.y}
-                      r={n.size}
-                    />
-
-                    <text
-                      className={styles.cityGlyph}
-                      x={n.x + n.size + 8}
-                      y={n.y + 4}
-                      fontSize={n.size * 1.2}
+              <g>
+                {renderOrder.map((n, i) => {
+                  const meta = TYPE_META[typeIdx(n.city.cityType)];
+                  const isSel = n.city.cityId === selectedId;
+                  const isHome = n.city.cityId === homeCity;
+                  const isCapital = typeIdx(n.city.cityType) === 0;
+                  const always = isCapital || isHome || isSel;
+                  const hitR = Math.max(n.size + 3, 10);
+                  const groupClass = [
+                    styles.cityGroup,
+                    always ? styles.alwaysLabel : "",
+                    isSel ? styles.selected : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <g
+                      key={n.key}
+                      className={groupClass}
+                      style={{ animationDelay: `${0.1 + i * 0.04}s` }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedId(isSel ? null : n.city.cityId);
+                      }}
+                      role="button"
+                      aria-label={`${n.city.name}, ${meta.label} city`}
                     >
-                      {meta.glyph}
-                    </text>
-
-                    {isHome && (
-                      <polygon
-                        className={styles.homeFlag}
-                        points={`${n.x - 1},${n.y - n.size - 4} ${n.x - 1},${n.y - n.size - 16} ${n.x + 7},${n.y - n.size - 12} ${n.x - 1},${n.y - n.size - 8}`}
-                      />
-                    )}
-
-                    {(() => {
-                      const side = labelSide.get(n.key) ?? "above";
-                      const nameAbove = side === "above";
-                      const nameY = nameAbove
-                        ? n.y - n.size - (isHome ? 22 : 9)
-                        : n.y + n.size + 14;
-                      const countY = nameAbove
-                        ? n.y + n.size + 12
-                        : n.y - n.size - 7;
-                      return (
+                      {isSel && (
                         <>
-                          <text
-                            className={styles.cityName}
-                            x={n.x}
-                            y={nameY}
-                            fontSize={9.5}
-                          >
-                            {n.city.name}
-                          </text>
-                          <text
-                            className={styles.cityCount}
-                            x={n.x}
-                            y={countY}
-                            fontSize={8}
-                          >
-                            {n.city.playersPresent.toLocaleString()}
-                          </text>
+                          <circle
+                            className={styles.selectedOuter}
+                            cx={n.x}
+                            cy={n.y}
+                            r={n.size + 9}
+                          />
+                          <circle
+                            className={styles.selectedInner}
+                            cx={n.x}
+                            cy={n.y}
+                            r={n.size + 4}
+                          />
                         </>
-                      );
-                    })()}
-                  </g>
-                );
-              })}
-            </g>
+                      )}
+
+                      <circle className={styles.cityRing} cx={n.x} cy={n.y} r={n.size + 2.5} />
+
+                      {/* Transparent hit target — pointer-events catches the
+                        +3 unit margin around the visible dot. */}
+                      <circle cx={n.x} cy={n.y} r={hitR} fill="transparent" />
+
+                      <circle className={styles.cityDot} cx={n.x} cy={n.y} r={n.size} />
+
+                      <text
+                        className={styles.cityGlyph}
+                        x={n.x + n.size + 8}
+                        y={n.y + 4}
+                        fontSize={n.size * 1.2}
+                      >
+                        {meta.glyph}
+                      </text>
+
+                      {isHome && (
+                        <polygon
+                          className={styles.homeFlag}
+                          points={`${n.x - 1},${n.y - n.size - 4} ${n.x - 1},${n.y - n.size - 16} ${n.x + 7},${n.y - n.size - 12} ${n.x - 1},${n.y - n.size - 8}`}
+                        />
+                      )}
+
+                      {(() => {
+                        const side = labelSide.get(n.key) ?? "above";
+                        const nameAbove = side === "above";
+                        const nameY = nameAbove
+                          ? n.y - n.size - (isHome ? 22 : 9)
+                          : n.y + n.size + 14;
+                        const countY = nameAbove ? n.y + n.size + 12 : n.y - n.size - 7;
+                        return (
+                          <>
+                            <text className={styles.cityName} x={n.x} y={nameY} fontSize={9.5}>
+                              {n.city.name}
+                            </text>
+                            <text className={styles.cityCount} x={n.x} y={countY} fontSize={8}>
+                              {n.city.playersPresent.toLocaleString()}
+                            </text>
+                          </>
+                        );
+                      })()}
+                    </g>
+                  );
+                })}
+              </g>
             </g>
           </svg>
 
@@ -474,10 +442,7 @@ export function RealmMap({
                 isHome: selected.city.cityId === homeCity,
               })
             ) : (
-              <DefaultSelectedPanel
-                node={selected}
-                isHome={selected.city.cityId === homeCity}
-              />
+              <DefaultSelectedPanel node={selected} isHome={selected.city.cityId === homeCity} />
             )
           ) : renderDefault ? (
             renderDefault({
@@ -500,10 +465,7 @@ export function RealmMap({
   );
 }
 
-export function DefaultSelectedPanel({
-  node,
-  isHome,
-}: RealmMapSelectedContext) {
+export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) {
   const c = node.city;
   const meta = TYPE_META[typeIdx(c.cityType)];
   const lore = getCityLore(c.cityId);
@@ -541,12 +503,7 @@ export function DefaultSelectedPanel({
   );
 }
 
-export function DefaultRealmPanel({
-  typeCounts,
-  kingdom,
-  theme,
-  start,
-}: RealmMapDefaultContext) {
+export function DefaultRealmPanel({ typeCounts, kingdom, theme, start }: RealmMapDefaultContext) {
   const started =
     start > 0
       ? new Date(start * 1000).toLocaleDateString(undefined, {
@@ -575,9 +532,8 @@ export function DefaultRealmPanel({
       </dl>
 
       <p className={styles.hint}>
-        Touch a city to learn its name and its wilds. The roads run from the
-        King&apos;s seat outward; the larger the ink, the more souls walk
-        within.
+        Touch a city to learn its name and its wilds. The roads run from the King&apos;s seat
+        outward; the larger the ink, the more souls walk within.
       </p>
     </>
   );
@@ -586,8 +542,24 @@ export function DefaultRealmPanel({
 function CompassRose() {
   return (
     <svg viewBox="0 0 100 100">
-      <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
-      <circle cx="50" cy="50" r="32" fill="none" stroke="currentColor" strokeWidth="0.35" opacity="0.35" />
+      <circle
+        cx="50"
+        cy="50"
+        r="38"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.6"
+        opacity="0.55"
+      />
+      <circle
+        cx="50"
+        cy="50"
+        r="32"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="0.35"
+        opacity="0.35"
+      />
 
       {Array.from({ length: 8 }).map((_, i) => {
         const a = (i * Math.PI) / 4;
@@ -609,16 +581,8 @@ function CompassRose() {
         );
       })}
 
-      <path
-        d="M50 14 L54 50 L50 86 L46 50 Z"
-        fill="currentColor"
-        opacity="0.85"
-      />
-      <path
-        d="M14 50 L50 46 L86 50 L50 54 Z"
-        fill="currentColor"
-        opacity="0.55"
-      />
+      <path d="M50 14 L54 50 L50 86 L46 50 Z" fill="currentColor" opacity="0.85" />
+      <path d="M14 50 L50 46 L86 50 L50 54 Z" fill="currentColor" opacity="0.55" />
       <circle cx="50" cy="50" r="2.2" fill="currentColor" opacity="0.9" />
 
       <text

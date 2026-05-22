@@ -101,7 +101,11 @@ export function ReinforceTab() {
         client.fetchReinforcementsSent(myPlayerPda),
         client.fetchReinforcementsReceived(myPlayerPda),
       ]);
-      const rows: { pubkey: PublicKey; account: ReinforcementAccount; direction: "sent" | "received" }[] = [
+      const rows: {
+        pubkey: PublicKey;
+        account: ReinforcementAccount;
+        direction: "sent" | "received";
+      }[] = [
         ...sent.map((r) => ({ ...r, direction: "sent" as const })),
         ...received.map((r) => ({ ...r, direction: "received" as const })),
       ].filter((r) => r.account.status !== 3); // exclude Completed
@@ -188,12 +192,14 @@ export function ReinforceTab() {
       },
     );
     const total = reinUnits.reduce((a, b) => a + b, 0);
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: `Sent ${total.toLocaleString()} units in reinforcement!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: `Sent ${total.toLocaleString()} units in reinforcement!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   // Recall a reinforcement the player sent.
@@ -208,12 +214,14 @@ export function ReinforceTab() {
       senderCityId: row.account.senderCity ?? 0,
       destinationCityId: row.account.destinationCity ?? 0,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Reinforcements recalled!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Reinforcements recalled!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   // Speed up the travel of a chosen reinforcement (sender pays gems).
@@ -233,12 +241,14 @@ export function ReinforceTab() {
       },
       { speedupTier: tier as 1 | 2 },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Reinforcement travel sped up!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Reinforcement travel sped up!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   // Permissionless: process arrival of a traveling reinforcement.
@@ -247,12 +257,14 @@ export function ReinforceTab() {
       reinforcement: row.pubkey,
       destinationPlayer: row.account.destination,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Reinforcement arrival processed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Reinforcement arrival processed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   // Destination relieves a reinforcement (sends it back home).
@@ -267,12 +279,14 @@ export function ReinforceTab() {
       senderCityId: row.account.senderCity ?? 0,
       destinationCityId: row.account.destinationCity ?? 0,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Reinforcements relieved (sent back)!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Reinforcements relieved (sent back)!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   return (
@@ -282,7 +296,7 @@ export function ReinforceTab() {
       </div>
 
       {traveling && (
-        <div className="rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-400">
+        <div className="rounded-lg border border-border-gold bg-accent/20 px-4 py-3 text-sm text-danger">
           You are currently traveling. Reinforcement actions may be restricted.
         </div>
       )}
@@ -317,7 +331,8 @@ export function ReinforceTab() {
         </h3>
         <div className="space-y-3">
           <div>
-            <label className="text-sm text-text-muted">Target Player Address:
+            <label className="text-sm text-text-muted">
+              Target Player Address:
               <input
                 type="text"
                 value={targetAddress}
@@ -415,7 +430,7 @@ export function ReinforceTab() {
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
                           row.direction === "sent"
-                            ? "bg-amber-900/40 text-text-gold"
+                            ? "bg-accent/40 text-text-gold"
                             : "bg-zinc-800 text-text-muted"
                         }`}
                       >
@@ -432,32 +447,28 @@ export function ReinforceTab() {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     {status === 0 && arrivesAt > 0 && (
-                      <GoldCountdown endsAt={arrivesAt} format="compact" size="sm" label="Arrives" />
+                      <GoldCountdown
+                        endsAt={arrivesAt}
+                        format="compact"
+                        size="sm"
+                        label="Arrives"
+                      />
                     )}
                     {/* Process arrival is permissionless once travel completes */}
                     {status === 0 && (
-                      <TxButton
-                        onClick={(rp) => handleProcessArrival(row, rp)}
-                        variant="secondary"
-                      >
+                      <TxButton onClick={(rp) => handleProcessArrival(row, rp)} variant="secondary">
                         Process Arrival
                       </TxButton>
                     )}
                     {/* Recall — only the sender can recall their own reinforcement */}
                     {row.direction === "sent" && (status === 0 || status === 1) && (
-                      <TxButton
-                        onClick={(rp) => handleRecall(row, rp)}
-                        variant="secondary"
-                      >
+                      <TxButton onClick={(rp) => handleRecall(row, rp)} variant="secondary">
                         Recall
                       </TxButton>
                     )}
                     {/* Relieve — only the destination can send a reinforcement back */}
                     {row.direction === "received" && status === 1 && (
-                      <TxButton
-                        onClick={(rp) => handleRelieve(row, rp)}
-                        variant="secondary"
-                      >
+                      <TxButton onClick={(rp) => handleRelieve(row, rp)} variant="secondary">
                         Relieve
                       </TxButton>
                     )}

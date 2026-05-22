@@ -19,10 +19,10 @@ import { NoviRewards } from "@/components/shared/NoviRewards";
 import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES } from "@/lib/hooks/useFeatureGate";
 import { buildingFraming } from "@/lib/narrative";
+import { FeatureLayout } from "./feature-layout";
 import {
   createCollectResourcesInstruction,
   createVaultTransferInstruction,
-  createUpdateLockedNoviInstruction,
   createTransferCashInstruction,
   derivePlayerPda,
   isNullPubkey,
@@ -62,12 +62,14 @@ export function VaultTab() {
       { owner: publicKey, gameEngine: ge },
       { amount: vaultAmount, toVault: vaultDirection === "deposit" },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: `Vault ${vaultDirection === "deposit" ? "deposit" : "withdrawal"} complete!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: `Vault ${vaultDirection === "deposit" ? "deposit" : "withdrawal"} complete!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleCollectCash = async (reportPhase: (p: TxPhase) => void) => {
@@ -75,30 +77,16 @@ export function VaultTab() {
     const ge = client.gameEngine;
     const ix = createCollectResourcesInstruction(
       { owner: publicKey, gameEngine: ge },
-      { noviAmount: collectNoviAmount, collectionType: CASH_COLLECTION_TYPE }
+      { noviAmount: collectNoviAmount, collectionType: CASH_COLLECTION_TYPE },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Converted NOVI into cash!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleClaimAndCollectCash = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const claimIx = createUpdateLockedNoviInstruction({ owner: publicKey, gameEngine: ge });
-    const collectIx = createCollectResourcesInstruction(
-      { owner: publicKey, gameEngine: ge },
-      { noviAmount: collectNoviAmount, collectionType: CASH_COLLECTION_TYPE }
-    );
-    return transact.mutateAsync({
-      instructions: [claimIx, collectIx],
-      invalidateKeys: [["player"]],
-      successMessage: "Claimed NOVI & converted to cash!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Converted NOVI into cash!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   if (!estateData?.exists) {
@@ -120,110 +108,117 @@ export function VaultTab() {
   const hasEnoughForCollect = noviBalance >= collectNoviAmount;
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Vault).line}</p>
-      
-      {/* Vault transfer — cash sheltered behind the locked door. */}
-      <FeatureGate feature={FEATURES.VAULT_TRANSFER}>
-        <div className="card">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            The Locked Door
-          </h3>
-          <p className="mb-4 text-xs text-text-muted">
-            Cash set behind the vault door keeps 75% of its worth through a raid. Cash on hand does not.
-          </p>
-          <div className="mb-4 grid gap-2 grid-cols-2">
-            <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">On Hand</div>
-              <span className="inline-flex items-center gap-1">
-                <GameIcon id="resource-cash" size={14} />
-                <GoldNumber value={cashOnHand} format="compact" size="sm" />
-              </span>
-            </div>
-            <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">In Vault</div>
-              <span className="inline-flex items-center gap-1">
-                <GameIcon id="resource-cash" size={14} />
-                <GoldNumber value={cashInVault} format="compact" size="sm" glow={false} />
-              </span>
-            </div>
-          </div>
-          <div className="mb-4 flex gap-2">
-            <button
-              onClick={() => setVaultDirection("deposit")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm sm:flex-none ${
-                vaultDirection === "deposit" ? "bg-amber-900/30 text-text-gold" : "text-text-muted"
-              }`}
-            >
-              Hand &rarr; Vault
-            </button>
-            <button
-              onClick={() => setVaultDirection("withdraw")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm sm:flex-none ${
-                vaultDirection === "withdraw" ? "bg-amber-900/30 text-text-gold" : "text-text-muted"
-              }`}
-            >
-              Vault &rarr; Hand
-            </button>
-          </div>
-          <div className="space-y-3">
-            <NumberField
-              label="Amount"
-              value={vaultAmount}
-              onChange={setVaultAmount}
-              min={0}
-              max={vaultDirection === "deposit" ? cashOnHand : cashInVault}
-            />
-            <TxButton
-              onClick={handleVaultTransfer}
-              disabled={vaultAmount <= 0 || !!vaultValidation}
-              className="w-full"
-            >
-              {vaultDirection === "deposit" ? "Deposit" : "Withdraw"} ${vaultAmount.toLocaleString()}
-            </TxButton>
-          </div>
-          {vaultValidation && (
-            <div className="mt-2 text-xs text-red-400">{vaultValidation}</div>
-          )}
-        </div>
-      </FeatureGate>
+    <FeatureLayout
+      main={
+        <>
+          <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Vault).line}</p>
 
-      {/* Cash collection — turning locked NOVI into spendable cash. */}
-      <FeatureGate feature={FEATURES.COLLECT_CASH}>
-        <div className="card">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Coin the NOVI
-          </h3>
-          <p className="mb-4 text-xs text-text-muted">
-            Set your operative workforce to turn locked NOVI into cash on hand.
-          </p>
-          <div className="space-y-3">
-            <div className={`rounded-lg bg-surface-overlay px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "tier-accent-text" : "text-text-muted"}`}>
-              {operativeUnits > 0 ? `Operative Units: ${operativeUnits.toLocaleString()}` : "No operative units"}
+          {/* Cash collection — turning locked NOVI into spendable cash. */}
+          <FeatureGate feature={FEATURES.COLLECT_CASH}>
+            <div className="card">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Coin the NOVI
+              </h3>
+              <p className="mb-4 text-xs text-text-muted">
+                Set your operative workforce to turn locked NOVI into cash on hand.
+              </p>
+              <div className="space-y-3">
+                <div
+                  className={`rounded-lg bg-surface-overlay px-2.5 py-1.5 text-xs font-semibold ${operativeUnits > 0 ? "tier-accent-text" : "text-text-muted"}`}
+                >
+                  {operativeUnits > 0
+                    ? `Operative Units: ${operativeUnits.toLocaleString()}`
+                    : "No operative units"}
+                </div>
+                <NumberField
+                  label="NOVI to spend"
+                  value={collectNoviAmount}
+                  onChange={setCollectNoviAmount}
+                  min={1}
+                  max={noviBalance}
+                  suffix="NOVI"
+                />
+                <TxButton
+                  onClick={handleCollectCash}
+                  disabled={operativeUnits === 0 || !hasEnoughForCollect}
+                >
+                  {hasEnoughForCollect ? "Collect Cash" : "Insufficient NOVI"}
+                </TxButton>
+              </div>
             </div>
-            <NumberField
-              label="NOVI to spend"
-              value={collectNoviAmount}
-              onChange={setCollectNoviAmount}
-              min={1}
-              max={noviBalance}
-              suffix="NOVI"
-            />
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <TxButton onClick={handleCollectCash} disabled={operativeUnits === 0 || !hasEnoughForCollect} className="flex-1">
-                {hasEnoughForCollect ? "Collect Cash" : "Insufficient NOVI"}
-              </TxButton>
-              <TxButton onClick={handleClaimAndCollectCash} variant="secondary" className="flex-1 text-xs" disabled={operativeUnits === 0}>
-                Claim NOVI &amp; Collect
-              </TxButton>
-            </div>
-          </div>
-        </div>
-      </FeatureGate>
+          </FeatureGate>
 
-      {/* Sending cash to House members. */}
-      <SendCashPanel player={player} />
-    </div>
+          {/* Sending cash to House members. */}
+          <SendCashPanel player={player} />
+        </>
+      }
+      aside={
+        /* Vault transfer — cash sheltered behind the locked door. */
+        <FeatureGate feature={FEATURES.VAULT_TRANSFER}>
+          <div className="card">
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              The Locked Door
+            </h3>
+            <p className="mb-4 text-xs text-text-muted">
+              Cash set behind the vault door keeps 75% of its worth through a raid. Cash on hand
+              does not.
+            </p>
+            <div className="mb-4 grid gap-2 grid-cols-2">
+              <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">On Hand</div>
+                <span className="inline-flex items-center gap-1">
+                  <GameIcon id="resource-cash" size={14} />
+                  <GoldNumber value={cashOnHand} format="compact" size="sm" />
+                </span>
+              </div>
+              <div className="rounded-lg border border-border-default bg-surface px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">In Vault</div>
+                <span className="inline-flex items-center gap-1">
+                  <GameIcon id="resource-cash" size={14} />
+                  <GoldNumber value={cashInVault} format="compact" size="sm" glow={false} />
+                </span>
+              </div>
+            </div>
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setVaultDirection("deposit")}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm sm:flex-none ${
+                  vaultDirection === "deposit" ? "bg-accent/30 text-text-gold" : "text-text-muted"
+                }`}
+              >
+                Hand &rarr; Vault
+              </button>
+              <button
+                onClick={() => setVaultDirection("withdraw")}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm sm:flex-none ${
+                  vaultDirection === "withdraw" ? "bg-accent/30 text-text-gold" : "text-text-muted"
+                }`}
+              >
+                Vault &rarr; Hand
+              </button>
+            </div>
+            <div className="space-y-3">
+              <NumberField
+                label="Amount"
+                value={vaultAmount}
+                onChange={setVaultAmount}
+                min={0}
+                max={vaultDirection === "deposit" ? cashOnHand : cashInVault}
+              />
+              <TxButton
+                onClick={handleVaultTransfer}
+                disabled={vaultAmount <= 0 || !!vaultValidation}
+                className="w-full"
+              >
+                {vaultDirection === "deposit" ? "Deposit" : "Withdraw"} $
+                {vaultAmount.toLocaleString()}
+              </TxButton>
+            </div>
+            {vaultValidation && <div className="mt-2 text-xs text-red-400">{vaultValidation}</div>}
+          </div>
+        </FeatureGate>
+      }
+    />
   );
 }
 
@@ -235,8 +230,7 @@ function SendCashPanel({ player }: { player: any }) {
   const [recipient, setRecipient] = useState<PublicKey | null>(null);
   const [amount, setAmount] = useState(0);
 
-  const teamPubkey =
-    player?.team && !isNullPubkey(player.team) ? player.team : null;
+  const teamPubkey = player?.team && !isNullPubkey(player.team) ? player.team : null;
   const { data: teamData } = useTeam(teamPubkey);
   const teamId = teamData?.account?.id;
 
@@ -253,9 +247,7 @@ function SendCashPanel({ player }: { player: any }) {
   if (!teamPubkey) {
     return (
       <div className="card text-center">
-        <p className="text-sm text-text-muted">
-          Join a House to send cash to its members.
-        </p>
+        <p className="text-sm text-text-muted">Join a House to send cash to its members.</p>
       </div>
     );
   }
@@ -287,12 +279,14 @@ function SendCashPanel({ player }: { player: any }) {
       },
       { amount },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Cash sent!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Cash sent!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   return (
@@ -319,7 +313,7 @@ function SendCashPanel({ player }: { player: any }) {
                   onClick={() => setRecipient(m.account.player)}
                   className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition-all ${
                     isSelected
-                      ? "border-amber-600 bg-amber-900/20"
+                      ? "border-border-gold bg-accent/20"
                       : "border-zinc-800 hover:border-zinc-700"
                   }`}
                 >
@@ -347,9 +341,7 @@ function SendCashPanel({ player }: { player: any }) {
               Send ${amount.toLocaleString()}
             </TxButton>
           </div>
-          {amountError && (
-            <div className="mt-2 text-xs text-red-400">{amountError}</div>
-          )}
+          {amountError && <div className="mt-2 text-xs text-red-400">{amountError}</div>}
         </>
       )}
     </div>

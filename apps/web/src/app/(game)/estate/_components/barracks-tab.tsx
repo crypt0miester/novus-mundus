@@ -15,15 +15,47 @@ import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES, useFeatureGate } from "@/lib/hooks/useFeatureGate";
 import { buildingFraming } from "@/lib/narrative";
+import { FeatureLayout } from "./feature-layout";
+import { ActivityForecast } from "./activity-forecast";
+import { CoverageNote } from "./coverage-note";
+import { ShowcaseBanner } from "./showcase-banner";
+import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useTimeOfDay } from "@/lib/estate/useTimeOfDay";
+import { forecastHire } from "@/lib/estate/forecast";
 import {
+  ActivityType,
+  calculateDefensivePower,
+  calculateProduceDeficit,
+  calculateWeaponDeficit,
   createHireUnitsInstruction,
-  createUpdateLockedNoviInstruction,
 } from "novus-mundus-sdk";
+import { GameIcon } from "@/components/shared/GameIcon";
 
 const DEFENSIVE_UNITS = [
-  { label: "Infantry", multiplier: 1, field: "defensiveUnit1" as const, unitType: 0 },
-  { label: "Cavalry", multiplier: 4, field: "defensiveUnit2" as const, unitType: 1 },
-  { label: "Siege", multiplier: 16, field: "defensiveUnit3" as const, unitType: 2 },
+  {
+    label: "Infantry",
+    multiplier: 1,
+    field: "defensiveUnit1" as const,
+    unitType: 0,
+    icon: "unit-infantry" as const,
+    lore: "The line that holds, spear and shield, the first thing a raider meets.",
+  },
+  {
+    label: "Cavalry",
+    multiplier: 4,
+    field: "defensiveUnit2" as const,
+    unitType: 1,
+    icon: "unit-cavalry" as const,
+    lore: "Raised for the counter-charge, four times the weight of a footman on the wall.",
+  },
+  {
+    label: "Siege",
+    multiplier: 16,
+    field: "defensiveUnit3" as const,
+    unitType: 2,
+    icon: "unit-siege" as const,
+    lore: "Engines, not soldiers, trebuchet and ballista crews, the spine of a fortress.",
+  },
 ];
 
 export function BarracksTab() {
@@ -38,36 +70,24 @@ export function BarracksTab() {
   const [hireNoviAmount, setHireNoviAmount] = useState(100);
 
   const gate = useFeatureGate(FEATURES.HIRE_DEFENSIVE);
+  const { data: geData } = useGameEngine();
+  const { now } = useTimeOfDay();
 
   const handleHire = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
     const ix = createHireUnitsInstruction(
       { owner: publicKey, gameEngine: ge },
-      { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: hireNoviAmount }
+      { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: hireNoviAmount },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: `Spent ${hireNoviAmount} NOVI to hire ${DEFENSIVE_UNITS[hireType]?.label}!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
-  };
-
-  const handleClaimAndHire = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ge = client.gameEngine;
-    const claimIx = createUpdateLockedNoviInstruction({ owner: publicKey, gameEngine: ge });
-    const hireIx = createHireUnitsInstruction(
-      { owner: publicKey, gameEngine: ge },
-      { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: hireNoviAmount }
-    );
-    return transact.mutateAsync({
-      instructions: [claimIx, hireIx],
-      invalidateKeys: [["player"]],
-      successMessage: `Claimed NOVI & hired ${DEFENSIVE_UNITS[hireType]?.label}!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: `Spent ${hireNoviAmount} NOVI to hire ${DEFENSIVE_UNITS[hireType]?.label}!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   if (!estateData?.exists) {
@@ -82,81 +102,156 @@ export function BarracksTab() {
   const selectedUnit = DEFENSIVE_UNITS[hireType]!;
   const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
 
+  const ge = geData?.account;
+  const hireForecast = ge
+    ? forecastHire(hireNoviAmount, selectedUnit.unitType, player, ge, now)
+    : null;
+
+  const du1 = player.defensiveUnit1?.toNumber?.() ?? 0;
+  const du2 = player.defensiveUnit2?.toNumber?.() ?? 0;
+  const du3 = player.defensiveUnit3?.toNumber?.() ?? 0;
+  const defensivePower = calculateDefensivePower(du1, du2, du3);
+
+  // Defenders fight at a loss without a weapon, and lose happiness unfed.
+  const defUnits = du1 + du2 + du3;
+  const weapons =
+    (player.meleeWeapons?.toNumber?.() ?? 0) +
+    (player.rangedWeapons?.toNumber?.() ?? 0) +
+    (player.siegeWeapons?.toNumber?.() ?? 0);
+  const weaponDeficit = calculateWeaponDeficit(defUnits, weapons);
+  const produceDeficit = calculateProduceDeficit(defUnits, player.produce?.toNumber?.() ?? 0);
+
   return (
-    <div className="space-y-4">
-      <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Barracks).line}</p>
+    <FeatureLayout
+      main={
+        <>
+          <p className="text-xs italic text-text-muted">
+            {buildingFraming(BuildingId.Barracks).line}
+          </p>
 
-      <NoviGenerator compact />
+          <NoviGenerator compact />
 
-      {!gate.allowed && gate.missing.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {gate.missing.map((m) => (
-            <Link key={m.label} href={m.href} className="inline-flex items-center gap-1 rounded-md border border-amber-800/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-text-gold hover:bg-amber-900/40">
-              {m.label}<ChevronRight className="h-3.5 w-3.5" />
-            </Link>
-          ))}
-        </div>
-      )}
-
-      <div className="grid gap-2 grid-cols-3">
-        {DEFENSIVE_UNITS.map((unit, i) => {
-          const count = player[unit.field]?.toNumber?.() ?? 0;
-          const isSelected = hireType === i;
-          const isLocked = !gate.allowed;
-          return (
-            <button
-              key={unit.label}
-              onClick={() => !isLocked && setHireType(i)}
-              disabled={isLocked}
-              className={`rounded-lg border p-3 text-left transition-all ${
-                isLocked
-                  ? "cursor-not-allowed border-zinc-800/50 opacity-50"
-                  : isSelected
-                    ? "border-amber-600 bg-amber-900/20 ring-1 ring-amber-600/30"
-                    : "border-zinc-800 hover:border-zinc-700"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className={`text-sm font-semibold ${isLocked ? "text-zinc-600" : "text-text-primary"}`}>{unit.label}</span>
-                <span className="text-[10px] text-text-muted">{unit.multiplier}x</span>
-              </div>
-              <div className="mt-1 text-xs font-mono tabular-nums">
-                {isLocked ? <span className="text-zinc-600">Locked</span> : <GoldNumber value={count} size="sm" glow={false} />}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {gate.allowed && (
-        <div className="card">
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Hire {selectedUnit.label}
-          </h4>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-500">Your NOVI</span>
-              <span className="font-mono tabular-nums text-text-gold">{noviBalance.toLocaleString()}</span>
+          {!gate.allowed && gate.missing.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {gate.missing.map((m) => (
+                <Link
+                  key={m.label}
+                  href={m.href}
+                  className="inline-flex items-center gap-1 rounded-md border border-border-gold/50 bg-accent/20 px-2.5 py-1 text-xs font-medium text-text-gold hover:bg-accent/40"
+                >
+                  {m.label}
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              ))}
             </div>
-            <NumberField
-              label="NOVI to spend"
-              value={hireNoviAmount}
-              onChange={setHireNoviAmount}
-              min={1}
-              max={noviBalance}
-              suffix="NOVI"
-            />
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <TxButton onClick={handleHire} className="flex-1" disabled={noviBalance < hireNoviAmount}>
+          )}
+
+          <div className="flex items-center justify-between rounded-lg bg-surface-overlay/30 px-3 py-2 text-xs">
+            <span className="text-text-muted">Total defensive power</span>
+            <span className="font-mono font-semibold tabular-nums text-text-gold">
+              {defensivePower.toLocaleString()}
+            </span>
+          </div>
+
+          <CoverageNote
+            items={[
+              { count: weaponDeficit, label: "defenders without a weapon" },
+              { count: produceDeficit, label: "defenders going hungry" },
+            ]}
+          />
+
+          <div className="grid gap-2 grid-cols-3">
+            {DEFENSIVE_UNITS.map((unit, i) => {
+              const count = player[unit.field]?.toNumber?.() ?? 0;
+              const isSelected = hireType === i;
+              const isLocked = !gate.allowed;
+              return (
+                <button
+                  key={unit.label}
+                  onClick={() => !isLocked && setHireType(i)}
+                  disabled={isLocked}
+                  className={`rounded-lg border p-3 text-left transition-all ${
+                    isLocked
+                      ? "cursor-not-allowed border-zinc-800/50 opacity-50"
+                      : isSelected
+                        ? "border-border-gold bg-accent/20 ring-1 ring-border-gold/30"
+                        : "border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={`text-sm font-semibold ${isLocked ? "text-zinc-600" : "text-text-primary"}`}
+                    >
+                      {unit.label}
+                    </span>
+                    <span className="text-[10px] text-text-muted">{unit.multiplier}x</span>
+                  </div>
+                  <div className="mt-1 text-xs font-mono tabular-nums">
+                    {isLocked ? (
+                      <span className="text-zinc-600">Locked</span>
+                    ) : (
+                      <GoldNumber value={count} size="sm" glow={false} />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <ShowcaseBanner
+            image="/img/banners/barracks-banner.webp"
+            icon={selectedUnit.icon}
+            title={selectedUnit.label}
+            tag={`${selectedUnit.multiplier}x defensive power`}
+          >
+            <p className="text-xs italic text-zinc-300">{selectedUnit.lore}</p>
+          </ShowcaseBanner>
+        </>
+      }
+      aside={
+        gate.allowed ? (
+          <div className="card">
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Hire {selectedUnit.label}
+            </h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Your NOVI</span>
+                <span className="font-mono tabular-nums text-text-gold">
+                  <GameIcon id="resource-novi" size={14} className="mr-2" />
+                  {noviBalance.toLocaleString()}
+                </span>
+              </div>
+              <ActivityForecast
+                activity={ActivityType.Consuming}
+                verb={`Hiring ${selectedUnit.label}`}
+              >
+                {hireForecast ? (
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-text-muted">{hireNoviAmount.toLocaleString()} NOVI</span>
+                    <span className="font-mono tabular-nums text-text-gold">
+                      ~{hireForecast.units.toLocaleString()} {selectedUnit.label}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-text-muted">Loading forecast…</span>
+                )}
+              </ActivityForecast>
+              <NumberField
+                label="NOVI to spend"
+                value={hireNoviAmount}
+                onChange={setHireNoviAmount}
+                min={1}
+                max={noviBalance}
+                suffix="NOVI"
+              />
+              <TxButton onClick={handleHire} disabled={noviBalance < hireNoviAmount}>
                 {noviBalance >= hireNoviAmount ? `Hire ${selectedUnit.label}` : "Insufficient NOVI"}
-              </TxButton>
-              <TxButton onClick={handleClaimAndHire} variant="secondary" className="flex-1 text-xs">
-                Claim NOVI &amp; Hire
               </TxButton>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        ) : undefined
+      }
+    />
   );
 }

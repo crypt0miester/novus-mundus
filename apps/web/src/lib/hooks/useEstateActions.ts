@@ -47,7 +47,7 @@ export function useEstateActions() {
   const plotsOwned = estate?.plotsOwned ?? 1;
   const maxSlots = plotsOwned * 4;
   const canBuyPlot = plotsOwned < 5;
-  const nextPlotCost = canBuyPlot ? PLOT_COSTS[plotsOwned] ?? 0 : 0;
+  const nextPlotCost = canBuyPlot ? (PLOT_COSTS[plotsOwned] ?? 0) : 0;
 
   // Building cost/time config is read live from the on-chain BuildingTemplate
   // PDAs (one per type), so the panel always shows what the tx will charge.
@@ -75,7 +75,7 @@ export function useEstateActions() {
       const playerCity = playerData?.account.currentCity;
       const ix = createCreateEstateInstruction(
         { gameEngine: ge, owner: publicKey },
-        { cityId: playerCity! }
+        { cityId: playerCity! },
       );
 
       return transact
@@ -86,7 +86,7 @@ export function useEstateActions() {
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact, playerData]
+    [publicKey, client, transact, playerData],
   );
 
   const handleBuildOrUpgrade = useCallback(
@@ -98,16 +98,13 @@ export function useEstateActions() {
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
 
       const ix = isUpgrade
-        ? createUpgradeBuildingInstruction(
-            { owner: publicKey, gameEngine: ge },
-            { buildingType }
-          )
+        ? createUpgradeBuildingInstruction({ owner: publicKey, gameEngine: ge }, { buildingType })
         : createBuildBuildingInstruction(
             {
               gameEngine: ge,
               owner: publicKey,
             },
-            { buildingType }
+            { buildingType },
           );
 
       return transact
@@ -119,28 +116,38 @@ export function useEstateActions() {
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact, estate]
+    [publicKey, client, transact, estate],
   );
 
   const handleBuildingSpeedup = useCallback(
-    async (buildingType: number, tier: number, reportPhase: (p: TxPhase) => void) => {
+    async (
+      buildingType: number,
+      tier: number,
+      reportPhase: (p: TxPhase) => void,
+      count: number = 1,
+    ) => {
       if (!publicKey) throw new Error("Wallet not connected");
       const ge = client.gameEngine;
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
-      const ix = createBuildingSpeedupInstruction(
-        { owner: publicKey, gameEngine: ge },
-        { buildingType, speedupTier: tier as 1 | 2 }
+      // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
+      const n = Math.max(1, Math.floor(count));
+      const instructions = Array.from({ length: n }, () =>
+        createBuildingSpeedupInstruction(
+          { owner: publicKey, gameEngine: ge },
+          { buildingType, speedupTier: tier as 1 | 2 },
+        ),
       );
       return transact
         .mutateAsync({
-          instructions: [ix],
+          instructions,
           invalidateKeys: [["estate"], ["player"]],
-          successMessage: `${name} construction sped up!`,
+          successMessage:
+            n > 1 ? `${name} construction sped up ×${n}!` : `${name} construction sped up!`,
           onPhase: reportPhase,
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact]
+    [publicKey, client, transact],
   );
 
   const handleCompleteBuilding = useCallback(
@@ -150,7 +157,7 @@ export function useEstateActions() {
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
       const ix = createCompleteBuildingInstruction(
         { owner: publicKey, gameEngine: ge },
-        { buildingType }
+        { buildingType },
       );
       return transact
         .mutateAsync({
@@ -161,7 +168,7 @@ export function useEstateActions() {
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact]
+    [publicKey, client, transact],
   );
 
   const handleBuyPlot = useCallback(
@@ -178,7 +185,7 @@ export function useEstateActions() {
         })
         .then((r) => r.signature);
     },
-    [publicKey, client, transact, plotsOwned]
+    [publicKey, client, transact, plotsOwned],
   );
 
   /**
@@ -196,8 +203,7 @@ export function useEstateActions() {
       const base = t.baseNoviCost.toNumber();
       return {
         baseCost: calculateBuildingCost(base, level, t.costGrowthBps),
-        baseTimeHours:
-          calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
+        baseTimeHours: calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
         tier: t.tier,
         isUpgrade,
         level,
@@ -205,7 +211,7 @@ export function useEstateActions() {
         atMaxLevel: isUpgrade && level >= t.maxLevel,
       };
     },
-    [buildingTemplates, estate]
+    [buildingTemplates, estate],
   );
 
   /**
@@ -228,13 +234,12 @@ export function useEstateActions() {
         out.push({
           level,
           cost: calculateBuildingCost(base, level, t.costGrowthBps),
-          timeHours:
-            calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
+          timeHours: calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
         });
       }
       return out;
     },
-    [buildingTemplates, estate]
+    [buildingTemplates, estate],
   );
 
   return {

@@ -35,10 +35,7 @@ export function ProgressRing({
 }: ProgressRingProps) {
   const p = Math.max(0, Math.min(100, percent));
   return (
-    <div
-      className={cn("relative flex-shrink-0", className)}
-      style={{ width: size, height: size }}
-    >
+    <div className={cn("relative flex-shrink-0", className)} style={{ width: size, height: size }}>
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
         <circle
           cx="60"
@@ -62,9 +59,7 @@ export function ProgressRing({
         />
       </svg>
       {children != null && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          {children}
-        </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
       )}
     </div>
   );

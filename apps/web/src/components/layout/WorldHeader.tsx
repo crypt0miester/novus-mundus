@@ -20,13 +20,13 @@ export function WorldHeader() {
         {connected ? (
           <Link
             href="/dashboard"
-            className="rounded-md border border-border-gold px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-amber-900/20"
+            className="rounded-md border border-border-gold px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-accent/20"
           >
             Return to Game
           </Link>
         ) : (
           <span className="rounded-md bg-zinc-800 px-2 py-1 text-xs text-text-muted">
-            Spectating as Peasant
+            Spectating
           </span>
         )}
         <WalletMultiButton

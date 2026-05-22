@@ -1,7 +1,7 @@
 /**
- * Per-city storyline — keyed by on-chain `cityId` (0–23). Sourced from
- * docs/WORLD_LORE.md §XI, the realm registry. Each blurb names what the city
- * is built on, why it matters, and one detail of its character.
+ * Per-city storyline — the realm registry, keyed by on-chain `cityId` (0–23).
+ * Each blurb names what the city is built on, why it matters, and one detail
+ * of its character.
  */
 export interface CityLore {
   /** Canonical city name — a sanity anchor against the on-chain account. */
@@ -76,7 +76,7 @@ export const CITY_LORE: Record<number, CityLore> = {
   12: {
     name: "Drenmire",
     region: "Stormbreak Isles",
-    lore: "A walled settlement in a fertile valley. The walls are old-world — no one alive could build them that high.",
+    lore: "A walled settlement in a fertile valley. The walls are old-world, no one alive could build them that high.",
   },
   13: {
     name: "Pelagora",

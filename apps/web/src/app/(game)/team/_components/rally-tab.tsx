@@ -15,7 +15,7 @@ import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
@@ -100,7 +100,7 @@ export function RallyTab() {
   const traveling = player ? isTraveling(player) : false;
   const tod = useMemo(() => getCurrentTimeOfDay(nowSec, 0), [nowSec]);
   const todName = getTimeOfDayName(tod);
-  const rallyBonus = getActivityMultiplier('attacking' as any, tod);
+  const rallyBonus = getActivityMultiplier("attacking" as any, tod);
 
   const [targetType, setTargetType] = useState(1); // Encounter by default
   const [rallyUnits, setRallyUnits] = useState<[number, number, number]>([0, 0, 0]);
@@ -171,42 +171,90 @@ export function RallyTab() {
         heroTemplateId: hero?.templateId,
       },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["rally"]],
-      successMessage: `Rally created against ${rallyTarget.label}!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["rally"]],
+        successMessage: `Rally created against ${rallyTarget.label}!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
-  const handleRallySpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+  const handleRallySpeedup = async (
+    tier: number,
+    reportPhase: (p: TxPhase) => void,
+    count: number = 1,
+  ) => {
     if (!publicKey || !rallyData || !rally) throw new Error("No rally");
     const geKey = client.gameEngine;
-    const speedupType = rally.status === 0 ? RallySpeedupType.Gather
-      : rally.status === 1 ? RallySpeedupType.March
-      : RallySpeedupType.Return;
-    const ix = createRallySpeedupInstruction(
-      {
-        owner: publicKey,
-        gameEngine: geKey,
-        rally: rallyData.pubkey,
-        rallyCreator: publicKey,
-        rallyId,
-        participant: publicKey,
-      },
-      { speedupType, speedupTier: tier as 1 | 2 },
+    const speedupType =
+      rally.status === 0
+        ? RallySpeedupType.Gather
+        : rally.status === 1
+          ? RallySpeedupType.March
+          : RallySpeedupType.Return;
+    // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
+      createRallySpeedupInstruction(
+        {
+          owner: publicKey,
+          gameEngine: geKey,
+          rally: rallyData.pubkey,
+          rallyCreator: publicKey,
+          rallyId,
+          participant: publicKey,
+        },
+        { speedupType, speedupTier: tier as 1 | 2 },
+      ),
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["rally"], ["player"]],
-      successMessage: "Rally sped up!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions,
+        invalidateKeys: [["rally"], ["player"]],
+        successMessage: n > 1 ? `Rally sped up ×${n}!` : "Rally sped up!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const rallyRemaining = rally?.arriveAt
     ? Math.max(0, rally.arriveAt.toNumber() - Math.floor(Date.now() / 1000))
     : 0;
+
+  // Hold-to-charge caps for the rally speedup tiers — how many speedup
+  // instructions one tx can usefully hold (timer-collapse ∧ gem affordability).
+  // Rally: T1 leaves 50% of time / 1x cost, T2 leaves 25% / 2x cost — the same
+  // `remaining_minutes * gems_per_minute * tier_cost` formula as travel.
+  const rallyGemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
+  const rallyGemBalance = player?.gems?.toNumber?.() ?? 0;
+  const speedupTiers = [
+    {
+      tier: 1,
+      label: "Hasten",
+      description: "50% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: rallyRemaining,
+        timeMultiplier: 0.5,
+        costMultiplier: 1,
+        gemsPerMinute: rallyGemsPerMinute,
+        gemBalance: rallyGemBalance,
+      }),
+    },
+    {
+      tier: 2,
+      label: "Rush",
+      description: "75% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: rallyRemaining,
+        timeMultiplier: 0.25,
+        costMultiplier: 2,
+        gemsPerMinute: rallyGemsPerMinute,
+        gemBalance: rallyGemBalance,
+      }),
+    },
+  ];
 
   const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !rallyData || !rally) throw new Error("No rally");
@@ -218,12 +266,14 @@ export function RallyTab() {
       rallyId: rally.id.toNumber(),
       rallyCityId: rally.rallyCity ?? 0,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["rally"]],
-      successMessage: "Rally cancelled.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["rally"]],
+        successMessage: "Rally cancelled.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
@@ -238,12 +288,14 @@ export function RallyTab() {
       rallyCityId: rally.rallyCity ?? 0,
       homeCityId: player?.currentCity ?? 0,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["rally"]],
-      successMessage: "Left the rally.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["rally"]],
+        successMessage: "Left the rally.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleExecute = async (reportPhase: (p: TxPhase) => void) => {
@@ -265,12 +317,14 @@ export function RallyTab() {
       leaderEstate,
       rallyParticipants: ordered.map((p) => p.pubkey),
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["rally"], ["player"]],
-      successMessage: "Rally executed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["rally"], ["player"]],
+        successMessage: "Rally executed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleProcessReturn = async (reportPhase: (p: TxPhase) => void) => {
@@ -285,12 +339,14 @@ export function RallyTab() {
       rallyCityId: rally.rallyCity ?? 0,
       homeCityId: player?.currentCity ?? 0,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["rally"], ["player"]],
-      successMessage: "Return processed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["rally"], ["player"]],
+        successMessage: "Return processed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleClose = async (reportPhase: (p: TxPhase) => void) => {
@@ -299,12 +355,14 @@ export function RallyTab() {
       rally: rallyData.pubkey,
       leaderOwner: rally.creator,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["rally"], ["player"]],
-      successMessage: "Rally closed.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["rally"], ["player"]],
+        successMessage: "Rally closed.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   return (
@@ -312,14 +370,16 @@ export function RallyTab() {
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <span>{todName}</span>
         {rallyBonus > 1 ? (
-          <span className="text-green-400">+{((rallyBonus - 1) * 100).toFixed(0)}% rally power</span>
+          <span className="text-green-400">
+            +{((rallyBonus - 1) * 100).toFixed(0)}% rally power
+          </span>
         ) : rallyBonus < 1 ? (
-          <span className="text-amber-400">{((rallyBonus - 1) * 100).toFixed(0)}% rally power</span>
+          <span className="text-danger">{((rallyBonus - 1) * 100).toFixed(0)}% rally power</span>
         ) : null}
       </div>
 
       {traveling && (
-        <div className="rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-400">
+        <div className="rounded-lg border border-border-gold bg-accent/20 px-4 py-3 text-sm text-danger">
           You are currently traveling. Rally actions may be restricted.
         </div>
       )}
@@ -336,9 +396,7 @@ export function RallyTab() {
             </div>
             <div className="text-right">
               <div className="text-xs text-text-muted">Target</div>
-              <div className="text-sm text-text-primary">
-                {TARGET_TYPE[rally.targetType ?? 0]}
-              </div>
+              <div className="text-sm text-text-primary">{TARGET_TYPE[rally.targetType ?? 0]}</div>
             </div>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-4">
@@ -379,9 +437,7 @@ export function RallyTab() {
               </TxButton>
             )}
             {(rally.status === 3 || rally.status === 4) && (
-              <TxButton onClick={handleProcessReturn}>
-                Process Return
-              </TxButton>
+              <TxButton onClick={handleProcessReturn}>Process Return</TxButton>
             )}
             {rally.status === 4 && (
               <TxButton onClick={handleClose} variant="secondary">
@@ -394,7 +450,8 @@ export function RallyTab() {
             <SpeedupPanel
               visible={rallyRemaining > 0}
               remainingSeconds={rallyRemaining}
-              onSpeedup={handleRallySpeedup}
+              tiers={speedupTiers}
+              onSpeedup={(tier, rp, count) => handleRallySpeedup(tier, rp, count)}
               gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
               gemBalance={player?.gems?.toNumber?.()}
               className="mt-4"
@@ -478,7 +535,7 @@ export function RallyTab() {
                 }}
                 className={`rounded-lg border p-3 text-center transition-all ${
                   targetType === i
-                    ? "border-amber-600 bg-amber-900/20"
+                    ? "border-border-gold bg-accent/20"
                     : "border-zinc-800 hover:border-zinc-700"
                 }`}
               >
@@ -506,7 +563,7 @@ export function RallyTab() {
                         onClick={() => setRallyTarget({ pubkey: p.pubkey, label })}
                         className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
                           sel
-                            ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                            ? "border-border-gold-bright bg-accent/30 text-text-primary"
                             : "border-zinc-800 text-text-muted hover:border-zinc-700"
                         }`}
                       >
@@ -528,7 +585,7 @@ export function RallyTab() {
                         onClick={() => setRallyTarget({ pubkey: e.pubkey, label })}
                         className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
                           sel
-                            ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                            ? "border-border-gold-bright bg-accent/30 text-text-primary"
                             : "border-zinc-800 text-text-muted hover:border-zinc-700"
                         }`}
                       >
@@ -552,7 +609,7 @@ export function RallyTab() {
                       onClick={() => setRallyTarget({ pubkey, label })}
                       className={`w-full rounded border px-3 py-1.5 text-left text-xs ${
                         sel
-                          ? "border-amber-500 bg-amber-900/30 text-text-primary"
+                          ? "border-border-gold-bright bg-accent/30 text-text-primary"
                           : "border-zinc-800 text-text-muted hover:border-zinc-700"
                       }`}
                     >
@@ -597,7 +654,7 @@ export function RallyTab() {
                   onClick={() => setGatherMinutes(m)}
                   className={`rounded-lg border px-3 py-1.5 text-xs transition-all ${
                     gatherMinutes === m
-                      ? "border-amber-600 bg-amber-900/20 text-text-primary"
+                      ? "border-border-gold bg-accent/20 text-text-primary"
                       : "border-zinc-800 text-text-muted hover:border-zinc-700"
                   }`}
                 >

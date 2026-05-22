@@ -50,18 +50,14 @@ export function useMorphActions(actions: PanelAction[] | null | undefined) {
       list.map((a) => ({
         ...a,
         onClick: (reportPhase) =>
-          ((latest.current ?? []).find((x) => x.id === a.id) ?? a).onClick(
-            reportPhase,
-          ),
+          ((latest.current ?? []).find((x) => x.id === a.id) ?? a).onClick(reportPhase),
       })),
     );
   }, [
     owner,
     register,
     unregister,
-    JSON.stringify(
-      (actions ?? []).map((a) => [a.id, a.label, a.variant, a.disabled]),
-    ),
+    JSON.stringify((actions ?? []).map((a) => [a.id, a.label, a.variant, a.disabled])),
   ]);
 
   // Drop this panel's slot on unmount — and only its own, so other open

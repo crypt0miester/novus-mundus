@@ -45,6 +45,21 @@
     { "id": "resource-stamina",             "set": "relief", "seed": 1854, "subject": "a single bold lightning bolt" },
     { "id": "resource-fragments",           "set": "relief", "seed": 1855, "subject": "a small cluster of three jagged crystal shards" },
 
+    { "id": "unit-infantry",                "set": "relief", "seed": 1730, "subject": "A foot-soldier's heater shield with two infantry spears crossed behind it, a kettle helm resting at its base. No people, no figures, no face — equipment only." },
+    { "id": "unit-cavalry",                 "set": "relief", "seed": 1731, "subject": "A cavalry lance carrying a swallow-tailed war pennon, crossed with a riding stirrup and a spur. No horse, no people, no figures, no face — rider's equipment only." },
+    { "id": "unit-siege",                   "set": "relief", "seed": 1732, "subject": "A counterweight trebuchet, its throwing arm raised and the sling hanging from the tip, heavy timber frame. No people, no figures, no face — the engine only." },
+
+    { "id": "unit-laborer",                 "set": "relief", "seed": 1733, "subject": "A laborer's pickaxe crossed with a shovel, a woven carrying basket resting at their base. No people, no figures, no face — tools only." },
+    { "id": "unit-artisan",                 "set": "relief", "seed": 1734, "subject": "A woodworker's mallet crossed with a hand plane, a chisel and a pair of calipers resting at their base. No people, no figures, no face — tools only." },
+    { "id": "unit-engineer",                "set": "relief", "seed": 1735, "subject": "An engineer's toothed gear wheel with a draughtsman's compass and set-square over it, a rolled blueprint at the base. No people, no figures, no face — instruments only." },
+
+    { "id": "equip-melee",                  "set": "relief", "seed": 1736, "subject": "A knight's longsword crossed with a broad war axe. No people, no figures, no face — weapons only." },
+    { "id": "equip-ranged",                 "set": "relief", "seed": 1737, "subject": "A recurve war bow with a full quiver of arrows leaning against it. No people, no figures, no face — equipment only." },
+    { "id": "equip-siege",                  "set": "relief", "seed": 1738, "subject": "A heavy windlass crossbow, an arbalest, with a small bundle of bolts at its base. No people, no figures, no face — the weapon only." },
+    { "id": "equip-armor",                  "set": "relief", "seed": 1739, "subject": "A crested knight's great helm with a draped mail coif beside it. The helm is empty and hollow — no head, no face, no figure inside. Armour only." },
+
+    { "id": "sanctuary-meditation",         "set": "relief", "seed": 1742, "subject": "A cairn — a stack of smooth flat weathered stones balanced into a tapering tower, the largest stone at the bottom and the smallest on top. Just the stack of stones and nothing else. No people, no figures, no face." },
+
     { "id": "weapon-melee",                 "set": "flat",   "seed": 1801, "subject": "Two swords crossed in a saltire." },
     { "id": "weapon-ranged",                "set": "flat",   "seed": 1802, "subject": "A drawn longbow with a single nocked arrow." },
     { "id": "weapon-siege",                 "set": "flat",   "seed": 1803, "subject": "A torsion catapult with its throwing arm cocked back." },

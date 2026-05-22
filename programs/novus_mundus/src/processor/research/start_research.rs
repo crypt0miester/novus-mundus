@@ -47,8 +47,8 @@ use crate::{
 /// # Building Requirements
 /// Requires Academy at specific levels based on research category:
 /// - Battle research: Academy Lv 1+
-/// - Economy research: Academy Lv 5+
-/// - Growth research: Academy Lv 10+
+/// - Economy research: Academy Lv 2+
+/// - Growth research: Academy Lv 3+
 ///
 /// # Instruction Data
 /// - [0] research_type: u8 (which research to start)

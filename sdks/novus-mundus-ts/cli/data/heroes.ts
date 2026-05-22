@@ -149,8 +149,8 @@ const RARE_HEROES: HeroTemplateData[] = [
     supplyCap: 2_000, enabled: true, eventExclusive: false,
     requiredPlayerLevel: 5, meditationCityId: 7, // Auren Khet
     buffs: [{ stat: 3, baseBps: 1200 }, { stat: 12, baseBps: 600 }, { stat: 9, baseBps: 400 }],
-    // "Tribute": grants 50,000 cash immediately, cd 24h
-    abilityKind: 5, abilityStat: 0, abilityParam1: 50_000, abilityParam2: 0, abilityCooldownSecs: 86_400,
+    // "Tribute": grants 100,000,000 cash immediately, cd 24h
+    abilityKind: 5, abilityStat: 0, abilityParam1: 100_000_000, abilityParam2: 0, abilityCooldownSecs: 86_400,
   },
   {
     templateId: 15,

@@ -14,9 +14,9 @@ import { PlayerCard } from "@/components/shared/PlayerCard";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { ViewToggle } from "@/components/shared/ViewToggle";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { matchesPlayerQuery } from "@/lib/players";
+import { matchesPlayerQuery, playerScore } from "@/lib/players";
 import { shortenAddress } from "@/lib/utils";
-import { calculateDefensivePower, isNullPubkey } from "novus-mundus-sdk";
+import { isNullPubkey } from "novus-mundus-sdk";
 import type { PlayerAccount } from "novus-mundus-sdk";
 import type { PublicKey } from "@solana/web3.js";
 
@@ -33,25 +33,6 @@ const SORTS = [
 type SortKey = (typeof SORTS)[number]["key"];
 
 const PAGE_SIZE = 48;
-
-function score(p: PlayerAccount, key: SortKey): number {
-  switch (key) {
-    case "networth":
-      return p.networth.toNumber();
-    case "level":
-      return p.level;
-    case "combat":
-      return calculateDefensivePower(
-        p.defensiveUnit1.toNumber(),
-        p.defensiveUnit2.toNumber(),
-        p.defensiveUnit3.toNumber(),
-      );
-    case "reputation":
-      return p.reputation.toNumber();
-    case "newest":
-      return p.createdAt.toNumber();
-  }
-}
 
 /**
  * Browsable, searchable directory of every player in the realm — the answer to
@@ -85,10 +66,7 @@ export function PlayerBrowser() {
   }, [teams]);
 
   // Resolve every player's domain up front so the search can match it.
-  const allOwners = useMemo(
-    () => (players ?? []).map((p) => p.account.owner),
-    [players],
-  );
+  const allOwners = useMemo(() => (players ?? []).map((p) => p.account.owner), [players]);
   const domainNames = useDomainNames(allOwners);
 
   const selfAddress = citizen.player?.owner.toBase58();
@@ -110,17 +88,14 @@ export function PlayerBrowser() {
   const filtered = useMemo(
     () =>
       [...searchFiltered].sort(
-        (a, b) => score(b.account, sort) - score(a.account, sort),
+        (a, b) => playerScore(b.account, sort) - playerScore(a.account, sort),
       ),
     [searchFiltered, sort],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const pageData = filtered.slice(
-    safePage * PAGE_SIZE,
-    (safePage + 1) * PAGE_SIZE,
-  );
+  const pageData = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   const columns: Column<PlayerRow>[] = [
     {
@@ -128,8 +103,7 @@ export function PlayerBrowser() {
       header: "Player",
       cell: (p) => {
         const addr = p.account.owner.toBase58();
-        const label =
-          p.account.name || domainNames.get(addr) || shortenAddress(addr, 4);
+        const label = p.account.name || domainNames.get(addr) || shortenAddress(addr, 4);
         return (
           <Link
             href={`/world/players/${addr}`}
@@ -158,15 +132,11 @@ export function PlayerBrowser() {
       header: "Team",
       className: "hidden w-36 md:table-cell",
       cell: (p) => {
-        if (isNullPubkey(p.account.team))
-          return <span className="text-text-muted">—</span>;
+        if (isNullPubkey(p.account.team)) return <span className="text-text-muted">—</span>;
         const t = teamMap.get(p.account.team.toBase58());
         if (!t) return <span className="text-text-muted">—</span>;
         return (
-          <Link
-            href={`/world/teams/${t.id}`}
-            className="transition-colors hover:text-text-gold"
-          >
+          <Link href={`/world/teams/${t.id}`} className="transition-colors hover:text-text-gold">
             {t.name || `#${t.id}`}
           </Link>
         );
@@ -177,9 +147,7 @@ export function PlayerBrowser() {
       header: "Networth",
       align: "right",
       className: "w-28",
-      cell: (p) => (
-        <GoldNumber value={p.account.networth.toNumber()} size="sm" />
-      ),
+      cell: (p) => <GoldNumber value={p.account.networth.toNumber()} size="sm" />,
     },
   ];
 
@@ -243,9 +211,7 @@ export function PlayerBrowser() {
           </div>
         ) : (
           <div className="card">
-            <p className="text-sm text-text-muted">
-              No players match that search.
-            </p>
+            <p className="text-sm text-text-muted">No players match that search.</p>
           </div>
         )
       ) : (
@@ -253,9 +219,7 @@ export function PlayerBrowser() {
           columns={columns}
           rows={pageData}
           rowKey={(p) => p.account.owner.toBase58()}
-          rowClassName={(p) =>
-            p.account.owner.toBase58() === selfAddress ? "bg-amber-900/10" : ""
-          }
+          rowClassName={(p) => (p.account.owner.toBase58() === selfAddress ? "bg-accent/10" : "")}
           empty="No players match that search."
         />
       )}

@@ -89,6 +89,8 @@ These accounts are program-global (no `game_engine` scoping).
 | **User Account** | `USER_SEED = "user"` | `["user", owner: 32 bytes]` | `state/player.rs` `UserAccount::derive_pda` |
 | **Hero Collection** | `HERO_COLLECTION_SEED = "hero_collection"` | `["hero_collection"]` | `processor/hero/create_collection.rs` (global singleton) |
 | **Research Template** | `RESEARCH_TEMPLATE_SEED = "research_template"` | `["research_template", research_type: 1 byte (u8)]` | `state/research.rs` `ResearchTemplate::derive_pda` |
+| **Building Template** | `BUILDING_TEMPLATE_SEED = "building_template"` | `["building_template", building_type: 1 byte (u8)]` | `state/building_template.rs` `BuildingTemplate::derive_pda` |
+| **Oracle Quote** | `ORACLE_QUOTE_SEED = "oracle_quote"` | `["oracle_quote", switchboard_queue: 32 bytes]` | `state/oracle_quote.rs` `OracleQuotePda::derive_pda` |
 | **Hero Template** | `HERO_TEMPLATE_SEED = "hero_template"` | `["hero_template", template_id: 2 bytes (u16 LE)]` | `state/hero.rs` `HeroTemplate::derive_pda` |
 | **King Registry** | `KING_REGISTRY_SEED = "king_registry"` | `["king_registry", king: 32 bytes]` | `state/castle.rs` `KingRegistry::derive_pda` |
 
@@ -240,6 +242,7 @@ These use `game_engine` for kingdom scope plus participant and target addresses.
 | `LOOT_SEED` | `"loot"` |
 | `RESEARCH_SEED` | `"research"` |
 | `RESEARCH_TEMPLATE_SEED` | `"research_template"` |
+| `BUILDING_TEMPLATE_SEED` | `"building_template"` |
 | `HERO_TEMPLATE_SEED` | `"hero_template"` |
 | `HERO_COLLECTION_SEED` | `"hero_collection"` |
 | `HERO_MINT_RECEIPT_SEED` | `"hero_mint_receipt"` |
@@ -254,6 +257,7 @@ These use `game_engine` for kingdom scope plus participant and target addresses.
 | `PLAYER_PURCHASE_SEED` | `"player_purchase"` |
 | `INVENTORY_SEED` | `"inventory"` |
 | `ALLOWED_TOKEN_SEED` | `"allowed_token"` |
+| `ORACLE_QUOTE_SEED` | `"oracle_quote"` |
 | `ESTATE_SEED` | `"estate"` |
 | `EXPEDITION_SEED` | `"expedition"` |
 | `ARENA_SEASON_SEED` | `"arena_season"` |

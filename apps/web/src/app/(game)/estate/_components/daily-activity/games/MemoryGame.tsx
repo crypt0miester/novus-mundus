@@ -22,7 +22,7 @@ interface MemoryMoveResult {
 const SYMBOLS = ["◆", "●", "▲", "■", "★", "✦", "❖", "⬟"];
 // Pairs match on symbol+color, so all 8 colours must be distinct.
 const SYMBOL_COLORS = [
-  "text-amber-300",
+  "text-gold-300",
   "text-sky-300",
   "text-teal-300",
   "text-rose-300",
@@ -44,12 +44,7 @@ interface MemoryGameProps {
  * tile tap is a `/move` and the server returns just that tile's face. Matched
  * pairs stay revealed; a mismatch shows both briefly, then flips them back.
  */
-export function MemoryGame({
-  presentation,
-  submitting,
-  sendMove,
-  onComplete,
-}: MemoryGameProps) {
+export function MemoryGame({ presentation, submitting, sendMove, onComplete }: MemoryGameProps) {
   const { tiles, pairs } = presentation;
   const [revealed, setRevealed] = useState<Record<number, number>>({});
   const [matched, setMatched] = useState<Set<number>>(() => new Set());
@@ -121,10 +116,10 @@ export function MemoryGame({
               onClick={() => flip(i)}
               className={`flex aspect-square items-center justify-center rounded-lg border text-2xl font-bold transition-all ${
                 isMatched
-                  ? "border-amber-800/50 bg-amber-950/30 opacity-60"
+                  ? "border-border-gold/50 bg-accent/30 opacity-60"
                   : shown
-                    ? "border-amber-600 bg-amber-900/20"
-                    : "border-border-default bg-surface-raised hover:border-amber-800/50"
+                    ? "border-border-gold bg-accent/20"
+                    : "border-border-default bg-surface-raised hover:border-border-gold/50"
               }`}
             >
               {shown ? (

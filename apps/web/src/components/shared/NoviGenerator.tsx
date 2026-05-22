@@ -40,8 +40,15 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
   const [nextIntervalIn, setNextIntervalIn] = useState(INTERVAL_SECONDS);
 
   const {
-    displayNovi, pendingNovi, fillPct, lastUpdatedAt,
-    genRate, noviPerHour, effectiveTier, isFull, ready,
+    displayNovi,
+    pendingNovi,
+    fillPct,
+    lastUpdatedAt,
+    genRate,
+    noviPerHour,
+    effectiveTier,
+    isFull,
+    ready,
   } = gen;
 
   // Fires on upward crossings of pendingNovi only. Respects reduced-motion.
@@ -49,8 +56,10 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     const prev = prevPendingRef.current;
     prevPendingRef.current = pendingNovi;
     if (pendingNovi <= prev) return;
-    if (typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
       return;
     }
 
@@ -118,14 +127,13 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     return (
       <div className={cn("card relative flex items-center gap-3", className)}>
         <ProgressRing percent={fillPct} size={48} strokeWidth={5}>
-          <span className="text-[10px] font-bold text-text-gold">
-            {Math.floor(fillPct)}%
-          </span>
+          <span className="text-[10px] font-bold text-text-gold">{Math.floor(fillPct)}%</span>
         </ProgressRing>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-lg font-bold tabular-nums text-text-gold">
+              <GameIcon id="resource-novi" size={14} className="mr-2 my-auto" />
               {formatNumber(displayNovi, "compact")}
             </span>
             {pendingNovi > 0 && (
@@ -162,7 +170,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         <div className="flex items-center gap-2">
           <div
             ref={gemRef}
-            className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-900/40"
+            className="flex h-6 w-6 items-center justify-center rounded-md bg-accent/40"
             style={{ willChange: "transform" }}
           >
             <GameIcon id="resource-novi" size={14} />
@@ -173,7 +181,10 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         </div>
         <div
           className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-          style={{ color: "var(--tier-accent-bright)", backgroundColor: "color-mix(in srgb, var(--tier-accent) 20%, transparent)" }}
+          style={{
+            color: "var(--tier-accent-bright)",
+            backgroundColor: "color-mix(in srgb, var(--tier-accent) 20%, transparent)",
+          }}
         >
           {TIER_NAMES[effectiveTier]}
         </div>
@@ -206,13 +217,15 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
             onClick={handleClaim}
             className={cn(
               "w-full max-w-xs py-3 text-base font-bold tracking-wide",
-              justClaimed && "animate-none"
+              justClaimed && "animate-none",
             )}
           >
-            {isFull ? "CLAIM — GENERATOR FULL!" : `CLAIM ${formatNumber(pendingNovi, "compact")} NOVI`}
+            {isFull
+              ? "CLAIM — GENERATOR FULL!"
+              : `CLAIM ${formatNumber(pendingNovi, "compact")} NOVI`}
           </TxButton>
         ) : isFull ? (
-          <div className="w-full max-w-xs rounded-lg border border-amber-800/50 bg-amber-950/20 py-3 text-center">
+          <div className="w-full max-w-xs rounded-lg border border-border-gold/50 bg-accent/20 py-3 text-center">
             <span className="text-sm font-bold uppercase tracking-wider text-text-gold">Full</span>
           </div>
         ) : (

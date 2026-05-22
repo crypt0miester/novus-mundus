@@ -102,7 +102,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTierData[] = [
   {
     name: 'Epic',
     tierIndex: 2,
-    costInUsdCents: 4999,
+    costInUsdCents: 9999,
     durationDays: 30,
     generationMultiplier: 250,
     maxLockedNovi: 10_000_000,
@@ -130,7 +130,7 @@ export const SUBSCRIPTION_TIERS: SubscriptionTierData[] = [
   {
     name: 'Legendary',
     tierIndex: 3,
-    costInUsdCents: 24999,
+    costInUsdCents: 99999,
     durationDays: 30,
     generationMultiplier: 500,
     maxLockedNovi: 100_000_000,

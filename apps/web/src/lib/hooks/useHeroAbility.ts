@@ -14,6 +14,23 @@ import { usePlayer } from "./usePlayer";
 import { useNow } from "./useNow";
 
 /**
+ * Read an on-chain unix-second stamp (a `BN`) as a plain number.
+ *
+ * `BN.toNumber()` throws past 2^53 — and `?? 0` can't catch a thrown error.
+ * A player account written before a given timestamp field existed decodes
+ * arbitrary bytes at that offset, so a stale account can yield a value of any
+ * size. A real stamp is only ~2^31; anything implausible (overflowing, or
+ * simply not a sane time) reads back as 0, which the cooldown/effect logic
+ * already treats as "unused / expired".
+ */
+function stampSeconds(v: { toString(): string } | null | undefined): number {
+  // `toString()` never throws; `Number()` of an over-large decimal is merely
+  // imprecise, never an exception — then the range check rejects nonsense.
+  const n = v ? Number(v.toString()) : 0;
+  return Number.isFinite(n) && n > 0 && n < 1e11 ? n : 0;
+}
+
+/**
  * Cooldown status for an active hero slot's ability.
  *
  * Reads `ability_last_used_at[slot]` from the player account and combines
@@ -24,7 +41,7 @@ export function useHeroAbilityCooldown(slot: number, cooldownSecs: number) {
   const { data } = usePlayer();
   // Always tick; rendered cooldown timer needs per-second refresh.
   const now = useNow(true);
-  const lastUsedAt = data?.account?.abilityLastUsedAt?.[slot]?.toNumber?.() ?? 0;
+  const lastUsedAt = stampSeconds(data?.account?.abilityLastUsedAt?.[slot]);
   return useMemo(
     () => abilityCooldownStatus(lastUsedAt, cooldownSecs, now),
     [lastUsedAt, cooldownSecs, now],
@@ -43,7 +60,7 @@ export function usePendingEffect() {
     if (!acct) return null;
     const kind = acct.pendingEffectKind ?? 0;
     if (kind === 0) return null;
-    const expiresAt = acct.pendingEffectExpiresAt?.toNumber?.() ?? 0;
+    const expiresAt = stampSeconds(acct.pendingEffectExpiresAt);
     if (expiresAt <= now) return null;
     return {
       kind,

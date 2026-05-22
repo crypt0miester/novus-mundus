@@ -28,8 +28,8 @@ export default function Error({
           height={96}
         />
 
-        <p className="font-mono text-xs uppercase tracking-[0.4em] text-text-muted">
-          500 · The Forge Falters
+        <p className="font-mono text-xs lowercase tracking-[0.4em] text-text-muted">
+          500 · the forge falters
         </p>
 
         <h1 className="tier-title mt-3 font-display text-5xl font-bold tracking-wider md:text-6xl">
@@ -37,13 +37,11 @@ export default function Error({
         </h1>
 
         <p className="mt-5 max-w-md text-base text-text-secondary md:text-lg">
-          Something snapped in the works. The chroniclers have been notified.
+          something snapped in the works. The chroniclers have been notified.
         </p>
 
         {error?.digest && (
-          <p className="mt-3 font-mono text-xs text-text-muted">
-            sigil · {error.digest}
-          </p>
+          <p className="mt-3 font-mono text-xs text-text-muted">sigil · {error.digest}</p>
         )}
       </div>
 
@@ -52,13 +50,13 @@ export default function Error({
           onClick={reset}
           className="rounded-lg border border-[var(--nm-accent)] bg-[#18181b] px-8 py-3 font-semibold text-[var(--tier-accent-bright)] transition-colors hover:bg-[#1f1f23]"
         >
-          Try again
+          try again
         </button>
         <Link
           href="/"
           className="rounded-lg border border-zinc-800 bg-transparent px-8 py-3 font-semibold text-text-secondary transition-colors hover:border-zinc-700 hover:text-text-primary"
         >
-          Return to the realm
+          return to the realm
         </Link>
       </div>
     </div>

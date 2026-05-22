@@ -33,7 +33,7 @@ const RARITY_COLORS = [
   "text-green-400",
   "text-blue-400",
   "text-fuchsia-400",
-  "text-amber-400",
+  "text-gold-400",
 ];
 // Mirrors the program's ENCOUNTER_ATTACK_RANGE_METERS (attack_encounter.rs).
 const ENCOUNTER_RANGE = 16;
@@ -43,11 +43,7 @@ const ENCOUNTER_RANGE = 16;
  * encounter list. Self-derives off the encounter pubkey: distance, level band,
  * stamina, and the attack / travel actions. The list only has to `show()` it.
  */
-export function EncounterDetailPanel({
-  encounterPubkey,
-}: {
-  encounterPubkey: string;
-}) {
+export function EncounterDetailPanel({ encounterPubkey }: { encounterPubkey: string }) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();
@@ -57,17 +53,13 @@ export function EncounterDetailPanel({
   const { data: encounterData } = useEncounters(player?.currentCity);
 
   const encounter = useMemo(
-    () =>
-      (encounterData ?? []).find(
-        (e) => e.pubkey.toBase58() === encounterPubkey,
-      ) ?? null,
+    () => (encounterData ?? []).find((e) => e.pubkey.toBase58() === encounterPubkey) ?? null,
     [encounterData, encounterPubkey],
   );
 
   const playerTraveling = player ? isTraveling(player) : false;
 
-  const maxLevelDiff =
-    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
+  const maxLevelDiff = geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
 
   const dist = useMemo(() => {
     if (!player || !encounter) return null;
@@ -86,9 +78,7 @@ export function EncounterDetailPanel({
     return { level: encounter.account.level ?? 0, diff, inBand: diff <= maxLevelDiff };
   }, [player, encounter, maxLevelDiff]);
 
-  const staminaCost = encounter
-    ? getEncounterStaminaCost(encounter.account.rarity ?? 0)
-    : null;
+  const staminaCost = encounter ? getEncounterStaminaCost(encounter.account.rarity ?? 0) : null;
   // Stamina regenerates over time; the on-chain field is only a snapshot.
   // useStamina applies the program's regen math so the panel agrees with the
   // stamina bar — and with what attack_encounter sees after it regenerates.
@@ -108,7 +98,10 @@ export function EncounterDetailPanel({
     const [playerPda] = derivePlayerPda(ge, publicKey);
     const [loot] = deriveLootPda(playerPda, player.lootCounter.toNumber());
     const [encounterLocation] = deriveLocationPda(
-      ge, enc.cityId, toGrid(enc.locationLat), toGrid(enc.locationLong),
+      ge,
+      enc.cityId,
+      toGrid(enc.locationLat),
+      toGrid(enc.locationLong),
     );
     const locationCreatorRefund = geData?.account?.authority ?? publicKey;
     const ix = createAttackEncounterInstruction(
@@ -143,7 +136,10 @@ export function EncounterDetailPanel({
     const [playerPda] = derivePlayerPda(ge, publicKey);
     const [loot] = deriveLootPda(playerPda, player.lootCounter.toNumber());
     const [encounterLocation] = deriveLocationPda(
-      ge, enc.cityId, toGrid(enc.locationLat), toGrid(enc.locationLong),
+      ge,
+      enc.cityId,
+      toGrid(enc.locationLat),
+      toGrid(enc.locationLong),
     );
     const locationCreatorRefund = geData?.account?.authority ?? publicKey;
     const staminaIx = createPurchaseStaminaInstruction(
@@ -186,8 +182,7 @@ export function EncounterDetailPanel({
             id: "attack",
             label: levelBand?.inBand === false ? "LEVEL GAP" : "Attack",
             variant: "primary" as const,
-            disabled:
-              !hasStamina || !dist?.inRange || levelBand?.inBand === false,
+            disabled: !hasStamina || !dist?.inRange || levelBand?.inBand === false,
             onClick: handleAttack,
           },
           {
@@ -200,11 +195,7 @@ export function EncounterDetailPanel({
   useMorphActions(morphActions);
 
   if (!encounter || !dist || !player) {
-    return (
-      <p className="text-sm text-text-muted">
-        This encounter is no longer available.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">This encounter is no longer available.</p>;
   }
 
   const rarity = encounter.account.rarity ?? 0;
@@ -218,16 +209,16 @@ export function EncounterDetailPanel({
         <div className={`text-lg font-bold ${RARITY_COLORS[rarity]}`}>
           {RARITY_LABELS[rarity]} Encounter
         </div>
-        <div className="text-xs text-text-muted">
-          #{encounter.account.id.toString()}
-        </div>
+        <div className="text-xs text-text-muted">#{encounter.account.id.toString()}</div>
       </div>
 
       {/* HP */}
       <div>
         <div className="flex justify-between text-xs text-text-muted mb-1">
           <span>Health</span>
-          <span>{hp.toLocaleString()} / {maxHp.toLocaleString()}</span>
+          <span>
+            {hp.toLocaleString()} / {maxHp.toLocaleString()}
+          </span>
         </div>
         <StatBar current={hp} max={maxHp} color="health" showValues={false} />
       </div>
@@ -236,19 +227,25 @@ export function EncounterDetailPanel({
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Stamina Cost</div>
-          <div className={`font-mono text-sm font-bold ${hasStamina ? "text-text-primary" : "text-red-400"}`}>
+          <div
+            className={`font-mono text-sm font-bold ${hasStamina ? "text-text-primary" : "text-red-400"}`}
+          >
             {staminaCost ?? "—"}
           </div>
         </div>
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Distance</div>
-          <div className={`font-mono text-sm font-bold ${dist.inRange ? "text-green-400" : "text-red-400"}`}>
+          <div
+            className={`font-mono text-sm font-bold ${dist.inRange ? "text-green-400" : "text-red-400"}`}
+          >
             {dist.distance.toFixed(1)}m
           </div>
         </div>
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Level</div>
-          <div className={`font-mono text-sm font-bold ${levelBand?.inBand === false ? "text-red-400" : "text-text-primary"}`}>
+          <div
+            className={`font-mono text-sm font-bold ${levelBand?.inBand === false ? "text-red-400" : "text-text-primary"}`}
+          >
             {encounter.account.level}
           </div>
         </div>
@@ -257,12 +254,10 @@ export function EncounterDetailPanel({
       {/* Level band — cannot be fixed by travelling */}
       {levelBand && !levelBand.inBand && (
         <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
-          <div className="text-xs font-semibold text-red-400">
-            Level gap too wide
-          </div>
+          <div className="text-xs font-semibold text-red-400">Level gap too wide</div>
           <div className="text-[10px] text-red-600">
-            Encounter Lv {levelBand.level} · you are Lv {player.level ?? 0} —
-            {" "}{levelBand.diff} apart, max {maxLevelDiff}. 
+            Encounter Lv {levelBand.level} · you are Lv {player.level ?? 0} — {levelBand.diff}{" "}
+            apart, max {maxLevelDiff}.
           </div>
         </div>
       )}
@@ -290,9 +285,7 @@ export function EncounterDetailPanel({
         range={ENCOUNTER_RANGE}
         inRange={dist.inRange}
         proximityDisabled={levelBand?.inBand === false}
-        onArriveAttack={
-          hasStamina && levelBand?.inBand !== false ? handleAttack : undefined
-        }
+        onArriveAttack={hasStamina && levelBand?.inBand !== false ? handleAttack : undefined}
       />
 
       {/* Stamina warning */}

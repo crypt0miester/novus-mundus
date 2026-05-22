@@ -360,7 +360,7 @@ export enum GameError {
   InvalidQualityTier = 7742,
   InsufficientCraftedItems = 7743,
 
-  // Hero & Meditation Errors (7760-7767)
+  // Hero & Meditation Errors (7760-7775)
   HeroAlreadyMeditating = 7760,
   HeroNotMeditating = 7761,
   HeroNotInSlot = 7762,
@@ -369,6 +369,14 @@ export enum GameError {
   HeroAtMeditationCap = 7765,
   WrongCityForMeditation = 7766,
   HeroCollectionExists = 7767,
+  HeroAlreadyMintedByPlayer = 7768,
+  HeroIsLocked = 7769,
+  HeroNotOwnedByCaller = 7770,
+  SupplyCapCannotDecrease = 7771,
+  HeroAbilityNotConfigured = 7772,
+  HeroAbilityOnCooldown = 7773,
+  HeroAbilityInvalidKind = 7774,
+  HeroAbilityBadParams = 7775,
 
   // Expedition System Errors (7800-7812)
   ExpeditionInProgress = 7800,
@@ -874,6 +882,14 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.HeroAtMeditationCap]: 'Hero is at meditation cap',
   [GameError.WrongCityForMeditation]: 'Wrong city for meditation',
   [GameError.HeroCollectionExists]: 'Hero collection already exists',
+  [GameError.HeroAlreadyMintedByPlayer]: 'You have already minted this hero',
+  [GameError.HeroIsLocked]: 'Hero is locked into an active slot',
+  [GameError.HeroNotOwnedByCaller]: 'You do not own this hero',
+  [GameError.SupplyCapCannotDecrease]: 'Supply cap can only be increased',
+  [GameError.HeroAbilityNotConfigured]: 'This hero has no active ability',
+  [GameError.HeroAbilityOnCooldown]: 'Hero ability is still on cooldown',
+  [GameError.HeroAbilityInvalidKind]: 'Unknown hero ability type',
+  [GameError.HeroAbilityBadParams]: 'Hero ability parameters are invalid',
 };
 
 // Error Parsing Functions

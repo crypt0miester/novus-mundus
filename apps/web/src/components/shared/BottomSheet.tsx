@@ -3,12 +3,13 @@
 import {
   useCallback,
   useEffect,
+  useId,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { animate, spring } from "animejs";
 import { useSheetStore } from "@/lib/store/sheet";
 
 // The content area hugs its content but never grows past this slice of the
@@ -24,6 +25,13 @@ const PROJECTION_MS = 150;
 const DISMISS_VISIBLE_VH = 0.1;
 // Resistance applied while dragging up past the fully-open position.
 const OVERDRAG_DAMP = 0.5;
+// Programmatic settles — open, close, drag-release snap — play as Web
+// Animations on `transform`/`opacity`, which the browser runs on the
+// compositor thread. That keeps the slide at a steady 60fps even while a
+// freshly-mounted sheet's content is still painting on the main thread (the
+// JS spring this replaced janked badly there). ~420ms, firm decelerating curve.
+const SETTLE_MS = 420;
+const SETTLE_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 interface Detents {
   /** translateY (px) with the whole content visible. */
@@ -43,10 +51,14 @@ function prefersReducedMotion(): boolean {
 /**
  * BottomSheet — a mobile bottom-sheet modal that drags like an iOS/Android
  * sheet. It opens at its full content height (capped at 92vh); drag up and it
- * springs back, drag down past the 10%-visible mark and it springs shut.
+ * eases back, drag down past the 10%-visible mark and it settles shut.
  * Background extends below the content, so over-dragging up expands the sheet
  * rather than exposing the backdrop. Desktop layouts render their own panel —
  * this is `lg:hidden`.
+ *
+ * The finger drag is tracked on the main thread; every other move — open,
+ * close, drag-release snap — is a compositor-run Web Animation, so it stays
+ * smooth even while the sheet's freshly-mounted content paints.
  */
 export function BottomSheet({
   open,
@@ -67,11 +79,13 @@ export function BottomSheet({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
 
-  // translateY is the single source of truth for position: anime writes
-  // `pos.y` and every frame we mirror it onto the DOM.
+  // translateY is the position source of truth at rest and during a drag;
+  // mid-settle the running Web Animation owns it (read back via `currentY`).
   const pos = useRef({ y: 0 });
   const detents = useRef<Detents>({ full: 0, dismiss: 0 });
-  const anim = useRef<ReturnType<typeof animate> | null>(null);
+  // The in-flight settle — one Animation per animated element.
+  const sheetAnim = useRef<Animation | null>(null);
+  const backdropAnim = useRef<Animation | null>(null);
   const animating = useRef(false);
   const closing = useRef(false);
   const openRef = useRef(open);
@@ -83,6 +97,11 @@ export function BottomSheet({
     velocity: number;
   } | null>(null);
 
+  // `mounted` read without subscribing the `open` effect to it — that effect
+  // must fire only on real `open` changes, never on the mount it triggers.
+  const mountedRef = useRef(mounted);
+  mountedRef.current = mounted;
+
   // Re-measure the content region and recompute snap points.
   const remeasure = useCallback(() => {
     const el = contentRef.current;
@@ -92,75 +111,155 @@ export function BottomSheet({
     };
   }, []);
 
-  // Mirror a translateY value onto the sheet and fade the backdrop with it.
-  const paint = useCallback((y: number) => {
+  // Backdrop opacity is a linear function of the sheet's translateY: fully
+  // open → BACKDROP_MAX, fully dismissed → 0.
+  const opacityFor = useCallback((y: number) => {
     const { dismiss } = detents.current;
-    const sheet = sheetRef.current;
-    const backdrop = backdropRef.current;
-    if (sheet) sheet.style.transform = `translate3d(0, ${y}px, 0)`;
-    if (backdrop) {
-      const fade = dismiss > 0 ? nearestClamp((dismiss - y) / dismiss, 0, 1) : 1;
-      backdrop.style.opacity = String(fade * BACKDROP_MAX);
-    }
+    const fade = dismiss > 0 ? nearestClamp((dismiss - y) / dismiss, 0, 1) : 1;
+    return fade * BACKDROP_MAX;
   }, []);
 
-  // Spring the sheet to a target translateY; `onArrive` fires once it settles.
-  const springTo = useCallback(
+  // Mirror a translateY straight onto the DOM — used for drag frames and to
+  // bake a settle's resting values into inline style once it finishes.
+  const paint = useCallback(
+    (y: number) => {
+      const sheet = sheetRef.current;
+      const backdrop = backdropRef.current;
+      if (sheet) sheet.style.transform = `translate3d(0, ${y}px, 0)`;
+      if (backdrop) backdrop.style.opacity = String(opacityFor(y));
+    },
+    [opacityFor],
+  );
+
+  // The sheet's translateY *right now* — the live interpolated value when a
+  // settle is mid-flight, so a fresh settle or a grab picks up without a jump.
+  const currentY = useCallback(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return pos.current.y;
+    const t = getComputedStyle(sheet).transform;
+    return t && t !== "none" ? new DOMMatrixReadOnly(t).m42 : pos.current.y;
+  }, []);
+
+  const currentOpacity = useCallback(() => {
+    const backdrop = backdropRef.current;
+    if (!backdrop) return 0;
+    const o = parseFloat(getComputedStyle(backdrop).opacity);
+    return Number.isFinite(o) ? o : 0;
+  }, []);
+
+  // Settle the sheet to a target translateY as a compositor-run Web Animation;
+  // `onArrive` fires once it lands. Safe to call mid-flight — it reads the
+  // live position and animates on from there.
+  const settleTo = useCallback(
     (targetY: number, onArrive?: () => void) => {
-      anim.current?.pause();
-      if (prefersReducedMotion()) {
-        pos.current.y = targetY;
+      const sheet = sheetRef.current;
+      const backdrop = backdropRef.current;
+
+      // Where the sheet visually is now — mid-flight if a settle is running.
+      const fromY = currentY();
+      const fromOpacity = currentOpacity();
+
+      // Drop any in-flight settle. `cancel()` never fires `onfinish`, so a
+      // superseded settle's `onArrive` is correctly abandoned.
+      sheetAnim.current?.cancel();
+      backdropAnim.current?.cancel();
+      sheetAnim.current = null;
+      backdropAnim.current = null;
+
+      pos.current.y = targetY;
+      const toOpacity = opacityFor(targetY);
+
+      if (!sheet || prefersReducedMotion() || fromY === targetY) {
         paint(targetY);
+        animating.current = false;
         onArrive?.();
         return;
       }
+
       animating.current = true;
-      anim.current = animate(pos.current, {
-        y: targetY,
-        ease: spring({ stiffness: 140, damping: 20 }),
-        onUpdate: () => paint(pos.current.y),
-        onComplete: () => {
-          animating.current = false;
-          onArrive?.();
-        },
-      });
+      const timing: KeyframeAnimationOptions = {
+        duration: SETTLE_MS,
+        easing: SETTLE_EASING,
+        fill: "forwards",
+      };
+
+      const sa = sheet.animate(
+        [
+          { transform: `translate3d(0, ${fromY}px, 0)` },
+          { transform: `translate3d(0, ${targetY}px, 0)` },
+        ],
+        timing,
+      );
+      sheetAnim.current = sa;
+      if (backdrop) {
+        backdropAnim.current = backdrop.animate(
+          [{ opacity: fromOpacity }, { opacity: toOpacity }],
+          timing,
+        );
+      }
+
+      // The compositor owns the motion from here; the main thread is free to
+      // paint freshly-mounted content without disturbing the slide.
+      sa.onfinish = () => {
+        if (sheetAnim.current !== sa) return;
+        animating.current = false;
+        // Bake the resting values into inline style, then release the
+        // animations' hold so a later drag can write transform directly.
+        paint(targetY);
+        sheetAnim.current?.cancel();
+        backdropAnim.current?.cancel();
+        sheetAnim.current = null;
+        backdropAnim.current = null;
+        onArrive?.();
+      };
     },
-    [paint],
+    [paint, currentY, currentOpacity, opacityFor],
   );
 
-  // The single path that closes the sheet: spring it shut, then unmount —
-  // unless `open` flipped back true mid-animation, in which case spring back.
+  // The single path that closes the sheet: settle it shut, then unmount —
+  // unless `open` flipped back true mid-animation, in which case settle back.
   const dismiss = useCallback(() => {
     if (closing.current) return;
     closing.current = true;
-    springTo(detents.current.dismiss, () => {
+    settleTo(detents.current.dismiss, () => {
       closing.current = false;
-      if (openRef.current) springTo(detents.current.full);
+      if (openRef.current) settleTo(detents.current.full);
       else setMounted(false);
     });
-  }, [springTo]);
+  }, [settleTo]);
 
-  // `open` drives mount; closing always springs shut before unmounting.
-  useEffect(() => {
+  // `open` drives mount; closing always settles shut before unmounting. A
+  // layout effect, so the mount is requested in the same commit as the tap.
+  // Keyed on `open` alone (mounted via ref) so it fires once per real open:
+  // settling a *fresh* sheet up belongs to the mount effect below — here
+  // only the re-open of an already-mounted sheet settles.
+  useLayoutEffect(() => {
     openRef.current = open;
     if (open) {
       closing.current = false;
-      if (mounted) springTo(detents.current.full);
+      if (mountedRef.current) settleTo(detents.current.full);
       else setMounted(true);
-    } else if (mounted) {
+    } else if (mountedRef.current) {
       dismiss();
     }
-  }, [open, mounted, dismiss, springTo]);
+  }, [open, dismiss, settleTo]);
 
-  // On mount, measure, start off-screen, then spring up to full height.
-  useEffect(() => {
+  // On mount: measure and place the sheet off-screen *now*, in a layout effect
+  // before the browser paints — so the heavy first paint of the sheet's
+  // content lands on a frame where the sheet sits parked off-screen and still.
+  // The settle is armed for the *next* frame, so it animates against
+  // already-painted, already-layerised content. Being a compositor animation
+  // it then stays smooth no matter how busy that content keeps the main thread.
+  useLayoutEffect(() => {
     if (!mounted) return;
     remeasure();
     pos.current.y = detents.current.dismiss;
     paint(pos.current.y);
-    const id = requestAnimationFrame(() => springTo(detents.current.full));
+    const id = requestAnimationFrame(() => {
+      if (openRef.current) settleTo(detents.current.full);
+    });
     return () => cancelAnimationFrame(id);
-  }, [mounted, remeasure, paint, springTo]);
+  }, [mounted, remeasure, paint, settleTo]);
 
   // Keep snap points honest when the content or viewport resizes under us.
   useEffect(() => {
@@ -168,7 +267,7 @@ export function BottomSheet({
     const resync = () => {
       remeasure();
       if (drag.current || animating.current || closing.current) return;
-      springTo(detents.current.full);
+      settleTo(detents.current.full);
     };
     const ro = new ResizeObserver(resync);
     if (contentRef.current) ro.observe(contentRef.current);
@@ -177,16 +276,17 @@ export function BottomSheet({
       ro.disconnect();
       window.removeEventListener("resize", resync);
     };
-  }, [mounted, remeasure, springTo]);
+  }, [mounted, remeasure, settleTo]);
 
   useEffect(
     () => () => {
-      anim.current?.pause();
+      sheetAnim.current?.cancel();
+      backdropAnim.current?.cancel();
     },
     [],
   );
 
-  // While the sheet is painted — including the spring-shut animation — lift the
+  // While the sheet is painted — including the settle-shut animation — lift the
   // mobile top bars above the backdrop so they never flash dark behind it.
   useEffect(() => {
     if (!mounted) return;
@@ -195,26 +295,38 @@ export function BottomSheet({
     return releaseMounted;
   }, [mounted]);
 
-  // Open intent is tracked separately — it drops the instant the sheet is
-  // dismissed, before the close animation, so the mobile data bar collapses
-  // immediately instead of lingering until the spring settles.
+  // Open intent is tracked separately from `mounted` — it drops the instant
+  // the sheet is dismissed, before the close animation, so the mobile data bar
+  // collapses immediately. Registering a `close` handler lets the MorphTabBar
+  // surface a ✕ that dismisses this sheet.
+  const sheetId = useId();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const { acquireOpen, releaseOpen } = useSheetStore.getState();
-    acquireOpen();
-    return releaseOpen;
-  }, [open]);
+    const { registerOpen, releaseOpen } = useSheetStore.getState();
+    registerOpen({ id: sheetId, close: () => onCloseRef.current() });
+    return () => releaseOpen(sheetId);
+  }, [open, sheetId]);
 
   if (!mounted) return null;
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    anim.current?.pause();
+    // Pin the sheet wherever it visually is and drop any in-flight settle, so
+    // finger tracking takes over without a jump.
+    const y = currentY();
+    sheetAnim.current?.cancel();
+    backdropAnim.current?.cancel();
+    sheetAnim.current = null;
+    backdropAnim.current = null;
     animating.current = false;
+    pos.current.y = y;
+    paint(y);
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = {
       pointerStartY: e.clientY,
-      sheetStartY: pos.current.y,
-      lastY: pos.current.y,
+      sheetStartY: y,
+      lastY: y,
       lastT: performance.now(),
       velocity: 0,
     };
@@ -245,33 +357,23 @@ export function BottomSheet({
     const det = detents.current;
 
     // Project the release velocity ahead, the way iOS picks a resting detent.
-    const projected = Math.min(
-      det.dismiss,
-      pos.current.y + d.velocity * PROJECTION_MS,
-    );
+    const projected = Math.min(det.dismiss, pos.current.y + d.velocity * PROJECTION_MS);
 
     // Collapse only once dragged (or flung) down far enough that 10% or less
     // of the viewport still shows the sheet — but never demand more than 60%
     // of the sheet's own height, so short sheets stay dismissable.
-    const minVisible = Math.min(
-      DISMISS_VISIBLE_VH * window.innerHeight,
-      det.dismiss * 0.6,
-    );
+    const minVisible = Math.min(DISMISS_VISIBLE_VH * window.innerHeight, det.dismiss * 0.6);
     if (projected >= det.dismiss - minVisible) {
       // Closing routes through `open` so the parent's state stays in sync;
-      // the effect above then springs the sheet shut.
+      // the effect above then settles the sheet shut.
       onClose();
       return;
     }
-    springTo(det.full);
+    settleTo(det.full);
   };
 
   return (
-    <div
-      className="lg:hidden fixed inset-0 z-50 overflow-hidden"
-      role="dialog"
-      aria-modal="true"
-    >
+    <div className="lg:hidden fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true">
       <div
         ref={backdropRef}
         className="absolute inset-0 bg-black"
@@ -296,9 +398,10 @@ export function BottomSheet({
           className="flex flex-col"
           style={{ maxHeight: `${MAX_HEIGHT_VH * 100}vh` }}
         >
-          {/* Drag handle — the grab zone for the spring drag */}
+          {/* Drag handle — the grab zone for the spring drag. Closing is the
+              MorphTabBar's ✕ (plus drag-down / backdrop / Escape). */}
           <div
-            className="relative flex shrink-0 cursor-grab items-center justify-center pb-2 pt-3 active:cursor-grabbing"
+            className="flex shrink-0 cursor-grab items-center justify-center pb-2 pt-3 active:cursor-grabbing"
             style={{ touchAction: "none" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -306,13 +409,6 @@ export function BottomSheet({
             onPointerCancel={onPointerUp}
           >
             <div className="h-1 w-10 rounded-full bg-zinc-600" />
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="absolute right-3 top-2.5 rounded-full p-1 text-text-muted hover:text-text-primary"
-            >
-              &#10005;
-            </button>
           </div>
 
           {title && (
@@ -326,9 +422,7 @@ export function BottomSheet({
           {/* Bottom padding (`pb-24`) reserves clearance for the floating
               MorphTabBar (h-14 pill + safe-area offset, ~80px). Without it
               the bar at z-[60] would visually cover the tail of the content. */}
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-24">
-            {children}
-          </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-24">{children}</div>
         </div>
       </div>
     </div>

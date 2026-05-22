@@ -27,22 +27,23 @@ function EventRow({ entry }: { entry: EventEntry }) {
   const sig = entry.txSignature;
 
   return (
-    <div className={`flex items-start gap-3 rounded-lg px-3 py-2 ${!entry.read ? "bg-surface-raised/50" : ""}`}>
-      <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full" style={{
-        backgroundColor: !entry.read ? "#d4a843" : "transparent",
-      }} />
+    <div
+      className={`flex items-start gap-3 rounded-lg px-3 py-2 ${!entry.read ? "bg-surface-raised/50" : ""}`}
+    >
+      <div
+        className="mt-0.5 h-2 w-2 shrink-0 rounded-full"
+        style={{
+          backgroundColor: !entry.read ? "#d4a843" : "transparent",
+        }}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-sm font-medium text-text-primary truncate">
-            {title}
-          </span>
+          <span className="text-sm font-medium text-text-primary truncate">{title}</span>
           <span className="shrink-0 text-[11px] text-text-muted">
             {relativeTime(entry.timestamp)}
           </span>
         </div>
-        {message && (
-          <p className="mt-0.5 text-xs text-text-secondary truncate">{message}</p>
-        )}
+        {message && <p className="mt-0.5 text-xs text-text-secondary truncate">{message}</p>}
         <a
           href={`https://solscan.io/tx/${sig}`}
           target="_blank"
@@ -100,7 +101,7 @@ export function ActivityFeed() {
             >
               {label}
               {unread > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white">
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
                   {unread > 99 ? "99+" : unread}
                 </span>
               )}
@@ -111,13 +112,9 @@ export function ActivityFeed() {
 
       {/* Event List */}
       <div className="max-h-64 space-y-1 overflow-y-auto">
-        {!loaded && (
-          <p className="py-4 text-center text-xs text-text-muted">Loading...</p>
-        )}
+        {!loaded && <p className="py-4 text-center text-xs text-text-muted">Loading...</p>}
         {loaded && filtered.length === 0 && (
-          <p className="py-4 text-center text-xs text-text-muted">
-            No events yet
-          </p>
+          <p className="py-4 text-center text-xs text-text-muted">No events yet</p>
         )}
         {filtered.slice(0, 50).map((entry) => (
           <EventRow key={entry.id} entry={entry} />

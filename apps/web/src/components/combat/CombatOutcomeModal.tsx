@@ -98,10 +98,13 @@ function buildView(
     rows.push({ label: "Your units lost", value: unitsLost > 0 ? fmt(unitsLost) : "None" });
     rows.push({ label: "Enemy units killed", value: unitsKilled > 0 ? fmt(unitsKilled) : "None" });
 
-    if (num(pvp.cashStolen) > 0) rows.push({ label: "Cash stolen", value: `$${fmt(pvp.cashStolen)}` });
+    if (num(pvp.cashStolen) > 0)
+      rows.push({ label: "Cash stolen", value: `$${fmt(pvp.cashStolen)}` });
     if (num(pvp.armorStolen) > 0) rows.push({ label: "Armor stolen", value: fmt(pvp.armorStolen) });
-    if (num(pvp.produceStolen) > 0) rows.push({ label: "Produce stolen", value: fmt(pvp.produceStolen) });
-    if (num(pvp.vehiclesStolen) > 0) rows.push({ label: "Vehicles stolen", value: fmt(pvp.vehiclesStolen) });
+    if (num(pvp.produceStolen) > 0)
+      rows.push({ label: "Produce stolen", value: fmt(pvp.produceStolen) });
+    if (num(pvp.vehiclesStolen) > 0)
+      rows.push({ label: "Vehicles stolen", value: fmt(pvp.vehiclesStolen) });
   } else if (defeated) {
     tone = "victory";
     heading = "Encounter Defeated";
@@ -161,7 +164,7 @@ function HpDiminishBar({ from, to, max }: HpAnim) {
   const fromPct = Math.max(0, Math.min(100, (from / max) * 100));
   const toPct = Math.max(0, Math.min(100, (to / max) * 100));
   // Ramp colour to match the post-hit HP — red when critical, amber low, green healthy.
-  const fillColor = toPct > 50 ? "bg-emerald-500" : toPct > 25 ? "bg-amber-500" : "bg-red-500";
+  const fillColor = toPct > 50 ? "bg-emerald-500" : toPct > 25 ? "bg-gold-500" : "bg-red-500";
 
   useEffect(() => {
     if (!fillRef.current) return;
@@ -214,7 +217,11 @@ function HpDiminishBar({ from, to, max }: HpAnim) {
 }
 
 const TONE: Record<Tone, { ring: string; text: string; glow: string }> = {
-  victory: { ring: "border-amber-500/40", text: "text-amber-300", glow: "shadow-amber-500/20" },
+  victory: {
+    ring: "border-border-gold-bright/40",
+    text: "text-text-gold",
+    glow: "shadow-gold-500/20",
+  },
   survive: { ring: "border-sky-700/50", text: "text-sky-300", glow: "shadow-sky-500/10" },
   defeat: { ring: "border-red-800/60", text: "text-red-400", glow: "shadow-red-900/30" },
 };
@@ -303,13 +310,13 @@ export function CombatOutcomeModal() {
               <div
                 key={i}
                 className={`flex items-baseline justify-between rounded-md px-3 py-1.5 text-sm ${
-                  row.highlight ? "bg-amber-500/10" : "bg-surface/60"
+                  row.highlight ? "bg-gold-500/10" : "bg-surface/60"
                 }`}
               >
                 <span className="text-xs text-text-muted">{row.label}</span>
                 <span
                   className={`font-mono font-semibold ${
-                    row.highlight ? "text-amber-300" : "text-text-primary"
+                    row.highlight ? "text-text-gold" : "text-text-primary"
                   }`}
                 >
                   {row.value}
@@ -319,9 +326,7 @@ export function CombatOutcomeModal() {
           </div>
         )}
 
-        {view.hint && (
-          <p className="mt-3 text-center text-[11px] text-text-muted">{view.hint}</p>
-        )}
+        {view.hint && <p className="mt-3 text-center text-[11px] text-text-muted">{view.hint}</p>}
 
         {view.canAttackAgain && onAttackAgain ? (
           <div className="mt-5 flex items-stretch gap-2">

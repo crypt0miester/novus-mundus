@@ -52,7 +52,7 @@ export function DetailPanel({
       {/* ── Desktop: inline sticky panel ── */}
       <div className={`hidden lg:block lg:col-span-1 ${className}`}>
         {open ? (
-          <div className="sticky top-0 rounded-lg border border-border-default bg-surface-raised p-4 space-y-4">
+          <div className="sticky top-0 max-h-[calc(100vh_-_5.5rem)] overflow-y-auto overscroll-contain rounded-lg border border-border-default bg-surface-raised p-4 space-y-4">
             {children}
           </div>
         ) : null}

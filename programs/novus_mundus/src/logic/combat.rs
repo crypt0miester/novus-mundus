@@ -284,7 +284,6 @@ pub fn update_happiness_operative(
         return 0.0;
     }
 
-    // Happy (1.0) when there's at least one produce per unit, else 0.0.
     if produce >= sum_of_units { 1.0 } else { 0.0 }
 }
 

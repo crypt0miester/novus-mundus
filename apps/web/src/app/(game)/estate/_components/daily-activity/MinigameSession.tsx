@@ -1,11 +1,7 @@
 "use client";
 
 import { type ComponentType, useCallback, useEffect, useRef, useState } from "react";
-import {
-  useDailyActivity,
-  type Archetype,
-  type StartResponse,
-} from "@/lib/hooks/useDailyActivity";
+import { useDailyActivity, type Archetype, type StartResponse } from "@/lib/hooks/useDailyActivity";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
 import { formatTime } from "@/lib/utils";
 import { McqGame } from "./games/McqGame";
@@ -78,9 +74,7 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
     setSession(null);
     startSession(building)
       .then(setSession)
-      .catch((e) =>
-        setError(e instanceof Error ? e.message : "could not start the mini-game"),
-      );
+      .catch((e) => setError(e instanceof Error ? e.message : "could not start the mini-game"));
   }, [building, startSession]);
 
   useEffect(() => {
@@ -95,11 +89,7 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
       setSubmitting(true);
       setError(null);
       try {
-        const { score, windowBonus } = await submitSession(
-          building,
-          session.sessionId,
-          answer,
-        );
+        const { score, windowBonus } = await submitSession(building, session.sessionId, answer);
         onComplete(score, windowBonus);
       } catch (e) {
         setError(e instanceof Error ? e.message : "submission failed");
@@ -115,7 +105,7 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
         <p className="mb-3 text-sm text-red-400">{error}</p>
         <button
           onClick={begin}
-          className="rounded-lg border border-border-gold bg-amber-900/20 px-5 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+          className="rounded-lg border border-border-gold bg-accent/20 px-5 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
         >
           Try again
         </button>
@@ -124,11 +114,7 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
   }
 
   if (!session) {
-    return (
-      <div className="card text-center text-sm text-text-muted">
-        Preparing the mini-game…
-      </div>
-    );
+    return <div className="card text-center text-sm text-text-muted">Preparing the mini-game…</div>;
   }
 
   const entry = GAMES[session.archetype];

@@ -118,9 +118,9 @@ Growth Tree:
 ├─ Collection Mastery (no prereq)
 ├─ Reputation Mastery (no prereq)
 ├─ Stamina Vitality (no prereq)
+├─ Mining Operations (no prereq)
+├─ Fishing Industry (no prereq)
 ├─ Lucky Streak → requires Reputation Mastery lvl 5
-├─ Mining Operations → requires Collection Mastery lvl 5
-├─ Fishing Industry → requires Collection Mastery lvl 10
 ├─ Loot Magnetism → requires Lucky Streak lvl 10
 ├─ Fragment Discovery → requires Loot Magnetism lvl 5
 └─ Gem Prospecting → requires Fragment Discovery lvl 5

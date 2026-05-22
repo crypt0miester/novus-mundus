@@ -44,10 +44,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
     );
   }
 
-  const runChoice = async (
-    payload: { choice?: number; heroMint?: string },
-    summary: string,
-  ) => {
+  const runChoice = async (payload: { choice?: number; heroMint?: string }, summary: string) => {
     setSubmitting(true);
     setError(null);
     try {
@@ -61,16 +58,10 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
   };
 
   const chooseStance = (choice: number) =>
-    runChoice(
-      { choice },
-      `Watch set — ${stanceName(choice)} stance for the day.`,
-    );
+    runChoice({ choice }, `Watch set — ${stanceName(choice)} stance for the day.`);
 
   const chooseHero = (heroMint: string) =>
-    runChoice(
-      { heroMint },
-      "Hero blessed — +25% effectiveness for the day.",
-    );
+    runChoice({ heroMint }, "Hero blessed — +25% effectiveness for the day.");
 
   const heroes = (playerData?.account?.activeHeroes ?? [])
     .filter((h) => !isNullPubkey(h))
@@ -88,9 +79,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
   return (
     <div className="space-y-3">
       <header>
-        <h3 className="font-display text-lg font-bold text-text-primary">
-          {meta.title}
-        </h3>
+        <h3 className="font-display text-lg font-bold text-text-primary">{meta.title}</h3>
         <p className="text-xs text-text-muted">{meta.tagline}</p>
       </header>
 
@@ -112,9 +101,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
                 score,
                 summary:
                   rewardSummary(building, score) +
-                  (windowBonus > 0
-                    ? ` ✦ Window complete — +${windowBonus} bonus folded in.`
-                    : ""),
+                  (windowBonus > 0 ? ` ✦ Window complete — +${windowBonus} bonus folded in.` : ""),
               })
             }
           />
@@ -123,7 +110,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
             <p className="mb-4 text-sm text-text-secondary">{meta.tagline}</p>
             <button
               onClick={() => setStarted(true)}
-              className="rounded-lg border border-border-gold bg-amber-900/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+              className="rounded-lg border border-border-gold bg-accent/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
             >
               Begin
             </button>

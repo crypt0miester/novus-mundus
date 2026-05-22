@@ -14,13 +14,10 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxExpeditionSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
-import {
-  TripleCountInput,
-  OPERATIVE_UNIT_LABELS,
-} from "@/components/shared/TripleCountInput";
+import { TripleCountInput, OPERATIVE_UNIT_LABELS } from "@/components/shared/TripleCountInput";
 import { bpsToPercent } from "@/lib/utils";
 import {
   deriveHeroCollectionPda,
@@ -105,6 +102,39 @@ export function ExpeditionTab() {
   const expeditionRemaining = hasExpedition
     ? Math.max(0, getExpeditionEndTime(expedition) - Math.floor(Date.now() / 1000))
     : 0;
+
+  // Hold-to-charge caps for the speedup tiers — how many speedup instructions
+  // one tx can usefully hold (timer-collapse ∧ gem affordability). The
+  // expedition processor prices a speedup on the time it removes, with a flat
+  // 100 gems/minute rate, so the cap is computed with maxExpeditionSpeedupCount.
+  const EXPEDITION_SPEEDUP_GEMS_PER_MINUTE = 100;
+  const expeditionGemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const speedupTiers = [
+    {
+      tier: 1,
+      label: "Hasten",
+      description: "50% time reduction",
+      maxCount: maxExpeditionSpeedupCount({
+        remainingSeconds: expeditionRemaining,
+        reductionBps: 5000,
+        costMultiplier: 1,
+        gemsPerMinute: EXPEDITION_SPEEDUP_GEMS_PER_MINUTE,
+        gemBalance: expeditionGemBalance,
+      }),
+    },
+    {
+      tier: 2,
+      label: "Rush",
+      description: "75% time reduction",
+      maxCount: maxExpeditionSpeedupCount({
+        remainingSeconds: expeditionRemaining,
+        reductionBps: 7500,
+        costMultiplier: 2,
+        gemsPerMinute: EXPEDITION_SPEEDUP_GEMS_PER_MINUTE,
+        gemBalance: expeditionGemBalance,
+      }),
+    },
+  ];
 
   // Reward preview for selected expedition type (tier 0 = base tier)
   const rewardPreview = useMemo(() => {
@@ -198,12 +228,14 @@ export function ExpeditionTab() {
         operativeUnit3: expeditionOps[2],
       },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: "Expedition started!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: "Expedition started!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
@@ -217,12 +249,14 @@ export function ExpeditionTab() {
       heroMint: expHeroMint ?? undefined,
       heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: "Expedition rewards claimed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: "Expedition rewards claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleAbort = async (reportPhase: (p: TxPhase) => void) => {
@@ -236,27 +270,39 @@ export function ExpeditionTab() {
       heroMint: expHeroMint ?? undefined,
       heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: "Expedition aborted.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: "Expedition aborted.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
-  const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+  const handleSpeedup = async (
+    tier: number,
+    reportPhase: (p: TxPhase) => void,
+    count: number = 1,
+  ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const geKey = client.gameEngine;
-    const ix = createExpeditionSpeedupInstruction(
-      { owner: publicKey, gameEngine: geKey },
-      { speedupTier: tier as 1 | 2 },
+    // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
+      createExpeditionSpeedupInstruction(
+        { owner: publicKey, gameEngine: geKey },
+        { speedupTier: tier as 1 | 2 },
+      ),
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: "Expedition sped up!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions,
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: n > 1 ? `Expedition sped up ×${n}!` : "Expedition sped up!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleStartAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
@@ -285,31 +331,35 @@ export function ExpeditionTab() {
       { owner: publicKey, gameEngine: ge },
       { speedupTier: tier as 1 | 2 },
     );
-    return transact.mutateAsync({
-      instructions: [startIx, speedupIx],
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: `${EXPEDITION_TYPES.find((t) => t.id === selectedType)?.name} expedition started (sped up)!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [startIx, speedupIx],
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: `${EXPEDITION_TYPES.find((t) => t.id === selectedType)?.name} expedition started (sped up)!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   // A strike is a skill action — the score is game_authority-co-signed.
   const handleStrike = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const versionedTx = await requestCoSign("/api/cosign/expedition/strike");
-    return transact.mutateAsync({
-      versionedTx,
-      invalidateKeys: [["expedition"], ["player"]],
-      successMessage: "Strike landed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        versionedTx,
+        invalidateKeys: [["expedition"], ["player"]],
+        successMessage: "Strike landed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   return (
     <div className="space-y-4">
       {/* Traveling Warning */}
       {playerTraveling && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-sm text-amber-300">
+        <div className="rounded-lg border border-border-gold/50 bg-accent/20 p-3 text-sm text-danger">
           You are currently traveling. Complete or cancel travel before starting an expedition.
         </div>
       )}
@@ -321,7 +371,8 @@ export function ExpeditionTab() {
             <div>
               <div className="text-xs text-text-muted">Active Expedition</div>
               <div className="text-lg font-semibold text-text-primary">
-                {EXPEDITION_TYPES.find((t) => t.id === expedition.expeditionType)?.name || "Unknown"}
+                {EXPEDITION_TYPES.find((t) => t.id === expedition.expeditionType)?.name ||
+                  "Unknown"}
               </div>
             </div>
             <div className="text-right">
@@ -345,8 +396,10 @@ export function ExpeditionTab() {
           {/* Time Remaining Display */}
           {expeditionRemaining > 0 && (
             <div className="mt-2 text-center text-[11px] text-text-muted">
-              Time remaining: <span className="text-text-gold">
-                {Math.floor(expeditionRemaining / 3600)}h {Math.floor((expeditionRemaining % 3600) / 60)}m {expeditionRemaining % 60}s
+              Time remaining:{" "}
+              <span className="text-text-gold">
+                {Math.floor(expeditionRemaining / 3600)}h{" "}
+                {Math.floor((expeditionRemaining % 3600) / 60)}m {expeditionRemaining % 60}s
               </span>
             </div>
           )}
@@ -391,14 +444,14 @@ export function ExpeditionTab() {
             </TxButton>
           </div>
           <p className="mt-1 text-center text-[11px] text-text-muted">
-            One strike unlocks per elapsed hour — higher average score lifts the
-            final yield.
+            One strike unlocks per elapsed hour — higher average score lifts the final yield.
           </p>
           {/* Speedup */}
           <SpeedupPanel
             visible={expeditionRemaining > 0}
             remainingSeconds={expeditionRemaining}
-            onSpeedup={handleSpeedup}
+            tiers={speedupTiers}
+            onSpeedup={(tier, rp, count) => handleSpeedup(tier, rp, count)}
             gemsPerMinute={100}
             gemBalance={playerData?.account?.gems?.toNumber?.()}
             className="mt-4"
@@ -415,18 +468,31 @@ export function ExpeditionTab() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-[200px]">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Stamina</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                      Stamina
+                    </span>
                     <span className="text-xs">
-                      <span className={playerStamina > 0 ? "text-green-400" : "text-red-400"}>{playerStamina}</span>
+                      <span className={playerStamina > 0 ? "text-green-400" : "text-red-400"}>
+                        {playerStamina}
+                      </span>
                       <span className="text-text-muted"> / {playerMaxStamina}</span>
                     </span>
                   </div>
-                  <StatBar current={playerStamina} max={playerMaxStamina} color="gold" size="sm" showValues={false} />
+                  <StatBar
+                    current={playerStamina}
+                    max={playerMaxStamina}
+                    color="gold"
+                    size="sm"
+                    showValues={false}
+                  />
                 </div>
               </div>
               {EXPEDITION_STAMINA_COST > 0 && (
                 <div className="mt-2 text-[11px] text-text-muted">
-                  Expedition stamina cost: <span className={hasStamina ? "text-text-secondary" : "text-red-400"}>{EXPEDITION_STAMINA_COST}</span>
+                  Expedition stamina cost:{" "}
+                  <span className={hasStamina ? "text-text-secondary" : "text-red-400"}>
+                    {EXPEDITION_STAMINA_COST}
+                  </span>
                   {!hasStamina && <span className="ml-2 text-red-400">Insufficient stamina</span>}
                 </div>
               )}
@@ -444,7 +510,7 @@ export function ExpeditionTab() {
                   onClick={() => setSelectedType(type.id)}
                   className={`rounded-lg border p-6 text-left transition-all ${
                     selectedType === type.id
-                      ? "border-amber-600 bg-amber-900/20"
+                      ? "border-border-gold bg-accent/20"
                       : "border-zinc-800 hover:border-zinc-700"
                   }`}
                 >
@@ -470,7 +536,7 @@ export function ExpeditionTab() {
                       onClick={() => setExpeditionTier(t)}
                       className={`rounded-lg border p-2 text-center transition-all ${
                         expeditionTier === t
-                          ? "border-amber-600 bg-amber-900/20 text-text-primary"
+                          ? "border-border-gold bg-accent/20 text-text-primary"
                           : "border-zinc-800 text-text-muted hover:border-zinc-700"
                       }`}
                     >
@@ -525,12 +591,20 @@ export function ExpeditionTab() {
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                   <div>
                     <div className="text-xs text-text-muted">Duration</div>
-                    <div className="text-text-gold text-sm font-semibold">{rewardPreview.duration}h</div>
+                    <div className="text-text-gold text-sm font-semibold">
+                      {rewardPreview.duration}h
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs text-text-muted">Est. {rewardPreview.resourceLabel}</div>
+                    <div className="text-xs text-text-muted">
+                      Est. {rewardPreview.resourceLabel}
+                    </div>
                     <div className="flex items-center gap-1 text-text-gold text-sm">
-                      <GameIcon id={rewardPreview.resourceIcon} title={rewardPreview.resourceLabel} size={14} />
+                      <GameIcon
+                        id={rewardPreview.resourceIcon}
+                        title={rewardPreview.resourceLabel}
+                        size={14}
+                      />
                       <GoldNumber value={rewardPreview.estimatedGems} size="sm" />
                     </div>
                   </div>
@@ -546,7 +620,9 @@ export function ExpeditionTab() {
                   </div>
                 </div>
                 <div className="mt-1 text-[11px] text-text-muted">
-                  Estimated for {(expeditionOps[0] + expeditionOps[1] + expeditionOps[2]).toLocaleString()} operatives sent.
+                  Estimated for{" "}
+                  {(expeditionOps[0] + expeditionOps[1] + expeditionOps[2]).toLocaleString()}{" "}
+                  operatives sent.
                 </div>
               </div>
             )}
@@ -560,7 +636,11 @@ export function ExpeditionTab() {
 
             <div className="mt-4 space-y-3">
               <div className="flex justify-center">
-                <TxButton onClick={handleStart} className="px-8 py-3 text-lg" disabled={!canStartNow}>
+                <TxButton
+                  onClick={handleStart}
+                  className="px-8 py-3 text-lg"
+                  disabled={!canStartNow}
+                >
                   Start Expedition
                 </TxButton>
               </div>
@@ -587,41 +667,57 @@ export function ExpeditionTab() {
         </>
       )}
       {/* Game Parameters */}
-      {ge && (() => {
-        const ec = ge.expeditionConfig;
-        return (
-          <GameInfoPanel>
-            <InfoGrid items={[
-              ...ec.miningNoviCost.map((c, i) => ({
-                label: `Mining Cost T${i}`,
-                value: c.toNumber().toLocaleString(),
-                suffix: "NOVI",
-              })),
-              ...ec.fishingNoviCost.map((c, i) => ({
-                label: `Fishing Cost T${i}`,
-                value: c.toNumber().toLocaleString(),
-                suffix: "NOVI",
-              })),
-              ...ec.miningFragmentBonus.map((b, i) => ({
-                label: `Mining Frag T${i}`,
-                value: `+${b.toNumber()}`,
-              })),
-              ...ec.miningDurationHours.map((h, i) => ({
-                label: `Mining Dur T${i}`,
-                value: `${h}h`,
-              })),
-              ...ec.miningRareChanceBps.map((c, i) => ({
-                label: `Mining Rare T${i}`,
-                value: bpsToPercent(c),
-              })),
-              { label: "Perfect Bonus", value: bpsToPercent(ec.perfectExpeditionBonusBps), highlight: true },
-              { label: "Op T1 Mult", value: bpsToPercent(ec.operativeTier1MultiplierBps.toNumber()) },
-              { label: "Op T2 Mult", value: bpsToPercent(ec.operativeTier2MultiplierBps.toNumber()) },
-              { label: "Op T3 Mult", value: bpsToPercent(ec.operativeTier3MultiplierBps.toNumber()) },
-            ]} />
-          </GameInfoPanel>
-        );
-      })()}
+      {ge &&
+        (() => {
+          const ec = ge.expeditionConfig;
+          return (
+            <GameInfoPanel>
+              <InfoGrid
+                items={[
+                  ...ec.miningNoviCost.map((c, i) => ({
+                    label: `Mining Cost T${i}`,
+                    value: c.toNumber().toLocaleString(),
+                    suffix: "NOVI",
+                  })),
+                  ...ec.fishingNoviCost.map((c, i) => ({
+                    label: `Fishing Cost T${i}`,
+                    value: c.toNumber().toLocaleString(),
+                    suffix: "NOVI",
+                  })),
+                  ...ec.miningFragmentBonus.map((b, i) => ({
+                    label: `Mining Frag T${i}`,
+                    value: `+${b.toNumber()}`,
+                  })),
+                  ...ec.miningDurationHours.map((h, i) => ({
+                    label: `Mining Dur T${i}`,
+                    value: `${h}h`,
+                  })),
+                  ...ec.miningRareChanceBps.map((c, i) => ({
+                    label: `Mining Rare T${i}`,
+                    value: bpsToPercent(c),
+                  })),
+                  {
+                    label: "Perfect Bonus",
+                    value: bpsToPercent(ec.perfectExpeditionBonusBps),
+                    highlight: true,
+                  },
+                  {
+                    label: "Op T1 Mult",
+                    value: bpsToPercent(ec.operativeTier1MultiplierBps.toNumber()),
+                  },
+                  {
+                    label: "Op T2 Mult",
+                    value: bpsToPercent(ec.operativeTier2MultiplierBps.toNumber()),
+                  },
+                  {
+                    label: "Op T3 Mult",
+                    value: bpsToPercent(ec.operativeTier3MultiplierBps.toNumber()),
+                  },
+                ]}
+              />
+            </GameInfoPanel>
+          );
+        })()}
     </div>
   );
 }

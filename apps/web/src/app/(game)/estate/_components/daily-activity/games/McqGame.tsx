@@ -20,9 +20,7 @@ interface McqGameProps {
  */
 export function McqGame({ presentation, submitting, onSubmit }: McqGameProps) {
   const { questions } = presentation;
-  const [answers, setAnswer] = useIndexedSelection<number | null>(() =>
-    questions.map(() => null),
-  );
+  const [answers, setAnswer] = useIndexedSelection<number | null>(() => questions.map(() => null));
 
   const answered = answers.filter((a) => a !== null).length;
   const allAnswered = answered === questions.length;
@@ -34,10 +32,7 @@ export function McqGame({ presentation, submitting, onSubmit }: McqGameProps) {
           {q.display && (
             <div className="mb-2 flex flex-wrap gap-1.5 text-2xl leading-none">
               {q.display.split(" ").map((g, gi) => (
-                <span
-                  key={gi}
-                  className={g === "★" ? "text-amber-300" : "text-zinc-600"}
-                >
+                <span key={gi} className={g === "★" ? "text-gold-300" : "text-zinc-600"}>
                   {g}
                 </span>
               ))}
@@ -54,8 +49,8 @@ export function McqGame({ presentation, submitting, onSubmit }: McqGameProps) {
                   onClick={() => setAnswer(qi, oi)}
                   className={`min-w-[3rem] rounded-lg border px-4 py-2 text-sm font-semibold tabular-nums transition-colors ${
                     selected
-                      ? "border-amber-600 bg-amber-900/30 text-text-gold"
-                      : "border-border-default text-text-secondary hover:border-amber-800/50"
+                      ? "border-border-gold bg-accent/30 text-text-gold"
+                      : "border-border-default text-text-secondary hover:border-border-gold/50"
                   }`}
                 >
                   {opt}

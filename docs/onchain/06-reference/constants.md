@@ -63,7 +63,10 @@ Used to verify oracle feed account ownership (prevents fake feed accounts).
 | Constant | Value |
 |----------|-------|
 | `PYTH_PROGRAM_ID` | `pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT` |
+| `PYTH_RECEIVER_PROGRAM_ID` | `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` |
 | `SWITCHBOARD_PROGRAM_ID` | `SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv` |
+
+Pyth pull-oracle accounts (`PriceUpdateV2`) are owned by one of two programs — the Pyth price-feed program (`PYTH_PROGRAM_ID`, sponsored continuously-updated feeds) or the Pyth Solana Receiver (`PYTH_RECEIVER_PROGRAM_ID`, caller-posted ephemeral updates). Both produce the identical `PriceUpdateV2` layout, so either owner is accepted.
 
 ---
 
@@ -136,6 +139,12 @@ Constant: `PRIZE_DISTRIBUTION: [u16; 10]`
 
 Constant: `ENCOUNTER_STAMINA_COSTS: [u64; 6]`
 
+### Encounter Lifecycle
+
+| Constant | Type | Value | Meaning |
+|----------|------|-------|---------|
+| `ENCOUNTER_CLEANUP_GRACE` | `i64` | 3,600 | Grace period (seconds) after `despawn_at` before an encounter account can be cleaned up; the extra hour lets any rally created before despawn finish executing before its target account is closed |
+
 ---
 
 ## Subscription Tiers
@@ -153,6 +162,7 @@ Constant: `ENCOUNTER_STAMINA_COSTS: [u64; 6]`
 | `DEFENSIVE_UNIT_1_POWER` | `u64` | 10 | Combat power per Tier-1 defensive unit |
 | `DEFENSIVE_UNIT_2_POWER` | `u64` | 25 | Combat power per Tier-2 defensive unit |
 | `DEFENSIVE_UNIT_3_POWER` | `u64` | 60 | Combat power per Tier-3 defensive unit |
+| `DEFENSIVE_UNIT_HEALTH` | `[u64; 3]` | `[2, 5, 12]` | HP per defensive unit by tier; gives tier-3 units real durability so overworld combat takes 5–10 rounds at parity instead of one swing (ratios echo `DUNGEON_UNIT_HEALTH` scaled down ~30×) |
 | `WEAPON_LOOT_RATE_BPS` | `u16` | 6,000 | 60% of dead enemy troops' weapons can be looted |
 | `ARMORY_RAID_WITH_OPERATIVES_BPS` | `u16` | 2,500 | 25% armory raid rate when defender has operatives but no garrison |
 | `ARMORY_RAID_UNDEFENDED_BPS` | `u16` | 5,000 | 50% armory raid rate when defender is completely undefended |
@@ -165,7 +175,7 @@ Constant: `ENCOUNTER_STAMINA_COSTS: [u64; 6]`
 
 | Constant | Type | Value | Meaning |
 |----------|------|-------|---------|
-| `ENCOUNTER_ATTACK_RANGE_METERS` | `f64` | 10.0 | Maximum range to attack an encounter (meters) |
+| `ENCOUNTER_ATTACK_RANGE_METERS` | `f64` | 16.0 | Maximum range to attack an encounter (meters); must exceed one grid cell (~11 m N/S, ~10.2 m E/W at mid latitudes) so 16 m clears a diagonal cell |
 | `PVP_ATTACK_RANGE_METERS` | `f64` | 15.0 | Maximum range for PvP combat (meters) |
 
 ---
@@ -527,6 +537,17 @@ Constant: `GARRISON_CAP_BY_TIER: [u8; 4]`
 | `MEMBER_NOVI_PER_DAY` | `u64` | 5,000 | NOVI per day for team members |
 | `MEMBER_CASH_PER_DAY` | `u64` | 500,000 | Cash per day for team members |
 | `KING_LOOT_CUT_BPS` | `u16` | 1,500 | King receives 15% of combat loot from garrison |
+
+---
+
+## Seeds
+
+`constants.rs` also defines the PDA seed string constants. The complete list with full seed-array layouts lives in [Seeds](./seeds.md); two seeds documented only in source are noted here for completeness.
+
+| Constant | Type | Value | Meaning |
+|----------|------|-------|---------|
+| `BUILDING_TEMPLATE_SEED` | `&[u8]` | `"building_template"` | Seed for building-template PDAs |
+| `ORACLE_QUOTE_SEED` | `&[u8]` | `"oracle_quote"` | Seed for the program-owned Switchboard oracle-quote PDA (`["oracle_quote", switchboard_queue]`) |
 
 ---
 

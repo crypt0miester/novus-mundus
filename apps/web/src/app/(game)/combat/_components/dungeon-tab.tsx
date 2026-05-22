@@ -14,6 +14,7 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useChainNow } from "@/lib/hooks/useChainTime";
 import { bpsToPercent } from "@/lib/utils";
 import {
   derivePlayerPda,
@@ -80,16 +81,12 @@ export function DungeonTab() {
   const { data: template } = useDungeonTemplate(run?.dungeonId);
 
   const [selectedDungeon, setSelectedDungeon] = useState(0);
-  const [heroSpec, setHeroSpec] = useState<HeroSpecialization>(
-    HeroSpecialization.Warrior,
-  );
+  const [heroSpec, setHeroSpec] = useState<HeroSpecialization>(HeroSpecialization.Warrior);
   // Every dungeon that exists on-chain — drives the selector. Names, floors,
   // entry cost and the level gate all come from the template; nothing here is
   // hardcoded.
   const { data: dungeons } = useDungeonTemplates();
-  const selectedTemplate = dungeons?.find(
-    (d) => d.id === selectedDungeon,
-  )?.template;
+  const selectedTemplate = dungeons?.find((d) => d.id === selectedDungeon)?.template;
 
   // Snap the selection to a real dungeon once the list loads.
   useEffect(() => {
@@ -107,9 +104,7 @@ export function DungeonTab() {
   const selectedMint = useDungeonHeroStore((s) => s.selectedMint);
   const showPanel = useRightPanelStore((s) => s.show);
   const champion =
-    unlockedHeroes.find((h) => h.mint.toBase58() === selectedMint) ??
-    unlockedHeroes[0] ??
-    null;
+    unlockedHeroes.find((h) => h.mint.toBase58() === selectedMint) ?? unlockedHeroes[0] ?? null;
   const heroMint: PublicKey | null = champion?.mint ?? null;
 
   // A finished run's recap + claim live in the DungeonClaimPanel (RightPanel).
@@ -118,8 +113,7 @@ export function DungeonTab() {
     (run.status === DungeonStatus.Completed ||
       run.status === DungeonStatus.Failed ||
       run.status === DungeonStatus.Fled);
-  const runEndedTitle =
-    run?.status === DungeonStatus.Completed ? "Dungeon Cleared" : "Run Ended";
+  const runEndedTitle = run?.status === DungeonStatus.Completed ? "Dungeon Cleared" : "Run Ended";
 
   useEffect(() => {
     if (runEnded) showPanel(runEndedTitle, "dungeon-claim");
@@ -144,8 +138,9 @@ export function DungeonTab() {
   // Per-room stamina cost (each room in a dungeon costs 1 encounter worth)
   const roomStaminaCost = useMemo(() => ENCOUNTER_STAMINA_COSTS[0] ?? 10, []);
 
-  // Time-of-day indicator
-  const now = Math.floor(Date.now() / 1000);
+  // Time-of-day indicator — chain-anchored so the previewed loot multiplier
+  // matches what the program computes from `Clock::unix_timestamp`.
+  const now = useChainNow();
   const timeOfDayInfo = useMemo(() => {
     if (!player) return null;
     const longitude = (player.currentLong ?? 0) / 10000;
@@ -201,9 +196,8 @@ export function DungeonTab() {
     <div className="space-y-6">
       {/* Traveling Warning */}
       {playerTraveling && (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-900/20 p-3 text-sm text-amber-300">
-          You are currently traveling. Complete or cancel travel before
-          entering a dungeon.
+        <div className="rounded-lg border border-border-gold/50 bg-accent/20 p-3 text-sm text-danger">
+          You are currently traveling. Complete or cancel travel before entering a dungeon.
         </div>
       )}
 
@@ -217,11 +211,7 @@ export function DungeonTab() {
                   Stamina
                 </span>
                 <span className="text-xs">
-                  <span
-                    className={
-                      playerStamina > 0 ? "text-green-400" : "text-red-400"
-                    }
-                  >
+                  <span className={playerStamina > 0 ? "text-green-400" : "text-red-400"}>
                     {playerStamina}
                   </span>
                   <span className="text-text-muted"> / {playerMaxStamina}</span>
@@ -275,13 +265,11 @@ export function DungeonTab() {
                     onClick={() => setSelectedDungeon(id)}
                     className={`rounded-lg border p-4 text-left transition-all ${
                       selectedDungeon === id
-                        ? "border-amber-600 bg-amber-900/20"
+                        ? "border-border-gold bg-accent/20"
                         : "border-zinc-800 hover:border-zinc-700"
                     }`}
                   >
-                    <div className="text-lg font-bold text-text-gold">
-                      {t.name}
-                    </div>
+                    <div className="text-lg font-bold text-text-gold">{t.name}</div>
                     <div className="text-xs text-text-muted">
                       {THEMES[t.theme]?.name ?? `Theme ${t.theme}`}
                     </div>
@@ -290,22 +278,14 @@ export function DungeonTab() {
                     </div>
                     <div className="text-[11px] text-text-muted">
                       Entry:{" "}
-                      <span
-                        className={
-                          affordable ? "text-text-secondary" : "text-red-400"
-                        }
-                      >
+                      <span className={affordable ? "text-text-secondary" : "text-red-400"}>
                         {t.staminaCost} stamina
                       </span>
                     </div>
                     {t.minPlayerLevel > 0 && (
                       <div className="text-[11px] text-text-muted">
                         Requires{" "}
-                        <span
-                          className={
-                            levelOk ? "text-text-secondary" : "text-red-400"
-                          }
-                        >
+                        <span className={levelOk ? "text-text-secondary" : "text-red-400"}>
                           level {t.minPlayerLevel}
                         </span>
                       </div>
@@ -323,12 +303,8 @@ export function DungeonTab() {
               {dungeonStaminaCost}
             </span>
             {" / "}Current:{" "}
-            <span className={hasStamina ? "text-green-400" : "text-red-400"}>
-              {playerStamina}
-            </span>
-            {!hasStamina && (
-              <span className="ml-2 text-red-400">Insufficient stamina</span>
-            )}
+            <span className={hasStamina ? "text-green-400" : "text-red-400"}>{playerStamina}</span>
+            {!hasStamina && <span className="ml-2 text-red-400">Insufficient stamina</span>}
           </div>
           <div className="mt-1 text-center text-[11px] text-text-muted">
             Per room: <span className="text-text-secondary">{roomStaminaCost} stamina</span>
@@ -336,24 +312,19 @@ export function DungeonTab() {
           {minLevel > 0 && (
             <div className="mt-1 text-center text-[11px]">
               <span className="text-text-muted">Requires level </span>
-              <span
-                className={meetsLevel ? "text-text-secondary" : "text-red-400"}
-              >
+              <span className={meetsLevel ? "text-text-secondary" : "text-red-400"}>
                 {minLevel}
               </span>
               {!meetsLevel && (
-                <span className="ml-1 text-red-400">
-                  — you are level {player?.level ?? 0}
-                </span>
+                <span className="ml-1 text-red-400">— you are level {player?.level ?? 0}</span>
               )}
             </div>
           )}
           {champion ? (
             <div className="mt-1 flex items-center justify-center gap-2 text-[11px] text-text-muted">
               <span>
-                Champion:{" "}
-                <span className="text-text-secondary">{champion.name}</span> —
-                escrowed for the run
+                Champion: <span className="text-text-secondary">{champion.name}</span> — escrowed
+                for the run
               </span>
               {unlockedHeroes.length > 1 && (
                 <button
@@ -365,9 +336,9 @@ export function DungeonTab() {
               )}
             </div>
           ) : (
-            <div className="mt-1 text-center text-[11px] text-amber-400">
-              No hero available — mint or unlock one in the Heroes tab. A
-              dungeon run escrows a wallet-held hero.
+            <div className="mt-1 text-center text-[11px] text-danger">
+              No hero available — mint or unlock one in the Heroes tab. A dungeon run escrows a
+              wallet-held hero.
             </div>
           )}
 
@@ -383,13 +354,11 @@ export function DungeonTab() {
                   onClick={() => setHeroSpec(s.id)}
                   className={`rounded-lg border p-2 text-left transition-all ${
                     heroSpec === s.id
-                      ? "border-amber-600 bg-amber-900/20"
+                      ? "border-border-gold bg-accent/20"
                       : "border-zinc-800 hover:border-zinc-700"
                   }`}
                 >
-                  <div className="text-sm font-semibold text-text-primary">
-                    {s.label}
-                  </div>
+                  <div className="text-sm font-semibold text-text-primary">{s.label}</div>
                   <div className="text-[10px] text-text-muted">{s.perk}</div>
                 </button>
               ))}
@@ -412,9 +381,7 @@ export function DungeonTab() {
                 <TxButton
                   onClick={handleEnter}
                   className="px-8 py-3 text-lg"
-                  disabled={
-                    playerTraveling || !hasStamina || !heroMint || !meetsLevel
-                  }
+                  disabled={playerTraveling || !hasStamina || !heroMint || !meetsLevel}
                 >
                   Enter Dungeon
                 </TxButton>
@@ -444,31 +411,60 @@ export function DungeonTab() {
       )}
 
       {/* Game Parameters */}
-      {geData?.account && (() => {
-        const dc = geData.account.dungeonConfig;
-        return (
-          <GameInfoPanel>
-            <InfoGrid
-              items={[
-                { label: "Resume Gem Cost", value: dc.resumeGemCost.toNumber().toLocaleString(), highlight: true },
-                { label: "Unit Power T1", value: dc.unitPower[0]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Unit Power T2", value: dc.unitPower[1]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Unit Power T3", value: dc.unitPower[2]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Unit Health T1", value: dc.unitHealth[0]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Unit Health T2", value: dc.unitHealth[1]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Unit Health T3", value: dc.unitHealth[2]?.toNumber().toLocaleString() ?? "—" },
-                { label: "Treasure Loot Mult", value: bpsToPercent(dc.treasureLootMultiplierBps) },
-                { label: "Trap XP Bonus", value: bpsToPercent(dc.trapXpBonusBps) },
-                { label: "Rest Heal", value: `${dc.restHealPercent}%` },
-                { label: "Darkness Dmg/Floor", value: bpsToPercent(dc.darknessDamagePenaltyPerFloorBps) },
-                { label: "Flee Penalty F1", value: bpsToPercent(dc.fleePenaltyBps[0] ?? 0) },
-                { label: "Flee Penalty F2", value: bpsToPercent(dc.fleePenaltyBps[1] ?? 0) },
-                { label: "Flee Penalty F3", value: bpsToPercent(dc.fleePenaltyBps[2] ?? 0) },
-              ]}
-            />
-          </GameInfoPanel>
-        );
-      })()}
+      {geData?.account &&
+        (() => {
+          const dc = geData.account.dungeonConfig;
+          return (
+            <GameInfoPanel>
+              <InfoGrid
+                items={[
+                  {
+                    label: "Resume Gem Cost",
+                    value: dc.resumeGemCost.toNumber().toLocaleString(),
+                    highlight: true,
+                  },
+                  {
+                    label: "Unit Power T1",
+                    value: dc.unitPower[0]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Unit Power T2",
+                    value: dc.unitPower[1]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Unit Power T3",
+                    value: dc.unitPower[2]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Unit Health T1",
+                    value: dc.unitHealth[0]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Unit Health T2",
+                    value: dc.unitHealth[1]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Unit Health T3",
+                    value: dc.unitHealth[2]?.toNumber().toLocaleString() ?? "—",
+                  },
+                  {
+                    label: "Treasure Loot Mult",
+                    value: bpsToPercent(dc.treasureLootMultiplierBps),
+                  },
+                  { label: "Trap XP Bonus", value: bpsToPercent(dc.trapXpBonusBps) },
+                  { label: "Rest Heal", value: `${dc.restHealPercent}%` },
+                  {
+                    label: "Darkness Dmg/Floor",
+                    value: bpsToPercent(dc.darknessDamagePenaltyPerFloorBps),
+                  },
+                  { label: "Flee Penalty F1", value: bpsToPercent(dc.fleePenaltyBps[0] ?? 0) },
+                  { label: "Flee Penalty F2", value: bpsToPercent(dc.fleePenaltyBps[1] ?? 0) },
+                  { label: "Flee Penalty F3", value: bpsToPercent(dc.fleePenaltyBps[2] ?? 0) },
+                ]}
+              />
+            </GameInfoPanel>
+          );
+        })()}
     </div>
   );
 }

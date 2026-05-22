@@ -226,8 +226,8 @@ use crate::state::research::ResearchCategory;
 pub const fn required_academy_level_for_research(category: ResearchCategory) -> u8 {
     match category {
         ResearchCategory::Battle => 1,
-        ResearchCategory::Economy => 5,
-        ResearchCategory::Growth => 10,
+        ResearchCategory::Economy => 2,
+        ResearchCategory::Growth => 3,
     }
 }
 

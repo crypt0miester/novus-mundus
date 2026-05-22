@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useCallback, useState, useEffect } from "react";
+import { Suspense, useCallback, useState, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -12,11 +12,16 @@ import { TxButton } from "@/components/shared/TxButton";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToPercent } from "@/lib/utils";
-import { getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier, isTraveling, findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
+import { isTraveling, findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
 import { BuildingGrid } from "./_components/building-grid";
 import { FeatureView, hasCenterView } from "./_components/feature-view";
-import { BUILDING_FEATURE_MAP, buildingSlug, buildingIdFromSlug } from "@/lib/config/building-features";
+import {
+  BUILDING_FEATURE_MAP,
+  buildingSlug,
+  buildingIdFromSlug,
+} from "@/lib/config/building-features";
 import { Arrival } from "@/components/arrival/Arrival";
+import { loadJump } from "@/lib/jumpstart/persist";
 import { buildingPhase } from "@/lib/narrative";
 import MagicRings from "@/components/shared/animations/MagicRing";
 import { DailyActivityTracker } from "./_components/daily-activity/DailyActivityTracker";
@@ -43,35 +48,20 @@ function EstateContent() {
 
   const [activeBuilding, setActiveBuilding] = useTabParam("", "building");
 
-  const {
-    handleCreateEstate,
-    handleBuyPlot,
-    plotsOwned,
-    maxSlots,
-    canBuyPlot,
-    nextPlotCost,
-  } = useEstateActions();
+  const { handleCreateEstate, handleBuyPlot, plotsOwned, maxSlots, canBuyPlot, nextPlotCost } =
+    useEstateActions();
 
-  // Time-of-day info
   const now = Math.floor(Date.now() / 1000);
-  const timeInfo = useMemo(() => {
-    if (!player) return null;
-    const longitude = player.currentLong ?? 0;
-    const tod = getCurrentTimeOfDay(now, longitude / 10000);
-    return {
-      name: getTimeOfDayName(tod),
-      mult: getActivityMultiplier("hiring" as any, tod),
-    };
-  }, [player, now]);
 
   // Building counts
-  const activeCount = estate?.buildings?.filter(
-    (b: BuildingSlot) =>
-      b.status === BuildingStatus.Active || b.status === BuildingStatus.Upgrading
-  ).length ?? 0;
-  const constructingCount = estate?.buildings?.filter(
-    (b: BuildingSlot) => b.status === BuildingStatus.Building
-  ).length ?? 0;
+  const activeCount =
+    estate?.buildings?.filter(
+      (b: BuildingSlot) =>
+        b.status === BuildingStatus.Active || b.status === BuildingStatus.Upgrading,
+    ).length ?? 0;
+  const constructingCount =
+    estate?.buildings?.filter((b: BuildingSlot) => b.status === BuildingStatus.Building).length ??
+    0;
 
   // Handle building selection for right panel. One handler for every phase —
   // the panel itself derives build / upgrade / speed-up from the live state.
@@ -81,7 +71,7 @@ function EstateContent() {
       const name = config?.name ?? `Building #${id}`;
       show(name, "building-detail", { buildingId: id });
     },
-    [show]
+    [show],
   );
 
   const handleOpenFeature = useCallback(
@@ -89,18 +79,20 @@ function EstateContent() {
       // Use a readable slug in the URL (?building=mine), not a raw id.
       setActiveBuilding(buildingSlug(buildingId));
     },
-    [setActiveBuilding]
+    [setActiveBuilding],
   );
 
   // The Arrival — onboarding gate. The estate is home; a player without an
   // estate (or no player at all) sees the Arrival before the holding.
-  const [arrivalState, setArrivalState] = useState<"pending" | "running" | "done">(
-    "pending",
-  );
+  const [arrivalState, setArrivalState] = useState<"pending" | "running" | "done">("pending");
   useEffect(() => {
     if (arrivalState !== "pending") return;
     if (!playerReady || !estateReady) return;
-    setArrivalState(playerData?.exists && estateData?.exists ? "done" : "running");
+    // A jump-ahead can create the player + estate yet still be unfinished —
+    // keep the Arrival open so it can resume the jump rather than dropping
+    // the player into a half-built holding.
+    const arrived = playerData?.exists && estateData?.exists && !loadJump();
+    setArrivalState(arrived ? "done" : "running");
   }, [arrivalState, playerReady, estateReady, playerData, estateData]);
 
   if (arrivalState === "pending") {
@@ -116,12 +108,7 @@ function EstateContent() {
     );
   }
   if (arrivalState === "running") {
-    return (
-      <Arrival
-        hasPlayer={!!playerData?.exists}
-        onComplete={() => setArrivalState("done")}
-      />
-    );
+    return <Arrival hasPlayer={!!playerData?.exists} onComplete={() => setArrivalState("done")} />;
   }
 
   // If a building feature view is active and the building is usable, show it.
@@ -146,8 +133,7 @@ function EstateContent() {
         {!estateData?.exists && estateReady && (
           <div className="card accent-border text-center">
             <p className="mb-4 text-text-secondary">
-              The ground here is yours for the taking. Drive your stakes and
-              the climb begins.
+              The ground here is yours for the taking. Drive your stakes and the climb begins.
             </p>
             <TxButton onClick={handleCreateEstate}>Claim the Ground</TxButton>
           </div>
@@ -176,9 +162,7 @@ function EstateContent() {
                   </div>
                   <div>
                     <span className="text-text-muted">Plots </span>
-                    <span className="font-semibold text-text-primary">
-                      {plotsOwned}
-                    </span>
+                    <span className="font-semibold text-text-primary">{plotsOwned}</span>
                     <span className="text-text-muted">/5</span>
                   </div>
                   <div>
@@ -188,32 +172,10 @@ function EstateContent() {
                     </span>
                     <span className="text-text-muted">/{maxSlots}</span>
                   </div>
-                  {timeInfo && (
-                    <div>
-                      <span className="text-text-muted">{timeInfo.name}</span>
-                      {timeInfo.mult !== 1 && (
-                        <span
-                          className={`ml-1 text-xs ${
-                            timeInfo.mult > 1 ? "text-green-600" : "text-amber-600"
-                          }`}
-                        >
-                          (
-                          {timeInfo.mult > 1
-                            ? `-${((timeInfo.mult - 1) * 100).toFixed(0)}%`
-                            : `+${(((1 - timeInfo.mult) / timeInfo.mult) * 100).toFixed(0)}%`}{" "}
-                          cost)
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                   {canBuyPlot && (
-                    <TxButton
-                      onClick={handleBuyPlot}
-                      variant="secondary"
-                      className="text-xs px-4"
-                    >
+                    <TxButton onClick={handleBuyPlot} variant="secondary" className="text-xs px-4">
                       Buy Plot ({(nextPlotCost / 1000).toFixed(0)}k NOVI)
                     </TxButton>
                   )}

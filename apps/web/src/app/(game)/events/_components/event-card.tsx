@@ -34,7 +34,7 @@ const STATUS_LABEL: Record<number, string> = {
 
 const STATUS_STYLE: Record<number, string> = {
   [EventStatus.Pending]: "bg-zinc-800 text-text-muted",
-  [EventStatus.Active]: "bg-amber-900/40 text-text-gold",
+  [EventStatus.Active]: "bg-accent/40 text-text-gold",
   [EventStatus.Finalized]: "bg-emerald-900/40 text-emerald-300",
   [EventStatus.Cancelled]: "bg-red-900/30 text-red-400",
 };
@@ -95,8 +95,7 @@ export function EventCard({
   const canJoin =
     (status === EventStatus.Pending || status === EventStatus.Active) && !isJoined && !ended;
   // Finalize — permissionless, for events past endTime still in Pending/Active.
-  const canFinalize =
-    (status === EventStatus.Pending || status === EventStatus.Active) && ended;
+  const canFinalize = (status === EventStatus.Pending || status === EventStatus.Active) && ended;
   // Claim — Finalized event where the player is on the top-10 leaderboard.
   const canClaim = status === EventStatus.Finalized && myRank !== null;
 
@@ -211,7 +210,9 @@ export function EventCard({
         <div>
           <div className="text-xs text-text-muted">Prize Pool</div>
           <GoldNumber value={prizeAmount} size="sm" />
-          <div className="text-[10px] text-text-muted">{PRIZE_LABEL[event.prizeType] ?? "Prize"}</div>
+          <div className="text-[10px] text-text-muted">
+            {PRIZE_LABEL[event.prizeType] ?? "Prize"}
+          </div>
         </div>
         <div>
           <div className="text-xs text-text-muted">Remaining</div>
@@ -219,11 +220,7 @@ export function EventCard({
         </div>
         <div>
           <div className="text-xs text-text-muted">
-            {status === EventStatus.Pending && !started
-              ? "Starts"
-              : ended
-                ? "Ended"
-                : "Ends"}
+            {status === EventStatus.Pending && !started ? "Starts" : ended ? "Ended" : "Ends"}
           </div>
           {status === EventStatus.Pending && !started ? (
             <GoldCountdown endsAt={startTime} format="compact" size="sm" />
@@ -239,7 +236,7 @@ export function EventCard({
 
       {/* Your participation */}
       {isJoined && (
-        <div className="mt-3 flex items-center justify-between rounded-lg border border-amber-800/60 bg-amber-900/10 px-3 py-2">
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-border-gold/60 bg-accent/10 px-3 py-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-gold">
             Your Entry
           </span>
@@ -273,17 +270,13 @@ export function EventCard({
                 <div
                   key={`${entry.player.toBase58()}-${i}`}
                   className={`flex items-center justify-between rounded-md px-2 py-1 text-sm ${
-                    isMe ? "bg-amber-900/20" : ""
+                    isMe ? "bg-accent/20" : ""
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-6 text-right text-xs font-semibold ${
-                        i === 0
-                          ? "text-text-gold"
-                          : i < 3
-                            ? "text-amber-300"
-                            : "text-text-muted"
+                        i === 0 ? "text-text-gold" : i < 3 ? "text-gold-300" : "text-text-muted"
                       }`}
                     >
                       #{i + 1}
@@ -291,9 +284,7 @@ export function EventCard({
                     <span className="font-mono text-text-primary">
                       <DomainName pubkey={entry.player} chars={4} />
                     </span>
-                    {isMe && (
-                      <span className="text-[10px] uppercase text-text-gold">you</span>
-                    )}
+                    {isMe && <span className="text-[10px] uppercase text-text-gold">you</span>}
                   </div>
                   <span className="text-text-secondary">
                     {entry.score.toNumber().toLocaleString()}
@@ -336,14 +327,14 @@ export function EventCard({
       )}
       {canFinalize && (
         <p className="mt-2 text-xs text-text-muted">
-          This event has ended. Finalizing is permissionless — it locks the
-          leaderboard so winners can claim.
+          This event has ended. Finalizing is permissionless — it locks the leaderboard so winners
+          can claim.
         </p>
       )}
       {canClaim && (
         <p className="mt-2 text-xs text-text-muted">
-          Prize claims require an aged, active account. New or low-activity
-          accounts may be rejected on-chain by anti-Sybil checks.
+          Prize claims require an aged, active account. New or low-activity accounts may be rejected
+          on-chain by anti-Sybil checks.
         </p>
       )}
     </div>

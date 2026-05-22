@@ -20,11 +20,29 @@ import {
   RESEARCH_CATEGORY_NAMES,
   getResearchName,
 } from '../../../src/index';
-import { RESEARCH_TEMPLATES } from '../../data/research';
+import { RESEARCH_TEMPLATES, type ResearchTemplateData } from '../../data/research';
 import {
   section, table, bold, dim, green, red, formatNum, formatBps,
   formatDuration, check, statusBadge,
 } from '../format';
+
+/**
+ * Full update-param set for a template, synced from the catalog. The on-chain
+ * update_template processor patches one field per call; the SDK builder turns
+ * this into one instruction per field.
+ */
+function templateUpdateParams(t: ResearchTemplateData) {
+  return {
+    baseTimeSeconds: t.baseTimeSeconds,
+    baseCost: new BN(t.baseNoviCost),
+    buffPerLevelBps: t.buffPerLevelBps,
+    gemCostPerMinute: t.gemCostPerMinute,
+    isActive: t.isActive,
+    maxLevel: t.maxLevel,
+    prerequisiteResearch: t.prerequisiteResearch,
+    prerequisiteLevel: t.prerequisiteLevel,
+  };
+}
 
 export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
@@ -60,12 +78,7 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
           gameEngine: ctx.gameEngine,
           researchType: template.researchType,
         },
-        {
-          baseCost: new BN(template.baseNoviCost),
-          baseDuration: new BN(template.baseTimeSeconds),
-          buffPerLevelBps: template.buffPerLevelBps,
-          maxLevel: template.maxLevel,
-        }
+        templateUpdateParams(template),
       ),
       stats
     );
@@ -90,12 +103,7 @@ export async function updateResearch(ctx: CLIContext): Promise<PhaseStats> {
           gameEngine: ctx.gameEngine,
           researchType: template.researchType,
         },
-        {
-          baseCost: new BN(template.baseNoviCost),
-          baseDuration: new BN(template.baseTimeSeconds),
-          buffPerLevelBps: template.buffPerLevelBps,
-          maxLevel: template.maxLevel,
-        }
+        templateUpdateParams(template),
       ),
       stats
     );

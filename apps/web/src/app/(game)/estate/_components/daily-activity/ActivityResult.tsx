@@ -15,12 +15,7 @@ interface ActivityResultProps {
  * The reward reveal shown after a daily activity is co-signed. Graded
  * mini-games count the score up; Class A choices just show the outcome.
  */
-export function ActivityResult({
-  title,
-  score,
-  summary,
-  onClose,
-}: ActivityResultProps) {
+export function ActivityResult({ title, score, summary, onClose }: ActivityResultProps) {
   const [shown, setShown] = useState(0);
 
   useEffect(() => {
@@ -40,9 +35,7 @@ export function ActivityResult({
 
   return (
     <div className="card accent-border animate-in fade-in zoom-in-95 text-center duration-300">
-      <div className="text-xs uppercase tracking-wider text-text-muted">
-        {title} — complete
-      </div>
+      <div className="text-xs uppercase tracking-wider text-text-muted">{title} — complete</div>
       {score !== undefined && (
         <div className="mt-2 font-display text-5xl font-bold tabular-nums text-text-gold">
           {shown}
@@ -52,7 +45,7 @@ export function ActivityResult({
       <p className="mt-2 text-sm text-text-secondary">{summary}</p>
       <button
         onClick={onClose}
-        className="mt-4 rounded-lg border border-border-gold bg-amber-900/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+        className="mt-4 rounded-lg border border-border-gold bg-accent/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
       >
         Done
       </button>

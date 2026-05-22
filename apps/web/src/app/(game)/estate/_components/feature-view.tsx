@@ -11,7 +11,7 @@ import { useEstate } from "@/lib/hooks/useEstate";
 import { useEstateActions } from "@/lib/hooks/useEstateActions";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { buildingPhase } from "@/lib/narrative";
-import { formatTime } from "@/lib/utils";
+import { formatNumber, formatTime } from "@/lib/utils";
 import { ResearchTab } from "./research-tab";
 import { ForgeTab } from "./forge-tab";
 import { MarketTab } from "./market-tab";
@@ -125,12 +125,10 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
 
   if (!view) {
     return (
-      <div className="flex h-full flex-col gap-3">
+      <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
         <BuildingStrip buildingId={buildingId} />
         <div className="card text-center">
-          <p className="text-sm text-text-muted">
-            No feature view available for {buildingName}.
-          </p>
+          <p className="text-sm text-text-muted">No feature view available for {buildingName}.</p>
         </div>
       </div>
     );
@@ -139,7 +137,7 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
   const { component: Component, feature } = view;
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
       <BuildingStrip buildingId={buildingId} />
       {feature ? (
         <FeatureGate feature={feature}>
@@ -160,12 +158,10 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
 function BuildingStrip({ buildingId }: { buildingId: number }) {
   const { data: estateData } = useEstate();
   const show = useRightPanelStore((s) => s.show);
-  const { handleCompleteBuilding } = useEstateActions();
+  const { handleCompleteBuilding, getBuildCostInfo } = useEstateActions();
 
   const config = BUILDING_FEATURE_MAP.get(buildingId);
-  const slot = estateData?.account
-    ? findBuilding(estateData.account, buildingId)
-    : null;
+  const slot = estateData?.account ? findBuilding(estateData.account, buildingId) : null;
 
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
   const phase = buildingPhase(slot, tick);
@@ -175,18 +171,14 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
     return () => clearInterval(t);
   }, [phase]);
 
-  const name =
-    config?.name ?? BuildingName[buildingId] ?? `Building #${buildingId}`;
+  const name = config?.name ?? BuildingName[buildingId] ?? `Building #${buildingId}`;
   const level = slot?.level ?? 0;
-  const accent = config
-    ? CATEGORY_COLORS[config.category]
-    : "border-l-border-default";
+  const accent = config ? CATEGORY_COLORS[config.category] : "border-l-border-default";
 
   const startedAt = slot?.constructionStarted?.toNumber?.() ?? 0;
   const endsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
   const span = endsAt - startedAt;
-  const pct =
-    span > 0 ? Math.min(100, Math.max(0, ((tick - startedAt) / span) * 100)) : 0;
+  const pct = span > 0 ? Math.min(100, Math.max(0, ((tick - startedAt) / span) * 100)) : 0;
   const remaining = Math.max(0, endsAt - tick);
 
   const status =
@@ -195,6 +187,14 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
       : phase === "improved"
         ? `Level ${level} → ${level + 1} · ready`
         : `Level ${level}`;
+
+  // Surface the next upgrade's NOVI cost on the standing-phase button, read
+  // live from the building template — no need to open the panel to see it.
+  const costInfo = phase === "standing" ? getBuildCostInfo(buildingId) : null;
+  const upgradeLabel =
+    costInfo && !costInfo.atMaxLevel
+      ? `Upgrade · ${formatNumber(costInfo.baseCost, "compact")} NOVI`
+      : "Upgrade";
 
   return (
     <header
@@ -209,9 +209,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
 
       <div className="mt-1 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="tier-title font-display text-xl font-bold tracking-wide">
-            {name}
-          </h2>
+          <h2 className="tier-title font-display text-xl font-bold tracking-wide">{name}</h2>
           <p
             className={`mt-0.5 font-mono text-[11px] tabular-nums ${
               phase === "improved" ? "text-text-gold" : "text-text-muted"
@@ -226,7 +224,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
             onClick={() => show(name, "building-detail", { buildingId })}
             className="shrink-0 rounded-md border border-border-gold bg-surface-raised px-4 py-1.5 text-xs font-semibold text-text-gold transition-colors hover:bg-surface-overlay"
           >
-            Upgrade
+            {upgradeLabel}
           </button>
         )}
         {phase === "improving" && (
@@ -254,8 +252,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
           className="absolute bottom-0 left-0 h-[2px]"
           style={{
             width: `${pct}%`,
-            background:
-              "linear-gradient(90deg, var(--nm-accent), var(--nm-accent-bright))",
+            background: "linear-gradient(90deg, var(--nm-accent), var(--nm-accent-bright))",
             transition: "width 1s linear",
           }}
         />

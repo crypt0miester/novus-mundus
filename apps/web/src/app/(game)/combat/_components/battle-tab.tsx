@@ -37,14 +37,14 @@ const RARITY_COLORS = [
   "text-green-400",
   "text-blue-400",
   "text-fuchsia-400",
-  "text-amber-400",
+  "text-gold-400",
 ];
 const RARITY_BORDERS = [
   "border-zinc-700",
   "border-green-800",
   "border-blue-800",
   "border-purple-800",
-  "border-amber-800",
+  "border-border-gold",
 ];
 
 export function BattleTab() {
@@ -89,7 +89,7 @@ export function BattleTab() {
     if (!player) return null;
     const longitude = (player.currentLong ?? 0) / 10000;
     const tod = getCurrentTimeOfDay(now, longitude);
-    const mult = getActivityMultiplier('attacking' as any, tod);
+    const mult = getActivityMultiplier("attacking" as any, tod);
     return { name: getTimeOfDayName(tod), mult };
   }, [player, now]);
 
@@ -110,8 +110,7 @@ export function BattleTab() {
   // Level band — the program rejects an attack when |encounter.level −
   // player.level| exceeds maxEncounterLevelDiff (attack_encounter.rs), and
   // travelling there first does not help. Surface it before either.
-  const maxLevelDiff =
-    geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
+  const maxLevelDiff = geData?.account?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
   const encounterLevels = useMemo(() => {
     const lvl = player?.level ?? 0;
     return encounters.map((enc) => {
@@ -144,7 +143,10 @@ export function BattleTab() {
     if (!player) return null;
     const defUnits = getTotalDefensiveUnits(player).toNumber();
     const offUnits = getTotalOperativeUnits(player).toNumber();
-    const weapons = (player.meleeWeapons?.toNumber?.() ?? 0) + (player.rangedWeapons?.toNumber?.() ?? 0) + (player.siegeWeapons?.toNumber?.() ?? 0);
+    const weapons =
+      (player.meleeWeapons?.toNumber?.() ?? 0) +
+      (player.rangedWeapons?.toNumber?.() ?? 0) +
+      (player.siegeWeapons?.toNumber?.() ?? 0);
     try {
       return calculateDamageOutput(defUnits + offUnits, weapons, false);
     } catch {
@@ -169,7 +171,9 @@ export function BattleTab() {
               </div>
               <div className="hidden h-8 w-px bg-border-default sm:block" />
               <div className="min-w-0">
-                <div className="text-sm font-bold text-text-secondary"><GoldNumber value={power.defense} size="sm" /></div>
+                <div className="text-sm font-bold text-text-secondary">
+                  <GoldNumber value={power.defense} size="sm" />
+                </div>
                 <div className="text-[10px] text-text-muted">GARRISON</div>
               </div>
               {estimatedDamage != null && (
@@ -188,15 +192,21 @@ export function BattleTab() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-              <span className="whitespace-nowrap">Stamina: <span className="font-mono text-text-gold">{playerStamina}</span></span>
+              <span className="whitespace-nowrap">
+                Stamina: <span className="font-mono text-text-gold">{playerStamina}</span>
+              </span>
               {attackTimeInfo && (
                 <span className="whitespace-nowrap">
                   {attackTimeInfo.name}
                   {attackTimeInfo.mult > 1 && (
-                    <span className="ml-1 text-green-400">+{((attackTimeInfo.mult - 1) * 100).toFixed(0)}%</span>
+                    <span className="ml-1 text-green-400">
+                      +{((attackTimeInfo.mult - 1) * 100).toFixed(0)}%
+                    </span>
                   )}
                   {attackTimeInfo.mult < 1 && (
-                    <span className="ml-1 text-red-400">{((attackTimeInfo.mult - 1) * 100).toFixed(0)}%</span>
+                    <span className="ml-1 text-red-400">
+                      {((attackTimeInfo.mult - 1) * 100).toFixed(0)}%
+                    </span>
                   )}
                 </span>
               )}
@@ -218,224 +228,259 @@ export function BattleTab() {
       {/* ── ENCOUNTERS ── */}
       {tab === "encounter" && (
         <div className="space-y-2">
-            {encounters.length === 0 ? (
-              <div className="card">
-                <p className="text-sm text-text-muted">No encounters in your city. Check back later or travel to another city.</p>
-              </div>
-            ) : (
-              encounters.map((enc, i) => {
-                const hp = enc.account.health.toNumber();
-                const maxHp = enc.account.maxHealth.toNumber();
-                const rarity = enc.account.rarity ?? 0;
-                const dist = encounterDistances[i];
-                const lvl = encounterLevels[i];
-                const isSelected =
-                  rpContentKey === "encounter-detail" &&
-                  rpContentProps.encounterPubkey === enc.pubkey.toBase58();
-                const staminaCost = getEncounterStaminaCost(rarity);
+          {encounters.length === 0 ? (
+            <div className="card">
+              <p className="text-sm text-text-muted">
+                No encounters in your city. Check back later or travel to another city.
+              </p>
+            </div>
+          ) : (
+            encounters.map((enc, i) => {
+              const hp = enc.account.health.toNumber();
+              const maxHp = enc.account.maxHealth.toNumber();
+              const rarity = enc.account.rarity ?? 0;
+              const dist = encounterDistances[i];
+              const lvl = encounterLevels[i];
+              const isSelected =
+                rpContentKey === "encounter-detail" &&
+                rpContentProps.encounterPubkey === enc.pubkey.toBase58();
+              const staminaCost = getEncounterStaminaCost(rarity);
 
-                return (
-                  <button
-                    key={enc.account.id.toString()}
-                    onClick={() =>
-                      showPanel(
-                        `${RARITY_LABELS[rarity]} Encounter`,
-                        "encounter-detail",
-                        { encounterPubkey: enc.pubkey.toBase58() },
-                      )
-                    }
-                    className={`w-full rounded-lg border p-3 text-left transition-all ${
-                      isSelected
-                        ? `${RARITY_BORDERS[rarity]} bg-surface-raised ring-1 ring-amber-600/30`
-                        : `border-zinc-800 hover:border-zinc-700`
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-bold ${RARITY_COLORS[rarity]}`}>
-                          {RARITY_LABELS[rarity]?.[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-text-primary">
-                              {RARITY_LABELS[rarity]} Encounter
-                            </span>
-                            <span className="text-[10px] text-text-muted">#{enc.account.id.toString()}</span>
-                          </div>
-                          <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                            <span className={lvl && !lvl.inBand ? "font-semibold text-red-400" : ""}>
-                              Lv {lvl?.level ?? enc.account.level}
-                            </span>
-                            <span>{hp.toLocaleString()} / {maxHp.toLocaleString()} HP</span>
-                            <span>Cost: {staminaCost} stamina</span>
-                          </div>
-                        </div>
+              return (
+                <button
+                  key={enc.account.id.toString()}
+                  onClick={() =>
+                    showPanel(`${RARITY_LABELS[rarity]} Encounter`, "encounter-detail", {
+                      encounterPubkey: enc.pubkey.toBase58(),
+                    })
+                  }
+                  className={`w-full rounded-lg border p-3 text-left transition-all ${
+                    isSelected
+                      ? `${RARITY_BORDERS[rarity]} bg-surface-raised ring-1 ring-accent/30`
+                      : `border-zinc-800 hover:border-zinc-700`
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-bold ${RARITY_COLORS[rarity]}`}
+                      >
+                        {RARITY_LABELS[rarity]?.[0]}
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                        {lvl && !lvl.inBand && (
-                          <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                            LEVEL GAP
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-text-primary">
+                            {RARITY_LABELS[rarity]} Encounter
                           </span>
-                        )}
-                        {dist && (
-                          dist.inRange ? (
-                            <span className="text-[10px] font-medium text-text-muted">
-                              ✓ {dist.distance.toFixed(1)}m
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                              {dist.distance.toFixed(1)}m away
-                            </span>
-                          )
-                        )}
+                          <span className="text-[10px] text-text-muted">
+                            #{enc.account.id.toString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-text-muted">
+                          <span className={lvl && !lvl.inBand ? "font-semibold text-red-400" : ""}>
+                            Lv {lvl?.level ?? enc.account.level}
+                          </span>
+                          <span>
+                            {hp.toLocaleString()} / {maxHp.toLocaleString()} HP
+                          </span>
+                          <span>Cost: {staminaCost} stamina</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="mt-2">
-                      <StatBar current={hp} max={maxHp} color="health" size="sm" showValues={false} />
+                    <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
+                      {lvl && !lvl.inBand && (
+                        <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                          LEVEL GAP
+                        </span>
+                      )}
+                      {dist &&
+                        (dist.inRange ? (
+                          <span className="text-[10px] font-medium text-text-muted">
+                            ✓ {dist.distance.toFixed(1)}m
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                            {dist.distance.toFixed(1)}m away
+                          </span>
+                        ))}
                     </div>
-                  </button>
-                );
-              })
-            )}
+                  </div>
+                  <div className="mt-2">
+                    <StatBar current={hp} max={maxHp} color="health" size="sm" showValues={false} />
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       )}
 
       {/* ── PVP ── */}
       {tab === "pvp" && (
         <div className="space-y-2">
-            {playersLoading ? (
-              <div className="card">
-                <p className="text-sm text-text-muted">Scanning for nearby players...</p>
-              </div>
-            ) : (cityPlayers?.length ?? 0) === 0 ? (
-              <div className="card">
-                <p className="text-sm text-text-muted">
-                  No other players in your city. Travel to a busier city to find targets.
-                </p>
-              </div>
-            ) : (
-              cityPlayers!.map((p) => {
-                const def = calculateDefensivePower(
-                  p.account.defensiveUnit1.toNumber(),
-                  p.account.defensiveUnit2.toNumber(),
-                  p.account.defensiveUnit3.toNumber(),
-                );
-                const totalOps = p.account.operativeUnit1.toNumber()
-                  + p.account.operativeUnit2.toNumber()
-                  + p.account.operativeUnit3.toNumber();
-                const isProtected = p.account.newPlayerProtectionUntil.toNumber() > now;
-                const isSelected =
-                  rpContentKey === "pvp-detail" &&
-                  rpContentProps.playerPubkey === p.pubkey.toBase58();
-                const isTargetTraveling = isTraveling(p.account);
-                const dist = playerDistances.get(p.pubkey.toBase58());
+          {playersLoading ? (
+            <div className="card">
+              <p className="text-sm text-text-muted">Scanning for nearby players...</p>
+            </div>
+          ) : (cityPlayers?.length ?? 0) === 0 ? (
+            <div className="card">
+              <p className="text-sm text-text-muted">
+                No other players in your city. Travel to a busier city to find targets.
+              </p>
+            </div>
+          ) : (
+            cityPlayers!.map((p) => {
+              const def = calculateDefensivePower(
+                p.account.defensiveUnit1.toNumber(),
+                p.account.defensiveUnit2.toNumber(),
+                p.account.defensiveUnit3.toNumber(),
+              );
+              const totalOps =
+                p.account.operativeUnit1.toNumber() +
+                p.account.operativeUnit2.toNumber() +
+                p.account.operativeUnit3.toNumber();
+              const isProtected = p.account.newPlayerProtectionUntil.toNumber() > now;
+              const isSelected =
+                rpContentKey === "pvp-detail" &&
+                rpContentProps.playerPubkey === p.pubkey.toBase58();
+              const isTargetTraveling = isTraveling(p.account);
+              const dist = playerDistances.get(p.pubkey.toBase58());
 
-                return (
-                  <button
-                    key={p.pubkey.toBase58()}
-                    onClick={() =>
-                      !isProtected && !isTargetTraveling
-                        ? showPanel(
-                            p.account.name ||
-                              domainNames.get(p.account.owner.toBase58()) ||
-                              shortenAddress(p.account.owner.toBase58()),
-                            "pvp-detail",
-                            { playerPubkey: p.pubkey.toBase58() },
-                          )
-                        : undefined
-                    }
-                    disabled={isProtected || isTargetTraveling}
-                    className={`w-full rounded-lg border p-3 text-left transition-all ${
-                      isSelected
-                        ? "border-red-600 bg-red-900/20 ring-1 ring-red-600/30"
-                        : isProtected || isTargetTraveling
-                          ? "border-zinc-900 opacity-50"
-                          : "border-zinc-800 hover:border-zinc-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <Link
-                            href={`/world/players/${p.account.owner.toBase58()}`}
-                            className="text-sm font-semibold text-text-primary hover:text-text-gold transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {p.account.name || domainNames.get(p.account.owner.toBase58()) || shortenAddress(p.account.owner.toBase58())}
-                          </Link>
-                          <div className="flex items-center gap-2 text-[10px] text-text-muted">
-                            <span>Lv {p.account.level}</span>
-                            <span>&middot;</span>
-                            <span>NW <GoldNumber value={p.account.networth.toNumber()} size="sm" /></span>
-                          </div>
+              return (
+                <button
+                  key={p.pubkey.toBase58()}
+                  onClick={() =>
+                    !isProtected && !isTargetTraveling
+                      ? showPanel(
+                          p.account.name ||
+                            domainNames.get(p.account.owner.toBase58()) ||
+                            shortenAddress(p.account.owner.toBase58()),
+                          "pvp-detail",
+                          { playerPubkey: p.pubkey.toBase58() },
+                        )
+                      : undefined
+                  }
+                  disabled={isProtected || isTargetTraveling}
+                  className={`w-full rounded-lg border p-3 text-left transition-all ${
+                    isSelected
+                      ? "border-red-600 bg-red-900/20 ring-1 ring-red-600/30"
+                      : isProtected || isTargetTraveling
+                        ? "border-zinc-900 opacity-50"
+                        : "border-zinc-800 hover:border-zinc-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <Link
+                          href={`/world/players/${p.account.owner.toBase58()}`}
+                          className="text-sm font-semibold text-text-primary hover:text-text-gold transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {p.account.name ||
+                            domainNames.get(p.account.owner.toBase58()) ||
+                            shortenAddress(p.account.owner.toBase58())}
+                        </Link>
+                        <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                          <span>Lv {p.account.level}</span>
+                          <span>&middot;</span>
+                          <span>
+                            NW <GoldNumber value={p.account.networth.toNumber()} size="sm" />
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right mr-2">
-                          <div className="text-xs text-text-secondary">{def.toLocaleString()}</div>
-                          <div className="text-[10px] text-text-muted">POWER</div>
-                        </div>
-                        {def === 0 && totalOps > 0 && (
-                          <span className="rounded bg-red-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
-                            EXPOSED
-                          </span>
-                        )}
-                        {isProtected && (
-                          <span className="rounded bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300">
-                            PROTECTED
-                          </span>
-                        )}
-                        {isTargetTraveling && (
-                          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
-                            TRAVELING
-                          </span>
-                        )}
-                        {dist && !isProtected && !isTargetTraveling && (
-                          dist.inRange ? (
-                            <span className="text-[10px] font-medium text-text-muted">
-                              ✓ in range
-                            </span>
-                          ) : (
-                            <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-                              {dist.distance.toFixed(1)}m
-                            </span>
-                          )
-                        )}
                       </div>
                     </div>
-                  </button>
-                );
-              })
-            )}
+                    <div className="flex items-center gap-2">
+                      <div className="text-right mr-2">
+                        <div className="text-xs text-text-secondary">{def.toLocaleString()}</div>
+                        <div className="text-[10px] text-text-muted">POWER</div>
+                      </div>
+                      {def === 0 && totalOps > 0 && (
+                        <span className="rounded bg-red-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-red-300">
+                          EXPOSED
+                        </span>
+                      )}
+                      {isProtected && (
+                        <span className="rounded bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300">
+                          PROTECTED
+                        </span>
+                      )}
+                      {isTargetTraveling && (
+                        <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
+                          TRAVELING
+                        </span>
+                      )}
+                      {dist &&
+                        !isProtected &&
+                        !isTargetTraveling &&
+                        (dist.inRange ? (
+                          <span className="text-[10px] font-medium text-text-muted">
+                            ✓ in range
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+                            {dist.distance.toFixed(1)}m
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       )}
 
       {/* Game Parameters */}
-      {geData?.account && (() => {
-        const ge = geData.account;
-        const gp = ge.gameplayConfig;
-        const cc = ge.combatConfig;
-        return (
-          <GameInfoPanel>
-            <InfoGrid items={[
-              { label: "Safebox Protection", value: bpsToPercent(gp.safeboxProtectionPercent), highlight: true },
-              { label: "PvP Loot Base", value: bpsToPercent(gp.pvpLootPercentageBase) },
-              { label: "Armor Reduction", value: bpsToPercent(gp.armorDamageReductionBps) },
-              { label: "Armor Reduction Cap", value: bpsToPercent(gp.armorDamageReductionCapBps) },
-              { label: "Weapon Loot Rate", value: bpsToPercent(cc.weaponLootRateBps) },
-              { label: "Armory Raid (Ops)", value: bpsToPercent(cc.armoryRaidWithOperativesBps) },
-              { label: "Armory Undefended", value: bpsToPercent(cc.armoryRaidUndefendedBps) },
-              { label: "Siege Capture Rate", value: bpsToPercent(cc.siegeCaptureRateBps) },
-              { label: "Dmg Dist T1", value: bpsToPercent(gp.damageUnit1Percent) },
-              { label: "Dmg Dist T2", value: bpsToPercent(gp.damageUnit2Percent) },
-              { label: "Dmg Dist T3", value: bpsToPercent(gp.damageUnit3Percent) },
-              { label: "PvP Range", value: cc.pvpAttackRangeMeters.toLocaleString(), suffix: "m" },
-              { label: "Siege Dmg/Weapon", value: cc.damagePerSiegeWeapon.toNumber().toLocaleString() },
-              { label: "Encounter Range", value: cc.encounterAttackRangeMeters.toLocaleString(), suffix: "m" },
-            ]} />
-          </GameInfoPanel>
-        );
-      })()}
+      {geData?.account &&
+        (() => {
+          const ge = geData.account;
+          const gp = ge.gameplayConfig;
+          const cc = ge.combatConfig;
+          return (
+            <GameInfoPanel>
+              <InfoGrid
+                items={[
+                  {
+                    label: "Safebox Protection",
+                    value: bpsToPercent(gp.safeboxProtectionPercent),
+                    highlight: true,
+                  },
+                  { label: "PvP Loot Base", value: bpsToPercent(gp.pvpLootPercentageBase) },
+                  { label: "Armor Reduction", value: bpsToPercent(gp.armorDamageReductionBps) },
+                  {
+                    label: "Armor Reduction Cap",
+                    value: bpsToPercent(gp.armorDamageReductionCapBps),
+                  },
+                  { label: "Weapon Loot Rate", value: bpsToPercent(cc.weaponLootRateBps) },
+                  {
+                    label: "Armory Raid (Ops)",
+                    value: bpsToPercent(cc.armoryRaidWithOperativesBps),
+                  },
+                  { label: "Armory Undefended", value: bpsToPercent(cc.armoryRaidUndefendedBps) },
+                  { label: "Siege Capture Rate", value: bpsToPercent(cc.siegeCaptureRateBps) },
+                  { label: "Dmg Dist T1", value: bpsToPercent(gp.damageUnit1Percent) },
+                  { label: "Dmg Dist T2", value: bpsToPercent(gp.damageUnit2Percent) },
+                  { label: "Dmg Dist T3", value: bpsToPercent(gp.damageUnit3Percent) },
+                  {
+                    label: "PvP Range",
+                    value: cc.pvpAttackRangeMeters.toLocaleString(),
+                    suffix: "m",
+                  },
+                  {
+                    label: "Siege Dmg/Weapon",
+                    value: cc.damagePerSiegeWeapon.toNumber().toLocaleString(),
+                  },
+                  {
+                    label: "Encounter Range",
+                    value: cc.encounterAttackRangeMeters.toLocaleString(),
+                    suffix: "m",
+                  },
+                ]}
+              />
+            </GameInfoPanel>
+          );
+        })()}
     </div>
   );
 }

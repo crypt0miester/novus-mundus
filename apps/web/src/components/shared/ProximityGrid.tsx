@@ -84,9 +84,7 @@ export function ProximityGrid({
   const [occupancy, setOccupancy] = useState<(boolean | null)[]>(() => new Array(9).fill(null));
 
   useEffect(() => {
-    const pdas = cells.map((c) =>
-      deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0],
-    );
+    const pdas = cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0]);
     client.connection
       .getMultipleAccountsInfo(pdas)
       .then((accounts) => setOccupancy(accounts.map((a) => a !== null)))
@@ -158,10 +156,18 @@ export function ProximityGrid({
 
       {/* Legend */}
       <div className={styles.legend}>
-        <span><span style={{ color: "var(--crimson)" }}>&#9760;</span> Target</span>
-        <span><span style={{ color: "var(--seal)" }}>&#10003;</span> In range</span>
-        <span><span style={{ color: "var(--ink-soft)" }}>&#9679;</span> Close</span>
-        <span><span style={{ color: "var(--ink-faint)" }}>&#9632;</span> Occupied</span>
+        <span>
+          <span className={styles.legendTarget}>&#9760;</span> Target
+        </span>
+        <span>
+          <span className={styles.legendInRange}>&#10003;</span> In range
+        </span>
+        <span>
+          <span className={styles.legendClose}>&#9679;</span> Close
+        </span>
+        <span>
+          <span className={styles.legendOccupied}>&#9632;</span> Occupied
+        </span>
       </div>
 
       {/* Travel button for selected cell */}

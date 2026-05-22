@@ -62,8 +62,8 @@ Guards:
   - ResearchTemplate.is_active == true
   - Academy building ≥ required_academy_level_for_research(category)
     - Battle:  Academy Lv 1+
-    - Economy: Academy Lv 5+
-    - Growth:  Academy Lv 10+
+    - Economy: Academy Lv 2+
+    - Growth:  Academy Lv 3+
   - progress.check_prerequisites(template) == true
     - prerequisite_research == 255  OR
     - completed_levels[prereq] >= prerequisite_level

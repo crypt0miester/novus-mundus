@@ -45,9 +45,7 @@ import { useFeatureGate, FEATURES, BuildingId } from "@/lib/hooks/useFeatureGate
 import { AbilityCard } from "@/components/heroes/AbilityCard";
 import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
 
-const MPL_CORE_PROGRAM_ID = new PublicKey(
-  "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
-);
+const MPL_CORE_PROGRAM_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
 
 // ── Cost helpers (mirrors Rust logic) ────────────────────────
 
@@ -133,9 +131,7 @@ export function HeroesTab() {
 
   const traveling = player ? isTraveling(player) : false;
   const fragments = player?.fragments?.toNumber?.() ?? 0;
-  const emptySlots = player
-    ? player.activeHeroes.filter((h: any) => isNullPubkey(h)).length
-    : 0;
+  const emptySlots = player ? player.activeHeroes.filter((h: any) => isNullPubkey(h)).length : 0;
   const filledSlots = 3 - emptySlots;
 
   // Sanctuary level for hero level cap
@@ -143,7 +139,7 @@ export function HeroesTab() {
     const buildings = estateData?.account?.buildings;
     if (!buildings) return 0;
     const sanctuary = buildings.find(
-      (b: any) => b.buildingType === BuildingId.Sanctuary && (b.status === 2 || b.status === 3)
+      (b: any) => b.buildingType === BuildingId.Sanctuary && (b.status === 2 || b.status === 3),
     );
     return sanctuary?.level ?? 0;
   }, [estateData]);
@@ -171,7 +167,7 @@ export function HeroesTab() {
     const entries = Array.from(heroTemplatesMap.values()).filter((e) => e.account.enabled);
 
     const receiptPdas = entries.map(
-      (e) => deriveHeroMintReceiptPda(playerPda, e.account.templateId)[0]
+      (e) => deriveHeroMintReceiptPda(playerPda, e.account.templateId)[0],
     );
 
     connection
@@ -200,9 +196,7 @@ export function HeroesTab() {
         .filter((e) => !isNullPubkey(e.mint));
       if (filled.length === 0) return slots;
       try {
-        const infos = await connection.getMultipleAccountsInfo(
-          filled.map((e) => e.mint),
-        );
+        const infos = await connection.getMultipleAccountsInfo(filled.map((e) => e.mint));
         filled.forEach((e, i) => {
           const info = infos[i];
           if (!info?.data) return;
@@ -231,7 +225,7 @@ export function HeroesTab() {
               return null;
             }
           })
-          .filter((h): h is HeroData => h !== null)
+          .filter((h): h is HeroData => h !== null),
       )
       .catch(() => [] as HeroData[]);
 
@@ -285,7 +279,7 @@ export function HeroesTab() {
         heroMint: heroMintKeypair.publicKey,
         treasury: gameEngine.treasuryWallet,
       },
-      { templateId }
+      { templateId },
     );
     return transact
       .mutateAsync({
@@ -305,7 +299,7 @@ export function HeroesTab() {
     heroAddress: PublicKey,
     slotIndex: number,
     templateId: number,
-    reportPhase: (p: TxPhase) => void
+    reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
@@ -314,7 +308,7 @@ export function HeroesTab() {
     const [estateAccount] = deriveEstatePda(playerPda);
     const ix = createLockHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroMint: heroAddress, heroTemplate, estateAccount },
-      { slotIndex }
+      { slotIndex },
     );
     return transact
       .mutateAsync({
@@ -343,7 +337,7 @@ export function HeroesTab() {
     const [estateAccount] = deriveEstatePda(playerPda);
     const ix = createUnlockHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroMint, heroTemplate, estateAccount },
-      { slotIndex }
+      { slotIndex },
     );
     return transact
       .mutateAsync({
@@ -381,7 +375,7 @@ export function HeroesTab() {
   const handleLevelUp = async (
     heroMint: PublicKey,
     templateId: number,
-    reportPhase: (p: TxPhase) => void
+    reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
@@ -411,13 +405,13 @@ export function HeroesTab() {
   const handleBurn = async (
     heroAddress: PublicKey,
     templateId: number,
-    reportPhase: (p: TxPhase) => void
+    reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
     const ix = createBurnHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroAsset: heroAddress },
-      { templateId }
+      { templateId },
     );
     return transact
       .mutateAsync({
@@ -436,20 +430,19 @@ export function HeroesTab() {
 
   // ── Detail panel helpers ─────────────────────────────────
 
-  const selectedHero = selected?.type === "locked" || selected?.type === "unlocked" ? selected.hero : null;
+  const selectedHero =
+    selected?.type === "locked" || selected?.type === "unlocked" ? selected.hero : null;
   const selectedTemplate = selected?.type === "template" ? selected.info : null;
 
   const selectedAttrs = selectedHero?.asset?.attributes ?? {};
   const selectedLevel = selectedAttrs["Level"] ? parseInt(selectedAttrs["Level"]) : null;
   const selectedXp = selectedAttrs["XP"] ? parseInt(selectedAttrs["XP"]) : null;
   const selectedBuffs = Object.entries(selectedAttrs).filter(
-    ([key]) => !IGNORED_ATTRS.has(key) && key !== "Level" && key !== "XP"
+    ([key]) => !IGNORED_ATTRS.has(key) && key !== "Level" && key !== "XP",
   );
 
-  const isHeroSelected = (addr: PublicKey) =>
-    selectedHero?.address.toBase58() === addr.toBase58();
-  const isTemplateSelected = (id: number) =>
-    selectedTemplate?.account.templateId === id;
+  const isHeroSelected = (addr: PublicKey) => selectedHero?.address.toBase58() === addr.toBase58();
+  const isTemplateSelected = (id: number) => selectedTemplate?.account.templateId === id;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -469,7 +462,9 @@ export function HeroesTab() {
                   className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-surface px-2.5 py-1"
                 >
                   {icon && <GameIcon id={icon} title={buff.label} size={16} />}
-                  <span className="text-xs font-bold text-text-gold">+{(buff.bps / 100).toFixed(1)}%</span>
+                  <span className="text-xs font-bold text-text-gold">
+                    +{(buff.bps / 100).toFixed(1)}%
+                  </span>
                 </div>
               );
             })}
@@ -480,13 +475,15 @@ export function HeroesTab() {
           <span>{filledSlots}/3 slots</span>
           <span>Fragments: {fragments.toLocaleString()}</span>
           {levelCap > 0 && <span>Cap: Lv{levelCap}</span>}
-          {traveling && <span className="text-amber-400">Traveling</span>}
+          {traveling && <span className="text-danger">Traveling</span>}
           {loading && <span>Loading heroes...</span>}
         </div>
 
         {/* Active Slots */}
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Active Slots</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Active Slots
+          </h3>
           <div className="grid gap-2 grid-cols-3">
             {[0, 1, 2].map((i) => {
               const hero = lockedHeroes[i];
@@ -496,7 +493,11 @@ export function HeroesTab() {
               const attrs = hero?.asset?.attributes ?? {};
               const level = attrs["Level"] ? parseInt(attrs["Level"]) : null;
               const roleLabel = isDefensive ? "DEF" : isMeditating ? "MED" : "ACT";
-              const roleColor = isDefensive ? "text-blue-400" : isMeditating ? "text-fuchsia-400" : "text-green-400";
+              const roleColor = isDefensive
+                ? "text-blue-400"
+                : isMeditating
+                  ? "text-fuchsia-400"
+                  : "text-green-400";
 
               if (isEmpty) {
                 return (
@@ -519,9 +520,13 @@ export function HeroesTab() {
                       <div className="truncate text-sm font-semibold text-text-primary">
                         {hero?.asset?.name || `Hero #${i + 1}`}
                       </div>
-                      <div className={`text-[10px] font-medium ${roleColor}`}>{roleLabel} · Slot {i}</div>
+                      <div className={`text-[10px] font-medium ${roleColor}`}>
+                        {roleLabel} · Slot {i}
+                      </div>
                     </div>
-                    {level != null && <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>}
+                    {level != null && (
+                      <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>
+                    )}
                   </div>
                 </div>
               );
@@ -544,7 +549,9 @@ export function HeroesTab() {
                     key={hero.address.toBase58()}
                     onClick={() => setSelected({ type: "unlocked", hero })}
                     className={`card cursor-pointer border-dashed transition-all ${
-                      isHeroSelected(hero.address) ? "ring-1 ring-[var(--nm-accent)]" : "border-zinc-700"
+                      isHeroSelected(hero.address)
+                        ? "ring-1 ring-[var(--nm-accent)]"
+                        : "border-zinc-700"
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -552,9 +559,11 @@ export function HeroesTab() {
                         <div className="truncate text-sm font-semibold text-text-primary">
                           {hero.asset.name || "Hero"}
                         </div>
-                        <div className="text-[10px] font-medium text-amber-400">Unlocked</div>
+                        <div className="text-[10px] font-medium text-text-gold">Unlocked</div>
                       </div>
-                      {level != null && <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>}
+                      {level != null && (
+                        <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>
+                      )}
                     </div>
                   </div>
                 );
@@ -565,9 +574,13 @@ export function HeroesTab() {
 
         {/* Template Picker */}
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Templates</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Templates
+          </h3>
           {templates.length === 0 ? (
-            <div className="card py-6 text-center text-xs text-text-muted">No hero templates found</div>
+            <div className="card py-6 text-center text-xs text-text-muted">
+              No hero templates found
+            </div>
           ) : (
             <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
               {templates.map((t) => {
@@ -587,8 +600,12 @@ export function HeroesTab() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-text-primary">{t.account.name}</div>
-                        <div className="text-[10px] text-text-muted">#{t.account.templateId} · {supply}</div>
+                        <div className="truncate text-sm font-semibold text-text-primary">
+                          {t.account.name}
+                        </div>
+                        <div className="text-[10px] text-text-muted">
+                          #{t.account.templateId} · {supply}
+                        </div>
                       </div>
                       {t.minted && (
                         <span className="shrink-0 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-400">
@@ -606,7 +623,11 @@ export function HeroesTab() {
                               className="flex items-center gap-1 rounded bg-surface px-1 py-0.5 text-[10px] text-text-muted"
                             >
                               {icon ? (
-                                <GameIcon id={icon} title={getBuffStatMeta(b.stat)?.name} size={13} />
+                                <GameIcon
+                                  id={icon}
+                                  title={getBuffStatMeta(b.stat)?.name}
+                                  size={13}
+                                />
                               ) : (
                                 <>{getBuffStatMeta(b.stat)?.abbr ?? "?"}</>
                               )}
@@ -657,19 +678,26 @@ export function HeroesTab() {
             {/* Buffs */}
             {selectedBuffs.length > 0 && (
               <div>
-                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Buffs</div>
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Buffs
+                </div>
                 <div className="space-y-1">
                   {selectedBuffs.map(([key, value]) => {
                     const meta = getBuffStatByAttrKey(key);
                     const icon = meta ? buffStatIcon(meta.stat) : undefined;
                     return (
-                    <div key={key} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                      <span className="flex items-center gap-1.5 text-xs text-text-secondary">
-                        {icon && <GameIcon id={icon} title={meta?.name} size={18} />}
-                        {meta?.name ?? key}
-                      </span>
-                      <span className="font-mono text-xs font-semibold text-text-primary">{value}</span>
-                    </div>
+                      <div
+                        key={key}
+                        className="flex items-center justify-between rounded bg-surface px-2 py-1"
+                      >
+                        <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+                          {icon && <GameIcon id={icon} title={meta?.name} size={18} />}
+                          {meta?.name ?? key}
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-text-primary">
+                          {value}
+                        </span>
+                      </div>
                     );
                   })}
                 </div>
@@ -679,26 +707,34 @@ export function HeroesTab() {
             {/* Metadata */}
             <div className="space-y-1 text-[10px] text-text-muted">
               {selectedAttrs["Template"] && (
-                <div>Template: <span className="font-mono">{selectedAttrs["Template"]}</span></div>
+                <div>
+                  Template: <span className="font-mono">{selectedAttrs["Template"]}</span>
+                </div>
               )}
               {selectedAttrs["Serial"] && (
-                <div>Serial: <span className="font-mono">{selectedAttrs["Serial"]}</span></div>
+                <div>
+                  Serial: <span className="font-mono">{selectedAttrs["Serial"]}</span>
+                </div>
               )}
               {selectedAttrs["Origin"] && (
-                <div>Origin: <span className="font-mono">{selectedAttrs["Origin"]}</span></div>
+                <div>
+                  Origin: <span className="font-mono">{selectedAttrs["Origin"]}</span>
+                </div>
               )}
             </div>
 
             {(() => {
               const tidStr = selectedAttrs["Template"];
               if (!tidStr) return null;
-              const tpl = templates.find(
-                (e) => String(e.account.templateId) === tidStr
-              )?.account;
+              const tpl = templates.find((e) => String(e.account.templateId) === tidStr)?.account;
               if (!tpl) return null;
-              const interactive = selected?.type === "locked"
-                ? { heroMint: selectedHero.address, slotIndex: (selected as { slot: number }).slot }
-                : undefined;
+              const interactive =
+                selected?.type === "locked"
+                  ? {
+                      heroMint: selectedHero.address,
+                      slotIndex: (selected as { slot: number }).slot,
+                    }
+                  : undefined;
               return <AbilityCard template={tpl} interactive={interactive} />;
             })()}
 
@@ -707,12 +743,15 @@ export function HeroesTab() {
               const heroTemplateId = parseInt(selectedAttrs["Template"] || "0");
               const currentLevel = selectedLevel ?? 0;
               const cost = fragmentCost(currentLevel);
-              const canLevel = levelUpGate.allowed && fragments >= cost && currentLevel < levelCap && levelCap > 0;
+              const canLevel =
+                levelUpGate.allowed && fragments >= cost && currentLevel < levelCap && levelCap > 0;
               const atCap = currentLevel >= levelCap && levelCap > 0;
 
               return (
                 <div className="rounded-md border border-zinc-800 bg-surface px-3 py-2">
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Level Up</div>
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Level Up
+                  </div>
                   {!levelUpGate.allowed ? (
                     <div className="space-y-2">
                       {levelUpGate.missing.map((m) => (
@@ -722,9 +761,10 @@ export function HeroesTab() {
                           </p>
                           <Link
                             href={m.href}
-                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                            className="mt-1 inline-flex items-center gap-1 rounded border border-border-gold/50 bg-accent/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-accent/40"
                           >
-                            {m.label}<ChevronRight className="h-3 w-3" />
+                            {m.label}
+                            <ChevronRight className="h-3 w-3" />
                           </Link>
                         </div>
                       ))}
@@ -733,18 +773,22 @@ export function HeroesTab() {
                     <>
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-text-muted">Cost</span>
-                        <span className={`font-mono ${fragments >= cost ? "text-text-primary" : "text-red-400"}`}>
+                        <span
+                          className={`font-mono ${fragments >= cost ? "text-text-primary" : "text-red-400"}`}
+                        >
                           {cost === Infinity ? "MAX" : cost.toLocaleString()} fragments
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-text-muted">Level cap</span>
                         <span className="font-mono text-text-secondary">
-                          {levelCap > 0 ? `Lv${levelCap} (Sanctuary Lv${sanctuaryLevel})` : "No Sanctuary"}
+                          {levelCap > 0
+                            ? `Lv${levelCap} (Sanctuary Lv${sanctuaryLevel})`
+                            : "No Sanctuary"}
                         </span>
                       </div>
                       {atCap && (
-                        <p className="mt-1 text-[10px] text-amber-400">
+                        <p className="mt-1 text-[10px] text-danger">
                           At cap. Upgrade Sanctuary for higher cap.
                         </p>
                       )}
@@ -762,13 +806,15 @@ export function HeroesTab() {
               );
             })()}
 
-            {/* Actions */}
-            <div className="border-t border-border-default pt-3">
+            {/* Actions — pinned as a sticky footer; detail content scrolls behind it */}
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-border-default bg-surface-raised px-4 pb-4 pt-3">
               {selected?.type === "locked" ? (
                 <div className="space-y-2">
                   {player.defensiveHeroSlot !== (selected as { slot: number }).slot && (
                     <TxButton
-                      onClick={(rp) => handleAssignDefensive((selected as { slot: number }).slot, rp)}
+                      onClick={(rp) =>
+                        handleAssignDefensive((selected as { slot: number }).slot, rp)
+                      }
                       variant="secondary"
                       className="w-full text-xs"
                     >
@@ -790,7 +836,9 @@ export function HeroesTab() {
                       <div className="flex items-end gap-2">
                         <TxButton
                           onClick={(rp) => {
-                            const templateId = parseInt(selectedHero.asset.attributes["Template"] || "0");
+                            const templateId = parseInt(
+                              selectedHero.asset.attributes["Template"] || "0",
+                            );
                             return handleLock(selectedHero.address, lockSlot, templateId, rp);
                           }}
                           disabled={emptySlots === 0}
@@ -799,10 +847,12 @@ export function HeroesTab() {
                           Lock to Slot
                         </TxButton>
                       </div>
-                      {emptySlots === 0 && <p className="text-[10px] text-amber-400">Unlock a slot first</p>}
+                      {emptySlots === 0 && (
+                        <p className="text-[10px] text-danger">Unlock a slot first</p>
+                      )}
                     </>
                   ) : (
-                    <div className="space-y-2 rounded-md border border-amber-900/40 bg-surface px-3 py-2">
+                    <div className="space-y-2 rounded-md border border-border-gold/40 bg-surface px-3 py-2">
                       {lockGate.missing.map((m) => (
                         <div key={m.label}>
                           <p className="text-[10px] leading-relaxed text-text-muted">
@@ -810,9 +860,10 @@ export function HeroesTab() {
                           </p>
                           <Link
                             href={m.href}
-                            className="mt-1 inline-flex items-center gap-1 rounded border border-amber-800/50 bg-amber-900/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-amber-900/40"
+                            className="mt-1 inline-flex items-center gap-1 rounded border border-border-gold/50 bg-accent/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-accent/40"
                           >
-                            {m.label}<ChevronRight className="h-3 w-3" />
+                            {m.label}
+                            <ChevronRight className="h-3 w-3" />
                           </Link>
                         </div>
                       ))}
@@ -835,125 +886,141 @@ export function HeroesTab() {
         )}
 
         {/* ── Template Detail (mint) ── */}
-        {selectedTemplate && (() => {
-          const t = selectedTemplate;
-          const buffs = getActiveBuffs(t.account);
-          const playerLevel = player?.level ?? 0;
-          const meetsLevel = playerLevel >= t.account.requiredPlayerLevel;
-          const mintable = canMintHero(t.account) && !t.minted && meetsLevel;
-          const supply = t.account.supplyCap > 0
-            ? `${t.account.mintedCount} / ${t.account.supplyCap}`
-            : `${t.account.mintedCount} minted`;
-          const mintCostLamports = typeof t.account.mintCostSol === "number"
-            ? t.account.mintCostSol
-            : (t.account.mintCostSol as any).toNumber?.() ?? 0;
-          const tier = tierFromMintCost(mintCostLamports);
-          const costSol = mintCostLamports / 1_000_000_000;
+        {selectedTemplate &&
+          (() => {
+            const t = selectedTemplate;
+            const buffs = getActiveBuffs(t.account);
+            const playerLevel = player?.level ?? 0;
+            const meetsLevel = playerLevel >= t.account.requiredPlayerLevel;
+            const mintable = canMintHero(t.account) && !t.minted && meetsLevel;
+            const supply =
+              t.account.supplyCap > 0
+                ? `${t.account.mintedCount} / ${t.account.supplyCap}`
+                : `${t.account.mintedCount} minted`;
+            const mintCostLamports =
+              typeof t.account.mintCostSol === "number"
+                ? t.account.mintCostSol
+                : ((t.account.mintCostSol as any).toNumber?.() ?? 0);
+            const tier = tierFromMintCost(mintCostLamports);
+            const costSol = mintCostLamports / 1_000_000_000;
 
-          return (
-            <>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-base font-semibold text-text-primary">{t.account.name}</div>
-                  <div className="text-[10px] text-text-muted">
-                    Template #{t.account.templateId} · {HERO_TIER_NAMES[tier]}
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-semibold text-text-primary">
+                      {t.account.name}
+                    </div>
+                    <div className="text-[10px] text-text-muted">
+                      Template #{t.account.templateId} · {HERO_TIER_NAMES[tier]}
+                    </div>
                   </div>
+                  {t.minted && (
+                    <span className="shrink-0 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                      Minted
+                    </span>
+                  )}
                 </div>
-                {t.minted && (
-                  <span className="shrink-0 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-400">
-                    Minted
-                  </span>
-                )}
-              </div>
 
-              {/* Template stats */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-muted">Mint cost</span>
-                  <span className="font-mono text-text-primary">{costSol} SOL</span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-muted">Type</span>
-                  <span className="text-text-secondary">
-                    {HERO_TYPE_NAMES[t.account.heroType] ?? "Unknown"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-muted">Category</span>
-                  <span className="text-text-secondary">
-                    {HERO_CATEGORY_NAMES[t.account.category] ?? "Unknown"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-muted">Supply</span>
-                  <span className="font-mono text-text-secondary">{supply}</span>
-                </div>
-                {t.account.requiredPlayerLevel > 0 && (
+                {/* Template stats */}
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-text-muted">Required level</span>
-                    <span className={`font-mono ${meetsLevel ? "text-text-secondary" : "text-red-400"}`}>
-                      Lv{t.account.requiredPlayerLevel} {!meetsLevel && `(you: ${playerLevel})`}
+                    <span className="text-text-muted">Mint cost</span>
+                    <span className="font-mono text-text-primary">{costSol} SOL</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Type</span>
+                    <span className="text-text-secondary">
+                      {HERO_TYPE_NAMES[t.account.heroType] ?? "Unknown"}
                     </span>
                   </div>
-                )}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-muted">Burn value (Lv1)</span>
-                  <span className="font-mono text-text-secondary">
-                    {(burnReward(1, tier) / 10).toLocaleString()} NOVI
-                  </span>
-                </div>
-              </div>
-
-              {/* Buffs */}
-              {buffs.length > 0 && (
-                <div>
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    Base Buffs
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Category</span>
+                    <span className="text-text-secondary">
+                      {HERO_CATEGORY_NAMES[t.account.category] ?? "Unknown"}
+                    </span>
                   </div>
-                  <div className="space-y-1">
-                    {buffs.map((b) => {
-                      const icon = buffStatIcon(b.stat);
-                      return (
-                      <div key={b.stat} className="flex items-center justify-between rounded bg-surface px-2 py-1">
-                        <span className="flex items-center gap-1.5 text-xs text-text-secondary">
-                          {icon && <GameIcon id={icon} title={getBuffStatMeta(b.stat)?.name} size={18} />}
-                          {getBuffStatMeta(b.stat)?.name ?? `Stat ${b.stat}`}
-                        </span>
-                        <span className="font-mono text-xs font-semibold text-text-primary">
-                          +{(b.baseBps / 100).toFixed(1)}%
-                        </span>
-                      </div>
-                      );
-                    })}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Supply</span>
+                    <span className="font-mono text-text-secondary">{supply}</span>
+                  </div>
+                  {t.account.requiredPlayerLevel > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-text-muted">Required level</span>
+                      <span
+                        className={`font-mono ${meetsLevel ? "text-text-secondary" : "text-red-400"}`}
+                      >
+                        Lv{t.account.requiredPlayerLevel} {!meetsLevel && `(you: ${playerLevel})`}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Burn value (Lv1)</span>
+                    <span className="font-mono text-text-secondary">
+                      {(burnReward(1, tier) / 10).toLocaleString()} NOVI
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {/* Signature Ability (read-only on template detail) */}
-              <AbilityCard template={t.account} />
-
-              {/* Mint action */}
-              <div className="border-t border-border-default pt-3">
-                <TxButton
-                  onClick={(rp) => handleMint(t.account.templateId, rp)}
-                  disabled={!mintable || traveling}
-                  className="w-full"
-                >
-                  {t.minted ? "Already Minted" : `Mint`}
-                </TxButton>
-                {!mintable && !t.minted && (
-                  <p className="mt-1 text-center text-[10px] text-amber-400">
-                    {!meetsLevel
-                      ? `Requires player level ${t.account.requiredPlayerLevel} (you are ${playerLevel})`
-                      : t.account.supplyCap > 0 && t.account.mintedCount >= t.account.supplyCap
-                        ? "Supply exhausted"
-                        : "Not available"}
-                  </p>
+                {/* Buffs */}
+                {buffs.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                      Base Buffs
+                    </div>
+                    <div className="space-y-1">
+                      {buffs.map((b) => {
+                        const icon = buffStatIcon(b.stat);
+                        return (
+                          <div
+                            key={b.stat}
+                            className="flex items-center justify-between rounded bg-surface px-2 py-1"
+                          >
+                            <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+                              {icon && (
+                                <GameIcon
+                                  id={icon}
+                                  title={getBuffStatMeta(b.stat)?.name}
+                                  size={18}
+                                />
+                              )}
+                              {getBuffStatMeta(b.stat)?.name ?? `Stat ${b.stat}`}
+                            </span>
+                            <span className="font-mono text-xs font-semibold text-text-primary">
+                              +{(b.baseBps / 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </div>
-            </>
-          );
-        })()}
+
+                {/* Signature Ability (read-only on template detail) */}
+                <AbilityCard template={t.account} />
+
+                {/* Mint action */}
+                <div className="border-t border-border-default pt-3">
+                  <TxButton
+                    onClick={(rp) => handleMint(t.account.templateId, rp)}
+                    disabled={!mintable || traveling}
+                    className="w-full"
+                  >
+                    {t.minted ? "Already Minted" : `Mint`}
+                  </TxButton>
+                  {!mintable && !t.minted && (
+                    <p className="mt-1 text-center text-[10px] text-danger">
+                      {!meetsLevel
+                        ? `Requires player level ${t.account.requiredPlayerLevel} (you are ${playerLevel})`
+                        : t.account.supplyCap > 0 && t.account.mintedCount >= t.account.supplyCap
+                          ? "Supply exhausted"
+                          : "Not available"}
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
       </DetailPanel>
     </div>
   );

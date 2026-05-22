@@ -167,7 +167,16 @@ pub fn process(
     // Mirror the hero's ability cooldown stamp from the NFT into the slot.
     // This closes the unlock+relock exploit — unlock writes the slot value
     // back to the NFT, so cycling preserves cooldown across lock/unlock.
-    player.set_ability_last_used_at(slot_index as usize, parsed_hero.last_ability_used_at);
+    // The stamp must be a past unix time; a future or otherwise nonsensical
+    // value (e.g. a malformed NFT attribute) is treated as never-used so it
+    // can't wedge use_ability permanently on cooldown.
+    let now = Clock::get()?.unix_timestamp;
+    let last_used_stamp = if (0..=now).contains(&parsed_hero.last_ability_used_at) {
+        parsed_hero.last_ability_used_at
+    } else {
+        0
+    };
+    player.set_ability_last_used_at(slot_index as usize, last_used_stamp);
 
     // Add buffs using helper with location bonus applied
     add_hero_buffs_to_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
@@ -178,14 +187,13 @@ pub fn process(
     drop(template_data);
 
     // 12. Emit HeroLocked event
-    let clock = Clock::get()?;
     emit!(HeroLocked {
         hero_mint: *hero_mint.address(),
         hero_name,
         player: *player_account.address(),
         player_name,
         slot: slot_index,
-        timestamp: clock.unix_timestamp,
+        timestamp: now,
     });
 
     Ok(())

@@ -16,14 +16,7 @@ interface TeamCardProps {
   lordlyLabels?: boolean;
 }
 
-export function TeamCard({
-  teamId,
-  team,
-  rank,
-  actions,
-  className,
-  lordlyLabels,
-}: TeamCardProps) {
+export function TeamCard({ teamId, team, rank, actions, className, lordlyLabels }: TeamCardProps) {
   const isPublic = (team.settings & 1) !== 0;
   const memberLabel = lordlyLabels ? "sworn blades" : "members";
   const treasuryLabel = lordlyLabels ? "War-chest" : "Treasury";
@@ -40,9 +33,7 @@ export function TeamCard({
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            {rank != null && (
-              <span className="text-xs font-bold text-text-muted">#{rank}</span>
-            )}
+            {rank != null && <span className="text-xs font-bold text-text-muted">#{rank}</span>}
             <Link
               href={`/world/teams/${teamId}`}
               className="truncate text-sm font-semibold text-text-primary hover:text-text-gold transition-colors"
@@ -57,9 +48,7 @@ export function TeamCard({
             <span>
               {team.memberCount}/{team.maxMembers} {memberLabel}
             </span>
-            {team.minLevelToJoin > 1 && (
-              <span>Lv {team.minLevelToJoin}+</span>
-            )}
+            {team.minLevelToJoin > 1 && <span>Lv {team.minLevelToJoin}+</span>}
             {bannerAge && <span>Banner flown {bannerAge}</span>}
           </div>
         </div>
@@ -77,9 +66,7 @@ export function TeamCard({
       </div>
 
       {team.motd && (
-        <div className="mt-2 truncate text-xs text-text-secondary italic">
-          "{team.motd}"
-        </div>
+        <div className="mt-2 truncate text-xs text-text-secondary italic">"{team.motd}"</div>
       )}
 
       <div className="mt-2 text-[10px] text-text-muted">

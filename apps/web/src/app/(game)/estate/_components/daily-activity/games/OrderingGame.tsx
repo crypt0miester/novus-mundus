@@ -20,11 +20,7 @@ interface OrderingGameProps {
  * Ordering game UI. The player nudges items up and down into the right order
  * and submits the final sequence.
  */
-export function OrderingGame({
-  presentation,
-  submitting,
-  onSubmit,
-}: OrderingGameProps) {
+export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGameProps) {
   const { instruction, metricLabel, items } = presentation;
   const [order, setOrder] = useState<number[]>(() => items.map((_, i) => i));
 
@@ -48,17 +44,12 @@ export function OrderingGame({
           const it = items[itemIdx];
           if (!it) return null;
           return (
-            <div
-              key={itemIdx}
-              className="card flex items-center justify-between gap-2 py-2"
-            >
+            <div key={itemIdx} className="card flex items-center justify-between gap-2 py-2">
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-surface-overlay text-[11px] font-bold tabular-nums text-text-muted">
                   {pos + 1}
                 </span>
-                <span className="text-sm font-semibold text-text-primary">
-                  {it.label}
-                </span>
+                <span className="text-sm font-semibold text-text-primary">{it.label}</span>
                 <span className="text-[11px] tabular-nums text-text-muted">
                   {metricLabel} {it.metric}
                 </span>
@@ -69,7 +60,7 @@ export function OrderingGame({
                   disabled={submitting || pos === 0}
                   onClick={() => move(pos, -1)}
                   aria-label="Move up"
-                  className="rounded border border-border-default px-2 py-1 text-xs text-text-secondary transition-colors hover:border-amber-800/50 disabled:opacity-30"
+                  className="rounded border border-border-default px-2 py-1 text-xs text-text-secondary transition-colors hover:border-border-gold/50 disabled:opacity-30"
                 >
                   ▲
                 </button>
@@ -78,7 +69,7 @@ export function OrderingGame({
                   disabled={submitting || pos === order.length - 1}
                   onClick={() => move(pos, 1)}
                   aria-label="Move down"
-                  className="rounded border border-border-default px-2 py-1 text-xs text-text-secondary transition-colors hover:border-amber-800/50 disabled:opacity-30"
+                  className="rounded border border-border-default px-2 py-1 text-xs text-text-secondary transition-colors hover:border-border-gold/50 disabled:opacity-30"
                 >
                   ▼
                 </button>

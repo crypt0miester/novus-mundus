@@ -119,14 +119,17 @@ export function TeamTab() {
       .filter((pda) => !otherPlayers.has(pda.toBase58()));
     if (missing.length === 0) return;
 
-    connection.getMultipleAccountsInfo(missing).then((infos) => {
-      for (let i = 0; i < infos.length; i++) {
-        const info = infos[i];
-        if (!info) continue;
-        const parsed = parsePlayer(info);
-        if (parsed) upsertOtherPlayer(missing[i], parsed);
-      }
-    }).catch(() => {});
+    connection
+      .getMultipleAccountsInfo(missing)
+      .then((infos) => {
+        for (let i = 0; i < infos.length; i++) {
+          const info = infos[i];
+          if (!info) continue;
+          const parsed = parsePlayer(info);
+          if (parsed) upsertOtherPlayer(missing[i], parsed);
+        }
+      })
+      .catch(() => {});
   }, [members, connection]);
 
   // On-demand fetch: treasury requests are PDA-derivable per (team, requester).
@@ -135,18 +138,19 @@ export function TeamTab() {
   useEffect(() => {
     if (!teamData?.pubkey || !members || members.length === 0) return;
     const teamKey = teamData.pubkey;
-    const requestPdas = members.map(
-      (m) => deriveTreasuryRequestPda(teamKey, m.account.player)[0],
-    );
-    connection.getMultipleAccountsInfo(requestPdas).then((infos) => {
-      const store = useAccountStore.getState();
-      for (let i = 0; i < infos.length; i++) {
-        const info = infos[i];
-        if (!info) continue;
-        const parsed = parseTreasuryRequest(info);
-        if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
-      }
-    }).catch(() => {});
+    const requestPdas = members.map((m) => deriveTreasuryRequestPda(teamKey, m.account.player)[0]);
+    connection
+      .getMultipleAccountsInfo(requestPdas)
+      .then((infos) => {
+        const store = useAccountStore.getState();
+        for (let i = 0; i < infos.length; i++) {
+          const info = infos[i];
+          if (!info) continue;
+          const parsed = parseTreasuryRequest(info);
+          if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
+        }
+      })
+      .catch(() => {});
   }, [teamData?.pubkey?.toBase58(), members, connection, transact.isPending]);
 
   // On-demand fetch: incoming team invites for the current player. Invites
@@ -158,22 +162,23 @@ export function TeamTab() {
     const ge = client.gameEngine;
     const [meiPlayerPda] = derivePlayerPda(ge, publicKey);
     let cancelled = false;
-    client.fetchAllTeams({ activeOnly: true }).then((teams) => {
-      if (cancelled || teams.length === 0) return;
-      const invitePdas = teams.map(
-        (t) => deriveTeamInvitePda(t.pubkey, meiPlayerPda)[0],
-      );
-      return connection.getMultipleAccountsInfo(invitePdas).then((infos) => {
-        if (cancelled) return;
-        const store = useAccountStore.getState();
-        for (let i = 0; i < infos.length; i++) {
-          const info = infos[i];
-          if (!info) continue;
-          const parsed = parseTeamInvite(info);
-          if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
-        }
-      });
-    }).catch(() => {});
+    client
+      .fetchAllTeams({ activeOnly: true })
+      .then((teams) => {
+        if (cancelled || teams.length === 0) return;
+        const invitePdas = teams.map((t) => deriveTeamInvitePda(t.pubkey, meiPlayerPda)[0]);
+        return connection.getMultipleAccountsInfo(invitePdas).then((infos) => {
+          if (cancelled) return;
+          const store = useAccountStore.getState();
+          for (let i = 0; i < infos.length; i++) {
+            const info = infos[i];
+            if (!info) continue;
+            const parsed = parseTeamInvite(info);
+            if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
+          }
+        });
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -209,7 +214,10 @@ export function TeamTab() {
     if (!currentTeamDomainName) return null;
     const dotIdx = currentTeamDomainName.indexOf(".");
     if (dotIdx === -1) return null;
-    return { domain: currentTeamDomainName.slice(0, dotIdx), tld: currentTeamDomainName.slice(dotIdx + 1) };
+    return {
+      domain: currentTeamDomainName.slice(0, dotIdx),
+      tld: currentTeamDomainName.slice(dotIdx + 1),
+    };
   }, [currentTeamDomainName]);
 
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
@@ -218,14 +226,16 @@ export function TeamTab() {
     const teamIdNum = Date.now();
     const ix = createTeamCreateInstruction(
       { owner: publicKey, gameEngine: ge, teamId: teamIdNum },
-      { name: teamName.trim() }
+      { name: teamName.trim() },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"]],
-      successMessage: `Team "${teamName.trim()}" created!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"]],
+        successMessage: `Team "${teamName.trim()}" created!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
@@ -238,12 +248,14 @@ export function TeamTab() {
       teamId,
       slotIndex: player.teamSlotIndex,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"], ["teamMembers"]],
-      successMessage: "Left the team.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"], ["teamMembers"]],
+        successMessage: "Left the team.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleDisband = async (reportPhase: (p: TxPhase) => void) => {
@@ -255,63 +267,83 @@ export function TeamTab() {
       team: teamPubkey,
       teamId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"], ["teamMembers"]],
-      successMessage: "Team disbanded.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"], ["teamMembers"]],
+        successMessage: "Team disbanded.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleDeposit = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || depositAmount <= 0) throw new Error("Invalid amount");
+    if (!publicKey || !teamPubkey || !teamId || depositAmount <= 0)
+      throw new Error("Invalid amount");
     const ge = client.gameEngine;
     const ix = createTeamDepositTreasuryInstruction(
       { owner: publicKey, gameEngine: ge, team: teamPubkey, teamId },
-      { amount: depositAmount }
+      { amount: depositAmount },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"]],
-      successMessage: `Deposited $${depositAmount} to treasury!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"]],
+        successMessage: `Deposited $${depositAmount} to treasury!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleWithdraw = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || !player || withdrawAmount <= 0) throw new Error("Invalid amount");
+    if (!publicKey || !teamPubkey || !teamId || !player || withdrawAmount <= 0)
+      throw new Error("Invalid amount");
     const ge = client.gameEngine;
     const ix = createTeamWithdrawTreasuryInstruction(
-      { owner: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex },
-      { amount: withdrawAmount }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        slotIndex: player.teamSlotIndex,
+      },
+      { amount: withdrawAmount },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"]],
-      successMessage: `Withdrew $${withdrawAmount} from treasury!`,
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"]],
+        successMessage: `Withdrew $${withdrawAmount} from treasury!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleSetMotd = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || !player || !motd.trim()) throw new Error("Missing data");
+    if (!publicKey || !teamPubkey || !teamId || !player || !motd.trim())
+      throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamSetMotdInstruction(
-      { owner: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex },
-      { motd: motd.trim() }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        slotIndex: player.teamSlotIndex,
+      },
+      { motd: motd.trim() },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "MOTD updated!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "MOTD updated!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
-  const handleInvite = async (
-    inviteeWallet: PublicKey,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
+  const handleInvite = async (inviteeWallet: PublicKey, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const [inviteePlayerPda] = derivePlayerPda(ge, inviteeWallet);
@@ -323,12 +355,14 @@ export function TeamTab() {
       inviterSlotIndex: player.teamSlotIndex,
       inviteePlayer: inviteePlayerPda,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Invite sent!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Invite sent!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleTeamNameSet = (domain: string, tld: string) => {
@@ -383,7 +417,11 @@ export function TeamTab() {
     });
   };
 
-  const handleKick = async (kickedPlayer: PublicKey, kickedSlotIndex: number, kickedOwner: PublicKey) => {
+  const handleKick = async (
+    kickedPlayer: PublicKey,
+    kickedSlotIndex: number,
+    kickedOwner: PublicKey,
+  ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamKickMemberInstruction({
@@ -396,11 +434,13 @@ export function TeamTab() {
       kickedSlotIndex,
       kickedOwner,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["teamMembers"]],
-      successMessage: "Member kicked.",
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"], ["teamMembers"]],
+        successMessage: "Member kicked.",
+      })
+      .then((r) => r.signature);
   };
 
   const handlePromote = async (targetSlotIndex: number, currentRank: number) => {
@@ -408,14 +448,23 @@ export function TeamTab() {
     const ge = client.gameEngine;
     const newRank = Math.max(1, currentRank - 1); // promote = lower rank number (but not 0=leader)
     const ix = createTeamPromoteMemberInstruction(
-      { promoter: publicKey, gameEngine: ge, team: teamPubkey, teamId, promoterSlotIndex: player.teamSlotIndex, targetSlotIndex },
-      { newRank }
+      {
+        promoter: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        promoterSlotIndex: player.teamSlotIndex,
+        targetSlotIndex,
+      },
+      { newRank },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["teamMembers"]],
-      successMessage: `Member promoted to ${RANK_LABELS[newRank]}!`,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"], ["teamMembers"]],
+        successMessage: `Member promoted to ${RANK_LABELS[newRank]}!`,
+      })
+      .then((r) => r.signature);
   };
 
   const handleDemote = async (targetSlotIndex: number, currentRank: number) => {
@@ -423,76 +472,119 @@ export function TeamTab() {
     const ge = client.gameEngine;
     const newRank = Math.min(4, currentRank + 1); // demote = higher rank number
     const ix = createTeamDemoteMemberInstruction(
-      { demoter: publicKey, gameEngine: ge, team: teamPubkey, teamId, demoterSlotIndex: player.teamSlotIndex, targetSlotIndex },
-      { newRank }
+      {
+        demoter: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        demoterSlotIndex: player.teamSlotIndex,
+        targetSlotIndex,
+      },
+      { newRank },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["teamMembers"]],
-      successMessage: `Member demoted to ${RANK_LABELS[newRank]}.`,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"], ["teamMembers"]],
+        successMessage: `Member demoted to ${RANK_LABELS[newRank]}.`,
+      })
+      .then((r) => r.signature);
   };
 
   const handleTransferLeadership = async (newLeaderPlayer: PublicKey, newSlotIndex: number) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTransferLeadershipInstruction({
-      leader: publicKey, gameEngine: ge, team: teamPubkey, teamId,
-      currentSlotIndex: player.teamSlotIndex, newLeaderPlayer, newSlotIndex,
+      leader: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
+      currentSlotIndex: player.teamSlotIndex,
+      newLeaderPlayer,
+      newSlotIndex,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["teamMembers"], ["player"]],
-      successMessage: "Leadership transferred!",
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"], ["teamMembers"], ["player"]],
+        successMessage: "Leadership transferred!",
+      })
+      .then((r) => r.signature);
   };
 
   const handleCancelInvite = async (inviteePlayer: PublicKey) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamCancelInviteInstruction({
-      member: publicKey, gameEngine: ge, team: teamPubkey, teamId,
-      memberSlotIndex: player.teamSlotIndex, inviteePlayer,
+      member: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
+      memberSlotIndex: player.teamSlotIndex,
+      inviteePlayer,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Invite cancelled.",
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Invite cancelled.",
+      })
+      .then((r) => r.signature);
   };
 
-  const handleUpdateSettings = async (isPublic: boolean, minLevel: number, reportPhase: (p: TxPhase) => void) => {
+  const handleUpdateSettings = async (
+    isPublic: boolean,
+    minLevel: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const settings = isPublic ? 1 : 0; // bit 0 = PUBLIC
     const ix = createTeamUpdateSettingsInstruction(
-      { member: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex },
-      { settings, minLevelToJoin: minLevel }
+      {
+        member: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        slotIndex: player.teamSlotIndex,
+      },
+      { settings, minLevelToJoin: minLevel },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Team settings updated!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Team settings updated!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleTreasuryRequestWithdraw = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || !player || requestWithdrawAmount <= 0) throw new Error("Invalid amount");
+    if (!publicKey || !teamPubkey || !teamId || !player || requestWithdrawAmount <= 0)
+      throw new Error("Invalid amount");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryRequestWithdrawInstruction(
-      { owner: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex },
-      { amount: requestWithdrawAmount }
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        slotIndex: player.teamSlotIndex,
+      },
+      { amount: requestWithdrawAmount },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: `Withdrawal of $${requestWithdrawAmount} requested!`,
-      onPhase: reportPhase,
-    }).then((r) => {
-      setRequestWithdrawAmount(0);
-      return r.signature;
-    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: `Withdrawal of $${requestWithdrawAmount} requested!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        setRequestWithdrawAmount(0);
+        return r.signature;
+      });
   };
 
   const handleTreasuryApprove = async (
@@ -503,56 +595,82 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryApproveRequestInstruction({
-      approver: publicKey, gameEngine: ge, team: teamPubkey, teamId,
-      approverSlotIndex: player.teamSlotIndex, requesterSlotIndex, requesterPlayer, requesterRefund,
+      approver: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
+      approverSlotIndex: player.teamSlotIndex,
+      requesterSlotIndex,
+      requesterPlayer,
+      requesterRefund,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Request approved!",
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Request approved!",
+      })
+      .then((r) => r.signature);
   };
 
   const handleTreasuryReject = async (requesterPlayer: PublicKey, requesterRefund: PublicKey) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryRejectRequestInstruction({
-      rejecter: publicKey, gameEngine: ge, team: teamPubkey, teamId,
-      rejecterSlotIndex: player.teamSlotIndex, requesterPlayer, requesterRefund,
+      rejecter: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
+      rejecterSlotIndex: player.teamSlotIndex,
+      requesterPlayer,
+      requesterRefund,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Request rejected.",
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Request rejected.",
+      })
+      .then((r) => r.signature);
   };
 
   const handleTreasuryExecute = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryExecuteRequestInstruction({
-      owner: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex,
+      owner: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
+      slotIndex: player.teamSlotIndex,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["player"]],
-      successMessage: "Withdrawal executed!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"], ["player"]],
+        successMessage: "Withdrawal executed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleTreasuryCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamTreasuryCancelRequestInstruction({
-      owner: publicKey, gameEngine: ge, team: teamPubkey, teamId,
+      owner: publicKey,
+      gameEngine: ge,
+      team: teamPubkey,
+      teamId,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Withdrawal request cancelled.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Withdrawal request cancelled.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const handleUpdateTreasurySettings = async (
@@ -564,15 +682,23 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const ix = createTeamUpdateTreasurySettingsInstruction(
-      { leader: publicKey, gameEngine: ge, team: teamPubkey, teamId, slotIndex: player.teamSlotIndex },
-      { instantLimits, dailyCaps, cooldownHours }
+      {
+        leader: publicKey,
+        gameEngine: ge,
+        team: teamPubkey,
+        teamId,
+        slotIndex: player.teamSlotIndex,
+      },
+      { instantLimits, dailyCaps, cooldownHours },
     );
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["team"]],
-      successMessage: "Treasury settings updated!",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["team"]],
+        successMessage: "Treasury settings updated!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const getMemberNetworth = (playerPda: PublicKey): number => {
@@ -608,8 +734,7 @@ export function TeamTab() {
       .map((r) => {
         const requesterPda = r.account.requester;
         const slot = members?.find((m) => m.account.player.equals(requesterPda));
-        const requesterWallet =
-          otherPlayers.get(requesterPda.toBase58())?.account?.owner ?? null;
+        const requesterWallet = otherPlayers.get(requesterPda.toBase58())?.account?.owner ?? null;
         return {
           pubkey: r.pubkey,
           account: r.account,
@@ -621,10 +746,7 @@ export function TeamTab() {
       });
   }, [treasuryRequests, team, teamData, members, otherPlayers, myPlayerPda]);
 
-  const myRequest = useMemo(
-    () => pendingRequests.find((r) => r.isMine) ?? null,
-    [pendingRequests],
-  );
+  const myRequest = useMemo(() => pendingRequests.find((r) => r.isMine) ?? null, [pendingRequests]);
 
   // Incoming team invites addressed to the current player.
   // subscriptions.ts only stores invites whose `invitee` matches us, but the
@@ -643,16 +765,19 @@ export function TeamTab() {
     const inviterPdas = incomingInvites.map((inv) => inv.account.inviter);
     const missing = inviterPdas.filter((p) => !inviterWallets.has(p.toBase58()));
     if (missing.length === 0) return;
-    connection.getMultipleAccountsInfo(missing).then((infos) => {
-      const next = new Map(inviterWallets);
-      for (let i = 0; i < infos.length; i++) {
-        const info = infos[i];
-        if (!info) continue;
-        const parsed = parsePlayer(info);
-        if (parsed) next.set(missing[i].toBase58(), parsed.owner);
-      }
-      setInviterWallets(next);
-    }).catch(() => {});
+    connection
+      .getMultipleAccountsInfo(missing)
+      .then((infos) => {
+        const next = new Map(inviterWallets);
+        for (let i = 0; i < infos.length; i++) {
+          const info = infos[i];
+          if (!info) continue;
+          const parsed = parsePlayer(info);
+          if (parsed) next.set(missing[i].toBase58(), parsed.owner);
+        }
+        setInviterWallets(next);
+      })
+      .catch(() => {});
   }, [incomingInvites, connection]);
 
   // Accept an incoming invite — joins the inviting team at a free slot.
@@ -674,7 +799,10 @@ export function TeamTab() {
     const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
     let freeSlot = -1;
     for (let i = 0; i < inviteTeamAccount.maxMembers; i++) {
-      if (!usedSlots.has(i)) { freeSlot = i; break; }
+      if (!usedSlots.has(i)) {
+        freeSlot = i;
+        break;
+      }
     }
     if (freeSlot < 0) throw new Error("Team is full");
 
@@ -686,15 +814,17 @@ export function TeamTab() {
       slotIndex: freeSlot,
       inviteRefund: inviterRefund,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"], ["team"], ["teamMembers"]],
-      successMessage: "Invite accepted — joined team!",
-      onPhase: reportPhase,
-    }).then((r) => {
-      useTransitionStore.getState().triggerActBeat({ act: 3, phase: "oath" });
-      return r.signature;
-    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["team"], ["teamMembers"]],
+        successMessage: "Invite accepted — joined team!",
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        useTransitionStore.getState().triggerActBeat({ act: 3, phase: "oath" });
+        return r.signature;
+      });
   };
 
   // Decline an incoming invite.
@@ -711,12 +841,14 @@ export function TeamTab() {
       team: inviteTeam,
       inviterRefund,
     });
-    return transact.mutateAsync({
-      instructions: [ix],
-      invalidateKeys: [["player"]],
-      successMessage: "Invite declined.",
-      onPhase: reportPhase,
-    }).then((r) => r.signature);
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: "Invite declined.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
   };
 
   const [sidebarSection, setSidebarSection] = useState<"chat" | "treasury" | "settings">("chat");
@@ -727,19 +859,17 @@ export function TeamTab() {
       {!hasTeam && (
         <>
           <div className="card accent-border">
-            <h3 className="mb-1 text-sm font-semibold text-text-primary">
-              Raise your own banner.
-            </h3>
+            <h3 className="mb-1 text-sm font-semibold text-text-primary">Raise your own banner.</h3>
             <p className="mb-4 text-xs text-text-muted">
               Name the House and others may swear their blades to it.
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-col">
               <input
                 type="text"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 placeholder="House name..."
-                className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
                 maxLength={32}
               />
               <TxButton onClick={handleCreate} disabled={!teamName.trim()}>
@@ -823,7 +953,7 @@ export function TeamTab() {
                   <div className="text-xs text-text-muted">Members</div>
                   <GoldNumber value={team.memberCount} suffix={`/${team.maxMembers}`} />
                   {team.memberCount >= team.maxMembers && (
-                    <span className="text-xs text-amber-400">Full</span>
+                    <span className="text-xs text-danger">Full</span>
                   )}
                 </div>
               </div>
@@ -844,13 +974,13 @@ export function TeamTab() {
                 ) : (
                   <p className="mb-3 text-sm text-text-muted italic">No message set</p>
                 )}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-col">
                   <input
                     type="text"
                     value={motd}
                     onChange={(e) => setMotd(e.target.value)}
                     placeholder="Set new MOTD..."
-                    className="flex-1 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
                     maxLength={32}
                   />
                   <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
@@ -880,7 +1010,7 @@ export function TeamTab() {
                           <span
                             className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
                               m.account.rank === 0
-                                ? "bg-amber-900/40 text-text-gold"
+                                ? "bg-accent/40 text-text-gold"
                                 : "bg-zinc-800 text-text-muted"
                             }`}
                           >
@@ -889,13 +1019,13 @@ export function TeamTab() {
                           <span className="font-mono text-sm text-text-primary">
                             <DomainName pubkey={memberPda} chars={4} />
                           </span>
-                          {isCurrentPlayer && (
-                            <span className="text-xs text-text-gold">(you)</span>
-                          )}
+                          {isCurrentPlayer && <span className="text-xs text-text-gold">(you)</span>}
                         </div>
                         <div className="flex items-center gap-3">
                           {getMemberLevel(memberPda) > 0 && (
-                            <span className="text-xs text-text-muted">Lv {getMemberLevel(memberPda)}</span>
+                            <span className="text-xs text-text-muted">
+                              Lv {getMemberLevel(memberPda)}
+                            </span>
                           )}
                           {getMemberNetworth(memberPda) > 0 && (
                             <GoldNumber value={getMemberNetworth(memberPda)} size="sm" />
@@ -913,7 +1043,7 @@ export function TeamTab() {
                               {m.account.rank < 4 && (
                                 <button
                                   onClick={() => handleDemote(m.account.slotIndex, m.account.rank)}
-                                  className="text-xs text-amber-400 hover:text-amber-300"
+                                  className="text-xs text-text-gold hover:text-text-primary"
                                 >
                                   Demote
                                 </button>
@@ -923,13 +1053,17 @@ export function TeamTab() {
                           {isLeader && !isCurrentPlayer && m.account.rank !== 0 && (
                             <>
                               <button
-                                onClick={() => handleTransferLeadership(memberPda, m.account.slotIndex)}
+                                onClick={() =>
+                                  handleTransferLeadership(memberPda, m.account.slotIndex)
+                                }
                                 className="text-xs text-blue-400 hover:text-blue-300"
                               >
                                 Transfer Lead
                               </button>
                               <button
-                                onClick={() => handleKick(memberPda, m.account.slotIndex, memberPda)}
+                                onClick={() =>
+                                  handleKick(memberPda, m.account.slotIndex, memberPda)
+                                }
                                 className="text-xs text-red-400 hover:text-red-300"
                               >
                                 Kick
@@ -947,21 +1081,30 @@ export function TeamTab() {
               </div>
 
               {/* Game Parameters */}
-              {geData?.account && (() => {
-                const gp = geData.account.gameplayConfig;
-                const tiers = geData.account.subscriptionTiers;
-                return (
-                  <GameInfoPanel>
-                    <InfoGrid items={[
-                      { label: "Team Creation Cost", value: gp.teamCreationCost.toNumber().toLocaleString(), suffix: "NOVI", highlight: true },
-                      ...tiers.map((t) => ({
-                        label: `${t.name} Team Size`,
-                        value: t.maxTeamMembers.toString(),
-                      })),
-                    ]} columns={2} />
-                  </GameInfoPanel>
-                );
-              })()}
+              {geData?.account &&
+                (() => {
+                  const gp = geData.account.gameplayConfig;
+                  const tiers = geData.account.subscriptionTiers;
+                  return (
+                    <GameInfoPanel>
+                      <InfoGrid
+                        items={[
+                          {
+                            label: "Team Creation Cost",
+                            value: gp.teamCreationCost.toNumber().toLocaleString(),
+                            suffix: "NOVI",
+                            highlight: true,
+                          },
+                          ...tiers.map((t) => ({
+                            label: `${t.name} Team Size`,
+                            value: t.maxTeamMembers.toString(),
+                          })),
+                        ]}
+                        columns={2}
+                      />
+                    </GameInfoPanel>
+                  );
+                })()}
             </div>
 
             {/* Right — sidebar with tabbed sections */}
@@ -975,7 +1118,7 @@ export function TeamTab() {
                       onClick={() => setSidebarSection(s)}
                       className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                         sidebarSection === s
-                          ? "bg-amber-900/30 text-text-gold"
+                          ? "bg-accent/30 text-text-gold"
                           : "text-text-muted hover:text-text-secondary"
                       }`}
                     >
@@ -989,7 +1132,9 @@ export function TeamTab() {
                   <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
                     <div className="text-2xl text-text-muted">&#128172;</div>
                     <p className="text-sm text-text-muted">Team chat coming soon</p>
-                    <p className="text-[11px] text-text-muted">Coordinate with your team in real-time</p>
+                    <p className="text-[11px] text-text-muted">
+                      Coordinate with your team in real-time
+                    </p>
                   </div>
                 )}
 
@@ -1014,14 +1159,31 @@ export function TeamTab() {
                         min={0}
                         max={player?.cashOnHand?.toNumber?.() ?? 0}
                       />
-                      {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
-                        <p className="text-xs text-red-400">Exceeds cash on hand</p>
-                      )}
+                      {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) &&
+                        depositAmount > 0 && (
+                          <p className="text-xs text-red-400">Exceeds cash on hand</p>
+                        )}
                       <div className="grid grid-cols-2 gap-2">
-                        <TxButton onClick={handleDeposit} variant="secondary" className="text-xs" disabled={depositAmount <= 0 || depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)}>
+                        <TxButton
+                          onClick={handleDeposit}
+                          variant="secondary"
+                          className="text-xs"
+                          disabled={
+                            depositAmount <= 0 ||
+                            depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)
+                          }
+                        >
                           Deposit
                         </TxButton>
-                        <TxButton onClick={handleWithdraw} variant="secondary" className="text-xs" disabled={withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)}>
+                        <TxButton
+                          onClick={handleWithdraw}
+                          variant="secondary"
+                          className="text-xs"
+                          disabled={
+                            withdrawAmount <= 0 ||
+                            withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)
+                          }
+                        >
                           Withdraw
                         </TxButton>
                       </div>
@@ -1039,7 +1201,12 @@ export function TeamTab() {
                         min={0}
                         max={team.treasury.toNumber()}
                       />
-                      <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
+                      <TxButton
+                        onClick={handleTreasuryRequestWithdraw}
+                        variant="secondary"
+                        className="w-full text-xs"
+                        disabled={requestWithdrawAmount <= 0 || !!myRequest}
+                      >
                         Request
                       </TxButton>
                       {/* Execute / Cancel reflect the caller's own request state */}
@@ -1049,11 +1216,18 @@ export function TeamTab() {
                             onClick={handleTreasuryExecute}
                             variant="secondary"
                             className="text-xs"
-                            disabled={myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)}
+                            disabled={
+                              myRequest.account.executableAt.toNumber() >
+                              Math.floor(Date.now() / 1000)
+                            }
                           >
                             Execute
                           </TxButton>
-                          <TxButton onClick={handleTreasuryCancel} variant="danger" className="text-xs">
+                          <TxButton
+                            onClick={handleTreasuryCancel}
+                            variant="danger"
+                            className="text-xs"
+                          >
                             Cancel
                           </TxButton>
                         </div>
@@ -1119,11 +1293,7 @@ export function TeamTab() {
                     {/* Team Settings */}
                     {isOfficerPlus && (
                       <div className="border-t border-border-default pt-3">
-                        <TeamSettingsPanel
-                          team={team}
-                          onSave={handleUpdateSettings}
-                          compact
-                        />
+                        <TeamSettingsPanel team={team} onSave={handleUpdateSettings} compact />
                       </div>
                     )}
 
@@ -1172,7 +1342,7 @@ export function TeamTab() {
                   onClick={() => setSidebarSection(s)}
                   className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
                     sidebarSection === s
-                      ? "bg-amber-900/30 text-text-gold"
+                      ? "bg-accent/30 text-text-gold"
                       : "text-text-muted hover:text-text-secondary"
                   }`}
                 >
@@ -1215,10 +1385,25 @@ export function TeamTab() {
                     <p className="text-xs text-red-400">Exceeds cash on hand</p>
                   )}
                   <div className="grid grid-cols-2 gap-2">
-                    <TxButton onClick={handleDeposit} variant="secondary" className="text-xs" disabled={depositAmount <= 0 || depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)}>
+                    <TxButton
+                      onClick={handleDeposit}
+                      variant="secondary"
+                      className="text-xs"
+                      disabled={
+                        depositAmount <= 0 ||
+                        depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)
+                      }
+                    >
                       Deposit
                     </TxButton>
-                    <TxButton onClick={handleWithdraw} variant="secondary" className="text-xs" disabled={withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)}>
+                    <TxButton
+                      onClick={handleWithdraw}
+                      variant="secondary"
+                      className="text-xs"
+                      disabled={
+                        withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)
+                      }
+                    >
                       Withdraw
                     </TxButton>
                   </div>
@@ -1235,7 +1420,12 @@ export function TeamTab() {
                     min={0}
                     max={team.treasury.toNumber()}
                   />
-                  <TxButton onClick={handleTreasuryRequestWithdraw} variant="secondary" className="w-full text-xs" disabled={requestWithdrawAmount <= 0 || !!myRequest}>
+                  <TxButton
+                    onClick={handleTreasuryRequestWithdraw}
+                    variant="secondary"
+                    className="w-full text-xs"
+                    disabled={requestWithdrawAmount <= 0 || !!myRequest}
+                  >
                     Request
                   </TxButton>
                   {/* Execute / Cancel reflect the caller's own request state */}
@@ -1245,7 +1435,9 @@ export function TeamTab() {
                         onClick={handleTreasuryExecute}
                         variant="secondary"
                         className="text-xs"
-                        disabled={myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)}
+                        disabled={
+                          myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)
+                        }
                       >
                         Execute
                       </TxButton>
@@ -1312,11 +1504,7 @@ export function TeamTab() {
 
                 {isOfficerPlus && (
                   <div className="border-t border-border-default pt-3">
-                    <TeamSettingsPanel
-                      team={team}
-                      onSave={handleUpdateSettings}
-                      compact
-                    />
+                    <TeamSettingsPanel team={team} onSave={handleUpdateSettings} compact />
                   </div>
                 )}
 
@@ -1376,23 +1564,14 @@ function InvitePlayerPanel({
   invitedPdas: Set<string>;
   gameEngine: PublicKey;
   selfWallet: PublicKey | null;
-  onInvite: (
-    wallet: PublicKey,
-    reportPhase: (p: TxPhase) => void,
-  ) => Promise<string>;
+  onInvite: (wallet: PublicKey, reportPhase: (p: TxPhase) => void) => Promise<string>;
 }) {
   const { data: players } = useWorldPlayers();
   const [query, setQuery] = useState("");
 
-  const owners = useMemo(
-    () => (players ?? []).map((p) => p.account.owner),
-    [players],
-  );
+  const owners = useMemo(() => (players ?? []).map((p) => p.account.owner), [players]);
   const domains = useDomainNames(owners);
-  const knownOwners = useMemo(
-    () => new Set(owners.map((o) => o.toBase58())),
-    [owners],
-  );
+  const knownOwners = useMemo(() => new Set(owners.map((o) => o.toBase58())), [owners]);
 
   const candidates = useMemo(() => {
     if (!players) return [];
@@ -1442,29 +1621,22 @@ function InvitePlayerPanel({
       />
 
       {teamFull ? (
-        <p className="text-xs text-amber-400">
-          Your House is full — free a slot before inviting.
-        </p>
+        <p className="text-xs text-danger">Your House is full — free a slot before inviting.</p>
       ) : !players ? (
         <p className="text-xs text-text-muted">Loading players...</p>
       ) : (
         <div className="space-y-1">
           {candidates.map((p) => {
             const addr = p.account.owner.toBase58();
-            const label =
-              p.account.name || domains.get(addr) || shortenAddress(addr, 4);
+            const label = p.account.name || domains.get(addr) || shortenAddress(addr, 4);
             return (
               <div
                 key={addr}
                 className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-1.5"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm text-text-primary">
-                    {label}
-                  </div>
-                  <div className="text-[10px] text-text-muted">
-                    Lv {p.account.level}
-                  </div>
+                  <div className="truncate text-sm text-text-primary">{label}</div>
+                  <div className="text-[10px] text-text-muted">Lv {p.account.level}</div>
                 </div>
                 <TxButton
                   onClick={(rp) => onInvite(p.account.owner, rp)}
@@ -1494,9 +1666,7 @@ function InvitePlayerPanel({
 
           {candidates.length === 0 && !showPasted && (
             <p className="text-xs text-text-muted">
-              {query.trim()
-                ? "No players match that search."
-                : "No players available to invite."}
+              {query.trim() ? "No players match that search." : "No players available to invite."}
             </p>
           )}
         </div>
@@ -1511,7 +1681,11 @@ function TeamSettingsPanel({
   compact,
 }: {
   team: { settings: number; minLevelToJoin: number };
-  onSave: (isPublic: boolean, minLevel: number, reportPhase: (p: TxPhase) => void) => Promise<string>;
+  onSave: (
+    isPublic: boolean,
+    minLevel: number,
+    reportPhase: (p: TxPhase) => void,
+  ) => Promise<string>;
   compact?: boolean;
 }) {
   const [isPublic, setIsPublic] = useState(() => (team.settings & 1) !== 0);
@@ -1542,14 +1716,12 @@ function TeamSettingsPanel({
         />
         <span className="text-sm text-text-primary">Public (anyone can join)</span>
       </label>
-      <NumberField
-        label="Min Level"
-        value={minLevel}
-        onChange={setMinLevel}
-        min={1}
-        max={30}
-      />
-      <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
+      <NumberField label="Min Level" value={minLevel} onChange={setMinLevel} min={1} max={255} />
+      <TxButton
+        onClick={handleSave}
+        variant="secondary"
+        className={compact ? "w-full text-xs" : ""}
+      >
         Save Settings
       </TxButton>
     </div>
@@ -1612,8 +1784,19 @@ function TreasurySettingsPanel({
         </h3>
       )}
       {RANK_NAMES.map((name, i) => (
-        <div key={name} className="space-y-2 border-t border-border-default pt-2 first:border-t-0 first:pt-0">
-          <span className={compact ? "text-xs font-semibold text-text-primary" : "text-sm font-semibold text-text-primary"}>{name}</span>
+        <div
+          key={name}
+          className="space-y-2 border-t border-border-default pt-2 first:border-t-0 first:pt-0"
+        >
+          <span
+            className={
+              compact
+                ? "text-xs font-semibold text-text-primary"
+                : "text-sm font-semibold text-text-primary"
+            }
+          >
+            {name}
+          </span>
           <NumberField
             label="Instant Limit"
             value={limits[i]}
@@ -1645,7 +1828,11 @@ function TreasurySettingsPanel({
         min={1}
         max={72}
       />
-      <TxButton onClick={handleSave} variant="secondary" className={compact ? "w-full text-xs" : ""}>
+      <TxButton
+        onClick={handleSave}
+        variant="secondary"
+        className={compact ? "w-full text-xs" : ""}
+      >
         Save Treasury Settings
       </TxButton>
     </div>
@@ -1659,7 +1846,11 @@ function TreasurySettingsPanel({
 
 interface TreasuryRequestRow {
   pubkey: PublicKey;
-  account: { requester: PublicKey; amount: { toNumber: () => number }; executableAt: { toNumber: () => number } };
+  account: {
+    requester: PublicKey;
+    amount: { toNumber: () => number };
+    executableAt: { toNumber: () => number };
+  };
   requesterPda: PublicKey;
   requesterSlotIndex: number | null;
   requesterWallet: PublicKey | null;

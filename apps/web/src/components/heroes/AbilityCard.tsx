@@ -10,7 +10,11 @@ import {
   AbilityKind,
 } from "novus-mundus-sdk";
 import { TxButton } from "@/components/shared/TxButton";
-import { useHeroAbilityCooldown, useUseAbility, usePendingEffect } from "@/lib/hooks/useHeroAbility";
+import {
+  useHeroAbilityCooldown,
+  useUseAbility,
+  usePendingEffect,
+} from "@/lib/hooks/useHeroAbility";
 
 interface AbilityCardProps {
   template: HeroTemplateAccount;
@@ -85,9 +89,8 @@ function InteractiveTrigger({ template, heroMint, slotIndex }: InteractiveTrigge
   return (
     <div className="mt-2 space-y-2">
       {armedHere && (
-        <div className="rounded border border-amber-800/40 bg-amber-900/15 px-2 py-1 text-[10px] text-text-gold">
+        <div className="rounded border border-border-gold/40 bg-accent/15 px-2 py-1 text-[10px] text-text-gold">
           Armed — fires on next matching action.
-          {pending && <span className="ml-1 text-text-muted">Expires in {formatDurationCompact(pending.remainingSecs)}.</span>}
         </div>
       )}
 

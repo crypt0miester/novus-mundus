@@ -23,6 +23,7 @@ import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useAllCities } from "@/lib/hooks/useAllCities";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useTravelProgress } from "@/lib/hooks/useDerived";
+import { useChainNow } from "@/lib/hooks/useChainTime";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -30,7 +31,7 @@ import type { PanelAction } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { formatTime } from "@/lib/utils";
 import {
   RealmMap,
@@ -49,6 +50,15 @@ const typeIdx = (t: number) => Math.max(0, Math.min(3, t | 0));
 
 // intercity_teleport requires a Stable (BuildingId.Stables) at this level.
 const TELEPORT_STABLE_LEVEL = 10;
+
+// Shared styling for the travel-gate hints under the realm-map CTAs.
+const TRAVEL_NOTE_STYLE = {
+  marginTop: "0.6rem",
+  fontSize: "0.65rem",
+  fontStyle: "italic",
+  color: "var(--ink-soft)",
+  textAlign: "center",
+} as const;
 
 export function MapTab() {
   const { publicKey } = useWallet();
@@ -74,19 +84,22 @@ export function MapTab() {
     if (!buildings) return 0;
     const tb = buildings.find(
       (b: { buildingType: number; status: number; level: number }) =>
-        b.buildingType === BuildingId.Stables &&
-        (b.status === 2 || b.status === 3),
+        b.buildingType === BuildingId.Stables && (b.status === 2 || b.status === 3),
     );
     return tb?.level ?? 0;
   }, [estateData]);
   const canTeleport = stableLevel >= TELEPORT_STABLE_LEVEL;
+  // The chain hard-gates intercity travel on a Stable (intercity_start.rs:
+  // `require_stables(estate, 1)`) — mirror it so the CTAs never offer a tx
+  // the program will reject.
+  const hasStables = stableLevel >= 1;
 
-  const currentCityData = cities?.find(
-    (c) => c.account.cityId === player?.currentCity,
-  );
-  const destCityData = cities?.find(
-    (c) => c.account.cityId === destinationCity,
-  );
+  const currentCityData = cities?.find((c) => c.account.cityId === player?.currentCity);
+  const destCityData = cities?.find((c) => c.account.cityId === destinationCity);
+
+  // Chain-anchored time — the travel multiplier the player sees must match
+  // what `intercity_start.rs` computes from `Clock::unix_timestamp`.
+  const chainNow = useChainNow();
 
   const travelPreview = useMemo(() => {
     if (!currentCityData || !destCityData || !ge) return null;
@@ -100,16 +113,10 @@ export function MapTab() {
     );
     const baseSpeedKmh = ge.gameplayConfig?.themeTravelSpeedsKmh?.[0] ?? 50;
     const travelTimeSec = calculateIntercityTravelTime(distanceKm, baseSpeedKmh);
-    const baseTeleportCost =
-      ge.gameplayConfig?.teleportBaseCost?.toNumber?.() ?? 100_000;
-    const costPer100km =
-      ge.gameplayConfig?.teleportCostPer100km?.toNumber?.() ?? 10_000;
-    const teleportCost = calculateTeleportCost(
-      distanceKm,
-      baseTeleportCost,
-      costPer100km,
-    );
-    const tod = getCurrentTimeOfDay(Math.floor(Date.now() / 1000), origin.longitude);
+    const baseTeleportCost = ge.gameplayConfig?.teleportBaseCost?.toNumber?.() ?? 100_000;
+    const costPer100km = ge.gameplayConfig?.teleportCostPer100km?.toNumber?.() ?? 10_000;
+    const teleportCost = calculateTeleportCost(distanceKm, baseTeleportCost, costPer100km);
+    const tod = getCurrentTimeOfDay(chainNow, origin.longitude);
     const travelMult = getActivityMultiplier(ActivityType.Traveling, tod);
     return {
       distanceKm: Math.round(distanceKm),
@@ -119,11 +126,10 @@ export function MapTab() {
       todName: getTimeOfDayName(tod),
       travelMult,
     };
-  }, [currentCityData, destCityData, ge]);
+  }, [currentCityData, destCityData, ge, chainNow]);
 
   const startTravel = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player || destinationCity == null)
-      throw new Error("Not ready");
+    if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
     const ix = createIntercityStartInstruction({
@@ -171,8 +177,7 @@ export function MapTab() {
     // would pass a non-existent (System-owned) PDA and the ix would fail.
     const returningHome = player.destinationCity === player.currentCity;
     const homeCity = currentCityData?.account;
-    if (returningHome && !homeCity)
-      throw new Error("Origin city not loaded");
+    if (returningHome && !homeCity) throw new Error("Origin city not loaded");
     const ix = createIntercityCompleteInstruction({
       owner: publicKey,
       gameEngine: geKey,
@@ -233,8 +238,7 @@ export function MapTab() {
   };
 
   const teleport = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !player || destinationCity == null)
-      throw new Error("Not ready");
+    if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
     const ix = createIntercityTeleportInstruction({
@@ -268,31 +272,28 @@ export function MapTab() {
     return res.signature;
   };
 
-  const speedup = async (
-    tier: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
+  const speedup = async (tier: number, reportPhase: (p: TxPhase) => void, count: number = 1) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createTravelSpeedupInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { speedupTier: tier as 1 | 2 },
+    // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
+      createTravelSpeedupInstruction(
+        { owner: publicKey, gameEngine: client.gameEngine },
+        { speedupTier: tier as 1 | 2 },
+      ),
     );
     return transact
       .mutateAsync({
-        instructions: [ix],
+        instructions,
         invalidateKeys: [["player"]],
-        successMessage: "Travel sped up!",
+        successMessage: n > 1 ? `Travel sped up ×${n}!` : "Travel sped up!",
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
   };
 
-  const startAndSpeedup = async (
-    tier: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
-    if (!publicKey || !player || destinationCity == null)
-      throw new Error("Not ready");
+  const startAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
     const geKey = client.gameEngine;
     const startIx = createIntercityStartInstruction({
@@ -337,6 +338,38 @@ export function MapTab() {
     ? Math.max(0, travel.endsAt - Math.floor(Date.now() / 1000))
     : 0;
 
+  // Hold-to-charge caps for the in-transit speedup tiers — how many speedup
+  // instructions one tx can usefully hold (timer-collapse ∧ gem affordability).
+  // Travel: T1 leaves 50% of time / 1x cost, T2 leaves 25% / 2x cost.
+  const travelGemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
+  const travelGemBalance = player?.gems?.toNumber?.() ?? 0;
+  const speedupTiers = [
+    {
+      tier: 1,
+      label: "Hasten",
+      description: "50% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: travelRemaining,
+        timeMultiplier: 0.5,
+        costMultiplier: 1,
+        gemsPerMinute: travelGemsPerMinute,
+        gemBalance: travelGemBalance,
+      }),
+    },
+    {
+      tier: 2,
+      label: "Rush",
+      description: "75% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: travelRemaining,
+        timeMultiplier: 0.25,
+        costMultiplier: 2,
+        gemsPerMinute: travelGemsPerMinute,
+        gemBalance: travelGemBalance,
+      }),
+    },
+  ];
+
   // Mobile surfaces the travel CTAs through the MorphTabBar — the realm-map
   // scroll panel is desktop-only for actions (its inline buttons are hidden
   // below md). Rebuilt each render; useMorphActions diffs before registering.
@@ -364,21 +397,21 @@ export function MapTab() {
         label: "Walk",
         onClick: startTravel,
         variant: "primary",
-        disabled: !destCell,
+        disabled: !destCell || !hasStables,
       },
       {
         id: "hasten",
         label: "Hasten",
         onClick: (rp) => startAndSpeedup(1, rp),
         variant: "secondary",
-        disabled: !destCell,
+        disabled: !destCell || !hasStables,
       },
       {
         id: "rush",
         label: "Rush",
         onClick: (rp) => startAndSpeedup(2, rp),
         variant: "secondary",
-        disabled: !destCell,
+        disabled: !destCell || !hasStables,
       },
     );
     if (canTeleport) {
@@ -390,6 +423,19 @@ export function MapTab() {
         disabled: !destCell,
       });
     }
+    // Back out of a chosen destination — without it the bar morphs to travel
+    // actions with no way back to the nav tabs. `kind: "dismiss"` makes the
+    // morph bar render it as a circle in the same slot as nav mode's `+`.
+    morphActions.push({
+      id: "cancel",
+      kind: "dismiss",
+      label: "✕",
+      onClick: async () => {
+        setDestinationCity(null);
+        setDestCell(null);
+        return "";
+      },
+    });
   }
   useMorphActions(morphActions);
 
@@ -409,9 +455,7 @@ export function MapTab() {
 
         <dl className={styles.lineMeta}>
           <dt>People present</dt>
-          <dd className={styles.numeral}>
-            {node.city.playersPresent.toLocaleString()}
-          </dd>
+          <dd className={styles.numeral}>{node.city.playersPresent.toLocaleString()}</dd>
           <dt>Wilds about it</dt>
           <dd className={styles.numeral}>
             lv {node.city.minEncounterLevel}–{node.city.maxEncounterLevel}
@@ -420,13 +464,10 @@ export function MapTab() {
             <>
               <dt>Road by foot</dt>
               <dd className={styles.numeral}>
-                {travelPreview.distanceKm.toLocaleString()} km ·{" "}
-                {travelPreview.timeStr}
+                {travelPreview.distanceKm.toLocaleString()} km · {travelPreview.timeStr}
               </dd>
               <dt>By the stables</dt>
-              <dd className={styles.numeral}>
-                {travelPreview.teleportCost.toLocaleString()} NOVI
-              </dd>
+              <dd className={styles.numeral}>{travelPreview.teleportCost.toLocaleString()} NOVI</dd>
             </>
           )}
         </dl>
@@ -482,9 +523,7 @@ export function MapTab() {
                 centerGridLat={toGrid(node.city.latitude)}
                 centerGridLong={toGrid(node.city.longitude)}
                 selected={destCell}
-                onSelect={(gridLat, gridLong) =>
-                  setDestCell({ gridLat, gridLong })
-                }
+                onSelect={(gridLat, gridLong) => setDestCell({ gridLat, gridLong })}
               />
             </div>
 
@@ -494,7 +533,7 @@ export function MapTab() {
               <div style={{ marginTop: "0.9rem" }}>
                 <TxButton
                   onClick={startTravel}
-                  disabled={!destCell}
+                  disabled={!destCell || !hasStables}
                   className={styles.seal}
                 >
                   <span>Walk the road</span>
@@ -512,7 +551,7 @@ export function MapTab() {
               >
                 <TxButton
                   onClick={(rp) => startAndSpeedup(1, rp)}
-                  disabled={!destCell}
+                  disabled={!destCell || !hasStables}
                   variant="secondary"
                   className="w-full text-xs"
                 >
@@ -520,7 +559,7 @@ export function MapTab() {
                 </TxButton>
                 <TxButton
                   onClick={(rp) => startAndSpeedup(2, rp)}
-                  disabled={!destCell}
+                  disabled={!destCell || !hasStables}
                   variant="secondary"
                   className="w-full text-xs"
                 >
@@ -542,21 +581,16 @@ export function MapTab() {
               )}
             </div>
 
-            {!canTeleport && (
-              <p
-                style={{
-                  marginTop: "0.6rem",
-                  fontSize: "0.65rem",
-                  fontStyle: "italic",
-                  color: "var(--ink-soft)",
-                  textAlign: "center",
-                }}
-              >
-                A Stable at level {TELEPORT_STABLE_LEVEL} would let the
-                horses make this journey at once.
-                {stableLevel > 0 && ` (yours is lv ${stableLevel})`}
+            {!hasStables ? (
+              <p style={TRAVEL_NOTE_STYLE}>
+                No road will carry you yet — raise a Stable on your estate to set out.
               </p>
-            )}
+            ) : !canTeleport ? (
+              <p style={TRAVEL_NOTE_STYLE}>
+                A Stable at level {TELEPORT_STABLE_LEVEL} would let the horses make this journey at
+                once (yours is lv {stableLevel}).
+              </p>
+            ) : null}
           </>
         )}
       </>
@@ -566,8 +600,8 @@ export function MapTab() {
   const renderDefault = () => {
     if (travel.traveling) {
       const destName =
-        cities?.find((c) => c.account.cityId === player?.destinationCity)
-          ?.account.name ?? `City ${player?.destinationCity}`;
+        cities?.find((c) => c.account.cityId === player?.destinationCity)?.account.name ??
+        `City ${player?.destinationCity}`;
       const arrived = travel.pct >= 100;
       return (
         <>
@@ -593,11 +627,7 @@ export function MapTab() {
                 <span>›</span>
               </TxButton>
             ) : (
-              <TxButton
-                onClick={cancelTravel}
-                variant="danger"
-                className="w-full text-xs"
-              >
+              <TxButton onClick={cancelTravel} variant="danger" className="w-full text-xs">
                 Turn back
               </TxButton>
             )}
@@ -607,10 +637,9 @@ export function MapTab() {
               <SpeedupPanel
                 visible
                 remainingSeconds={travelRemaining}
-                onSpeedup={speedup}
-                gemsPerMinute={
-                  ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1
-                }
+                tiers={speedupTiers}
+                onSpeedup={(tier, rp, count) => speedup(tier, rp, count)}
+                gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
                 gemBalance={player?.gems?.toNumber?.()}
               />
             </div>
@@ -630,17 +659,14 @@ export function MapTab() {
             lineHeight: 1.5,
           }}
         >
-          Touch a city to weigh the road — its distance, the hour, what the
-          horses ask.
+          Touch a city to weigh the road — its distance, the hour, what the horses ask.
         </p>
         {currentCityData && (
           <dl className={styles.lineMeta} style={{ marginTop: "1rem" }}>
             <dt>Your seat</dt>
             <dd>{currentCityData.account.name}</dd>
             <dt>City type</dt>
-            <dd>
-              {TYPE_META[typeIdx(currentCityData.account.cityType)]?.label}
-            </dd>
+            <dd>{TYPE_META[typeIdx(currentCityData.account.cityType)]?.label}</dd>
           </dl>
         )}
       </>
@@ -656,13 +682,7 @@ export function MapTab() {
       }}
       renderSelected={renderSelected}
       renderDefault={renderDefault}
-      scrollHead={
-        travel.traveling
-          ? "the journey"
-          : destinationCity
-            ? "the road"
-            : "the chart"
-      }
+      scrollHead={travel.traveling ? "the journey" : destinationCity ? "the road" : "the chart"}
     />
   );
 }

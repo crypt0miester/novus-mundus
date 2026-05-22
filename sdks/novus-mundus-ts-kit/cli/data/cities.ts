@@ -1,5 +1,5 @@
 /**
- * City Data — the 24 canonical Novus Mundus settlements (see docs/WORLD_LORE.md §XI).
+ * City Data — the 24 canonical Novus Mundus settlements.
  *
  * Each settlement sits on the ruins of an old-world city; the real-world city
  * (the lore "Old Name") supplies the coordinates.

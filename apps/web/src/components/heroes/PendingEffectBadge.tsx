@@ -68,10 +68,15 @@ function describePending(p: { kind: number; stat: number; param: number }): stri
 
 function borderForKind(kind: number): string {
   switch (kind) {
-    case AbilityKind.CritNext: return "border-red-900/40";
-    case AbilityKind.ShieldNext: return "border-blue-900/40";
-    case AbilityKind.EncounterSkip: return "border-fuchsia-900/40";
-    case AbilityKind.BuffNext: return "border-amber-900/40";
-    default: return "border-zinc-800";
+    case AbilityKind.CritNext:
+      return "border-red-900/40";
+    case AbilityKind.ShieldNext:
+      return "border-blue-900/40";
+    case AbilityKind.EncounterSkip:
+      return "border-fuchsia-900/40";
+    case AbilityKind.BuffNext:
+      return "border-border-gold/40";
+    default:
+      return "border-zinc-800";
   }
 }

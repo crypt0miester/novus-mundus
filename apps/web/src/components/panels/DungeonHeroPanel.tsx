@@ -24,8 +24,8 @@ export function DungeonHeroPanel() {
   if (heroes.length === 0) {
     return (
       <p className="text-sm text-text-muted">
-        No heroes in your wallet. Mint a hero — or unlock a locked one — in the
-        Heroes tab, then it can be sent into a dungeon.
+        No heroes in your wallet. Mint a hero — or unlock a locked one — in the Heroes tab, then it
+        can be sent into a dungeon.
       </p>
     );
   }
@@ -33,8 +33,7 @@ export function DungeonHeroPanel() {
   return (
     <div className="space-y-2">
       <p className="text-xs text-text-muted">
-        The chosen hero is escrowed for the run and returns to your wallet when
-        it ends.
+        The chosen hero is escrowed for the run and returns to your wallet when it ends.
       </p>
       {heroes.map((hero) => {
         const mint = hero.mint.toBase58();
@@ -51,7 +50,7 @@ export function DungeonHeroPanel() {
             }}
             className={`flex w-full flex-col gap-1 rounded-lg border px-3 py-2 text-left transition-colors ${
               selected
-                ? "border-amber-500 bg-amber-900/20"
+                ? "border-border-gold-bright bg-accent/20"
                 : "border-zinc-800 hover:border-zinc-700"
             }`}
           >
@@ -60,9 +59,7 @@ export function DungeonHeroPanel() {
                 {selected ? "◆ " : ""}
                 {hero.name}
               </span>
-              {level != null && (
-                <span className="text-xs text-text-muted">Lv {level}</span>
-              )}
+              {level != null && <span className="text-xs text-text-muted">Lv {level}</span>}
             </div>
             {buffs.length > 0 && (
               <div className="flex flex-wrap gap-1">

@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useId, useState, type CSSProperties } from "react";
 import { Minus, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isFibonacci } from "@/lib/utils";
 
 interface NumberFieldProps {
   /** Current value — a clamped integer; the single source of truth. */
@@ -51,16 +45,6 @@ const FIB_FLOOR = 89;
 function clamp(n: number, lo: number, hi: number): number {
   if (!Number.isFinite(n)) return lo;
   return Math.min(hi, Math.max(lo, Math.round(n)));
-}
-
-/** A positive integer is a Fibonacci number iff 5n² ± 4 is a perfect square. */
-function isFibonacci(n: number): boolean {
-  if (n < 1 || !Number.isInteger(n)) return false;
-  const isSquare = (x: number) => {
-    const r = Math.round(Math.sqrt(x));
-    return r * r === x;
-  };
-  return isSquare(5 * n * n + 4) || isSquare(5 * n * n - 4);
 }
 
 /**
@@ -130,12 +114,7 @@ export function NumberField({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       {(label || (showMax && !rangeEmpty)) && (
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            label ? "justify-between" : "justify-end",
-          )}
-        >
+        <div className={cn("flex items-center gap-2", label ? "justify-between" : "justify-end")}>
           {label && (
             <label htmlFor={fieldId} className="text-xs text-text-muted">
               {label}

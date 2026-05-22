@@ -39,14 +39,7 @@ import { formatTime } from "@/lib/utils";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
-const ENCOUNTER_RARITY = [
-  "Common",
-  "Uncommon",
-  "Rare",
-  "Epic",
-  "Legendary",
-  "World Event",
-];
+const ENCOUNTER_RARITY = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "World Event"];
 
 interface RallyDetailPanelProps {
   rallyPubkey: string;
@@ -78,8 +71,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     staleTime: 10_000,
   });
 
-  const teamPubkey =
-    player?.team && !isNullPubkey(player.team) ? player.team : null;
+  const teamPubkey = player?.team && !isNullPubkey(player.team) ? player.team : null;
   const { data: teamData } = useTeam(teamPubkey);
   const teamId = teamData?.account?.id;
 
@@ -102,14 +94,11 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
 
   // The target encounter, when this rally hunts one — matched out of the
   // rally's target city.
-  const encounterCity =
-    rally && rally.targetType === 1 ? rally.targetCity : null;
+  const encounterCity = rally && rally.targetType === 1 ? rally.targetCity : null;
   const { data: encounters } = useEncounters(encounterCity);
   const targetEncounter = useMemo(() => {
     if (!rally || rally.targetType !== 1) return null;
-    return (
-      (encounters ?? []).find((e) => e.pubkey.equals(rally.target)) ?? null
-    );
+    return (encounters ?? []).find((e) => e.pubkey.equals(rally.target)) ?? null;
   }, [encounters, rally]);
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
@@ -262,11 +251,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     return <p className="text-sm text-text-muted">Loading rally…</p>;
   }
   if (!rally) {
-    return (
-      <p className="text-sm text-text-muted">
-        This rally is no longer available.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">This rally is no longer available.</p>;
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
@@ -288,8 +273,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const isReturning = status === RallyStatus.Returning;
   const isCompleted = status === RallyStatus.Completed;
   const isCancelled = status === RallyStatus.Cancelled;
-  const inFlight =
-    status === RallyStatus.Marching || status === RallyStatus.Combat;
+  const inFlight = status === RallyStatus.Marching || status === RallyStatus.Combat;
 
   // March only while gathering, once enough members joined and the gather
   // window (== execute_at on-chain) has elapsed.
@@ -348,8 +332,8 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       : isReturning
         ? { text: "The rally is returning home.", tone: "text-text-secondary" }
         : status === RallyStatus.Combat
-          ? { text: "The rally is in combat.", tone: "text-amber-300" }
-          : { text: "The rally is marching to its target.", tone: "text-amber-300" };
+          ? { text: "The rally is in combat.", tone: "text-text-gold" }
+          : { text: "The rally is marching to its target.", tone: "text-text-gold" };
 
   return (
     <div className="space-y-4">
@@ -363,9 +347,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         </div>
         <div className="text-right">
           <div className="text-xs text-text-muted">Target</div>
-          <div className="text-sm text-text-primary">
-            {TARGET_TYPE[rally.targetType ?? 0]}
-          </div>
+          <div className="text-sm text-text-primary">{TARGET_TYPE[rally.targetType ?? 0]}</div>
         </div>
       </div>
 
@@ -373,9 +355,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       <div className="rounded-lg border border-zinc-800 bg-surface/60 p-3">
         {isGathering ? (
           gatherDone ? (
-            <div className="text-sm font-semibold text-green-400">
-              Gathering complete
-            </div>
+            <div className="text-sm font-semibold text-green-400">Gathering complete</div>
           ) : (
             <GoldCountdown
               endsAt={gatherAt}
@@ -386,9 +366,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             />
           )
         ) : (
-          <div className={`text-sm font-semibold ${statusBanner.tone}`}>
-            {statusBanner.text}
-          </div>
+          <div className={`text-sm font-semibold ${statusBanner.tone}`}>{statusBanner.text}</div>
         )}
       </div>
 
@@ -406,21 +384,13 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           {nextOpen && (
             <div className="px-3 pb-3">
               <ol className="space-y-1.5">
-                <li
-                  className={
-                    gatherDone
-                      ? "text-zinc-600 line-through"
-                      : "text-text-secondary"
-                  }
-                >
+                <li className={gatherDone ? "text-zinc-600 line-through" : "text-text-secondary"}>
                   1. Gather — members commit troops
                   {gatherDone ? "" : " (in progress)"}
                 </li>
                 <li className="text-text-secondary">
                   2. March — the leader sends the rally at the target
-                  {marchDuration > 0
-                    ? ` (~${formatTime(marchDuration, "compact")})`
-                    : ""}
+                  {marchDuration > 0 ? ` (~${formatTime(marchDuration, "compact")})` : ""}
                 </li>
                 <li className="text-text-secondary">
                   3. Combat — the rally attacks once it arrives
@@ -444,14 +414,11 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
                   #{targetEncounter.account.id.toString()} ·{" "}
                   {ENCOUNTER_RARITY[targetEncounter.account.rarity] ?? "—"}
                 </span>
-                <span className="text-text-muted">
-                  Lv {targetEncounter.account.level}
-                </span>
+                <span className="text-text-muted">Lv {targetEncounter.account.level}</span>
               </div>
               {(() => {
                 const hp = targetEncounter.account.health?.toNumber?.() ?? 0;
-                const maxHp =
-                  targetEncounter.account.maxHealth?.toNumber?.() ?? 0;
+                const maxHp = targetEncounter.account.maxHealth?.toNumber?.() ?? 0;
                 const pct = maxHp > 0 ? Math.round((hp / maxHp) * 100) : 0;
                 return (
                   <div>
@@ -477,8 +444,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </div>
           ) : (
             <p className="text-xs text-text-muted">
-              Encounter details unavailable — it may be in another city or
-              already cleared.
+              Encounter details unavailable — it may be in another city or already cleared.
             </p>
           )}
         </div>
@@ -487,23 +453,17 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       {/* Force gathered so far */}
       <div className="grid grid-cols-3 gap-3 rounded-lg border border-zinc-800 bg-surface/60 p-3">
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-text-muted">
-            Joined
-          </div>
+          <div className="text-[10px] uppercase tracking-wider text-text-muted">Joined</div>
           <div className="text-sm font-semibold text-text-primary">
             {rally.participantCount ?? 0}/{rally.maxParticipants ?? 0}
           </div>
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-text-muted">
-            Units
-          </div>
+          <div className="text-[10px] uppercase tracking-wider text-text-muted">Units</div>
           <GoldNumber value={rally.totalUnits?.toNumber?.() ?? 0} size="sm" />
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-text-muted">
-            Power
-          </div>
+          <div className="text-[10px] uppercase tracking-wider text-text-muted">Power</div>
           <GoldNumber value={rally.totalPower?.toNumber?.() ?? 0} size="sm" />
         </div>
       </div>
@@ -511,13 +471,13 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       {/* Gathering — the leader marches or cancels */}
       {isGathering && isCreator && (
         <div className="space-y-3">
-          <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3 text-xs text-text-muted">
-            This is your rally — you committed troops when you raised it.
-            Marching sends the gathered force at the target.
+          <div className="rounded-lg border border-border-gold/40 bg-accent/10 p-3 text-xs text-text-muted">
+            This is your rally — you committed troops when you raised it. Marching sends the
+            gathered force at the target.
           </div>
 
           {traveling && (
-            <p className="text-xs text-amber-400">
+            <p className="text-xs text-danger">
               You are traveling — rally actions may be restricted.
             </p>
           )}
@@ -537,7 +497,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
 
       {/* In flight — nothing to do here until it returns home */}
       {inFlight && (
-        <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-3 text-xs text-text-muted">
+        <div className="rounded-lg border border-border-gold/40 bg-accent/10 p-3 text-xs text-text-muted">
           The rally is underway. Return and close unlock once it comes home.
         </div>
       )}
@@ -547,9 +507,8 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         <div className="space-y-3">
           {isCancelled && (
             <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-3 text-xs text-text-muted">
-              The rally was called off. Recover the troops and weapons you
-              committed — once everyone is home the rally closes in the same
-              step.
+              The rally was called off. Recover the troops and weapons you committed — once everyone
+              is home the rally closes in the same step.
             </div>
           )}
           <TxButton onClick={handleResolve} className="hidden lg:block">
@@ -604,20 +563,11 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           </div>
 
           {traveling && (
-            <p className="text-xs text-amber-400">
-              You are traveling — joining may be restricted.
-            </p>
+            <p className="text-xs text-danger">You are traveling — joining may be restricted.</p>
           )}
 
-          <TxButton
-            onClick={handleJoin}
-            disabled={traveling || full || noCommit || !teamId}
-          >
-            {full
-              ? "Rally is full"
-              : noCommit
-                ? "Commit troops to join"
-                : "Join Rally"}
+          <TxButton onClick={handleJoin} disabled={traveling || full || noCommit || !teamId}>
+            {full ? "Rally is full" : noCommit ? "Commit troops to join" : "Join Rally"}
           </TxButton>
         </>
       )}

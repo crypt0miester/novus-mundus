@@ -29,9 +29,17 @@ export interface NoviGeneratorState {
 }
 
 const EMPTY: NoviGeneratorState = {
-  ready: false, displayNovi: 0, pendingNovi: 0, fillPct: 0, genRate: 0,
-  maxCap: 0, noviPerHour: 0, effectiveTier: 0, currentLocked: 0,
-  isFull: false, lastUpdatedAt: 0,
+  ready: false,
+  displayNovi: 0,
+  pendingNovi: 0,
+  fillPct: 0,
+  genRate: 0,
+  maxCap: 0,
+  noviPerHour: 0,
+  effectiveTier: 0,
+  currentLocked: 0,
+  isFull: false,
+  lastUpdatedAt: 0,
 };
 
 /**
@@ -52,7 +60,9 @@ export function useNoviGenerator(): NoviGeneratorState {
   const ge = geData?.account;
 
   const [ticker, setTicker] = useState({
-    displayNovi: 0, pendingNovi: 0, fillPct: 0,
+    displayNovi: 0,
+    pendingNovi: 0,
+    fillPct: 0,
   });
 
   useEffect(() => {
@@ -67,17 +77,13 @@ export function useNoviGenerator(): NoviGeneratorState {
       const elapsed = Math.max(0, now - player.lastUpdatedTokensAt.toNumber());
       const intervals = Math.floor(elapsed / INTERVAL_SECONDS);
       const pending =
-        currentLocked >= maxCap
-          ? 0
-          : Math.min(intervals * genRate, maxCap - currentLocked);
+        currentLocked >= maxCap ? 0 : Math.min(intervals * genRate, maxCap - currentLocked);
       const total = currentLocked + pending;
       const next = {
         displayNovi: currentLocked,
         pendingNovi: Math.max(0, pending),
         fillPct: maxCap > 0 ? Math.min((total / maxCap) * 100, 100) : 0,
       };
-      // The balance moves once per interval, not once per second — commit only
-      // on a real change so consumers stay idle between drops.
       setTicker((prev) =>
         prev.displayNovi === next.displayNovi &&
         prev.pendingNovi === next.pendingNovi &&

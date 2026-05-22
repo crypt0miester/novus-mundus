@@ -91,16 +91,17 @@ export function InventoryPanel() {
       });
   };
 
-  const morphActions = lootItems.length > 0
-    ? [
-        {
-          id: "claim-all-loot",
-          label: `Claim All (${Math.min(lootItems.length, 5)})`,
-          variant: "primary" as const,
-          onClick: handleClaimAll,
-        },
-      ]
-    : null;
+  const morphActions =
+    lootItems.length > 0
+      ? [
+          {
+            id: "claim-all-loot",
+            label: `Claim All (${Math.min(lootItems.length, 5)})`,
+            variant: "primary" as const,
+            onClick: handleClaimAll,
+          },
+        ]
+      : null;
   useMorphActions(morphActions);
 
   return (
@@ -112,7 +113,10 @@ export function InventoryPanel() {
             Unclaimed Loot ({lootItems.length})
           </h3>
           {lootItems.length > 0 && (
-            <TxButton onClick={handleClaimAll} className="hidden text-[11px] px-2.5 py-1 lg:inline-flex">
+            <TxButton
+              onClick={handleClaimAll}
+              className="hidden text-[11px] px-2.5 py-1 lg:inline-flex"
+            >
               Claim All
             </TxButton>
           )}
@@ -142,22 +146,16 @@ export function InventoryPanel() {
                     <span className="inline-flex items-center gap-1">
                       <span className="text-text-muted">Cash</span>
                       <GameIcon id="resource-cash" size={14} />
-                      <span className="text-text-gold">
-                        {loot.account.cash.toNumber()}
-                      </span>
+                      <span className="text-text-gold">{loot.account.cash.toNumber()}</span>
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <span className="text-text-muted">Gems</span>
                       <GameIcon id="resource-gem" size={14} />
-                      <span className="text-text-primary">
-                        {loot.account.gems.toNumber()}
-                      </span>
+                      <span className="text-text-primary">{loot.account.gems.toNumber()}</span>
                     </span>
                   </div>
                   <TxButton
-                    onClick={(rp) =>
-                      handleClaimLoot(loot.pubkey, loot.account.creator, rp)
-                    }
+                    onClick={(rp) => handleClaimLoot(loot.pubkey, loot.account.creator, rp)}
                     variant="secondary"
                     className="mt-2 w-full text-xs"
                   >

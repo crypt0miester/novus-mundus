@@ -55,16 +55,11 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   }, [playerPubkey]);
 
   const target = useMemo(
-    () =>
-      (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === playerPubkey) ??
-      null,
+    () => (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === playerPubkey) ?? null,
     [cityPlayers, playerPubkey],
   );
 
-  const ownerList = useMemo(
-    () => (target ? [target.account.owner] : []),
-    [target],
-  );
+  const ownerList = useMemo(() => (target ? [target.account.owner] : []), [target]);
   const domainNames = useDomainNames(ownerList);
 
   const pvpRange = PVP_RANGE;
@@ -132,11 +127,7 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   };
 
   if (!target || !dist || !player) {
-    return (
-      <p className="text-sm text-text-muted">
-        This player is no longer in your city.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">This player is no longer in your city.</p>;
   }
 
   const targetName =
@@ -182,9 +173,7 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
       {/* Target header */}
       <div className="text-center">
         <div className="text-lg font-bold text-text-primary">{targetName}</div>
-        <div className="text-xs text-text-muted">
-          Level {target.account.level}
-        </div>
+        <div className="text-xs text-text-muted">Level {target.account.level}</div>
       </div>
 
       {/* Target stats */}
@@ -224,7 +213,9 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
       {/* Distance */}
       <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
         <div className="text-[10px] text-text-muted">Distance</div>
-        <div className={`font-mono text-sm font-bold ${dist.inRange ? "text-green-400" : "text-red-400"}`}>
+        <div
+          className={`font-mono text-sm font-bold ${dist.inRange ? "text-green-400" : "text-red-400"}`}
+        >
           {dist.distance.toFixed(1)}m
         </div>
       </div>
@@ -256,15 +247,13 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
 
       {/* Operative exposure hint */}
       {targetOps > 0 &&
-        (targetDef === 0 ||
-          (estimatedDamage != null && estimatedDamage > targetDef * 2)) && (
+        (targetDef === 0 || (estimatedDamage != null && estimatedDamage > targetDef * 2)) && (
           <div className="rounded border border-red-800/30 bg-red-900/10 px-3 py-2 text-xs text-red-300">
             {targetDef === 0
               ? `Garrison empty — ${targetOps.toLocaleString()} operatives take full damage`
               : `Garrison may break — ${targetOps.toLocaleString()} ops exposed`}
           </div>
         )}
-
 
       {!playerTraveling && (
         <div className="hidden space-y-2 lg:block">
@@ -285,9 +274,7 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
             <span className="flex flex-col items-center gap-0.5">
               <span className="text-sm font-bold">Overrun</span>
               <span className="text-[10px] font-normal text-text-muted">
-                {canOverrun
-                  ? "10k+ host · +27% damage"
-                  : "Requires a 10,000+ host"}
+                {canOverrun ? "10k+ host · +27% damage" : "Requires a 10,000+ host"}
               </span>
             </span>
           </TxButton>

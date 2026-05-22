@@ -22,8 +22,8 @@ import MagicRings from "@/components/shared/animations/MagicRing";
  * Three.js context + visual weight isn't worth it on a phone. Also skipped
  * under `prefers-reduced-motion`.
  */
-const GOLD_DEEP = "#92400e";   // amber-800, same as transition overlay edges
-const GOLD_BRIGHT = "#fbbf24"; // amber-400, same as transition overlay center
+const GOLD_DEEP = "#92400e"; // matches the transition overlay edges
+const GOLD_BRIGHT = "#fbbf24"; // matches the transition overlay center
 
 export function BootRing() {
   const [show, setShow] = useState(false);
@@ -38,10 +38,7 @@ export function BootRing() {
   if (!show) return null;
 
   return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 z-0"
-    >
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
       <MagicRings
         color={GOLD_DEEP}
         colorTwo={GOLD_BRIGHT}

@@ -16,13 +16,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useCoSign, fetchCoSign } from "@/lib/cosign";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import {
-  ROOM_INFO,
-  THEMES,
-  relicById,
-  relicsFromMask,
-  synergyStates,
-} from "@/lib/dungeon-lore";
+import { ROOM_INFO, THEMES, relicById, relicsFromMask, synergyStates } from "@/lib/dungeon-lore";
 import { DEFENSIVE_UNIT_LABELS } from "@/components/shared/TripleCountInput";
 
 const SPEC_NAMES = ["Warrior", "Guardian", "Scout", "Tactician"];
@@ -51,10 +45,7 @@ function fmt(x: number): string {
 // Each action invalidates the run query; we diff the new run against the
 // previous snapshot to narrate what just happened.
 
-function describeChange(
-  prev: DungeonRunAccount,
-  next: DungeonRunAccount,
-): string | null {
+function describeChange(prev: DungeonRunAccount, next: DungeonRunAccount): string | null {
   if (next.status === DungeonStatus.Completed && prev.status !== next.status)
     return "The dungeon is cleared — claim your spoils.";
   if (next.status === DungeonStatus.Failed && prev.status !== next.status)
@@ -81,8 +72,7 @@ function describeChange(
   if (relics > 0) facts.push("claimed a relic");
   if (xp > 0) facts.push(`+${fmt(xp)} XP`);
   if (novi > 0) facts.push(`+$${fmt(novi)}`);
-  if (next.currentFloor > prev.currentFloor)
-    facts.push(`descended to floor ${next.currentFloor}`);
+  if (next.currentFloor > prev.currentFloor) facts.push(`descended to floor ${next.currentFloor}`);
   if (next.darknessLevel > prev.darknessLevel) facts.push("the dark deepens");
 
   if (facts.length === 0) return null;
@@ -111,8 +101,7 @@ function DepthLadder({
           const here = f === run.currentFloor;
           const done = f < run.currentFloor;
           const isBoss = f === totalFloors;
-          const isCheckpoint =
-            checkpointInterval > 0 && f % checkpointInterval === 0 && !isBoss;
+          const isCheckpoint = checkpointInterval > 0 && f % checkpointInterval === 0 && !isBoss;
           return (
             <div
               key={f}
@@ -125,9 +114,9 @@ function DepthLadder({
               }
               className={`flex h-6 min-w-6 items-center justify-center rounded px-1 text-[10px] font-semibold ${
                 here
-                  ? "bg-amber-500 text-black"
+                  ? "bg-gold-500 text-black"
                   : done
-                    ? "bg-amber-900/40 text-amber-500"
+                    ? "bg-accent/40 text-text-gold"
                     : "border border-zinc-800 text-text-muted"
               }`}
             >
@@ -137,17 +126,15 @@ function DepthLadder({
         })}
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">
-          Room
-        </span>
+        <span className="text-[10px] uppercase tracking-wider text-text-muted">Room</span>
         {rooms.map((r) => (
           <span
             key={r}
             className={`h-2 w-2 rounded-full ${
               r < run.currentRoom
-                ? "bg-amber-600"
+                ? "bg-accent"
                 : r === run.currentRoom
-                  ? "bg-amber-400"
+                  ? "bg-gold-400"
                   : "bg-zinc-700"
             }`}
           />
@@ -168,16 +155,12 @@ function EnemyCard({ run }: { run: DungeonRunAccount }) {
   return (
     <div
       className={`rounded-lg border p-3 ${
-        run.isBoss
-          ? "border-red-700/60 bg-red-950/20"
-          : "border-zinc-800 bg-surface/60"
+        run.isBoss ? "border-red-700/60 bg-red-950/20" : "border-zinc-800 bg-surface/60"
       }`}
     >
       <div className="flex items-center justify-between">
         <span
-          className={`text-sm font-semibold ${
-            run.isBoss ? "text-red-400" : "text-text-primary"
-          }`}
+          className={`text-sm font-semibold ${run.isBoss ? "text-red-400" : "text-text-primary"}`}
         >
           {run.isBoss ? "☠ Floor Boss" : `Floor ${run.currentFloor} Enemy`}
         </span>
@@ -193,10 +176,7 @@ function EnemyCard({ run }: { run: DungeonRunAccount }) {
           </span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-          <div
-            className="h-full rounded-full bg-red-500"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="h-full rounded-full bg-red-500" style={{ width: `${pct}%` }} />
         </div>
       </div>
       {run.isBoss && (
@@ -217,9 +197,7 @@ function EnemyCard({ run }: { run: DungeonRunAccount }) {
               style={{ width: `${Math.min(100, run.bossWrath)}%` }}
             />
           </div>
-          {shield > 0 && (
-            <div className="text-[10px] text-sky-400">Shield: {fmt(shield)}</div>
-          )}
+          {shield > 0 && <div className="text-[10px] text-sky-400">Shield: {fmt(shield)}</div>}
         </div>
       )}
     </div>
@@ -262,10 +240,7 @@ function PartyTiers({ run }: { run: DungeonRunAccount }) {
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-emerald-500"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
               </div>
             </div>
           );
@@ -285,8 +260,8 @@ function RelicShelf({ run }: { run: DungeonRunAccount }) {
       </div>
       {relics.length === 0 ? (
         <p className="text-[11px] text-text-muted">
-          No relics yet — you choose one between floors. Match a relic&apos;s
-          colour to stack a synergy bonus.
+          No relics yet — you choose one between floors. Match a relic&apos;s colour to stack a
+          synergy bonus.
         </p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
@@ -294,7 +269,7 @@ function RelicShelf({ run }: { run: DungeonRunAccount }) {
             <span
               key={r.id}
               title={r.effect}
-              className="rounded border border-amber-900/50 bg-amber-950/30 px-1.5 py-0.5 text-[10px] text-text-secondary"
+              className="rounded border border-border-gold/50 bg-accent/30 px-1.5 py-0.5 text-[10px] text-text-secondary"
             >
               🔮 {r.name}
             </span>
@@ -308,9 +283,7 @@ function RelicShelf({ run }: { run: DungeonRunAccount }) {
               key={s.id}
               title={`${s.count} ${s.name} relics`}
               className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                s.tier === 3
-                  ? "bg-fuchsia-900/40 text-fuchsia-300"
-                  : "bg-sky-900/40 text-sky-300"
+                s.tier === 3 ? "bg-fuchsia-900/40 text-fuchsia-300" : "bg-sky-900/40 text-sky-300"
               }`}
             >
               {s.name} {s.tier}pc · {s.bonus}
@@ -353,12 +326,7 @@ function RunLog({ log }: { log: string[] }) {
 
 // ── Main ─────────────────────────────────────────────────────────────
 
-export function RunView({
-  run,
-  template,
-  playerStamina,
-  playerMaxStamina,
-}: RunViewProps) {
+export function RunView({ run, template, playerStamina, playerMaxStamina }: RunViewProps) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();
@@ -441,10 +409,7 @@ export function RunView({
       .then((r) => r.signature);
   };
 
-  const handleChooseRelic = async (
-    relicId: number,
-    rp: (p: TxPhase) => void,
-  ) => {
+  const handleChooseRelic = async (relicId: number, rp: (p: TxPhase) => void) => {
     const vtx = await requestCoSign("/api/cosign/dungeon/choose-relic", {
       relicId,
     });
@@ -509,20 +474,16 @@ export function RunView({
       {/* Slim header — theme, depth, stamina on one line */}
       <div className="card accent-border flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <div className="flex items-baseline gap-2">
-          <h3 className="text-base font-semibold text-text-primary">
-            {theme.name}
-          </h3>
+          <h3 className="text-base font-semibold text-text-primary">{theme.name}</h3>
           <span className="text-xs text-text-muted">
             Floor {run.currentFloor}
-            {run.currentFloor <= totalFloors ? `/${totalFloors}` : " · Endless"}{" "}
-            · {SPEC_NAMES[run.heroSpecialization] ?? "Champion"}
+            {run.currentFloor <= totalFloors ? `/${totalFloors}` : " · Endless"} ·{" "}
+            {SPEC_NAMES[run.heroSpecialization] ?? "Champion"}
           </span>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-text-muted">
           {run.darknessLevel > 0 && (
-            <span className="text-indigo-400">
-              Darkness Lv {run.darknessLevel}
-            </span>
+            <span className="text-indigo-400">Darkness Lv {run.darknessLevel}</span>
           )}
           <span>
             {run.isBoss || run.status === DungeonStatus.BossFight
@@ -562,26 +523,19 @@ export function RunView({
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <span>
                 <span className="text-text-muted">NOVI </span>
-                <span className="font-semibold text-text-gold">
-                  ${fmt(n(run.pendingNovi))}
-                </span>
+                <span className="font-semibold text-text-gold">${fmt(n(run.pendingNovi))}</span>
               </span>
               <span>
                 <span className="text-text-muted">XP </span>
-                <span className="font-semibold text-text-primary">
-                  {fmt(n(run.pendingXp))}
-                </span>
+                <span className="font-semibold text-text-primary">{fmt(n(run.pendingXp))}</span>
               </span>
               <span>
                 <span className="text-text-muted">Fragments </span>
-                <span className="font-semibold text-text-primary">
-                  {fmt(n(run.pendingGems))}
-                </span>
+                <span className="font-semibold text-text-primary">{fmt(n(run.pendingGems))}</span>
               </span>
             </div>
             <p className="mt-1 text-[10px] text-text-muted">
-              Loot to your last checkpoint is safe; fleeing forfeits a share of
-              the rest.
+              Loot to your last checkpoint is safe; fleeing forfeits a share of the rest.
             </p>
           </div>
           <RunLog log={log} />
@@ -595,12 +549,8 @@ export function RunView({
             <div className="flex items-center gap-2">
               <span className="text-xl">{displayRoom.icon}</span>
               <div>
-                <div className="text-sm font-semibold text-text-primary">
-                  {displayRoom.name}
-                </div>
-                <div className="text-[11px] text-text-muted">
-                  {displayRoom.blurb}
-                </div>
+                <div className="text-sm font-semibold text-text-primary">{displayRoom.name}</div>
+                <div className="text-[11px] text-text-muted">{displayRoom.blurb}</div>
               </div>
             </div>
             {isCombat && (
@@ -618,8 +568,8 @@ export function RunView({
                 Choose a Relic
               </h3>
               <p className="mb-3 text-[11px] text-text-muted">
-                A floor cleared. Pick one relic to carry on — stacking a synergy
-                colour unlocks bigger bonuses.
+                A floor cleared. Pick one relic to carry on — stacking a synergy colour unlocks
+                bigger bonuses.
               </p>
               {!relicOffer ? (
                 <p className="text-sm text-text-muted">Reading the offering…</p>
@@ -635,9 +585,7 @@ export function RunView({
                         className="py-2"
                       >
                         <span className="flex flex-col items-center gap-0.5">
-                          <span className="text-sm">
-                            🔮 {info?.name ?? `Relic #${relicId}`}
-                          </span>
+                          <span className="text-sm">🔮 {info?.name ?? `Relic #${relicId}`}</span>
                           <span className="text-[10px] font-normal text-text-muted">
                             {info?.effect ?? ""}
                           </span>
@@ -656,21 +604,19 @@ export function RunView({
                 {isCombat && maxAttacks > 1 && (
                   <>
                     <span className="text-[11px] text-text-muted">Strikes:</span>
-                    {Array.from({ length: maxAttacks }, (_, i) => i + 1).map(
-                      (nn) => (
-                        <button
-                          key={nn}
-                          onClick={() => setAttackCount(nn)}
-                          className={`h-6 w-6 rounded text-xs transition-colors ${
-                            effectiveAttacks === nn
-                              ? "bg-amber-600 text-white"
-                              : "border border-zinc-700 text-text-muted hover:border-zinc-500"
-                          }`}
-                        >
-                          {nn}
-                        </button>
-                      ),
-                    )}
+                    {Array.from({ length: maxAttacks }, (_, i) => i + 1).map((nn) => (
+                      <button
+                        key={nn}
+                        onClick={() => setAttackCount(nn)}
+                        className={`h-6 w-6 rounded text-xs transition-colors ${
+                          effectiveAttacks === nn
+                            ? "bg-primary text-white"
+                            : "border border-zinc-700 text-text-muted hover:border-zinc-500"
+                        }`}
+                      >
+                        {nn}
+                      </button>
+                    ))}
                   </>
                 )}
               </div>
@@ -678,10 +624,7 @@ export function RunView({
                 <TxButton
                   onClick={handleAdvance}
                   className="px-8"
-                  disabled={
-                    isCombat &&
-                    playerStamina < effectiveAttacks * roomStaminaCost
-                  }
+                  disabled={isCombat && playerStamina < effectiveAttacks * roomStaminaCost}
                 >
                   {isCombat
                     ? effectiveAttacks > 1
@@ -693,13 +636,11 @@ export function RunView({
                   Flee
                 </TxButton>
               </div>
-              {isCombat &&
-                playerStamina < effectiveAttacks * roomStaminaCost && (
-                  <p className="text-center text-[11px] text-red-400">
-                    Not enough stamina ({playerStamina}/
-                    {effectiveAttacks * roomStaminaCost})
-                  </p>
-                )}
+              {isCombat && playerStamina < effectiveAttacks * roomStaminaCost && (
+                <p className="text-center text-[11px] text-red-400">
+                  Not enough stamina ({playerStamina}/{effectiveAttacks * roomStaminaCost})
+                </p>
+              )}
             </div>
           )}
         </div>

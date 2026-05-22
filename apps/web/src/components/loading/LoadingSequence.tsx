@@ -94,7 +94,7 @@ export function LoadingSequence({
   return (
     <div
       ref={containerRef}
-      className="relative flex min-h-[60vh] flex-col items-center justify-center gap-6"
+      className="relative flex mt-10 min-h-[60vh] flex-col items-center justify-center gap-6"
     >
       <BootRing />
       <h2 className="tier-title font-display relative z-10 text-2xl font-semibold tracking-wide">
@@ -116,12 +116,10 @@ export function LoadingSequence({
               ) : (
                 <span className="animate-pulse text-zinc-600">◌</span>
               )}
-              <span className={done ? "text-zinc-400" : "text-zinc-500"}>
+              <span className={done ? "text-zinc-400 lowercase" : "text-zinc-500 lowercase"}>
                 {step.label}
               </span>
-              {done && (
-                <span className="ml-auto text-xs text-zinc-600">✓</span>
-              )}
+              {done && <span className="ml-auto text-xs text-zinc-600">✓</span>}
             </div>
           );
         })}
@@ -148,45 +146,270 @@ type TieredStep = { key: string; labels: readonly [string, string, string, strin
 
 const TIERED: Record<string, readonly TieredStep[]> = {
   dashboard: [
-    { key: "player",     labels: ["Loading player data...",   "Summoning your warrior...",        "Your knights assemble...",         "The champion rises...",             "A legend stirs..."] },
-    { key: "gameEngine", labels: ["Fetching game state...",   "Reading the kingdom ledger...",    "Consulting the royal archives...", "The grand council convenes...",     "Fate itself takes notice..."] },
-    { key: "user",       labels: ["Loading profile...",       "Scanning your domain...",          "Surveying the silver realm...",    "Inspecting the royal court...",     "Your dominion spans horizons..."] },
-    { key: "loot",       labels: ["Checking rewards...",      "Checking unclaimed loot...",       "Tallying the silver spoils...",    "Counting the royal treasury...",    "Mythic treasures await..."] },
+    {
+      key: "player",
+      labels: [
+        "Loading player data...",
+        "Summoning your warrior...",
+        "Your knights assemble...",
+        "The champion rises...",
+        "A legend stirs...",
+      ],
+    },
+    {
+      key: "gameEngine",
+      labels: [
+        "Fetching game state...",
+        "Reading the kingdom ledger...",
+        "Consulting the royal archives...",
+        "The grand council convenes...",
+        "Fate itself takes notice...",
+      ],
+    },
+    {
+      key: "user",
+      labels: [
+        "Loading profile...",
+        "Scanning your domain...",
+        "Surveying the silver realm...",
+        "Inspecting the royal court...",
+        "Your dominion spans horizons...",
+      ],
+    },
+    {
+      key: "loot",
+      labels: [
+        "Checking rewards...",
+        "Checking unclaimed loot...",
+        "Tallying the silver spoils...",
+        "Counting the royal treasury...",
+        "Mythic treasures await...",
+      ],
+    },
   ],
   city: [
-    { key: "city",       labels: ["Loading city...",          "Entering the city gates...",       "The silver banners welcome you...", "The golden streets gleam...",      "The city kneels before you..."] },
-    { key: "encounters", labels: ["Loading encounters...",    "Scouting for encounters...",       "Knights patrol the streets...",     "The royal guard reports...",       "Legends stalk the shadows..."] },
-    { key: "players",    labels: ["Loading players...",       "Counting heads at the tavern...",  "The guild hall buzzes...",          "Nobles gather at court...",        "Champions fill the halls..."] },
+    {
+      key: "city",
+      labels: [
+        "Loading city...",
+        "Entering the city gates...",
+        "The silver banners welcome you...",
+        "The golden streets gleam...",
+        "The city kneels before you...",
+      ],
+    },
+    {
+      key: "encounters",
+      labels: [
+        "Loading encounters...",
+        "Scouting for encounters...",
+        "Knights patrol the streets...",
+        "The royal guard reports...",
+        "Legends stalk the shadows...",
+      ],
+    },
+    {
+      key: "players",
+      labels: [
+        "Loading players...",
+        "Counting heads at the tavern...",
+        "The guild hall buzzes...",
+        "Nobles gather at court...",
+        "Champions fill the halls...",
+      ],
+    },
   ],
   estate: [
-    { key: "estate",     labels: ["Loading estate...",        "Surveying your lands...",          "Your silver estates shimmer...",    "The golden manor awaits...",       "Your mythic fortress looms..."] },
-    { key: "player",     labels: ["Loading buildings...",     "Inspecting the buildings...",      "Checking the armory...",           "The royal workshops hum...",        "Legendary forges ignite..."] },
-    { key: "gameEngine", labels: ["Loading schedule...",      "Checking daily windows...",        "Reviewing the calendar...",        "The steward presents reports...",   "Time bends to your will..."] },
+    {
+      key: "estate",
+      labels: [
+        "Loading estate...",
+        "Surveying your lands...",
+        "Your silver estates shimmer...",
+        "The golden manor awaits...",
+        "Your mythic fortress looms...",
+      ],
+    },
+    {
+      key: "player",
+      labels: [
+        "Loading buildings...",
+        "Inspecting the buildings...",
+        "Checking the armory...",
+        "The royal workshops hum...",
+        "Legendary forges ignite...",
+      ],
+    },
+    {
+      key: "gameEngine",
+      labels: [
+        "Loading schedule...",
+        "Checking daily windows...",
+        "Reviewing the calendar...",
+        "The steward presents reports...",
+        "Time bends to your will...",
+      ],
+    },
   ],
   dungeon: [
-    { key: "dungeonRun", labels: ["Loading dungeon...",       "Descending into darkness...",      "Silver torches flicker...",        "The golden depths call...",         "The abyss whispers your name..."] },
-    { key: "player",     labels: ["Loading hero...",          "Readying your hero...",            "Strapping on silver mail...",      "Donning golden armor...",           "The mythic blade awakens..."] },
-    { key: "template",   labels: ["Loading layout...",        "Lighting the torches...",          "Mapping the corridors...",         "Scouts report treasure ahead...",   "Ancient power pulses below..."] },
+    {
+      key: "dungeonRun",
+      labels: [
+        "Loading dungeon...",
+        "Descending into darkness...",
+        "Silver torches flicker...",
+        "The golden depths call...",
+        "The abyss whispers your name...",
+      ],
+    },
+    {
+      key: "player",
+      labels: [
+        "Loading hero...",
+        "Readying your hero...",
+        "Strapping on silver mail...",
+        "Donning golden armor...",
+        "The mythic blade awakens...",
+      ],
+    },
+    {
+      key: "template",
+      labels: [
+        "Loading layout...",
+        "Lighting the torches...",
+        "Mapping the corridors...",
+        "Scouts report treasure ahead...",
+        "Ancient power pulses below...",
+      ],
+    },
   ],
   arena: [
-    { key: "season",     labels: ["Loading season...",        "Entering the colosseum...",        "The crowd roars...",               "Champions salute the king...",      "The arena trembles with awe..."] },
-    { key: "loadout",    labels: ["Loading loadout...",       "Reviewing your loadout...",        "Polishing the silver edge...",     "Sharpening the golden blade...",    "Your mythic aura blazes..."] },
-    { key: "participant",labels: ["Loading standings...",     "Checking the standings...",        "Rivals sharpen their swords...",   "The elite prepare for war...",      "Only legends remain..."] },
+    {
+      key: "season",
+      labels: [
+        "Loading season...",
+        "Entering the colosseum...",
+        "The crowd roars...",
+        "Champions salute the king...",
+        "The arena trembles with awe...",
+      ],
+    },
+    {
+      key: "loadout",
+      labels: [
+        "Loading loadout...",
+        "Reviewing your loadout...",
+        "Polishing the silver edge...",
+        "Sharpening the golden blade...",
+        "Your mythic aura blazes...",
+      ],
+    },
+    {
+      key: "participant",
+      labels: [
+        "Loading standings...",
+        "Checking the standings...",
+        "Rivals sharpen their swords...",
+        "The elite prepare for war...",
+        "Only legends remain...",
+      ],
+    },
   ],
   castle: [
-    { key: "castle",     labels: ["Loading castle...",        "Approaching the fortress...",      "Silver towers pierce the sky...",  "The golden keep gleams...",         "Your mythic citadel awaits..."] },
-    { key: "garrison",   labels: ["Loading garrison...",      "Inspecting the garrison...",       "Knights stand at attention...",    "The elite guard salutes...",        "Legendary forces assemble..."] },
-    { key: "court",      labels: ["Loading decrees...",       "Reading court decrees...",         "The council is in session...",     "Royal edicts are proclaimed...",    "The realm awaits your decree..."] },
+    {
+      key: "castle",
+      labels: [
+        "Loading castle...",
+        "Approaching the fortress...",
+        "Silver towers pierce the sky...",
+        "The golden keep gleams...",
+        "Your mythic citadel awaits...",
+      ],
+    },
+    {
+      key: "garrison",
+      labels: [
+        "Loading garrison...",
+        "Inspecting the garrison...",
+        "Knights stand at attention...",
+        "The elite guard salutes...",
+        "Legendary forces assemble...",
+      ],
+    },
+    {
+      key: "court",
+      labels: [
+        "Loading decrees...",
+        "Reading court decrees...",
+        "The council is in session...",
+        "Royal edicts are proclaimed...",
+        "The realm awaits your decree...",
+      ],
+    },
   ],
   shop: [
-    { key: "shopConfig", labels: ["Loading shop...",          "Browsing the wares...",            "Fine silver on display...",        "The royal emporium opens...",       "Mythic relics surface..."] },
-    { key: "player",     labels: ["Loading balance...",       "Checking your coin purse...",      "Counting silver marks...",         "The golden coffers overflow...",    "Wealth beyond measure..."] },
-    { key: "flashSales", labels: ["Loading sales...",         "Hunting for flash sales...",       "Rare deals spotted...",            "Exclusive offers appear...",        "Once-in-an-age bargains..."] },
+    {
+      key: "shopConfig",
+      labels: [
+        "Loading shop...",
+        "Browsing the wares...",
+        "Fine silver on display...",
+        "The royal emporium opens...",
+        "Mythic relics surface...",
+      ],
+    },
+    {
+      key: "player",
+      labels: [
+        "Loading balance...",
+        "Checking your coin purse...",
+        "Counting silver marks...",
+        "The golden coffers overflow...",
+        "Wealth beyond measure...",
+      ],
+    },
+    {
+      key: "flashSales",
+      labels: [
+        "Loading sales...",
+        "Hunting for flash sales...",
+        "Rare deals spotted...",
+        "Exclusive offers appear...",
+        "Once-in-an-age bargains...",
+      ],
+    },
   ],
   hero: [
-    { key: "heroes",     labels: ["Loading heroes...",        "Assembling your champions...",     "Silver-rank heroes answer...",     "Golden champions march forth...",   "Legends answer the call..."] },
-    { key: "player",     labels: ["Loading stats...",         "Reading their legends...",         "Reviewing the chronicles...",      "The royal scribe reports...",       "Their myths are written in stars..."] },
-    { key: "estate",     labels: ["Loading sanctuary...",     "Checking the sanctuary...",        "The shrine hums softly...",        "Sacred golden light pulses...",     "The mythic sanctum resonates..."] },
+    {
+      key: "heroes",
+      labels: [
+        "Loading heroes...",
+        "Assembling your champions...",
+        "Silver-rank heroes answer...",
+        "Golden champions march forth...",
+        "Legends answer the call...",
+      ],
+    },
+    {
+      key: "player",
+      labels: [
+        "Loading stats...",
+        "Reading their legends...",
+        "Reviewing the chronicles...",
+        "The royal scribe reports...",
+        "Their myths are written in stars...",
+      ],
+    },
+    {
+      key: "estate",
+      labels: [
+        "Loading sanctuary...",
+        "Checking the sanctuary...",
+        "The shrine hums softly...",
+        "Sacred golden light pulses...",
+        "The mythic sanctum resonates...",
+      ],
+    },
   ],
 };
 
@@ -211,5 +434,5 @@ const LOADING_STEPS = Object.fromEntries(
   Object.entries(TIERED).map(([screen, steps]) => [
     screen,
     steps.map((s) => ({ key: s.key, label: s.labels[1] })),
-  ])
+  ]),
 ) as Record<keyof typeof TIERED, LoadingStep[]>;

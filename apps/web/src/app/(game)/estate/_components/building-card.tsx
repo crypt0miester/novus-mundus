@@ -27,11 +27,7 @@ interface BuildingCardProps {
   onClick: () => void;
 }
 
-export function BuildingCard({
-  data,
-  selected,
-  onClick,
-}: BuildingCardProps) {
+export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   const { config, phase, status, level, constructing, remainingSec, ready, lockReason } = data;
   const categoryColor = CATEGORY_COLORS[config.category];
 
@@ -44,16 +40,16 @@ export function BuildingCard({
         const started = data.slot.constructionStarted?.toNumber?.() ?? 0;
         const ends = data.slot.constructionEnds?.toNumber?.() ?? 0;
         const total = ends - started;
-        return total > 0
-          ? Math.min(100, Math.round(((total - remainingSec) / total) * 100))
-          : 0;
+        return total > 0 ? Math.min(100, Math.round(((total - remainingSec) / total) * 100)) : 0;
       })()
     : 0;
 
   // Locked state
   if (status === "locked") {
     return (
-      <div className={`rounded-lg border-l-2 ${categoryColor} border border-zinc-800/50 p-3 opacity-40`}>
+      <div
+        className={`rounded-lg border-l-2 ${categoryColor} border border-zinc-800/50 p-3 opacity-40`}
+      >
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-600">{config.name}</span>
           <span className="text-[10px] text-zinc-700">T{config.tier}</span>
@@ -68,15 +64,12 @@ export function BuildingCard({
     return (
       <div
         className={`relative overflow-hidden rounded-lg border-l-2 ${categoryColor} border ${
-          selected ? "border-amber-600 bg-amber-900/20" : "border-amber-700/60"
+          selected ? "border-border-gold bg-accent/20" : "border-border-gold/60"
         } bg-surface-raised p-3 cursor-pointer`}
         onClick={onClick}
       >
         {/* Progress bar overlay */}
-        <div
-          className="absolute inset-y-0 left-0 bg-amber-900/20"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="absolute inset-y-0 left-0 bg-accent/20" style={{ width: `${pct}%` }} />
         <div className="relative">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-text-primary">{config.name}</span>
@@ -84,17 +77,16 @@ export function BuildingCard({
               {status === "upgrading" ? `Lv ${level}` : "New"}
             </span>
           </div>
-          <div className="text-xs text-amber-600 font-mono tabular-nums mt-1">
-            {ready ? "Ready to complete" : `${timeStr} remaining (${pct}%)`}
+          <div className="text-xs text-text-gold font-mono tabular-nums mt-1">
+            {ready ? "Ready!" : `${timeStr} remaining (${pct}%)`}
           </div>
-          {(phase === "improving" || phase === "improved") &&
-            hasCenterView(config.id) && (
-              <div className="mt-0.5 text-[10px] text-text-muted">
-                {config.featureHint ?? "In use"} · still open
-              </div>
-            )}
+          {(phase === "improving" || phase === "improved") && hasCenterView(config.id) && (
+            <div className="mt-0.5 text-[10px] text-text-muted">
+              {config.featureHint ?? "In use"} · still open
+            </div>
+          )}
           <div className="mt-2 text-[11px] text-text-muted">
-            {ready ? "Tap to complete" : "Tap to speed up"}
+            {ready ? "tap to complete" : "tap to speed up"}
           </div>
         </div>
       </div>
@@ -108,8 +100,8 @@ export function BuildingCard({
         onClick={onClick}
         className={`rounded-lg border-l-2 ${categoryColor} border p-3 text-left transition-colors ${
           selected
-            ? "border-amber-600 bg-amber-900/20"
-            : "border-border-default hover:border-amber-800/40"
+            ? "border-border-gold bg-accent/20"
+            : "border-border-default hover:border-border-gold/40"
         }`}
       >
         <div className="flex items-center justify-between">
@@ -136,7 +128,7 @@ export function BuildingCard({
       onClick={onClick}
       className={`rounded-lg border-l-2 ${categoryColor} border border-dashed p-3 text-left transition-colors ${
         selected
-          ? "border-amber-600 bg-amber-900/20"
+          ? "border-border-gold bg-accent/20"
           : "border-border-default opacity-60 hover:opacity-80 hover:border-border-default"
       }`}
     >
@@ -145,7 +137,7 @@ export function BuildingCard({
         <span
           className={`text-[11px] font-bold ${
             config.tier === 3
-              ? "text-amber-500"
+              ? "text-gold-500"
               : config.tier === 2
                 ? "text-text-gold"
                 : "text-text-muted"

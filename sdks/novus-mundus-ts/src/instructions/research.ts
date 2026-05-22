@@ -127,47 +127,107 @@ export interface UpdateTemplateAccounts {
 }
 
 export interface UpdateTemplateParams {
-  /** New base cost (0=no change) */
+  /** field 0 — base research time for level 1, in seconds (u32) */
+  baseTimeSeconds?: number;
+  /** field 1 — base NOVI cost for level 1 (u64) */
   baseCost?: BN | number | bigint;
-  /** New base duration (0=no change) */
-  baseDuration?: BN | number | bigint;
-  /** New buff per level (0=no change) */
+  /** field 2 — buff per level, in basis points (u16) */
   buffPerLevelBps?: number;
-  /** New max level (0=no change) */
+  /** field 3 — gem cost per minute for speed-ups (u16) */
+  gemCostPerMinute?: number;
+  /** field 4 — whether the node is researchable */
+  isActive?: boolean;
+  /** field 5 — max level (u8) */
   maxLevel?: number;
+  /** field 6 — prerequisite research type; 255 or -1 for none (u8) */
+  prerequisiteResearch?: number;
+  /** field 7 — required level of the prerequisite (u8) */
+  prerequisiteLevel?: number;
 }
 
-/** ~5,000 CU */
 /**
- * Update a research template.
+ * Update a research template — admin only.
  *
- * Admin-only.
+ * The on-chain `update_template` processor patches ONE field per call, keyed by
+ * a leading field byte. This builder returns one instruction per field present
+ * in `params`; drop them all into a single transaction to change several at
+ * once. Returns an empty array when `params` is empty.
+ *
+ * Rust account order: [dao_authority, research_template, game_engine]
+ * Rust instruction data: [field_to_update: u8, ...value]  (~5,000 CU each)
  */
 export function createUpdateTemplateInstruction(
   accounts: UpdateTemplateAccounts,
   params: UpdateTemplateParams = {}
-): TransactionInstruction {
+): TransactionInstruction[] {
   const [template] = deriveResearchTemplatePda(accounts.researchType);
 
+  // Rust: extract_accounts! exact [dao_authority, research_template, game_engine]
   const keys = [
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
+    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: template, isSigner: false, isWritable: true },
+    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(20);
-  writer.writeU64(params.baseCost ?? 0);
-  writer.writeI64(params.baseDuration ?? 0);
-  writer.writeU16(params.buffPerLevelBps ?? 0);
-  writer.writeU8(params.maxLevel ?? 0);
+  const fieldIx = (writer: BufferWriter): TransactionInstruction =>
+    new TransactionInstruction({
+      keys,
+      programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.RESEARCH_UPDATE_TEMPLATE, writer.toBuffer()),
+    });
 
-  const data = createInstructionData(DISCRIMINATORS.RESEARCH_UPDATE_TEMPLATE, writer.toBuffer());
+  const ixns: TransactionInstruction[] = [];
 
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  if (params.baseTimeSeconds !== undefined) {
+    const w = new BufferWriter(5);
+    w.writeU8(0);
+    w.writeU32(params.baseTimeSeconds);
+    ixns.push(fieldIx(w));
+  }
+  if (params.baseCost !== undefined) {
+    const w = new BufferWriter(9);
+    w.writeU8(1);
+    w.writeU64(params.baseCost);
+    ixns.push(fieldIx(w));
+  }
+  if (params.buffPerLevelBps !== undefined) {
+    const w = new BufferWriter(3);
+    w.writeU8(2);
+    w.writeU16(params.buffPerLevelBps);
+    ixns.push(fieldIx(w));
+  }
+  if (params.gemCostPerMinute !== undefined) {
+    const w = new BufferWriter(3);
+    w.writeU8(3);
+    w.writeU16(params.gemCostPerMinute);
+    ixns.push(fieldIx(w));
+  }
+  if (params.isActive !== undefined) {
+    const w = new BufferWriter(2);
+    w.writeU8(4);
+    w.writeU8(params.isActive ? 1 : 0);
+    ixns.push(fieldIx(w));
+  }
+  if (params.maxLevel !== undefined) {
+    const w = new BufferWriter(2);
+    w.writeU8(5);
+    w.writeU8(params.maxLevel);
+    ixns.push(fieldIx(w));
+  }
+  if (params.prerequisiteResearch !== undefined) {
+    const w = new BufferWriter(2);
+    w.writeU8(6);
+    w.writeU8(params.prerequisiteResearch === -1 ? 255 : params.prerequisiteResearch);
+    ixns.push(fieldIx(w));
+  }
+  if (params.prerequisiteLevel !== undefined) {
+    const w = new BufferWriter(2);
+    w.writeU8(7);
+    w.writeU8(params.prerequisiteLevel);
+    ixns.push(fieldIx(w));
+  }
+
+  return ixns;
 }
 
 // Create Progress

@@ -25,7 +25,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { ProximityGrid } from "@/components/shared/ProximityGrid";
 import styles from "./TargetTravel.module.css";
 
@@ -91,14 +91,22 @@ export function TargetTravel({
     const ge = client.gameEngine;
     const cityId = player.currentCity;
     const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
+      ge,
+      cityId,
+      toGrid(player.currentLat),
+      toGrid(player.currentLong),
     );
-    const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(destLat), toGrid(destLong),
-    );
+    const [destinationLocation] = deriveLocationPda(ge, cityId, toGrid(destLat), toGrid(destLong));
     const originCreatorRefund = geData?.account?.authority ?? publicKey;
     const ix = createIntracityStartInstruction(
-      { owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, originCreatorRefund },
+      {
+        owner: publicKey,
+        gameEngine: ge,
+        cityId,
+        originLocation,
+        destinationLocation,
+        originCreatorRefund,
+      },
       { destinationLat: destLat, destinationLong: destLong },
     );
     return transact
@@ -116,10 +124,16 @@ export function TargetTravel({
     const ge = client.gameEngine;
     const cityId = player.currentCity;
     const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+      ge,
+      cityId,
+      toGrid(player.travelingToLat),
+      toGrid(player.travelingToLong),
     );
     return createIntracityCompleteInstruction({
-      owner: publicKey, gameEngine: ge, cityId, destinationLocation,
+      owner: publicKey,
+      gameEngine: ge,
+      cityId,
+      destinationLocation,
     });
   };
 
@@ -139,10 +153,16 @@ export function TargetTravel({
     const ge = client.gameEngine;
     const cityId = player.currentCity;
     const [originLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.currentLat), toGrid(player.currentLong),
+      ge,
+      cityId,
+      toGrid(player.currentLat),
+      toGrid(player.currentLong),
     );
     const [destinationLocation] = deriveLocationPda(
-      ge, cityId, toGrid(player.travelingToLat), toGrid(player.travelingToLong),
+      ge,
+      cityId,
+      toGrid(player.travelingToLat),
+      toGrid(player.travelingToLong),
     );
     // The travel destination's `location_creator` is the player — intracity_start
     // sets `dest_location.location_creator = owner`. intracity_cancel refunds the
@@ -150,7 +170,12 @@ export function TargetTravel({
     // so the refund must go to the player, not the game authority.
     const destinationCreatorRefund = publicKey;
     const ix = createIntracityCancelInstruction({
-      owner: publicKey, gameEngine: ge, cityId, originLocation, destinationLocation, destinationCreatorRefund,
+      owner: publicKey,
+      gameEngine: ge,
+      cityId,
+      originLocation,
+      destinationLocation,
+      destinationCreatorRefund,
     });
     return transact
       .mutateAsync({
@@ -165,17 +190,22 @@ export function TargetTravel({
   const handleTravelSpeedup = async (
     tier: number,
     reportPhase: (p: TxPhase) => void,
+    count: number = 1,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createTravelSpeedupInstruction(
-      { owner: publicKey, gameEngine: client.gameEngine },
-      { speedupTier: tier as 1 | 2 },
+    // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
+      createTravelSpeedupInstruction(
+        { owner: publicKey, gameEngine: client.gameEngine },
+        { speedupTier: tier as 1 | 2 },
+      ),
     );
     return transact
       .mutateAsync({
-        instructions: [ix],
+        instructions,
         invalidateKeys: [["player"]],
-        successMessage: "Travel sped up!",
+        successMessage: n > 1 ? `Travel sped up ×${n}!` : "Travel sped up!",
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
@@ -187,31 +217,49 @@ export function TargetTravel({
   const destInRange =
     !!player &&
     playerTraveling &&
-    calculateDistanceMeters(
-      player.travelingToLat,
-      player.travelingToLong,
-      targetLat,
-      targetLong,
-    ) <= range;
+    calculateDistanceMeters(player.travelingToLat, player.travelingToLong, targetLat, targetLong) <=
+      range;
   // On arrival within range, fold the settle (intracity_complete) into the
   // host panel's attack so both land in a single transaction.
-  const canArriveAttack =
-    playerArrived && isIntracity && destInRange && !!onArriveAttack;
-  const handleArriveAttack = (rp: (p: TxPhase) => void) =>
-    onArriveAttack!(rp, [buildCompleteIx()]);
+  const canArriveAttack = playerArrived && isIntracity && destInRange && !!onArriveAttack;
+  const handleArriveAttack = (rp: (p: TxPhase) => void) => onArriveAttack!(rp, [buildCompleteIx()]);
 
-  // Surface the in-transit actions on the mobile morph bar. The SpeedupPanel
-  // tier cards are display-only on mobile, so without this the speed-ups are
-  // unreachable on a phone. Mutually exclusive with the host panel's attack
-  // actions: the panel registers `null` while traveling and this registers
-  // `null` while not, so only one morph slot is ever populated.
-  const remainingMinutes = Math.ceil(travelRemaining / 60);
-  const gemsPerMinute =
-    geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1;
+  // Surface in-transit actions on the mobile morph bar (SpeedupPanel
+  // tier cards are display-only there). Mutually exclusive with the
+  // host panel's attack actions — each registers `null` when the other
+  // is active, so only one morph slot is populated.
+  const gemsPerMinute = geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1;
   const gemBalance = player?.gems?.toNumber?.();
-  const canAfford = (tier: number) =>
-    gemBalance == null ||
-    gemBalance >= remainingMinutes * gemsPerMinute * tier;
+
+  // Hold-to-charge caps — how many speedup instructions one tx can usefully
+  // hold per tier (timer-collapse ∧ gem affordability). Travel has 2 tiers:
+  // T1 leaves 50% of time / 1x cost, T2 leaves 25% / 2x cost.
+  const speedupTiers = [
+    {
+      tier: 1,
+      label: "Hasten",
+      description: "50% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: travelRemaining,
+        timeMultiplier: 0.5,
+        costMultiplier: 1,
+        gemsPerMinute,
+        gemBalance: gemBalance ?? 0,
+      }),
+    },
+    {
+      tier: 2,
+      label: "Rush",
+      description: "75% time reduction",
+      maxCount: maxSpeedupCount({
+        remainingSeconds: travelRemaining,
+        timeMultiplier: 0.25,
+        costMultiplier: 2,
+        gemsPerMinute,
+        gemBalance: gemBalance ?? 0,
+      }),
+    },
+  ];
 
   let travelActions: PanelAction[] | null = null;
   if (playerTraveling && playerArrived) {
@@ -243,14 +291,18 @@ export function TargetTravel({
         id: "hasten",
         label: "Hasten",
         variant: "primary",
-        disabled: !canAfford(1),
+        disabled: speedupTiers[0]?.maxCount === 0,
         onClick: (rp) => handleTravelSpeedup(1, rp),
+        onHold: (rp, count) => handleTravelSpeedup(1, rp, count),
+        holdMax: speedupTiers[0]?.maxCount,
       },
       {
         id: "rush",
         label: "Rush",
-        disabled: !canAfford(2),
+        disabled: speedupTiers[1]?.maxCount === 0,
         onClick: (rp) => handleTravelSpeedup(2, rp),
+        onHold: (rp, count) => handleTravelSpeedup(2, rp, count),
+        holdMax: speedupTiers[1]?.maxCount,
       },
     ];
     // Only intracity travel can be cancelled mid-route.
@@ -303,7 +355,8 @@ export function TargetTravel({
                 />
               )}
             </div>
-            {isIntracity && playerArrived &&
+            {isIntracity &&
+              playerArrived &&
               (canArriveAttack ? (
                 <TxButton onClick={handleArriveAttack} className="w-full text-xs">
                   Attack
@@ -314,7 +367,11 @@ export function TargetTravel({
                 </TxButton>
               ))}
             {isIntracity && !playerArrived && (
-              <TxButton onClick={handleIntracityCancel} variant="secondary" className="w-full text-xs">
+              <TxButton
+                onClick={handleIntracityCancel}
+                variant="secondary"
+                className="w-full text-xs"
+              >
                 Cancel Travel
               </TxButton>
             )}
@@ -327,7 +384,8 @@ export function TargetTravel({
           <SpeedupPanel
             visible={!playerArrived}
             remainingSeconds={travelRemaining}
-            onSpeedup={handleTravelSpeedup}
+            tiers={speedupTiers}
+            onSpeedup={(tier, rp, count) => handleTravelSpeedup(tier, rp, count)}
             gemsPerMinute={geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1}
             gemBalance={player.gems?.toNumber?.()}
             variant="parchment"

@@ -279,15 +279,15 @@ stateDiagram-v2
 
 ## Academy Building Requirement
 
-Research requires an Academy building:
+Research requires an Academy building, hard-gated by category:
 
-| Academy Level | Research Access |
-|---------------|-----------------|
-| 1-4 | Basic nodes only |
-| 5-9 | Intermediate nodes |
-| 10-14 | Advanced nodes |
-| 15-19 | Expert nodes |
-| 20 | All nodes |
+| Research Category | Required Academy Level |
+|-------------------|------------------------|
+| Battle | 1 |
+| Economy | 2 |
+| Growth | 3 |
+
+[Source: helpers/estate.rs `required_academy_level_for_research`](../../../programs/novus_mundus/src/helpers/estate.rs)
 
 Academy also provides **research speed bonus**:
 ```

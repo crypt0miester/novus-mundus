@@ -9,6 +9,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
+import { WorldClock } from "@/components/shared/WorldClock";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -39,9 +40,7 @@ export function LeftPanel() {
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
         const end = player.subscriptionEnd.toNumber();
-        return player.subscriptionTier > 0 && end > now
-          ? Math.min(player.subscriptionTier, 4)
-          : 0;
+        return player.subscriptionTier > 0 && end > now ? Math.min(player.subscriptionTier, 4) : 0;
       })()
     : getCachedTier();
   const tierInfo = getTierInfo(tier);
@@ -68,12 +67,10 @@ export function LeftPanel() {
 
   if (!player) return null;
 
-  const activeBuildings = estate?.buildings?.filter(
-    (b: any) => b.status === 2 || b.status === 3
-  ).length ?? 0;
-  const constructingBuildings = estate?.buildings?.filter(
-    (b: any) => b.status === 1 || b.status === 4
-  ).length ?? 0;
+  const activeBuildings =
+    estate?.buildings?.filter((b: any) => b.status === 2 || b.status === 3).length ?? 0;
+  const constructingBuildings =
+    estate?.buildings?.filter((b: any) => b.status === 1 || b.status === 4).length ?? 0;
   const plotsOwned = estate?.plotsOwned ?? 0;
   const maxSlots = plotsOwned * 4;
 
@@ -86,13 +83,9 @@ export function LeftPanel() {
           <span className="text-sm font-semibold text-text-primary truncate">
             {domain || player.name || "Player"}
           </span>
-          {tierInfo.hasBadge && (
-            <span className="tier-badge text-[10px]">[{tierInfo.badge}]</span>
-          )}
+          {tierInfo.hasBadge && <span className="tier-badge text-[10px]">[{tierInfo.badge}]</span>}
         </div>
-        <div className="mt-1 text-xs text-text-muted">
-          Level {player.level}
-        </div>
+        <div className="mt-1 text-xs text-text-muted">Level {player.level}</div>
       </div>
 
       {/* Stamina */}
@@ -122,11 +115,7 @@ export function LeftPanel() {
             <GameIcon id="resource-novi" size={14} />
             NOVI
           </span>
-          <GoldNumber
-            value={player.lockedNovi.toNumber()}
-            size="sm"
-            format="compact"
-          />
+          <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
         </div>
         {pendingNovi > 0 && (
           <div className="mt-2 flex items-center justify-between">
@@ -150,22 +139,14 @@ export function LeftPanel() {
             <GameIcon id="resource-cash" size={14} />
             Cash
           </span>
-          <GoldNumber
-            value={player.cashOnHand.toNumber()}
-            size="sm"
-            format="compact"
-          />
+          <GoldNumber value={player.cashOnHand.toNumber()} size="sm" format="compact" />
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="flex items-center gap-1.5 text-text-muted">
             <GameIcon id="resource-gem" size={14} />
             Gems
           </span>
-          <GoldNumber
-            value={player.gems.toNumber()}
-            size="sm"
-            format="compact"
-          />
+          <GoldNumber value={player.gems.toNumber()} size="sm" format="compact" />
         </div>
       </div>
 
@@ -177,15 +158,11 @@ export function LeftPanel() {
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-muted">Level</span>
-            <span className="font-semibold text-text-primary">
-              {estate.estateLevel ?? 0}
-            </span>
+            <span className="font-semibold text-text-primary">{estate.estateLevel ?? 0}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-muted">Plots</span>
-            <span className="text-text-primary">
-              {plotsOwned}/5
-            </span>
+            <span className="text-text-primary">{plotsOwned}/5</span>
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-muted">Buildings</span>
@@ -217,9 +194,7 @@ export function LeftPanelMobile() {
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
         const end = player.subscriptionEnd.toNumber();
-        return player.subscriptionTier > 0 && end > now
-          ? Math.min(player.subscriptionTier, 4)
-          : 0;
+        return player.subscriptionTier > 0 && end > now ? Math.min(player.subscriptionTier, 4) : 0;
       })()
     : getCachedTier();
   const tierInfo = getTierInfo(tier);
@@ -234,7 +209,7 @@ export function LeftPanelMobile() {
   // animation): drop the full data panel down while a detail sheet is open —
   // the player is mid-decision and wants resources in view — and collapse it
   // the moment the sheet closes, with no lingering delay.
-  const sheetOpen = useSheetStore((s) => s.open > 0);
+  const sheetOpen = useSheetStore((s) => s.openSheets.length > 0);
   useEffect(() => {
     setExpanded(sheetOpen);
   }, [sheetOpen]);
@@ -276,18 +251,13 @@ export function LeftPanelMobile() {
           <span className="font-medium text-text-primary truncate">
             {domain || player.name || "Player"}
           </span>
-          {tierInfo.hasBadge && (
-            <span className="tier-badge text-[9px]">[{tierInfo.badge}]</span>
-          )}
+          {tierInfo.hasBadge && <span className="tier-badge text-[9px]">[{tierInfo.badge}]</span>}
           <span className="text-text-muted">Lv {player.level}</span>
           <span className="text-text-muted">
-            <GoldNumber
-              value={player.lockedNovi.toNumber()}
-              size="sm"
-              format="compact"
-            />
+            <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
           </span>
         </button>
+        <WorldClock compact />
         <WalletMultiButton
           style={{
             background: "var(--nm-bg-raised)",
@@ -318,53 +288,32 @@ export function LeftPanelMobile() {
                 <GameIcon id="resource-novi" size={12} />
                 NOVI
               </div>
-              <GoldNumber
-                value={player.lockedNovi.toNumber()}
-                size="sm"
-                format="compact"
-              />
+              <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">
                 <GameIcon id="resource-cash" size={12} />
                 Cash
               </div>
-              <GoldNumber
-                value={player.cashOnHand.toNumber()}
-                size="sm"
-                format="compact"
-              />
+              <GoldNumber value={player.cashOnHand.toNumber()} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">
                 <GameIcon id="resource-gem" size={12} />
                 Gems
               </div>
-              <GoldNumber
-                value={player.gems.toNumber()}
-                size="sm"
-                format="compact"
-              />
+              <GoldNumber value={player.gems.toNumber()} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">
                 <GameIcon id="resource-stamina" size={12} />
                 Stamina
               </div>
-              <div className="font-mono tabular-nums text-text-secondary">
-                {stamina.current}/{stamina.max}
-              </div>
+              <GoldNumber value={stamina.current} size="sm" format="compact" />
+              /
+              <GoldNumber value={stamina.max} size="sm" format="compact" />
             </div>
           </div>
-
-          {/* Stamina bar */}
-          <StatBar
-            current={stamina.current}
-            max={stamina.max}
-            size="sm"
-            showValues={false}
-            color="tier"
-          />
 
           {/* NOVI claim */}
           {pendingNovi > 0 && (

@@ -43,27 +43,23 @@ export function GemAction({
       <div
         className={cn(
           "flex flex-col items-center gap-1.5 rounded-lg border border-zinc-800 bg-surface px-4 py-3",
-          className
+          className,
         )}
       >
         <div className="flex items-center gap-2 text-sm text-zinc-400">
           <span>{children}</span>
-          <span className="rounded bg-amber-900/30 px-1.5 py-0.5 font-mono text-xs text-text-gold">
+          <span className="rounded bg-accent/30 px-1.5 py-0.5 font-mono text-xs text-text-gold">
             {gemCost.toLocaleString()} gems
           </span>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
-          <span className="text-zinc-500">
-            You have {gemBalance.toLocaleString()}
-          </span>
+          <span className="text-zinc-500">You have {gemBalance.toLocaleString()}</span>
           <span className="text-zinc-600">·</span>
-          <span className="text-red-400">
-            Need {deficit.toLocaleString()} more
-          </span>
+          <span className="text-red-400">Need {deficit.toLocaleString()} more</span>
         </div>
         <Link
           href="/shop"
-          className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-amber-900/20 px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+          className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-accent/20 px-3 py-1 text-xs font-semibold text-text-gold transition-colors hover:bg-accent/40"
         >
           Get Gems
           <ChevronRight className="h-3.5 w-3.5" />

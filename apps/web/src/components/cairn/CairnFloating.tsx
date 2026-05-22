@@ -122,10 +122,7 @@ export function CairnFloating() {
       onGrab: closePopover, // any grab — drag or tap — dismisses the popover
       onSettle: (self) => {
         try {
-          localStorage.setItem(
-            POS_KEY,
-            JSON.stringify({ x: self.x, y: self.y }),
-          );
+          localStorage.setItem(POS_KEY, JSON.stringify({ x: self.x, y: self.y }));
         } catch {
           /* the position just won't persist */
         }
@@ -242,11 +239,7 @@ export function CairnFloating() {
   return (
     <>
       {mounted && (
-        <div
-          aria-hidden
-          className="fixed inset-0 z-40"
-          onPointerDown={() => closePopover()}
-        />
+        <div aria-hidden className="fixed inset-0 z-40" onPointerDown={() => closePopover()} />
       )}
 
       <button
@@ -272,7 +265,7 @@ export function CairnFloating() {
           <div>
             <p className="text-sm leading-snug text-text-secondary">{line}</p>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              <span className="text-[10px] font-medium lowercase text-text-muted">
                 {actDef.name}
               </span>
               <button
@@ -281,7 +274,7 @@ export function CairnFloating() {
                   show("The Chronicle", "chronicle");
                   closePopover();
                 }}
-                className="inline-flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted transition-colors hover:text-text-gold"
+                className="inline-flex items-center gap-0.5 text-[10px] font-medium lowercase text-text-muted transition-colors hover:text-text-gold"
               >
                 the climb
                 <ChevronRight className="h-3 w-3" />

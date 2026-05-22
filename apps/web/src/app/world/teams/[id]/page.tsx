@@ -19,11 +19,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 const RANK_LABELS = ["Member", "Officer", "Co-Leader", "Leader"] as const;
 const RANK_VARIANTS = ["default", "info", "gold", "legendary"] as const;
 
-export default function TeamDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const teamId = parseInt(id, 10);
   const client = useNovusMundusClient();
@@ -40,7 +36,8 @@ export default function TeamDetailPage({
 
   // Build a map of player PDA → player data
   const playerMap = useMemo(() => {
-    if (!allPlayers) return new Map<string, { name: string; level: number; networth: number; owner: string }>();
+    if (!allPlayers)
+      return new Map<string, { name: string; level: number; networth: number; owner: string }>();
     const map = new Map<string, { name: string; level: number; networth: number; owner: string }>();
     for (const p of allPlayers) {
       map.set(p.pubkey.toBase58(), {
@@ -101,7 +98,10 @@ export default function TeamDetailPage({
           </h1>
           <div className="card">
             <p className="text-sm text-text-muted">Team #{id} does not exist.</p>
-            <Link href="/world/teams" className="mt-3 inline-block text-sm text-text-gold hover:underline">
+            <Link
+              href="/world/teams"
+              className="mt-3 inline-block text-sm text-text-gold hover:underline"
+            >
               Browse Teams
             </Link>
           </div>
@@ -131,9 +131,7 @@ export default function TeamDetailPage({
                 <Badge variant="gold">
                   {team.memberCount}/{team.maxMembers} Members
                 </Badge>
-                {team.minLevelToJoin > 1 && (
-                  <Badge variant="info">Lv {team.minLevelToJoin}+</Badge>
-                )}
+                {team.minLevelToJoin > 1 && <Badge variant="info">Lv {team.minLevelToJoin}+</Badge>}
               </div>
             </div>
             <div className="text-right">
@@ -171,7 +169,7 @@ export default function TeamDetailPage({
             <div className="mt-4">
               <Link
                 href={`/team?join=${teamId}`}
-                className="inline-block rounded-md border border-border-gold bg-amber-900/20 px-4 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40"
+                className="inline-block rounded-md border border-border-gold bg-accent/20 px-4 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
               >
                 Join Team
               </Link>
@@ -207,9 +205,7 @@ export default function TeamDetailPage({
             </div>
             {sortedMembers.map((m) => {
               const pdata = playerMap.get(m.account.player.toBase58());
-              const joinDate = new Date(
-                m.account.joinedAt.toNumber() * 1000
-              ).toLocaleDateString();
+              const joinDate = new Date(m.account.joinedAt.toNumber() * 1000).toLocaleDateString();
               const rankIndex = Math.min(m.account.rank, 3);
 
               return (
@@ -227,11 +223,7 @@ export default function TeamDetailPage({
                     className="flex-1 truncate text-sm text-text-secondary hover:text-text-gold transition-colors"
                   >
                     {pdata?.name ?? <DomainName pubkey={m.account.player} chars={4} />}
-                    {pdata && (
-                      <span className="ml-2 text-xs text-text-muted">
-                        Lv{pdata.level}
-                      </span>
-                    )}
+                    {pdata && <span className="ml-2 text-xs text-text-muted">Lv{pdata.level}</span>}
                   </Link>
                   <span className="hidden w-20 text-right sm:block">
                     {pdata ? (
@@ -247,9 +239,7 @@ export default function TeamDetailPage({
               );
             })}
             {sortedMembers.length === 0 && (
-              <p className="py-4 text-center text-sm text-text-muted">
-                No members found.
-              </p>
+              <p className="py-4 text-center text-sm text-text-muted">No members found.</p>
             )}
           </div>
         </div>

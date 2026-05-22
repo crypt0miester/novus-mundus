@@ -7,7 +7,11 @@ import { BUILDING_FEATURES } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
 import { formatTime } from "@/lib/utils";
-import { BuildingCard, type BuildingCardData, type BuildingStatus as CardStatus } from "./building-card";
+import {
+  BuildingCard,
+  type BuildingCardData,
+  type BuildingStatus as CardStatus,
+} from "./building-card";
 import { hasCenterView } from "./feature-view";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -48,10 +52,7 @@ export function BuildingGrid({
       const slot = estate ? findBuilding(estate, config.id) : null;
       const phase = buildingPhase(slot, tick);
       const constructing =
-        phase === "rising" ||
-        phase === "raised" ||
-        phase === "improving" ||
-        phase === "improved";
+        phase === "rising" || phase === "raised" || phase === "improving" || phase === "improved";
       const endsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
       const remainingSec = constructing ? Math.max(0, endsAt - tick) : 0;
       const ready = phase === "raised" || phase === "improved";
@@ -115,8 +116,7 @@ export function BuildingGrid({
     (data: BuildingCardData) => {
       const id = data.config.id;
       const { phase } = data;
-      const usable =
-        phase === "standing" || phase === "improving" || phase === "improved";
+      const usable = phase === "standing" || phase === "improving" || phase === "improved";
       // A usable building whose feature lives on another page navigates there
       // (e.g. Catacombs → the dungeon), instead of opening an estate panel.
       if (usable && data.config.route) {
@@ -134,16 +134,16 @@ export function BuildingGrid({
       // phase and shows speed-up / complete or build / upgrade accordingly.
       onSelectBuilding(id);
     },
-    [onSelectBuilding, onOpenFeature, router]
+    [onSelectBuilding, onOpenFeature, router],
   );
 
   return (
     <div className="space-y-6">
       {/* Construction alerts banner */}
       {constructingBuildings.length > 0 && (
-        <div className="rounded-lg border border-amber-700/60 bg-amber-900/10 px-4 py-2">
+        <div className="rounded-lg border border-border-gold/60 bg-accent/10 px-4 py-2">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-semibold text-amber-500">
+            <span className="font-semibold text-text-gold">
               {constructingBuildings.length} rising
             </span>
             <span className="text-text-muted">
@@ -179,16 +179,14 @@ export function BuildingGrid({
                 onClick={() => handleCardClick(data)}
               />
             ))}
-            {Array.from({ length: SLOTS_PER_PLOT - buildings.length }).map(
-              (_, slotIdx) => (
-                <div
-                  key={`empty-${slotIdx}`}
-                  className="flex min-h-[5.5rem] items-center justify-center rounded-lg border border-dashed border-border-default/60 p-3 text-[11px] text-text-muted"
-                >
-                  Open ground
-                </div>
-              ),
-            )}
+            {Array.from({ length: SLOTS_PER_PLOT - buildings.length }).map((_, slotIdx) => (
+              <div
+                key={`empty-${slotIdx}`}
+                className="flex min-h-[5.5rem] items-center justify-center rounded-lg border border-dashed border-border-default/60 p-3 text-[11px] text-text-muted"
+              >
+                Open ground
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -228,13 +226,11 @@ export function BuildingGrid({
                     key={`unclaimed-${idx}`}
                     onClick={onBuyPlot}
                     variant="secondary"
-                    className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-amber-700/50 bg-amber-900/10 p-3 text-center transition-colors hover:border-amber-600 hover:bg-amber-900/20"
+                    className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border-gold/50 bg-accent/10 p-3 text-center transition-colors hover:border-border-gold hover:bg-accent/20"
                   >
-                    <span className="text-sm font-semibold text-text-gold">
-                      Claim Plot {plotNumber}
-                    </span>
+                    <span className="text-sm font-semibold text-text-gold">Buy Plot</span>
                     <span className="text-[11px] text-text-muted">
-                      Buy Plot · {(nextPlotCost / 1000).toFixed(0)}k NOVI
+                      Plot {plotNumber} · {(nextPlotCost / 1000).toFixed(0)}k NOVI
                     </span>
                   </TxButton>
                 );
@@ -244,12 +240,8 @@ export function BuildingGrid({
                   key={`unclaimed-${idx}`}
                   className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-border-default/40 p-3 text-center opacity-50"
                 >
-                  <span className="text-sm font-semibold text-text-muted">
-                    Plot {plotNumber}
-                  </span>
-                  <span className="mt-0.5 text-[11px] text-text-muted">
-                    Unclaimed ground
-                  </span>
+                  <span className="text-sm font-semibold text-text-muted">Plot {plotNumber}</span>
+                  <span className="mt-0.5 text-[11px] text-text-muted">Unclaimed ground</span>
                 </div>
               );
             })}

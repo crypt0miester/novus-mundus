@@ -35,9 +35,9 @@ export default function LandingPage() {
           NOVUS MUNDUS
         </h1>
         <p className="mt-4 text-lg text-text-secondary">
-          The old world is gone. What rises from its bones is yours to shape — or to lose.
+          the old world is gone. what rises from its bones is yours to shape, or to lose.
         </p>
-        <p className="mt-1 text-sm text-text-muted">On Solana.</p>
+        <p className="mt-1 text-sm text-text-muted">on Solana.</p>
       </div>
 
       {/* Wallet connect */}
@@ -54,9 +54,9 @@ export default function LandingPage() {
 
       <button
         onClick={() => trigger(spectateMessage(), "/world")}
-        className="text-sm text-text-secondary transition-colors hover:text-text-gold"
+        className="text-sm text-text-secondary transition-colors hover:text-text-gold lowercase"
       >
-        Spectate the Realm as a Peasant
+        Spectate the Realms
       </button>
     </div>
   );

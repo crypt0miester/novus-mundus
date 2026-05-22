@@ -182,7 +182,7 @@ cost = (teleport_base_cost
 Cost is deducted from `player.locked_novi`.  
 Player lands at destination **city center** (not a specific cell).
 
-> M-09 Audit: No time-based cooldown is enforced on teleport; the processor comment
+> No time-based cooldown is enforced on teleport; the processor comment
 > acknowledges this finding.
 
 [Source: programs/novus_mundus/src/processor/travel/intercity_teleport.rs](../../programs/novus_mundus/src/processor/travel/intercity_teleport.rs)
@@ -395,4 +395,4 @@ This result is compared against the meter thresholds:
 | T-07 | One `LocationAccount` per grid cell; only one entity (player or encounter) occupies a cell at a time. |
 | T-08 | Speed-based stealing is only possible against a **traveling player**, never against a stationary player or an encounter. |
 | T-09 | Intracity speed comes from `gameplay_config.intracity_travel_speed_kmh` (runtime config), not from the compile-time constant `INTRACITY_WALKING_SPEED_KMH`. |
-| T-10 | There is no time-based cooldown on `intercity_teleport` (M-09 audit finding). |
+| T-10 | There is no time-based cooldown on `intercity_teleport` (audit finding). |

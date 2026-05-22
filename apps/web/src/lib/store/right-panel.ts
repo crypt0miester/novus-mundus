@@ -9,6 +9,19 @@ export interface PanelAction {
   onClick: (reportPhase: (p: TxPhase) => void) => Promise<string>;
   variant?: "primary" | "secondary" | "danger";
   disabled?: boolean;
+  /** A back/dismiss action. The morph bar lifts it out of the action row and
+   *  renders it as a standalone circle — matching the nav-mode `+` toggle. */
+  kind?: "dismiss";
+  /**
+   * Press-and-hold charging for this action (mirrors `TxButton`'s `holdMax` /
+   * `onHold`). When `holdMax > 1` and `onHold` is set, holding the morph
+   * button ramps a count 1..holdMax and release fires `onHold` with it — so a
+   * speedup action can pack that many instructions into one tx. A tap still
+   * fires `onClick`. Omitted or <= 1 → plain one-shot.
+   */
+  holdMax?: number;
+  /** Hold-release handler — receives the charged count (always >= 1). */
+  onHold?: (reportPhase: (p: TxPhase) => void, count: number) => Promise<string>;
 }
 
 /** One panel's claim on the morph bar's action slot. `owner` is a stable id
@@ -64,6 +77,5 @@ export const useRightPanelStore = create<RightPanelState>((set) => ({
       return next.length === s.morphActions.length ? s : { morphActions: next };
     }),
 
-  close: () =>
-    set({ open: false, title: "", contentKey: null, contentProps: {} }),
+  close: () => set({ open: false, title: "", contentKey: null, contentProps: {} }),
 }));

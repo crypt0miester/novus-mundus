@@ -19,11 +19,7 @@ import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
 // Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
 const CITY_TYPE_VARIANTS = ["legendary", "success", "danger", "gold"] as const;
 
-export default function CityRosterPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function CityRosterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const cityId = parseInt(id, 10);
   const { data: cities, isLoading: citiesLoading } = useWorldCities();
@@ -40,10 +36,7 @@ export default function CityRosterPage({
     if (!allPlayers) return [];
     return allPlayers
       .filter((p) => p.account.currentCity === cityId)
-      .sort(
-        (a, b) =>
-          b.account.networth.toNumber() - a.account.networth.toNumber()
-      );
+      .sort((a, b) => b.account.networth.toNumber() - a.account.networth.toNumber());
   }, [allPlayers, cityId]);
 
   // Build team lookup map
@@ -72,9 +65,7 @@ export default function CityRosterPage({
     for (const pda of teamPdas) {
       const info = teamMap.get(pda);
       if (info) {
-        const count = cityPlayers.filter(
-          (p) => p.account.team.toBase58() === pda
-        ).length;
+        const count = cityPlayers.filter((p) => p.account.team.toBase58() === pda).length;
         result.push({ ...info, memberCount: count });
       }
     }
@@ -116,33 +107,21 @@ export default function CityRosterPage({
   const lore = getCityLore(cityId);
   const typeIndex = Math.min(c.cityType, 3);
   const isCurrentCity =
-    citizen.isCitizen &&
-    citizen.player &&
-    citizen.player.currentCity === cityId;
+    citizen.isCitizen && citizen.player && citizen.player.currentCity === cityId;
 
   return (
     <PageTransition>
       <div className="mx-auto max-w-4xl space-y-6">
         {/* City Info */}
-        <div
-          className={cn(
-            "card accent-border",
-            isCurrentCity && "accent-border-bright"
-          )}
-         
-        >
+        <div className={cn("card accent-border", isCurrentCity && "accent-border-bright")}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-text-gold">
-                {c.name}
-              </h1>
+              <h1 className="text-2xl font-bold text-text-gold">{c.name}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge variant={CITY_TYPE_VARIANTS[typeIndex] as any}>
                   {CITY_TYPE_NAMES[typeIndex]}
                 </Badge>
-                {isCurrentCity && (
-                  <Badge variant="success">You are here</Badge>
-                )}
+                {isCurrentCity && <Badge variant="success">You are here</Badge>}
               </div>
               {lore && (
                 <div className="mt-1 text-xs uppercase tracking-wider text-text-muted">
@@ -157,9 +136,7 @@ export default function CityRosterPage({
           </div>
 
           {lore && (
-            <p className="mt-4 text-sm italic leading-relaxed text-text-secondary">
-              {lore.lore}
-            </p>
+            <p className="mt-4 text-sm italic leading-relaxed text-text-secondary">{lore.lore}</p>
           )}
 
           <div className="mt-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
@@ -181,9 +158,7 @@ export default function CityRosterPage({
             </div>
             <div>
               <span className="text-text-muted">Radius: </span>
-              <span className="text-text-secondary">
-                {c.radiusKm.toFixed(1)} km
-              </span>
+              <span className="text-text-secondary">{c.radiusKm.toFixed(1)} km</span>
             </div>
           </div>
         </div>
@@ -191,9 +166,7 @@ export default function CityRosterPage({
         {/* Teams in City */}
         {teamsPresent.length > 0 && (
           <div>
-            <h2 className="mb-3 text-lg font-semibold text-text-primary">
-              Teams in {c.name}
-            </h2>
+            <h2 className="mb-3 text-lg font-semibold text-text-primary">Teams in {c.name}</h2>
             <div className="flex flex-wrap gap-2">
               {teamsPresent.map((t) => (
                 <Link
@@ -204,9 +177,7 @@ export default function CityRosterPage({
                   <span className="text-sm font-semibold text-text-primary">
                     {t.name || `Team #${t.id}`}
                   </span>
-                  <span className="text-xs text-text-muted">
-                    {t.memberCount} here
-                  </span>
+                  <span className="text-xs text-text-muted">{t.memberCount} here</span>
                 </Link>
               ))}
             </div>
@@ -215,9 +186,7 @@ export default function CityRosterPage({
 
         {/* Citizens */}
         <div>
-          <h2 className="mb-3 text-lg font-semibold text-text-primary">
-            Citizens of {c.name}
-          </h2>
+          <h2 className="mb-3 text-lg font-semibold text-text-primary">Citizens of {c.name}</h2>
           <div className="space-y-2">
             {cityPlayers.map((p, i) => (
               <PlayerCard
@@ -228,16 +197,13 @@ export default function CityRosterPage({
                 showNetworth
                 highlight={
                   citizen.isCitizen &&
-                  citizen.player?.owner.toBase58() ===
-                    p.account.owner.toBase58()
+                  citizen.player?.owner.toBase58() === p.account.owner.toBase58()
                 }
               />
             ))}
             {cityPlayers.length === 0 && (
               <div className="card">
-                <p className="text-sm text-text-muted">
-                  No players currently in this city.
-                </p>
+                <p className="text-sm text-text-muted">No players currently in this city.</p>
               </div>
             )}
           </div>

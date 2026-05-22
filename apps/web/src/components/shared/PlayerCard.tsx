@@ -42,13 +42,7 @@ export function PlayerCard({
   const tierIndex = Math.min(player.subscriptionTier, 3);
 
   return (
-    <div
-      className={cn(
-        "card transition-all",
-        highlight && "accent-border-bright",
-        className
-      )}
-    >
+    <div className={cn("card transition-all", highlight && "accent-border-bright", className)}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {rank != null && (
@@ -56,12 +50,12 @@ export function PlayerCard({
               className={cn(
                 "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold",
                 rank === 1
-                  ? "bg-amber-900/50 text-amber-400"
+                  ? "bg-accent/50 text-gold-400"
                   : rank === 2
                     ? "bg-zinc-700 text-zinc-300"
                     : rank === 3
-                      ? "bg-amber-950/50 text-amber-700"
-                      : "bg-zinc-800 text-text-muted"
+                      ? "bg-accent/50 text-gold-700"
+                      : "bg-zinc-800 text-text-muted",
               )}
             >
               {rank}
@@ -81,9 +75,7 @@ export function PlayerCard({
                   {TIER_LABELS[tierIndex]}
                 </Badge>
               )}
-              {showCity && cityName && (
-                <span className="truncate">{cityName}</span>
-              )}
+              {showCity && cityName && <span className="truncate">{cityName}</span>}
             </div>
           </div>
         </div>

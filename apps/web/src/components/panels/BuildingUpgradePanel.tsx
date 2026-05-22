@@ -8,12 +8,13 @@ import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import type { PanelAction } from "@/lib/store/right-panel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
+import { GameIcon } from "../shared/GameIcon";
 
 /** Hours → compact "4h" / "10.5h" string. */
 function fmtHours(h: number): string {
@@ -45,10 +46,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
   const phase = buildingPhase(slot, tick);
   const isConstructing =
-    phase === "rising" ||
-    phase === "raised" ||
-    phase === "improving" ||
-    phase === "improved";
+    phase === "rising" || phase === "raised" || phase === "improving" || phase === "improved";
   useEffect(() => {
     if (!isConstructing) return;
     const interval = setInterval(() => setTick(Math.floor(Date.now() / 1000)), 1000);
@@ -63,13 +61,43 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
   const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
 
-  const costInfo = useMemo(
-    () => getBuildCostInfo(buildingId),
-    [getBuildCostInfo, buildingId]
+  // Speedup tiers with hold-to-charge caps — how many speedup instructions one
+  // tx can usefully hold (timer-collapse ∧ gem affordability). Recomputed each
+  // tick as the construction timer counts down.
+  const speedupTiers = useMemo(
+    () => [
+      {
+        tier: 1,
+        label: "Hasten",
+        description: "50% time reduction",
+        maxCount: maxSpeedupCount({
+          remainingSeconds: remainingSec,
+          timeMultiplier: 0.5,
+          costMultiplier: 1,
+          gemsPerMinute: 1,
+          gemBalance,
+        }),
+      },
+      {
+        tier: 2,
+        label: "Rush",
+        description: "75% time reduction",
+        maxCount: maxSpeedupCount({
+          remainingSeconds: remainingSec,
+          timeMultiplier: 0.25,
+          costMultiplier: 2,
+          gemsPerMinute: 1,
+          gemBalance,
+        }),
+      },
+    ],
+    [remainingSec, gemBalance],
   );
+
+  const costInfo = useMemo(() => getBuildCostInfo(buildingId), [getBuildCostInfo, buildingId]);
   const costPreview = useMemo(
     () => getUpgradeCostPreview(buildingId),
-    [getUpgradeCostPreview, buildingId]
+    [getUpgradeCostPreview, buildingId],
   );
 
   const morphActions = useMemo<PanelAction[] | null>(() => {
@@ -88,17 +116,23 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       const remainingMinutes = Math.max(1, Math.ceil(remainingSec / 60));
       const t1Cost = remainingMinutes;
       const t2Cost = remainingMinutes * 2;
+      // Mirror the desktop SpeedupPanel tier caps onto the morph buttons so
+      // mobile gets the same hold-to-charge (count threaded through onHold).
       return [
         {
           id: "hasten-building",
           label: "Hasten",
           onClick: (rp) => handleBuildingSpeedup(buildingId, 1, rp),
+          onHold: (rp, count) => handleBuildingSpeedup(buildingId, 1, rp, count),
+          holdMax: speedupTiers[0]?.maxCount,
           disabled: gemBalance < t1Cost,
         },
         {
           id: "rush-building",
           label: "Rush",
           onClick: (rp) => handleBuildingSpeedup(buildingId, 2, rp),
+          onHold: (rp, count) => handleBuildingSpeedup(buildingId, 2, rp, count),
+          holdMax: speedupTiers[1]?.maxCount,
           disabled: gemBalance < t2Cost,
         },
       ];
@@ -109,11 +143,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
     return [
       {
         id: "build-upgrade",
-        label: !hasEnough
-          ? "Insufficient NOVI"
-          : ci.isUpgrade
-            ? `Upgrade → Lv ${(ci.level ?? 0) + 1}`
-            : `Build ${config.name}`,
+        label: !hasEnough ? "Insufficient NOVI" : ci.isUpgrade ? `Upgrade` : `Build`,
         variant: "primary" as const,
         disabled: !hasEnough,
         onClick: (rp) => handleBuildOrUpgrade(buildingId, rp),
@@ -128,6 +158,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
     noviBalance,
     gemBalance,
     buildingId,
+    speedupTiers,
     handleCompleteBuilding,
     handleBuildOrUpgrade,
     handleBuildingSpeedup,
@@ -158,9 +189,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
             {ready ? "Construction Complete" : `Constructing ${config.name}`}
           </div>
           {ready ? (
-            <p className="text-sm font-semibold text-text-gold">
-              Ready to break ground.
-            </p>
+            <p className="text-sm font-semibold text-text-gold">Ready to break ground.</p>
           ) : (
             <GoldCountdown
               endsAt={constructionEndsAt}
@@ -184,7 +213,8 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
             visible
             inline
             remainingSeconds={remainingSec}
-            onSpeedup={(tier, rp) => handleBuildingSpeedup(buildingId, tier, rp)}
+            tiers={speedupTiers}
+            onSpeedup={(tier, rp, count) => handleBuildingSpeedup(buildingId, tier, rp, count)}
             gemBalance={gemBalance}
             gemsPerMinute={1}
           />
@@ -206,7 +236,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-900/40 text-sm font-bold text-text-gold">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent/40 text-sm font-bold text-text-gold">
           T{tier}
         </span>
         <div className="min-w-0">
@@ -236,6 +266,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
               hasEnough || atMaxLevel ? "text-text-gold" : "text-red-400"
             }`}
           >
+            <GameIcon id="resource-novi" size={14} className="mr-2" />
             {noviBalance.toLocaleString()}
           </span>
         </div>
@@ -271,19 +302,15 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
                   key={u.level}
                   className={`rounded border px-2 py-1 text-center ${
                     isNext
-                      ? "border-amber-600 bg-amber-900/20"
+                      ? "border-border-gold bg-accent/20"
                       : isDone
                         ? "border-green-800/50 bg-green-900/10"
                         : "border-zinc-800"
                   }`}
                 >
                   <div className="text-[11px] text-text-muted">Lv {u.level + 1}</div>
-                  <div className="text-xs font-semibold text-text-gold">
-                    {u.cost.toLocaleString()}
-                  </div>
-                  <div className="text-[11px] text-text-muted">
-                    ~{fmtHours(u.timeHours)}
-                  </div>
+                  <div className="text-xs font-semibold text-text-gold">{formatNumber(u.cost)}</div>
+                  <div className="text-[11px] text-text-muted">~{fmtHours(u.timeHours)}</div>
                 </div>
               );
             })}
@@ -297,7 +324,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
           Loading building costs…
         </div>
       ) : atMaxLevel ? (
-        <div className="rounded-lg border border-amber-800/50 bg-amber-950/20 py-3 text-center text-sm font-semibold uppercase tracking-wider text-text-gold">
+        <div className="rounded-lg border border-border-gold/50 bg-accent/20 py-3 text-center text-sm font-semibold uppercase tracking-wider text-text-gold">
           Max Level Reached
         </div>
       ) : (
@@ -306,11 +333,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
           className="hidden w-full lg:block"
           disabled={!hasEnough}
         >
-          {!hasEnough
-            ? "Insufficient NOVI"
-            : isUpgrade
-              ? `Upgrade ${config.name} → Lv ${level + 1}`
-              : `Build ${config.name}`}
+          {!hasEnough ? "Insufficient NOVI" : isUpgrade ? `Upgrade` : `Build`}
         </TxButton>
       )}
     </div>

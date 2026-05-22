@@ -4,7 +4,7 @@
  * DAO controlled configuration for each hero type.
  * Heroes provide buffs that scale deterministically with level using golden root.
  *
- * Size: 96 bytes (repr(C) layout)
+ * Size: 112 bytes (repr(C) layout)
  */
 
 import type { AccountInfo } from '@solana/web3.js';
@@ -89,10 +89,13 @@ export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplate
   const bump = reader.readU8();
   reader.skip(3); // _padding
 
-  // Ability config (12 bytes; struct grew here)
+  // Ability config (18 bytes incl. alignment padding; struct grew here).
+  // repr(C): abilityKind/abilityStat/abilityParam1 land at 90/91/92, then a
+  // u16->u32 alignment gap pushes abilityParam2 to 96 and the cooldown to 100.
   const abilityKind = reader.readU8();
   const abilityStat = reader.readU8();
   const abilityParam1 = reader.readU16();
+  reader.skip(2); // implicit padding: u16 abilityParam1 -> u32 abilityParam2
   const abilityParam2 = reader.readU32();
   const abilityCooldownSecs = reader.readU32();
   reader.skip(4); // _ability_padding

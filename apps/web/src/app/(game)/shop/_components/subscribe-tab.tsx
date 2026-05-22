@@ -86,9 +86,7 @@ function PerkRow({ icon: Icon, color, strong, children }: PerkRowProps) {
       >
         <Icon className="h-3.5 w-3.5" />
       </span>
-      <span className={strong ? "text-text-primary" : "text-text-secondary"}>
-        {children}
-      </span>
+      <span className={strong ? "text-text-primary" : "text-text-secondary"}>{children}</span>
     </li>
   );
 }
@@ -116,10 +114,7 @@ export function SubscribeTab() {
 
   // The featured tier follows the player up the ladder: always their realistic
   // next purchase (current + 1), floored at the anchor tier for new players.
-  const recommendedTier = Math.min(
-    tiers.length - 1,
-    Math.max(effectiveTier + 1, ANCHOR_TIER)
-  );
+  const recommendedTier = Math.min(tiers.length - 1, Math.max(effectiveTier + 1, ANCHOR_TIER));
 
   const tierName = (i: number) => tiers[i]?.name ?? `Tier ${i}`;
 
@@ -135,7 +130,7 @@ export function SubscribeTab() {
         paymentAuthority: publicKey,
         treasury: geAccount.treasuryWallet,
       },
-      { paymentType: 0, tier: tierId }
+      { paymentType: 0, tier: tierId },
     );
     return transact
       .mutateAsync({
@@ -153,9 +148,7 @@ export function SubscribeTab() {
   const curGen = num(cur?.generationMultiplier);
   const baseGen = num(baseTier?.generationMultiplier);
   const curGenRatio = baseGen > 0 ? curGen / baseGen : null;
-  const daysLeft = sub.active && sub.expiresAt > 0
-    ? (sub.expiresAt - nowSec) / 86_400
-    : null;
+  const daysLeft = sub.active && sub.expiresAt > 0 ? (sub.expiresAt - nowSec) / 86_400 : null;
   const expiringSoon = daysLeft != null && daysLeft < 3;
 
   return (
@@ -165,9 +158,9 @@ export function SubscribeTab() {
           A Patron&apos;s Charter
         </h2>
         <p className="mt-1 text-xs text-text-muted">
-          A charter is a standing arrangement with a patron, it multiplies your
-          NOVI generator, widens your vault, and grants a signing bounty the
-          moment it is sealed. Higher charters compound everything below.
+          A charter is a standing arrangement with a patron, it multiplies your NOVI generator,
+          widens your vault, and grants a signing bounty the moment it is sealed. Higher charters
+          compound everything below.
         </p>
       </div>
 
@@ -183,10 +176,7 @@ export function SubscribeTab() {
               <div className="text-[10px] uppercase tracking-wider text-text-muted">
                 Current Charter
               </div>
-              <div
-                className="text-lg font-bold leading-tight"
-                style={{ color: curTheme.bright }}
-              >
+              <div className="text-lg font-bold leading-tight" style={{ color: curTheme.bright }}>
                 {tierName(effectiveTier)}
               </div>
             </div>
@@ -195,7 +185,7 @@ export function SubscribeTab() {
             <div className="text-right">
               <div
                 className={`flex items-center justify-end gap-1 text-[10px] uppercase tracking-wider ${
-                  expiringSoon ? "text-amber-400" : "text-text-muted"
+                  expiringSoon ? "text-danger" : "text-text-muted"
                 }`}
               >
                 {expiringSoon && <Clock className="h-3 w-3 animate-pulse" />}
@@ -209,7 +199,7 @@ export function SubscribeTab() {
         {/* Downgrade preview — loss aversion */}
         {effectiveTier > 0 && curGenRatio != null && (
           <div className="mt-3 flex items-start gap-2 rounded-lg bg-surface/60 px-3 py-2 text-[11px] text-text-muted">
-            <Clock className="mt-px h-3.5 w-3.5 shrink-0 text-amber-500/80" />
+            <Clock className="mt-px h-3.5 w-3.5 shrink-0 text-text-gold" />
             <span>
               {expiringSoon ? "Renew before it lapses — " : "If this charter lapses, "}
               your generator drops{" "}
@@ -226,8 +216,8 @@ export function SubscribeTab() {
         )}
         {effectiveTier === 0 && (
           <p className="mt-3 text-[11px] text-text-muted">
-            You hold the free charter. Every paid charter below multiplies your
-            NOVI generator and pays a signing bounty up front.
+            You hold the free charter. Every paid charter below multiplies your NOVI generator and
+            pays a signing bounty up front.
           </p>
         )}
       </div>
@@ -249,13 +239,9 @@ export function SubscribeTab() {
           const priceKnown = costLamports > 0;
           const curTierCost =
             effectiveTier > 0
-              ? solCostLamports(
-                  num(tiers[effectiveTier]?.costInUsdCents),
-                  usdPriceCents
-                )
+              ? solCostLamports(num(tiers[effectiveTier]?.costInUsdCents), usdPriceCents)
               : 0;
-          const upgradeDelta =
-            idx > effectiveTier ? costLamports - curTierCost : 0;
+          const upgradeDelta = idx > effectiveTier ? costLamports - curTierCost : 0;
 
           // Real perks, derived from on-chain config
           const gen = num(t.generationMultiplier);
@@ -275,11 +261,9 @@ export function SubscribeTab() {
           const grantNovi = num(t.novi);
           const grantCash = num(t.cash);
           const troops =
-            num(t.du1) + num(t.du2) + num(t.du3) +
-            num(t.op1) + num(t.op2) + num(t.op3);
+            num(t.du1) + num(t.du2) + num(t.du3) + num(t.op1) + num(t.op2) + num(t.op3);
           const gear =
-            num(t.meleeWeapons) + num(t.rangedWeapons) +
-            num(t.siegeWeapons) + num(t.armor);
+            num(t.meleeWeapons) + num(t.rangedWeapons) + num(t.siegeWeapons) + num(t.armor);
           const grantParts: string[] = [];
           if (grantNovi) grantParts.push(`${formatNumber(grantNovi)} NOVI`);
           if (grantCash) grantParts.push(`${formatNumber(grantCash)} cash`);
@@ -294,10 +278,7 @@ export function SubscribeTab() {
               } ${isLocked ? "opacity-60" : ""}`}
               style={{
                 borderColor: th.accent,
-                boxShadow:
-                  isRecommended || isCurrent
-                    ? `0 8px 36px ${th.glow}`
-                    : undefined,
+                boxShadow: isRecommended || isCurrent ? `0 8px 36px ${th.glow}` : undefined,
               }}
             >
               {isRecommended && (
@@ -337,9 +318,7 @@ export function SubscribeTab() {
                     </span>
                   </>
                 ) : (
-                  <span className="text-sm text-text-muted">
-                    Price unavailable
-                  </span>
+                  <span className="text-sm text-text-muted">Price unavailable</span>
                 )}
               </div>
 
@@ -352,9 +331,7 @@ export function SubscribeTab() {
                   className="font-mono text-xl font-bold leading-none tabular-nums"
                   style={{ color: th.bright }}
                 >
-                  {genRatio != null
-                    ? asMultiplier(genRatio)
-                    : perHour.toLocaleString()}
+                  {genRatio != null ? asMultiplier(genRatio) : perHour.toLocaleString()}
                 </div>
                 <div className="mt-1 text-[10px] uppercase tracking-wider text-text-muted">
                   NOVI Generation
@@ -368,9 +345,7 @@ export function SubscribeTab() {
               <ul className="mt-4 flex-1 space-y-2">
                 <PerkRow icon={Database} color={th.bright} strong>
                   Vault holds{" "}
-                  <span className="font-semibold text-text-gold">
-                    {formatNumber(cap)} NOVI
-                  </span>{" "}
+                  <span className="font-semibold text-text-gold">{formatNumber(cap)} NOVI</span>{" "}
                   before it fills
                 </PerkRow>
                 {dailyCap > 0 && (
@@ -384,8 +359,7 @@ export function SubscribeTab() {
                 )}
                 {buyBonusBps > 0 && (
                   <PerkRow icon={Percent} color={th.bright}>
-                    +{(buyBonusBps / 100).toFixed(0)}% bonus NOVI on every
-                    purchase
+                    +{(buyBonusBps / 100).toFixed(0)}% bonus NOVI on every purchase
                   </PerkRow>
                 )}
                 {drRatio != null && drRatio > 1 && (
@@ -395,10 +369,7 @@ export function SubscribeTab() {
                 )}
                 {grantParts.length > 0 && (
                   <PerkRow icon={Award} color={th.bright} strong>
-                    Bonus:{" "}
-                    <span className="text-text-secondary">
-                      {grantParts.join(" · ")}
-                    </span>
+                    Bonus: <span className="text-text-secondary">{grantParts.join(" · ")}</span>
                   </PerkRow>
                 )}
                 {team > 0 && (
@@ -427,9 +398,7 @@ export function SubscribeTab() {
                       variant="secondary"
                       className="w-full"
                     >
-                      {durationDays > 0
-                        ? `Extend charter +${durationDays}d`
-                        : "Extend charter"}
+                      {durationDays > 0 ? `Extend charter +${durationDays}d` : "Extend charter"}
                     </TxButton>
                     {sub.expiresAt > 0 && durationDays > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
@@ -455,8 +424,7 @@ export function SubscribeTab() {
                     </TxButton>
                     {effectiveTier > 0 && upgradeDelta > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
-                        +{formatLamportsAsSol(upgradeDelta)} over your current
-                        charter
+                        +{formatLamportsAsSol(upgradeDelta)} over your current charter
                       </p>
                     )}
                   </>

@@ -54,17 +54,13 @@ export function TeamBrowser() {
         result.sort((a, b) => b.account.memberCount - a.account.memberCount);
         break;
       case "treasury":
-        result.sort(
-          (a, b) => b.account.treasury.toNumber() - a.account.treasury.toNumber()
-        );
+        result.sort((a, b) => b.account.treasury.toNumber() - a.account.treasury.toNumber());
         break;
       case "name":
         result.sort((a, b) => a.account.name.localeCompare(b.account.name));
         break;
       case "newest":
-        result.sort(
-          (a, b) => b.account.createdAt.toNumber() - a.account.createdAt.toNumber()
-        );
+        result.sort((a, b) => b.account.createdAt.toNumber() - a.account.createdAt.toNumber());
         break;
     }
 
@@ -76,10 +72,7 @@ export function TeamBrowser() {
     citizen.player &&
     citizen.player.team.toBase58() !== "11111111111111111111111111111111";
 
-  const handleJoin = async (
-    t: (typeof filtered)[number],
-    reportPhase: (p: TxPhase) => void,
-  ) => {
+  const handleJoin = async (t: (typeof filtered)[number], reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const slots = await client.fetchTeamMembers(t.pubkey);
     const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
@@ -125,10 +118,7 @@ export function TeamBrowser() {
             >
               {t.account.name || `Team #${t.account.id.toNumber()}`}
             </Link>
-            <Badge
-              variant={isPublic ? "success" : "default"}
-              className="px-1 py-0 text-[10px]"
-            >
+            <Badge variant={isPublic ? "success" : "default"} className="px-1 py-0 text-[10px]">
               {isPublic ? "Public" : "Private"}
             </Badge>
           </div>
@@ -144,9 +134,7 @@ export function TeamBrowser() {
         <span>
           {t.account.memberCount}/{t.account.maxMembers}
           {t.account.minLevelToJoin > 1 && (
-            <span className="ml-1 text-text-muted">
-              · Lv {t.account.minLevelToJoin}+
-            </span>
+            <span className="ml-1 text-text-muted">· Lv {t.account.minLevelToJoin}+</span>
           )}
         </span>
       ),
@@ -180,11 +168,7 @@ export function TeamBrowser() {
         const isPublic = (t.account.settings & 1) !== 0;
         if (!isPublic) return null;
         return (
-          <TxButton
-            onClick={(rp) => handleJoin(t, rp)}
-            variant="secondary"
-            className="text-xs"
-          >
+          <TxButton onClick={(rp) => handleJoin(t, rp)} variant="secondary" className="text-xs">
             Swear In
           </TxButton>
         );
@@ -246,8 +230,7 @@ export function TeamBrowser() {
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((t) => {
               const isPublic = (t.account.settings & 1) !== 0;
-              const canJoin =
-                citizen.isCitizen && !citizenHasTeam && isPublic;
+              const canJoin = citizen.isCitizen && !citizenHasTeam && isPublic;
 
               return (
                 <TeamCard
@@ -273,9 +256,7 @@ export function TeamBrowser() {
 
           {filtered.length === 0 && (
             <div className="card">
-              <p className="text-sm text-text-muted">
-                No House answers to that search.
-              </p>
+              <p className="text-sm text-text-muted">No House answers to that search.</p>
             </div>
           )}
         </>
@@ -290,12 +271,10 @@ export function TeamBrowser() {
 
       {citizen.isCitizen && !citizenHasTeam && (
         <div className="card accent-border">
-          <h3 className="mb-1 text-sm font-semibold text-text-primary">
-            Raise your own banner.
-          </h3>
+          <h3 className="mb-1 text-sm font-semibold text-text-primary">Raise your own banner.</h3>
           <p className="text-xs text-text-muted">
-            No House here suits you? Found one of your own on the Team screen and
-            let others swear to it.
+            No House here suits you? Found one of your own on the Team screen and let others swear
+            to it.
           </p>
         </div>
       )}

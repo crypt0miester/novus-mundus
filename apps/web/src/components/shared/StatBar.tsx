@@ -15,7 +15,7 @@ interface StatBarProps {
 
 // `gold` routes through --color-text-gold so the bar tracks per-tier overrides
 // from globals.css (bronze/silver/gold), staying in lock-step with sibling
-// gold text rather than hardcoding amber-500.
+// gold text rather than hardcoding a fixed gold shade.
 const colorMap = {
   gold: "bg-[var(--color-text-gold)]",
   green: "bg-emerald-500",
@@ -28,7 +28,7 @@ const colorMap = {
 /** Health ramp — green while healthy, amber when worn down, red when critical. */
 function healthClass(pct: number): string {
   if (pct > 50) return "bg-emerald-500";
-  if (pct > 25) return "bg-amber-500";
+  if (pct > 25) return "bg-gold-500";
   return "bg-red-500";
 }
 
@@ -54,11 +54,7 @@ export function StatBar({
     <div className={cn("flex flex-col gap-1", className)}>
       {(label || showValues) && (
         <div className="flex items-center justify-between text-xs">
-          {label && (
-            <span className="uppercase tracking-wider text-text-muted">
-              {label}
-            </span>
-          )}
+          {label && <span className="uppercase tracking-wider text-text-muted">{label}</span>}
           {showValues && (
             <span className="game-num text-xs">
               {current.toLocaleString()} / {max.toLocaleString()}
@@ -66,17 +62,9 @@ export function StatBar({
           )}
         </div>
       )}
-      <div
-        className={cn(
-          "overflow-hidden rounded-full bg-zinc-800",
-          sizeMap[size]
-        )}
-      >
+      <div className={cn("overflow-hidden rounded-full bg-zinc-800", sizeMap[size])}>
         <div
-          className={cn(
-            "h-full rounded-full transition-[width] duration-700 ease-out",
-            barClass
-          )}
+          className={cn("h-full rounded-full transition-[width] duration-700 ease-out", barClass)}
           style={{ width: `${pct}%` }}
         />
       </div>

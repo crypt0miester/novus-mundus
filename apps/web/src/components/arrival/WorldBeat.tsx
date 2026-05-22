@@ -4,9 +4,10 @@ import { useRef } from "react";
 import { BeatButton, BeatEyebrow } from "./Beat";
 import { useRevealOnMount } from "./useRevealOnMount";
 
-/** The storyline's finished onboarding text — WORLD_LORE.md §XII. */
+/** The storyline's finished onboarding text. */
 const LINES = [
-  "The old world fell. You don't remember it — no one alive does.",
+  "The old world fell. You don't remember it,",
+  "No one alive does.",
   "What's left is ruin, rubble, and a world that does not care whether you survive.",
   "But you have. And now you are done just surviving.",
   "Claim your ground. Build your name.",
@@ -14,10 +15,12 @@ const LINES = [
 
 interface WorldBeatProps {
   onContinue: () => void;
+  /** Skip the early game — opens the jump-ahead path. */
+  onJump: () => void;
 }
 
 /** Beat 1 of the Arrival — the world, surfaced at last. */
-export function WorldBeat({ onContinue }: WorldBeatProps) {
+export function WorldBeat({ onContinue, onJump }: WorldBeatProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   useRevealOnMount(rootRef, {
     translateY: 14,
@@ -53,14 +56,23 @@ export function WorldBeat({ onContinue }: WorldBeatProps) {
         <p
           key={i}
           data-reveal
-          className="mb-4 text-lg leading-relaxed text-text-secondary opacity-0"
+          className="mb-4 text-sm leading-relaxed text-text-secondary opacity-0 lowercase"
         >
           {line}
         </p>
       ))}
-      <BeatButton reveal onClick={onContinue} className="mt-7 px-6">
-        Go on
-      </BeatButton>
+      <div data-reveal className="mt-7 flex items-center gap-3 opacity-0">
+        <BeatButton onClick={onContinue} className="px-6">
+          go on
+        </BeatButton>
+        <button
+          type="button"
+          onClick={onJump}
+          className="rounded-full border border-[var(--tier-accent)] px-5 py-2.5 text-sm font-medium lowercase text-text-gold transition-colors hover:bg-surface-raised"
+        >
+          jump ahead
+        </button>
+      </div>
     </div>
   );
 }

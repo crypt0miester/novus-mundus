@@ -24,6 +24,12 @@ const PID_FILE = path.join(SDK_DIR, '.validator.pid');
 
 const NOVUS_MUNDUS_SO = path.join(ROOT_DIR, 'target/deploy/novus_mundus.so');
 
+// Novus Mundus is loaded UPGRADEABLE with the DAO key as upgrade authority —
+// init_game_engine calls assert_is_program_authority(), which rejects any
+// signer that is not the program's upgrade authority. A plain --bpf-program
+// load leaves the authority null and init fails with 6001.
+const DAO_AUTHORITY_KEYPAIR = path.join(SDK_DIR, 'keys/dao-authority.json');
+
 const NOVUS_MUNDUS_PROGRAM_ID = 'J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V';
 const MPL_CORE_PROGRAM_ID = 'CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d';
 const TLD_HOUSE_PROGRAM_ID = 'TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S';
@@ -93,6 +99,13 @@ function verifyBinaries(): void {
     );
   }
 
+  if (!fs.existsSync(DAO_AUTHORITY_KEYPAIR)) {
+    throw new Error(
+      `DAO authority keypair not found at ${DAO_AUTHORITY_KEYPAIR}\n` +
+      'It is the program upgrade authority — run any other `novus` command once to generate it.'
+    );
+  }
+
   const required = ['mpl_core.so', 'tld_house.so', 'alt_name_service.so'];
   const missing = required.filter(f => !fs.existsSync(path.join(BIN_DIR, f)));
   if (missing.length > 0) {
@@ -127,7 +140,7 @@ async function handleStart(args: ParsedArgs): Promise<void> {
   const spawnArgs = [
     '--ledger', LEDGER_DIR,
     '--reset',
-    '--bpf-program', NOVUS_MUNDUS_PROGRAM_ID, NOVUS_MUNDUS_SO,
+    '--upgradeable-program', NOVUS_MUNDUS_PROGRAM_ID, NOVUS_MUNDUS_SO, DAO_AUTHORITY_KEYPAIR,
     '--bpf-program', MPL_CORE_PROGRAM_ID, path.join(BIN_DIR, 'mpl_core.so'),
     '--bpf-program', TLD_HOUSE_PROGRAM_ID, path.join(BIN_DIR, 'tld_house.so'),
     '--bpf-program', ALT_NAME_SERVICE_PROGRAM_ID, path.join(BIN_DIR, 'alt_name_service.so'),

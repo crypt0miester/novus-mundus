@@ -43,8 +43,7 @@ function validate(input: string): { type: "invalid"; reason: string } | null {
   if (input.length === 0) return null;
   if (input.length < 1) return { type: "invalid", reason: "Too short" };
   if (input.length > 32) return { type: "invalid", reason: "Max 32 characters" };
-  if (!DOMAIN_RE.test(input))
-    return { type: "invalid", reason: "Letters, numbers, hyphens only" };
+  if (!DOMAIN_RE.test(input)) return { type: "invalid", reason: "Letters, numbers, hyphens only" };
   return null;
 }
 
@@ -117,8 +116,7 @@ export function DomainPicker({
     return { type: "idle" };
   }, [input, debounced, isChecking, checkResult, walletDomains]);
 
-  const canSubmit =
-    !isPending && input.trim().length > 0 && status.type === "owned";
+  const canSubmit = !isPending && input.trim().length > 0 && status.type === "owned";
 
   const isUpdate = !!currentName;
   const parsed = currentName ? parseDomainTld(currentName) : null;
@@ -164,7 +162,7 @@ export function DomainPicker({
                 onClick={() => handleSelect(d.domain)}
                 className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all ${
                   input.trim().toLowerCase() === d.domain
-                    ? "border-amber-600 bg-amber-900/30 text-text-gold"
+                    ? "border-border-gold bg-accent/30 text-text-gold"
                     : "border-zinc-700 text-text-secondary hover:border-zinc-600 hover:text-text-primary"
                 }`}
               >
@@ -189,9 +187,7 @@ export function DomainPicker({
         </div>
       )}
 
-      {domainsLoading && (
-        <div className="text-xs text-text-muted">Loading your domains...</div>
-      )}
+      {domainsLoading && <div className="text-xs text-text-muted">Loading your domains...</div>}
 
       {/* Manual input */}
       <div className="flex gap-2">
@@ -207,8 +203,8 @@ export function DomainPicker({
                 : status.type === "invalid" || status.type === "not-owned"
                   ? "border-red-800 focus:border-red-700"
                   : status.type === "not-registered"
-                    ? "border-amber-800 focus:border-amber-700"
-                    : "border-zinc-800 focus:border-amber-600"
+                    ? "border-border-gold focus:border-border-gold"
+                    : "border-zinc-800 focus:border-border-gold"
             }`}
           />
           {/* Status icon */}
@@ -217,18 +213,10 @@ export function DomainPicker({
               {status.type === "checking" && (
                 <span className="text-text-muted animate-pulse">...</span>
               )}
-              {status.type === "owned" && (
-                <span className="text-green-400">&#10003;</span>
-              )}
-              {status.type === "not-owned" && (
-                <span className="text-red-400">&#10007;</span>
-              )}
-              {status.type === "not-registered" && (
-                <span className="text-amber-400">?</span>
-              )}
-              {status.type === "invalid" && (
-                <span className="text-red-400">!</span>
-              )}
+              {status.type === "owned" && <span className="text-green-400">&#10003;</span>}
+              {status.type === "not-owned" && <span className="text-red-400">&#10007;</span>}
+              {status.type === "not-registered" && <span className="text-text-gold">?</span>}
+              {status.type === "invalid" && <span className="text-red-400">!</span>}
             </span>
           )}
         </div>
@@ -236,7 +224,7 @@ export function DomainPicker({
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isUpdate ? "Update" : "Set Name"}
         </button>
@@ -251,7 +239,7 @@ export function DomainPicker({
               : status.type === "not-owned"
                 ? "text-red-400"
                 : status.type === "not-registered"
-                  ? "text-amber-400"
+                  ? "text-text-gold"
                   : status.type === "invalid"
                     ? "text-red-400"
                     : "text-text-muted"
@@ -266,7 +254,7 @@ export function DomainPicker({
                 href={`https://alldomains.id/search/${input.trim()}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline hover:text-amber-300"
+                className="underline hover:text-text-primary"
               >
                 Register it
               </a>

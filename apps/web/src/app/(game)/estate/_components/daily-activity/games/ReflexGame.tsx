@@ -40,15 +40,15 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 // Gold ramp only — no green/emerald rating.
 function reactionTag(ms: number): { label: string; tone: string } {
   if (ms <= 220) return { label: "⚡ Razor sharp", tone: "text-text-gold" };
-  if (ms <= 320) return { label: "Sharp", tone: "text-amber-300" };
-  if (ms <= 470) return { label: "Steady", tone: "text-amber-400" };
+  if (ms <= 320) return { label: "Sharp", tone: "text-gold-300" };
+  if (ms <= 470) return { label: "Steady", tone: "text-gold-400" };
   return { label: "Slow off the mark", tone: "text-zinc-400" };
 }
 
 function precisionTag(fraction: number): { label: string; tone: string } {
   if (fraction >= 0.95) return { label: "⚒ Optimal heat", tone: "text-text-gold" };
-  if (fraction >= 0.6) return { label: "Close", tone: "text-amber-300" };
-  if (fraction >= 0.25) return { label: "Off the mark", tone: "text-amber-400" };
+  if (fraction >= 0.6) return { label: "Close", tone: "text-gold-300" };
+  if (fraction >= 0.25) return { label: "Off the mark", tone: "text-gold-400" };
   return { label: "Furnace cold", tone: "text-zinc-400" };
 }
 
@@ -58,12 +58,7 @@ function precisionTag(fraction: number): { label: string; tone: string } {
  * stamps every instant on its own clock; this component only renders state and
  * fires `round-start` / `arm` / `tap` | `release`.
  */
-export function ReflexGame({
-  presentation,
-  submitting,
-  sendMove,
-  onComplete,
-}: ReflexGameProps) {
+export function ReflexGame({ presentation, submitting, sendMove, onComplete }: ReflexGameProps) {
   const { mode, rounds, instruction } = presentation;
 
   const [phase, setPhase] = useState<Phase>("intro");
@@ -225,9 +220,9 @@ export function ReflexGame({
               key={i}
               className={`h-2 w-2 rounded-full ${
                 i < completed
-                  ? "bg-amber-400"
+                  ? "bg-gold-400"
                   : i === completed
-                    ? "bg-amber-400/40 ring-1 ring-amber-400"
+                    ? "bg-gold-400/40 ring-1 ring-gold-400"
                     : "bg-border-default"
               }`}
             />
@@ -257,9 +252,7 @@ export function ReflexGame({
         />
       )}
 
-      <p className="text-center text-[11px] text-text-muted">
-        tap the panel or press Space
-      </p>
+      <p className="text-center text-[11px] text-text-muted">tap the panel or press Space</p>
     </div>
   );
 }
@@ -280,8 +273,7 @@ function ReactArena({
   onTap: () => void;
 }) {
   const tag = reactionTag(result?.reactionMs ?? 999);
-  const falseStart =
-    phase === "result" && result?.kind === "reaction" && !!result.falseStart;
+  const falseStart = phase === "result" && result?.kind === "reaction" && !!result.falseStart;
   return (
     <button
       type="button"
@@ -289,20 +281,18 @@ function ReactArena({
       onClick={onTap}
       className={`flex min-h-[220px] w-full select-none flex-col items-center justify-center rounded-2xl border-2 transition-transform duration-100 ${
         phase === "go"
-          ? "scale-[1.015] border-amber-300 bg-amber-500 text-amber-950"
+          ? "scale-[1.015] border-gold-300 bg-gold-500 text-gold-900"
           : falseStart
             ? "border-red-500/70 bg-red-950/30"
             : "border-border-default bg-surface-raised"
       }`}
     >
       {phase === "intro" && (
-        <span className="font-display text-xl font-bold text-text-muted">
-          Round {round}
-        </span>
+        <span className="font-display text-xl font-bold text-text-muted">Round {round}</span>
       )}
       {phase === "waiting" && (
         <>
-          <span className="animate-pulse font-display text-3xl font-bold tracking-[0.3em] text-amber-500/80">
+          <span className="animate-pulse font-display text-3xl font-bold tracking-[0.3em] text-text-gold">
             STEADY
           </span>
           <span className="mt-2 text-xs text-text-muted">
@@ -312,16 +302,15 @@ function ReactArena({
       )}
       {phase === "go" && (
         <>
-          <span className="font-display text-7xl font-black tracking-wider">
-            GO
-          </span>
+          <span className="font-display text-7xl font-black tracking-wider">GO</span>
           <span className="mt-1 font-mono text-base tabular-nums opacity-80">
             {Math.round(liveMs)} ms
           </span>
         </>
       )}
-      {phase === "result" && result?.kind === "reaction" && (
-        falseStart ? (
+      {phase === "result" &&
+        result?.kind === "reaction" &&
+        (falseStart ? (
           <>
             <span className="font-display text-5xl font-black tracking-wide text-red-400">
               TOO SOON
@@ -336,16 +325,11 @@ function ReactArena({
               {result.reactionMs}
               <span className="ml-1 text-2xl text-text-muted">ms</span>
             </span>
-            <span className={`mt-2 text-sm font-semibold ${tag.tone}`}>
-              {tag.label}
-            </span>
+            <span className={`mt-2 text-sm font-semibold ${tag.tone}`}>{tag.label}</span>
           </>
-        )
-      )}
+        ))}
       {phase === "done" && (
-        <span className="font-display text-xl font-bold text-text-muted">
-          Drill complete
-        </span>
+        <span className="font-display text-xl font-bold text-text-muted">Drill complete</span>
       )}
     </button>
   );
@@ -368,10 +352,8 @@ function PrecisionArena({
   disabled: boolean;
   onRelease: () => void;
 }) {
-  const displayPos =
-    phase === "result" ? (result?.markerPos ?? markerPos) : markerPos;
-  const inBand =
-    !!sweep && markerPos >= sweep.bandFrom && markerPos <= sweep.bandTo;
+  const displayPos = phase === "result" ? (result?.markerPos ?? markerPos) : markerPos;
+  const inBand = !!sweep && markerPos >= sweep.bandFrom && markerPos <= sweep.bandTo;
   const tag = precisionTag(result?.fraction ?? 0);
 
   return (
@@ -387,13 +369,13 @@ function PrecisionArena({
             <div className="relative h-20 w-full overflow-hidden rounded-xl bg-zinc-900">
               {/* heat fill up to the marker */}
               <div
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-orange-900 via-orange-600 to-amber-300"
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-orange-900 via-orange-600 to-gold-300"
                 style={{ width: `${displayPos * 100}%` }}
               />
               {/* optimal-heat band */}
               {sweep && (
                 <div
-                  className="absolute inset-y-0 border-x-2 border-amber-200/80 bg-amber-200/15"
+                  className="absolute inset-y-0 border-x-2 border-gold-200/80 bg-gold-200/15"
                   style={{
                     left: `${sweep.bandFrom * 100}%`,
                     width: `${(sweep.bandTo - sweep.bandFrom) * 100}%`,
@@ -407,9 +389,7 @@ function PrecisionArena({
               />
             </div>
             {phase === "result" && (
-              <p className={`mt-3 text-center text-sm font-semibold ${tag.tone}`}>
-                {tag.label}
-              </p>
+              <p className={`mt-3 text-center text-sm font-semibold ${tag.tone}`}>{tag.label}</p>
             )}
           </>
         )}
@@ -427,8 +407,8 @@ function PrecisionArena({
         className={`w-full select-none rounded-xl border-2 py-4 font-display text-lg font-bold tracking-wider transition-colors ${
           phase === "sweeping"
             ? inBand
-              ? "border-amber-300 bg-amber-500/90 text-amber-950"
-              : "border-amber-700 bg-amber-900/30 text-text-gold"
+              ? "border-gold-300 bg-gold-500/90 text-gold-900"
+              : "border-border-gold bg-accent/30 text-text-gold"
             : "border-border-default text-text-muted"
         }`}
       >

@@ -5,7 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatNumber(n: number, fmt: "compact" | "full" | "novi" | "percentage" = "compact"): string {
+export function formatNumber(
+  n: number,
+  fmt: "compact" | "full" | "novi" | "percentage" = "compact",
+): string {
   if (fmt === "compact") {
     if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "B";
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -50,4 +53,25 @@ export function bpsToPercent(bps: number): string {
 /** Convert basis points to multiplier string: 15000 → "1.5x" */
 export function bpsToMultiplier(bps: number): string {
   return (bps / 10000).toFixed(bps % 10000 === 0 ? 0 : 1) + "x";
+}
+
+/**
+ * True when n is a Fibonacci number — 5n²±4 is a perfect square. Mirrors the
+ * on-chain `is_fibonacci`; false past the safe-integer range where a float
+ * sqrt could misread.
+ */
+export function isFibonacci(n: number): boolean {
+  if (!Number.isInteger(n) || n < 0) return false;
+  if (n <= 1) return true;
+  const fiveNSq = 5 * n * n;
+  if (!Number.isSafeInteger(fiveNSq)) return false;
+  return isPerfectSquare(fiveNSq + 4) || isPerfectSquare(fiveNSq - 4);
+}
+
+function isPerfectSquare(n: number): boolean {
+  if (n < 0) return false;
+  let r = Math.floor(Math.sqrt(n));
+  while (r * r > n) r--;
+  while ((r + 1) * (r + 1) <= n) r++;
+  return r * r === n;
 }

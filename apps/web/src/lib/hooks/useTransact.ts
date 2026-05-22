@@ -5,7 +5,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import type { TransactionInstruction } from "@solana/web3.js";
 import { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useNotifications } from "@/lib/store/notifications";
+import { notify } from "@/lib/notify";
 import { useSettings } from "@/lib/store/settings";
 import { useAccountStore } from "@/lib/store/accounts";
 import { refetchAccounts } from "@/lib/store/refetch";
@@ -17,11 +17,14 @@ import type { NovusMundusEvent } from "novus-mundus-sdk";
 
 // Pending TX Registry (WebSocket-based confirmation)
 
-const pendingTxs = new Map<string, {
-  resolve: (logs: string[]) => void;
-  reject: (err: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
-}>();
+const pendingTxs = new Map<
+  string,
+  {
+    resolve: (logs: string[]) => void;
+    reject: (err: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }
+>();
 
 /**
  * Called from subscriptions.ts when a log payload arrives.
@@ -81,7 +84,6 @@ export function useTransact() {
   const client = useNovusMundusClient();
   const wallet = useWallet();
   const queryClient = useQueryClient();
-  const addNotification = useNotifications((s) => s.add);
 
   return useMutation({
     mutationFn: async (opts: TransactOptions) => {
@@ -99,15 +101,11 @@ export function useTransact() {
         tx = opts.versionedTx;
       } else if (opts.instructions) {
         const { priorityFee } = useSettings.getState();
-        tx = await client.buildVersionedTransaction(
-          opts.instructions,
-          wallet.publicKey,
-          {
-            computeUnits: 400_000,
-            computeUnitPrice: priorityFee,
-            lookupTables: opts.lookupTables,
-          },
-        );
+        tx = await client.buildVersionedTransaction(opts.instructions, wallet.publicKey, {
+          computeUnits: 400_000,
+          computeUnitPrice: priorityFee,
+          lookupTables: opts.lookupTables,
+        });
       } else {
         throw new Error("Must provide instructions or versionedTx");
       }
@@ -123,9 +121,7 @@ export function useTransact() {
       onPhase?.("sending");
 
       // Send raw — the versioned tx may already have other signatures
-      const signature = await client.connection.sendRawTransaction(
-        signed.serialize(),
-      );
+      const signature = await client.connection.sendRawTransaction(signed.serialize());
 
       // Try WebSocket-based confirmation first (zero extra RPC calls)
       const wsActive = useAccountStore.getState().subscriptionActive;
@@ -183,29 +179,29 @@ export function useTransact() {
         }));
         useEventStore.getState().addEvents(entries);
 
-        // Show rich toast for the most notable event
-        const firstFormatted = events
+        // Toast the tx's outcome — the LAST formatted event. A bundled tx
+        // emits several (e.g. instant research = start + speedup + complete);
+        // the final one is the end state ("Research Complete", not "Started").
+        const formatted = events
           .map((e) => formatEventMessage(e))
-          .find((msg) => msg !== null);
+          .filter((m): m is NonNullable<typeof m> => m !== null);
+        const notable = formatted.at(-1);
 
-        if (firstFormatted) {
-          addNotification({
-            type: "gold",
-            title: firstFormatted.title,
-            message: firstFormatted.message,
+        if (notable) {
+          notify.gold({
+            title: notable.title,
+            message: notable.message,
             signature,
           });
         } else {
-          addNotification({
-            type: "gold",
+          notify.gold({
             title: variables.successMessage || "Transaction confirmed",
             message: `Signature: ${signature.slice(0, 8)}...`,
             signature,
           });
         }
       } else {
-        addNotification({
-          type: "gold",
+        notify.gold({
           title: variables.successMessage || "Transaction confirmed",
           message: `Signature: ${signature.slice(0, 8)}...`,
           signature,
@@ -228,8 +224,7 @@ export function useTransact() {
     onError: (error) => {
       // Pre-send errors (TypeError, missing accounts, etc.) — show as-is
       if (error instanceof TypeError || error instanceof RangeError) {
-        addNotification({
-          type: "error",
+        notify.error({
           title: "Transaction failed",
           message: error.message,
         });
@@ -238,8 +233,7 @@ export function useTransact() {
 
       // On-chain / Solana errors — parse custom program codes
       const parsed = parseTransactionError(error);
-      addNotification({
-        type: "error",
+      notify.error({
         title: "Transaction failed",
         message: parsed.message,
       });

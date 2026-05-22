@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
@@ -36,8 +36,8 @@ import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
 import {
-  xpRequiredForLevel, levelProgressPercent,
-  getCurrentTimeOfDay, getTimeOfDayName, getActivityMultiplier,
+  xpRequiredForLevel,
+  levelProgressPercent,
   createClaimDailyRewardInstruction,
 } from "novus-mundus-sdk";
 
@@ -56,10 +56,6 @@ export default function DashboardPage() {
   const novi = useNoviBalance();
   const noviGen = useNoviGenerator();
   const showPanel = useRightPanelStore((s) => s.show);
-
-  const nowSec = Math.floor(Date.now() / 1000);
-  const tod = useMemo(() => getCurrentTimeOfDay(nowSec, 0), [nowSec]);
-  const todName = getTimeOfDayName(tod);
 
   const xpForNext = player ? xpRequiredForLevel(player.level + 1) : 0;
   const xpProgress = player ? levelProgressPercent(player.level, player.currentXp.toNumber()) : 0;
@@ -84,7 +80,11 @@ export default function DashboardPage() {
   const lootCount = lootData?.length ?? 0;
 
   return (
-    <LoadingSequence steps={getLoadingSteps("dashboard")} screen="dashboard" completedKeys={completedKeys}>
+    <LoadingSequence
+      steps={getLoadingSteps("dashboard")}
+      screen="dashboard"
+      completedKeys={completedKeys}
+    >
       <PageTransition>
         <div className="flex flex-col gap-3">
           {/* Header row */}
@@ -93,10 +93,12 @@ export default function DashboardPage() {
               STATUS
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted sm:gap-3">
-              <span>{todName}</span>
               {player && (
                 <div className="flex flex-wrap gap-2">
-                  <Link href="/estate?tab=market" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
+                  <Link
+                    href="/estate?building=vault"
+                    className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold"
+                  >
                     Collect
                   </Link>
                   {lootCount > 0 && (
@@ -108,10 +110,16 @@ export default function DashboardPage() {
                       Claim Loot ({lootCount})
                     </button>
                   )}
-                  <Link href="/shop" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
+                  <Link
+                    href="/shop"
+                    className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold"
+                  >
                     Shop
                   </Link>
-                  <Link href="/shop?tab=subscribe" className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold">
+                  <Link
+                    href="/shop?tab=subscribe"
+                    className="accent-border rounded bg-surface-raised px-2.5 py-1 text-xs font-medium text-text-gold"
+                  >
                     Subscribe
                   </Link>
                 </div>
@@ -151,7 +159,10 @@ export default function DashboardPage() {
                       className="flex items-center justify-between text-sm text-text-gold hover:opacity-80 sm:gap-2"
                     >
                       <span>{lootCount} unclaimed loot</span>
-                      <span className="inline-flex items-center gap-0.5">Claim<ChevronRight className="h-3.5 w-3.5" /></span>
+                      <span className="inline-flex items-center gap-0.5">
+                        Claim
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </span>
                     </button>
                   )}
                 </div>
@@ -159,14 +170,12 @@ export default function DashboardPage() {
 
               {/* Main grid: player stuff (left 2/3) + NOVI stuff (right 1/3) */}
               <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                {/* Left column. On mobile the wrapper is `display:contents` so
-                    its cards join the page grid directly and `order-*` can
-                    interleave them with the right column; lg restores the
-                    two-column layout (`lg:order-none` clears the mobile order). */}
+                {/* `display:contents` on mobile so these cards join the page grid and
+                    `order-*` can interleave them with the right column; lg restores
+                    the two-column layout. */}
                 <div className="contents lg:flex lg:flex-col lg:gap-3 lg:col-span-2">
-                  {/* Vitals — Level (XP) and Stamina rings. Identity
-                      (name/city/tier) omitted; the left panel and status bar
-                      already carry it. */}
+                  {/* Vitals — Level/Stamina/NOVI rings. Identity omitted; the left
+                      panel and status bar already carry it. */}
                   <div className="card accent-border order-3 lg:order-none">
                     <div className="flex flex-wrap items-center justify-around gap-3">
                       <div className="flex flex-col items-center gap-2">
@@ -181,8 +190,8 @@ export default function DashboardPage() {
                         <div className="text-center text-[11px] text-text-muted">
                           <span className="font-mono tabular-nums text-text-secondary">
                             {formatNumber(player.currentXp.toNumber(), "compact")}
-                          </span>
-                          {" "}/ {formatNumber(xpForNext, "compact")} XP
+                          </span>{" "}
+                          / {formatNumber(xpForNext, "compact")} XP
                         </div>
                       </div>
                       <div className="flex flex-col items-center gap-2">
@@ -198,7 +207,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex flex-col items-center gap-2">
                         <ProgressRing percent={noviGen.fillPct} size={96}>
-                          <span className="font-mono text-xl font-bold leading-none tabular-nums text-text-gold">
+                          <span className="font-mono text-lg font-bold leading-none tabular-nums text-text-gold">
                             {formatNumber(noviGen.displayNovi, "compact")}
                           </span>
                           <span className="mt-0.5 text-[9px] uppercase tracking-wider text-text-muted">
@@ -214,7 +223,9 @@ export default function DashboardPage() {
 
                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 order-4 lg:order-none">
                     <div className="card">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Treasury</h3>
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                        Treasury
+                      </h3>
                       <div className="space-y-1.5">
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">NOVI</span>
@@ -228,15 +239,14 @@ export default function DashboardPage() {
                             the game-state accounting (player.lockedNovi).
                             They should match; when they don't, the spendable
                             number is the wallet's, not the accounting's. */}
-                        {!novi.loading &&
-                          player.lockedNovi.toNumber() !== novi.raw && (
-                            <div className="flex justify-between text-[11px] text-text-muted">
-                              <span>Vault accounting</span>
-                              <span className="font-mono tabular-nums">
-                                ◆ {player.lockedNovi.toNumber().toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                        {!novi.loading && player.lockedNovi.toNumber() !== novi.raw && (
+                          <div className="flex justify-between text-[11px] text-text-muted">
+                            <span>Vault accounting</span>
+                            <span className="font-mono tabular-nums">
+                              ◆ {player.lockedNovi.toNumber().toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Cash</span>
                           <span className="flex items-center gap-1">
@@ -248,7 +258,11 @@ export default function DashboardPage() {
                           <span className="text-text-secondary">Vault</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-cash" size={14} />
-                            <GoldNumber value={player.cashInVault.toNumber()} format="full" glow={false} />
+                            <GoldNumber
+                              value={player.cashInVault.toNumber()}
+                              format="full"
+                              glow={false}
+                            />
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
@@ -273,7 +287,9 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="card">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Power</h3>
+                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                        Power
+                      </h3>
                       <div className="mb-3 text-center">
                         <GoldNumber value={power.total} size="xl" />
                         <div className="text-[10px] text-text-muted">Total Combat Power</div>
@@ -297,32 +313,58 @@ export default function DashboardPage() {
                     <ActivityFeed />
                   </div>
 
-                  {geData?.account && (() => {
-                    const ge = geData.account;
-                    const gp = ge.gameplayConfig;
-                    const tm = ge.themeConfig.themeMultipliers;
-                    return (
-                      <div className="order-7 lg:order-none">
-                      <GameInfoPanel>
-                        <InfoGrid items={[
-                          { label: "Kingdom", value: ge.kingdomName, highlight: true },
-                          { label: "Theme", value: ge.kingdomTheme.toString() },
-                          { label: "Total Players", value: ge.totalPlayers.toNumber().toLocaleString() },
-                          { label: "Protection", value: formatTime(gp.newPlayerProtectionDuration.toNumber(), "compact") },
-                          { label: "Daily Cash", value: gp.dailyCashBase.toNumber().toLocaleString() },
-                          { label: "Daily XP", value: gp.dailyXpBase.toNumber().toLocaleString() },
-                          { label: "Attack Mult", value: bpsToMultiplier(tm.attackMultiplier) },
-                          { label: "Defense Mult", value: bpsToMultiplier(tm.defenseMultiplier) },
-                          { label: "Collection Mult", value: bpsToMultiplier(tm.collectionMultiplier) },
-                        ]} />
-                      </GameInfoPanel>
-                      </div>
-                    );
-                  })()}
+                  {geData?.account &&
+                    (() => {
+                      const ge = geData.account;
+                      const gp = ge.gameplayConfig;
+                      const tm = ge.themeConfig.themeMultipliers;
+                      return (
+                        <div className="order-7 lg:order-none">
+                          <GameInfoPanel>
+                            <InfoGrid
+                              items={[
+                                { label: "Kingdom", value: ge.kingdomName, highlight: true },
+                                { label: "Theme", value: ge.kingdomTheme.toString() },
+                                {
+                                  label: "Total Players",
+                                  value: ge.totalPlayers.toNumber().toLocaleString(),
+                                },
+                                {
+                                  label: "Protection",
+                                  value: formatTime(
+                                    gp.newPlayerProtectionDuration.toNumber(),
+                                    "compact",
+                                  ),
+                                },
+                                {
+                                  label: "Daily Cash",
+                                  value: gp.dailyCashBase.toNumber().toLocaleString(),
+                                },
+                                {
+                                  label: "Daily XP",
+                                  value: gp.dailyXpBase.toNumber().toLocaleString(),
+                                },
+                                {
+                                  label: "Attack Mult",
+                                  value: bpsToMultiplier(tm.attackMultiplier),
+                                },
+                                {
+                                  label: "Defense Mult",
+                                  value: bpsToMultiplier(tm.defenseMultiplier),
+                                },
+                                {
+                                  label: "Collection Mult",
+                                  value: bpsToMultiplier(tm.collectionMultiplier),
+                                },
+                              ]}
+                            />
+                          </GameInfoPanel>
+                        </div>
+                      );
+                    })()}
                 </div>
 
-                {/* Right column — `display:contents` on mobile (see left
-                    column note) so these interleave with the left cards. */}
+                {/* `display:contents` on mobile (see left column) so these interleave. */}
                 <div className="contents lg:flex lg:flex-col lg:gap-3">
                   <div className="order-2 lg:order-none">
                     <NoviGenerator />
@@ -344,11 +386,7 @@ export default function DashboardPage() {
 }
 
 // Daily Reward
-function DailyRewardCard({
-  daily,
-}: {
-  daily: ReturnType<typeof useDailyRewards>;
-}) {
+function DailyRewardCard({ daily }: { daily: ReturnType<typeof useDailyRewards> }) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();

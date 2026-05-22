@@ -26,10 +26,7 @@ export function ViewToggle({
     <div
       role="group"
       aria-label="View mode"
-      className={cn(
-        "inline-flex shrink-0 gap-0.5 rounded-lg bg-surface p-0.5",
-        className,
-      )}
+      className={cn("inline-flex shrink-0 gap-0.5 rounded-lg bg-surface p-0.5", className)}
     >
       {OPTIONS.map(({ mode: m, icon: Icon, label }) => {
         const active = mode === m;

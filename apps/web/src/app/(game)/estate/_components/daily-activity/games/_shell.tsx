@@ -45,11 +45,7 @@ export function GameFooter({
   onSubmit,
 }: GameFooterProps) {
   return (
-    <div
-      className={`flex items-center gap-3 pt-1 ${
-        progress ? "justify-between" : "justify-end"
-      }`}
-    >
+    <div className={`flex items-center gap-3 pt-1 ${progress ? "justify-between" : "justify-end"}`}>
       {progress && (
         <span className="text-xs tabular-nums text-text-muted">
           {progress.done} / {progress.total} {progress.noun}
@@ -59,7 +55,7 @@ export function GameFooter({
         type="button"
         disabled={disabled || submitting}
         onClick={onSubmit}
-        className="rounded-lg border border-border-gold bg-amber-900/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-lg border border-border-gold bg-accent/20 px-6 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {submitting ? "Submitting…" : submitLabel}
       </button>
