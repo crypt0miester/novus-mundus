@@ -439,6 +439,13 @@ async function completeExistingBuilding(
 }
 
 // Step 3: Fund NOVI
+//
+// After the mint_for_prize internal/external split, only Prize + Event
+// credit `user.reserved_novi` directly. External purposes (Development /
+// Marketing / Partnership / Treasury / Liquidity) mint to the recipient's
+// wallet ATA. To preserve the "fund into locked" semantics this helper
+// needs, external mints are bridged back through deposit_novi (paying
+// the 5% fee) before the reserved_to_locked conversion.
 
 async function fundNovi(
   ctx: CLIContext,
@@ -455,6 +462,25 @@ async function fundNovi(
     { purpose: MintPurpose.Prize,       cap: 50_000_000 },
   ];
 
+  /* Only Prize + Event hit the player's reserved ATA directly; every
+   * other purpose targets the wallet ATA. */
+  const isExternal = (p: MintPurpose) =>
+    p !== MintPurpose.Prize && p !== MintPurpose.Event;
+
+  /* External mints land in the wallet ATA, which must exist before the
+   * SPL Token MintTo CPI fires. Idempotent so re-funding is safe. */
+  if (purposes.some((p) => isExternal(p.purpose))) {
+    const [noviMint] = deriveNoviMintPda();
+    const walletAta = getAssociatedTokenAddressSync(noviMint, keypair.publicKey);
+    const ataPrep = createAssociatedTokenAccountIdempotentInstruction(
+      ctx.daoAuthority.publicKey,
+      walletAta,
+      keypair.publicKey,
+      noviMint,
+    );
+    await sendWithRetry(ctx, ataPrep, [ctx.daoAuthority]);
+  }
+
   let remaining = amount;
   for (const { purpose, cap } of purposes) {
     if (remaining <= 0) break;
@@ -462,7 +488,7 @@ async function fundNovi(
     while (allocated < cap && remaining > 0) {
       const thisAmount = Math.min(MAX_PER_CALL, cap - allocated, remaining);
 
-      // Mint to reserved_novi (DAO signs)
+      // Mint (DAO signs). Internal → reserved ATA; external → wallet ATA.
       const mintIx = createMintForPrizeInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
@@ -473,10 +499,25 @@ async function fundNovi(
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
+      let toConvert = thisAmount;
+      if (isExternal(purpose)) {
+        /* Bridge wallet → reserved via deposit_novi. The 5% fee is
+         * burned; only the credited amount lands in reserved, so
+         * convert exactly that much (else reserved_to_locked errors
+         * with insufficient reserved). */
+        const fee = Math.floor((thisAmount * DEPOSIT_FEE_BPS) / 10_000);
+        toConvert = thisAmount - fee;
+        const depositIx = createDepositNoviInstruction(
+          { owner: keypair.publicKey },
+          { amount: new BN(thisAmount) },
+        );
+        await sendWithRetry(ctx, depositIx, [keypair]);
+      }
+
       // Convert reserved -> locked (player signs)
       const convertIx = createReservedToLockedInstruction(
         { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(thisAmount) }
+        { amount: new BN(toConvert) }
       );
       await sendWithRetry(ctx, convertIx, [keypair]);
 

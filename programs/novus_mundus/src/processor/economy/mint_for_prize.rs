@@ -123,10 +123,23 @@ pub fn process(
     let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
 
     // 4. Load Recipient User Account (internal flows only; external skips it).
+    //
+    // Internal mints write to UserAccount fields via a raw pointer cast after
+    // the SPL Token MintTo CPI. Without a discriminator + PDA check, a
+    // caller who passes a different program-owned account (PlayerAccount,
+    // EstateAccount, …) by typo or malice would have UserAccount field
+    // offsets — `reserved_novi`, `total_reserved_earned`,
+    // `reserved_novi_earned_at` — written on top of unrelated bytes,
+    // corrupting that account. `load_checked_by_key` validates the
+    // discriminator AND that the account address matches the canonical
+    // PDA derived from the stored bump/owner. The Loaded borrow drops at
+    // the end of the scoped expression, freeing the underlying account
+    // data for the post-CPI raw-pointer write.
 
     let user_data: Option<&mut UserAccount> = if is_external {
         None
     } else {
+        UserAccount::load_checked_by_key(recipient_user, program_id)?;
         Some(unsafe { &mut *(recipient_user.data_ptr() as *mut UserAccount) })
     };
 

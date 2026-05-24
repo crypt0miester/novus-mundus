@@ -26,8 +26,11 @@ import {
   derivePlayerPda,
   deriveCityPda,
   deriveLocationPda,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressSync,
   deserializePlayer,
 } from '../../../src/index';
+import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
 const GRID_PRECISION = 10000;
 
@@ -78,7 +81,15 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  // Fund using DAO mint + convert
+  /* Fund as DAO ops. After mint_for_prize's internal/external split:
+   *   - Prize + Event mint to the player's UserAccount reserved ATA
+   *     (player must later call reserved_to_locked themselves to spend).
+   *   - All other purposes mint directly to the player's wallet ATA
+   *     (player can deposit_novi back to reserved or trade on DEX).
+   *
+   * We don't have the player's keypair, so we can't drive deposit_novi
+   * here — the DAO can only deliver NOVI to one of those two
+   * destinations and the player follows up. */
   const MAX_PER_CALL = 100_000_000;
   const purposes: { purpose: MintPurpose; cap: number }[] = [
     { purpose: MintPurpose.Development, cap: 150_000_000 },
@@ -89,7 +100,28 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     { purpose: MintPurpose.Prize,       cap: 50_000_000 },
   ];
 
+  const isExternal = (p: MintPurpose) =>
+    p !== MintPurpose.Prize && p !== MintPurpose.Event;
+
+  /* External mints land in the recipient's wallet ATA. Pre-create it
+   * idempotently with DAO as payer so the MintTo CPI doesn't reject on
+   * uninitialized destination. Only emitted if any external purpose
+   * will run. */
+  if (purposes.some((p) => isExternal(p.purpose))) {
+    const [noviMint] = deriveNoviMintPda();
+    const walletAta = getAssociatedTokenAddressSync(noviMint, recipientOwner);
+    const ataPrep = createAssociatedTokenAccountIdempotentInstruction(
+      ctx.daoAuthority.publicKey,
+      walletAta,
+      recipientOwner,
+      noviMint,
+    );
+    await sendWithRetry(ctx, ataPrep, [ctx.daoAuthority]);
+  }
+
   let remaining = amount;
+  let intoReserved = 0;
+  let intoWallet = 0;
   for (const { purpose, cap } of purposes) {
     if (remaining <= 0) break;
     let allocated = 0;
@@ -106,16 +138,21 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
-      // Convert reserved -> locked requires player signature
-      // For fund command, we only mint to reserved (DAO-side operation)
-      // The player must convert separately unless we have their keypair
+      if (isExternal(purpose)) intoWallet += thisAmount;
+      else intoReserved += thisAmount;
+
       allocated += thisAmount;
       remaining -= thisAmount;
     }
   }
 
-  log.info(`  Minted ${amount.toLocaleString()} NOVI to reserved for ${recipientOwner.toBase58()}`);
-  log.info('  Player must call reservedToLocked to convert to usable NOVI.');
+  log.info(`  Funded ${amount.toLocaleString()} NOVI for ${recipientOwner.toBase58()}`);
+  if (intoReserved > 0) {
+    log.info(`    ${intoReserved.toLocaleString()} → reserved (player must reservedToLocked to spend)`);
+  }
+  if (intoWallet > 0) {
+    log.info(`    ${intoWallet.toLocaleString()} → wallet ATA (player can depositNovi or trade)`);
+  }
 }
 
 // travel
