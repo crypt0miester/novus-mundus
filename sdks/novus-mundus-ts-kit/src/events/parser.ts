@@ -277,6 +277,13 @@ EVENT_CODECS.set('EncounterDefeated', getStructCodec([
   ['killingBlowName', fixedString(48).codec],
   ['lootCash', u64.codec],
   ['lootNovi', u64.codec],
+  ['lootProduce', u64.codec],
+  ['lootVehicles', u64.codec],
+  ['lootMelee', u64.codec],
+  ['lootRanged', u64.codec],
+  ['lootSiege', u64.codec],
+  ['lootFragments', u64.codec],
+  ['lootGems', u64.codec],
   ['timestamp', i64.codec],
 ]));
 

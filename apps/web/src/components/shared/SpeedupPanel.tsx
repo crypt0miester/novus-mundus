@@ -11,7 +11,7 @@ interface SpeedupTier {
   description: string;
   gemCost?: number;
   /** Hold-to-charge cap — most speedup instructions one tx can hold for this
-   *  tier (timer-collapse ∧ gem affordability). Omitted → plain one-shot. */
+   *  tier (timer-collapse ∧ gem affordability). Omitted to plain one-shot. */
   maxCount?: number;
 }
 

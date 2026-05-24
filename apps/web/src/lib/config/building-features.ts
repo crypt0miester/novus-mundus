@@ -34,7 +34,7 @@ export interface BuildingFeatureConfig {
   /** Whether clicking opens a center feature view (complex features) */
   centerView?: boolean;
   /** Route to navigate to when clicking an active building — used for features
-   *  that live on another page (e.g. Catacombs → the dungeon). Takes precedence
+   *  that live on another page (e.g. Catacombs to the dungeon). Takes precedence
    *  over the panel / center view. */
   route?: string;
   /** Hint text shown on the card for active buildings */
@@ -225,7 +225,7 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
 /** Map from building ID to feature config */
 export const BUILDING_FEATURE_MAP = new Map(BUILDING_FEATURES.map((b) => [b.id, b]));
 
-/** URL-safe slug for a building — its lowercased name (e.g. 14 → "mine"). */
+/** URL-safe slug for a building — its lowercased name (e.g. 14 to "mine"). */
 export function buildingSlug(id: number): string {
   return BUILDING_FEATURE_MAP.get(id)?.name.toLowerCase() ?? String(id);
 }

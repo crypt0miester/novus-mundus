@@ -1,9 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface InfoGridItem {
-  label: string;
+  label: ReactNode;
   value: string | number;
   suffix?: string;
   highlight?: boolean;
@@ -25,8 +26,8 @@ export function InfoGrid({ items, columns = 4, className }: InfoGridProps) {
 
   return (
     <div className={cn("grid gap-3", colClass, className)}>
-      {items.map((item) => (
-        <div key={item.label} className="rounded-lg bg-surface/60 px-3 py-2">
+      {items.map((item, i) => (
+        <div key={i} className="rounded-lg bg-surface/60 px-3 py-2">
           <div className="text-[10px] uppercase tracking-wider text-zinc-500">
             {item.label}
           </div>

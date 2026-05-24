@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   deriveLocationPda,
@@ -537,7 +538,7 @@ export function MapTab() {
                   className={styles.seal}
                 >
                   <span>Walk the road</span>
-                  <span>›</span>
+                  <span><ChevronRight className="h-3.5 w-3.5" /></span>
                 </TxButton>
               </div>
 
@@ -624,7 +625,7 @@ export function MapTab() {
             {arrived ? (
               <TxButton onClick={completeTravel} className={styles.seal}>
                 <span>Step through the gate</span>
-                <span>›</span>
+                <span><ChevronRight className="h-3.5 w-3.5" /></span>
               </TxButton>
             ) : (
               <TxButton onClick={cancelTravel} variant="danger" className="w-full text-xs">

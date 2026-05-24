@@ -30,7 +30,7 @@ interface RunViewProps {
   playerMaxStamina: number;
 }
 
-/** BN | number → number, defensively. */
+/** BN | number to number, defensively. */
 function n(v: { toNumber?: () => number } | number | null | undefined): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;

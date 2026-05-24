@@ -8,7 +8,7 @@ export interface NotifyOptions {
   message?: string;
   /** Tx signature — renders `message` as a link to the user's chosen explorer. */
   signature?: string;
-  /** Existing toast id to update in place (loading → result morph). */
+  /** Existing toast id to update in place (loading to result morph). */
   id?: string | number;
   /** ms; 0 keeps it sticky. Defaults: 4s, or sticky while loading. */
   duration?: number;

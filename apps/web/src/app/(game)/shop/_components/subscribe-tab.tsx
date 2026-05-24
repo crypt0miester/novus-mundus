@@ -13,8 +13,9 @@ import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { formatNumber } from "@/lib/utils";
 import {
   createPurchaseSubscriptionInstruction,
-  getEffectiveTier,
+  deciToNovi,
   formatLamportsAsSol,
+  getEffectiveTier,
 } from "novus-mundus-sdk";
 import {
   Database,
@@ -32,7 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-// Charter accent ramp — a metal ladder (iron → bronze → silver → gold) that
+// Charter accent ramp — a metal ladder (iron to bronze to silver to gold) that
 // matches the Free/Bronze/Silver/Gold names the rest of the app uses.
 const TIER_THEME = [
   { accent: "#71717a", bright: "#a1a1aa", glow: "rgba(113,113,122,0)" },
@@ -47,7 +48,7 @@ const ANCHOR_TIER = 2;
 
 const theme = (i: number) => TIER_THEME[i] ?? TIER_THEME[TIER_THEME.length - 1];
 
-/** BN | number | undefined → number */
+/** BN | number | undefined to number */
 function num(v: unknown): number {
   if (v && typeof (v as { toNumber?: () => number }).toNumber === "function") {
     return (v as { toNumber: () => number }).toNumber();
@@ -55,7 +56,7 @@ function num(v: unknown): number {
   return Number(v ?? 0);
 }
 
-/** 1 → "1×", 2.5 → "2.5×" */
+/** 1 to "1×", 2.5 to "2.5×" */
 function asMultiplier(r: number): string {
   return Number.isInteger(r) ? `${r}×` : `${r.toFixed(1)}×`;
 }
@@ -112,9 +113,15 @@ export function SubscribeTab() {
   // SOL/USD rate (USD cents per 1 SOL) — drives the live charter price.
   const usdPriceCents = num(geData?.account?.usdPriceCents);
 
-  // The featured tier follows the player up the ladder: always their realistic
-  // next purchase (current + 1), floored at the anchor tier for new players.
-  const recommendedTier = Math.min(tiers.length - 1, Math.max(effectiveTier + 1, ANCHOR_TIER));
+  // No charter = unsubscribed (chain falls back to tier 0 config as the
+  // baseline, but the player has bought nothing). Distinct from Rookie active.
+  const noCharter = !sub.active;
+
+  // Featured tier: decoy-anchor (Epic) for unsubscribed players, otherwise
+  // their realistic next purchase (current + 1).
+  const recommendedTier = noCharter
+    ? Math.min(tiers.length - 1, ANCHOR_TIER)
+    : Math.min(tiers.length - 1, effectiveTier + 1);
 
   const tierName = (i: number) => tiers[i]?.name ?? `Tier ${i}`;
 
@@ -143,10 +150,13 @@ export function SubscribeTab() {
   };
 
   // ─── Current-charter framing ───────────────────────────────────────────
-  const curTheme = theme(effectiveTier);
+  const curTheme = noCharter ? theme(0) : theme(effectiveTier);
   const cur = tiers[effectiveTier];
-  const curGen = num(cur?.generationMultiplier);
-  const baseGen = num(baseTier?.generationMultiplier);
+  // NOVI-denominated tier fields (generationMultiplier, maxLockedNovi, novi
+  // grant) are stored on-chain as raw deci-NOVI (mint decimals=1). Convert
+  // once here so every downstream display reads as real NOVI.
+  const curGen = deciToNovi(num(cur?.generationMultiplier));
+  const baseGen = deciToNovi(num(baseTier?.generationMultiplier));
   const curGenRatio = baseGen > 0 ? curGen / baseGen : null;
   const daysLeft = sub.active && sub.expiresAt > 0 ? (sub.expiresAt - nowSec) / 86_400 : null;
   const expiringSoon = daysLeft != null && daysLeft < 3;
@@ -177,7 +187,7 @@ export function SubscribeTab() {
                 Current Charter
               </div>
               <div className="text-lg font-bold leading-tight" style={{ color: curTheme.bright }}>
-                {tierName(effectiveTier)}
+                {noCharter ? "No Charter" : tierName(effectiveTier)}
               </div>
             </div>
           </div>
@@ -196,8 +206,9 @@ export function SubscribeTab() {
           )}
         </div>
 
-        {/* Downgrade preview — loss aversion */}
-        {effectiveTier > 0 && curGenRatio != null && (
+        {/* Downgrade preview — loss aversion. Only meaningful above tier 0,
+            since on-chain tier 0 (Rookie) is the fallback config for everyone. */}
+        {sub.active && effectiveTier > 0 && curGenRatio != null && (
           <div className="mt-3 flex items-start gap-2 rounded-lg bg-surface/60 px-3 py-2 text-[11px] text-text-muted">
             <Clock className="mt-px h-3.5 w-3.5 shrink-0 text-text-gold" />
             <span>
@@ -208,23 +219,29 @@ export function SubscribeTab() {
               </span>{" "}
               and your vault shrinks to{" "}
               <span className="font-semibold text-text-secondary">
-                {formatNumber(num(baseTier?.maxLockedNovi))} NOVI
+                {formatNumber(deciToNovi(num(baseTier?.maxLockedNovi)))} NOVI
               </span>
               .
             </span>
           </div>
         )}
-        {effectiveTier === 0 && (
+        {sub.active && effectiveTier === 0 && (
           <p className="mt-3 text-[11px] text-text-muted">
-            You hold the free charter. Every paid charter below multiplies your NOVI generator and
-            pays a signing bounty up front.
+            Your Rookie charter is active — renewing keeps the signing bounty flowing. Stepping up
+            to Expert and above multiplies your NOVI generator on top.
+          </p>
+        )}
+        {noCharter && (
+          <p className="mt-3 text-[11px] text-text-muted">
+            You hold no charter. Each charter below pays a signing bounty up front, and the higher
+            ones multiply your NOVI generator on top.
           </p>
         )}
       </div>
 
       {/* ─── Tier ladder (paid charters) ─── */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {tiers.slice(1).map((t) => {
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {tiers.map((t) => {
           const idx = t.tierIndex ?? tiers.indexOf(t);
           const th = theme(idx);
           const isCurrent = sub.active && idx === effectiveTier;
@@ -237,17 +254,16 @@ export function SubscribeTab() {
           const costUsdCents = num(t.costInUsdCents);
           const costLamports = solCostLamports(costUsdCents, usdPriceCents);
           const priceKnown = costLamports > 0;
-          const curTierCost =
-            effectiveTier > 0
-              ? solCostLamports(num(tiers[effectiveTier]?.costInUsdCents), usdPriceCents)
-              : 0;
-          const upgradeDelta = idx > effectiveTier ? costLamports - curTierCost : 0;
+          const curTierCost = sub.active
+            ? solCostLamports(num(tiers[effectiveTier]?.costInUsdCents), usdPriceCents)
+            : 0;
+          const upgradeDelta = sub.active && idx > effectiveTier ? costLamports - curTierCost : 0;
 
           // Real perks, derived from on-chain config
-          const gen = num(t.generationMultiplier);
+          const gen = deciToNovi(num(t.generationMultiplier));
           const genRatio = baseGen > 0 ? gen / baseGen : null;
           const perHour = gen * 12;
-          const cap = num(t.maxLockedNovi);
+          const cap = deciToNovi(num(t.maxLockedNovi));
           const dailyCap = num(npc?.noviSubDailyCap?.[idx]) / 10;
           const buyBonusBps = npc?.noviSubBonusBps?.[idx] ?? 0;
           const dr = num(t.dailyRewardMultiplier);
@@ -257,18 +273,22 @@ export function SubscribeTab() {
           const rally = t.rallyCaps?.maxRallySize ?? 0;
           const travelBps = t.travelSpeedBonusBps ?? 0;
 
-          // Signing grant summary
-          const grantNovi = num(t.novi);
+          // Signing grant summary. Drays (the chain `vehicles` field) are listed
+          // separately from weapons/armor — they're a transport resource in the
+          // lore, not gear you swing in a fight.
+          const grantNovi = deciToNovi(num(t.novi));
           const grantCash = num(t.cash);
           const troops =
             num(t.du1) + num(t.du2) + num(t.du3) + num(t.op1) + num(t.op2) + num(t.op3);
           const gear =
             num(t.meleeWeapons) + num(t.rangedWeapons) + num(t.siegeWeapons) + num(t.armor);
+          const grantDrays = num(t.vehicles);
           const grantParts: string[] = [];
           if (grantNovi) grantParts.push(`${formatNumber(grantNovi)} NOVI`);
           if (grantCash) grantParts.push(`${formatNumber(grantCash)} cash`);
           if (troops) grantParts.push(`${formatNumber(troops)} troops`);
           if (gear) grantParts.push(`${formatNumber(gear)} gear`);
+          if (grantDrays) grantParts.push(`${formatNumber(grantDrays)} drays`);
 
           return (
             <div
@@ -422,7 +442,7 @@ export function SubscribeTab() {
                     >
                       Move to this charter
                     </TxButton>
-                    {effectiveTier > 0 && upgradeDelta > 0 && (
+                    {sub.active && upgradeDelta > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
                         +{formatLamportsAsSol(upgradeDelta)} over your current charter
                       </p>

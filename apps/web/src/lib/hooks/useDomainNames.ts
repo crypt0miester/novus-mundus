@@ -6,7 +6,7 @@ import type { PublicKey } from "@solana/web3.js";
 import { useDomainStore } from "@/lib/store/domains";
 
 /**
- * Batch-resolve wallets → domain names.
+ * Batch-resolve wallets to domain names.
  * Uses getMultipleAccountsInfo via @onsol/tldparser under the hood.
  * Reads from zustand domain cache; batch-fetches any missing keys.
  *

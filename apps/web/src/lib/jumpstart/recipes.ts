@@ -57,7 +57,7 @@ export interface JumpRecipe {
 /**
  * Lamport price of each shop item the jumps buy — mirrors `cli/data/shop-items.ts`.
  * Held as integer lamports (not SOL floats) so a summed tier price stays exact.
- *  - 5: Small NOVI Pack  — 0.05 SOL → 10,000 NOVI
+ *  - 5: Small NOVI Pack  — 0.05 SOL to 10,000 NOVI
  *  - 7: Gem Pack (10,000) — 0.8 SOL
  *  - 8: Gem Pack (100,000) — 7 SOL
  */
@@ -83,7 +83,7 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
       { itemId: 7, quantity: 1 },
       { itemId: 5, quantity: 4 },
     ],
-    buildings: [BuildingType.Barracks],
+    buildings: [BuildingType.Market, BuildingType.Barracks],
     hires: [{ unitType: 0, novi: 50_000 }],
   },
   established: {

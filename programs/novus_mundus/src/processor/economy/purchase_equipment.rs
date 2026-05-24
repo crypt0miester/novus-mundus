@@ -55,8 +55,6 @@ impl TryFrom<u8> for EquipmentType {
     }
 }
 
-// Removed get_equipment_cost() - now using GameEngine.economic_config.{weapon_cost,produce_cost,vehicle_cost} with DAO multiplier
-
 /// Purchase equipment using locked Novi or cash
 ///
 /// # Flow

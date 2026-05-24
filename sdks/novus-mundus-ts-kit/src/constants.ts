@@ -66,8 +66,16 @@ export const TIER_LEGENDARY = 3;
 export const MAX_TEAM_MEMBERS_BY_TIER = [5, 10, 25, 50] as const;
 
 // Starter Resources (New Player Onboarding)
+//
+// As of the EconomicConfig refactor, the runtime value is per-kingdom and
+// lives in `GameEngine.economic_config.starter_locked_novi`. This constant
+// is only the *seeded default* used by `init_game_engine` (matches
+// `programs/.../constants.rs:STARTER_LOCKED_NOVI`). Read from chain for the
+// actual value in use.
+export const STARTER_LOCKED_NOVI_DEFAULT = 1_000_000; // raw, = 100K display NOVI
 
-export const STARTER_LOCKED_NOVI = 100 * 10; // 100 NOVI (1 decimal)
+/** @deprecated Read `GameEngine.economic_config.starter_locked_novi` instead. */
+export const STARTER_LOCKED_NOVI = STARTER_LOCKED_NOVI_DEFAULT;
 
 // Economic Constants
 

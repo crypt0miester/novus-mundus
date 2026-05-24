@@ -52,7 +52,7 @@ interface DailyActivityRequest {
 }
 
 /**
- * Citadel stance → a representative score inside that stance's on-chain bucket
+ * Citadel stance to a representative score inside that stance's on-chain bucket
  * (`<34` Defensive, `<67` Balanced, else Aggressive). The midpoints make all
  * three stances reachable; the flat score roll can only land on Balanced or
  * Aggressive.

@@ -22,10 +22,12 @@ import { buildingFraming } from "@/lib/narrative";
 import { FeatureLayout } from "./feature-layout";
 import {
   createCollectResourcesInstruction,
-  createVaultTransferInstruction,
   createTransferCashInstruction,
+  createVaultTransferInstruction,
+  deciToNovi,
   derivePlayerPda,
   isNullPubkey,
+  noviToDeci,
 } from "novus-mundus-sdk";
 
 // Cash collection is collection type 0 on-chain.
@@ -77,7 +79,7 @@ export function VaultTab() {
     const ge = client.gameEngine;
     const ix = createCollectResourcesInstruction(
       { owner: publicKey, gameEngine: ge },
-      { noviAmount: collectNoviAmount, collectionType: CASH_COLLECTION_TYPE },
+      { noviAmount: noviToDeci(collectNoviAmount), collectionType: CASH_COLLECTION_TYPE },
     );
     return transact
       .mutateAsync({
@@ -100,7 +102,7 @@ export function VaultTab() {
 
   const cashOnHand = player.cashOnHand?.toNumber?.() ?? 0;
   const cashInVault = player.cashInVault?.toNumber?.() ?? 0;
-  const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
+  const noviBalance = deciToNovi(player.lockedNovi ?? 0);
   const operativeUnits =
     (player.operativeUnit1?.toNumber?.() ?? 0) +
     (player.operativeUnit2?.toNumber?.() ?? 0) +
@@ -137,6 +139,7 @@ export function VaultTab() {
                   min={1}
                   max={noviBalance}
                   suffix="NOVI"
+                  fibonacciCheckValue={noviToDeci(collectNoviAmount)}
                 />
                 <TxButton
                   onClick={handleCollectCash}

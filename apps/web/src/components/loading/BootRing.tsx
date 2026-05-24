@@ -7,7 +7,7 @@ import MagicRings from "@/components/shared/animations/MagicRing";
  * BootRing — ambient back layer for `LoadingSequence` and `TransitionOverlay`.
  *
  * Color comes from the same gold palette the transition overlay's gold lines
- * use (`#92400e` → `#fbbf24`), not the tier-accent system. The tier accent
+ * use (`#92400e` to `#fbbf24`), not the tier-accent system. The tier accent
  * can be red on Tier 4 or muddy on Tier 0; the gold gradient is the app's
  * universal "ritual / chrome" hue, used wherever the UI wants to read as
  * legendary regardless of tier.

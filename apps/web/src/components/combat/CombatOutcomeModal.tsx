@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { animate, spring } from "animejs";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { TxButton } from "@/components/shared/TxButton";
+import { formatNoviAmount } from "novus-mundus-sdk";
 
 function num(v: unknown): number {
   if (typeof v === "number") return v;
@@ -104,16 +105,35 @@ function buildView(
     if (num(pvp.produceStolen) > 0)
       rows.push({ label: "Produce stolen", value: fmt(pvp.produceStolen) });
     if (num(pvp.vehiclesStolen) > 0)
-      rows.push({ label: "Vehicles stolen", value: fmt(pvp.vehiclesStolen) });
+      rows.push({ label: "Drays taken", value: fmt(pvp.vehiclesStolen) });
   } else if (defeated) {
     tone = "victory";
     heading = "Encounter Defeated";
     sub = `${RARITY[num(defeated.encounterType)] ?? "Encounter"} · Level ${num(defeated.level)}`;
+    // `lootCash` is the immediate kill bounty (already in the player's hand);
+    // every other field is the LootAccount breakdown waiting for `claim_loot`.
     const cash = num(defeated.lootCash);
     const novi = num(defeated.lootNovi);
-    if (cash > 0) rows.push({ label: "Loot · cash", value: `$${fmt(cash)}` });
-    if (novi > 0) rows.push({ label: "Loot · NOVI", value: fmt(novi) });
-    if (cash > 0 || novi > 0) hint = "Unclaimed loot is waiting in your Inventory.";
+    const produce = num(defeated.lootProduce);
+    const drays = num(defeated.lootVehicles);
+    const melee = num(defeated.lootMelee);
+    const ranged = num(defeated.lootRanged);
+    const siege = num(defeated.lootSiege);
+    const fragments = num(defeated.lootFragments);
+    const gems = num(defeated.lootGems);
+    if (cash > 0) rows.push({ label: "Kill bounty · cash", value: `$${fmt(cash)}` });
+    if (novi > 0) rows.push({ label: "Loot · NOVI", value: formatNoviAmount(novi) });
+    if (melee > 0) rows.push({ label: "Loot · melee", value: fmt(melee) });
+    if (ranged > 0) rows.push({ label: "Loot · ranged", value: fmt(ranged) });
+    if (siege > 0) rows.push({ label: "Loot · siege", value: fmt(siege) });
+    if (produce > 0) rows.push({ label: "Loot · produce", value: fmt(produce) });
+    if (drays > 0) rows.push({ label: "Loot · drays", value: fmt(drays) });
+    if (fragments > 0) rows.push({ label: "Loot · fragments", value: fmt(fragments) });
+    if (gems > 0) rows.push({ label: "Loot · gems", value: fmt(gems) });
+    const hasLockedLoot =
+      novi > 0 || produce > 0 || drays > 0 || melee > 0 || ranged > 0 || siege > 0 ||
+      fragments > 0 || gems > 0;
+    if (hasLockedLoot) hint = "Unclaimed loot is waiting in your Inventory.";
   } else {
     tone = "survive";
     heading = "Hit Landed";
@@ -127,7 +147,7 @@ function buildView(
       rows.push({ label: "Stamina spent", value: fmt(attacked.staminaConsumed) });
     }
     if (num(attacked.noviConsumed) > 0) {
-      rows.push({ label: "NOVI spent", value: fmt(attacked.noviConsumed) });
+      rows.push({ label: "NOVI spent", value: formatNoviAmount(num(attacked.noviConsumed)) });
     }
     const damage = num(attacked.damageDealt);
     const remaining = num(attacked.healthRemaining);

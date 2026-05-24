@@ -15,7 +15,7 @@ const WEB2_TLDS = new Set([".id", ".com", ".xyz"]);
 /**
  * Co-signer TLDs use a dedicated endpoint that returns a pre-signed
  * VersionedTransaction. The user just adds their signature and submits.
- * Map: ".tld" → API route slug (e.g. ".solana" → "solana").
+ * Map: ".tld" to API route slug (e.g. ".solana" to "solana").
  */
 const COSIGNER_TLD_SLUGS: Record<string, string> = {
   ".slam": "slam",
@@ -160,12 +160,12 @@ export async function fetchUserDomainsForTld(
  * Create a domain purchase transaction.
  *
  * Routes automatically:
- * - Standard TLDs  → POST /api/create-domain  (returns instructions)
- * - Co-signer TLDs → POST /api/co-signer-{slug} (returns pre-signed tx)
+ * - Standard TLDs to POST /api/create-domain  (returns instructions)
+ * - Co-signer TLDs to POST /api/co-signer-{slug} (returns pre-signed tx)
  *
  * The caller should check the result type:
- * - `DomainPurchaseResult`  → build tx from instructions, sign, send
- * - `CosignerPurchaseResult` → deserialize tx, add user sig, send
+ * - `DomainPurchaseResult` to build tx from instructions, sign, send
+ * - `CosignerPurchaseResult` to deserialize tx, add user sig, send
  */
 export async function createDomainPurchase(params: {
   domain: string;

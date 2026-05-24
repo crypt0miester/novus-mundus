@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useState, useEffect } from "react";
+import { ChevronRight } from "lucide-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -222,19 +223,43 @@ function EstateContent() {
                               value: bpsToPercent(gp.abandonRateMiserable),
                             },
                             {
-                              label: "Dmg Redist T1→T2",
+                              label: (
+                                <>
+                                  Dmg Redist T1{" "}
+                                  <ChevronRight className="inline-block h-2.5 w-2.5 align-middle" />{" "}
+                                  T2
+                                </>
+                              ),
                               value: bpsToPercent(gp.damageRedistribUnit1ToUnit2),
                             },
                             {
-                              label: "Dmg Redist T1→T3",
+                              label: (
+                                <>
+                                  Dmg Redist T1{" "}
+                                  <ChevronRight className="inline-block h-2.5 w-2.5 align-middle" />{" "}
+                                  T3
+                                </>
+                              ),
                               value: bpsToPercent(gp.damageRedistribUnit1ToUnit3),
                             },
                             {
-                              label: "Dmg Redist T3→T1",
+                              label: (
+                                <>
+                                  Dmg Redist T3{" "}
+                                  <ChevronRight className="inline-block h-2.5 w-2.5 align-middle" />{" "}
+                                  T1
+                                </>
+                              ),
                               value: bpsToPercent(gp.damageRedistribUnit3ToUnit1),
                             },
                             {
-                              label: "Dmg Redist T3→T2",
+                              label: (
+                                <>
+                                  Dmg Redist T3{" "}
+                                  <ChevronRight className="inline-block h-2.5 w-2.5 align-middle" />{" "}
+                                  T2
+                                </>
+                              ),
                               value: bpsToPercent(gp.damageRedistribUnit3ToUnit2),
                             },
                           ]}

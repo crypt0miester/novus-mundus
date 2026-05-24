@@ -224,6 +224,17 @@ pub fn process(
     // Get new player protection duration from config
     let protection_duration = game_engine_data.gameplay_config.new_player_protection_duration;
 
+    // Read per-kingdom starter NOVI grant (raw units, 1 decimal). DAO-tunable.
+    // Fall back to the compile-time constant when the config slot is 0 — the
+    // field reused the byte offset of the prior `_reserved_consumption`, so
+    // GameEngine PDAs initialized before this change have 0 there until the
+    // DAO pushes a real value. Without the fallback, `mint_tokens` below
+    // would reject `amount == 0` and brick new-player onboarding.
+    let starter_locked_novi = {
+        let configured = game_engine_data.economic_config.starter_locked_novi;
+        if configured == 0 { STARTER_LOCKED_NOVI } else { configured }
+    };
+
     // 7. Calculate Rent and Create Account
 
     let lamports = crate::utils::rent_exempt_const(PlayerAccount::LEN);
@@ -257,6 +268,7 @@ pub fn process(
             spawn_lat,
             spawn_long,
             protection_duration,
+            starter_locked_novi,
         );
 
         // Set default name as "Player #X"
@@ -395,7 +407,7 @@ pub fn process(
         novi_mint,
         player_token_account,
         game_engine,
-        STARTER_LOCKED_NOVI,
+        starter_locked_novi,
         &[signer],
     )?;
 

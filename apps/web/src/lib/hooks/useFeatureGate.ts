@@ -151,7 +151,7 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     // No extension gate. `lock.rs:65` calls `unlock_extension_if_eligible(
     // EXT_HEROES)` BEFORE its `require_extension` check, and
     // `unlock_extension_if_eligible` cascades through the prerequisite chain
-    // (RESEARCH → INVENTORY → TEAM → RALLY → HEROES), allocating every
+    // (RESEARCH to INVENTORY to TEAM to RALLY to HEROES), allocating every
     // missing section in one shot. So calling lock_hero on a wallet with
     // none of those extensions still succeeds — the processor sets them all.
     // The earlier `Ext.RALLY` gate was the worst of both: rallies depend on
@@ -212,7 +212,7 @@ const EXT_NAMES: Record<number, string> = {
 };
 
 // Extensions are earned through play, not bought. The chain is fixed on-chain
-// (Team → Rally → Heroes), so each one points at the action that unlocks it.
+// (Team to Rally to Heroes), so each one points at the action that unlocks it.
 const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: string }> = {
   [Ext.RESEARCH]: {
     label: "Begin a study",

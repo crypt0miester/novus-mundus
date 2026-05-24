@@ -52,6 +52,7 @@ import {
   calculateNoviStreak,
   getRemainingDailyAllowance,
   formatNoviAmount,
+  deciToNovi,
   formatLamportsAsSol,
   NOVI_PACKAGE_TIERS,
   calculateShopPrice,
@@ -554,7 +555,7 @@ export function ShopTab() {
               <div className="text-xs text-text-muted">NOVI</div>
               <span className="inline-flex items-center gap-1">
                 <GameIcon id="resource-novi" size={14} />
-                <GoldNumber value={player.lockedNovi.toNumber()} />
+                <GoldNumber value={deciToNovi(player.lockedNovi)} />
               </span>
             </div>
           </div>

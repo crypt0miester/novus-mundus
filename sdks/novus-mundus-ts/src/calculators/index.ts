@@ -32,6 +32,9 @@ export * from './progression';
 // Resource calculations (networth, consumption, generation)
 export * from './resources';
 
+// Estate activity forecasting (faithful NOVI-consumption economy ports)
+export * from './forecast';
+
 // Cost calculations (hiring, upgrades, speedups)
 export * from './costs';
 

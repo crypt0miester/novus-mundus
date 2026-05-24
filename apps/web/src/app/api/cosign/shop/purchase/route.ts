@@ -113,7 +113,7 @@ export async function POST(req: Request) {
 
   try {
     // Final tx layout: [<compute-budget prefix>, ed25519, crank, purchase].
-    // `coSign` → `buildVersionedTransaction` prepends COMPUTE_BUDGET_PREFIX_IX_COUNT
+    // `coSign` to `buildVersionedTransaction` prepends COMPUTE_BUDGET_PREFIX_IX_COUNT
     // instructions, and `ed25519` is the first instruction we supply — so it
     // lands at exactly that index. This index is consumed two ways and BOTH
     // must match its real position: the Switchboard gateway request, and the

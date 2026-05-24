@@ -758,7 +758,7 @@ export function TeamTab() {
     );
   }, [teamInvites, myPlayerPda]);
 
-  // Resolve inviter player PDA → wallet for the incoming invites (rent refund).
+  // Resolve inviter player PDA to wallet for the incoming invites (rent refund).
   const [inviterWallets, setInviterWallets] = useState<Map<string, PublicKey>>(new Map());
   useEffect(() => {
     if (incomingInvites.length === 0) return;

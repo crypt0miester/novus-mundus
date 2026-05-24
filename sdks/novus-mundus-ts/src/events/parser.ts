@@ -395,6 +395,13 @@ EVENT_PARSERS.set('EncounterDefeated', (r) => ({
   killingBlowName: r.readName48(),
   lootCash: r.readU64(),
   lootNovi: r.readU64(),
+  lootProduce: r.readU64(),
+  lootVehicles: r.readU64(),
+  lootMelee: r.readU64(),
+  lootRanged: r.readU64(),
+  lootSiege: r.readU64(),
+  lootFragments: r.readU64(),
+  lootGems: r.readU64(),
   timestamp: r.readI64(),
 }));
 

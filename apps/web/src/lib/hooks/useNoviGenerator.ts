@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePlayer } from "./usePlayer";
 import { useGameEngine } from "./useGameEngine";
-import { getEffectiveTier } from "novus-mundus-sdk";
+import { deciToNovi, getEffectiveTier } from "novus-mundus-sdk";
 
 /** NOVI accrues one drop every 5 minutes. */
 export const INTERVAL_SECONDS = 300;
@@ -102,20 +102,24 @@ export function useNoviGenerator(): NoviGeneratorState {
     const effectiveTier = getEffectiveTier(player, Math.floor(Date.now() / 1000));
     const cfg = ge.subscriptionTiers[effectiveTier];
     if (!cfg) return EMPTY;
-    const genRate = cfg.generationMultiplier.toNumber();
-    const maxCap = cfg.maxLockedNovi.toNumber();
-    const currentLocked = player.lockedNovi.toNumber();
+    // Internal scale: everything from the chain is in raw deci-NOVI (mint
+    // decimals=1). The hook surfaces all NOVI-denominated fields in DISPLAY
+    // NOVI so every consumer (status bar, dashboard ring, sidebar, generator
+    // card) renders them directly without per-site conversion.
+    const genRateRaw = cfg.generationMultiplier.toNumber();
+    const maxCapRaw = cfg.maxLockedNovi.toNumber();
+    const currentLockedRaw = player.lockedNovi.toNumber();
     return {
       ready: true,
-      displayNovi: ticker.displayNovi,
-      pendingNovi: ticker.pendingNovi,
+      displayNovi: deciToNovi(ticker.displayNovi),
+      pendingNovi: deciToNovi(ticker.pendingNovi),
       fillPct: ticker.fillPct,
-      genRate,
-      maxCap,
-      noviPerHour: genRate * 12,
+      genRate: deciToNovi(genRateRaw),
+      maxCap: deciToNovi(maxCapRaw),
+      noviPerHour: deciToNovi(genRateRaw * 12),
       effectiveTier,
-      currentLocked,
-      isFull: currentLocked >= maxCap || ticker.fillPct >= 99.9,
+      currentLocked: deciToNovi(currentLockedRaw),
+      isFull: currentLockedRaw >= maxCapRaw || ticker.fillPct >= 99.9,
       lastUpdatedAt: player.lastUpdatedTokensAt.toNumber(),
     };
   }, [player, ge, ticker]);

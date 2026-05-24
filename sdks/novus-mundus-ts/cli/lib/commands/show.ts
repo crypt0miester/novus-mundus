@@ -6,6 +6,8 @@ import { NovusMundusClient } from '../../../src/client';
 import type { CLIContext, ParsedArgs } from '../context';
 import { log } from '../helpers';
 import { showAllPlayers, showPlayer } from '../show/player';
+import { showUser } from '../show/user';
+import { showMint } from '../show/mint';
 import { showAllTeams, showTeam } from '../show/team';
 import { showAllRallies, showRally } from '../show/rally';
 import { showExpeditions } from '../show/expedition';
@@ -27,6 +29,16 @@ export async function handleShow(ctx: CLIContext, args: ParsedArgs): Promise<voi
       } else {
         await showAllPlayers(client, ctx);
       }
+      break;
+    case 'user':
+      if (!args.extra) {
+        log.error('Usage: novus show user <wallet-pubkey>');
+        return;
+      }
+      await showUser(client, ctx, args.extra);
+      break;
+    case 'mint':
+      await showMint(client, ctx);
       break;
     case 'team':
       if (args.extra) {

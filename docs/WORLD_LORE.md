@@ -135,7 +135,7 @@ The currency of Novus Mundus is **salvage**. The old world's ruins are an almost
 
 - **Produce** — Food grown in the ash-enriched soil of Novus Mundus. The Sundering devastated the surface, but centuries of volcanic fallout made the new topsoil absurdly fertile. Farming is viable, but every field must be defended from both raiders and wildlife.
 
-- **Vehicles** — Beasts of burden, carts, and salvaged machinery. Aeondral had sophisticated transport networks; their remnants — wheels, axles, harness systems, even primitive engines — are rebuilt and repurposed.
+- **Drays** — Low-sided carts dragged by beasts of burden or salvaged engines. Aeondral had sophisticated transport networks; their remnants — wheels, axles, harness systems, even primitive motors — are stripped, rebuilt, and yoked to whatever still pulls. A column of drays at dawn is what an army looks like when it actually moves.
 
 ### NOVI — Fragments of Power
 

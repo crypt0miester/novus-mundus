@@ -5,7 +5,7 @@
  * Returns null for obscure events that don't warrant a toast.
  */
 
-import type { NovusMundusEvent } from "novus-mundus-sdk";
+import { formatNoviAmount, type NovusMundusEvent } from "novus-mundus-sdk";
 
 function bn(v: unknown): number {
   if (typeof v === "number") return v;
@@ -42,7 +42,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
       const d = event.data;
       const parts = [];
       if (bn(d.lootCash) > 0) parts.push(`$${fmt(d.lootCash)} cash`);
-      if (bn(d.lootNovi) > 0) parts.push(`${fmt(d.lootNovi)} NOVI`);
+      if (bn(d.lootNovi) > 0) parts.push(`${formatNoviAmount(bn(d.lootNovi))} NOVI`);
       return { title: "Encounter Defeated!", message: parts.length > 0 ? `Loot: ${parts.join(", ")}` : "No loot dropped" };
     }
 

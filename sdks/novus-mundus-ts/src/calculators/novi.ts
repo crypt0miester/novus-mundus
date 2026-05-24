@@ -303,14 +303,39 @@ export function getPackageAmount(
 }
 
 /**
- * Format NOVI amount for display (handles 1 decimal).
+ * NOVI token mint decimals on-chain. All cached u64 fields (player.lockedNovi,
+ * user.reservedNovi, gameEngine.noviPurchaseAmounts, etc.) and all on-chain
+ * cost constants are denominated in raw token-units = display NOVI × 10.
  *
- * @param amount - Raw amount (with 1 decimal, e.g., 5000 = 500 NOVI)
- * @returns Formatted string
+ * Source of truth: programs/novus_mundus/src/processor/initialization/game_engine.rs
+ * (`decimals: 1` at mint creation). Verified at runtime via `novus show mint`.
+ */
+export const NOVI_DECIMALS = 1;
+export const DECI_NOVI_PER_NOVI = 10 ** NOVI_DECIMALS;
+
+/**
+ * Raw on-chain deci-NOVI → display NOVI. Use at every UI render of a NOVI
+ * field (player.lockedNovi, user.reservedNovi, etc.) and as the `max` of any
+ * NumberField whose value the user is meant to type as NOVI.
+ */
+export function deciToNovi(raw: BN | number): number {
+  const v = typeof raw === 'number' ? raw : raw.toNumber();
+  return v / DECI_NOVI_PER_NOVI;
+}
+
+/**
+ * Display NOVI → raw deci-NOVI. Use when packing instruction params; every
+ * on-chain NOVI amount (convert / withdraw / collect / hire / etc.) is in raw.
+ */
+export function noviToDeci(display: number): number {
+  return Math.round(display * DECI_NOVI_PER_NOVI);
+}
+
+/**
+ * Format NOVI amount for display. Input is raw deci-NOVI (e.g. 5000 = 500 NOVI).
  */
 export function formatNoviAmount(amount: BN | number): string {
-  const value = typeof amount === 'number' ? amount : amount.toNumber();
-  return (value / 10).toLocaleString(undefined, {
+  return deciToNovi(amount).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   });

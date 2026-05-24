@@ -22,7 +22,7 @@ const MATERIAL_TIERS = [
 ];
 
 // convert_materials.rs gates each conversion on the Workshop's level, indexed
-// by the from-tier: Common→1, Uncommon→5, Rare→10, Epic→15.
+// by the from-tier: Common to 1, Uncommon to 5, Rare to 10, Epic to 15.
 const WORKSHOP_LEVEL_REQ = [1, 5, 10, 15];
 
 const ALL_MATERIALS = [

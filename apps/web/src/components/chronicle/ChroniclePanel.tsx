@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useAct } from "@/lib/hooks/useAct";
@@ -128,7 +129,7 @@ export function ChroniclePanel() {
                     <li key={b.key} className="flex gap-2 text-xs">
                       <span
                         className={cn(
-                          "w-3 shrink-0 text-center",
+                          "inline-flex w-3 shrink-0 items-center justify-center",
                           isDone
                             ? "text-text-gold"
                             : isNext
@@ -136,7 +137,7 @@ export function ChroniclePanel() {
                               : "text-text-muted",
                         )}
                       >
-                        {isDone ? "✦" : isNext ? "→" : "·"}
+                        {isDone ? "✦" : isNext ? <ChevronRight className="h-3 w-3" /> : "·"}
                       </span>
                       <div className="min-w-0">
                         <div

@@ -8,29 +8,6 @@ Last touched: 2026-05-21.
 
 ---
 
-## 1. Top bar stays visible behind the DetailPanel bottom sheet — `DONE`
-
-**Problem.** On mobile, opening a `DetailPanel` (which renders `BottomSheet`)
-drops a full-screen backdrop at `z-50`. The mobile top bar (`LeftPanelMobile`)
-sits in normal flow with no z-index, so it is dimmed and buried — the player
-loses sight of their resources exactly when a detail panel (e.g. an upgrade
-cost) makes those resources relevant.
-
-**Current state.**
-- `components/shared/BottomSheet.tsx` — sheet container is `fixed inset-0 z-50`.
-- `components/layout/LeftPanel.tsx` — `LeftPanelMobile` is the mobile top bar,
-  static position, collapsible (`expanded` state), shown `< lg`.
-- `components/layout/TopBar.tsx` — desktop/tablet bar, `z-40`, shown `>= md`.
-
-**Plan / done.**
-- New `lib/store/sheet.ts` — a tiny counter store (`acquire`/`release`).
-- `BottomSheet` acquires while mounted, releases on unmount/close.
-- `LeftPanelMobile` + `TopBar` raise to `z-[55]` when a sheet is open, so the
-  bar paints above the `z-50` backdrop but below the `z-[60]` MorphTabBar.
-  Bar stays collapsed (h-10) and tappable — never overlaps the 92vh sheet.
-
----
-
 ## 2. Make the stats page photogenic / screenshot-worthy — `TODO`
 
 **Problem.** The "stats page" should look good when screenshotted and shared.
@@ -52,27 +29,6 @@ cost) makes those resources relevant.
   eyes on the running app. Deferred until the structural items land.
 
 ---
-
-## 3. Make team invites easy — `DONE`
-
-**Problem.** Inviting someone to a team required pasting a raw 44-char base58
-wallet address. No lookup, no names, no validation feedback beyond "invalid".
-
-**Current state.**
-- `app/(game)/team/_components/team-tab.tsx` — invite UI is a bare text input
-  (`inviteAddress`) duplicated in the desktop sidebar and the mobile section.
-  `handleInvite` derives the player PDA from the typed address.
-- On-chain: `createTeamInviteInstruction` (invite by invitee player PDA).
-
-**Plan / done.**
-- New `lib/players.ts` — `matchesPlayerQuery()` shared search helper.
-- New `InvitePlayerPanel` (in `team-tab.tsx`) — a searchable player picker:
-  filters all players by name / resolved domain / address, excludes self,
-  already-teamed players, and pending invitees; one tap to invite. Still
-  accepts a pasted full address for not-yet-fetched accounts.
-- `handleInvite` refactored to take an explicit wallet argument.
-- Used by both the desktop and mobile settings sections (de-duped).
-
 ---
 
 ## 4. Give the Mansion a purpose — `TODO`
@@ -98,23 +54,6 @@ streak multiplier (up to 3x at 90 days), per-level reward bonuses, and the
   becomes the home of the daily loop. Medium effort — needs a new panel.
 
 ---
-
-## 5. Players need their own page — `DONE`
-
-**Problem.** There was a player *detail* page but no players *directory*. The
-`/world` nav had Overview / Leaderboard / Teams / Cities — no Players.
-
-**Current state.**
-- `app/world/players/[address]/page.tsx` — player profile (exists, decent).
-- No `app/world/players/page.tsx` index. `components/layout/WorldNav.tsx` had
-  no Players entry.
-
-**Plan / done.**
-- New `components/world/PlayerBrowser.tsx` — directory with search, sort,
-  grid + table views, pagination.
-- New `app/world/players/page.tsx` + `layout.tsx`.
-- `WorldNav` gains a "Players" entry.
-
 ---
 
 ## 6. Make spectate actually spectate — `TODO`
@@ -139,45 +78,7 @@ nav. It is redundant — it does not let you *watch* the game.
 
 ---
 
-## 7. Make the map more interactive — `DONE`
-
-**7a. Per-city storyline — done.** New `lib/cityLore.ts` — all 24 cities'
-storyline (region + a 1–3 sentence blurb), lifted from `docs/WORLD_LORE.md`
-§XI. Surfaced in the RealmMap selected-city panel and the `/world/cities/[id]`
-page (blurb + region label).
-
-**7b/7c. Water + mountains — dropped.** A first procedural pass (scattered
-lakes + triangle clusters, `RealmTerrain.tsx`) was low-quality and reverted.
-Three redo directions were offered — coastal / mountain-framed / none — and the
-call was to leave the map clean: the parchment + city dots + roads holds on its
-own, and a realm-scale terrain layer risked clutter. Component removed.
-
-**7d. Optional follow-up — per-city local terrain view.** The on-chain per-city
-terrain (`terrainSeed`/`waterLine`/`peakLine`/anchors) is genuine LOCAL terrain
-— a city's own ~50 km neighbourhood. Its proper home is a terrain mini-map on
-`/world/cities/[id]`, rendered via the SDK decoder (`sdks/novus-mundus-ts/src/
-calculators/terrain.ts` — `terrainElevation`, `renderTerrainPixels`). Needs
-cities to carry anchor data first: `novus terrain set <city-id>` (only cities
-0–2 have CLI presets today).
-
-**Map-marker icons — skipped.** The `map-*.svg` icons stay in the legend and
-panels (via `GameIcon`); the in-`<svg>` city markers keep their unicode glyphs
-— the traced icons (combat is 17 paths) turn muddy at ~12 px marker size.
-
----
-
-## 8. Easy search for players — `DONE`
-
-**Problem.** No way to search for a player anywhere — discovery was scroll the
-leaderboard or hand-type a profile URL.
-
-**Plan / done.** Search box on the new Players directory (item 5): matches
-name, resolved AllDomains name, or wallet address. Shares `lib/players.ts`
-`matchesPlayerQuery()` with the team invite picker (item 3).
-
----
-
-## 9. Table view and grid view for lists — `DONE`
+## 9. Table view and grid view for lists - needs to be used everywhere — `TODO`
 
 **Problem.** No view toggle anywhere. Cities/Teams were card-grid only;
 the leaderboard was a hand-rolled table. Each browser reimplemented layout.
@@ -188,17 +89,14 @@ the leaderboard was a hand-rolled table. Each browser reimplemented layout.
 - New `lib/hooks/useViewMode.ts` — localStorage-backed view preference.
 - Applied to `PlayerBrowser`, `CityBrowser`, `TeamBrowser`.
 
----
+----
 
-## Shipped
-
-Items **1, 3, 5, 8, 9** — top-bar/sheet fix, easy team invites, the Players
-directory, player search, and the table/grid toggle — plus **7a**, the per-city
-storyline. Item 7's realm-map water/mountains (7b/7c) were tried and dropped as
-not worth the clutter.
-
-## Still open
-
-Items **2, 4, 6** — stats-page polish, the Mansion panel, and real spectating.
-Optional: **7d**, a per-city local terrain view. Notes above are enough to pick
-any of them up cold.
+10. user can open map in the beginning to choose where to start 
+11. expedition, castle untested.
+12. chat
+13. reinforce should be in team page
+14. team page needs more player data
+15. players have no idea if there is another rally going on in the team that they may want to join.
+16. rally, player attack, reinforce need to be rethought of. it is completely unusable. hero selection needs to be 3 slots rather than a drop down. 
+17. its not clear how to open up more slots. in heroes tab
+18. mini activities are so bland.

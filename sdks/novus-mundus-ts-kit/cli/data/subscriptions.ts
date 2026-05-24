@@ -46,8 +46,8 @@ export const SUBSCRIPTION_TIERS: SubscriptionTierData[] = [
   {
     name: 'Rookie',
     tierIndex: 0,
-    costInUsdCents: 0,
-    durationDays: 0,
+    costInUsdCents: 499,
+    durationDays: 30,
     generationMultiplier: 100,
     maxLockedNovi: 100_000,
     dailyRewardMultiplier: 100,

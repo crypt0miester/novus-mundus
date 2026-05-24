@@ -28,8 +28,8 @@ interface EventEntry {
 
 /**
  * Shared event list. `filter` selects which statuses to render:
- *  - "active"  → Pending (0) + Active (1)
- *  - "history" → Finalized (2)
+ *  - "active" to Pending (0) + Active (1)
+ *  - "history" to Finalized (2)
  *
  * Events stream into the `events` zustand store map via the WS subscription
  * (`AccountKey.Event`, kingdom-scoped). The WS only pushes *live updates*, so

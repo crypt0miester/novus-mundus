@@ -56,6 +56,8 @@ export interface EconomicConfig {
   produceValue: bigint;
   vehicleValue: bigint;
   noviConsumptionBase: bigint;
+  /** Per-kingdom starter NOVI granted on init_player (raw units, 1 decimal). */
+  starterLockedNovi: bigint;
   secondaryMultiplierBase: number;
   fibonacciBonusBase: number;
   encounterBaseCash: bigint[];
@@ -467,7 +469,7 @@ const economicConfigCodec = struct<EconomicConfig>([
   ['produceValue', u64],
   ['vehicleValue', u64],
   ['noviConsumptionBase', u64],
-  pad(8), // _reserved_consumption
+  ['starterLockedNovi', u64],
   ['secondaryMultiplierBase', u32],
   pad(4), // _reserved_secondary
   ['fibonacciBonusBase', u32],

@@ -62,9 +62,9 @@ import { resolvePendingTx } from "@/lib/hooks/useTransact";
 
 /**
  * Start game subscriptions:
- * 1. Initial RPC fetch → seeds zustand store
- * 2. Single program-wide WebSocket → keeps zustand current
- * 3. Log subscription → routes events to event store + resolves pending txs
+ * 1. Initial RPC fetch to seeds zustand store
+ * 2. Single program-wide WebSocket to keeps zustand current
+ * 3. Log subscription to routes events to event store + resolves pending txs
  *
  * Zustand is the sole source of truth for account data.
  * Hooks read from zustand. No React Query involved.

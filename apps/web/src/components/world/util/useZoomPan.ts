@@ -9,10 +9,10 @@
  * scaling.
  *
  * Gestures:
- *  - 1-finger drag (after a 6px threshold) → pan
- *  - 2-finger pinch → zoom around the pinch midpoint
- *  - wheel (desktop) → zoom around the cursor
- *  - double-tap → reset to 1× / centred
+ *  - 1-finger drag (after a 6px threshold) to pan
+ *  - 2-finger pinch to zoom around the pinch midpoint
+ *  - wheel (desktop) to zoom around the cursor
+ *  - double-tap to reset to 1× / centred
  *
  * Pan is clamped so the viewport always stays inside the (scaled) content.
  * Tap-without-drag does not preventDefault, so city `onClick` handlers still
@@ -112,7 +112,7 @@ export function useZoomPan({
         // Track for pan but don't start until threshold is crossed.
         lastTouch.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
         panning.current = false;
-        // Double-tap → reset.
+        // Double-tap to reset.
         const now = Date.now();
         if (now - tapAt.current < 300) {
           reset();

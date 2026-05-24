@@ -620,7 +620,9 @@ impl EstateAccount {
 
     /// Get cost for next plot (φ² scaling)
     pub fn next_plot_cost(&self) -> Option<u64> {
-        const BASE_PLOT_COST: u64 = 100_000; // 100k NOVI for plot 2
+        // NOVI has 1 decimal on-chain (mint decimals=1), so display NOVI × 10
+        // = raw token-units. 100k NOVI display = 1_000_000 raw.
+        const BASE_PLOT_COST: u64 = 1_000_000; // 100k NOVI for plot 2 (with 1 decimal)
 
         match self.plots_owned {
             1 => Some(BASE_PLOT_COST),                    // Plot 2: 100k

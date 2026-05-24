@@ -5,7 +5,6 @@
  */
 
 import { BPS_100, applyBps, applyBpsBonus, mulDiv } from './constants';
-import { getActivityMultiplier, TimeOfDay, ActivityType, getCurrentTimeOfDay } from './time';
 
 // Networth Calculation
 
@@ -135,111 +134,6 @@ export function calculateNetworthBreakdown(
     cash,
     total: units + weapons + equipment + cash,
   };
-}
-
-// Resource Collection
-
-/**
- * Calculate resource collection amount with time bonus.
- *
- * Golden hours (Dawn/Dusk) provide φ² (2.618x) collection bonus.
- * Midday provides φ (1.618x) bonus.
- * Night provides reduced rates.
- *
- * @param baseAmount - Base resource amount
- * @param timestamp - Current unix timestamp
- * @param longitude - Player longitude for time calculation
- * @param collectionBonusBps - Collection bonus in basis points
- * @returns Resource amount with time bonus applied
- */
-export function calculateCollectionWithTimeBonus(
-  baseAmount: number,
-  timestamp: number,
-  longitude: number,
-  collectionBonusBps: number = 0
-): number {
-  const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
-  const multiplier = getActivityMultiplier(ActivityType.Collecting, timeOfDay);
-  let amount = Math.floor(baseAmount * multiplier);
-
-  if (collectionBonusBps > 0) {
-    amount = applyBpsBonus(amount, collectionBonusBps);
-  }
-
-  return amount;
-}
-
-/**
- * Calculate mining output with time bonus.
- *
- * Mining is better at night (cooler, less distraction).
- * DeepNight provides φ (1.618x) bonus.
- * Midday provides penalty.
- */
-export function calculateMiningWithTimeBonus(
-  baseAmount: number,
-  timestamp: number,
-  longitude: number,
-  miningBonusBps: number = 0
-): number {
-  const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
-  const multiplier = getActivityMultiplier(ActivityType.Mining, timeOfDay);
-  let amount = Math.floor(baseAmount * multiplier);
-
-  if (miningBonusBps > 0) {
-    amount = applyBpsBonus(amount, miningBonusBps);
-  }
-
-  return amount;
-}
-
-/**
- * Calculate fishing output with time bonus.
- *
- * Fishing is best at dawn/dusk (feeding times).
- * Dawn/Dusk provide φ² (2.618x) bonus.
- */
-export function calculateFishingWithTimeBonus(
-  baseAmount: number,
-  timestamp: number,
-  longitude: number,
-  fishingBonusBps: number = 0
-): number {
-  const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
-  const multiplier = getActivityMultiplier(ActivityType.Fishing, timeOfDay);
-  let amount = Math.floor(baseAmount * multiplier);
-
-  if (fishingBonusBps > 0) {
-    amount = applyBpsBonus(amount, fishingBonusBps);
-  }
-
-  return amount;
-}
-
-/**
- * Calculate farming output with time bonus.
- *
- * Farming uses defensive units (not operatives).
- * Farm building provides produce bonus (50 bps/level).
- *
- * Note: On-chain, farming uses the Fishing activity multiplier
- * (CollectionType::Fishing | CollectionType::Farming => ActivityType::Fishing).
- */
-export function calculateFarmingWithTimeBonus(
-  baseAmount: number,
-  timestamp: number,
-  longitude: number,
-  farmingBonusBps: number = 0
-): number {
-  const timeOfDay = getCurrentTimeOfDay(timestamp, longitude);
-  const multiplier = getActivityMultiplier(ActivityType.Fishing, timeOfDay);
-  let amount = Math.floor(baseAmount * multiplier);
-
-  if (farmingBonusBps > 0) {
-    amount = applyBpsBonus(amount, farmingBonusBps);
-  }
-
-  return amount;
 }
 
 // Resource Consumption

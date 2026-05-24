@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useExpedition } from "@/lib/hooks/useExpedition";
+import { useEstate } from "@/lib/hooks/useEstate";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -29,7 +30,13 @@ import {
   getExpeditionDurationSeconds,
   isTraveling,
   isNullPubkey,
+  findBuilding,
+  BuildingType,
+  BuildingStatus,
+  MINING_WORKSHOP_REQ,
+  FISHING_DOCK_REQ,
   ENCOUNTER_STAMINA_COSTS,
+  formatNoviAmount,
 } from "novus-mundus-sdk";
 import { useCoSign } from "@/lib/cosign";
 
@@ -54,6 +61,7 @@ const EXPEDITION_TYPES = [
 export function ExpeditionTab() {
   const { data: playerData } = usePlayer();
   const { data: expeditionData } = useExpedition();
+  const { data: estateData } = useEstate();
   const { data: geData } = useGameEngine();
   const ge = geData?.account;
   const client = useNovusMundusClient();
@@ -95,8 +103,45 @@ export function ExpeditionTab() {
     return true;
   }, [player, playerTraveling, hasExpedition]);
 
-  // Can only start once stamina + at least one operative are committed.
-  const canStartNow = canStart && hasStamina && expeditionOps.some((n) => n > 0);
+  // Building gate — Mining needs the Mine, Fishing the Dock, at the level the
+  // chosen tier demands. The on-chain error (BuildingLevelInsufficient) is
+  // generic and never names the building, so resolve it here.
+  const buildingReq = useMemo(() => {
+    const isMining = selectedType === 1;
+    const name = isMining ? "Mine" : "Dock";
+    const type = isMining ? BuildingType.Mine : BuildingType.Dock;
+    const required = (isMining ? MINING_WORKSHOP_REQ : FISHING_DOCK_REQ)[expeditionTier] ?? 20;
+    const estate = estateData?.account;
+    // Estate still loading — let the on-chain check be the backstop.
+    if (!estate) return { ok: true, message: null as string | null };
+    // `findBuilding` already skips Empty slots, so a null result means "not built".
+    const b = findBuilding(estate, type);
+    if (!b) {
+      return { ok: false, message: `Requires a ${name} (Lv ${required}+) — not built yet.` };
+    }
+    if (b.status !== BuildingStatus.Active && b.status !== BuildingStatus.Upgrading) {
+      return { ok: false, message: `Your ${name} is still under construction.` };
+    }
+    if (b.level < required) {
+      // While an upgrade is in flight, `b.level` is still the old level — the
+      // chain only commits the new one on `complete_upgrade`. Surface the
+      // in-progress upgrade so the player isn't told "yours is Lv X" when
+      // they're actively building toward Lv X+1.
+      const isUpgrading = b.status === BuildingStatus.Upgrading;
+      return {
+        ok: false,
+        message: isUpgrading
+          ? `${name} Lv ${b.level} is upgrading to Lv ${b.level + 1} — Tier ${expeditionTier} needs Lv ${required}.`
+          : `Tier ${expeditionTier} needs ${name} Lv ${required} — yours is Lv ${b.level}.`,
+      };
+    }
+    return { ok: true, message: null };
+  }, [estateData, selectedType, expeditionTier]);
+
+  // Can only start once stamina + at least one operative are committed, and the
+  // tier's required building is in place.
+  const canStartNow =
+    canStart && hasStamina && buildingReq.ok && expeditionOps.some((n) => n > 0);
 
   // Expedition time remaining
   const expeditionRemaining = hasExpedition
@@ -614,8 +659,9 @@ export function ExpeditionTab() {
                   </div>
                   <div>
                     <div className="text-xs text-text-muted">NOVI Cost</div>
-                    <div className="text-text-secondary text-sm">
-                      <GoldNumber value={rewardPreview.cost} prefix="$ " size="sm" />
+                    <div className="flex items-center gap-1 text-text-secondary text-sm">
+                      <GameIcon id="resource-novi" size={14} />
+                      {formatNoviAmount(rewardPreview.cost)}
                     </div>
                   </div>
                 </div>
@@ -631,6 +677,11 @@ export function ExpeditionTab() {
             {hasExpedition && (
               <div className="mt-3 text-center text-[11px] text-red-400">
                 You already have an active expedition. Claim or abort it first.
+              </div>
+            )}
+            {!hasExpedition && buildingReq.message && (
+              <div className="mt-3 text-center text-[11px] text-red-400">
+                {buildingReq.message}
               </div>
             )}
 

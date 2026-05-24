@@ -20,8 +20,13 @@ import { FeatureLayout } from "./feature-layout";
 import { ActivityForecast } from "./activity-forecast";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTimeOfDay } from "@/lib/estate/useTimeOfDay";
-import { forecastCollect } from "@/lib/estate/forecast";
-import { ActivityType, createCollectResourcesInstruction } from "novus-mundus-sdk";
+import {
+  ActivityType,
+  createCollectResourcesInstruction,
+  deciToNovi,
+  forecastCollect,
+  noviToDeci,
+} from "novus-mundus-sdk";
 
 // Farming is collection type 3 on-chain.
 const COLLECTION_TYPE = 3;
@@ -45,7 +50,7 @@ export function FarmTab() {
     const ge = client.gameEngine;
     const ix = createCollectResourcesInstruction(
       { owner: publicKey, gameEngine: ge },
-      { noviAmount: collectNoviAmount, collectionType: COLLECTION_TYPE },
+      { noviAmount: noviToDeci(collectNoviAmount), collectionType: COLLECTION_TYPE },
     );
     return transact
       .mutateAsync({
@@ -66,7 +71,7 @@ export function FarmTab() {
   }
   if (!player) return null;
 
-  const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
+  const noviBalance = deciToNovi(player.lockedNovi ?? 0);
   const produce = player.produce?.toNumber?.() ?? 0;
   const operativeUnits =
     (player.operativeUnit1?.toNumber?.() ?? 0) +
@@ -75,7 +80,7 @@ export function FarmTab() {
   const hasEnough = noviBalance >= collectNoviAmount;
 
   const ge = geData?.account;
-  const forecast = ge ? forecastCollect(collectNoviAmount, "farming", player, ge, now) : null;
+  const forecast = ge ? forecastCollect(noviToDeci(collectNoviAmount), "farming", player, ge, now) : null;
 
   return (
     <FeatureLayout
@@ -135,8 +140,9 @@ export function FarmTab() {
               <ActivityForecast activity={ActivityType.Consuming} verb="Farming">
                 {operativeUnits > 0 && forecast ? (
                   <span className="flex items-center justify-between gap-2">
-                    <span className="text-text-muted">
-                      {collectNoviAmount.toLocaleString()} NOVI →
+                    <span className="inline-flex items-center gap-1 text-text-muted">
+                      {collectNoviAmount.toLocaleString()} NOVI
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     </span>
                     <span className="inline-flex items-center gap-1 font-mono tabular-nums text-text-gold">
                       ≥ {forecast.output.toLocaleString()}
@@ -154,6 +160,7 @@ export function FarmTab() {
                 min={1}
                 max={noviBalance}
                 suffix="NOVI"
+                fibonacciCheckValue={noviToDeci(collectNoviAmount)}
               />
               <TxButton onClick={handleCollect} disabled={operativeUnits === 0 || !hasEnough}>
                 {hasEnough ? "Harvest Produce" : "Insufficient NOVI"}

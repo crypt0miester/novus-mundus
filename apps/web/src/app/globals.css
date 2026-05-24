@@ -34,7 +34,7 @@ button:not(:disabled) {
   --color-border-gold: #92400e;
   --color-border-gold-bright: #b45309;
 
-  /* Tier accent — follows the player's subscription tier (copper→crimson).
+  /* Tier accent — follows the player's subscription tier (copper to crimson).
      Rebound to --tier-accent on <body>; defaults here are paper / tier 0.
      Use for accent chrome (bg-accent, border-accent, ring-accent). */
   --color-accent: var(--tier-accent);
@@ -123,6 +123,9 @@ body[data-theme="dark"] {
 /* --nm-accent / --nm-accent-bright follow --tier-accent (aliased in :root) —
    single source of truth, no per-tier overrides. */
 
+/* Chain ladder: Rookie 0 / Expert 1 / Epic 2 / Legendary 3.
+   tier 0 (Rookie / no charter) keeps the :root defaults — no override. */
+
 body[data-tier="1"] {
   --tier-accent: #CD7F32;
   --tier-accent-bright: #D4944A;
@@ -135,17 +138,6 @@ body[data-tier="1"] {
 }
 
 body[data-tier="2"] {
-  --tier-accent: #94A3B8;
-  --tier-accent-bright: #B0BEC5;
-  --tier-accent-glow: rgba(148, 163, 184, 0.15);
-  --tier-border: #2D3748;
-  --tier-noise: 0.02;
-  --tier-vignette: 0.25;
-  --tier-scrollbar: #4A5568;
-  --color-text-gold: #B0BEC5;
-}
-
-body[data-tier="3"] {
   --tier-accent: #daa520;
   --tier-accent-bright: #f1af09;
   --tier-accent-glow: rgba(251, 191, 36, 0.2);
@@ -156,7 +148,7 @@ body[data-tier="3"] {
   --color-text-gold: #daa520;
 }
 
-body[data-tier="4"] {
+body[data-tier="3"] {
   --tier-accent: #8B1A1A;
   --tier-accent-bright: #9a2222;
   --tier-accent-glow: rgba(139, 26, 26, 0.25);

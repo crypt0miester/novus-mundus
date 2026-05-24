@@ -15,6 +15,8 @@ import { NumberField } from "./NumberField";
 import {
   createReservedToLockedInstruction,
   createWithdrawReservedInstruction,
+  deciToNovi,
+  noviToDeci,
   RESERVED_NOVI_VESTING_PERIOD,
 } from "novus-mundus-sdk";
 
@@ -69,7 +71,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     const geKey = client.gameEngine;
     const ix = createReservedToLockedInstruction(
       { owner: publicKey, gameEngine: geKey },
-      { amount },
+      { amount: noviToDeci(amount) },
     );
     return transact
       .mutateAsync({
@@ -92,7 +94,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     const geKey = client.gameEngine;
     const ix = createWithdrawReservedInstruction(
       { owner: publicKey, gameEngine: geKey },
-      { amount },
+      { amount: noviToDeci(amount) },
     );
     return transact
       .mutateAsync({
@@ -109,8 +111,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
   if (!user || !player) return null;
 
-  const reservedBalance = user.reservedNovi.toNumber();
-  const totalEarned = user.totalReservedEarned.toNumber();
+  const reservedBalance = deciToNovi(user.reservedNovi);
+  const totalEarned = deciToNovi(user.totalReservedEarned);
   const eventsWon = user.totalEventsWon.toNumber();
   const eventsPlayed = user.totalEventsParticipated.toNumber();
   const isVested = vestingRemaining === 0 && reservedBalance > 0;

@@ -17,7 +17,7 @@ export interface PanelAction {
    * `onHold`). When `holdMax > 1` and `onHold` is set, holding the morph
    * button ramps a count 1..holdMax and release fires `onHold` with it — so a
    * speedup action can pack that many instructions into one tx. A tap still
-   * fires `onClick`. Omitted or <= 1 → plain one-shot.
+   * fires `onClick`. Omitted or <= 1 to plain one-shot.
    */
   holdMax?: number;
   /** Hold-release handler — receives the charged count (always >= 1). */

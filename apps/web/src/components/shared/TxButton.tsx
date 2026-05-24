@@ -20,7 +20,7 @@ interface TxButtonProps {
   onHold?: (reportPhase: (phase: TxPhase) => void, count: number) => Promise<string>;
   /**
    * Enables press-and-hold charging (requires `onHold`). Holding ramps a count
-   * 1..holdMax; release fires `onHold`. Omitted or <= 1 → plain one-shot.
+   * 1..holdMax; release fires `onHold`. Omitted or <= 1 to plain one-shot.
    */
   holdMax?: number;
   children: React.ReactNode;

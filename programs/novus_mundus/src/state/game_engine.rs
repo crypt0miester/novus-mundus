@@ -361,7 +361,11 @@ pub struct EconomicConfig {
     // Novi consumption multipliers (basis points: 10000 = 1.0x)
     // DETERMINISTIC: Single base value, variance from time-of-day multipliers
     pub novi_consumption_base: u64,             // 137500 bp (13.75x) - midpoint of old range
-    pub _reserved_consumption: u64,             // Reserved for future use (maintains struct size)
+
+    // Starter Locked NOVI granted on init_player (raw units, 1 decimal).
+    // Per-kingdom so each deployment can tune onboarding generosity.
+    // Default seeded from `constants::STARTER_LOCKED_NOVI` in init_game_engine.
+    pub starter_locked_novi: u64,
 
     // Secondary multiplier (basis points: deterministic bonus)
     // Uses √φ = 1.272x for golden ratio harmony

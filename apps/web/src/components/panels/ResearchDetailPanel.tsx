@@ -38,6 +38,7 @@ import {
   getResearchLevel,
   checkResearchPrerequisites,
   findBuilding,
+  formatNoviAmount,
   getResearchName,
   getResearchNode,
   getResearchCategoryName,
@@ -458,7 +459,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
             className={`font-mono tabular-nums ${hasEnoughNovi || isActiveForThis ? "text-text-gold" : "text-red-400"}`}
           >
             <GameIcon id="resource-novi" size={14} className="mr-2" />
-            {noviBalance.toLocaleString()}
+            {formatNoviAmount(noviBalance)}
           </span>
         </div>
 
@@ -473,13 +474,13 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
           <div className="mt-1 flex items-center justify-between text-xs">
             <span className="text-zinc-500">Lv {currentLevel + 1} Cost</span>
             <span className="font-mono tabular-nums text-text-muted">
-              {nextLevelCost.toLocaleString()} NOVI
+              {formatNoviAmount(nextLevelCost)} NOVI
             </span>
           </div>
         )}
         {!hasEnoughNovi && !isActiveForThis && currentLevel < template.maxLevel && (
           <div className="mt-1 text-[11px] text-red-400">
-            Need {(nextLevelCost - noviBalance).toLocaleString()} more NOVI
+            Need {formatNoviAmount(nextLevelCost - noviBalance)} more NOVI
           </div>
         )}
       </div>
@@ -526,7 +527,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
               }`}
             >
               <div className="text-[11px] text-text-muted">Lv {r.level}</div>
-              <div className="text-xs font-semibold text-text-gold">{r.cost.toLocaleString()}</div>
+              <div className="text-xs font-semibold text-text-gold">{formatNoviAmount(r.cost)}</div>
               <div className="text-[11px] text-text-muted">~{r.timeHours}h</div>
             </div>
           ))}

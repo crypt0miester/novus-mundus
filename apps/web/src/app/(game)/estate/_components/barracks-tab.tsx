@@ -21,13 +21,15 @@ import { CoverageNote } from "./coverage-note";
 import { ShowcaseBanner } from "./showcase-banner";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTimeOfDay } from "@/lib/estate/useTimeOfDay";
-import { forecastHire } from "@/lib/estate/forecast";
 import {
   ActivityType,
   calculateDefensivePower,
   calculateProduceDeficit,
   calculateWeaponDeficit,
   createHireUnitsInstruction,
+  deciToNovi,
+  forecastHire,
+  noviToDeci,
 } from "novus-mundus-sdk";
 import { GameIcon } from "@/components/shared/GameIcon";
 
@@ -78,7 +80,7 @@ export function BarracksTab() {
     const ge = client.gameEngine;
     const ix = createHireUnitsInstruction(
       { owner: publicKey, gameEngine: ge },
-      { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: hireNoviAmount },
+      { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: noviToDeci(hireNoviAmount) },
     );
     return transact
       .mutateAsync({
@@ -100,11 +102,11 @@ export function BarracksTab() {
   if (!player) return null;
 
   const selectedUnit = DEFENSIVE_UNITS[hireType]!;
-  const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
+  const noviBalance = deciToNovi(player.lockedNovi ?? 0);
 
   const ge = geData?.account;
   const hireForecast = ge
-    ? forecastHire(hireNoviAmount, selectedUnit.unitType, player, ge, now)
+    ? forecastHire(noviToDeci(hireNoviAmount), selectedUnit.unitType, player, ge, now)
     : null;
 
   const du1 = player.defensiveUnit1?.toNumber?.() ?? 0;
@@ -241,9 +243,10 @@ export function BarracksTab() {
                 label="NOVI to spend"
                 value={hireNoviAmount}
                 onChange={setHireNoviAmount}
-                min={1}
+                min={100}
                 max={noviBalance}
                 suffix="NOVI"
+                fibonacciCheckValue={noviToDeci(hireNoviAmount)}
               />
               <TxButton onClick={handleHire} disabled={noviBalance < hireNoviAmount}>
                 {noviBalance >= hireNoviAmount ? `Hire ${selectedUnit.label}` : "Insufficient NOVI"}

@@ -12,11 +12,11 @@ import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel"
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { cn, formatNumber } from "@/lib/utils";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
-import { findBuilding } from "novus-mundus-sdk";
+import { findBuilding, formatNoviAmount } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
 import { GameIcon } from "../shared/GameIcon";
 
-/** Hours → compact "4h" / "10.5h" string. */
+/** Hours to compact "4h" / "10.5h" string. */
 function fmtHours(h: number): string {
   return `${h < 10 ? h.toFixed(1) : Math.round(h)}h`;
 }
@@ -267,7 +267,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
             }`}
           >
             <GameIcon id="resource-novi" size={14} className="mr-2" />
-            {noviBalance.toLocaleString()}
+            {formatNoviAmount(noviBalance)}
           </span>
         </div>
         {!atMaxLevel && costInfo && (
@@ -276,13 +276,13 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
               {isUpgrade ? `Lv ${level + 1} Cost` : "Build Cost"}
             </span>
             <span className="font-mono tabular-nums text-text-muted">
-              {cost.toLocaleString()} NOVI · {fmtHours(costInfo.baseTimeHours)}
+              {formatNoviAmount(cost)} NOVI · {fmtHours(costInfo.baseTimeHours)}
             </span>
           </div>
         )}
         {!hasEnough && !atMaxLevel && costInfo && (
           <div className="mt-1 text-[11px] text-red-400">
-            Need {deficit.toLocaleString()} more NOVI
+            Need {formatNoviAmount(deficit)} more NOVI
           </div>
         )}
       </div>

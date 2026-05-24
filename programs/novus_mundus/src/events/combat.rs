@@ -105,7 +105,15 @@ impl Event for EncounterAttacked {
     }
 }
 
-/// Emitted when an encounter is defeated (killed)
+/// Emitted when an encounter is defeated (killed).
+///
+/// `loot_cash` is the immediate kill-bounty cash already added to
+/// `player.cash_on_hand` (see `instant_cash` in `attack_encounter.rs`).
+/// Everything from `loot_novi` onward lives in the killing-blow player's
+/// LootAccount and is claimed via `claim_loot`. Equipment shares are the
+/// post-split (melee 50% / ranged 30% / siege remainder) values actually
+/// written to the LootAccount. Encounter loot has no armor — it's a PvP-
+/// and subscription-only resource on the loot side.
 pub struct EncounterDefeated {
     /// Encounter account pubkey
     pub encounter: Address,
@@ -119,10 +127,24 @@ pub struct EncounterDefeated {
     pub killing_blow_by: Address,
     /// Killing blow player's name (48 bytes UTF-8)
     pub killing_blow_name: [u8; 48],
-    /// Total loot cash generated
+    /// Immediate kill-bounty cash (added to player.cash_on_hand on the kill)
     pub loot_cash: u64,
-    /// Total loot NOVI generated
+    /// LootAccount NOVI (claimable)
     pub loot_novi: u64,
+    /// LootAccount produce (claimable rations)
+    pub loot_produce: u64,
+    /// LootAccount vehicles (claimable drays — transport)
+    pub loot_vehicles: u64,
+    /// LootAccount melee weapons (post-split share)
+    pub loot_melee: u64,
+    /// LootAccount ranged weapons (post-split share)
+    pub loot_ranged: u64,
+    /// LootAccount siege weapons (post-split share)
+    pub loot_siege: u64,
+    /// LootAccount crafting fragments
+    pub loot_fragments: u64,
+    /// LootAccount raw gems
+    pub loot_gems: u64,
     /// Unix timestamp
     pub timestamp: i64,
 }
@@ -140,6 +162,13 @@ impl Event for EncounterDefeated {
         offset += self.killing_blow_name.pack(&mut buf[offset..]);
         offset += self.loot_cash.pack(&mut buf[offset..]);
         offset += self.loot_novi.pack(&mut buf[offset..]);
+        offset += self.loot_produce.pack(&mut buf[offset..]);
+        offset += self.loot_vehicles.pack(&mut buf[offset..]);
+        offset += self.loot_melee.pack(&mut buf[offset..]);
+        offset += self.loot_ranged.pack(&mut buf[offset..]);
+        offset += self.loot_siege.pack(&mut buf[offset..]);
+        offset += self.loot_fragments.pack(&mut buf[offset..]);
+        offset += self.loot_gems.pack(&mut buf[offset..]);
         offset += self.timestamp.pack(&mut buf[offset..]);
         offset
     }

@@ -6,7 +6,7 @@ import { SYSVAR_CLOCK_PUBKEY } from "@solana/web3.js";
 
 /** Byte offset of `unix_timestamp` (i64, LE) within the Clock sysvar account.
  *  Layout: slot u64 | epoch_start_timestamp i64 | epoch u64 |
- *  leader_schedule_epoch u64 | unix_timestamp i64  →  8+8+8+8 = 32. */
+ *  leader_schedule_epoch u64 | unix_timestamp i64 to 8+8+8+8 = 32. */
 const CLOCK_UNIX_TIMESTAMP_OFFSET = 32;
 
 /** How often to re-anchor to the chain clock. Validator-clock drift is slow,

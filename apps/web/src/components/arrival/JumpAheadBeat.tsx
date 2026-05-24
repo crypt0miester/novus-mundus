@@ -72,6 +72,8 @@ export function JumpAheadBeat({
         log={jump.log}
         onEnter={jump.phase === "done" ? onComplete : undefined}
         onRetry={jump.phase === "failed" ? jump.resume : undefined}
+        walletSol={jump.walletSol}
+        onRefetchBalance={jump.refetchBalance}
       />
     );
   }

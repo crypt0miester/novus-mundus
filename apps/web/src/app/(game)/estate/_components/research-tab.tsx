@@ -111,8 +111,8 @@ export function ResearchTab() {
     return isTraveling(player) ? "Cannot research while traveling" : null;
   }, [player]);
 
-  // Templates grouped by category, ordered by category number (Battle →
-  // Economy → Growth). The view shows one category at a time.
+  // Templates grouped by category, ordered by category number (Battle to 
+  // Economy to Growth). The view shows one category at a time.
   const categories = useMemo(() => {
     if (!templates) return [];
     const byNum = new Map<number, ResearchTemplateAccount[]>();

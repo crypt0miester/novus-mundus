@@ -263,7 +263,7 @@ export function TargetTravel({
 
   let travelActions: PanelAction[] | null = null;
   if (playerTraveling && playerArrived) {
-    // Arrived within range → one-tap "Attack" (settles + strikes in one tx).
+    // Arrived within range to one-tap "Attack" (settles + strikes in one tx).
     // Otherwise intracity still needs a tx to settle; intercity finishes on
     // the map.
     if (canArriveAttack) {

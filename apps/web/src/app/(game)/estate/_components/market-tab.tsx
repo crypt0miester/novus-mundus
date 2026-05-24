@@ -29,8 +29,13 @@ import {
   ActivityType,
   getCurrentTimeOfDay,
   getActivityMultiplier,
+  formatNoviAmount,
 } from "novus-mundus-sdk";
 
+// Equipment offered by the Market caravan. Drays are the lore name for the
+// chain's `vehicles` resource — wagons + beasts + salvaged engines. No game
+// icon yet (the generated registry has no entry); we fall back to the armor
+// icon at the call site, which is a stand-in until an icon ships.
 const EQUIPMENT = [
   {
     label: "Melee Weapons",
@@ -55,6 +60,18 @@ const EQUIPMENT = [
     field: "armorPieces" as const,
     type: EquipmentType.Armor,
     icon: "equip-armor" as const,
+  },
+  {
+    label: "Produce",
+    field: "produce" as const,
+    type: EquipmentType.Produce,
+    icon: "resource-produce" as const,
+  },
+  {
+    label: "Drays",
+    field: "vehicles" as const,
+    type: EquipmentType.Vehicles,
+    icon: "equip-drays" as const,
   },
 ];
 
@@ -92,8 +109,15 @@ export function MarketTab() {
     const longitude = playerData?.account?.currentLong;
     if (!ec || !estate || longitude == null) return null;
 
-    // Index aligns with the EQUIPMENT array order: melee, ranged, siege, armor.
-    const baseCosts = [ec.meleeWeaponCost, ec.rangedWeaponCost, ec.siegeWeaponCost, ec.armorCost];
+    // Index aligns with the EQUIPMENT array order: melee, ranged, siege, armor, produce, drays.
+    const baseCosts = [
+      ec.meleeWeaponCost,
+      ec.rangedWeaponCost,
+      ec.siegeWeaponCost,
+      ec.armorCost,
+      ec.produceCost,
+      ec.vehicleCost,
+    ];
     const baseCost = baseCosts[equipType]?.toNumber?.() ?? 0;
     if (baseCost <= 0) return null;
 
@@ -273,7 +297,7 @@ export function MarketTab() {
                       <>
                         {" · "}
                         <span className="font-mono tabular-nums text-text-gold">
-                          {unitPrice.toLocaleString()}
+                          {equipPayCash ? unitPrice.toLocaleString() : formatNoviAmount(unitPrice)}
                         </span>{" "}
                         each
                       </>
@@ -292,7 +316,7 @@ export function MarketTab() {
                       <span className="text-zinc-500">Your {equipPayCash ? "Cash" : "NOVI"}</span>
                       <span className="flex items-center gap-1 font-mono tabular-nums text-text-gold">
                         <GameIcon id={equipPayCash ? "resource-cash" : "resource-novi"} size={13} />
-                        {(equipPayCash ? cashBalance : noviBalance).toLocaleString()}
+                        {equipPayCash ? cashBalance.toLocaleString() : formatNoviAmount(noviBalance)}
                       </span>
                     </div>
                     <div className="flex gap-1 rounded-lg bg-surface p-1">
@@ -334,7 +358,9 @@ export function MarketTab() {
                             id={equipPayCash ? "resource-cash" : "resource-novi"}
                             size={13}
                           />
-                          {(unitPrice * equipAmount).toLocaleString()}
+                          {equipPayCash
+                            ? (unitPrice * equipAmount).toLocaleString()
+                            : formatNoviAmount(unitPrice * equipAmount)}
                         </span>
                       </div>
                     )}

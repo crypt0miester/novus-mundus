@@ -21,12 +21,14 @@ import { CoverageNote } from "./coverage-note";
 import { ShowcaseBanner } from "./showcase-banner";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTimeOfDay } from "@/lib/estate/useTimeOfDay";
-import { forecastHire } from "@/lib/estate/forecast";
 import {
   ActivityType,
   calculateOperativePower,
   calculateProduceDeficit,
   createHireUnitsInstruction,
+  deciToNovi,
+  forecastHire,
+  noviToDeci,
 } from "novus-mundus-sdk";
 import { GameIcon } from "@/components/shared/GameIcon";
 
@@ -77,7 +79,7 @@ export function CampTab() {
     const ge = client.gameEngine;
     const ix = createHireUnitsInstruction(
       { owner: publicKey, gameEngine: ge },
-      { unitType: OPERATIVE_UNITS[hireType]!.unitType, noviAmount: hireNoviAmount },
+      { unitType: OPERATIVE_UNITS[hireType]!.unitType, noviAmount: noviToDeci(hireNoviAmount) },
     );
     return transact
       .mutateAsync({
@@ -99,11 +101,11 @@ export function CampTab() {
   if (!player) return null;
 
   const selectedUnit = OPERATIVE_UNITS[hireType]!;
-  const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
+  const noviBalance = deciToNovi(player.lockedNovi ?? 0);
 
   const ge = geData?.account;
   const hireForecast = ge
-    ? forecastHire(hireNoviAmount, selectedUnit.unitType, player, ge, now)
+    ? forecastHire(noviToDeci(hireNoviAmount), selectedUnit.unitType, player, ge, now)
     : null;
 
   const op1 = player.operativeUnit1?.toNumber?.() ?? 0;
@@ -218,6 +220,7 @@ export function CampTab() {
                 min={1}
                 max={noviBalance}
                 suffix="NOVI"
+                fibonacciCheckValue={noviToDeci(hireNoviAmount)}
               />
               <ActivityForecast
                 activity={ActivityType.Consuming}
@@ -225,8 +228,9 @@ export function CampTab() {
               >
                 {hireForecast ? (
                   <span className="flex items-center justify-between gap-2">
-                    <span className="text-text-muted">
-                      {hireNoviAmount.toLocaleString()} NOVI →
+                    <span className="inline-flex items-center gap-1 text-text-muted">
+                      {hireNoviAmount.toLocaleString()} NOVI
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     </span>
                     <span className="font-mono tabular-nums text-text-gold">
                       ~{hireForecast.units.toLocaleString()} {selectedUnit.label}

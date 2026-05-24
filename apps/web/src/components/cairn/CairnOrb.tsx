@@ -6,7 +6,7 @@ import type { Act, Mood } from "@/lib/narrative";
 
 interface CairnOrbProps {
   mood: Mood;
-  /** 0–5 — drives how lit the stone is: dull stone → beacon. */
+  /** 0–5 — drives how lit the stone is: dull stone to beacon. */
   act: Act;
   /** Diameter in px. */
   size?: number;

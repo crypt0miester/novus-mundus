@@ -10,11 +10,6 @@ import {
   // Networth
   calculateNetworth,
   calculateNetworthBreakdown,
-  // Resource collection (time-based)
-  calculateCollectionWithTimeBonus,
-  calculateMiningWithTimeBonus,
-  calculateFishingWithTimeBonus,
-  calculateFarmingWithTimeBonus,
   // Consumption
   calculateProduceConsumption,
   calculateProduceDeficit,
@@ -187,96 +182,6 @@ describe('Networth Calculations', () => {
       const breakdown = calculateNetworthBreakdown(assets, values);
 
       expect(breakdown.total).toBe(total);
-    });
-  });
-});
-
-// Resource Collection Tests (Time-Based)
-
-describe('Resource Collection with Time Bonus', () => {
-  // Use a fixed longitude (0 = Greenwich) so time-of-day is predictable
-  const longitude = 0;
-
-  describe('calculateCollectionWithTimeBonus', () => {
-    it('should return a positive value for non-zero base amount', () => {
-      const result = calculateCollectionWithTimeBonus(100, 43200, longitude);
-      expect(result).toBeGreaterThan(0);
-    });
-
-    it('should return 0 for zero base amount', () => {
-      const result = calculateCollectionWithTimeBonus(0, 43200, longitude);
-      expect(result).toBe(0);
-    });
-
-    it('should apply collection bonus when provided', () => {
-      const noBonus = calculateCollectionWithTimeBonus(100, 43200, longitude, 0);
-      const withBonus = calculateCollectionWithTimeBonus(100, 43200, longitude, 5000); // 50%
-      expect(withBonus).toBeGreaterThan(noBonus);
-    });
-
-    it('should vary based on time of day', () => {
-      // Dawn-ish timestamp (longitude 0, 3-6am range = 10800-21600s)
-      const dawnResult = calculateCollectionWithTimeBonus(1000, 14400, longitude);
-      // Midday timestamp (longitude 0, 9-15h = 32400-54000s)
-      const middayResult = calculateCollectionWithTimeBonus(1000, 43200, longitude);
-      // Results should differ because of time-of-day multiplier
-      // (Both positive, but different amounts)
-      expect(dawnResult).toBeGreaterThan(0);
-      expect(middayResult).toBeGreaterThan(0);
-    });
-  });
-
-  describe('calculateMiningWithTimeBonus', () => {
-    it('should return a positive value for non-zero base amount', () => {
-      const result = calculateMiningWithTimeBonus(100, 43200, longitude);
-      expect(result).toBeGreaterThan(0);
-    });
-
-    it('should return 0 for zero base amount', () => {
-      const result = calculateMiningWithTimeBonus(0, 43200, longitude);
-      expect(result).toBe(0);
-    });
-
-    it('should apply mining bonus when provided', () => {
-      const noBonus = calculateMiningWithTimeBonus(100, 43200, longitude, 0);
-      const withBonus = calculateMiningWithTimeBonus(100, 43200, longitude, 3000); // 30%
-      expect(withBonus).toBeGreaterThan(noBonus);
-    });
-  });
-
-  describe('calculateFishingWithTimeBonus', () => {
-    it('should return a positive value for non-zero base amount', () => {
-      const result = calculateFishingWithTimeBonus(100, 43200, longitude);
-      expect(result).toBeGreaterThan(0);
-    });
-
-    it('should return 0 for zero base amount', () => {
-      const result = calculateFishingWithTimeBonus(0, 43200, longitude);
-      expect(result).toBe(0);
-    });
-
-    it('should apply fishing bonus when provided', () => {
-      const noBonus = calculateFishingWithTimeBonus(100, 43200, longitude, 0);
-      const withBonus = calculateFishingWithTimeBonus(100, 43200, longitude, 2000); // 20%
-      expect(withBonus).toBeGreaterThan(noBonus);
-    });
-  });
-
-  describe('calculateFarmingWithTimeBonus', () => {
-    it('should return a positive value for non-zero base amount', () => {
-      const result = calculateFarmingWithTimeBonus(100, 43200, longitude);
-      expect(result).toBeGreaterThan(0);
-    });
-
-    it('should return 0 for zero base amount', () => {
-      const result = calculateFarmingWithTimeBonus(0, 43200, longitude);
-      expect(result).toBe(0);
-    });
-
-    it('should apply farming bonus when provided', () => {
-      const noBonus = calculateFarmingWithTimeBonus(100, 43200, longitude, 0);
-      const withBonus = calculateFarmingWithTimeBonus(100, 43200, longitude, 1000); // 10%
-      expect(withBonus).toBeGreaterThan(noBonus);
     });
   });
 });

@@ -8,11 +8,9 @@ import { useSettings, type ThemePreference } from "@/lib/store/settings";
  * Sets `data-tier` and `data-theme` on <body> based on the player's subscription
  * tier and the user's theme preference.
  *
- * Tier 0 = Free (no sub / expired)  → paper default
- * Tier 1 = Bronze                   → paper default
- * Tier 2 = Silver                   → choice (paper or dark)
- * Tier 3 = Gold                     → dark default (paper alt)
- * Tier 4 = Legendary                → dark default (paper alt)
+ * The on-chain ladder is 4 tiers (Rookie 0 / Expert 1 / Epic 2 / Legendary 3).
+ * `data-tier` is the chain tier index when the charter is active, else 0; the
+ * CSS palette in `globals.css` is keyed on those four indices.
  */
 export function useTierTheme() {
   const { data } = usePlayer();
@@ -25,10 +23,7 @@ export function useTierTheme() {
     if (player) {
       const now = Math.floor(Date.now() / 1000);
       const end = player.subscriptionEnd.toNumber();
-      tier =
-        player.subscriptionTier > 0 && end > now
-          ? Math.min(player.subscriptionTier, 4)
-          : 0;
+      if (end > now) tier = Math.min(player.subscriptionTier, 3);
     }
 
     document.body.setAttribute("data-tier", String(tier));
@@ -49,7 +44,7 @@ export function useTierTheme() {
 function resolveTheme(pref: ThemePreference, tier: number): string {
   if (pref === "paper") return "paper";
   if (pref === "dark") return "dark";
-  // auto: tiers 0-1 = paper, tiers 2-4 = dark
+  // auto: Rookie/Expert = paper, Epic/Legendary = dark
   return tier <= 1 ? "paper" : "dark";
 }
 
@@ -64,17 +59,27 @@ export function getCachedTier(): number {
   }
 }
 
-/** Tier display names */
-export const TIER_NAMES = ["Free", "Bronze", "Silver", "Gold", "Legendary"] as const;
+/** Chain tier index → display name. Mirrors the on-chain `SubscriptionTier`
+ *  ladder defined in `programs/.../initialization/game_engine.rs`. */
+export const TIER_NAMES = ["Rookie", "Expert", "Epic", "Legendary"] as const;
 
-/** Tier badge text (Roman numerals, empty for free) */
-const TIER_BADGES = ["", "I", "II", "III", "IV"] as const;
+/** Roman-numeral badge per chain tier index. */
+const TIER_BADGES = ["I", "II", "III", "IV"] as const;
 
-/** Get tier info for a given tier number */
-export function getTierInfo(tier: number) {
+/**
+ * Tier info for the layout chrome.
+ *
+ * `active` is the subscription's expiry state — `subscription_end > now`. A
+ * lapsed / never-subscribed player gets the "No Charter" framing; an active
+ * player (including a paying Rookie at tier 0) gets their tier's name and
+ * badge.
+ */
+export function getTierInfo(tier: number, active = true) {
+  if (!active) return { name: "No Charter", badge: "", hasBadge: false };
+  const safe = Math.min(Math.max(tier, 0), TIER_NAMES.length - 1);
   return {
-    name: TIER_NAMES[tier] ?? "Free",
-    badge: TIER_BADGES[tier] ?? "",
-    hasBadge: tier > 0,
+    name: TIER_NAMES[safe],
+    badge: TIER_BADGES[safe],
+    hasBadge: true,
   };
 }

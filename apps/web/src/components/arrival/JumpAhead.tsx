@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { cn } from "@/lib/utils";
 
 /**
  * Jump-ahead progress stepper — the UI for the paid "skip the early game"
  * action. A flat panel that sits in the Arrival like any other beat: no
- * floating-card chrome. Step state reads as a disc filling in (hollow ring →
- * spinner → filled disc) — no checkmarks, which the game's iconography
+ * floating-card chrome. Step state reads as a disc filling in (hollow ring to 
+ * spinner to filled disc) — no checkmarks, which the game's iconography
  * doesn't use; the tier accent replaces any generic green.
  *
  * Pure presentational component. The executor (`lib/jumpstart`) drives it.
@@ -38,6 +39,11 @@ interface JumpAheadProps {
   onEnter?: () => void;
   /** Shown when `phase === "failed"`. */
   onRetry?: () => void;
+  /** Live wallet SOL balance (lamports) — surfaced beside the retry control
+   *  so the player sees an airdrop landing without having to retry first. */
+  walletSol?: number | null;
+  /** Manual balance refetch — paired with the live readout above. */
+  onRefetchBalance?: () => void;
 }
 
 const STATUS_WORD: Record<JumpPhase, string> = {
@@ -90,6 +96,8 @@ export function JumpAhead({
   log,
   onEnter,
   onRetry,
+  walletSol,
+  onRefetchBalance,
 }: JumpAheadProps) {
   const doneCount = useMemo(
     () => steps.filter((s) => s.status === "done").length,
@@ -205,14 +213,33 @@ export function JumpAhead({
             enter the realm
           </button>
         )}
-        {phase === "failed" && onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="rounded-full border border-[var(--tier-accent)] px-4 py-1.5 text-xs font-bold lowercase text-text-gold transition-colors hover:bg-surface-raised"
-          >
-            resume
-          </button>
+        {phase === "failed" && (
+          <div className="flex items-center gap-2">
+            {walletSol != null && (
+              <span className="font-mono text-xs tabular-nums text-text-muted">
+                {(walletSol / LAMPORTS_PER_SOL).toFixed(2)} SOL
+              </span>
+            )}
+            {onRefetchBalance && (
+              <button
+                type="button"
+                onClick={onRefetchBalance}
+                className="rounded-full border border-border-default px-2.5 py-1 text-xs lowercase text-text-muted transition-colors hover:bg-surface-raised hover:text-text-secondary"
+                aria-label="Refresh balance"
+              >
+                refresh
+              </button>
+            )}
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="rounded-full border border-[var(--tier-accent)] px-4 py-1.5 text-xs font-bold lowercase text-text-gold transition-colors hover:bg-surface-raised"
+              >
+                resume
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -9,6 +9,11 @@ import { MinigameSession } from "./MinigameSession";
 import { StanceChoice, stanceName } from "./choices/StanceChoice";
 import { BlessingChoice } from "./choices/BlessingChoice";
 import { ActivityResult } from "./ActivityResult";
+import {
+  useDailyActivities,
+  WINDOW_LABEL,
+  type OwnedActivity,
+} from "./useDailyActivities";
 
 interface DailyActivityPanelProps {
   building: number;
@@ -21,6 +26,18 @@ interface ActivityOutcome {
   summary: string;
 }
 
+/** Why the activity can't be launched right now, for the gated-state notice. */
+function windowGateMessage(activity: OwnedActivity): string {
+  switch (activity.status) {
+    case "done":
+      return "You've already completed this activity for today's window.";
+    case "missed":
+      return `The ${WINDOW_LABEL[activity.window]} window has closed for today.`;
+    default:
+      return `Not open yet — this plays in the ${WINDOW_LABEL[activity.window]} window.`;
+  }
+}
+
 /**
  * One building's daily activity, end to end. A skill game (`play`) gets an
  * intro then the `MinigameSession`; a Class A choice (`stance` / `blessing`)
@@ -30,6 +47,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
   const meta = ACTIVITY_BY_BUILDING.get(building);
   const { data: playerData } = usePlayer();
   const { submitChoice } = useDailyActivity();
+  const daily = useDailyActivities();
 
   const [started, setStarted] = useState(false);
   const [outcome, setOutcome] = useState<ActivityOutcome | null>(null);
@@ -43,6 +61,20 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
       </div>
     );
   }
+
+  // The activity's window status (available / later / missed / done). The
+  // server (and the on-chain `daily_activity` gate) reject an out-of-window
+  // play, so block the launch here rather than letting the run fail.
+  //
+  // Also gate while `daily` is still loading: without this guard, a player
+  // who taps Begin in the load window plays a full minigame only to have
+  // submitChoice reject after the fact.
+  const dailyReady = !!daily;
+  const activity = daily?.owned.find((a) => a.meta.building === building) ?? null;
+  const gated = !started && (!dailyReady || (!!activity && activity.status !== "available"));
+  const gateMessage = activity
+    ? windowGateMessage(activity)
+    : "Checking today's window…";
 
   const runChoice = async (payload: { choice?: number; heroMint?: string }, summary: string) => {
     setSubmitting(true);
@@ -92,6 +124,10 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
           summary={outcome.summary}
           onClose={closeResult}
         />
+      ) : gated ? (
+        <div className="card text-center">
+          <p className="text-sm text-text-secondary">{gateMessage}</p>
+        </div>
       ) : meta.kind === "play" ? (
         started ? (
           <MinigameSession

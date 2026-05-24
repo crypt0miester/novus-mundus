@@ -16,7 +16,7 @@ import { useDomainName } from "@/lib/hooks/useDomainName";
 import { formatNumber } from "@/lib/utils";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
-import { createUpdateLockedNoviInstruction } from "novus-mundus-sdk";
+import { createUpdateLockedNoviInstruction, deciToNovi } from "novus-mundus-sdk";
 
 /** Persistent status bar at the bottom of the viewport. Shows player info + resources + mini NOVI generator. */
 export function StatusBar() {
@@ -31,14 +31,17 @@ export function StatusBar() {
 
   const domain = useDomainName(publicKey);
 
-  const tier = player
+  const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
         const end = player.subscriptionEnd.toNumber();
-        return player.subscriptionTier > 0 && end > now ? Math.min(player.subscriptionTier, 4) : 0;
+        return {
+          tier: Math.min(player.subscriptionTier, 3),
+          active: end > now,
+        };
       })()
-    : getCachedTier();
-  const tierInfo = getTierInfo(tier);
+    : { tier: getCachedTier(), active: false };
+  const tierInfo = getTierInfo(tier, active);
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -76,7 +79,7 @@ export function StatusBar() {
           </div>
           <div className="hidden items-center gap-1 sm:flex">
             <GameIcon id="resource-novi" title="Locked NOVI" size={15} />
-            <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
+            <GoldNumber value={deciToNovi(player.lockedNovi)} size="sm" format="compact" />
           </div>
           <div className="hidden items-center gap-1 sm:flex">
             <GameIcon id="resource-cash" title="Cash" size={15} />

@@ -34,7 +34,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
 
   const team = teamResult?.account;
 
-  // Build a map of player PDA → player data
+  // Build a map of player PDA to player data
   const playerMap = useMemo(() => {
     if (!allPlayers)
       return new Map<string, { name: string; level: number; networth: number; owner: string }>();

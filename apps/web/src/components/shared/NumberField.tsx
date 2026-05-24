@@ -26,6 +26,14 @@ interface NumberFieldProps {
   showSlider?: boolean;
   /** Render the tappable "max N" shortcut. Default true. */
   showMax?: boolean;
+  /**
+   * Optional override for the Fibonacci-highlight check. The chain's
+   * Fibonacci bonus applies to the value the instruction *carries* — for NOVI
+   * fields that's `display × 10` raw, so callers should pass the raw value
+   * here (e.g. `noviToDeci(value)`) when the highlight needs to predict the
+   * actual on-chain bonus. Defaults to the displayed `value`.
+   */
+  fibonacciCheckValue?: number;
   className?: string;
 }
 
@@ -56,7 +64,7 @@ function clamp(n: number, lo: number, hi: number): number {
  * the player can actually commit.
  *
  * The field holds a local draft string while focused, so it can be cleared and
- * retyped freely; it commits (parse → clamp) on blur or Enter. The steppers and
+ * retyped freely; it commits (parse to clamp) on blur or Enter. The steppers and
  * slider commit immediately.
  *
  * When the value is a Fibonacci number past `FIB_FLOOR`, the number renders
@@ -73,6 +81,7 @@ export function NumberField({
   disabled = false,
   showSlider = true,
   showMax = true,
+  fibonacciCheckValue,
   className,
 }: NumberFieldProps) {
   const fieldId = useId();
@@ -84,8 +93,11 @@ export function NumberField({
   const inert = disabled || rangeEmpty;
   const current = clamp(value, lo, hi);
   // A Fibonacci value worth marking in gold — the small, dense ones
-  // (≤ FIB_FLOOR) are dropped.
-  const onFib = isFibonacci(current) && current > FIB_FLOOR;
+  // (≤ FIB_FLOOR) are dropped. The check runs against `fibonacciCheckValue`
+  // when supplied (NOVI fields pass `noviToDeci(value)` so the highlight
+  // predicts the chain's on-raw bonus), otherwise against `current`.
+  const fibValue = fibonacciCheckValue ?? current;
+  const onFib = isFibonacci(fibValue) && current > FIB_FLOOR;
 
   // Draft string, live only while the field is focused — lets it be cleared
   // and retyped without the committed value fighting every keystroke.

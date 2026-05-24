@@ -20,7 +20,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import { useSheetStore } from "@/lib/store/sheet";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { CairnReport } from "@/components/cairn/CairnReport";
-import { createUpdateLockedNoviInstruction } from "novus-mundus-sdk";
+import { createUpdateLockedNoviInstruction, deciToNovi } from "novus-mundus-sdk";
 
 /** Desktop left sidebar — vertical card stack with player data + resources. */
 export function LeftPanel() {
@@ -36,14 +36,17 @@ export function LeftPanel() {
 
   const domain = useDomainName(publicKey);
 
-  const tier = player
+  const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
         const end = player.subscriptionEnd.toNumber();
-        return player.subscriptionTier > 0 && end > now ? Math.min(player.subscriptionTier, 4) : 0;
+        return {
+          tier: Math.min(player.subscriptionTier, 3),
+          active: end > now,
+        };
       })()
-    : getCachedTier();
-  const tierInfo = getTierInfo(tier);
+    : { tier: getCachedTier(), active: false };
+  const tierInfo = getTierInfo(tier, active);
 
   // NOVI accrual ticker — shared with the status bar and mobile sidebar.
   const { pendingNovi } = useNoviGenerator();
@@ -115,7 +118,7 @@ export function LeftPanel() {
             <GameIcon id="resource-novi" size={14} />
             NOVI
           </span>
-          <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
+          <GoldNumber value={deciToNovi(player.lockedNovi)} size="sm" format="compact" />
         </div>
         {pendingNovi > 0 && (
           <div className="mt-2 flex items-center justify-between">
@@ -190,14 +193,17 @@ export function LeftPanelMobile() {
 
   const domain = useDomainName(publicKey);
 
-  const tier = player
+  const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
         const end = player.subscriptionEnd.toNumber();
-        return player.subscriptionTier > 0 && end > now ? Math.min(player.subscriptionTier, 4) : 0;
+        return {
+          tier: Math.min(player.subscriptionTier, 3),
+          active: end > now,
+        };
       })()
-    : getCachedTier();
-  const tierInfo = getTierInfo(tier);
+    : { tier: getCachedTier(), active: false };
+  const tierInfo = getTierInfo(tier, active);
 
   const [expanded, setExpanded] = useState(false);
 
@@ -254,7 +260,7 @@ export function LeftPanelMobile() {
           {tierInfo.hasBadge && <span className="tier-badge text-[9px]">[{tierInfo.badge}]</span>}
           <span className="text-text-muted">Lv {player.level}</span>
           <span className="text-text-muted">
-            <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
+            <GoldNumber value={deciToNovi(player.lockedNovi)} size="sm" format="compact" />
           </span>
         </button>
         <WorldClock compact />
@@ -288,7 +294,7 @@ export function LeftPanelMobile() {
                 <GameIcon id="resource-novi" size={12} />
                 NOVI
               </div>
-              <GoldNumber value={player.lockedNovi.toNumber()} size="sm" format="compact" />
+              <GoldNumber value={deciToNovi(player.lockedNovi)} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">

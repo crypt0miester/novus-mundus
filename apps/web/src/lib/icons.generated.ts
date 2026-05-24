@@ -20,6 +20,7 @@ export const GAME_ICONS = {
   "buff-weapon-efficiency": "relief",
   "buff-xp-gain": "relief",
   "equip-armor": "relief",
+  "equip-drays": "relief",
   "equip-melee": "relief",
   "equip-ranged": "relief",
   "equip-siege": "relief",

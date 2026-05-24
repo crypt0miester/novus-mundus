@@ -18,7 +18,7 @@ export interface EventEntry {
   id: string;
   /** Event discriminator name */
   name: string;
-  /** Serialized event data (BN→string, PublicKey→base58) */
+  /** Serialized event data (BN to string, PublicKey to base58) */
   event: Record<string, unknown>;
   /** Scopes this event belongs to */
   scopes: EventScope[];
@@ -61,10 +61,10 @@ export function serializeEventData(event: NovusMundusEvent): Record<string, unkn
     if (val === null || val === undefined) {
       result[key] = val;
     } else if (typeof val === "object" && "toNumber" in (val as object)) {
-      // BN → string
+      // BN to string
       result[key] = (val as { toString: () => string }).toString();
     } else if (typeof val === "object" && "toBase58" in (val as object)) {
-      // PublicKey → base58
+      // PublicKey to base58
       result[key] = (val as { toBase58: () => string }).toBase58();
     } else if (Array.isArray(val)) {
       result[key] = val.map((v) => {

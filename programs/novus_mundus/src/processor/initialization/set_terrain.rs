@@ -188,7 +188,7 @@ pub fn process(
         city_account.resize(new_size)?;
     }
 
-    // ── Write terrain data ─────────────────────────────────────
+    // Write terrain data
     {
         let mut city_data = city_account.try_borrow_mut()?;
         let city = unsafe { &mut *(city_data.as_mut_ptr() as *mut CityAccount) };

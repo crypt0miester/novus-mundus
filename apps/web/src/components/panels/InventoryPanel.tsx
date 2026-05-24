@@ -180,6 +180,25 @@ export function InventoryPanel() {
             siege={player.siegeWeapons?.toNumber?.() ?? 0}
             armor={player.armorPieces?.toNumber?.() ?? 0}
           />
+          {/* Provisions — produce (rations) and drays (transport). Both are
+              first-class on-chain resources that ride alongside the army; gear
+              swings, provisions move. */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between rounded-md bg-surface/40 px-2.5 py-1.5">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Produce</div>
+                <div className="text-[11px] text-text-muted">Rations from the ash-fed soil</div>
+              </div>
+              <GoldNumber value={player.produce?.toNumber?.() ?? 0} size="sm" />
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-surface/40 px-2.5 py-1.5">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Drays</div>
+                <div className="text-[11px] text-text-muted">Wagons, beasts, salvaged engines</div>
+              </div>
+              <GoldNumber value={player.vehicles?.toNumber?.() ?? 0} size="sm" />
+            </div>
+          </div>
         </div>
       )}
 

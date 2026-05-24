@@ -26,7 +26,7 @@ const Noise: React.FC<NoiseProps> = ({
 
     const canvasSize = 1024;
 
-    // Tier-aware strength: --tier-noise runs 0.04 (tier 0) → 0 (tier 4).
+    // Tier-aware strength: --tier-noise runs 0.04 (tier 0) to 0 (tier 4).
     // 0.04 is treated as full strength; tier 4 disables the grain entirely.
     let strength = 1;
     const readStrength = () => {

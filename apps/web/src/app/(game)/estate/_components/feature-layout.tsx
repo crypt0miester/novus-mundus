@@ -16,7 +16,7 @@ interface FeatureLayoutProps {
  * Shared desktop layout for a building's feature view. Mobile keeps the single
  * vertical column the views were designed around; at `lg` the content splits
  * into `main` + a pinned `aside`, so a wide screen reads left-to-right (what
- * you have → what you do) instead of stretching the mobile stack across the
+ * you have to what you do) instead of stretching the mobile stack across the
  * whole column. Each slot lays its children out with the views' usual 1rem
  * vertical rhythm, so a tab just passes loose cards.
  */

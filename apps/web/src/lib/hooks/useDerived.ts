@@ -127,23 +127,29 @@ export function useHeroBuffs() {
   }, [player]);
 }
 
-/** Subscription status from player tier + end time */
+/** Subscription status from player tier + end time.
+ *
+ * `active` is purely the expiry check — the chain treats tier 0 (Rookie) as a
+ * paid charter too, so the legacy `tier > 0` gate would mis-report a paying
+ * Rookie holder as inactive. Names mirror the on-chain tier names; consumers
+ * that need the live name should read `gameEngine.subscriptionTiers[i].name`. */
 export function useSubscriptionStatus() {
   const { data } = usePlayer();
   const player = data?.account;
 
   return useMemo(() => {
-    if (!player) return { tier: 0, active: false, expiresAt: 0, tierName: "Free" };
+    if (!player) return { tier: 0, active: false, expiresAt: 0, tierName: "No Charter" };
 
     const now = Math.floor(Date.now() / 1000);
     const end = player.subscriptionEnd.toNumber();
-    const tierNames = ["Free", "Bronze", "Silver", "Gold", "Platinum"];
+    const active = end > now;
+    const tierNames = ["Rookie", "Expert", "Epic", "Legendary"];
 
     return {
       tier: player.subscriptionTier,
-      active: player.subscriptionTier > 0 && end > now,
+      active,
       expiresAt: end,
-      tierName: tierNames[player.subscriptionTier] || "Free",
+      tierName: active ? tierNames[player.subscriptionTier] ?? "Rookie" : "No Charter",
     };
   }, [player]);
 }

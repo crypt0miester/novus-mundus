@@ -134,7 +134,7 @@ export function CastleTab() {
     { playerPda: PublicKey; wallet: PublicKey }[]
   >([]);
 
-  // Resolve player-PDA → owner wallet for a batch of player PDAs.
+  // Resolve player-PDA to owner wallet for a batch of player PDAs.
   const resolveWallets = async (playerPdas: PublicKey[]): Promise<Map<string, PublicKey>> => {
     const out = new Map<string, PublicKey>();
     if (playerPdas.length === 0) return out;

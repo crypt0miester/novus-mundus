@@ -6,7 +6,7 @@ import type { PublicKey } from "@solana/web3.js";
 import { useDomainStore } from "@/lib/store/domains";
 
 /**
- * Resolve a single wallet → domain name.
+ * Resolve a single wallet to domain name.
  * Reads from the zustand domain cache; triggers a lazy fetch if missing.
  *
  * For lists, use useDomainNames() to batch-resolve.

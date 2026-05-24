@@ -23,7 +23,7 @@ function getParser(connection: Connection): TldParser {
   return _parser;
 }
 
-/** Resolve a single wallet → "domain.tld" or null. */
+/** Resolve a single wallet to "domain.tld" or null. */
 export async function resolveDomainName(
   connection: Connection,
   owner: PublicKey | string,
@@ -39,7 +39,7 @@ export async function resolveDomainName(
 }
 
 /**
- * Batch-resolve wallets → domain names.
+ * Batch-resolve wallets to domain names.
  * Uses getMultipleAccountsInfo internally (max ~100 per call).
  *
  * Returns a Map<base58, domainString | null>.

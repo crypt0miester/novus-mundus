@@ -58,7 +58,7 @@ export function inflate(poly: Pt[], delta: number): Pt[] {
 }
 
 /**
- * Catmull–Rom → cubic Bezier SVG path string for a closed polygon. Tension
+ * Catmull–Rom to cubic Bezier SVG path string for a closed polygon. Tension
  * `t` ∈ [0, 1]; lower is rounder. 0.5 reads as a hand-drawn flowing outline.
  */
 export function smoothClosedPath(poly: Pt[], t = 0.5): string {

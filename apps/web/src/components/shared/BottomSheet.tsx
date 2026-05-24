@@ -112,7 +112,7 @@ export function BottomSheet({
   }, []);
 
   // Backdrop opacity is a linear function of the sheet's translateY: fully
-  // open → BACKDROP_MAX, fully dismissed → 0.
+  // open to BACKDROP_MAX, fully dismissed to 0.
   const opacityFor = useCallback((y: number) => {
     const { dismiss } = detents.current;
     const fade = dismiss > 0 ? nearestClamp((dismiss - y) / dismiss, 0, 1) : 1;

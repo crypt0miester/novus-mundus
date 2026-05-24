@@ -449,6 +449,18 @@ pub fn process(
         0
     };
 
+    // Loot breakdown for the EncounterDefeated event, populated inside the
+    // loot creation block below. Defaults to zero so the event still serializes
+    // cleanly when the encounter dies but has_loot() returned false.
+    let mut emit_loot_novi = 0u64;
+    let mut emit_loot_produce = 0u64;
+    let mut emit_loot_vehicles = 0u64;
+    let mut emit_loot_melee = 0u64;
+    let mut emit_loot_ranged = 0u64;
+    let mut emit_loot_siege = 0u64;
+    let mut emit_loot_fragments = 0u64;
+    let mut emit_loot_gems = 0u64;
+
     // 18a. Create Loot if encounter dies (NEW)
     if encounter_data.health == 0 {
         // Calculate loot pool using oscillation + level scaling + time-of-day bonus
@@ -627,6 +639,16 @@ pub fn process(
                 fragments,
                 gems,
             };
+
+            // Snapshot for the EncounterDefeated event emitted later.
+            emit_loot_novi = loot_pool.total_novi;
+            emit_loot_produce = loot_pool.total_produce;
+            emit_loot_vehicles = loot_pool.total_vehicles;
+            emit_loot_melee = melee_share;
+            emit_loot_ranged = ranged_share;
+            emit_loot_siege = siege_share;
+            emit_loot_fragments = fragments;
+            emit_loot_gems = gems;
         }
 
         // 18b. Close Encounter's LocationAccount (refund rent to creator)
@@ -787,7 +809,14 @@ pub fn process(
             killing_blow_by: player_key,
             killing_blow_name: player_data.name,
             loot_cash: instant_cash,
-            loot_novi: 0, // Loot NOVI is in LootAccount, not instant
+            loot_novi: emit_loot_novi,
+            loot_produce: emit_loot_produce,
+            loot_vehicles: emit_loot_vehicles,
+            loot_melee: emit_loot_melee,
+            loot_ranged: emit_loot_ranged,
+            loot_siege: emit_loot_siege,
+            loot_fragments: emit_loot_fragments,
+            loot_gems: emit_loot_gems,
             timestamp: now,
         });
     }

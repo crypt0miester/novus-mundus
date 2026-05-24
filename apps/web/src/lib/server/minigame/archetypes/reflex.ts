@@ -19,7 +19,7 @@ import type {
  *    distance from it.
  *
  * Everything timed is stamped on the *server* clock (see `reflex-session.ts`).
- * Network latency is estimated from the round-start→arm leg and subtracted,
+ * Network latency is estimated from the round-start to arm leg and subtracted,
  * capped — the client never reports a time. This file is the pure logic:
  * generation and grading; the timed move state machine lives in the route.
  */
@@ -65,7 +65,7 @@ export interface ReflexProgress {
   tStart: number;
   tGo: number;
   tSweepStart: number;
-  /** One round-start→arm round-trip sample per round. */
+  /** One round-start to arm round-trip sample per round. */
   rttSamples: number[];
   /** Per completed round, the score fraction 0-1. */
   results: number[];
@@ -89,7 +89,7 @@ export function rttEstimate(samples: number[]): number {
   return Math.min(Math.min(...samples), REFLEX_RTT_CAP_MS);
 }
 
-/** react: a reaction time (ms) → score fraction 0-1. */
+/** react: a reaction time (ms) to score fraction 0-1. */
 export function reactionFraction(
   reactionMs: number,
   targetMs: number,
@@ -99,7 +99,7 @@ export function reactionFraction(
   return clamp((floorMs - reactionMs) / (floorMs - targetMs), 0, 1);
 }
 
-/** precision: the marker position vs the target band → score fraction 0-1. */
+/** precision: the marker position vs the target band to score fraction 0-1. */
 export function precisionFraction(
   markerPos: number,
   bandFrom: number,

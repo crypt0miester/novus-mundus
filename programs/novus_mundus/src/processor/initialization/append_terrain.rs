@@ -67,7 +67,7 @@ pub fn process(
     accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
-    // ── Parse accounts ─────────────────────────────────────────
+    // Parse accounts
     crate::extract_accounts!(accounts, [dao_authority, game_engine_account, city_account]);
 
     if !dao_authority.is_signer() {
@@ -84,7 +84,7 @@ pub fn process(
         return Err(ProgramError::IllegalOwner);
     }
 
-    // ── Parse instruction data ─────────────────────────────────
+    // Parse instruction data ─────────────────────────────────
     // Minimum: city_id (2 bytes) + at least one anchor (8 bytes)
     if data.len() < 2 + ANCHOR_SIZE {
         return Err(ProgramError::InvalidInstructionData);
@@ -101,7 +101,7 @@ pub fn process(
 
     let new_anchor_count = (anchor_bytes.len() / ANCHOR_SIZE) as u16;
 
-    // ── Verify city PDA ────────────────────────────────────────
+    // Verify city PDA ────────────────────────────────────────
     if city_account.data_len() < CityAccount::SIZE {
         return Err(ProgramError::AccountDataTooSmall);
     }
@@ -144,7 +144,7 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // ── Realloc ────────────────────────────────────────────────
+    // Realloc───────
     let new_size = CityAccount::account_size(total_anchors);
     let current_size = city_account.data_len();
 
@@ -165,7 +165,7 @@ pub fn process(
         city_account.resize(new_size)?;
     }
 
-    // ── Append anchors ─────────────────────────────────────────
+    // Append anchors
     {
         let mut city_data = city_account.try_borrow_mut()?;
 
@@ -179,7 +179,7 @@ pub fn process(
         city_data[dst_start..dst_end].copy_from_slice(anchor_bytes);
     }
 
-    // ── Emit event ─────────────────────────────────────────────
+    // Emit event────
     crate::emit!(crate::events::TerrainSet {
         city: *city_account.address(),
         city_id,

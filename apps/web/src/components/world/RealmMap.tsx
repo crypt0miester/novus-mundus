@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
 import {
@@ -48,7 +49,7 @@ export interface RealmMapSelectedContext {
   isHome: boolean;
 }
 
-/* City type → glyph + label + icon. Index must match the on-chain CityType
+/* City type to glyph + label + icon. Index must match the on-chain CityType
  * enum: Capital=0, Resource=1, Combat=2, Trade=3. Colour is deliberately
  * absent — type is signalled by the glyph engraved beside each city's dot.
  * `glyph` stays for the tiny in-SVG markers; `icon` is the engraved GameIcon
@@ -497,7 +498,7 @@ export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) 
 
       <Link href={`/world/cities/${c.cityId}`} className={styles.seal}>
         <span>Walk its gates</span>
-        <span>›</span>
+        <span><ChevronRight className="h-3.5 w-3.5" /></span>
       </Link>
     </>
   );

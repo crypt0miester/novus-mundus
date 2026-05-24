@@ -333,7 +333,7 @@ fn create_default_game_engine(
 
             // DETERMINISTIC: Golden ratio based values (no min/max randomness!)
             novi_consumption_base: 137500,              // 13.75x (midpoint of old range)
-            _reserved_consumption: 0,                   // Reserved
+            starter_locked_novi: crate::constants::STARTER_LOCKED_NOVI,
             secondary_multiplier_base: 12720,           // √φ = 1.272x (golden ratio harmony)
             _reserved_secondary: 0,                     // Reserved
             fibonacci_bonus_base: 16180,                // φ = 1.618x (golden ratio for Fibonacci matches)
@@ -489,24 +489,24 @@ fn create_rookie_tier() -> SubscriptionTier {
         synchrony_bonus: 0,                                  // 0% synchrony bonus (free tier)
         _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal
-        novi: 1_000,                                        // No reserved NOVI for free tier
-        cash: 1_000_000,                                     // 1M cash bonus
-        du_1: 10_000,                                       // 10 defensive units
+        // Bonuses granted on purchase/renewal — Rookie baseline (1× across the board)
+        novi: 25_000,                                   // 2,500 NOVI sign-on bounty (with 1 decimal)
+        cash: 10_000_000,                               // 10M cash
+        du_1: 10_000,
         du_2: 10_000,
-        du_3: 5_000,
-        op_1: 30_000,                                       // 10 operative units
+        du_3: 5_000,                                    // DU total 25k
+        op_1: 30_000,
         op_2: 20_000,
-        op_3: 10_000,
-        // Equipment bonuses (basic gear for free tier)
+        op_3: 10_000,                                   // OU total 60k
+        // Equipment — weapons total and armor each mirror DU total
         melee_weapons: 20_000,
         ranged_weapons: 5_000,
         siege_weapons: 0,
-        armor: 5_000,
+        armor: 25_000,
         produce: 50_000,
         vehicles: 50,
-        reputation: 0,                                  // No reputation bonus
-        xp: 0,                                          // No XP bonus
+        reputation: 100,
+        xp: 100,
 
         rally_caps: GameEngineRallyCaps::for_tier(0),
         max_team_members: 5,
@@ -539,24 +539,24 @@ fn create_expert_tier() -> SubscriptionTier {
         synchrony_bonus: 500,                                // 5% synchrony bonus (basis points)
         _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal (1.6× Rookie for $10/month)
-        novi: 2_000,                                    // 200 display NOVI (~$2 at $0.01/NOVI)
-        cash: 1_500_000,                                // 1.5M cash bonus
-        du_1: 16_000,                                   // 40k total defensive units
-        du_2: 16_000,
-        du_3: 8_000,
-        op_1: 48_000,                                   // 96k total operative units
-        op_2: 32_000,
-        op_3: 16_000,
-        // Equipment bonuses (balanced loadout)
-        melee_weapons: 32_000,
+        // Bonuses granted on purchase/renewal — Expert: 2× standard, 5× growth ($10 / 2× cost)
+        novi: 50_000,                                   // 5,000 NOVI sign-on bounty (with 1 decimal)
+        cash: 50_000_000,                               // 50M cash
+        du_1: 20_000,
+        du_2: 20_000,
+        du_3: 10_000,                                   // DU total 50k
+        op_1: 60_000,
+        op_2: 40_000,
+        op_3: 20_000,                                   // OU total 120k
+        // Equipment — weapons total and armor each mirror DU total
+        melee_weapons: 40_000,
         ranged_weapons: 8_000,
         siege_weapons: 2_000,
-        armor: 8_000,
-        produce: 500_000,
-        vehicles: 500,
-        reputation: 250,                                // 250 reputation bonus
-        xp: 1_000,                                      // 1,000 XP bonus
+        armor: 50_000,
+        produce: 250_000,
+        vehicles: 250,
+        reputation: 1_000,
+        xp: 1_000,
 
         rally_caps: GameEngineRallyCaps::for_tier(1),
         max_team_members: 10,
@@ -589,24 +589,24 @@ fn create_epic_tier() -> SubscriptionTier {
         synchrony_bonus: 1000,                               // 10% synchrony bonus (basis points)
         _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal (2.8× Rookie for $50/month)
-        novi: 10_000,                                   // 1,000 display NOVI (~$10 at $0.01/NOVI)
-        cash: 3_000_000,                                // 3M cash bonus
-        du_1: 28_000,                                   // 70k total defensive units
-        du_2: 28_000,
-        du_3: 14_000,
-        op_1: 84_000,                                   // 168k total operative units
-        op_2: 56_000,
-        op_3: 28_000,
-        // Equipment bonuses (advanced arsenal)
-        melee_weapons: 56_000,
-        ranged_weapons: 14_000,
-        siege_weapons: 4_000,
-        armor: 14_000,
-        produce: 2_000_000,
-        vehicles: 2_000,
-        reputation: 500,                                // 500 reputation bonus
-        xp: 2_500,                                      // 2,500 XP bonus
+        // Bonuses granted on purchase/renewal — Epic: 5× standard, 25× growth ($50 / 10× cost)
+        novi: 250_000,                                  // 25,000 NOVI sign-on bounty (with 1 decimal)
+        cash: 200_000_000,                              // 200M cash
+        du_1: 50_000,
+        du_2: 50_000,
+        du_3: 25_000,                                   // DU total 125k
+        op_1: 150_000,
+        op_2: 100_000,
+        op_3: 50_000,                                   // OU total 300k
+        // Equipment — weapons total and armor each mirror DU total
+        melee_weapons: 100_000,
+        ranged_weapons: 20_000,
+        siege_weapons: 5_000,
+        armor: 125_000,
+        produce: 1_250_000,
+        vehicles: 1_250,
+        reputation: 10_000,
+        xp: 10_000,
 
         rally_caps: GameEngineRallyCaps::for_tier(2),
         max_team_members: 25,
@@ -639,24 +639,24 @@ fn create_legendary_tier() -> SubscriptionTier {
         synchrony_bonus: 1500,                               // 15% synchrony bonus (basis points)
         _padding_sync: [0; 4],
 
-        // Bonuses granted on purchase/renewal (4× Rookie for $250/month)
-        novi: 50_000,                                   // 5,000 display NOVI (~$50 at $0.01/NOVI)
-        cash: 4_000_000,                                // 4M cash bonus
-        du_1: 40_000,                                   // 100k total defensive units
-        du_2: 40_000,
-        du_3: 20_000,
-        op_1: 120_000,                                  // 240k total operative units
-        op_2: 80_000,
-        op_3: 40_000,
-        // Equipment bonuses (legendary arsenal)
-        melee_weapons: 80_000,
-        ranged_weapons: 20_000,
-        siege_weapons: 8_000,
-        armor: 20_000,
-        produce: 5_000_000,
-        vehicles: 5_000,
-        reputation: 1_000,                              // 1,000 reputation bonus
-        xp: 5_000,                                      // 5,000 XP bonus
+        // Bonuses granted on purchase/renewal — Legend: 12× standard, 125× growth ($250 / 50× cost)
+        novi: 1_250_000,                                // 125,000 NOVI sign-on bounty (with 1 decimal)
+        cash: 1_000_000_000,                            // 1B cash
+        du_1: 120_000,
+        du_2: 120_000,
+        du_3: 60_000,                                   // DU total 300k
+        op_1: 360_000,
+        op_2: 240_000,
+        op_3: 120_000,                                  // OU total 720k
+        // Equipment — weapons total and armor each mirror DU total
+        melee_weapons: 240_000,
+        ranged_weapons: 50_000,
+        siege_weapons: 10_000,
+        armor: 300_000,
+        produce: 6_250_000,
+        vehicles: 6_250,
+        reputation: 100_000,
+        xp: 100_000,
 
         rally_caps: GameEngineRallyCaps::for_tier(3),
         max_team_members: 50,

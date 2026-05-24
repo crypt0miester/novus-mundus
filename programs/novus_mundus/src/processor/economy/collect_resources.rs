@@ -35,6 +35,40 @@ use crate::{
     events::{ResourcesCollected, XpGained, PlayerLeveledUp},
 };
 
+// Tuning for `saturating_yield` — `output = M·raw/(raw+K) + raw^0.75/D`.
+// M (`_CEILING`) is the plateau; K (`_HALF`) is the raw at which the plateau
+// reaches M/2, so it sets how far the rising part stretches; D
+// (`_TAIL_DIVISOR`) sets where the soft tail overtakes the plateau (`D ≈
+// raw_whale^0.75 / M`, anchored at raw_whale ≈ 1e12).
+const CASH_YIELD_CEILING: u64 = 5_000_000;
+const CASH_YIELD_HALF: u64 = 1_000_000;
+const CASH_YIELD_TAIL_DIVISOR: u64 = 200;
+
+const GEM_YIELD_CEILING: u64 = 2_000;
+const GEM_YIELD_HALF: u64 = 5_000;
+const GEM_YIELD_TAIL_DIVISOR: u64 = 500_000;
+
+// Flat fragment drops, awarded once research unlocks them.
+const MINING_FRAGMENT_DROP: u64 = 10;
+const FISHING_FRAGMENT_DROP: u64 = 8;
+
+/// Saturating yield curve for cash and gem collection.
+///
+/// `output = ceiling·raw/(raw + half)  +  raw^0.75 / tail_divisor`
+///
+/// * The first term plateaus at `ceiling` — a soft cap.
+/// * The second is an unbounded but sub-linear tail (`x^0.75`), so whales
+///   keep climbing past the plateau rather than hitting a hard wall.
+///
+/// `half` is the `raw` at which the plateau term reaches `ceiling/2`.
+fn saturating_yield(raw: u64, ceiling: u64, half: u64, tail_divisor: u64) -> u64 {
+    let denom = (raw as u128).saturating_add(half as u128).max(1);
+    // plateau ≤ ceiling, so the downcast to u64 cannot truncate.
+    let plateau = ((ceiling as u128).saturating_mul(raw as u128) / denom) as u64;
+    let tail = pow_three_quarters(raw) / tail_divisor.max(1);
+    plateau.saturating_add(tail)
+}
+
 /// Operative units collect resources (cash, gems, or produce)
 ///
 /// # Flow
@@ -191,52 +225,22 @@ pub fn process(
     // 8. Calculate resource generation based on collection type
     let base_output = match collection_type {
         CollectionType::Cash => {
-            // Cash generation based on operative units
-            // operative_unit_1: 10x (highest tier)
-            // operative_unit_2: 8x (mid tier)
-            // operative_unit_3: 5x (lowest tier)
-            let cash_from_unit_1 = player_data.operative_unit_1
+            // Cash from operative units, weighted by tier: 10x / 8x / 5x.
+            let unit_factor = player_data.operative_unit_1
                 .saturating_mul(10)
-                .saturating_mul(power);
-
-            let cash_from_unit_2 = player_data.operative_unit_2
-                .saturating_mul(8)
-                .saturating_mul(power);
-
-            let cash_from_unit_3 = player_data.operative_unit_3
-                .saturating_mul(5)
-                .saturating_mul(power);
-
-            cash_from_unit_1
-                .saturating_add(cash_from_unit_2)
-                .saturating_add(cash_from_unit_3)
+                .saturating_add(player_data.operative_unit_2.saturating_mul(8))
+                .saturating_add(player_data.operative_unit_3.saturating_mul(5));
+            let raw = unit_factor.saturating_mul(power);
+            saturating_yield(raw, CASH_YIELD_CEILING, CASH_YIELD_HALF, CASH_YIELD_TAIL_DIVISOR)
         },
         CollectionType::Mining => {
-            // Mining generates gems based on power and unit count
-            // Less efficient than cash but produces valuable gems
-            // operative_unit_1: 3x (best miners)
-            // operative_unit_2: 2x
-            // operative_unit_3: 1x
-            let gems_from_unit_1 = player_data.operative_unit_1
-                .saturating_mul(3);
-
-            let gems_from_unit_2 = player_data.operative_unit_2
-                .saturating_mul(2);
-
-            let gems_from_unit_3 = player_data.operative_unit_3
-                .saturating_mul(1);
-
-            let unit_factor = gems_from_unit_1
-                .saturating_add(gems_from_unit_2)
-                .saturating_add(gems_from_unit_3);
-
-            // Scale with power but apply square root for diminishing returns (no u128!)
-            // This makes gems scale with NOVI input but not linearly
-            // sqrt(power * unit_factor) gives meaningful scaling
-            // Example: 100 power * 100 units = sqrt(10000) = 100 gems
-            // Example: 1000 power * 100 units = sqrt(100000) = 316 gems
-            // Uses safe sqrt_product that stays in u64
-            sqrt_product(unit_factor, power)
+            // Gems from operative units, weighted by tier: 3x / 2x / 1x.
+            let unit_factor = player_data.operative_unit_1
+                .saturating_mul(3)
+                .saturating_add(player_data.operative_unit_2.saturating_mul(2))
+                .saturating_add(player_data.operative_unit_3);
+            let raw = unit_factor.saturating_mul(power);
+            saturating_yield(raw, GEM_YIELD_CEILING, GEM_YIELD_HALF, GEM_YIELD_TAIL_DIVISOR)
         },
         CollectionType::Fishing => {
             // Fishing generates produce based on power and unit count
@@ -493,10 +497,9 @@ pub fn process(
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
-            // Deterministic fragment bonus (always award 2 fragments if unlocked)
-            // Hero collection_rate_bps also boosts fragment drops
+            // Hero collection-rate buff also scales the fragment drop.
             if player_data.has_fragment_drops() {
-                let mut fragments = 2u64; // Deterministic: midpoint of old 1-3 range
+                let mut fragments = MINING_FRAGMENT_DROP;
                 if player_data.hero_collection_rate_bps() > 0 {
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
@@ -534,10 +537,9 @@ pub fn process(
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
-            // Deterministic fragment bonus (always award 1 fragment if unlocked)
-            // Hero collection_rate_bps also boosts fragment drops
+            // Hero collection-rate buff also scales the fragment drop.
             if player_data.has_fragment_drops() {
-                let mut fragments = 1u64; // Deterministic: lower end of old 1-2 range (fishing less efficient)
+                let mut fragments = FISHING_FRAGMENT_DROP;
                 if player_data.hero_collection_rate_bps() > 0 {
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;

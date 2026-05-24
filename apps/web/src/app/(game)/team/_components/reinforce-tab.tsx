@@ -110,7 +110,7 @@ export function ReinforceTab() {
         ...received.map((r) => ({ ...r, direction: "received" as const })),
       ].filter((r) => r.account.status !== 3); // exclude Completed
 
-      // Resolve sender/destination player PDAs → owner wallets.
+      // Resolve sender/destination player PDAs to owner wallets.
       const pdaSet = new Set<string>();
       for (const r of rows) {
         pdaSet.add(r.account.sender.toBase58());

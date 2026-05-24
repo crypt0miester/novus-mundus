@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { findBuilding } from "novus-mundus-sdk";
+import { findBuilding, formatNoviAmount } from "novus-mundus-sdk";
 import { BuildingId, BuildingName, FEATURES } from "@/lib/hooks/useFeatureGate";
 import { FeatureGate } from "@/components/shared/FeatureGate";
 import { TxButton } from "@/components/shared/TxButton";
@@ -11,7 +12,7 @@ import { useEstate } from "@/lib/hooks/useEstate";
 import { useEstateActions } from "@/lib/hooks/useEstateActions";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { buildingPhase } from "@/lib/narrative";
-import { formatNumber, formatTime } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
 import { ResearchTab } from "./research-tab";
 import { ForgeTab } from "./forge-tab";
 import { MarketTab } from "./market-tab";
@@ -182,18 +183,26 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
   const remaining = Math.max(0, endsAt - tick);
 
   const status =
-    phase === "improving"
-      ? `Level ${level} → ${level + 1} · ${formatTime(remaining, "compact")} left`
-      : phase === "improved"
-        ? `Level ${level} → ${level + 1} · ready`
-        : `Level ${level}`;
+    phase === "improving" ? (
+      <>
+        Level {level} <ChevronRight className="inline-block h-3 w-3 align-middle" /> {level + 1} ·{" "}
+        {formatTime(remaining, "compact")} left
+      </>
+    ) : phase === "improved" ? (
+      <>
+        Level {level} <ChevronRight className="inline-block h-3 w-3 align-middle" /> {level + 1} ·{" "}
+        ready
+      </>
+    ) : (
+      `Level ${level}`
+    );
 
   // Surface the next upgrade's NOVI cost on the standing-phase button, read
   // live from the building template — no need to open the panel to see it.
   const costInfo = phase === "standing" ? getBuildCostInfo(buildingId) : null;
   const upgradeLabel =
     costInfo && !costInfo.atMaxLevel
-      ? `Upgrade · ${formatNumber(costInfo.baseCost, "compact")} NOVI`
+      ? `Upgrade · ${formatNoviAmount(costInfo.baseCost)} NOVI`
       : "Upgrade";
 
   return (
@@ -202,9 +211,10 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
     >
       <Link
         href="/estate"
-        className="text-[11px] text-text-muted transition-colors hover:text-text-gold"
+        className="inline-flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-gold"
       >
-        ‹ Estate
+        <ChevronLeft className="h-3 w-3" />
+        Estate
       </Link>
 
       <div className="mt-1 flex items-center justify-between gap-4">

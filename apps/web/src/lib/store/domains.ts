@@ -3,7 +3,7 @@ import type { Connection } from "@solana/web3.js";
 import { resolveDomainName, resolveDomainNamesBatched } from "@/lib/domains";
 
 interface DomainsState {
-  /** base58 → "domain.tld" | null (resolved) | undefined (not fetched) */
+  /** base58 to "domain.tld" | null (resolved) | undefined (not fetched) */
   names: Map<string, string | null>;
 
   /** Keys currently being fetched (dedup) */

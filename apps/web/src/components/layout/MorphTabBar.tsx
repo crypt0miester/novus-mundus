@@ -61,10 +61,10 @@ function prefersReducedMotion(): boolean {
 /**
  * The mobile bottom bar — one pill that morphs between three shapes:
  *
- *   nav      → 5 primary tabs in the pill, beside a separate `+` circle
+ *   nav to 5 primary tabs in the pill, beside a separate `+` circle
  *              that floats the secondary nav items above the bar
- *   actions  → 1-2 panel actions in the same pill, centred
- *   wide     → 3+ actions (or a dismiss ✕) in a bar pinned to the nav
+ *   actions to 1-2 panel actions in the same pill, centred
+ *   wide to 3+ actions (or a dismiss ✕) in a bar pinned to the nav
  *              group's width, the ✕ taking the circle slot
  *
  * The pill is a *single persistent element* across all three — it is never
@@ -274,7 +274,7 @@ export function MorphTabBar() {
 
     const reduce = prefersReducedMotion();
 
-    // Width morph. Evaluated even when the shape is unchanged, so a wide→wide
+    // Width morph. Evaluated even when the shape is unchanged, so a wide to wide
     // width change — a dismiss ✕ appearing or leaving — still animates; only
     // the cross-fade further down is gated on a real shape change.
     const pill = pillRef.current;

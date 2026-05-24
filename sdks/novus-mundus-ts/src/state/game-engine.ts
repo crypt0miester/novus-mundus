@@ -55,6 +55,8 @@ export interface EconomicConfig {
   produceValue: BN;
   vehicleValue: BN;
   noviConsumptionBase: BN;
+  /** Per-kingdom starter NOVI granted on init_player (raw units, 1 decimal). */
+  starterLockedNovi: BN;
   secondaryMultiplierBase: number;
   fibonacciBonusBase: number;
   encounterBaseCash: BN[];
@@ -521,7 +523,7 @@ function deserializeEconomicConfig(reader: BufferReader): EconomicConfig {
   const vehicleValue = reader.readU64();
 
   const noviConsumptionBase = reader.readU64();
-  reader.skip(8); // _reserved_consumption
+  const starterLockedNovi = reader.readU64();
 
   const secondaryMultiplierBase = reader.readU32();
   reader.skip(4); // _reserved_secondary
@@ -574,6 +576,7 @@ function deserializeEconomicConfig(reader: BufferReader): EconomicConfig {
     produceValue,
     vehicleValue,
     noviConsumptionBase,
+    starterLockedNovi,
     secondaryMultiplierBase,
     fibonacciBonusBase,
     encounterBaseCash,

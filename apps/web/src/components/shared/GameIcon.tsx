@@ -6,7 +6,7 @@ export type { GameIconId };
 const BASE = "/img/icons/game";
 
 /**
- * BuffStat enum id (1–18) → relief icon id. Order matches the on-chain
+ * BuffStat enum id (1–18) to relief icon id. Order matches the on-chain
  * `BuffStat` enum in the SDK; index 0 is unused (stat ids are 1-based).
  */
 const BUFF_STAT_ICONS: readonly GameIconId[] = [

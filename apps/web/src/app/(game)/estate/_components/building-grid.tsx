@@ -118,12 +118,12 @@ export function BuildingGrid({
       const { phase } = data;
       const usable = phase === "standing" || phase === "improving" || phase === "improved";
       // A usable building whose feature lives on another page navigates there
-      // (e.g. Catacombs → the dungeon), instead of opening an estate panel.
+      // (e.g. Catacombs to the dungeon), instead of opening an estate panel.
       if (usable && data.config.route) {
         router.push(data.config.route);
         return;
       }
-      // A built building with a feature view → open it. The feature stays
+      // A built building with a feature view to open it. The feature stays
       // usable through an upgrade, so improving and improved route here too.
       if (usable && onOpenFeature && hasCenterView(id)) {
         onOpenFeature(id);

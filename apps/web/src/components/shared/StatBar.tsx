@@ -6,7 +6,7 @@ interface StatBarProps {
   current: number;
   max: number;
   label?: string;
-  /** "health" ramps green → amber → red as the value drops. */
+  /** "health" ramps green to amber to red as the value drops. */
   color?: "gold" | "green" | "red" | "blue" | "purple" | "tier" | "health";
   size?: "sm" | "md" | "lg";
   showValues?: boolean;

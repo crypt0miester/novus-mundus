@@ -30,6 +30,7 @@ const UPDATE_EXPEDITION: u16 = 1 << 8;
 const UPDATE_DUNGEON: u16 = 1 << 9;
 const UPDATE_CASTLE: u16 = 1 << 10;
 const UPDATE_COMBAT: u16 = 1 << 11;
+const UPDATE_USD_PRICE: u16 = 1 << 12;
 
 /// Update GameEngine sub-configurations
 ///
@@ -53,7 +54,8 @@ const UPDATE_COMBAT: u16 = 1 << 11;
 /// 3: SubscriptionTiers ([SubscriptionTier; 4]),
 /// 4: MintingConfig, 5: ThemeModifierConfig, 6: NoviPurchaseConfig,
 /// 7: ArenaConfig, 8: ExpeditionConfig, 9: DungeonConfig,
-/// 10: CastleConfig, 11: CombatConfig
+/// 10: CastleConfig, 11: CombatConfig,
+/// 12: usd_price_cents (raw u64 — static SOL/USD reference; cents per SOL)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -116,6 +118,12 @@ pub fn process(
     apply_update!(UPDATE_DUNGEON, engine.dungeon_config, DungeonConfig);
     apply_update!(UPDATE_CASTLE, engine.castle_config, CastleConfig);
     apply_update!(UPDATE_COMBAT, engine.combat_config, CombatConfig);
+    // Static SOL/USD reference (cents per SOL). Read only by subscription
+    // purchase to convert tier `cost_in_usd_cents` into a lamports charge —
+    // see `subscription/purchase.rs`. Bit order convention: this is a bare
+    // u64, not a sub-config, but consumed in the same byte stream so the
+    // client must place its 8 bytes after every preceding set bit's payload.
+    apply_update!(UPDATE_USD_PRICE, engine.usd_price_cents, u64);
 
     // Reject trailing garbage bytes.
     if offset != data.len() {
@@ -158,6 +166,14 @@ pub fn process(
     if update_flags & UPDATE_MINTING != 0 {
         // Per-proposal cap must not exceed total supply cap.
         if engine.minting_config.max_mint_per_proposal > engine.minting_config.max_supply_cap {
+            return Err(GameError::InvalidParameter.into());
+        }
+    }
+    if update_flags & UPDATE_USD_PRICE != 0 {
+        // Mirror the bounds enforced at subscription purchase: $1 .. $1M per
+        // SOL. Wider than any realistic market move, tight enough to catch a
+        // typo or accidental 0 that would make div-by-zero / wild overcharge.
+        if engine.usd_price_cents < 100 || engine.usd_price_cents > 100_000_000 {
             return Err(GameError::InvalidParameter.into());
         }
     }

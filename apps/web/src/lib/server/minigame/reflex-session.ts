@@ -13,12 +13,12 @@ import {
 import type { MinigameSession } from "./types";
 
 /**
- * The Reflex move state machine — `round-start` → `arm` → `tap`/`release`.
+ * The Reflex move state machine — `round-start` to `arm` to `tap`/`release`.
  *
  * Reflex is timed, so it bypasses the synchronous `applyMove` interface: every
  * instant is stamped here on the server clock (`Date.now()`), and the `arm`
  * response in `react` mode is *held open* for the secret GO delay — which is
- * what makes "tap before GO" impossible. RTT is sampled on the round-start→arm
+ * what makes "tap before GO" impossible. RTT is sampled on the round-start to arm
  * leg and subtracted (capped) so the reaction is the player's, not the wire's.
  */
 
@@ -98,7 +98,7 @@ export async function handleReflexMove(
     const round = puzzle.perRound[progress.round];
     if (!round) return { error: "no such round", status: 409, code: "BAD_MOVE" };
 
-    // The round-start → arm round-trip — the RTT sample for this round.
+    // The round-start to arm round-trip — the RTT sample for this round.
     const rtt = Math.max(0, Date.now() - progress.tStart);
 
     if (puzzle.mode === "react") {

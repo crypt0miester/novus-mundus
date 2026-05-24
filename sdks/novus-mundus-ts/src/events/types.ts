@@ -46,8 +46,24 @@ export interface EncounterDefeatedEvent {
   totalAttackers: number;
   killingBlowBy: PublicKey;
   killingBlowName: string;
+  /** Immediate kill-bounty cash already added to player.cash_on_hand. */
   lootCash: BN;
+  /** LootAccount NOVI awaiting claim. */
   lootNovi: BN;
+  /** LootAccount produce (rations). */
+  lootProduce: BN;
+  /** LootAccount vehicles (drays — transport). */
+  lootVehicles: BN;
+  /** LootAccount melee weapons (post-split share). */
+  lootMelee: BN;
+  /** LootAccount ranged weapons (post-split share). */
+  lootRanged: BN;
+  /** LootAccount siege weapons (post-split share). */
+  lootSiege: BN;
+  /** LootAccount crafting fragments. */
+  lootFragments: BN;
+  /** LootAccount raw gems. */
+  lootGems: BN;
   timestamp: BN;
 }
 

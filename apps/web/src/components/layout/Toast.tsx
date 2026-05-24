@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { useSettings, type Explorer } from "@/lib/store/settings";
 
@@ -82,14 +83,26 @@ export function ToastCard({
 /**
  * Global toast viewport. Mounted once in the root layout.
  *
- * Single position (bottom-center): the pre-sonner system used top-right on
- * mobile, but bottom-center reads fine on both and avoids a remount-on-resize
- * hack (sonner takes one static position).
+ * Position is viewport-aware: bottom-center on desktop, top-center on mobile
+ * (< md) where the floating MorphTabBar owns the bottom of the screen. sonner
+ * takes one static `position` prop, so this is matchMedia-driven — not a CSS
+ * breakpoint — and the Toaster re-renders when the breakpoint is crossed.
  */
 export function AppToaster() {
+  // Default false to desktop (bottom-center) on first paint; corrected on mount.
+  // The Toaster has no visible content until a toast fires, so no flash.
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    const sync = () => setMobile(mql.matches);
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+
   return (
     <Toaster
-      position="bottom-center"
+      position={mobile ? "top-center" : "bottom-center"}
       gap={8}
       visibleToasts={4}
       toastOptions={{ unstyled: true }}

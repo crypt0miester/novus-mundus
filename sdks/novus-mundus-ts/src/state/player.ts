@@ -831,9 +831,15 @@ export function getEffectiveTier(player: PlayerCore, nowSeconds: number): Subscr
   return SubscriptionTier.Rookie;
 }
 
-/** Check if subscription is active */
+/**
+ * Check if the subscription is active.
+ *
+ * Active = `subscription_end > now`. Rookie (tier 0) is a paid charter under
+ * the current ladder, so the legacy `tier > 0` gate would mis-classify a
+ * paying Rookie as inactive — gone.
+ */
 export function isSubscriptionActive(player: PlayerCore, nowSeconds: number): boolean {
-  return player.subscriptionEnd.toNumber() > nowSeconds && player.subscriptionTier > 0;
+  return player.subscriptionEnd.toNumber() > nowSeconds;
 }
 
 /** Check if player has a team */

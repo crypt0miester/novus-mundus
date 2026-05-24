@@ -10,7 +10,7 @@ interface PageTransitionProps {
 export function PageTransition({ children, className }: PageTransitionProps) {
   return (
     <div
-      className={`animate-in fade-in slide-in-from-bottom duration-200 ${
+      className={`h-full animate-in fade-in slide-in-from-bottom duration-200 ${
         className ?? ""
       }`}
     >

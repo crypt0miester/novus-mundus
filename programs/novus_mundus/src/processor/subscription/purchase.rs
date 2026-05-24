@@ -254,13 +254,36 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 12. Process payment
-    // Calculate SOL cost (used for both SOL and token payments)
+    // Calculate SOL cost (used for both SOL and token payments). Note that
+    // `usd_price_cents` here is a static DAO-set SOL/USD reference stored on
+    // the GameEngine — *not* an oracle reading. The Pyth/Switchboard oracle
+    // path is only used downstream in `process_token_payment_flow` to convert
+    // the resulting lamports value into the buyer's chosen payment token.
+    //
     // Formula: sol_cost_lamports = (cost_in_usd_cents * 1_000_000_000) / usd_price_cents
-    // Example: ($10.00 * 1B lamports) / 10000 cents = 1_000_000 lamports = 0.001 SOL
+    //   1_000_000_000 = lamports per SOL (SOL decimals = 9). USD cents cancel
+    //   in numerator/denominator, leaving lamports.
+    //
+    // Example: $50 sub (cost_in_usd_cents = 5_000) at SOL @ $100 (usd_price_cents
+    // = 10_000): 5_000 × 1_000_000_000 / 10_000 = 500_000_000 lamports = 0.5 SOL.
     let cost_usd_cents = tier.cost_in_usd_cents;
     let usd_price = game_engine_data.usd_price_cents;
 
-    if usd_price == 0 && (is_onchain_sol || is_token) {
+    // Sanity-bound the static SOL/USD reference so a drift to nonsense (0 →
+    // div-by-zero, or wildly out of range) can't silently overcharge or
+    // undercharge buyers. Bounds: $1/SOL .. $1,000,000/SOL — far wider than
+    // any realistic market move but tight enough to catch typos / corruption.
+    const MIN_USD_PRICE_CENTS: u64 = 100;            // $1.00 per SOL
+    const MAX_USD_PRICE_CENTS: u64 = 100_000_000;    // $1,000,000 per SOL
+    if (is_onchain_sol || is_token)
+        && (usd_price < MIN_USD_PRICE_CENTS || usd_price > MAX_USD_PRICE_CENTS)
+    {
+        pinocchio_log::log!(
+            "subscription_purchase: usd_price_cents {} out of range [{}, {}]",
+            usd_price,
+            MIN_USD_PRICE_CENTS,
+            MAX_USD_PRICE_CENTS,
+        );
         return Err(GameError::InvalidParameter.into());
     }
 

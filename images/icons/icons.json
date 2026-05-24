@@ -57,6 +57,7 @@
     { "id": "equip-ranged",                 "set": "relief", "seed": 1737, "subject": "A recurve war bow with a full quiver of arrows leaning against it. No people, no figures, no face — equipment only." },
     { "id": "equip-siege",                  "set": "relief", "seed": 1738, "subject": "A heavy windlass crossbow, an arbalest, with a small bundle of bolts at its base. No people, no figures, no face — the weapon only." },
     { "id": "equip-armor",                  "set": "relief", "seed": 1739, "subject": "A crested knight's great helm with a draped mail coif beside it. The helm is empty and hollow — no head, no face, no figure inside. Armour only." },
+    { "id": "equip-drays",                  "set": "relief", "seed": 1741, "subject": "A heavy four-wheeled troop transport wagon — long timber bed with raised side rails and an open back board for soldiers to ride, a single tall spoked wheel angled in the foreground, a stacked yoke and harness traces draped over the front board, two infantry shields and a row of upright spears propped along the bench seat. No people, no figures, no face, no beasts — the wagon and tack and weapons only." },
 
     { "id": "sanctuary-meditation",         "set": "relief", "seed": 1742, "subject": "A cairn — a stack of smooth flat weathered stones balanced into a tapering tower, the largest stone at the bottom and the smallest on top. Just the stack of stones and nothing else. No people, no figures, no face." },
 

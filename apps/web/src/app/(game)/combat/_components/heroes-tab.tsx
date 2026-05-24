@@ -13,6 +13,8 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DetailPanel } from "@/components/shared/DetailPanel";
+import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import type { PanelAction } from "@/lib/store/right-panel";
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {
@@ -47,7 +49,7 @@ import { PendingEffectBadge } from "@/components/heroes/PendingEffectBadge";
 
 const MPL_CORE_PROGRAM_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
 
-// ── Cost helpers (mirrors Rust logic) ────────────────────────
+// Cost helpers — mirror the Rust logic.
 
 function fragmentCost(currentLevel: number): number {
   const BASE = 10;
@@ -83,7 +85,7 @@ function burnReward(level: number, tier: number): number {
   return base * lvl * lvl;
 }
 
-// ── Types ────────────────────────────────────────────────────
+// Types
 
 interface HeroData {
   address: PublicKey;
@@ -264,7 +266,7 @@ export function HeroesTab() {
     });
   }, [player, connection, publicKey, refreshKey]);
 
-  // ── Handlers ─────────────────────────────────────────────
+  // Handlers
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -426,9 +428,84 @@ export function HeroesTab() {
       });
   };
 
+  // The in-panel action buttons are desktop-only (`hidden lg:block`); on mobile
+  // the BottomSheet carries no action row and these drive the morph bar.
+  const morphActions: PanelAction[] | null = (() => {
+    if (!player || !selected) return null;
+
+    if (selected.type === "template") {
+      const t = selected.info;
+      const mintable =
+        canMintHero(t.account) &&
+        !t.minted &&
+        (player.level ?? 0) >= t.account.requiredPlayerLevel;
+      return [
+        {
+          id: "mint",
+          label: t.minted ? "Minted" : "Mint",
+          variant: "primary",
+          disabled: !mintable || traveling,
+          onClick: (rp) => handleMint(t.account.templateId, rp),
+        },
+      ];
+    }
+
+    const hero = selected.hero;
+    const attrs = hero.asset.attributes;
+    const templateId = parseInt(attrs["Template"] || "0");
+    const level = attrs["Level"] ? parseInt(attrs["Level"]) : 0;
+    const canLevel =
+      levelUpGate.allowed &&
+      fragments >= fragmentCost(level) &&
+      level < levelCap &&
+      levelCap > 0;
+
+    const list: PanelAction[] = [];
+    if (levelUpGate.allowed) {
+      list.push({
+        id: "level-up",
+        label: "Level Up",
+        variant: "primary",
+        disabled: !canLevel || traveling,
+        onClick: (rp) => handleLevelUp(hero.address, templateId, rp),
+      });
+    }
+    if (selected.type === "locked") {
+      if (player.defensiveHeroSlot !== selected.slot) {
+        list.push({
+          id: "assign-defender",
+          label: "Defend",
+          onClick: (rp) => handleAssignDefensive(selected.slot, rp),
+        });
+      }
+      list.push({
+        id: "unlock",
+        label: "Unlock",
+        onClick: (rp) => handleUnlock(selected.slot, rp),
+      });
+    } else {
+      if (lockGate.allowed) {
+        list.push({
+          id: "lock",
+          label: "Lock",
+          disabled: emptySlots === 0,
+          onClick: (rp) => handleLock(hero.address, lockSlot, templateId, rp),
+        });
+      }
+      list.push({
+        id: "burn",
+        label: "Burn",
+        variant: "danger",
+        onClick: (rp) => handleBurn(hero.address, templateId, rp),
+      });
+    }
+    return list.length > 0 ? list : null;
+  })();
+  useMorphActions(morphActions);
+
   if (!player) return null;
 
-  // ── Detail panel helpers ─────────────────────────────────
+  // Detail panel helpers
 
   const selectedHero =
     selected?.type === "locked" || selected?.type === "unlocked" ? selected.hero : null;
@@ -445,9 +522,9 @@ export function HeroesTab() {
   const isTemplateSelected = (id: number) => selectedTemplate?.account.templateId === id;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* ── Left: lists ── */}
-      <div className="space-y-4 lg:col-span-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-1 lg:h-full">
+      {/* Left: lists — scrolls independently of the detail column */}
+      <div className="space-y-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto">
         {/* Pending ability effect status (only renders when an effect is armed) */}
         <PendingEffectBadge variant="block" />
 
@@ -645,9 +722,9 @@ export function HeroesTab() {
         </div>
       </div>
 
-      {/* ── Right: Detail Panel ── */}
-      <DetailPanel open={!!selected} onClose={() => setSelected(null)}>
-        {/* ── Hero Detail (locked or unlocked) ── */}
+      {/* Right: Detail Panel — fixed-height column, scrolls independently */}
+      <DetailPanel open={!!selected} onClose={() => setSelected(null)} variant="column">
+        {/* Hero detail */}
         {selectedHero && (
           <>
             <div className="flex items-center justify-between">
@@ -796,7 +873,7 @@ export function HeroesTab() {
                         onClick={(rp) => handleLevelUp(selectedHero.address, heroTemplateId, rp)}
                         disabled={!canLevel || traveling}
                         variant="secondary"
-                        className="mt-2 w-full text-xs"
+                        className="mt-2 hidden w-full text-xs lg:block"
                       >
                         Level Up
                       </TxButton>
@@ -806,8 +883,9 @@ export function HeroesTab() {
               );
             })()}
 
-            {/* Actions — pinned as a sticky footer; detail content scrolls behind it */}
-            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-border-default bg-surface-raised px-4 pb-4 pt-3">
+            {/* Actions — desktop only (sticky footer; content scrolls behind it).
+                On mobile these live in the MorphTabBar via useMorphActions. */}
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 hidden border-t border-border-default bg-surface-raised px-4 pb-4 pt-3 lg:block">
               {selected?.type === "locked" ? (
                 <div className="space-y-2">
                   {player.defensiveHeroSlot !== (selected as { slot: number }).slot && (
@@ -885,7 +963,7 @@ export function HeroesTab() {
           </>
         )}
 
-        {/* ── Template Detail (mint) ── */}
+        {/* Template detail */}
         {selectedTemplate &&
           (() => {
             const t = selectedTemplate;
@@ -999,8 +1077,8 @@ export function HeroesTab() {
                 {/* Signature Ability (read-only on template detail) */}
                 <AbilityCard template={t.account} />
 
-                {/* Mint action */}
-                <div className="border-t border-border-default pt-3">
+                {/* Mint action — desktop only; mobile uses the MorphTabBar */}
+                <div className="hidden border-t border-border-default pt-3 lg:block">
                   <TxButton
                     onClick={(rp) => handleMint(t.account.templateId, rp)}
                     disabled={!mintable || traveling}

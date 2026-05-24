@@ -583,6 +583,8 @@ impl PlayerCore {
     }
 
     /// Init with starting city, coordinates, and starter resources (Rookie tier).
+    /// `starter_locked_novi` is read from `GameEngine.economic_config` so each
+    /// kingdom can tune onboarding generosity independently.
     pub fn init_with_city(
         game_engine: Address,
         owner: Address,
@@ -592,9 +594,10 @@ impl PlayerCore {
         latitude: f64,
         longitude: f64,
         protection_duration: i64,
+        starter_locked_novi: u64,
     ) -> Self {
         let mut core = Self::init(game_engine, owner, created_at, bump);
-        core.locked_novi = crate::constants::STARTER_LOCKED_NOVI;
+        core.locked_novi = starter_locked_novi;
         // Starter units
         core.defensive_unit_1 = 10_000;
         core.defensive_unit_2 = 4_000;

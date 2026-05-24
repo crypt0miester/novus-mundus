@@ -6,7 +6,7 @@ import { orderingArchetype } from "./ordering";
 import { memoryArchetype } from "./memory";
 import { reflexArchetype } from "./reflex";
 
-/** The archetype registry — `name → { generate, applyMove?, grade }`. */
+/** The archetype registry — `name to { generate, applyMove?, grade }`. */
 export const ARCHETYPES: Record<ArchetypeName, Archetype> = {
   mcq: mcqArchetype,
   "set-select": setSelectArchetype,

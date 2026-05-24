@@ -19,6 +19,7 @@ import {
   createBuildingSpeedupInstruction,
   createCompleteBuildingInstruction,
   createHireUnitsInstruction,
+  noviToDeci,
   parseTransactionError,
   GameError,
   BuildingType,
@@ -98,11 +99,22 @@ function buildSpeedupIxs(
   return ix;
 }
 
-/** Recipe → ordered steps. Pure. */
+// `purchase_item` gates non-gem items on a built Market; gem packs (shop
+// item_type 50) bypass that gate, so they can run in the estate step before
+// any building exists. Everything else is deferred until after the Market is
+// built — see the "stock" step below.
+const GEM_PACK_ITEM_IDS = new Set<number>([7, 8]);
+
+/** Recipe to ordered steps. Pure. */
 function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
   const { owner, gameEngine, treasury, city } = ctx;
   const accounts = { owner, gameEngine };
   const steps: PlannedStep[] = [];
+
+  const gemPurchases = recipe.purchases.filter((p) => GEM_PACK_ITEM_IDS.has(p.itemId));
+  const marketGatedPurchases = recipe.purchases.filter(
+    (p) => !GEM_PACK_ITEM_IDS.has(p.itemId),
+  );
 
   // 1. Stake the claim — init_user + init_player + create_progress.
   steps.push({
@@ -123,17 +135,16 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     ],
   });
 
-  // 2. Raise the estate + run the tier's SOL purchases — the gem packs that
-  //    fund build speedups and the NOVI packs that round out the price. This
-  //    is the whole of the player's SOL spend.
+  // 2. Raise the estate + the tier's gem-pack purchases — gems fund the build
+  //    speedups and bypass the Market gate, so they're safe to buy now.
   steps.push({
     kind: "fixed",
     id: "estate",
     label: "Raise the estate",
-    computeUnits: 400_000 + 80_000 * recipe.purchases.length,
+    computeUnits: 400_000 + 80_000 * gemPurchases.length,
     instructions: [
       createCreateEstateInstruction(accounts, { cityId: city.cityId }),
-      ...recipe.purchases.map((p) =>
+      ...gemPurchases.map((p) =>
         createPurchaseItemInstruction(
           { buyer: owner, gameEngine, itemId: p.itemId, treasury },
           { quantity: p.quantity },
@@ -175,7 +186,28 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     });
   }
 
-  // 4. Muster the garrison — hires run last (Barracks must stand first).
+  // 4. Stock the reserve — NOVI packs (and any other Market-gated purchases)
+  //    have to wait until the Market is built. Skipped when the recipe has
+  //    only gem packs.
+  if (marketGatedPurchases.length > 0) {
+    steps.push({
+      kind: "fixed",
+      id: "stock",
+      label: "Stock the reserve",
+      computeUnits: 100_000 + 80_000 * marketGatedPurchases.length,
+      instructions: marketGatedPurchases.map((p) =>
+        createPurchaseItemInstruction(
+          { buyer: owner, gameEngine, itemId: p.itemId, treasury },
+          { quantity: p.quantity },
+        ),
+      ),
+    });
+  }
+
+  // 5. Muster the garrison — hires run last (Barracks must stand first).
+  // `h.novi` in the recipes is in display NOVI; the chain consumes raw
+  // deci-NOVI (mint decimals=1), so convert exactly like every other hire
+  // call site.
   if (recipe.hires.length > 0) {
     steps.push({
       kind: "fixed",
@@ -185,7 +217,7 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
       instructions: recipe.hires.map((h) =>
         createHireUnitsInstruction(accounts, {
           unitType: h.unitType,
-          noviAmount: h.novi,
+          noviAmount: noviToDeci(h.novi),
         }),
       ),
     });
@@ -212,6 +244,9 @@ export function useJumpAhead() {
     elapsedMs: 0,
     log: [],
   });
+  // Wallet SOL balance (lamports) — polled while halted so an airdrop landing
+  // reflects in the halt notice without needing a manual retry first.
+  const [walletSol, setWalletSol] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Retained so `resume` can rebuild the exact same plan.
   const recipeRef = useRef<JumpRecipe | null>(null);
@@ -229,6 +264,27 @@ export function useJumpAhead() {
     },
     [],
   );
+
+  const refetchBalance = useCallback(async () => {
+    if (!publicKey) {
+      setWalletSol(null);
+      return;
+    }
+    try {
+      setWalletSol(await client.connection.getBalance(publicKey));
+    } catch {
+      /* RPC hiccup — keep the last value rather than flicker null. */
+    }
+  }, [publicKey, client]);
+
+  // Poll the balance only while halted. A successful run doesn't need it, and
+  // 3s is responsive enough to catch a fresh airdrop without hammering the RPC.
+  useEffect(() => {
+    if (!publicKey || state.phase !== "failed") return;
+    refetchBalance();
+    const id = setInterval(refetchBalance, 3000);
+    return () => clearInterval(id);
+  }, [publicKey, state.phase, refetchBalance]);
 
   const appendLog = useCallback((line: string) => {
     setState((s) => ({ ...s, log: [...s.log, line] }));
@@ -488,16 +544,15 @@ export function useJumpAhead() {
             /* RPC hiccup — skip the courtesy check; the run will surface a
                real failure on its own. */
           }
+          if (balance !== null) setWalletSol(balance);
           const costLamports = jumpTierLamports(recipe);
           if (balance !== null && balance < costLamports) {
-            const have = (balance / LAMPORTS_PER_SOL).toFixed(2);
             setState((s) => ({
               ...s,
               phase: "failed",
               log: [
                 ...s.log,
-                `Not enough SOL — ${recipe.label} costs ` +
-                  `${costLamports / LAMPORTS_PER_SOL} SOL, your wallet holds ${have}.`,
+                `Not enough SOL — ${recipe.label} costs ${costLamports / LAMPORTS_PER_SOL} SOL.`,
               ],
             }));
             return;
@@ -542,5 +597,5 @@ export function useJumpAhead() {
     }
   }, [start]);
 
-  return { ...state, start, resume };
+  return { ...state, walletSol, refetchBalance, start, resume };
 }

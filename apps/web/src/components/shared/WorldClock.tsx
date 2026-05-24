@@ -24,7 +24,7 @@ const CX = 120;
 const CY = 110;
 const R = 94;
 
-/** Day fraction (0–1) → the body's [x, y] on the arc, in viewBox units. */
+/** Day fraction (0–1) to the body's [x, y] on the arc, in viewBox units. */
 function arcPoint(dayFraction: number): [number, number] {
   const theta = Math.PI * (1 - dayFraction);
   return [CX + R * Math.cos(theta), CY - R * Math.sin(theta)];

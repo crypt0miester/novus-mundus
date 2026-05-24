@@ -184,12 +184,16 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
               player.operativeUnit3.toNumber(),
             ]}
           />
-          <div className="mt-4 grid grid-cols-4 gap-3">
+          {/* Equipment + provisions. Produce + drays sit with the army stats
+              because they're what gets the army to the fight and keep it fed. */}
+          <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
             {[
               { label: "Melee", value: player.meleeWeapons.toNumber() },
               { label: "Ranged", value: player.rangedWeapons.toNumber() },
               { label: "Siege", value: player.siegeWeapons.toNumber() },
               { label: "Armor", value: player.armorPieces.toNumber() },
+              { label: "Produce", value: player.produce.toNumber() },
+              { label: "Drays", value: player.vehicles.toNumber() },
             ].map((w) => (
               <div key={w.label} className="text-center">
                 <div className="text-[10px] text-text-muted">{w.label}</div>

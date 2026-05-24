@@ -88,7 +88,7 @@ export function deriveAct(
 /**
  * The estate's mood — the orb's colour (§8). `threatened` needs the attack /
  * reserve signals from the Phase 2 comeback Report; until then mood resolves
- * across raw → working → thriving from build state alone.
+ * across raw to working to thriving from build state alone.
  */
 export function deriveMood(
   estate: EstateLike | null | undefined,

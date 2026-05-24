@@ -39,6 +39,7 @@ import {
   xpRequiredForLevel,
   levelProgressPercent,
   createClaimDailyRewardInstruction,
+  deciToNovi,
 } from "novus-mundus-sdk";
 
 export default function DashboardPage() {
@@ -231,7 +232,7 @@ export default function DashboardPage() {
                           <span className="text-text-secondary">NOVI</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-novi" size={14} />
-                            <GoldNumber value={novi.raw} delta />
+                            <GoldNumber value={deciToNovi(novi.raw)} delta />
                           </span>
                         </div>
                         {/* Surface a desync between the wallet's spendable
@@ -239,11 +240,11 @@ export default function DashboardPage() {
                             the game-state accounting (player.lockedNovi).
                             They should match; when they don't, the spendable
                             number is the wallet's, not the accounting's. */}
-                        {!novi.loading && player.lockedNovi.toNumber() !== novi.raw && (
+                        {!novi.loading && deciToNovi(player.lockedNovi) !== deciToNovi(novi.raw) && (
                           <div className="flex justify-between text-[11px] text-text-muted">
                             <span>Vault accounting</span>
                             <span className="font-mono tabular-nums">
-                              ◆ {player.lockedNovi.toNumber().toLocaleString()}
+                              ◆ {deciToNovi(player.lockedNovi).toLocaleString()}
                             </span>
                           </div>
                         )}

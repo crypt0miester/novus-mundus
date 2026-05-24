@@ -19,15 +19,30 @@ import {
   ActivityType,
   getCurrentTimeOfDay,
   getActivityMultiplierBps,
-  type GameEngine,
-  type PlayerCore,
-  type TimeOfDay,
-} from "novus-mundus-sdk";
-import { isFibonacci } from "@/lib/utils";
+  TimeOfDay,
+} from './time';
+import type { GameEngine } from '../state/game-engine';
+import type { PlayerCore } from '../state/player';
+import { applyBps } from './constants';
 
-/** `apply_bp` — ⌊value · bp / 10000⌋, the program's one basis-point primitive. */
-function applyBp(value: number, bp: number): number {
-  return Math.floor((value * bp) / 10000);
+/** True when `n` is a perfect square. */
+function isPerfectSquare(n: number): boolean {
+  if (n < 0) return false;
+  const r = isqrt(n);
+  return r * r === n;
+}
+
+/**
+ * True when `n` is a Fibonacci number. A non-negative integer `n` is Fibonacci
+ * iff `5n² + 4` or `5n² - 4` is a perfect square. Bails to `false` once `5n²`
+ * leaves the safe-integer range, where the perfect-square test could misread.
+ */
+export function isFibonacci(n: number): boolean {
+  if (!Number.isInteger(n) || n < 0) return false;
+  if (n <= 1) return true;
+  const fiveNSq = 5 * n * n;
+  if (!Number.isSafeInteger(fiveNSq)) return false;
+  return isPerfectSquare(fiveNSq + 4) || isPerfectSquare(fiveNSq - 4);
 }
 
 /** Integer square root — floor(√n), matching the program's `isqrt`. */
@@ -53,6 +68,48 @@ function powThreeQuarters(x: number): number {
   const s = isqrt(x);
   return s * isqrt(s);
 }
+
+// Collection yield tuning — MUST mirror the constants in
+// `programs/novus_mundus/src/processor/economy/collect_resources.rs`.
+const CASH_YIELD_CEILING = 5_000_000;
+const CASH_YIELD_HALF = 1_000_000;
+const CASH_YIELD_TAIL_DIVISOR = 200;
+const GEM_YIELD_CEILING = 2_000;
+const GEM_YIELD_HALF = 5_000;
+const GEM_YIELD_TAIL_DIVISOR = 500_000;
+
+/**
+ * `saturating_yield` — `⌊ceiling·raw/(raw+half)⌋ + ⌊raw^0.75 / tailDivisor⌋`.
+ * A soft plateau (anti-runaway) plus an unbounded sub-linear tail. Mirrors the
+ * program helper of the same name. `raw` is a `bigint` so the math stays exact
+ * past 2^53 (the program uses u128 there); JS-number widening would silently
+ * truncate for whale collections (raw ≈ unit_factor × power can reach 1e17).
+ * The tail term uses `powThreeQuarters` which is JS-number; raw past 2^53 is
+ * clamped to `MAX_SAFE_INTEGER` before that delegation — the plateau dominates
+ * at those magnitudes anyway.
+ */
+function saturatingYield(
+  raw: bigint,
+  ceiling: number,
+  half: number,
+  tailDivisor: number,
+): number {
+  if (raw <= 0n) return 0;
+  const denom = raw + BigInt(half);
+  const plateau = Number((BigInt(ceiling) * raw) / denom);
+  const rawNum =
+    raw <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(raw) : Number.MAX_SAFE_INTEGER;
+  const tail = Math.floor(powThreeQuarters(rawNum) / tailDivisor);
+  return plateau + tail;
+}
+
+/** [reputation floor, `reputationSynchronyBonuses` index] — highest floor first. */
+const REPUTATION_RANKS: ReadonlyArray<readonly [number, number]> = [
+  [100_000, 4],
+  [20_000, 3],
+  [5_000, 2],
+  [1_000, 1],
+];
 
 /**
  * `calculate_synchrony` — the player's consumption-efficiency multiplier in
@@ -84,17 +141,8 @@ export function synchronyBp(
 
   // Reputation rank bonus — Novice / Skilled / Veteran / Elite / Legendary.
   const rep = player.reputation.toNumber();
-  const repBonuses = gp.reputationSynchronyBonuses;
-  bp +=
-    rep >= 100_000
-      ? (repBonuses[4] ?? 0)
-      : rep >= 20_000
-        ? (repBonuses[3] ?? 0)
-        : rep >= 5_000
-          ? (repBonuses[2] ?? 0)
-          : rep >= 1_000
-            ? (repBonuses[1] ?? 0)
-            : (repBonuses[0] ?? 0);
+  const rank = REPUTATION_RANKS.find(([floor]) => rep >= floor)?.[1] ?? 0;
+  bp += gp.reputationSynchronyBonuses[rank] ?? 0;
 
   // Level bonus.
   bp += player.level * gp.levelSynchronyBonusPerLevel;
@@ -113,10 +161,10 @@ export function consumeNoviToPower(
   ge: GameEngine,
 ): number {
   const ec = ge.economicConfig;
-  let value = applyBp(novi, ec.noviConsumptionBase.toNumber());
-  value = applyBp(value, ec.secondaryMultiplierBase);
-  value = applyBp(value, synchrony);
-  if (isFibonacci(novi)) value = applyBp(value, ec.fibonacciBonusBase);
+  let value = applyBps(novi, ec.noviConsumptionBase.toNumber());
+  value = applyBps(value, ec.secondaryMultiplierBase);
+  value = applyBps(value, synchrony);
+  if (isFibonacci(novi)) value = applyBps(value, ec.fibonacciBonusBase);
   return value;
 }
 
@@ -130,7 +178,7 @@ function powerAtTime(
 ): { power: number; tod: TimeOfDay } {
   const base = consumeNoviToPower(novi, synchronyBp(player, ge, nowSec), ge);
   const tod = getCurrentTimeOfDay(nowSec, player.currentLong / 10000);
-  const power = applyBp(base, getActivityMultiplierBps(ActivityType.Consuming, tod));
+  const power = applyBps(base, getActivityMultiplierBps(ActivityType.Consuming, tod));
   return { power, tod };
 }
 
@@ -170,7 +218,7 @@ export function forecastHire(
   if (novi <= 0) return { units: 0, power: 0 };
   const { power, tod } = powerAtTime(novi, player, ge, nowSec);
 
-  const adjusted = applyBp(
+  const adjusted = applyBps(
     baseUnitCost(ge, unitType),
     ge.economicConfig.costMultiplier.toNumber(),
   );
@@ -183,7 +231,7 @@ export function forecastHire(
     units = baseUnits + 1;
   }
 
-  units = applyBp(units, getActivityMultiplierBps(ActivityType.Hiring, tod));
+  units = applyBps(units, getActivityMultiplierBps(ActivityType.Hiring, tod));
   return { units, power };
 }
 
@@ -201,8 +249,8 @@ export interface CollectForecast {
 
 /**
  * Forecast `collect_resources`: NOVI → power, then the per-type unit-weighted
- * scaling — linear for cash, ⌊√(unitFactor·power)⌋ for mining, that ^0.75 ×3
- * for fishing/farming.
+ * scaling — `saturatingYield` (plateau + tail) for cash and mining, the
+ * ⌊√(unitFactor·power)⌋^0.75 ×3 curve for fishing/farming.
  *
  * Mining/fishing/farming are reported as a floor: the chain then applies
  * terrain affinity and research buffs, both of which only ever *raise* the
@@ -224,13 +272,27 @@ export function forecastCollect(
   const op3 = player.operativeUnit3.toNumber();
 
   if (kind === "cash") {
-    const output = (op1 * 10 + op2 * 8 + op3 * 5) * power;
+    const unitFactor = op1 * 10 + op2 * 8 + op3 * 5;
+    const raw = BigInt(unitFactor) * BigInt(power);
+    const output = saturatingYield(
+      raw,
+      CASH_YIELD_CEILING,
+      CASH_YIELD_HALF,
+      CASH_YIELD_TAIL_DIVISOR,
+    );
     return { output, isFloor: false };
   }
 
   if (kind === "mining") {
     const unitFactor = op1 * 3 + op2 * 2 + op3 * 1;
-    return { output: sqrtProduct(unitFactor, power), isFloor: true };
+    const raw = BigInt(unitFactor) * BigInt(power);
+    const output = saturatingYield(
+      raw,
+      GEM_YIELD_CEILING,
+      GEM_YIELD_HALF,
+      GEM_YIELD_TAIL_DIVISOR,
+    );
+    return { output, isFloor: true };
   }
 
   // Fishing and farming share the ^0.75 curve and the ×3 produce weighting.
