@@ -193,8 +193,12 @@ pub fn process(
 
         // Calculate time bonus bps
         let time_bonus_bps = if units_with_time_bonus > units_to_hire {
-            let bonus_ratio = (units_with_time_bonus - units_to_hire) * 10000 / units_to_hire.max(1);
-            bonus_ratio as u16
+            let diff = units_with_time_bonus
+                .checked_sub(units_to_hire)
+                .ok_or(GameError::MathOverflow)?;
+            let bonus_ratio = mul_div(diff, 10000, units_to_hire.max(1))
+                .ok_or(GameError::MathOverflow)?;
+            u16::try_from(bonus_ratio.min(u16::MAX as u64)).unwrap_or(u16::MAX)
         } else {
             0
         };

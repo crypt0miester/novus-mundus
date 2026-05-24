@@ -802,7 +802,7 @@ pub fn process(
     }
 
     // 15. Update combat stats
-    attacker_data.total_attacks += 1;
+    attacker_data.total_attacks = attacker_data.total_attacks.saturating_add(1);
     attacker_data.total_attack_power = attacker_data.total_attack_power
         .saturating_add(attacker_damage);
 

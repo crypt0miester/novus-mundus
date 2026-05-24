@@ -14,7 +14,7 @@ use crate::{
         inflict_damage,
         calculate_networth,
         calculate_encounter_loot_pool,
-        safe_math::calculate_share,
+        safe_math::{calculate_share, mul_div},
         combat::{WeaponSet, resolve_weapon_combat},
     },
     state::{
@@ -219,7 +219,9 @@ pub fn process(
             let rp_data = unsafe { RallyParticipant::load_mut(&mut rp_data_ref) };
 
             if rp_data.included_in_march {
-                rp_data.contribution_bps = ((contributions[i] as u128 * 10000) / total_contribution as u128) as u16;
+                let bps = mul_div(contributions[i], 10000, total_contribution)
+                    .ok_or(GameError::MathOverflow)?;
+                rp_data.contribution_bps = u16::try_from(bps).unwrap_or(10000);
             }
         }
     }

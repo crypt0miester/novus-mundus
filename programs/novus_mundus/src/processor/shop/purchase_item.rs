@@ -449,7 +449,7 @@ fn calculate_optional_discounts(
             item_id,
             now,
         ) {
-            total_discount_bps += discount as u32;
+            total_discount_bps = total_discount_bps.saturating_add(discount as u32);
         }
         account_idx += 1;
     }
@@ -465,7 +465,7 @@ fn calculate_optional_discounts(
             item_category,
             now,
         ) {
-            total_discount_bps += discount as u32;
+            total_discount_bps = total_discount_bps.saturating_add(discount as u32);
         }
         // account_idx += 1;
     }

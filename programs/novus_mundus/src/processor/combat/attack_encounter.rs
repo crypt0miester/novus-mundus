@@ -407,7 +407,7 @@ pub fn process(
     )?;
 
     // 17. Update player stats
-    player_data.total_attacks += 1;
+    player_data.total_attacks = player_data.total_attacks.saturating_add(1);
     player_data.total_attack_power = player_data.total_attack_power
         .saturating_add(damage);
 

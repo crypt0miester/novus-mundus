@@ -60,12 +60,17 @@ pub fn elevation(terrain: &CityTerrain, ox: i32, oy: i32) -> u8 {
     let b1 = buoyancy(anchors[ni].mass, anchors[ni].lift) as i32;
     let b2 = buoyancy(anchors[si].mass, anchors[si].lift) as i32;
     let total = dn.saturating_add(ds);
-    let t = if total > 0 { (dn * 256 / total) as i32 } else { 0 };
-    let base = b1 + (b2 - b1) * t / 256;
+    let t = if total > 0 {
+        crate::logic::safe_math::mul_div(dn, 256, total).unwrap_or(0) as i32
+    } else {
+        0
+    };
+    let blend = b2.saturating_sub(b1).saturating_mul(t).saturating_div(256);
+    let base = b1.saturating_add(blend);
     let pressure = pressure_effect(&anchors[ni], &anchors[si], dn, ds) as i32;
-    let texture = (noise(terrain.seed, ox, oy) as i32 - 128) / 4;
+    let texture = (noise(terrain.seed, ox, oy) as i32).saturating_sub(128).saturating_div(4);
 
-    clamp_u8(base + pressure + texture)
+    clamp_u8(base.saturating_add(pressure).saturating_add(texture))
 }
 
 /// Is the coordinate passable? False if water or mountain.
@@ -88,8 +93,13 @@ pub fn terrain_moisture(terrain: &CityTerrain, ox: i32, oy: i32) -> u8 {
     let m1 = anchors[ni].moisture as i32;
     let m2 = anchors[si].moisture as i32;
     let total = dn.saturating_add(ds);
-    let t = if total > 0 { (dn * 256 / total) as i32 } else { 0 };
-    clamp_u8(m1 + (m2 - m1) * t / 256)
+    let t = if total > 0 {
+        crate::logic::safe_math::mul_div(dn, 256, total).unwrap_or(0) as i32
+    } else {
+        0
+    };
+    let blend = m2.saturating_sub(m1).saturating_mul(t).saturating_div(256);
+    clamp_u8(m1.saturating_add(blend))
 }
 
 /// Full sample with classification metadata.
@@ -155,14 +165,14 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
         return TerrainAffinity { mining_bps: 0, fishing_bps: 0, elevation_bps: 0 };
     }
 
-    let midpoint = (wl + pl) / 2;
-    let half_range = ((pl - wl) / 2).max(1);
+    let midpoint = wl.saturating_add(pl).saturating_div(2);
+    let half_range = pl.saturating_sub(wl).saturating_div(2).max(1);
 
     // Mining: bonus when elevation is in upper half (near mountains)
     // Linear scale: midpoint -> 0 BPS, peak_line -> 1500 BPS
     let mining_bps = if e > midpoint {
-        let above = (e - midpoint) as u32;
-        ((above * 1500) / half_range as u32).min(1500) as u16
+        let above = e.saturating_sub(midpoint) as u32;
+        above.saturating_mul(1500).saturating_div(half_range as u32).min(1500) as u16
     } else {
         0
     };
@@ -170,16 +180,16 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
     // Fishing: bonus when elevation is in lower half (near coast)
     // Linear scale: midpoint -> 0 BPS, water_line -> 1500 BPS
     let fishing_bps = if e < midpoint {
-        let below = (midpoint - e) as u32;
-        ((below * 1500) / half_range as u32).min(1500) as u16
+        let below = midpoint.saturating_sub(e) as u32;
+        below.saturating_mul(1500).saturating_div(half_range as u32).min(1500) as u16
     } else {
         0
     };
 
     // Combat: elevation advantage relative to midpoint
     // Linear scale: water_line -> -500 BPS, midpoint -> 0, peak_line -> +500 BPS
-    let centered = e - midpoint;
-    let elevation_bps = ((centered * 500) / half_range).max(-500).min(500) as i16;
+    let centered = e.saturating_sub(midpoint);
+    let elevation_bps = centered.saturating_mul(500).saturating_div(half_range).max(-500).min(500) as i16;
 
     TerrainAffinity { mining_bps, fishing_bps, elevation_bps }
 }
@@ -208,7 +218,10 @@ pub fn city_offset(
     city_lat: f64,
     city_long: f64,
 ) -> (i32, i32) {
-    (grid_long - to_grid(city_long), grid_lat - to_grid(city_lat))
+    (
+        grid_long.saturating_sub(to_grid(city_long)),
+        grid_lat.saturating_sub(to_grid(city_lat)),
+    )
 }
 
 
@@ -226,9 +239,11 @@ fn two_nearest(anchors: &[Anchor], ox: i32, oy: i32) -> (usize, usize, u64, u64)
     let mut second_d: u64 = u64::MAX;
 
     for (i, a) in anchors.iter().enumerate() {
-        let dx = ox as i64 - a.x as i64;
-        let dy = oy as i64 - a.y as i64;
-        let d = (dx * dx + dy * dy) as u64;
+        let dx = (ox as i64).saturating_sub(a.x as i64);
+        let dy = (oy as i64).saturating_sub(a.y as i64);
+        let dx2 = dx.saturating_mul(dx);
+        let dy2 = dy.saturating_mul(dy);
+        let d = (dx2.saturating_add(dy2)) as u64;
         if d < best_d {
             second_d = best_d;
             second_idx = best_idx;
@@ -247,7 +262,8 @@ fn two_nearest(anchors: &[Anchor], ox: i32, oy: i32) -> (usize, usize, u64, u64)
 // Internal: buoyancy (isostasy)
 /// lift × (255 - mass) / 255
 fn buoyancy(mass: u8, lift: u8) -> u8 {
-    ((lift as u32 * (255 - mass as u32)) / 255) as u8
+    let inv_mass = 255u32.saturating_sub(mass as u32);
+    (lift as u32).saturating_mul(inv_mass).saturating_div(255) as u8
 }
 
 
@@ -259,7 +275,7 @@ fn pressure_effect(nearest: &Anchor, second: &Anchor, dist_n: u64, dist_s: u64) 
     }
 
     // proximity: 0 = at nearest anchor, 64 = equidistant (boundary)
-    let proximity = (dist_n * 128 / total) as u32;
+    let proximity = crate::logic::safe_math::mul_div(dist_n, 128, total).unwrap_or(0) as u32;
 
     // Only apply pressure in outer half of territory (proximity >= 32)
     if proximity < 32 {
@@ -267,24 +283,27 @@ fn pressure_effect(nearest: &Anchor, second: &Anchor, dist_n: u64, dist_s: u64) 
     }
 
     // Scale: 0 at proximity=32, 255 at proximity=64
-    let strength = ((proximity - 32) * 8).min(255) as i32;
+    let strength = proximity
+        .saturating_sub(32)
+        .saturating_mul(8)
+        .min(255) as i32;
 
-    let rpx = nearest.push_x as i32 - second.push_x as i32;
-    let rpy = nearest.push_y as i32 - second.push_y as i32;
+    let rpx = (nearest.push_x as i32).saturating_sub(second.push_x as i32);
+    let rpy = (nearest.push_y as i32).saturating_sub(second.push_y as i32);
     if rpx == 0 && rpy == 0 {
         return 0;
     }
 
-    let bx = second.x as i32 - nearest.x as i32;
-    let by = second.y as i32 - nearest.y as i32;
-    let mag = (bx.abs() + by.abs()).max(1);
-    let nx = (bx * 64) / mag;
-    let ny = (by * 64) / mag;
+    let bx = (second.x as i32).saturating_sub(nearest.x as i32);
+    let by = (second.y as i32).saturating_sub(nearest.y as i32);
+    let mag = bx.saturating_abs().saturating_add(by.saturating_abs()).max(1);
+    let nx = bx.saturating_mul(64).saturating_div(mag);
+    let ny = by.saturating_mul(64).saturating_div(mag);
 
-    let dot = rpx * nx + rpy * ny;
-    let effect = clamp_i32(dot / 128, -60, 60);
+    let dot = rpx.saturating_mul(nx).saturating_add(rpy.saturating_mul(ny));
+    let effect = clamp_i32(dot.saturating_div(128), -60, 60);
 
-    (effect * strength / 256) as i16
+    effect.saturating_mul(strength).saturating_div(256) as i16
 }
 
 
@@ -302,7 +321,9 @@ fn terrain_hash(seed: u32, x: i32, y: i32) -> u8 {
 /// Smoothstep in fixed-point: t in 0..256, returns 0..256.
 /// Formula: t² × (3×256 − 2×t) / 256²
 fn smoothstep256(t: u32) -> u32 {
-    (t * t * (768 - 2 * t)) >> 16
+    let two_t = t.saturating_mul(2);
+    let curve = 768u32.saturating_sub(two_t);
+    t.saturating_mul(t).saturating_mul(curve) >> 16
 }
 
 /// Bilinear-interpolated octave with smoothstep. Returns 0..255.
@@ -311,27 +332,38 @@ fn smooth_octave(seed: u32, x: i32, y: i32, shift: u32) -> u32 {
     let gx = x.div_euclid(s);
     let gy = y.div_euclid(s);
     // Fractional position in cell, scaled to 0..256
-    let fx = (x.rem_euclid(s) as u32 * 256) / s as u32;
-    let fy = (y.rem_euclid(s) as u32 * 256) / s as u32;
+    let fx = (x.rem_euclid(s) as u32).saturating_mul(256).saturating_div(s as u32);
+    let fy = (y.rem_euclid(s) as u32).saturating_mul(256).saturating_div(s as u32);
     // 4 corner hashes
     let v00 = terrain_hash(seed, gx, gy) as u32;
-    let v10 = terrain_hash(seed, gx + 1, gy) as u32;
-    let v01 = terrain_hash(seed, gx, gy + 1) as u32;
-    let v11 = terrain_hash(seed, gx + 1, gy + 1) as u32;
+    let v10 = terrain_hash(seed, gx.saturating_add(1), gy) as u32;
+    let v01 = terrain_hash(seed, gx, gy.saturating_add(1)) as u32;
+    let v11 = terrain_hash(seed, gx.saturating_add(1), gy.saturating_add(1)) as u32;
     // Smoothstep interpolation factors
     let tx = smoothstep256(fx);
     let ty = smoothstep256(fy);
-    let itx = 256 - tx;
-    let ity = 256 - ty;
+    let itx = 256u32.saturating_sub(tx);
+    let ity = 256u32.saturating_sub(ty);
     // Bilinear interpolation, result in 0..255
-    (v00 * itx * ity + v10 * tx * ity + v01 * itx * ty + v11 * tx * ty) / (256 * 256)
+    let c00 = v00.saturating_mul(itx).saturating_mul(ity);
+    let c10 = v10.saturating_mul(tx).saturating_mul(ity);
+    let c01 = v01.saturating_mul(itx).saturating_mul(ty);
+    let c11 = v11.saturating_mul(tx).saturating_mul(ty);
+    c00.saturating_add(c10)
+        .saturating_add(c01)
+        .saturating_add(c11)
+        .saturating_div(256u32.saturating_mul(256))
 }
 
 fn noise(seed: u32, x: i32, y: i32) -> u8 {
     let o1 = smooth_octave(seed, x, y, 10);
     let o2 = smooth_octave(seed ^ 0x9E3779B9, x, y, 7);
     let o3 = smooth_octave(seed ^ 0x517CC1B7, x, y, 4);
-    ((o1 * 4 + o2 * 2 + o3) / 7) as u8
+    let weighted = o1
+        .saturating_mul(4)
+        .saturating_add(o2.saturating_mul(2))
+        .saturating_add(o3);
+    weighted.saturating_div(7) as u8
 }
 
 
