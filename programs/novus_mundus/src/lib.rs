@@ -321,6 +321,10 @@ pub fn process_instruction(
         311 => { msg!("update supply cap"); processor::hero::update_supply_cap::process(program_id, accounts, instruction_data) }
         312 => { msg!("use hero ability"); processor::hero::use_ability::process(program_id, accounts, instruction_data) }
 
+        // Token Operations Extended (320-329)
+        320 => { msg!("deposit novi"); processor::economy::deposit_novi::process(program_id, accounts, instruction_data) }
+        321 => { msg!("treasury sweep untracked novi"); processor::economy::treasury_sweep_untracked_novi::process(program_id, accounts, instruction_data) }
+
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

@@ -366,6 +366,10 @@ export const DISCRIMINATORS = {
   HERO_BURN: 310,
   HERO_UPDATE_SUPPLY_CAP: 311,
   HERO_USE_ABILITY: 312,
+
+  // Token Operations Extended (320-329)
+  DEPOSIT_NOVI: 320,
+  TREASURY_SWEEP_UNTRACKED_NOVI: 321,
 } as const;
 
 /** Type for discriminator values */

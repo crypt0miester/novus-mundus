@@ -1,6 +1,6 @@
 # Instruction Map
 
-> Complete reference of all 187 Novus Mundus instructions. Source of truth: `programs/novus_mundus/src/lib.rs`.
+> Complete reference of all 189 Novus Mundus instructions. Source of truth: `programs/novus_mundus/src/lib.rs`.
 
 ## Instruction Format
 
@@ -13,9 +13,9 @@ Byte 2+  : instruction-specific payload (passed as &data[2..])
 
 The `msg!` string in each match arm (e.g. `"init game engine"`) is the canonical instruction name. There is no IDL.
 
-**Total: 187 instructions across 25 systems.**
+**Total: 189 instructions across 25 systems.**
 
-Discriminant **gaps** (reserved for future use): 9, 22–29, 35–39, 43–49, 68–69, 73–79, 84–89, 91–99, 103–109, 116–119, 128–129, 172–179, 185–189, 196–199, 205–209, 222–229, 237–249, 261–269, 291–299, 303–309.
+Discriminant **gaps** (reserved for future use): 9, 22–29, 35–39, 43–49, 68–69, 73–79, 84–89, 91–99, 103–109, 116–119, 128–129, 172–179, 185–189, 196–199, 205–209, 222–229, 237–249, 261–269, 291–299, 303–309, 322–329.
 
 [Source: lib.rs](../../../programs/novus_mundus/src/lib.rs)
 
@@ -150,16 +150,18 @@ graph TD
 
 ---
 
-## Token Operations (15–16)
+## Token Operations (15–16, 320–321)
 
-**2 instructions.** Direct NOVI token operations.
+**4 instructions.** Direct NOVI token operations.
 
 | ID | Canonical name | Processor | Description |
 |----|---------------|-----------|-------------|
 | 15 | `reserved to locked` | `processor::token::reserved_to_locked` | Move vested `reserved_novi` into `locked_novi` (SPL transfer between the User PDA and Player PDA token accounts) |
 | 16 | `withdraw reserved` | `processor::token::withdraw_reserved` | Withdraw vested `reserved_novi` to a player-owned ATA (7-day vesting enforced) |
+| 320 | `deposit novi` | `processor::economy::deposit_novi` | Wallet → reserved NOVI deposit. Burns `DEPOSIT_FEE_BPS` (500 bps = 5%) of the gross from the source ATA; transfers the remainder to the UserAccount PDA-owned reserved ATA. `reserved_novi_earned_at` is NOT touched so depositors cannot reset their own 7-day withdraw vesting clock. Wallet signs |
+| 321 | `treasury sweep untracked novi` | `processor::economy::treasury_sweep_untracked_novi` | Self-recover NOVI sitting in a program-PDA-owned ATA with no backing state (mis-sends, partner transfers without the matching deposit_novi ix). Compares ATA balance to `player.locked_novi` (kind=0) or `user.reserved_novi` (kind=1); transfers surplus to the **caller's** wallet ATA. Signer must equal the PDA's stored owner. Silent no-op when balance ≤ tracked |
 
-[Source: processor/token/](../../../programs/novus_mundus/src/processor/token/)
+[Source: processor/token/](../../../programs/novus_mundus/src/processor/token/) | [Source: processor/economy/deposit_novi.rs](../../../programs/novus_mundus/src/processor/economy/deposit_novi.rs)
 
 ---
 
@@ -706,7 +708,7 @@ Counts by system (verified against `lib.rs` match arms):
 |--------|-----|-------|
 | Initialization | 0–8 | 9 |
 | Economy | 10–14, 17–19 | 8 |
-| Token | 15–16 | 2 |
+| Token | 15–16, 320–321 | 4 |
 | Combat | 20–21 | 2 |
 | Travel Intercity | 30–34 | 5 |
 | Travel Intracity | 40–42 | 3 |
@@ -733,4 +735,4 @@ Counts by system (verified against `lib.rs` match arms):
 | Shop (NOVI purchase) | 300 | 1 |
 | Oracle | 301–302 | 2 |
 | Hero (burn/supply) | 310–312 | 3 |
-| **Total** | | **187** |
+| **Total** | | **189** |

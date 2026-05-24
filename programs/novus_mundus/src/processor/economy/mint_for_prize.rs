@@ -47,15 +47,25 @@ use crate::{
 /// - 5: Treasury (reserve fund)
 /// - 6: Liquidity (DEX pools)
 ///
-/// # Atomicity Caveat (audit M-17)
-/// The per-purpose `total_minted_*` cap reads/writes on GameEngine are NOT atomic
-/// across a multi-instruction transaction. If two `mint_for_prize` instructions
-/// for the same purpose are batched in one tx, each checks the cap before either
-/// writes the updated total, so both can pass even though their combined effect
-/// would exceed the cap. DAO front-ends MUST issue exactly one `mint_for_prize`
-/// per transaction (and ideally serialize on the off-chain side) to avoid
-/// circumventing the configured allocation limits. The on-chain check assumes
-/// single-instruction transactions.
+/// # Internal vs. External Recipient
+/// The same instruction handles two distinct flows, branched on `purpose`:
+///
+/// - **Internal** (purposes 0 Prizes, 1 Events): in-game gameplay rewards.
+///   `recipient_user` is a `UserAccount` PDA. `user_token_account` is the
+///   PDA-owned reserved ATA. The mint credits `user.reserved_novi` and
+///   resets `user.reserved_novi_earned_at` (7-day vesting starts now).
+///
+/// - **External** (purposes 2 Marketing, 3 Development, 4 Partnerships,
+///   5 Treasury, 6 Liquidity): treasury/wallet targets. `recipient_user`
+///   is a wallet pubkey (airdrop recipient, team multisig, partner,
+///   reserve wallet, DEX-LP wallet). `user_token_account` is that
+///   wallet's NOVI ATA. No `UserAccount` is required, no vesting, no
+///   state writes on the wallet side. Cap counters + `total_minted`
+///   update as usual.
+///
+/// External recipients can trade on a DEX immediately. If they later
+/// want to play the game, they can call `init_user` and `deposit_novi`
+/// to bring NOVI into the reserved pool (subject to the 5% deposit fee).
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -90,32 +100,35 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    // 3. Validate DAO Authority
+    let is_external = !matches!(purpose, 0 | 1);
 
+    // 3. Validate DAO Authority
     if !dao_authority.is_signer() {
         return Err(GameError::Unauthorized.into());
     }
 
-    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
-    // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
-    // load_checked_by_key drops the borrow at end of scope; we re-acquire the raw pointer
-    // after the auth check (account is still program-owned and the bytes are validated).
     {
         let ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
         if dao_authority.address() != &ge.authority {
             return Err(GameError::DaoRequired.into());
         }
     }
-    require_owner(recipient_user, program_id)?;
+
+    // Recipient validation differs by flow.
+    if !is_external {
+        require_owner(recipient_user, program_id)?;
+    }
+    validate_token_account_owner(user_token_account, recipient_user.address())?;
 
     let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
 
-    // Verify token account belongs to the UserAccount PDA
-    validate_token_account_owner(user_token_account, recipient_user.address())?;
+    // 4. Load Recipient User Account (internal flows only; external skips it).
 
-    // 4. Load Recipient User Account
-
-    let user_data = unsafe { &mut *(recipient_user.data_ptr() as *mut UserAccount) };
+    let user_data: Option<&mut UserAccount> = if is_external {
+        None
+    } else {
+        Some(unsafe { &mut *(recipient_user.data_ptr() as *mut UserAccount) })
+    };
 
     // 5. Check Allocation Caps
 
@@ -262,20 +275,22 @@ pub fn process(
         _ => {}
     }
 
-    // Update user's reserved_novi balance
-    user_data.reserved_novi = user_data.reserved_novi
-        .checked_add(amount)
-        .ok_or(GameError::MathOverflow)?;
+    // User-side state updates only run for internal flows. 
+    if let Some(user_data) = user_data {
+        user_data.reserved_novi = user_data.reserved_novi
+            .checked_add(amount)
+            .ok_or(GameError::MathOverflow)?;
 
-    user_data.total_reserved_earned = user_data.total_reserved_earned
-        .checked_add(amount)
-        .ok_or(GameError::MathOverflow)?;
+        user_data.total_reserved_earned = user_data.total_reserved_earned
+            .checked_add(amount)
+            .ok_or(GameError::MathOverflow)?;
 
-    // Update reserved_novi_earned_at so the 7-day vesting check in
-    // withdraw_reserved starts from NOW for this tranche. Without this, fresh
-    // users with default 0 earned_at could withdraw immediately (now - 0 ≫ 7d).
-    let clock = pinocchio::sysvars::clock::Clock::get()?;
-    user_data.reserved_novi_earned_at = clock.unix_timestamp;
+        // Update reserved_novi_earned_at so the 7-day vesting check in
+        // withdraw_reserved starts from NOW for this tranche. Without this, fresh
+        // users with default 0 earned_at could withdraw immediately (now - 0 ≫ 7d).
+        let clock = pinocchio::sysvars::clock::Clock::get()?;
+        user_data.reserved_novi_earned_at = clock.unix_timestamp;
+    }
 
     Ok(())
 }

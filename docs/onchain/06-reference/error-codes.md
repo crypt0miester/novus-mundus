@@ -38,7 +38,7 @@ gantt
     section Subscription
     6700–6706 Subscription     : 6700, 7
     section Minting
-    6800–6812 Minting          : 6800, 13
+    6800–6815 Minting          : 6800, 16
     section DAO
     6900–6904 Governance       : 6900, 5
     section Fibonacci
@@ -310,7 +310,7 @@ gantt
 
 ---
 
-## Minting Errors (6800–6812)
+## Minting Errors (6800–6815)
 
 | Code | Variant | Meaning |
 |------|---------|---------|
@@ -327,6 +327,9 @@ gantt
 | 6810 | `OraclePriceStale` | Oracle price data is too old |
 | 6811 | `OracleConfidenceTooWide` | Oracle confidence interval exceeds threshold |
 | 6812 | `TokenNotAllowed` | Token mint is not on the allowed-token list |
+| 6813 | `DepositAmountZero` | `deposit_novi` rejected `amount == 0` (or amount rounded entirely to fee) |
+| 6814 | `DepositSourceNotWalletOwned` | `deposit_novi` source ATA is not wallet-owned |
+| 6815 | `DepositReservedAtaMismatch` | `deposit_novi` reserved ATA is not owned by the UserAccount PDA |
 
 ---
 

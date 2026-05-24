@@ -6,7 +6,7 @@ import { useUser } from "@/lib/hooks/useUser";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
 import { GoldNumber } from "./GoldNumber";
@@ -15,9 +15,13 @@ import { NumberField } from "./NumberField";
 import {
   createReservedToLockedInstruction,
   createWithdrawReservedInstruction,
+  createDepositNoviInstruction,
   deciToNovi,
   noviToDeci,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressSync,
   RESERVED_NOVI_VESTING_PERIOD,
+  DEPOSIT_FEE_BPS,
 } from "novus-mundus-sdk";
 
 interface NoviRewardsProps {
@@ -29,6 +33,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
   const { data: playerData } = usePlayer();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const transact = useTransact();
 
   const user = userData?.account;
@@ -40,8 +45,35 @@ export function NoviRewards({ className }: NoviRewardsProps) {
   // State
   const [convertAmount, setConvertAmount] = useState(0);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
-  const [activeTab, setActiveTab] = useState<"convert" | "withdraw">("convert");
+  const [depositAmount, setDepositAmount] = useState(0);
+  const [activeTab, setActiveTab] = useState<"convert" | "withdraw" | "deposit">("convert");
   const [vestingRemaining, setVestingRemaining] = useState(0);
+  /* Wallet NOVI ATA balance — separate from the player PDA's locked NOVI
+   * ATA (which `useNoviBalance` reads). Required to gate the deposit
+   * button + show "you have N NOVI in your wallet" inline. */
+  const [walletNoviRaw, setWalletNoviRaw] = useState(0);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setWalletNoviRaw(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [noviMint] = deriveNoviMintPda();
+        const ata = getAssociatedTokenAddressSync(noviMint, publicKey);
+        const info = await connection.getTokenAccountBalance(ata);
+        if (!cancelled) setWalletNoviRaw(Number(info.value.amount));
+      } catch {
+        /* Wallet ATA not yet created — treat as zero. */
+        if (!cancelled) setWalletNoviRaw(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, publicKey, userData?.account?.reservedNovi]);
 
   // Vesting countdown
   useEffect(() => {
@@ -109,6 +141,28 @@ export function NoviRewards({ className }: NoviRewardsProps) {
       });
   };
 
+  const handleDeposit = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const amount = depositAmount;
+    if (!amount || amount <= 0) throw new Error("Invalid amount");
+    void client;
+    const ix = createDepositNoviInstruction(
+      { owner: publicKey },
+      { amount: noviToDeci(amount) },
+    );
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"]],
+        successMessage: `Deposited ${formatNumber(amount, "compact")} NOVI to reserved!`,
+        onPhase: reportPhase,
+      })
+      .then((r) => {
+        setDepositAmount(0);
+        return r.signature;
+      });
+  };
+
   if (!user || !player) return null;
 
   const reservedBalance = deciToNovi(user.reservedNovi);
@@ -117,9 +171,16 @@ export function NoviRewards({ className }: NoviRewardsProps) {
   const eventsPlayed = user.totalEventsParticipated.toNumber();
   const isVested = vestingRemaining === 0 && reservedBalance > 0;
   const hasReserved = reservedBalance > 0;
+  /* Wallet ATA balance, decimal-normalised. Deposit gate uses raw to
+   * preserve precision in the comparison. */
+  const walletNoviBalance = walletNoviRaw / 10;
+  const hasWalletNovi = walletNoviRaw > 0;
 
   const convertNum = convertAmount;
   const withdrawNum = withdrawAmount;
+  /* Inline fee preview for the deposit panel. floor(amount × bps / 10000). */
+  const depositFee = Math.floor((depositAmount * DEPOSIT_FEE_BPS) / 10_000);
+  const depositCredited = Math.max(0, depositAmount - depositFee);
 
   // Vesting progress (0-100)
   const vestingPct =
@@ -196,7 +257,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
         )}
       </div>
 
-      {!hasReserved && (
+      {!hasReserved && !hasWalletNovi && (
         <div className="mb-5 rounded-lg border border-zinc-800 bg-surface/60 px-4 py-6 text-center">
           <div className="text-sm text-zinc-500">No reserved NOVI yet</div>
           <div className="mt-1 text-xs text-zinc-600">
@@ -206,30 +267,45 @@ export function NoviRewards({ className }: NoviRewardsProps) {
       )}
 
       {/* Action Tabs */}
-      {hasReserved && (
+      {(hasReserved || hasWalletNovi) && (
         <>
           <div className="mb-4 flex gap-1 rounded-lg bg-surface p-1">
+            {hasReserved && (
+              <>
+                <button
+                  onClick={() => setActiveTab("convert")}
+                  className={cn(
+                    "flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                    activeTab === "convert"
+                      ? "bg-surface-raised text-text-gold"
+                      : "text-zinc-500 hover:text-zinc-400",
+                  )}
+                >
+                  Convert to Locked
+                </button>
+                <button
+                  onClick={() => setActiveTab("withdraw")}
+                  className={cn(
+                    "flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                    activeTab === "withdraw"
+                      ? "bg-surface-raised text-text-gold"
+                      : "text-zinc-500 hover:text-zinc-400",
+                  )}
+                >
+                  Withdraw to Wallet
+                </button>
+              </>
+            )}
             <button
-              onClick={() => setActiveTab("convert")}
+              onClick={() => setActiveTab("deposit")}
               className={cn(
                 "flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors",
-                activeTab === "convert"
+                activeTab === "deposit"
                   ? "bg-surface-raised text-text-gold"
                   : "text-zinc-500 hover:text-zinc-400",
               )}
             >
-              Convert to Locked
-            </button>
-            <button
-              onClick={() => setActiveTab("withdraw")}
-              className={cn(
-                "flex-1 rounded-md px-3 py-2 text-xs font-medium transition-colors",
-                activeTab === "withdraw"
-                  ? "bg-surface-raised text-text-gold"
-                  : "text-zinc-500 hover:text-zinc-400",
-              )}
-            >
-              Withdraw to Wallet
+              Deposit from Wallet
             </button>
           </div>
 
@@ -265,6 +341,69 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                   Convert
                 </TxButton>
               </div>
+            </div>
+          )}
+
+          {/* Deposit Tab */}
+          {activeTab === "deposit" && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border-gold/30 bg-accent/10 px-4 py-3">
+                <div className="flex items-start gap-2">
+                  <GameIcon id="resource-novi" title="NOVI" size={14} className="mt-0.5" />
+                  <div className="text-xs text-zinc-400">
+                    Deposit NOVI from your wallet back into{" "}
+                    <span className="font-semibold text-text-gold">reserved</span>. A{" "}
+                    <span className="text-text-gold">{DEPOSIT_FEE_BPS / 100}% fee</span> is burned
+                    on deposit; the rest credits your reserved balance.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-surface/60 px-3 py-2 text-xs">
+                <span className="text-zinc-500">Wallet NOVI</span>
+                <span className="font-mono font-semibold tabular-nums text-text-gold">
+                  {formatNumber(walletNoviBalance, "full")}
+                </span>
+              </div>
+
+              {!hasWalletNovi ? (
+                <div className="rounded-lg border border-zinc-800 bg-surface/60 px-4 py-4 text-center text-xs text-zinc-500">
+                  No NOVI in your wallet to deposit. Withdraw or buy NOVI first.
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-end gap-3">
+                    <NumberField
+                      className="flex-1"
+                      value={depositAmount}
+                      onChange={setDepositAmount}
+                      min={1}
+                      max={walletNoviBalance}
+                      suffix="NOVI"
+                    />
+                    <TxButton
+                      onClick={handleDeposit}
+                      disabled={
+                        depositAmount <= 0 ||
+                        depositAmount > walletNoviBalance ||
+                        depositCredited <= 0
+                      }
+                      className="w-auto shrink-0 whitespace-nowrap px-5"
+                    >
+                      Deposit
+                    </TxButton>
+                  </div>
+                  {depositAmount > 0 && (
+                    <div className="text-[11px] text-zinc-500">
+                      {formatNumber(depositAmount, "compact")} NOVI in →{" "}
+                      <span className="text-text-gold">
+                        {formatNumber(depositCredited, "compact")} reserved
+                      </span>{" "}
+                      ({formatNumber(depositFee, "compact")} burned)
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

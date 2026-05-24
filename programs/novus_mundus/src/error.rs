@@ -202,6 +202,11 @@ pub enum GameError {
     OracleConfidenceTooWide = 6811,
     TokenNotAllowed = 6812,
 
+    // Deposit Errors (813-819)
+    DepositAmountZero = 6813,             // deposit_novi: amount == 0
+    DepositSourceNotWalletOwned = 6814,   // source ATA owner != owner wallet
+    DepositReservedAtaMismatch = 6815,    // reserved ATA owner != user PDA
+
     // Governance/DAO Errors (900-999)
     ProposalNotFound = 6900,
     ProposalNotPassed = 6901,

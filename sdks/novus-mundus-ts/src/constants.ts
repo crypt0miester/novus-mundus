@@ -15,6 +15,12 @@ export const INACTIVE_ACCOUNT_THRESHOLD = 7_776_000; // 90 days
 export const ATTACK_IMMUNITY_DURATION = 259_200; // 3 days
 export const RESERVED_NOVI_VESTING_PERIOD = 604_800; // 7 days
 
+// Deposit fee — basis points taken from every wallet → reserved NOVI
+// deposit. Burned from the source ATA (no treasury collection). MUST mirror
+// `DEPOSIT_FEE_BPS` in programs/novus_mundus/src/constants.rs — keep in
+// lockstep.
+export const DEPOSIT_FEE_BPS = 500;
+
 // Account Size Limits
 
 export const MAX_TEAM_NAME_LENGTH = 32;

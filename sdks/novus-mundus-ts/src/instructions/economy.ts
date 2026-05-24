@@ -533,7 +533,13 @@ export interface MintForPrizeAccounts {
   authority: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
-  /** Recipient's wallet (to derive UserAccount PDA) */
+  /**
+   * Recipient wallet. For internal purposes (Prize / Event / Development /
+   * Treasury) this is the wallet whose UserAccount PDA will receive
+   * `reserved_novi`. For external purposes (Marketing / Partnership /
+   * Liquidity) the SDK skips the UserAccount derivation entirely and
+   * mints directly to this wallet's NOVI ATA.
+   */
   recipientOwner: PublicKey;
 }
 
@@ -555,15 +561,29 @@ export interface MintForPrizeParams {
 
 /** ~5,000 CU */
 /**
- * Mint NOVI tokens for prizes (DAO controlled).
+ * Mint NOVI tokens (DAO controlled).
  *
- * Subject to minting caps and allocation limits per purpose.
+ * Two flows, branched on `purpose`:
+ *
+ * - **Internal** (Prize / Event): in-game gameplay rewards. Mints into
+ *   the recipient's `UserAccount` PDA-owned reserved ATA. Credits
+ *   `user.reserved_novi` and resets the 7-day vesting clock. Recipient
+ *   must have called `init_user`.
+ * - **External** (Marketing / Development / Partnership / Treasury /
+ *   Liquidity): treasury/wallet targets. Mints directly to the
+ *   recipient *wallet*'s NOVI ATA. No `UserAccount` required, no
+ *   vesting, no game-side state writes. Use for airdrops, team
+ *   funding, partner payouts, reserve, and DEX-LP seeding.
+ *
+ * Account slots are the same in both flows — the SDK derives a different
+ * `recipient_user` / `user_token_account` pair based on purpose. Subject
+ * to the per-purpose minting caps in either case.
  *
  * Rust account order (6):
  * 0. [signer] dao_authority: DAO governance authority
- * 1. [writable] recipient_user: UserAccount PDA to receive minted tokens
+ * 1. [writable] recipient_user: UserAccount PDA (internal) or wallet pubkey (external)
  * 2. [writable] game_engine: GameEngine PDA (for authority and tracking)
- * 3. [writable] user_token_account: Recipient's NOVI token account (ATA)
+ * 3. [writable] user_token_account: PDA-owned reserved ATA (internal) or wallet ATA (external)
  * 4. [writable] novi_mint: NOVI token mint
  * 5. [] token_program: SPL Token program
  *
@@ -575,14 +595,23 @@ export function createMintForPrizeInstruction(
   accounts: MintForPrizeAccounts,
   params: MintForPrizeParams
 ): TransactionInstruction {
-  const [recipientUser] = deriveUserPda(accounts.recipientOwner);
   const [noviMint] = deriveNoviMintPda();
-  // User's NOVI token account is owned by UserAccount PDA
-  const userTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, recipientUser);
+  /* Only Prizes and Events route through a player's `UserAccount` —
+   * those are in-game rewards. Marketing / Development / Partnership /
+   * Treasury / Liquidity all mint directly to a wallet ATA (team
+   * multisig, treasury, partner, DEX-LP). */
+  const isExternal =
+    params.purpose !== MintPurpose.Prize && params.purpose !== MintPurpose.Event;
+  const recipientSlot = isExternal
+    ? accounts.recipientOwner
+    : deriveUserPda(accounts.recipientOwner)[0];
+  const userTokenAccount = isExternal
+    ? getAssociatedTokenAddressSync(noviMint, accounts.recipientOwner)
+    : getAssociatedTokenAddressSyncForPda(noviMint, recipientSlot);
 
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: false },
-    { pubkey: recipientUser, isSigner: false, isWritable: true },
+    { pubkey: recipientSlot, isSigner: false, isWritable: !isExternal },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: true },
     { pubkey: userTokenAccount, isSigner: false, isWritable: true },
     { pubkey: noviMint, isSigner: false, isWritable: true },

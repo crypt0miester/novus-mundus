@@ -1455,6 +1455,28 @@ impl UserAccount {
         Ok(unsafe { super::LoadedMut::new(data, ptr) })
     }
 
+    /// Like `load_checked` but with no caller-provided owner assertion —
+    /// validates program owner + discriminator + canonical PDA derived
+    /// from the stored owner + bump. Use when the instruction is
+    /// permissionless or signs against the on-account owner field directly.
+    pub fn load_checked_by_key<'a>(
+        account: &'a AccountView,
+        program_id: &Address,
+    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
+        if unsafe { account.owner() } != program_id {
+            return Err(ProgramError::IllegalOwner);
+        }
+        let data = account.try_borrow()?;
+        super::AccountKey::validate(&data, super::AccountKey::User)?;
+        let ptr = data.as_ptr() as *const Self;
+        let loaded = unsafe { &*ptr };
+        let expected_pda = Self::create_pda(&loaded.owner, loaded.bump)?;
+        if account.address() != &expected_pda {
+            return Err(crate::error::GameError::InvalidPDA.into());
+        }
+        Ok(unsafe { super::Loaded::new(data, ptr) })
+    }
+
     pub fn init(owner: Address, player: Address, bump: u8) -> Self {
         Self {
             account_key: crate::state::AccountKey::User as u8,

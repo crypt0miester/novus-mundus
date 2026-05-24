@@ -22,6 +22,12 @@ pub const SECONDS_PER_HOUR: i64 = 3_600;
 pub const TEAM_INVITE_EXPIRY: i64 = 604_800; // 7 days
 pub const RESERVED_NOVI_VESTING_PERIOD: i64 = 604_800; // 7 days
 
+// Deposit fee — basis points taken from every wallet → reserved NOVI deposit.
+// Burned from the source ATA (no treasury collection). Tunable; range expected
+// to be 0–1000 bps. SDK mirrors via `DEPOSIT_FEE_BPS` in
+// sdks/novus-mundus-ts/src/constants.ts — keep these in lockstep.
+pub const DEPOSIT_FEE_BPS: u16 = 500;
+
 // Account Size Limits
 pub const MAX_EVENT_NAME_LENGTH: usize = 64;
 

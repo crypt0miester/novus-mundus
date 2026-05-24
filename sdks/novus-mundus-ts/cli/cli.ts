@@ -203,6 +203,10 @@ Commands:
   deploy --skip-build       Deploy existing .so only
   player fund <pk> --novi N Mint NOVI to player (DAO operation)
   player travel <kp> --city N  Teleport player to city
+  player deposit <kp> --amount N
+                            Deposit wallet NOVI → reserved (5% fee burned)
+  player sweep <kp> --kind <user|player>
+                            Self-recover untracked NOVI surplus from your PDA-owned ATA
   snapshot save <name>      Save validator ledger state
   snapshot load <name>      Restore from snapshot
   snapshot list             List saved snapshots

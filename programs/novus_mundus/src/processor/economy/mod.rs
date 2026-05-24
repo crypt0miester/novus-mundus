@@ -15,3 +15,5 @@ pub mod mint_for_prize;
 pub mod purchase_stamina;
 pub mod transfer_cash;
 pub mod vault_transfer;
+pub mod deposit_novi;
+pub mod treasury_sweep_untracked_novi;

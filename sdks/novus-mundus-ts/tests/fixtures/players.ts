@@ -11,6 +11,7 @@ import {
   LAMPORTS_PER_SOL,
   ComputeBudgetProgram,
 } from '@solana/web3.js';
+import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -39,6 +40,10 @@ import {
   createBuyPlotInstruction,
   MintPurpose,
   createReservedToLockedInstruction,
+  createDepositNoviInstruction,
+  DEPOSIT_FEE_BPS,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressSync,
   BuildingType,
   derivePlayerPda,
   deriveEstatePda,
@@ -989,11 +994,19 @@ export class PlayerFactory {
 
   /**
    * Fund a player with additional locked NOVI via DAO minting.
-   * Uses mintForPrize across multiple allocation purposes, then converts
-   * reserved NOVI to locked NOVI.
+   *
+   * Mint purposes split into two flows after the deposit_novi work:
+   *   - **Internal** (Prize / Event / Development / Treasury): mint
+   *     lands directly in `user.reserved_novi`. Convert to locked.
+   *   - **External** (Marketing / Partnership / Liquidity): mint lands
+   *     in the *wallet* ATA. Bridge to reserved via `deposit_novi`
+   *     (which burns the 5% `DEPOSIT_FEE_BPS`), then convert to locked.
+   *
+   * Net delivered is therefore slightly less than requested because of
+   * the deposit fee on the external portion (~5% × external_share).
    *
    * Allocation caps: Development 150M, Liquidity 200M, Marketing 100M,
-   * Partnership 50M, Treasury 50M, Prize 50M = 600M total.
+   * Partnership 50M, Treasury 50M, Prize 50M = 600M raw budget.
    */
   async fundNovi(player: TestPlayer, amount: number): Promise<void> {
     const MAX_PER_CALL = 100_000_000; // 100M per proposal cap
@@ -1006,6 +1019,28 @@ export class PlayerFactory {
       { purpose: MintPurpose.Prize,       cap: 50_000_000 },
     ];
 
+    /* Only Prize + Event are internal (in-game rewards). Every other
+     * purpose mints to the wallet ATA, so fundNovi bridges via
+     * deposit_novi. */
+    const isExternal = (p: MintPurpose) =>
+      p !== MintPurpose.Prize && p !== MintPurpose.Event;
+
+    /* External mints land in the wallet ATA, which must exist before the
+     * SPL Token MintTo CPI fires. Idempotent so re-funding is safe. */
+    if (purposes.some((p) => isExternal(p.purpose))) {
+      const [noviMint] = deriveNoviMintPda();
+      const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+      const ataPrep = new Transaction().add(
+        createAssociatedTokenAccountIdempotentInstruction(
+          this.ctx.daoAuthority.publicKey,
+          walletAta,
+          player.publicKey,
+          noviMint,
+        ),
+      );
+      await sendTx(this.ctx.svm, ataPrep, [this.ctx.daoAuthority], this.ctx.config);
+    }
+
     let remaining = amount;
     for (const { purpose, cap } of purposes) {
       if (remaining <= 0) break;
@@ -1013,7 +1048,7 @@ export class PlayerFactory {
       while (allocated < cap && remaining > 0) {
         const thisAmount = Math.min(MAX_PER_CALL, cap - allocated, remaining);
 
-        // Mint to reserved_novi (DAO signs)
+        // Mint (DAO signs). Internal → reserved ATA; external → wallet ATA.
         const mintTx = new Transaction().add(
           createMintForPrizeInstruction(
             { authority: this.ctx.daoAuthority.publicKey, gameEngine: this.ctx.gameEngine, recipientOwner: player.publicKey },
@@ -1022,11 +1057,28 @@ export class PlayerFactory {
         );
         await sendTx(this.ctx.svm, mintTx, [this.ctx.daoAuthority], this.ctx.config);
 
+        let toConvert = thisAmount;
+        if (isExternal(purpose)) {
+          /* Bridge wallet → reserved via deposit_novi. The 5% fee is
+           * burned; only the credited amount lands in reserved, so
+           * convert exactly that much (else reserved_to_locked errors
+           * with insufficient reserved). */
+          const fee = Math.floor((thisAmount * DEPOSIT_FEE_BPS) / 10_000);
+          toConvert = thisAmount - fee;
+          const depositTx = new Transaction().add(
+            createDepositNoviInstruction(
+              { owner: player.publicKey },
+              { amount: new BN(thisAmount) },
+            ),
+          );
+          await sendTx(this.ctx.svm, depositTx, [player.keypair], this.ctx.config);
+        }
+
         // Convert reserved → locked (player signs)
         const convertTx = new Transaction().add(
           createReservedToLockedInstruction(
             { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
-            { amount: new BN(thisAmount) }
+            { amount: new BN(toConvert) }
           )
         );
         await sendTx(this.ctx.svm, convertTx, [player.keypair], this.ctx.config);

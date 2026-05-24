@@ -30,6 +30,8 @@ import {
   createMintForPrizeInstruction,
   MintPurpose,
   createReservedToLockedInstruction,
+  createDepositNoviInstruction,
+  DEPOSIT_FEE_BPS,
   createHireUnitsInstruction,
   createPurchaseEquipmentInstruction,
   createStartResearchInstruction,
@@ -38,11 +40,14 @@ import {
   derivePlayerPda,
   deriveEstatePda,
   deriveCityPda,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressSync,
   parseCity,
   pickSpawn,
   type CityForSpawn,
   BuildingType,
 } from '../../../src/index';
+import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
 // Gem shop item created by `novus init` (100 gems per purchase)
 const GEMS_ITEM_ID = 1;
