@@ -216,7 +216,7 @@ const EXT_NAMES: Record<number, string> = {
 const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: string }> = {
   [Ext.RESEARCH]: {
     label: "Begin a study",
-    href: "/estate?tab=research",
+    href: "/estate?building=academy",
     narrative: "The Academy stands idle. Begin your first study there and the way opens.",
   },
   [Ext.INVENTORY]: {
@@ -345,7 +345,7 @@ function evaluateReq(
       return {
         label: `Research ${flagName}`,
         detail: `Requires ${flagName} research to be completed`,
-        href: "/estate?tab=academy",
+        href: "/estate?building=academy",
         narrative:
           "The work is known, but the knowing of it is not. The Academy must dig it back to the light before the holding can put it to use.",
       };

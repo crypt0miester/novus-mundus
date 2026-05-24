@@ -21,7 +21,7 @@ const BIN_DIR = path.join(SDK_DIR, 'programs/.bin');
 const NOVUS_MUNDUS_SO = path.join(ROOT_DIR, 'target/deploy/novus_mundus.so');
 
 // Program IDs
-const NOVUS_MUNDUS_PROGRAM_ID = address('J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V');
+const NOVUS_MUNDUS_PROGRAM_ID = address('6kFKaG8DEMC5mVMi4VbD3AYxxmz2gQc3o2fuW4q4rYNk');
 const MPL_CORE_PROGRAM_ID = address('CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d');
 const TLD_HOUSE_PROGRAM_ID = address('TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S');
 const ALT_NAME_SERVICE_PROGRAM_ID = address('ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK');

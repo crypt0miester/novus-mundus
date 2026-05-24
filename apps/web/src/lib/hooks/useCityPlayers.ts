@@ -16,14 +16,17 @@ export function useCityPlayers(cityId: number | undefined) {
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
 
-  // On-demand fetch: seed zustand with all players
+  // Boot-time `startGameSubscriptions` seeds `otherPlayers` for the whole
+  // kingdom in a single fetchAllPlayers, and the program-wide WS keeps it
+  // live thereafter. Only fall back to a local refetch if the boot seed
+  // hasn't populated the map yet (e.g. the user navigated here before the
+  // boot Promise.all resolved, or a cold-start race).
   useEffect(() => {
     if (cityId === undefined || !publicKey) return;
-
+    if (useAccountStore.getState().otherPlayers.size > 0) return;
     client.fetchAllPlayers().then((results) => {
       const store = useAccountStore.getState();
       for (const p of results) {
-        // Don't overwrite self — that's managed by the Player handler
         if (p.pubkey.toBase58() !== store.myPlayerPda) {
           store.upsertOtherPlayer(p.pubkey, p.account);
         }

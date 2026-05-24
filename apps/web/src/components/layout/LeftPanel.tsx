@@ -317,7 +317,7 @@ export function LeftPanelMobile() {
               </div>
               <GoldNumber value={stamina.current} size="sm" format="compact" />
               /
-              <GoldNumber value={stamina.max} size="sm" format="compact" />
+              <GoldNumber value={stamina.max} size="sm" format="compact" animate={false} />
             </div>
           </div>
 

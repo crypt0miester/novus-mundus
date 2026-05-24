@@ -72,7 +72,7 @@ export const MAX_TEAM_MEMBERS_BY_TIER = [5, 10, 25, 50] as const;
 // is only the *seeded default* used by `init_game_engine` (matches
 // `programs/.../constants.rs:STARTER_LOCKED_NOVI`). Read from chain for the
 // actual value in use.
-export const STARTER_LOCKED_NOVI_DEFAULT = 1_000_000; // raw, = 100K display NOVI
+export const STARTER_LOCKED_NOVI_DEFAULT = 10_000_000; // raw, = 1M display NOVI
 
 /** @deprecated Read `GameEngine.economic_config.starter_locked_novi` instead. */
 export const STARTER_LOCKED_NOVI = STARTER_LOCKED_NOVI_DEFAULT;

@@ -80,6 +80,9 @@ export * from './parser/index';
 // Calculator exports
 export * from './calculators/index';
 
+// Spawn picker
+export * from './spawn/index';
+
 // External program helpers
 export * from './external/index';
 

@@ -70,8 +70,8 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
           owner: publicKey,
           gameEngine: ge,
           startingCityId: city.cityId,
-          cityLatitude: city.latitude,
-          cityLongitude: city.longitude,
+          cityLatitude: city.spawnLat,
+          cityLongitude: city.spawnLong,
         });
       }
 

@@ -9,7 +9,10 @@ import { usePlayer } from "@/lib/hooks/usePlayer";
  * every NOVI-consumption multiplier (hiring, collecting), so the activity
  * views read it to forecast yields and flag good/bad windows.
  *
- * `currentLong` is stored ×10000, the same scaling the estate header divides by.
+ * `PlayerCore.currentLong` is an f64 in degrees (see `state/player.rs:104`
+ * — `pub current_long: f64`) — NOT the ×10000 grid form. The ×10000 scaling
+ * belongs to `LocationAccount.grid_long`, a separate i32 field used for
+ * cell PDAs. Pass `currentLong` straight through to the time-of-day helper.
  */
 export function useTimeOfDay(): { now: number; tod: TimeOfDay } {
   const { data: playerData } = usePlayer();
@@ -20,6 +23,6 @@ export function useTimeOfDay(): { now: number; tod: TimeOfDay } {
     return () => clearInterval(t);
   }, []);
 
-  const longitude = (playerData?.account?.currentLong ?? 0) / 10000;
+  const longitude = playerData?.account?.currentLong ?? 0;
   return { now, tod: getCurrentTimeOfDay(now, longitude) };
 }

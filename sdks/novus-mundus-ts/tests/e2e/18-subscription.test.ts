@@ -84,9 +84,9 @@ describe('Subscription System', () => {
       expect(after).not.toBeNull();
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Expert);
       expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
-      // Expert tier grants 1,500,000 cash on purchase
+      // Expert tier grants 50,000,000 cash on purchase (game_engine.rs:544)
       const cashDelta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
-      expect(cashDelta).toBe(1_500_000);
+      expect(cashDelta).toBe(50_000_000);
     });
 
     it('should purchase Epic subscription (tier 2)', async () => {
@@ -142,8 +142,8 @@ describe('Subscription System', () => {
       expect(after!.subscriptionTier).toBe(SubscriptionTier.Rookie);
       // But expiry is set (30 days) and bonuses granted
       expect(after!.subscriptionEnd.toNumber()).toBeGreaterThan(0);
-      // Rookie tier grants: cash=1M, du1=10k, op1=30k
-      expect(after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber()).toBe(1_000_000);
+      // Rookie tier grants: cash=10M, du1=10k, op1=30k (game_engine.rs:494)
+      expect(after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber()).toBe(10_000_000);
       expect(after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber()).toBe(10_000);
       expect(after!.operativeUnit1.toNumber() - before!.operativeUnit1.toNumber()).toBe(30_000);
     });
@@ -214,7 +214,7 @@ describe('Subscription System', () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      // Epic tier grants 3,000,000 cash
+      // Epic tier grants 200,000,000 cash (game_engine.rs:594)
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createSubIx(player, 2)),
@@ -223,14 +223,14 @@ describe('Subscription System', () => {
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       const delta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
-      expect(delta).toBe(3_000_000);
+      expect(delta).toBe(200_000_000);
     });
 
     it('should grant defensive units', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      // Epic tier: du1=28k, du2=28k, du3=14k
+      // Epic tier: du1=50k, du2=50k, du3=25k (DU total 125k) — game_engine.rs:595-597
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createSubIx(player, 2)),
@@ -238,16 +238,16 @@ describe('Subscription System', () => {
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber()).toBe(28_000);
-      expect(after!.defensiveUnit2.toNumber() - before!.defensiveUnit2.toNumber()).toBe(28_000);
-      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(14_000);
+      expect(after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber()).toBe(50_000);
+      expect(after!.defensiveUnit2.toNumber() - before!.defensiveUnit2.toNumber()).toBe(50_000);
+      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(25_000);
     });
 
     it('should grant operative units', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      // Epic tier: op1=84k, op2=56k, op3=28k
+      // Epic tier: op1=150k, op2=100k, op3=50k (OU total 300k) — game_engine.rs:598-600
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createSubIx(player, 2)),
@@ -255,16 +255,17 @@ describe('Subscription System', () => {
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.operativeUnit1.toNumber() - before!.operativeUnit1.toNumber()).toBe(84_000);
-      expect(after!.operativeUnit2.toNumber() - before!.operativeUnit2.toNumber()).toBe(56_000);
-      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(28_000);
+      expect(after!.operativeUnit1.toNumber() - before!.operativeUnit1.toNumber()).toBe(150_000);
+      expect(after!.operativeUnit2.toNumber() - before!.operativeUnit2.toNumber()).toBe(100_000);
+      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(50_000);
     });
 
     it('should grant equipment', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      // Expert tier: melee=32k, ranged=8k, siege=2k, armor=8k, produce=500k, vehicles=500
+      // Expert tier: melee=40k, ranged=8k, siege=2k, armor=50k, produce=250k, vehicles=250
+      // (game_engine.rs:552-557)
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createSubIx(player, 1)),
@@ -272,19 +273,19 @@ describe('Subscription System', () => {
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(after!.meleeWeapons.toNumber() - before!.meleeWeapons.toNumber()).toBe(32_000);
+      expect(after!.meleeWeapons.toNumber() - before!.meleeWeapons.toNumber()).toBe(40_000);
       expect(after!.rangedWeapons.toNumber() - before!.rangedWeapons.toNumber()).toBe(8_000);
       expect(after!.siegeWeapons.toNumber() - before!.siegeWeapons.toNumber()).toBe(2_000);
-      expect(after!.armorPieces.toNumber() - before!.armorPieces.toNumber()).toBe(8_000);
-      expect(after!.produce.toNumber() - before!.produce.toNumber()).toBe(500_000);
-      expect(after!.vehicles.toNumber() - before!.vehicles.toNumber()).toBe(500);
+      expect(after!.armorPieces.toNumber() - before!.armorPieces.toNumber()).toBe(50_000);
+      expect(after!.produce.toNumber() - before!.produce.toNumber()).toBe(250_000);
+      expect(after!.vehicles.toNumber() - before!.vehicles.toNumber()).toBe(250);
     });
 
     it('should grant reputation', async () => {
       const player = await factory.createPlayer({ initialize: true });
       const before = await fetchPlayer(ctx.svm, player.playerPda);
 
-      // Expert tier grants 250 reputation
+      // Expert tier grants 1,000 reputation (game_engine.rs:558)
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createSubIx(player, 1)),
@@ -293,7 +294,7 @@ describe('Subscription System', () => {
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
       const repDelta = after!.reputation.toNumber() - before!.reputation.toNumber();
-      expect(repDelta).toBe(250);
+      expect(repDelta).toBe(1_000);
     });
 
     it('should grant XP with time bonus', async () => {
@@ -333,12 +334,12 @@ describe('Subscription System', () => {
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      // Cash should be 2× Expert bonus (2 × 1,500,000 = 3,000,000)
+      // Cash should be 2× Expert bonus (2 × 50,000,000 = 100,000,000)
       const cashDelta = after!.cashOnHand.toNumber() - before!.cashOnHand.toNumber();
-      expect(cashDelta).toBe(3_000_000);
-      // du1 should be 2× Expert bonus (2 × 16,000 = 32,000)
+      expect(cashDelta).toBe(100_000_000);
+      // du1 should be 2× Expert bonus (2 × 20,000 = 40,000)
       const du1Delta = after!.defensiveUnit1.toNumber() - before!.defensiveUnit1.toNumber();
-      expect(du1Delta).toBe(32_000);
+      expect(du1Delta).toBe(40_000);
     }, 15_000);
   });
 
@@ -378,16 +379,16 @@ describe('Subscription System', () => {
       const after1 = await fetchPlayer(ctx.svm, player1.playerPda);
       const after2 = await fetchPlayer(ctx.svm, player2.playerPda);
 
-      // Epic grants more cash than Expert (3M vs 1.5M)
+      // Epic grants more cash than Expert (200M vs 50M)
       const cash1 = after1!.cashOnHand.toNumber() - before1!.cashOnHand.toNumber();
       const cash2 = after2!.cashOnHand.toNumber() - before2!.cashOnHand.toNumber();
       expect(cash2).toBeGreaterThan(cash1);
 
-      // Epic grants more tier-3 defensive units than Expert (14k vs 8k)
+      // Epic grants more tier-3 defensive units than Expert (25k vs 10k)
       const du3_1 = after1!.defensiveUnit3.toNumber() - before1!.defensiveUnit3.toNumber();
       const du3_2 = after2!.defensiveUnit3.toNumber() - before2!.defensiveUnit3.toNumber();
-      expect(du3_1).toBe(8_000);
-      expect(du3_2).toBe(14_000);
+      expect(du3_1).toBe(10_000);
+      expect(du3_2).toBe(25_000);
     });
 
     it('should have tier-exclusive unit types', async () => {
@@ -402,9 +403,9 @@ describe('Subscription System', () => {
       );
 
       const after = await fetchPlayer(ctx.svm, player.playerPda);
-      // Epic grants du3=14k, op3=28k
-      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(14_000);
-      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(28_000);
+      // Epic grants du3=25k, op3=50k (game_engine.rs:597,600)
+      expect(after!.defensiveUnit3.toNumber() - before!.defensiveUnit3.toNumber()).toBe(25_000);
+      expect(after!.operativeUnit3.toNumber() - before!.operativeUnit3.toNumber()).toBe(50_000);
     });
   });
 

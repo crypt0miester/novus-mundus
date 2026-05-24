@@ -173,8 +173,11 @@ pub fn process(
     }
 
     if is_token {
-        // Token payment requires additional accounts starting at index 10
-        if accounts.len() < 17 {
+        // Token payment requires additional accounts starting at index 10:
+        // shop_config + TOKEN_PAYMENT_ACCOUNTS_PEGGED (5) = 6 above the base 10.
+        // Pyth/Switchboard paths add 2/3 more — those counts are checked
+        // inside `process_token_payment_flow` once the pegged flag is known.
+        if accounts.len() < 16 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
     }
@@ -325,10 +328,13 @@ pub fn process(
             token_accounts,
             game_engine.address(),
             &game_engine_data.treasury_wallet,
+            treasury_wallet,
             program_id,
             shop_config,
             owner,
             sol_cost_lamports,
+            Some(cost_usd_cents),
+            system_program,
             clock.slot,
             clock.unix_timestamp,
         )?;

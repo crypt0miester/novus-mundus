@@ -238,15 +238,7 @@ pub fn process(
     }
 
     // 8. Terrain Passability Check — encounters cannot spawn in water or on mountains
-    {
-        let (ox, oy) = crate::logic::terrain::city_offset(
-            spawn_grid_lat, spawn_grid_long,
-            city_data.latitude, city_data.longitude,
-        );
-        if !city_data.is_terrain_passable(city_account, ox, oy) {
-            return Err(GameError::TerrainImpassable.into());
-        }
-    }
+    city_data.require_passable_at(city_account, spawn_lat, spawn_long)?;
 
     // 8a. Validate Spawn Location PDA
     //
@@ -321,6 +313,7 @@ pub fn process(
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         location.account_key = crate::state::AccountKey::Location as u8;
+        location.game_engine = *game_engine_account.address();
         location.grid_lat = spawn_grid_lat;
         location.grid_long = spawn_grid_long;
         location.city_id = city_data.city_id;
@@ -345,7 +338,11 @@ pub fn process(
             return Err(GameError::CellOccupied.into());
         }
 
-        // Claim the cell for the encounter
+        // Claim the cell for the encounter. Heal: re-stamp discriminator +
+        // game_engine in case the cell came from an older build that omitted
+        // them.
+        location.account_key = crate::state::AccountKey::Location as u8;
+        location.game_engine = *game_engine_account.address();
         location.occupant_type = OCCUPANT_ENCOUNTER;
         location.occupant = *encounter_account.address();
         location.occupied_since = now;

@@ -195,38 +195,119 @@ impl CityAccount {
         Self::SIZE + anchor_count as usize * terrain::ANCHOR_SIZE
     }
 
-    /// Build a read-only terrain view from the city's account data.
+    /// Borrow the city's terrain and run a callback against it.
     ///
-    /// # Safety
-    /// Caller must ensure account data extends at least
-    /// `SIZE + anchor_count * ANCHOR_SIZE` bytes.
-    pub unsafe fn terrain_from_account<'a>(account: &'a AccountView) -> CityTerrain<'a> {
-        let city = &*(account.data_ptr() as *const CityAccount);
-        let count = city.anchor_count as usize;
-        let anchors = if count > 0 {
-            let ptr = account.data_ptr().add(Self::SIZE) as *const Anchor;
-            core::slice::from_raw_parts(ptr, count)
-        } else {
-            &[]
-        };
-        CityTerrain {
-            seed: city.terrain_seed,
-            water_line: city.water_line,
-            peak_line: city.peak_line,
-            anchors,
+    /// `Anchor` is `#[repr(C)]` with 9 bytes of fields and a hidden 1-byte
+    /// trailing pad — so `size_of::<Anchor>() == 10`. The on-chain layout
+    /// writes anchors at `ANCHOR_SIZE == 9` byte stride (no pad). Indexing a
+    /// `&[Anchor]` built via `from_raw_parts` therefore reads past valid
+    /// memory after the first few anchors, and the BPF runtime aborts with
+    /// the misleading `InvalidRealloc` error. This helper deserializes each
+    /// anchor by-byte into a stack buffer so the resulting slice is properly
+    /// laid out for Rust's indexing.
+    /*
+     * `#[inline(never)]` keeps the 1000-byte `[Anchor; 100]` stack buffer in
+     * `with_terrain`'s own frame instead of having LLVM splat it into every
+     * caller's frame on monomorphization. Six processors (init_player,
+     * encounter::spawn, intracity_start, intercity_start, intercity_teleport,
+     * collect_resources, attack_player) call this on hot paths; without the
+     * hint a future stack-heavy edit in any of them silently regresses to
+     * the same `InvalidRealloc` runtime fault this helper exists to fix.
+     */
+    #[inline(never)]
+    pub fn with_terrain<R>(
+        &self,
+        account: &AccountView,
+        f: impl FnOnce(&CityTerrain) -> R,
+    ) -> Result<R, ProgramError> {
+        const MAX_ANCHORS: usize = 100;
+        let count = self.anchor_count as usize;
+        if count > MAX_ANCHORS {
+            return Err(ProgramError::InvalidAccountData);
         }
+
+        let data = account.try_borrow()?;
+        let trailer_size = count
+            .checked_mul(terrain::ANCHOR_SIZE)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        let required_size = Self::SIZE
+            .checked_add(trailer_size)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        if data.len() < required_size {
+            return Err(ProgramError::AccountDataTooSmall);
+        }
+
+        let mut anchors_buf: [Anchor; MAX_ANCHORS] = [Anchor {
+            x: 0, y: 0, mass: 0, lift: 0, push_x: 0, push_y: 0, moisture: 0,
+        }; MAX_ANCHORS];
+        for i in 0..count {
+            let off = Self::SIZE
+                + i.checked_mul(terrain::ANCHOR_SIZE)
+                    .ok_or(ProgramError::ArithmeticOverflow)?;
+            anchors_buf[i] = Anchor {
+                x: i16::from_le_bytes([data[off], data[off + 1]]),
+                y: i16::from_le_bytes([data[off + 2], data[off + 3]]),
+                mass: data[off + 4],
+                lift: data[off + 5],
+                push_x: data[off + 6] as i8,
+                push_y: data[off + 7] as i8,
+                moisture: data[off + 8],
+            };
+        }
+
+        let terrain = CityTerrain {
+            seed: self.terrain_seed,
+            water_line: self.water_line,
+            peak_line: self.peak_line,
+            anchors: &anchors_buf[..count],
+        };
+        Ok(f(&terrain))
     }
 
     /// Check if a coordinate offset from city center is passable terrain.
-    /// Returns true if no terrain is configured (anchor_count == 0).
-    pub fn is_terrain_passable(&self, account: &AccountView, ox: i32, oy: i32) -> bool {
+    /// Returns `Ok(true)` if no terrain is configured (anchor_count == 0).
+    pub fn is_terrain_passable(
+        &self,
+        account: &AccountView,
+        ox: i32,
+        oy: i32,
+    ) -> Result<bool, ProgramError> {
         if self.anchor_count == 0 {
-            return true;
+            return Ok(true);
         }
-        let t = unsafe { Self::terrain_from_account(account) };
-        terrain::is_passable(&t, ox, oy)
+        self.with_terrain(account, |t| terrain::is_passable(t, ox, oy))
+    }
+
+    /// Quantize a (lat, long) to the grid, compute its offset from the city
+    /// centre, and reject if the resulting cell isn't passable. The five
+    /// processors that gate movement on terrain (init_player, encounter
+    /// spawn, intracity/intercity start, intercity teleport) all share this
+    /// preamble — call this helper instead of inlining it.
+    pub fn require_passable_at(
+        &self,
+        account: &AccountView,
+        lat: f64,
+        long: f64,
+    ) -> Result<(), ProgramError> {
+        let (ox, oy) = terrain::city_offset(
+            super::LocationAccount::to_grid(lat),
+            super::LocationAccount::to_grid(long),
+            self.latitude,
+            self.longitude,
+        );
+        if !self.is_terrain_passable(account, ox, oy)? {
+            return Err(crate::error::GameError::TerrainImpassable.into());
+        }
+        Ok(())
     }
 }
+
+// Document the on-chain ↔ in-memory size mismatch the `with_terrain` helper
+// has to work around. If a future struct edit changes either constant the
+// build will break here, forcing the author to revisit the per-byte
+// deserialization in `with_terrain` (and the SDK side).
+const _: () = assert!(core::mem::size_of::<Anchor>() == 10);
+const _: () = assert!(terrain::ANCHOR_SIZE == 9);
 
 /// City type classification
 #[repr(u8)]

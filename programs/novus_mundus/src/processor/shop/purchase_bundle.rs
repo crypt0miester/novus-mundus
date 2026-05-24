@@ -223,10 +223,13 @@ pub fn process(
             &accounts[token_offset..],
             game_engine_account.address(),
             &game_engine.treasury_wallet,
+            treasury,
             program_id,
             shop_config,
             buyer,
             final_price,
+            None, // SOL-priced bundle; pegged tokens rejected by the helper
+            system_program,
             clock.slot,
             clock.unix_timestamp,
         )?;

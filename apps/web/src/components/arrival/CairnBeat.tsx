@@ -4,11 +4,14 @@ import { useEffect, useRef } from "react";
 import { animate } from "animejs";
 import { CairnOrb } from "@/components/cairn/CairnOrb";
 import { useEstate } from "@/lib/hooks/useEstate";
-import { cairnBeat } from "@/lib/narrative";
+import { arrivalLine, cairnBeat } from "@/lib/narrative";
 import { BeatButton, BeatEyebrow } from "./Beat";
 import { useRevealOnMount } from "./useRevealOnMount";
+import type { CityChoice } from "./Arrival";
 
 interface CairnBeatProps {
+  /** The city the player just claimed — drives the arrival narration. */
+  city: CityChoice | null;
   onEnter: () => void;
 }
 
@@ -19,7 +22,7 @@ const ORB_DURATION = 1400;
  * Beat 4 of the Arrival — the stone lights. The Cairn delivers the Arrival line
  * and stays. The Enter button waits until the estate has settled on-chain.
  */
-export function CairnBeat({ onEnter }: CairnBeatProps) {
+export function CairnBeat({ city, onEnter }: CairnBeatProps) {
   const { data: estateData } = useEstate();
   const estateReady = !!estateData?.exists;
 
@@ -52,7 +55,9 @@ export function CairnBeat({ onEnter }: CairnBeatProps) {
           data-reveal
           className="mb-8 max-w-lg text-base leading-relaxed text-text-secondary opacity-0"
         >
-          {cairnBeat("arrival")}
+          {city
+            ? arrivalLine(city.name, city.spawnFlavor, city.spawnBearing)
+            : cairnBeat("arrival")}
         </p>
         <BeatButton
           reveal

@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { pickSpawn, toGrid, type SpawnBearing, type SpawnFlavor } from "novus-mundus-sdk";
 import { useAllCities } from "@/lib/hooks/useAllCities";
 import { cityType } from "@/lib/narrative";
-import { cn } from "@/lib/utils";
-import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
+import {
+  RealmMap,
+  realmMapStyles as mapStyles,
+  type RealmMapSelectedContext,
+} from "@/components/world/RealmMap";
+import { CityTerrainMap } from "@/components/world/CityTerrainMap";
 import { BeatButton, BeatEyebrow } from "./Beat";
 import type { CityChoice } from "./Arrival";
 
@@ -12,28 +17,21 @@ interface ChoiceBeatProps {
   onChoose: (city: CityChoice) => void;
 }
 
-/** City-type icon, indexed by the on-chain CityType enum (SDK):
- *  0 Capital · 1 Resource · 2 Combat · 3 Trade. */
-const CITY_TYPE_ICON: readonly GameIconId[] = [
-  "map-capital",
-  "map-resource",
-  "map-combat",
-  "map-trade",
-];
-
 /**
  * Beat 2 of the Arrival — where you make your stand.
  *
- * 24 cities is too much of a wall for a newcomer, so the picker is a single
- * horizontal strip with one settlement *recommended* and centred. The default
- * needs no thought; scrolling the strip reveals every other ground for those
- * who have a preference.
+ * Same surface the player uses for travel later: a full-width RealmMap with
+ * every settlement on it (least-crowded soft-pulsing as the recommendation).
+ * Clicking a city *drills in* — the realm sheet swaps to the CityTerrainMap
+ * for that city. The drill-in is dismissable (X / Esc) so the player can pop
+ * back to the kingdom view at any time and pick a different ground.
+ *
+ * `pickSpawn()` pre-fills a passable spawn cell whenever the city changes,
+ * so the player can confirm without ever opening the disc; refining is a
+ * click inside the drill-in.
  */
 export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
   const { data: cities } = useAllCities();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const recRef = useRef<HTMLButtonElement>(null);
-  const centeredRef = useRef(false);
 
   // Recommend the least-crowded settlement — a gentler, less-contested start.
   const recommendedId = useMemo(() => {
@@ -44,32 +42,151 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
     )[0]!.account.cityId;
   }, [cities]);
 
-  // Order the strip so the recommended city sits dead centre, the rest split
-  // around it — every settlement still reachable by scrolling either way.
-  const ordered = useMemo(() => {
-    if (recommendedId === null) return cities;
-    const rec = cities.find((c) => c.account.cityId === recommendedId);
-    const rest = cities.filter((c) => c.account.cityId !== recommendedId);
-    if (!rec) return cities;
-    const half = Math.floor(rest.length / 2);
-    return [...rest.slice(0, half), rec, ...rest.slice(half)];
-  }, [cities, recommendedId]);
+  // Land on the world view — no city selected, drill-in closed, recommended
+  // dot pulses to guide the player. They have to click a city deliberately
+  // to enter the terrain disc.
+  const [selectedCityId, setSelectedCityId] = useState<number | null>(null);
 
-  // Centre the strip on the recommended card once, when the cities first
-  // resolve. Guarded so a background city refetch (a new `ordered` identity)
-  // can't yank the strip back while the player is scrolling it.
+  const selectedCity = useMemo(
+    () => cities.find((c) => c.account.cityId === selectedCityId) ?? null,
+    [cities, selectedCityId],
+  );
+
+  // Auto-pick a spawn cell whenever the city changes. The user can still
+  // override by clicking the terrain disc — that updates `spawnCell` and
+  // leaves `autoSpawn` alone so the narrative flavour/bearing carry through.
+  const [spawnCell, setSpawnCell] = useState<{ gridLat: number; gridLong: number } | null>(null);
+  const [autoSpawn, setAutoSpawn] = useState<{
+    flavor: SpawnFlavor;
+    bearing: SpawnBearing;
+  } | null>(null);
+  /*
+   * Surfaces the (vanishingly rare) case where pickSpawn finds no passable
+   * cell — without this the lore card sits on "finding you a patch…"
+   * forever and the disabled button has no explanation.
+   */
+  const [pickError, setPickError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (centeredRef.current || !recRef.current) return;
-    centeredRef.current = true;
-    recRef.current.scrollIntoView({ inline: "center", block: "nearest" });
-  }, [ordered]);
+    if (!selectedCity) {
+      setSpawnCell(null);
+      setAutoSpawn(null);
+      setPickError(null);
+      return;
+    }
+    const a = selectedCity.account;
+    try {
+      const spawn = pickSpawn({
+        cityId: a.cityId,
+        latitude: a.latitude,
+        longitude: a.longitude,
+        radiusKm: a.radiusKm,
+        cityType: a.cityType,
+        terrain: {
+          seed: a.terrainSeed,
+          waterLine: a.waterLine,
+          peakLine: a.peakLine,
+          anchorCount: a.anchorCount,
+          version: a.terrainVersion,
+          anchors: a.anchors,
+        },
+      });
+      setSpawnCell({ gridLat: toGrid(spawn.lat), gridLong: toGrid(spawn.long) });
+      setAutoSpawn({ flavor: spawn.flavor, bearing: spawn.bearing });
+      setPickError(null);
+    } catch {
+      /*
+       * No passable cells found — the chain would reject any spawn here
+       * with TerrainImpassable. Surface a real message so the disabled
+       * button is explained; player can pick a different city.
+       */
+      setSpawnCell(null);
+      setAutoSpawn(null);
+      setPickError(`${a.name} has no passable land. Choose another settlement.`);
+    }
+    /*
+     * Depend on cityId only — re-rolling the auto-spawn every time the city
+     * account is refetched would yank the player's chosen cell. Re-running
+     * on `cities` identity would also clobber a manual disc override.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCityId]);
 
-  const effectiveId = selectedId ?? recommendedId;
-  const selected = cities.find((c) => c.account.cityId === effectiveId) ?? null;
-  const framing = selected ? cityType(selected.account.cityType) : null;
+  // Drill into the terrain disc when a city is chosen. Mirrors map-tab.tsx.
+  const renderSheetOverride = (node: { city: { cityId: number } }) => {
+    const target = cities.find((c) => c.account.cityId === node.city.cityId);
+    if (!target) return null;
+    return (
+      <CityTerrainMap
+        cityAccount={target.account}
+        selected={spawnCell}
+        onSelect={(gridLat, gridLong) => setSpawnCell({ gridLat, gridLong })}
+      />
+    );
+  };
+
+  const renderSelected = ({ node }: RealmMapSelectedContext) => {
+    const a = node.city;
+    const t = cityType(a.cityType);
+    const isRec = a.cityId === recommendedId;
+    return (
+      <>
+        <div className={mapStyles.detailName}>{a.name}</div>
+        <span className={mapStyles.detailType}>
+          <span className={mapStyles.glyph}>{TYPE_GLYPH[a.cityType] ?? "♛"}</span>
+          {t.name}
+          {isRec ? " · for newcomers" : ""}
+        </span>
+        <p
+          style={{
+            marginTop: "0.9rem",
+            fontStyle: "italic",
+            fontSize: "0.78rem",
+            lineHeight: 1.55,
+            color: "var(--ink-soft)",
+          }}
+        >
+          {t.line}
+        </p>
+        <dl className={mapStyles.lineMeta}>
+          <dt>players here</dt>
+          <dd className={mapStyles.numeral}>{a.playersPresent.toLocaleString()}</dd>
+          <dt>wilds about it</dt>
+          <dd className={mapStyles.numeral}>
+            lv {a.minEncounterLevel}–{a.maxEncounterLevel}
+          </dd>
+        </dl>
+        <p
+          style={{
+            marginTop: "0.9rem",
+            padding: "0.6rem 0.75rem",
+            border: "1px dashed var(--ink-faint)",
+            fontSize: "0.7rem",
+            color: pickError
+              ? "var(--ink-warn, #b54848)"
+              : spawnCell
+                ? "var(--seal)"
+                : "var(--ink-soft)",
+            fontStyle: "italic",
+            lineHeight: 1.5,
+          }}
+        >
+          {pickError
+            ? pickError
+            : spawnCell
+              ? "your patch is chosen. Click the disc to move it, or drive your stakes below."
+              : "finding you a patch…"}
+        </p>
+      </>
+    );
+  };
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col items-center">
+    // ChoiceBeat is the one beat that needs to *escape* the arrival's
+    // narrow centred column — the realm map deserves the full page width
+    // the player will see at /map later. RealmMap caps itself at 1320 px
+    // internally so this won't go absurdly wide on ultrawide displays.
+    <div className="flex w-full flex-col items-center">
       <BeatEyebrow className="mb-2 lowercase">The Choice</BeatEyebrow>
       <h2 className="tier-title mb-2 font-display text-2xl font-bold tracking-wide lowercase">
         Where you make your stand
@@ -82,84 +199,55 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
       {cities.length === 0 ? (
         <p className="animate-pulse text-sm text-text-muted lowercase">Reading the maps…</p>
       ) : (
-        <div className="relative w-full">
-          {/* Edge fades hint at the settlements that scroll off either side. */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-surface to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-surface to-transparent" />
-          <div className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-12 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {ordered.map((c) => {
-              const acc = c.account;
-              const active = effectiveId === acc.cityId;
-              const isRec = acc.cityId === recommendedId;
-              const t = cityType(acc.cityType);
-              return (
-                <button
-                  key={acc.cityId}
-                  ref={isRec ? recRef : undefined}
-                  onClick={() => setSelectedId(acc.cityId)}
-                  className={cn(
-                    "flex w-36 shrink-0 snap-center flex-col items-center gap-1 rounded-lg border p-3 text-center transition-all",
-                    active
-                      ? "border-border-gold-bright bg-surface-overlay ring-1 ring-[var(--nm-accent)]"
-                      : isRec
-                        ? "border-border-gold bg-surface-raised"
-                        : "border-border-default bg-surface-raised hover:border-border-gold",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "text-[9px] font-semibold lowercase tracking-wider",
-                      isRec ? "text-text-gold" : "text-transparent",
-                    )}
-                  >
-                    recommended
-                  </span>
-                  <GameIcon
-                    id={CITY_TYPE_ICON[acc.cityType] ?? "map-capital"}
-                    title={t.name}
-                    size={30}
-                  />
-                  <span className="text-sm font-semibold text-text-primary lowercase">
-                    {acc.name}
-                  </span>
-                  <span className="text-[11px] text-text-muted lowercase">
-                    {t.name} · {acc.playersPresent} here
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="w-full">
+          <RealmMap
+            selectedId={selectedCityId}
+            onSelectChange={setSelectedCityId}
+            recommendedId={recommendedId}
+            scrollHead="the choice"
+            renderSelected={renderSelected}
+            renderSheetOverride={renderSheetOverride}
+            // Arrival owns the page heading; suppress the parchment "THE
+            // KINGDOM" cartouche so the two don't stack and fight.
+            hideCartouche
+          />
         </div>
       )}
 
-      {/* The chosen ground, framed in fiction */}
-      <div className="mt-6 flex min-h-[3.75rem] max-w-md items-center text-center">
-        {framing ? (
-          <p className="text-sm leading-relaxed text-text-secondary lowercase">
-            <span className="text-text-gold">{framing.name}.</span> {framing.line}
-          </p>
-        ) : (
-          <p className="text-sm text-text-muted lowercase">Choose your ground.</p>
-        )}
-      </div>
-
       <BeatButton
-        disabled={!selected}
-        className="mt-5 px-6 lowercase"
+        disabled={!selectedCity || !spawnCell || !autoSpawn}
+        className="mt-6 px-6 lowercase"
         onClick={() => {
-          if (!selected) return;
-          const a = selected.account;
+          if (!selectedCity || !spawnCell || !autoSpawn) return;
+          const a = selectedCity.account;
           onChoose({
             cityId: a.cityId,
             name: a.name,
             cityType: a.cityType,
             latitude: a.latitude,
             longitude: a.longitude,
+            spawnLat: spawnCell.gridLat / 10000,
+            spawnLong: spawnCell.gridLong / 10000,
+            // Flavor/bearing come from the auto-pick. When the player
+            // overrides the cell we keep the original narrative anchor —
+            // recomputing for an arbitrary cell would need a separate
+            // classifier and the narrative is approximate either way.
+            spawnFlavor: autoSpawn.flavor,
+            spawnBearing: autoSpawn.bearing,
           });
         }}
       >
-        {selected ? `drive your stakes at ${selected.account.name}` : "choose your ground"}
+        {selectedCity ? `drive your stakes at ${selectedCity.account.name}` : "choose your ground"}
       </BeatButton>
     </div>
   );
 }
+
+/** Mirror of TYPE_META[].glyph in RealmMap — kept inline so the lore card
+ *  doesn't have to import the full meta table. */
+const TYPE_GLYPH: Record<number, string> = {
+  0: "♛", // Capital
+  1: "⛏", // Resource
+  2: "⚔", // Combat
+  3: "◆", // Trade
+};

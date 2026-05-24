@@ -8,8 +8,6 @@ use pinocchio::{
 
 use pinocchio_system::instructions::CreateAccount;
 
-use crate::msg;
-
 use crate::{
     emit,
     error::GameError,
@@ -96,13 +94,11 @@ pub fn process(
     // and use unsafe raw pointer access instead. This avoids holding RefCell
     // borrows during CreateAccount CPI which would cause AccountBorrowFailed.
 
-    msg!("IC_START: loading accounts");
     { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
     let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
     let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
-    msg!("IC_START: accounts loaded ok");
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
@@ -203,15 +199,7 @@ pub fn process(
     }
 
     // 10a. Terrain Passability Check
-    {
-        let (ox, oy) = crate::logic::terrain::city_offset(
-            dest_grid_lat, dest_grid_long,
-            destination_city_data.latitude, destination_city_data.longitude,
-        );
-        if !destination_city_data.is_terrain_passable(destination_city_account, ox, oy) {
-            return Err(GameError::TerrainImpassable.into());
-        }
-    }
+    destination_city_data.require_passable_at(destination_city_account, dest_lat_f64, dest_long_f64)?;
 
     let dest_city_bytes = destination_city_id.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();
@@ -232,7 +220,6 @@ pub fn process(
 
     if dest_location_len == 0 {
         // Create new destination location account
-        msg!("IC_START: creating dest location (CPI)");
         let lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
 
         let bump_seed = [dest_bump];
@@ -253,12 +240,12 @@ pub fn process(
             space: LocationAccount::LEN as u64,
             owner: program_id,
         }.invoke_signed(&[location_signer])?;
-        msg!("IC_START: CPI done ok");
 
         // Use unsafe raw pointer to avoid holding RefMut across close_account
         let dest_location = unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
 
         dest_location.account_key = crate::state::AccountKey::Location as u8;
+        dest_location.game_engine = *game_engine_account.address();
         dest_location.grid_lat = dest_grid_lat;
         dest_location.grid_long = dest_grid_long;
         dest_location.city_id = destination_city_id;
@@ -330,7 +317,11 @@ pub fn process(
             }
         }
 
-        // Reserve the destination (either was empty, ours, or we just stole it)
+        // Reserve the destination (either was empty, ours, or we just stole it).
+        // Heal: re-stamp discriminator + game_engine in case the cell came from
+        // an older build that omitted them.
+        dest_location.account_key = crate::state::AccountKey::Location as u8;
+        dest_location.game_engine = *game_engine_account.address();
         dest_location.occupant_type = OCCUPANT_PLAYER;
         dest_location.occupant = *player_account.address();
         dest_location.occupied_since = now;
@@ -355,7 +346,6 @@ pub fn process(
     }
 
     // Validate origin location occupant
-    msg!("IC_START: validating origin occupant");
     {
         let origin_data = origin_location_account.try_borrow()?;
         let origin_location = unsafe { LocationAccount::load(&origin_data) };
@@ -364,12 +354,9 @@ pub fn process(
             return Err(GameError::NotCellOccupant.into());
         }
     }
-    msg!("IC_START: origin validated ok");
 
     // Close origin location account (refund rent to the traveling player's owner)
-    msg!("IC_START: closing origin location");
     close_account(origin_location_account, owner)?;
-    msg!("IC_START: close done ok");
 
     // 12. Update Player State
 

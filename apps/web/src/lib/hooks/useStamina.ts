@@ -30,7 +30,10 @@ export function useStamina(
   const stored = player?.encounterStamina?.toNumber();
   const lastUpdate = player?.lastStaminaUpdate?.toNumber();
   const max = player?.maxEncounterStamina?.toNumber();
-  const longitude = player ? (player.currentLong ?? 0) / 10000 : undefined;
+  // `PlayerCore.currentLong` is an f64 in degrees (`state/player.rs:104`),
+  // NOT the ×10000 grid form (that's `LocationAccount.grid_long`). Pass
+  // through directly so stamina regen respects the player's actual timezone.
+  const longitude = player ? player.currentLong ?? 0 : undefined;
   const heroRegenBps = player?.heroStaminaRegenBps ?? 0;
 
   useEffect(() => {

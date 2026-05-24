@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -128,8 +128,8 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
         owner,
         gameEngine,
         startingCityId: city.cityId,
-        cityLatitude: city.latitude,
-        cityLongitude: city.longitude,
+        cityLatitude: city.spawnLat,
+        cityLongitude: city.spawnLong,
       }),
       createCreateProgressInstruction({ owner, gameEngine }),
     ],
@@ -597,5 +597,28 @@ export function useJumpAhead() {
     }
   }, [start]);
 
-  return { ...state, walletSol, refetchBalance, start, resume };
+  // Pre-check shortfall: rewrite the stale "Not enough SOL" line once an
+  // airdrop lands. The balance poll above already keeps `walletSol` fresh; this
+  // closes the loop on the body text so the halt notice doesn't lie. Only
+  // fires for the pre-check bail (no planned steps yet) — a mid-run failure
+  // with a populated `steps` array keeps its original log.
+  const displayLog = useMemo(() => {
+    if (
+      state.phase !== "failed" ||
+      state.steps.length > 0 ||
+      walletSol === null ||
+      !recipeRef.current
+    ) {
+      return state.log;
+    }
+    const cost = jumpTierLamports(recipeRef.current);
+    if (walletSol < cost) return state.log;
+    return state.log.map((line) =>
+      line.startsWith("Not enough SOL")
+        ? `Balance now ${(walletSol / LAMPORTS_PER_SOL).toFixed(2)} SOL — resume when ready.`
+        : line,
+    );
+  }, [state.log, state.phase, state.steps.length, walletSol]);
+
+  return { ...state, log: displayLog, walletSol, refetchBalance, start, resume };
 }

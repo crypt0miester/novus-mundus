@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useSubscriptionStatus } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -12,9 +12,14 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { formatNumber } from "@/lib/utils";
 import {
+  PaymentMethodSelector,
+  formatPaymentPrice,
+  formatPriceUsd,
+  type PaymentMethod,
+} from "./PaymentMethodSelector";
+import {
   createPurchaseSubscriptionInstruction,
   deciToNovi,
-  formatLamportsAsSol,
   getEffectiveTier,
 } from "novus-mundus-sdk";
 import {
@@ -61,16 +66,6 @@ function asMultiplier(r: number): string {
   return Number.isInteger(r) ? `${r}×` : `${r.toFixed(1)}×`;
 }
 
-/**
- * SOL cost of a charter, in lamports — mirrors the on-chain purchase formula
- * (subscription/purchase.rs): sol_cost = cost_in_usd_cents × 1e9 ÷ usd_price_cents.
- * The price is USD-denominated but settled in SOL at the live SOL/USD rate.
- */
-function solCostLamports(costUsdCents: number, usdPriceCents: number): number {
-  if (usdPriceCents <= 0 || costUsdCents <= 0) return 0;
-  return Math.floor((costUsdCents * 1_000_000_000) / usdPriceCents);
-}
-
 interface PerkRowProps {
   icon: LucideIcon;
   color: string;
@@ -101,6 +96,10 @@ export function SubscribeTab() {
   const { publicKey } = useWallet();
   const transact = useTransact();
 
+  // Default to SOL; user can flip to USDC/USDT (or any whitelisted token).
+  // The selector hides options the chain would reject.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>({ kind: "sol" });
+
   const nowSec = Math.floor(Date.now() / 1000);
   const effectiveTier = useMemo(() => {
     if (!player) return 0;
@@ -130,15 +129,53 @@ export function SubscribeTab() {
     const ge = client.gameEngine;
     const geAccount = geData?.account;
     if (!geAccount) throw new Error("Game engine not loaded");
-    const ix = createPurchaseSubscriptionInstruction(
-      {
-        owner: publicKey,
-        gameEngine: ge,
-        paymentAuthority: publicKey,
-        treasury: geAccount.treasuryWallet,
-      },
-      { paymentType: 0, tier: tierId },
-    );
+
+    /*
+     * Non-pegged tokens require oracle accounts (Pyth pair or Switchboard
+     * triple) — the subscribe flow has no UI to surface those yet, so reject
+     * here rather than send an ix the chain would respond to with a generic
+     * NotEnoughAccountKeys. The selector currently doesn't filter, so this
+     * guard is the only line of defence.
+     */
+    if (paymentMethod.kind === "token" && !paymentMethod.pegged) {
+      throw new Error(
+        `${paymentMethod.symbol ?? "this token"} is oracle-priced; pegged-stablecoin payments only for now.`,
+      );
+    }
+
+    /*
+     * Build the ix in the right mode for the selected payment method. SOL is
+     * a direct lamport transfer; tokens go through `process_token_payment_flow`
+     * which dispatches by `AllowedTokenAccount.pegged_to_usd`.
+     */
+    const ix =
+      paymentMethod.kind === "sol"
+        ? createPurchaseSubscriptionInstruction(
+            {
+              owner: publicKey,
+              gameEngine: ge,
+              paymentAuthority: publicKey,
+              treasury: geAccount.treasuryWallet,
+            },
+            { paymentType: 0, tier: tierId },
+          )
+        : createPurchaseSubscriptionInstruction(
+            {
+              owner: publicKey,
+              gameEngine: ge,
+              paymentAuthority: publicKey,
+              treasury: geAccount.treasuryWallet,
+              tokenPayment: {
+                tokenMint: paymentMethod.mint,
+                /*
+                 * Pegged → no oracle accounts. Non-pegged token selections
+                 * are blocked by the guard above.
+                 */
+              },
+            },
+            { paymentType: 2, tier: tierId },
+          );
+
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -239,6 +276,14 @@ export function SubscribeTab() {
         )}
       </div>
 
+      {/* Payment method — SOL by default, or any whitelisted token. The
+          selector hides options the chain can't honor for a USD-priced product. */}
+      <PaymentMethodSelector
+        product="usd"
+        value={paymentMethod}
+        onChange={setPaymentMethod}
+      />
+
       {/* ─── Tier ladder (paid charters) ─── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {tiers.map((t) => {
@@ -251,13 +296,14 @@ export function SubscribeTab() {
           const durationDays = t.durationDays ?? 0;
 
           // Live cost — USD-denominated, settled in SOL at the chain rate
+          // The selector + helper convert this USD-cent amount into whichever
+          // method the user picked (SOL / USDC / USDT / ...).
           const costUsdCents = num(t.costInUsdCents);
-          const costLamports = solCostLamports(costUsdCents, usdPriceCents);
-          const priceKnown = costLamports > 0;
-          const curTierCost = sub.active
-            ? solCostLamports(num(tiers[effectiveTier]?.costInUsdCents), usdPriceCents)
-            : 0;
-          const upgradeDelta = sub.active && idx > effectiveTier ? costLamports - curTierCost : 0;
+          const priceKnown = costUsdCents > 0 && usdPriceCents > 0;
+          // Upgrade delta — USD-cents (so it renders in whichever payment method).
+          const curTierCostUsdCents = sub.active ? num(tiers[effectiveTier]?.costInUsdCents) : 0;
+          const upgradeDeltaUsdCents =
+            sub.active && idx > effectiveTier ? costUsdCents - curTierCostUsdCents : 0;
 
           // Real perks, derived from on-chain config
           const gen = deciToNovi(num(t.generationMultiplier));
@@ -325,15 +371,19 @@ export function SubscribeTab() {
                 {t.name}
               </div>
 
-              {/* Cost — live, from chain (USD price settled in SOL) */}
+              {/* Cost — live, from chain. Renders in the selected payment
+                  method (SOL / USDC / USDT / ...) with a $ hint underneath. */}
               <div className="mt-1 flex items-baseline gap-2">
                 {priceKnown ? (
                   <>
                     <span className="text-lg font-bold leading-none text-text-gold">
-                      {formatLamportsAsSol(costLamports)}
+                      {formatPaymentPrice(paymentMethod, {
+                        usdCents: costUsdCents,
+                        solUsdRateCents: usdPriceCents,
+                      })}
                     </span>
                     <span className="text-[11px] text-text-muted">
-                      ≈ ${(costUsdCents / 100).toLocaleString()}
+                      ≈ {formatPriceUsd({ usdCents: costUsdCents })}
                       {durationDays > 0 && ` · ${durationDays}-day charter`}
                     </span>
                   </>
@@ -442,9 +492,13 @@ export function SubscribeTab() {
                     >
                       Move to this charter
                     </TxButton>
-                    {sub.active && upgradeDelta > 0 && (
+                    {sub.active && upgradeDeltaUsdCents > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
-                        +{formatLamportsAsSol(upgradeDelta)} over your current charter
+                        +{formatPaymentPrice(paymentMethod, {
+                          usdCents: upgradeDeltaUsdCents,
+                          solUsdRateCents: usdPriceCents,
+                        })}{" "}
+                        over your current charter
                       </p>
                     )}
                   </>

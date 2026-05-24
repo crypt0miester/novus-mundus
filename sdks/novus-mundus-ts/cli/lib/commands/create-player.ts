@@ -37,6 +37,10 @@ import {
   createCompleteResearchInstruction,
   derivePlayerPda,
   deriveEstatePda,
+  deriveCityPda,
+  parseCity,
+  pickSpawn,
+  type CityForSpawn,
   BuildingType,
 } from '../../../src/index';
 
@@ -69,6 +73,10 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
 
   const keysDir = path.join(__dirname, '../../../keys/players');
 
+  // Cache: cityId -> CityForSpawn (terrain etc). One RPC fetch per distinct
+  // city; the picker is called per-player off that cache.
+  const cityCache = new Map<number, CityForSpawn>();
+
   for (let i = 0; i < count; i++) {
     const playerIndex = startIndex + i;
     const cityId = cityFlag !== undefined
@@ -83,6 +91,12 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
 
     log.info(`--- Player ${playerIndex} (city ${cityId}: ${city.name}) ---`);
 
+    const cityForSpawn = await loadCityForSpawn(ctx, cityId, cityCache);
+    if (!cityForSpawn) {
+      log.error(`City ${cityId} not initialised on-chain — run \`novus init all\` first`);
+      return;
+    }
+
     const keypairPath = path.join(keysDir, `player-${playerIndex}.json`);
     const playerKeypair = loadKeypair(keypairPath);
 
@@ -95,7 +109,7 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
     const [estatePda] = deriveEstatePda(playerPda);
 
     // Step 1: Init user + player + research progress
-    await initPlayer(ctx, playerKeypair, cityId, city.lat, city.lon, playerIndex);
+    await initPlayer(ctx, playerKeypair, cityForSpawn);
 
     // Step 2: Estate + gems
     if (config.estate) {
@@ -168,13 +182,43 @@ function detectNextPlayerIndex(): number {
 
 // Step 1: Init user + player + research
 
+async function loadCityForSpawn(
+  ctx: CLIContext,
+  cityId: number,
+  cache: Map<number, CityForSpawn>,
+): Promise<CityForSpawn | null> {
+  const hit = cache.get(cityId);
+  if (hit) return hit;
+
+  const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+  const info = await ctx.connection.getAccountInfo(cityPda);
+  if (!info) return null;
+  const city = parseCity(info);
+  if (!city) return null;
+
+  const out: CityForSpawn = {
+    cityId: city.cityId,
+    latitude: city.latitude,
+    longitude: city.longitude,
+    radiusKm: city.radiusKm,
+    cityType: city.cityType,
+    terrain: {
+      seed: city.terrainSeed,
+      waterLine: city.waterLine,
+      peakLine: city.peakLine,
+      anchorCount: city.anchorCount,
+      version: city.terrainVersion,
+      anchors: city.anchors,
+    },
+  };
+  cache.set(cityId, out);
+  return out;
+}
+
 async function initPlayer(
   ctx: CLIContext,
   keypair: Keypair,
-  cityId: number,
-  cityLat: number,
-  cityLon: number,
-  spawnIndex: number,
+  city: CityForSpawn,
 ): Promise<void> {
   const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
@@ -183,8 +227,7 @@ async function initPlayer(
     return;
   }
 
-  // Offset spawn lat to avoid grid cell collision
-  const spawnLat = cityLat + spawnIndex * 0.0001;
+  const spawn = pickSpawn(city);
 
   const ixs = [
     createInitUserInstruction({
@@ -194,9 +237,9 @@ async function initPlayer(
     createInitPlayerInstruction({
       owner: keypair.publicKey,
       gameEngine: ctx.gameEngine,
-      startingCityId: cityId,
-      cityLatitude: spawnLat,
-      cityLongitude: cityLon,
+      startingCityId: city.cityId,
+      cityLatitude: spawn.lat,
+      cityLongitude: spawn.long,
     }),
     createCreateProgressInstruction({
       owner: keypair.publicKey,
@@ -205,7 +248,7 @@ async function initPlayer(
   ];
 
   await sendWithRetry(ctx, ixs, [keypair], { computeUnits: 600_000 });
-  log.create('initUser + initPlayer + unlockResearch');
+  log.create(`initUser + initPlayer (${spawn.flavor} ${spawn.bearing}) + unlockResearch`);
 }
 
 // Step 2: Estate + gems

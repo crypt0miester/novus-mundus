@@ -13,6 +13,7 @@ import {
   isTraveling,
   getEncounterStaminaCost,
   calculateDistanceMeters,
+  ENCOUNTER_ATTACK_RANGE_METERS,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
@@ -35,8 +36,7 @@ const RARITY_COLORS = [
   "text-fuchsia-400",
   "text-gold-400",
 ];
-// Mirrors the program's ENCOUNTER_ATTACK_RANGE_METERS (attack_encounter.rs).
-const ENCOUNTER_RANGE = 16;
+const ENCOUNTER_RANGE = ENCOUNTER_ATTACK_RANGE_METERS;
 
 /**
  * The encounter detail — opened in the RightPanel from the combat tab's

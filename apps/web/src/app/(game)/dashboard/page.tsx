@@ -232,7 +232,7 @@ export default function DashboardPage() {
                           <span className="text-text-secondary">NOVI</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-novi" size={14} />
-                            <GoldNumber value={deciToNovi(novi.raw)} delta />
+                            <GoldNumber value={deciToNovi(novi.raw)} />
                           </span>
                         </div>
                         {/* Surface a desync between the wallet's spendable

@@ -25,7 +25,7 @@ pub use token_ops::{
     burn_tokens, mint_tokens, process_token_payment_flow, transfer_tokens,
     validate_token_account_owner,
     // Oracle helpers
-    detect_oracle_type, read_pyth_price, require_pyth_feed_configured,
+    detect_oracle_type, read_pyth_price, read_token_decimals, require_pyth_feed_configured,
     sb_feed_value, scale_ratio, verify_switchboard_quote,
     OracleType, ZERO_PUBKEY,
 };

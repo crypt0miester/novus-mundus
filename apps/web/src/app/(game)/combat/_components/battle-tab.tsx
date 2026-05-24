@@ -27,6 +27,7 @@ import {
   getTotalDefensiveUnits,
   getTotalOperativeUnits,
   calculateDistanceMeters,
+  ENCOUNTER_ATTACK_RANGE_METERS,
 } from "novus-mundus-sdk";
 
 type CombatTab = "encounter" | "pvp";
@@ -70,9 +71,9 @@ export function BattleTab() {
 
   // Attack ranges. Encounter range mirrors the program's compile-time
   // ENCOUNTER_ATTACK_RANGE_METERS constant (attack_encounter.rs enforces that,
-  // not the GameEngine CombatConfig field — which a live kingdom may still
-  // hold at the old 10m). PvP still reads config.
-  const encounterRange = 16;
+  // not the GameEngine CombatConfig field). PvP still reads from config so
+  // kingdoms that customised it get the live value.
+  const encounterRange = ENCOUNTER_ATTACK_RANGE_METERS;
   const pvpRange = geData?.account?.combatConfig?.pvpAttackRangeMeters ?? 15;
 
   // Batch-resolve domain names for city player wallets
@@ -87,7 +88,9 @@ export function BattleTab() {
   // Time-of-day attack multiplier
   const attackTimeInfo = useMemo(() => {
     if (!player) return null;
-    const longitude = (player.currentLong ?? 0) / 10000;
+    // `PlayerCore.currentLong` is f64 degrees (`state/player.rs:104`), NOT
+    // the ×10000 grid form. Pass straight through.
+    const longitude = player.currentLong ?? 0;
     const tod = getCurrentTimeOfDay(now, longitude);
     const mult = getActivityMultiplier("attacking" as any, tod);
     return { name: getTimeOfDayName(tod), mult };

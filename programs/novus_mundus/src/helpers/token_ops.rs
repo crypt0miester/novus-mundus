@@ -184,6 +184,7 @@ use crate::constants::{PYTH_PROGRAM_ID, PYTH_RECEIVER_PROGRAM_ID};
 use crate::state::{AllowedTokenAccount, OracleQuotePda, ShopConfigAccount};
 use crate::validation::require_key_match;
 use crate::logic::safe_math::apply_bp_penalty;
+use crate::token_helpers::create_associated_token_account;
 use crate::utils::{unlikely, Pk};
 
 /// Oracle program, identified by the account passed at the SOL-feed slot.
@@ -402,34 +403,60 @@ pub fn process_token_payment<'a>(
 pub const TOKEN_PAYMENT_ACCOUNTS: usize = 7;
 /// Switchboard token-payment account count (see [`TOKEN_PAYMENT_ACCOUNTS`]).
 pub const TOKEN_PAYMENT_ACCOUNTS_SB: usize = 8;
+/// Pegged-stablecoin token-payment account count — slots 0..=4 only; oracle
+/// slots 5+ are not required when `AllowedTokenAccount.pegged_to_usd == 1`.
+pub const TOKEN_PAYMENT_ACCOUNTS_PEGGED: usize = 5;
 
 /// Process a complete token payment flow.
 ///
-/// Unified entry point for token payments across all purchase processors:
-/// detects the oracle program from the account at slot 5, verifies the
-/// price(s), computes the token amount, and CPI-transfers.
+/// Unified entry point for token payments across all purchase processors.
+/// Two pricing paths, selected per-token by `AllowedTokenAccount.pegged_to_usd`:
+///
+/// - **Pegged stablecoin** (`pegged_to_usd = 1`): USDC/USDT/PYUSD-style $1
+///   peg. Skips oracle entirely; computes `token_amount = cost_usd_cents ×
+///   10^(decimals - 2)`. Caller MUST pass a non-zero `cost_usd_cents` — this
+///   path is meaningful only for USD-denominated products (subscriptions).
+///   Account slots 5+ are not consulted, so the client may omit them.
+///
+/// - **Oracle path** (`pegged_to_usd = 0`): detects Pyth vs Switchboard from
+///   slot 5 and verifies the SOL/USD + TOKEN/USD pair to convert
+///   `final_price_lamports` into a token amount.
 ///
 /// `treasury_wallet` is the DAO-configured treasury (`game_engine.treasury_wallet`);
-/// the `treasury_token_ata` slot is pinned to it so a buyer cannot redirect
-/// payment to a token account they control.
+/// `treasury_token_ata` is pinned to it so a buyer cannot redirect payment to
+/// a token account they control. `treasury_wallet_account` + `system_program`
+/// are required for the ATA-creation backstop: if the treasury ATA happens not
+/// to exist (e.g. a token whitelisted before `create_allowed_token` provisioned
+/// it, or an accidental close), the buyer pays the rent to create it here,
+/// using the non-idempotent `Create` (mirrors `withdraw_reserved.rs`).
 ///
-/// `current_slot` drives Switchboard quote freshness (slot-based); `current_timestamp`
-/// drives Pyth staleness (`publish_time`, seconds).
+/// `current_slot` drives Switchboard quote freshness (slot-based);
+/// `current_timestamp` drives Pyth staleness (`publish_time`, seconds).
 pub fn process_token_payment_flow(
     token_accounts: &[AccountView],
     game_engine_key: &Address,
     treasury_wallet: &Address,
+    treasury_wallet_account: &AccountView,
     program_id: &Address,
     shop_config: &ShopConfigAccount,
     buyer: &AccountView,
     final_price_lamports: u64,
+    // USD-denominated price for the product, in cents. Pass `Some(n>0)` for
+    // USD-priced products (subscriptions) — required by the pegged-stablecoin
+    // path. Pass `None` for SOL-priced products (shop items / bundles /
+    // flash sales); pegged tokens are rejected with `InvalidParameter` in
+    // that case (no way to derive USD without an oracle, so the pegged
+    // shortcut would be meaningless).
+    cost_usd_cents: Option<u64>,
+    system_program: &AccountView,
     current_slot: u64,
     current_timestamp: i64,
 ) -> ProgramResult {
-    if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS) {
+    // Base account requirement (pegged path needs only these 5).
+    if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS_PEGGED) {
         pinocchio_log::log!(
-            "process_token_payment_flow: need at least {} accounts, got {}",
-            TOKEN_PAYMENT_ACCOUNTS as u64,
+            "process_token_payment_flow: need at least {} base accounts, got {}",
+            TOKEN_PAYMENT_ACCOUNTS_PEGGED as u64,
             token_accounts.len() as u64,
         );
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -447,6 +474,22 @@ pub fn process_token_payment_flow(
         return Err(ProgramError::InvalidAccountData);
     }
 
+    // ATA backstop: `create_allowed_token` provisions the treasury ATA at
+    // whitelist time, but this is defense-in-depth for tokens whitelisted
+    // before that helper existed, or if the ATA was closed. The non-
+    // idempotent `Create` errors if a front-run already created the same
+    // address; the caller's tx fails clean and they retry.
+    if treasury_token_ata.data_len() == 0 {
+        create_associated_token_account(
+            buyer,                       // payer (buyer covers rent in this fallback)
+            treasury_token_ata,          // ATA to create
+            treasury_wallet_account,     // wallet that owns the ATA
+            token_mint,
+            system_program,
+            token_program,
+        )?;
+    }
+
     // Pin the payment destination: the treasury token account's authority
     // must be the DAO-configured treasury wallet. Without this a buyer can
     // pass a token account they control as `treasury_token_ata` and pay
@@ -460,48 +503,92 @@ pub fn process_token_payment_flow(
         program_id,
     ).map_err(|_| GameError::TokenNotAllowed)?;
 
-    // Slot 5 selects the oracle program: a Pyth feed account, or this
-    // program's oracle-quote PDA.
-    let token_amount = match detect_oracle_type(&token_accounts[5])? {
-        OracleType::Pyth => {
-            // Pyth: slots 5,6 are the SOL and TOKEN `PriceUpdateV2` accounts.
-            if unlikely(detect_oracle_type(&token_accounts[6])? != OracleType::Pyth) {
-                pinocchio_log::log!("process_token_payment_flow: mixed Pyth+Switchboard feeds rejected");
-                return Err(GameError::OracleUnavailable.into());
+    // Branch on pricing model.
+    let token_amount = if allowed_token.pegged_to_usd != 0 {
+        // Pegged path: skip oracle, compute directly from USD.
+        // `None` (SOL-priced product) or `Some(0)` (degenerate input) is
+        // surfaced loudly — the pegged shortcut only makes sense when the
+        // caller has an authoritative USD price to convert from.
+        let cents = match cost_usd_cents {
+            Some(c) if c > 0 => c,
+            _ => {
+                pinocchio_log::log!(
+                    "process_token_payment_flow: pegged token requires a USD-denominated price (SOL-priced products must use a non-pegged token)",
+                );
+                return Err(GameError::InvalidParameter.into());
             }
-            calculate_token_amount_pyth(
-                &token_accounts[5],
-                &token_accounts[6],
-                token_mint,
-                &allowed_token,
-                shop_config,
-                final_price_lamports,
-                current_timestamp,
-            )?
+        };
+        let mint_data = token_mint.try_borrow()?;
+        let decimals = read_token_decimals(&mint_data)?;
+        /*
+         * Defensive cap mirrored from create/update_allowed_token's
+         * [2, 12] gate. The config-time validator should already prevent
+         * out-of-range decimals from ever reaching here, but the helper
+         * must not assume that invariant — `checked_pow(decimals - 2)`
+         * accepts up to decimals = 21 before overflowing, well past any
+         * realistic SPL mint.
+         */
+        if decimals < 2 || decimals > 12 {
+            return Err(GameError::InvalidParameter.into());
         }
-        OracleType::Switchboard => {
-            // Switchboard: slot 5 = quote PDA, 6 = queue, 7 = SlotHashes sysvar.
-            if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS_SB) {
-                return Err(ProgramError::NotEnoughAccountKeys);
+        /*
+         * token_amount = cents × 10^(decimals - 2)
+         * e.g. $50 sub at USDC (6 dec): 5_000 × 10^4 = 50_000_000 base units.
+         */
+        let scale = 10u64
+            .checked_pow((decimals - 2) as u32)
+            .ok_or(GameError::MathOverflow)?;
+        cents.checked_mul(scale).ok_or(GameError::MathOverflow)?
+    } else {
+        // Oracle path: slot 5 selects Pyth (PriceUpdateV2) or Switchboard
+        // (program-owned OracleQuote PDA).
+        if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS) {
+            pinocchio_log::log!(
+                "process_token_payment_flow: oracle path needs at least {} accounts, got {}",
+                TOKEN_PAYMENT_ACCOUNTS as u64,
+                token_accounts.len() as u64,
+            );
+            return Err(ProgramError::NotEnoughAccountKeys);
+        }
+        match detect_oracle_type(&token_accounts[5])? {
+            OracleType::Pyth => {
+                if unlikely(detect_oracle_type(&token_accounts[6])? != OracleType::Pyth) {
+                    pinocchio_log::log!("process_token_payment_flow: mixed Pyth+Switchboard feeds rejected");
+                    return Err(GameError::OracleUnavailable.into());
+                }
+                calculate_token_amount_pyth(
+                    &token_accounts[5],
+                    &token_accounts[6],
+                    token_mint,
+                    &allowed_token,
+                    shop_config,
+                    final_price_lamports,
+                    current_timestamp,
+                )?
             }
-            let quote = verify_switchboard_quote(
-                &token_accounts[5],
-                &token_accounts[6],
-                &token_accounts[7],
-                &shop_config.switchboard_queue,
-                current_slot,
-                shop_config.sol_max_staleness_slots as u64,
-            )?;
-            let sol_usd = sb_feed_value(&quote, shop_config.sol_switchboard_feed.as_array())?;
-            let token_usd = sb_feed_value(&quote, allowed_token.switchboard_feed.as_array())?;
-            let mint_data = token_mint.try_borrow()?;
-            let token_decimals = read_token_decimals(&mint_data)?;
-            calculate_token_amount_from_sb_prices(
-                final_price_lamports,
-                sol_usd,
-                token_usd,
-                token_decimals,
-            )?
+            OracleType::Switchboard => {
+                if unlikely(token_accounts.len() < TOKEN_PAYMENT_ACCOUNTS_SB) {
+                    return Err(ProgramError::NotEnoughAccountKeys);
+                }
+                let quote = verify_switchboard_quote(
+                    &token_accounts[5],
+                    &token_accounts[6],
+                    &token_accounts[7],
+                    &shop_config.switchboard_queue,
+                    current_slot,
+                    shop_config.sol_max_staleness_slots as u64,
+                )?;
+                let sol_usd = sb_feed_value(&quote, shop_config.sol_switchboard_feed.as_array())?;
+                let token_usd = sb_feed_value(&quote, allowed_token.switchboard_feed.as_array())?;
+                let mint_data = token_mint.try_borrow()?;
+                let token_decimals = read_token_decimals(&mint_data)?;
+                calculate_token_amount_from_sb_prices(
+                    final_price_lamports,
+                    sol_usd,
+                    token_usd,
+                    token_decimals,
+                )?
+            }
         }
     };
 

@@ -13,13 +13,47 @@ import { buildInstruction } from '../instruction';
 import { createInstructionData } from '../utils/serialize';
 import { packed, u8, u16, u32, u64, i64, fixedString, pad } from '../utils/codec';
 import {
+  deriveAllowedTokenPda,
   deriveNoviMintPda,
   derivePlayerPda,
+  deriveShopConfigPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
 
 // Purchase Subscription
+
+/**
+ * Accounts and oracle/peg context for a TOKEN-payment subscription
+ * (`paymentType = 2`). Set this when paying with an SPL token.
+ *
+ * Pricing path is selected per-token by `AllowedTokenAccount.pegged_to_usd`:
+ * - **Pegged** (USDC/USDT/PYUSD): omit all `*PythFeed` / `switchboard*`
+ *   fields. The chain skips the oracle and computes the token amount as
+ *   `cost_usd_cents × 10^(decimals - 2)`.
+ * - **Pyth**: set `solPythFeed` + `tokenPythFeed`.
+ * - **Switchboard**: set `switchboardQuote` + `switchboardQueue` + `slotHashes`.
+ *
+ * `tokenMint` is always required. `buyerTokenAta` and `treasuryTokenAta`
+ * default to the ATAs derived from `tokenMint` + the corresponding owner.
+ */
+export interface SubscriptionTokenPayment {
+  tokenMint: Address;
+  /** Buyer's ATA for `tokenMint`. Derived from owner if omitted. */
+  buyerTokenAta?: Address;
+  /** Treasury wallet's ATA for `tokenMint`. Derived from treasury if omitted. */
+  treasuryTokenAta?: Address;
+  /** Pyth path: SOL/USD PriceUpdateV2. */
+  solPythFeed?: Address;
+  /** Pyth path: TOKEN/USD PriceUpdateV2. */
+  tokenPythFeed?: Address;
+  /** Switchboard path: program-owned OracleQuote PDA. */
+  switchboardQuote?: Address;
+  /** Switchboard path: queue account. */
+  switchboardQueue?: Address;
+  /** Switchboard path: SlotHashes sysvar. */
+  slotHashes?: Address;
+}
 
 export interface PurchaseSubscriptionAccounts {
   /** Player's wallet (signer) */
@@ -30,12 +64,9 @@ export interface PurchaseSubscriptionAccounts {
   paymentAuthority: Address;
   /** Treasury wallet to receive SOL payments */
   treasury: Address;
-  /** Payment method (SOL or SPL token) */
-  paymentMint?: Address;
-  /** Pyth price feed for payment token */
-  pythFeed?: Address;
-  /** Switchboard feed (alternative) */
-  switchboardFeed?: Address;
+  /** Optional token-payment accounts. Required (and consulted) only when
+   *  `paymentType === 2`. */
+  tokenPayment?: SubscriptionTokenPayment;
 }
 
 export interface PurchaseSubscriptionParams {
@@ -107,17 +138,57 @@ export async function createPurchaseSubscriptionInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
-  console.log("Purchase Subscription Instruction:", keys.map(k => `${k.pubkey}${k.isSigner ? " (signer)" : ""}${k.isWritable ? " (writable)" : ""}`).join(", "));
 
-  // Optional accounts for TOKEN payment (payment_type=2)
-  if (accounts.paymentMint) {
-    keys.push({ pubkey: accounts.paymentMint, isSigner: false, isWritable: false });
-  }
-  if (accounts.pythFeed) {
-    keys.push({ pubkey: accounts.pythFeed, isSigner: false, isWritable: false });
-  }
-  if (accounts.switchboardFeed) {
-    keys.push({ pubkey: accounts.switchboardFeed, isSigner: false, isWritable: false });
+  /*
+   * TOKEN payment (paymentType === 2): append shop_config + the token-payment
+   * account layout that `process_token_payment_flow` consumes. Order mirrors
+   * `subscription/purchase.rs:307-335` — shop_config at slot 10, then
+   * token_accounts[..] which the helper expects to read positionally.
+   * Pegged-stablecoin tokens omit the trailing oracle accounts; the chain
+   * branches on `AllowedTokenAccount.pegged_to_usd`.
+   */
+  if (params.paymentType === 2) {
+    if (!accounts.tokenPayment) {
+      throw new Error(
+        'createPurchaseSubscriptionInstruction: paymentType=2 requires `tokenPayment` accounts',
+      );
+    }
+    const tp = accounts.tokenPayment;
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+    const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, tp.tokenMint);
+    const buyerAta = tp.buyerTokenAta ?? await getAssociatedTokenAddressSync(tp.tokenMint, accounts.owner);
+    const treasuryAta = tp.treasuryTokenAta ?? await getAssociatedTokenAddressSync(tp.tokenMint, accounts.treasury);
+
+    keys.push(
+      { pubkey: shopConfig, isSigner: false, isWritable: false },     /* [10] shop_config */
+      { pubkey: allowedToken, isSigner: false, isWritable: false },   /* [11] allowed_token */
+      { pubkey: tp.tokenMint, isSigner: false, isWritable: false },   /* [12] token_mint */
+      { pubkey: buyerAta, isSigner: false, isWritable: true },        /* [13] buyer_token_ata */
+      { pubkey: treasuryAta, isSigner: false, isWritable: true },     /* [14] treasury_token_ata */
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, /* [15] token_program (inner) */
+    );
+
+    if (tp.solPythFeed && tp.tokenPythFeed) {
+      keys.push(
+        { pubkey: tp.solPythFeed, isSigner: false, isWritable: false },   /* [16] sol PriceUpdateV2 */
+        { pubkey: tp.tokenPythFeed, isSigner: false, isWritable: false }, /* [17] token PriceUpdateV2 */
+      );
+    } else if (tp.switchboardQuote && tp.switchboardQueue && tp.slotHashes) {
+      keys.push(
+        { pubkey: tp.switchboardQuote, isSigner: false, isWritable: false }, /* [16] oracle-quote PDA */
+        { pubkey: tp.switchboardQueue, isSigner: false, isWritable: false }, /* [17] Switchboard queue */
+        { pubkey: tp.slotHashes, isSigner: false, isWritable: false },        /* [18] SlotHashes sysvar */
+      );
+    }
+    /* else: pegged path — no oracle accounts. */
+
+    /*
+     * Append the ATA program so `process_token_payment_flow`'s defensive
+     * `create_associated_token_account` backstop can CPI the ATA program
+     * when the treasury ATA doesn't exist. Appended last to keep positional
+     * `&accounts[..]` reads in the on-chain processor unshifted.
+     */
+    keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
   // Instruction data: payment_type (u8) + new_tier_index (u8)

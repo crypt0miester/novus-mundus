@@ -11,7 +11,7 @@ import { address, type Address } from '@solana/kit';
 
 /** Novus Mundus Program ID */
 export const PROGRAM_ID: Address = address(
-  'J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V'
+  '6kFKaG8DEMC5mVMi4VbD3AYxxmz2gQc3o2fuW4q4rYNk'
 );
 
 /** MPL Core Program ID */

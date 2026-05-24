@@ -271,14 +271,14 @@ describe('Estate System', () => {
         buildings: [BuildingType.Barracks],
       });
 
-      // Burn locked NOVI by upgrading Barracks as far as 1M NOVI allows.
+      // Burn locked NOVI by upgrading Barracks as far as 10M raw NOVI allows.
       // φ² (=2.618) scaling makes each successive upgrade ~2.6× the prior. Starting
-      // from base 10k, levels 2..5 cost roughly 10k + 26k + 68k + 178k + 466k ~= 750k
-      // → almost exhausts the 1M starter, leaving level 6 unaffordable.
+      // from base 10k, the level-2..8 cumulative is ~5.2M raw, with level 9 alone
+      // costing ~8.43M raw — beyond the remaining ~4.8M, so level 9 is unaffordable.
       try {
-        await factory.upgradeAndCompleteBuilding(player, BuildingType.Barracks, 6);
+        await factory.upgradeAndCompleteBuilding(player, BuildingType.Barracks, 9);
       } catch {
-        // ok if we error out before reaching level 6 — the rejection happens at
+        // ok if we error out before reaching level 9 — the rejection happens at
         // whichever level first exceeds the player's funds.
       }
 
@@ -380,15 +380,15 @@ describe('Estate System', () => {
     });
 
     it('should reject buying further plots once funds are exhausted', async () => {
-      // The true max-plots reject (5 plots) needs ~2.84M NOVI — not fundable in
+      // The true max-plots reject (5 plots) needs ~28.4M NOVI raw — not fundable in
       // the free-tier test environment. We test the equivalent reject path: buy
       // plots until insufficient NOVI, then the next buy fails. Both code paths
       // reject in the same buy_plot ix.
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
-      // Plot 2 costs 100k. After buying plot 2 the player has ~900k. Plot 3 costs
-      // 262k. After plot 3 the player has ~638k. Plot 4 costs ~686k — beyond
-      // remaining funds, so the buy fails.
+      // Player starts with 10M raw (1M display) STARTER_LOCKED_NOVI. Plot 2 costs
+      // 1M raw, plot 3 costs ~2.62M raw — after both the player has ~6.38M raw.
+      // Plot 4 costs ~6.85M raw, beyond remaining funds, so the buy fails.
       await sendTransaction(
         ctx.svm,
         new Transaction().add(createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })),
@@ -410,14 +410,14 @@ describe('Estate System', () => {
     });
 
     it('should scale plot cost with count', async () => {
-      // Player starts with 1M NOVI (STARTER_LOCKED_NOVI), enough for plots 2+3 (362k total)
+      // Player starts with 10M raw NOVI (STARTER_LOCKED_NOVI), enough for plots 2+3 (3.62M raw total)
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
       // Snapshot before buying plot 2
       const beforePlot2 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(beforePlot2).not.toBeNull();
 
-      // Buy plot 2 (costs 100,000 NOVI)
+      // Buy plot 2 (costs 1,000,000 raw NOVI = 100k display)
       const ix2 = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
       await sendTransaction(ctx.svm, new Transaction().add(ix2), [player.keypair]);
 
@@ -427,7 +427,7 @@ describe('Estate System', () => {
       // Cost of plot 2 = difference in lockedNovi
       const cost2 = beforePlot2!.data.lockedNovi.sub(afterPlot2!.data.lockedNovi);
 
-      // Buy plot 3 (costs ~262,000 NOVI - more expensive than plot 2)
+      // Buy plot 3 (costs ~2,618,000 raw NOVI = ~262k display - more expensive than plot 2)
       const beforePlot3 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(beforePlot3).not.toBeNull();
 

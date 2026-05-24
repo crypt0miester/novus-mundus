@@ -322,6 +322,15 @@ export interface TokenPaymentAccounts {
   buyerTokenAta: PublicKey;
   /** Treasury's ATA for `tokenMint` (writable). */
   treasuryTokenAta: PublicKey;
+  /**
+   * Set `true` for $1-pegged stablecoins (USDC/USDT/PYUSD) — skips oracle
+   * accounts on the wire and lets the chain price directly from
+   * `cost_usd_cents`. MUST be `true` when no oracle fields are passed,
+   * otherwise the builder throws (a missing flag on a non-pegged token
+   * would otherwise silently build an ix the chain rejects with
+   * NotEnoughAccountKeys).
+   */
+  peggedToUsd?: boolean;
   /** Pyth path: SOL/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
   solOracleFeed?: PublicKey;
   /** Pyth path: TOKEN/USD `PriceUpdateV2` account. Omit for the Switchboard path. */
@@ -422,14 +431,32 @@ export function createPurchaseItemInstruction(
       keys.push({ pubkey: tp.oracleQuote, isSigner: false, isWritable: false });
       keys.push({ pubkey: tp.switchboardQueue, isSigner: false, isWritable: false });
       keys.push({ pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false });
-    } else {
+    } else if (tp.solOracleFeed !== undefined || tp.tokenOracleFeed !== undefined) {
       // Pyth path: SOL and TOKEN `PriceUpdateV2` feed accounts.
       if (tp.solOracleFeed === undefined || tp.tokenOracleFeed === undefined) {
         throw new Error('purchaseItem: solOracleFeed + tokenOracleFeed required for the Pyth path');
       }
       keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
       keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+    } else if (!tp.peggedToUsd) {
+      /*
+       * No oracle fields AND no explicit pegged-USD opt-in — almost
+       * certainly a caller mistake. Without this guard the ix builds and
+       * submits, then the chain rejects with NotEnoughAccountKeys after
+       * burning compute. Pegged stablecoin? Set `peggedToUsd: true`.
+       */
+      throw new Error(
+        'purchaseItem: token payment needs either oracle accounts (Pyth/Switchboard) or explicit peggedToUsd: true',
+      );
     }
+
+    /*
+     * Append the ATA program so `process_token_payment_flow`'s defensive
+     * `create_associated_token_account` backstop (fires when the treasury
+     * ATA doesn't exist) can CPI the ATA program. Appended at the end so
+     * positional `&accounts[..]` reads are not shifted.
+     */
+    keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
   // Instruction data
@@ -1489,6 +1516,11 @@ export interface CreateAllowedTokenParams {
   confidenceThresholdBps: number;
   /** Discount in basis points (0-10000) */
   discountBps: number;
+  /** $1-pegged stablecoin? When true, the chain skips the oracle and computes
+   *  token amount directly from `cost_usd_cents` (subscription payments).
+   *  USDC / USDT / PYUSD. When true, `pythFeed` / `switchboardFeed` may be
+   *  omitted. Defaults to false. */
+  peggedToUsd?: boolean;
 }
 
 /** ~10,000 CU */
@@ -1527,8 +1559,9 @@ export function createCreateAllowedTokenInstruction(
     keys.push({ pubkey: params.switchboardFeed, isSigner: false, isWritable: false });
   }
 
-  // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) = 70 bytes
-  const writer = new BufferWriter(70);
+  // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16)
+  // + confidence_threshold_bps(u16) + discount_bps(u16) + pegged_to_usd(u8) = 71 bytes
+  const writer = new BufferWriter(71);
   if (params.pythFeed) {
     writer.writeBytes(feedIdBuffer(params.pythFeed));
   } else {
@@ -1542,6 +1575,7 @@ export function createCreateAllowedTokenInstruction(
   writer.writeU16(params.maxStalenessSlots);
   writer.writeU16(params.confidenceThresholdBps);
   writer.writeU16(params.discountBps);
+  writer.writeU8(params.peggedToUsd ? 1 : 0);
 
   const data = createInstructionData(DISCRIMINATORS.SHOP_CREATE_ALLOWED_TOKEN, writer.toBuffer());
 
@@ -1574,6 +1608,9 @@ export interface UpdateAllowedTokenParams {
   confidenceThresholdBps?: number;
   /** New discount in basis points */
   discountBps?: number;
+  /** Flip the stablecoin peg: true = $1-pegged (skip oracle), false = oracle path.
+   *  When flipping to true, the chain validates mint decimals are in [2, 12]. */
+  peggedToUsd?: boolean;
 }
 
 /** ~5,000 CU */
@@ -1645,6 +1682,15 @@ export function createUpdateAllowedTokenInstruction(
     const writer = new BufferWriter(3);
     writer.writeU8(4); // DiscountBps
     writer.writeU16(params.discountBps);
+    instructions.push(new TransactionInstruction({
+      keys, programId: PROGRAM_ID,
+      data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),
+    }));
+  }
+  if (params.peggedToUsd !== undefined) {
+    const writer = new BufferWriter(2);
+    writer.writeU8(5); // PeggedToUsd
+    writer.writeU8(params.peggedToUsd ? 1 : 0);
     instructions.push(new TransactionInstruction({
       keys, programId: PROGRAM_ID,
       data: createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, writer.toBuffer()),

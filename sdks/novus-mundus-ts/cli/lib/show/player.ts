@@ -15,6 +15,14 @@ import { SubscriptionTier, TravelType } from '../../../src/types/enums';
 import { isNullPubkey } from '../../../src/utils/deserialize';
 import { getTotalUnits } from '../../../src/state/player';
 import type { PlayerAccount } from '../../../src/state/player';
+import { deriveLocationPda } from '../../../src/pda';
+import {
+  parseLocation,
+  OCCUPANT_NONE,
+  OCCUPANT_PLAYER,
+  OCCUPANT_ENCOUNTER,
+} from '../../../src/state/location';
+import { toGrid, cityOffset } from '../../../src/calculators/terrain';
 
 const TIER_NAMES: Record<number, string> = {
   [SubscriptionTier.Rookie]: 'Rookie',
@@ -85,15 +93,22 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   // Identity
   log.info(section('Identity'));
   log.info(`  Level ${p.level} (${formatNum(p.currentXp)} XP)    Reputation: ${formatNum(p.reputation)}    Networth: ${formatNum(p.networth)}`);
-  const tierName = TIER_NAMES[p.subscriptionTier] ?? 'Unknown';
-  const subExpiry = p.subscriptionEnd.toNumber() > 0 ? formatDate(p.subscriptionEnd) : dim('none');
+  const subEndSec = p.subscriptionEnd.toNumber();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const subActive = subEndSec > nowSec;
+  const tierName = subActive ? (TIER_NAMES[p.subscriptionTier] ?? 'Unknown') : 'Free';
+  const subExpiry = subActive ? formatDate(p.subscriptionEnd) : dim('none');
   log.info(`  Subscription: ${tierName} (expires ${subExpiry})    City: ${cityName(p.currentCity)} (ID ${p.currentCity})`);
+  log.info(`  Coords: ${p.currentLat.toFixed(4)}, ${p.currentLong.toFixed(4)}`);
+
+  await showLocationCell(client, ctx, result.pubkey, p);
 
   // Location
   if (p.travelType !== TravelType.None) {
     log.info(section('Travel'));
     const travelLabel = p.travelType === TravelType.Intercity ? 'Intercity' : 'Intracity';
     log.info(`  ${travelLabel}: ${cityName(p.originCity)} → ${cityName(p.destinationCity)}    Arrives: ${formatDate(p.arrivalTime)}`);
+    log.info(`  Heading to: ${p.travelingToLat.toFixed(4)}, ${p.travelingToLong.toFixed(4)}`);
   }
 
   // Military
@@ -162,4 +177,67 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   }
 
   log.info('');
+}
+
+/*
+ * Derive the Location PDA from the player's current coords and dump its
+ * on-chain state. Mirrors what CityTerrainMap.tsx queries to decide whether
+ * to render the player's orange dot — if `occupant_type` here is not
+ * OCCUPANT_PLAYER or the city_id doesn't match `currentCity`, the player
+ * won't appear on the map.
+ */
+async function showLocationCell(
+  client: NovusMundusClient,
+  ctx: CLIContext,
+  playerPda: PublicKey,
+  p: PlayerAccount,
+): Promise<void> {
+  const city = CITIES.find((c) => c.id === p.currentCity);
+  const gridLat = toGrid(p.currentLat);
+  const gridLong = toGrid(p.currentLong);
+  const [locationPda] = deriveLocationPda(ctx.gameEngine, p.currentCity, gridLat, gridLong);
+
+  let offsetStr = '';
+  if (city) {
+    const [ox, oy] = cityOffset(gridLat, gridLong, city.lat, city.lon);
+    const distMeters = Math.round(Math.hypot(ox, oy) * 11);
+    offsetStr = `    Offset from centre: (${ox >= 0 ? '+' : ''}${ox}, ${oy >= 0 ? '+' : ''}${oy}) ≈ ${distMeters.toLocaleString()}m`;
+  }
+
+  log.info(section('Location Cell'));
+  log.info(`  PDA: ${locationPda.toBase58()}`);
+  log.info(`  Grid: (${gridLat}, ${gridLong})${offsetStr}`);
+
+  const acct = await client.connection.getAccountInfo(locationPda);
+  if (!acct) {
+    log.info(`  ${dim('Account does NOT exist on-chain — player will not appear on the map.')}`);
+    return;
+  }
+  const loc = parseLocation(acct);
+  if (!loc) {
+    log.info(`  ${dim('Account exists but failed to parse (wrong size or stale layout).')}`);
+    return;
+  }
+
+  const typeLabel = loc.occupantType === OCCUPANT_PLAYER
+    ? 'PLAYER'
+    : loc.occupantType === OCCUPANT_ENCOUNTER
+      ? 'ENCOUNTER'
+      : loc.occupantType === OCCUPANT_NONE
+        ? dim('NONE')
+        : `unknown(${loc.occupantType})`;
+
+  const occupantMatches = loc.occupant.equals(playerPda);
+  const cityMatches = loc.cityId === p.currentCity;
+  const reservedSec = loc.reservedArrivalTime.toNumber();
+  const reservedStr = reservedSec > 0
+    ? `${formatDate(loc.reservedArrivalTime)} ${dim('(in-transit reservation)')}`
+    : dim('arrived');
+
+  log.info(`  Occupant: ${typeLabel}    ${occupantMatches ? '' : dim('(mismatch) ')}${addr(loc.occupant)}`);
+  log.info(`  City ID: ${loc.cityId}${cityMatches ? '' : dim(` (player says ${p.currentCity})`)}    Occupied since: ${formatDate(loc.occupiedSince)}    Reserved until: ${reservedStr}`);
+
+  if (!occupantMatches || !cityMatches || loc.occupantType !== OCCUPANT_PLAYER) {
+    log.info(`  ${dim('⚠ Map filter on city_id + occupant_type=PLAYER would skip this cell.')}`);
+  }
 }

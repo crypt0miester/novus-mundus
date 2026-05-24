@@ -485,6 +485,14 @@ export async function createPurchaseItemInstruction(
       keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
       keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
     }
+
+    /*
+     * Append the ATA program so `process_token_payment_flow`'s defensive
+     * `create_associated_token_account` backstop can CPI the ATA program.
+     * Appended last so positional `&accounts[..]` reads in the on-chain
+     * processor are not shifted.
+     */
+    keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
   }
 
   // Variable-length instruction data: fixed head + conditional discount fields.
@@ -1626,10 +1634,12 @@ export interface CreateAllowedTokenAccounts {
 
 export interface CreateAllowedTokenParams {
   /** Pyth feed id — 32-byte feed id as 64 hex chars, NOT an account.
-   *  Optional; at least one of pyth/switchboard must be set. */
+   *  Optional when peggedToUsd is true; otherwise at least one of
+   *  pyth/switchboard must be set. */
   pythFeed?: string;
   /** Switchboard pull-feed account address.
-   *  Optional; at least one of pyth/switchboard must be set. */
+   *  Optional when peggedToUsd is true; otherwise at least one of
+   *  pyth/switchboard must be set. */
   switchboardFeed?: Address;
   /** Max price age — seconds for Pyth, slots for Switchboard. */
   maxStalenessSlots: number;
@@ -1637,12 +1647,19 @@ export interface CreateAllowedTokenParams {
   confidenceThresholdBps: number;
   /** Discount in basis points (0-10000) */
   discountBps: number;
+  /**
+   * Treat as a $1-pegged stablecoin (USDC/USDT/PYUSD) — skip oracle reads
+   * and price directly from `cost_usd_cents`. Mint decimals must be in
+   * [2, 12] when set. Defaults to false.
+   */
+  peggedToUsd?: boolean;
 }
 
 /**
- * CreateAllowedToken args (70 bytes): pyth_feed [u8;32] + switchboard_feed
+ * CreateAllowedToken args (71 bytes): pyth_feed [u8;32] + switchboard_feed
  * [u8;32] + max_staleness_slots (u16) + confidence_threshold_bps (u16) +
- * discount_bps (u16). Unset feeds are encoded as 32 zero bytes.
+ * discount_bps (u16) + pegged_to_usd (u8). Unset feeds are encoded as 32
+ * zero bytes.
  */
 const createAllowedTokenArgs = packed<{
   pythFeed: Uint8Array;
@@ -1650,13 +1667,15 @@ const createAllowedTokenArgs = packed<{
   maxStalenessSlots: number;
   confidenceThresholdBps: number;
   discountBps: number;
+  peggedToUsd: number;
 }>([
   ['pythFeed', bytes(32)],
   ['switchboardFeed', bytes(32)],
   ['maxStalenessSlots', u16],
   ['confidenceThresholdBps', u16],
   ['discountBps', u16],
-], 70);
+  ['peggedToUsd', u8],
+], 71);
 
 const ZERO_PUBKEY_BYTES = new Uint8Array(32);
 
@@ -1696,7 +1715,7 @@ export async function createCreateAllowedTokenInstruction(
     keys.push({ pubkey: params.switchboardFeed, isSigner: false, isWritable: false });
   }
 
-  // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) = 70 bytes
+  // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16) + confidence_threshold_bps(u16) + discount_bps(u16) + pegged_to_usd(u8) = 71 bytes
   const data = createInstructionData(
     DISCRIMINATORS.SHOP_CREATE_ALLOWED_TOKEN,
     createAllowedTokenArgs.encode({
@@ -1705,6 +1724,7 @@ export async function createCreateAllowedTokenInstruction(
       maxStalenessSlots: params.maxStalenessSlots,
       confidenceThresholdBps: params.confidenceThresholdBps,
       discountBps: params.discountBps,
+      peggedToUsd: params.peggedToUsd ? 1 : 0,
     })
   );
 
@@ -1733,6 +1753,11 @@ export interface UpdateAllowedTokenParams {
   confidenceThresholdBps?: number;
   /** New discount in basis points */
   discountBps?: number;
+  /**
+   * Toggle the $1-pegged-stablecoin pricing path. Chain rejects values
+   * outside 0/1.
+   */
+  peggedToUsd?: boolean;
 }
 
 /** ~5,000 CU */
@@ -1796,6 +1821,15 @@ export async function createUpdateAllowedTokenInstruction(
   }
   if (params.discountBps !== undefined) {
     const payload = concatBytes([u8.codec.encode(4), u16.codec.encode(params.discountBps)]);
+    instructions.push(buildInstruction(
+      PROGRAM_ID,
+      keys,
+      createInstructionData(DISCRIMINATORS.SHOP_UPDATE_ALLOWED_TOKEN, payload),
+    ));
+  }
+  if (params.peggedToUsd !== undefined) {
+    /* Field variant 5 = PeggedToUsd; chain rejects values > 1. */
+    const payload = concatBytes([u8.codec.encode(5), u8.codec.encode(params.peggedToUsd ? 1 : 0)]);
     instructions.push(buildInstruction(
       PROGRAM_ID,
       keys,

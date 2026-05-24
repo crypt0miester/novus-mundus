@@ -320,27 +320,23 @@ pub fn process(
             if unsafe { city_acc.owner() } == program_id && city_acc.data_len() >= CityAccount::SIZE {
                 let city_data = unsafe { CityAccount::load(city_acc)? };
                 // Validate city matches player's current city
-                if city_data.city_id == player_data.current_city {
-                    let t = unsafe { CityAccount::terrain_from_account(city_acc) };
-                    if !t.anchors.is_empty() {
-                        let (ox, oy) = terrain::city_offset(
-                            terrain::to_grid(player_data.current_lat),
-                            terrain::to_grid(player_data.current_long),
-                            city_data.latitude,
-                            city_data.longitude,
-                        );
-                        let aff = terrain::terrain_affinity(&t, ox, oy);
-                        let bonus = match collection_type {
-                            CollectionType::Mining => aff.mining_bps,
-                            CollectionType::Fishing => aff.fishing_bps,
-                            _ => 0,
-                        };
-                        if bonus > 0 {
-                            let m = 10000u64 + bonus as u64;
-                            base_output.saturating_mul(m) / 10000
-                        } else {
-                            base_output
-                        }
+                if city_data.city_id == player_data.current_city && city_data.anchor_count > 0 {
+                    let (ox, oy) = terrain::city_offset(
+                        terrain::to_grid(player_data.current_lat),
+                        terrain::to_grid(player_data.current_long),
+                        city_data.latitude,
+                        city_data.longitude,
+                    );
+                    let aff = city_data
+                        .with_terrain(city_acc, |t| terrain::terrain_affinity(t, ox, oy))?;
+                    let bonus = match collection_type {
+                        CollectionType::Mining => aff.mining_bps,
+                        CollectionType::Fishing => aff.fishing_bps,
+                        _ => 0,
+                    };
+                    if bonus > 0 {
+                        let m = 10000u64 + bonus as u64;
+                        base_output.saturating_mul(m) / 10000
                     } else {
                         base_output
                     }

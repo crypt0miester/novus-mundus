@@ -562,11 +562,14 @@ In a second terminal, seed the kingdom with the `novus` CLI:
 
 ```bash
 cd sdks/novus-mundus-ts
-bun run novus airdrop         # fund the authority + treasury keypairs
-bun run novus init all        # 10 phases: GameEngine, 32 cities, heroes, research, shop, dungeons, castles, arena, events
-bun run novus status          # verify each system reports OK
-bun run novus create-player   # register a player for your wallet
+bun run novus airdrop dao --amount 100    # fund the DAO authority
+bun run novus airdrop treasury --amount 100  # fund the treasury
+bun run novus init all                    # 12 phases: GameEngine, cities, terrain, heroes, research, subscriptions, shop, dungeons, castles, arena, events
+bun run novus status                      # verify each system reports OK
+bun run novus create-player --tier beginner   # optional: register a CLI-spun player (the web app handles wallet-based player creation)
 ```
+
+**Terrain (phase 3) is required.** It calls `set_terrain` for each city using the presets bundled under `terrain-builder/data/`. Without it, cities have no water/peak lines and terrain-gated logic (passability, mining/fishing bonuses) will misbehave. `init all` runs the terrain phase automatically; to (re-)run it standalone use `bun run novus terrain set <city-id>` per city.
 
 `init all` is create-or-skip — existing accounts are never overwritten. See `sdks/novus-mundus-ts/cli/README.md` for the full command reference.
 

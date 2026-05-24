@@ -318,8 +318,11 @@ export const DECI_NOVI_PER_NOVI = 10 ** NOVI_DECIMALS;
  * field (player.lockedNovi, user.reservedNovi, etc.) and as the `max` of any
  * NumberField whose value the user is meant to type as NOVI.
  */
-export function deciToNovi(raw: BN | number): number {
-  const v = typeof raw === 'number' ? raw : raw.toNumber();
+export function deciToNovi(raw: BN | number | bigint): number {
+  const v =
+    typeof raw === 'number' ? raw :
+    typeof raw === 'bigint' ? Number(raw) :
+    raw.toNumber();
   return v / DECI_NOVI_PER_NOVI;
 }
 
@@ -334,7 +337,7 @@ export function noviToDeci(display: number): number {
 /**
  * Format NOVI amount for display. Input is raw deci-NOVI (e.g. 5000 = 500 NOVI).
  */
-export function formatNoviAmount(amount: BN | number): string {
+export function formatNoviAmount(amount: BN | number | bigint): string {
   return deciToNovi(amount).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,

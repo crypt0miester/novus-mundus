@@ -19,6 +19,9 @@ pub enum AllowedTokenUpdateField {
     MaxStalenessSlots = 2,
     ConfidenceThresholdBps = 3,
     DiscountBps = 4,
+    /// Flip the stablecoin peg: 0 = oracle path, 1 = $1-pegged (USDC/USDT/PYUSD).
+    /// When flipping to 1, the chain validates mint decimals are in [2, 12].
+    PeggedToUsd = 5,
 }
 
 impl AllowedTokenUpdateField {
@@ -29,6 +32,7 @@ impl AllowedTokenUpdateField {
             2 => Some(Self::MaxStalenessSlots),
             3 => Some(Self::ConfidenceThresholdBps),
             4 => Some(Self::DiscountBps),
+            5 => Some(Self::PeggedToUsd),
             _ => None,
         }
     }
@@ -133,6 +137,22 @@ pub fn process(
                 return Err(GameError::InvalidParameter.into());
             }
             allowed_token.discount_bps = discount;
+        }
+        AllowedTokenUpdateField::PeggedToUsd => {
+            let new_flag = read_u8(instruction_data, 1, "pegged_to_usd")?;
+            if new_flag > 1 {
+                return Err(GameError::InvalidParameter.into());
+            }
+            if new_flag == 1 {
+                // Validate mint decimals are scalable: `cost_usd_cents × 10^(d-2)`
+                // requires d >= 2; cap at 12 to keep the multiply safe in u64.
+                let mint_data = token_mint.try_borrow()?;
+                let decimals = crate::helpers::read_token_decimals(&mint_data)?;
+                if decimals < 2 || decimals > 12 {
+                    return Err(GameError::InvalidParameter.into());
+                }
+            }
+            allowed_token.pegged_to_usd = new_flag;
         }
     }
 

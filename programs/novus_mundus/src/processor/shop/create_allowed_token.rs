@@ -11,7 +11,8 @@ use crate::{
     validation::{require_signer, require_writable, require_key_match},
     helpers::ZERO_PUBKEY,
     token_helpers::create_associated_token_account,
-    utils::{read_bytes32, read_u16},
+    helpers::read_token_decimals,
+    utils::{read_bytes32, read_u8, read_u16},
 };
 
 /// Create an AllowedToken account (DAO only)
@@ -40,6 +41,9 @@ use crate::{
 /// - max_staleness_slots: u16 - Max price age (Pyth: seconds; Switchboard: slots)
 /// - confidence_threshold_bps: u16 - Max confidence interval / std deviation
 /// - discount_bps: u16 - Discount for using this token
+/// - pegged_to_usd: u8 - 0 = oracle path (requires at least one feed);
+///   1 = $1-pegged stablecoin (USDC/USDT/PYUSD — no feeds needed; mint
+///   decimals must be in [2, 12]).
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -110,16 +114,40 @@ pub fn process(
     let max_staleness_slots = read_u16(instruction_data, 64, "max_staleness_slots")?;
     let confidence_threshold_bps = read_u16(instruction_data, 66, "confidence_threshold_bps")?;
     let discount_bps = read_u16(instruction_data, 68, "discount_bps")?;
+    let pegged_to_usd = read_u8(instruction_data, 70, "pegged_to_usd")?;
 
-    // Validate discount isn't over 50%
+    /*
+     * pegged_to_usd is a flag — only 0 or 1 are valid. Match the
+     * UpdateAllowedToken validator so create-time and update-time agree;
+     * without this the SDK reader (which treats the byte as `=== 1`) and
+     * the chain branch (`!= 0`) disagree on values 2..=255, producing a
+     * silent SDK↔chain divergence.
+     */
+    if pegged_to_usd > 1 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    /* Validate discount isn't over 50% */
     if discount_bps > 5000 {
         return Err(GameError::InvalidParameter.into());
     }
 
-    // At least one oracle feed must be configured; otherwise this token can
-    // never be priced. Reject the no-op config eagerly.
-    if pyth_feed.as_array() == &ZERO_PUBKEY && switchboard_feed.as_array() == &ZERO_PUBKEY {
-        return Err(GameError::OracleUnavailable.into());
+    if pegged_to_usd != 0 {
+        // Pegged stablecoin path: no oracle is read at purchase time, so feeds
+        // are not required (but may be set as belt-and-suspenders for a future
+        // un-peg). Instead, validate the mint's decimals — `cost_usd_cents ×
+        // 10^(decimals - 2)` requires decimals >= 2 and overflow-safe scaling.
+        let mint_data = token_mint.try_borrow()?;
+        let decimals = read_token_decimals(&mint_data)?;
+        if decimals < 2 || decimals > 12 {
+            return Err(GameError::InvalidParameter.into());
+        }
+    } else {
+        // Oracle path: at least one feed must be set; otherwise the token can
+        // never be priced. Reject the no-op config eagerly.
+        if pyth_feed.as_array() == &ZERO_PUBKEY && switchboard_feed.as_array() == &ZERO_PUBKEY {
+            return Err(GameError::OracleUnavailable.into());
+        }
     }
 
     // Both Pyth and Switchboard feeds are bare feed-ids verified at purchase
@@ -174,7 +202,8 @@ pub fn process(
     allowed_token.confidence_threshold_bps = confidence_threshold_bps;
     allowed_token.discount_bps = discount_bps;
     allowed_token._padding = [0; 2];
-    allowed_token._reserved = [0; 15];
+    allowed_token.pegged_to_usd = pegged_to_usd;
+    allowed_token._reserved = [0; 14];
     allowed_token.bump = bump;
 
     Ok(())

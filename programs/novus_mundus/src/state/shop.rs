@@ -869,8 +869,12 @@ pub struct AllowedTokenAccount {
     pub discount_bps: u16,                 // Discount for using this token
     pub _padding: [u8; 2],
 
-    // Reserved + Bump (16 bytes)
-    pub _reserved: [u8; 15],
+    // Pricing model + Reserved + Bump (16 bytes total)
+    /// 0 = oracle path (Pyth/Switchboard); 1 = $1-pegged stablecoin
+    /// (USDC/USDT/PYUSD — skips oracle, computes directly from cost_usd_cents).
+    /// Existing accounts default to 0 because `_reserved` was zero-initialized.
+    pub pegged_to_usd: u8,
+    pub _reserved: [u8; 14],
     pub bump: u8,
 }
 

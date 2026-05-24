@@ -11,6 +11,7 @@ import {
   calculateDamageOutput,
   getTotalDefensiveUnits,
   getTotalOperativeUnits,
+  PVP_ATTACK_RANGE_METERS,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCityPlayers } from "@/lib/hooks/useCityPlayers";
@@ -28,10 +29,7 @@ import { UnitGrid } from "@/components/shared/UnitGrid";
 import { TargetTravel } from "@/components/panels/TargetTravel";
 import { shortenAddress } from "@/lib/utils";
 
-// Mirrors the program's PVP_ATTACK_RANGE_METERS (attack_player.rs) — the
-// program enforces this constant, not GameEngine.combatConfig, so the panel
-// must too or the proximity grid will offer cells the chain rejects.
-const PVP_RANGE = 15;
+const PVP_RANGE = PVP_ATTACK_RANGE_METERS;
 
 /**
  * The PvP target detail — opened in the RightPanel from the combat tab's

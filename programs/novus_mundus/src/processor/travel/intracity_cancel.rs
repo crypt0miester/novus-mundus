@@ -197,6 +197,7 @@ pub fn process(
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
 
         return_location.account_key = crate::state::AccountKey::Location as u8;
+        return_location.game_engine = player_data.game_engine;
         return_location.grid_lat = return_grid_lat;
         return_location.grid_long = return_grid_long;
         return_location.city_id = player_data.current_city;
@@ -220,6 +221,10 @@ pub fn process(
             return Err(GameError::CellOccupied.into());
         }
 
+        // Heal: re-stamp discriminator + game_engine in case the cell came
+        // from an older build that omitted them.
+        return_location.account_key = crate::state::AccountKey::Location as u8;
+        return_location.game_engine = player_data.game_engine;
         return_location.occupant_type = OCCUPANT_PLAYER;
         return_location.occupant = *player_account.address();
         return_location.occupied_since = now;

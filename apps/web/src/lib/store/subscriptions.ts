@@ -92,66 +92,84 @@ export function startGameSubscriptions(
   // initial fetch and the WS handler so the PDA set is derived only once.
   const playerPurchasePdaToId = derivePlayerPurchaseIndex(wallet);
 
-  Promise.all([
-    client.fetchGameEngine(),
-    client.fetchPlayer(wallet),
-    client.fetchUser(wallet),
-    client.fetchAllCities(),
-    client.fetchShopConfig(),
-    client.fetchAllShopItems(),
-    client.fetchAllBundles(),
-    client.fetchAllFlashSales(),
-    client.fetchAllDailyDeals(),
-    client.fetchAllWeeklySales(),
-    client.fetchAllSeasonalSales(),
-    client.fetchAllDaoPromotions(),
-    client.fetchPlayerPurchases(wallet, playerPurchasePdaToId),
-    client.fetchAllHeroTemplates(),
-  ])
-    .then(([ge, player, user, cities, shopConfig, shopItems, bundles, flashSales, dailyDeals, weeklySales, seasonalSales, daoPromotions, playerPurchases, heroTemplates]) => {
-      if (ge.account) {
-        console.log(ge)
-        store().setGameEngine(ge.pubkey, ge.account);}
-      if (player.account) store().setPlayer(player.pubkey, player.account);
-      if (user.account) store().setUser(user.pubkey, user.account);
-      console.log("Fetched initial accounts: cities", cities.length, "shop items", shopItems.length, "bundles", bundles.length, "flash sales", flashSales.length, "hero templates", heroTemplates.length);
-      for (const city of cities) {
-        store().upsertCity(city.pubkey, city.account);
-      }
-      if (shopConfig.account) store().setShopConfig(shopConfig.pubkey, shopConfig.account);
-      for (const item of shopItems) {
-        store().upsertShopItem(item.pubkey, item.account, item.itemId);
-      }
-      for (const bundle of bundles) {
-        store().upsertBundle(bundle.pubkey, bundle.account, bundle.bundleId);
-      }
-      for (const sale of flashSales) {
-        store().upsertFlashSale(sale.pubkey, sale.account, sale.saleId);
-      }
-      for (const deal of dailyDeals) {
-        store().upsertDailyDeal(deal.pubkey, deal.account, deal.slot);
-      }
-      const nowSec = Math.floor(Date.now() / 1000);
-      const activeWeekly = weeklySales.find((w) => isWeeklySaleActive(w.account, nowSec)) ?? weeklySales[0];
-      if (activeWeekly) store().setWeeklySale(activeWeekly.pubkey, activeWeekly.account);
-      const activeSeasonal = seasonalSales.find((s) => isSeasonalSaleActive(s.account, nowSec)) ?? seasonalSales[0];
-      if (activeSeasonal) store().setSeasonalSale(activeSeasonal.pubkey, activeSeasonal.account);
-      for (const promo of daoPromotions) {
-        store().upsertDaoPromotion(promo.pubkey, promo.account);
-      }
-      for (const pp of playerPurchases) {
-        store().upsertPlayerPurchase(pp.pubkey, pp.account, pp.itemId);
-      }
-      for (const t of heroTemplates) {
-        store().upsertHeroTemplate(t.pubkey, t.account);
-      }
-    })
-    .catch(() => {
-      // Silently fail — accounts may not exist yet (new player)
-    })
-    .finally(() => {
-      store().setLoading(false);
-    });
+  /*
+   * Each fetch is independent — one failing (RPC blip, account not yet created)
+   * must not blank out the others. Promise.allSettled gives us per-fetch status;
+   * rejections are logged so they're not silently swallowed.
+   */
+  const tasks = [
+    ['gameEngine',      client.fetchGameEngine()],
+    ['player',          client.fetchPlayer(wallet)],
+    ['user',            client.fetchUser(wallet)],
+    ['cities',          client.fetchAllCities()],
+    ['shopConfig',      client.fetchShopConfig()],
+    ['shopItems',       client.fetchAllShopItems()],
+    ['bundles',         client.fetchAllBundles()],
+    ['flashSales',      client.fetchAllFlashSales()],
+    ['dailyDeals',      client.fetchAllDailyDeals()],
+    ['weeklySales',     client.fetchAllWeeklySales()],
+    ['seasonalSales',   client.fetchAllSeasonalSales()],
+    ['daoPromotions',   client.fetchAllDaoPromotions()],
+    ['playerPurchases', client.fetchPlayerPurchases(wallet, playerPurchasePdaToId)],
+    ['heroTemplates',   client.fetchAllHeroTemplates()],
+    /*
+     * Seed the full player population once at boot so the otherPlayers map is
+     * warm by the time the user drills into any city. After this, the program-
+     * wide WS keeps every player account live — no per-city or 30-second
+     * refetches anywhere downstream.
+     */
+    ['allPlayers',      client.fetchAllPlayers()],
+  ] as const;
+
+  Promise.allSettled(tasks.map(([, p]) => p)).then((results) => {
+    const ok = <T>(i: number): T | null => {
+      const r = results[i];
+      if (r.status === 'fulfilled') return r.value as T;
+      console.warn(`[boot] fetch ${tasks[i][0]} failed:`, r.reason);
+      return null;
+    };
+
+    const ge             = ok<Awaited<ReturnType<typeof client.fetchGameEngine>>>(0);
+    const player         = ok<Awaited<ReturnType<typeof client.fetchPlayer>>>(1);
+    const user           = ok<Awaited<ReturnType<typeof client.fetchUser>>>(2);
+    const cities         = ok<Awaited<ReturnType<typeof client.fetchAllCities>>>(3) ?? [];
+    const shopConfig     = ok<Awaited<ReturnType<typeof client.fetchShopConfig>>>(4);
+    const shopItems      = ok<Awaited<ReturnType<typeof client.fetchAllShopItems>>>(5) ?? [];
+    const bundles        = ok<Awaited<ReturnType<typeof client.fetchAllBundles>>>(6) ?? [];
+    const flashSales     = ok<Awaited<ReturnType<typeof client.fetchAllFlashSales>>>(7) ?? [];
+    const dailyDeals     = ok<Awaited<ReturnType<typeof client.fetchAllDailyDeals>>>(8) ?? [];
+    const weeklySales    = ok<Awaited<ReturnType<typeof client.fetchAllWeeklySales>>>(9) ?? [];
+    const seasonalSales  = ok<Awaited<ReturnType<typeof client.fetchAllSeasonalSales>>>(10) ?? [];
+    const daoPromotions  = ok<Awaited<ReturnType<typeof client.fetchAllDaoPromotions>>>(11) ?? [];
+    const playerPurchases = ok<Awaited<ReturnType<typeof client.fetchPlayerPurchases>>>(12) ?? [];
+    const heroTemplates  = ok<Awaited<ReturnType<typeof client.fetchAllHeroTemplates>>>(13) ?? [];
+    const allPlayers     = ok<Awaited<ReturnType<typeof client.fetchAllPlayers>>>(14) ?? [];
+
+    if (ge?.account) store().setGameEngine(ge.pubkey, ge.account);
+    if (player?.account) store().setPlayer(player.pubkey, player.account);
+    if (user?.account) store().setUser(user.pubkey, user.account);
+    for (const city of cities) store().upsertCity(city.pubkey, city.account);
+    if (shopConfig?.account) store().setShopConfig(shopConfig.pubkey, shopConfig.account);
+    for (const item of shopItems) store().upsertShopItem(item.pubkey, item.account, item.itemId);
+    for (const bundle of bundles) store().upsertBundle(bundle.pubkey, bundle.account, bundle.bundleId);
+    for (const sale of flashSales) store().upsertFlashSale(sale.pubkey, sale.account, sale.saleId);
+    for (const deal of dailyDeals) store().upsertDailyDeal(deal.pubkey, deal.account, deal.slot);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const activeWeekly = weeklySales.find((w) => isWeeklySaleActive(w.account, nowSec)) ?? weeklySales[0];
+    if (activeWeekly) store().setWeeklySale(activeWeekly.pubkey, activeWeekly.account);
+    const activeSeasonal = seasonalSales.find((s) => isSeasonalSaleActive(s.account, nowSec)) ?? seasonalSales[0];
+    if (activeSeasonal) store().setSeasonalSale(activeSeasonal.pubkey, activeSeasonal.account);
+    for (const promo of daoPromotions) store().upsertDaoPromotion(promo.pubkey, promo.account);
+    for (const pp of playerPurchases) store().upsertPlayerPurchase(pp.pubkey, pp.account, pp.itemId);
+    for (const t of heroTemplates) store().upsertHeroTemplate(t.pubkey, t.account);
+    /* Skip self — that one's already owned by setPlayer above. */
+    for (const p of allPlayers) {
+      if (p.pubkey.toBase58() === myPlayerKey) continue;
+      store().upsertOtherPlayer(p.pubkey, p.account);
+    }
+
+    store().setLoading(false);
+  });
 
   // ── 2. Program-wide WebSocket ───────────────────────────────
   const manager = new GameSubscriptionManager(

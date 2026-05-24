@@ -33,7 +33,7 @@ use pinocchio::{
 // Program ID — single source of truth. `constants::NOVI_MINT_PDA` derives
 // from `crate::ID.to_bytes()` so a redeploy under a new key only needs
 // this string updated.
-pinocchio::address::declare_id!("J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V");
+pinocchio::address::declare_id!("6kFKaG8DEMC5mVMi4VbD3AYxxmz2gQc3o2fuW4q4rYNk");
 
 program_entrypoint!(process_instruction);
 no_allocator!();

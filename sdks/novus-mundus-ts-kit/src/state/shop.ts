@@ -550,6 +550,12 @@ export interface AllowedTokenAccount {
   maxStalenessSlots: number;
   confidenceThresholdBps: number;
   discountBps: number;
+  /**
+   * 0 = oracle path (Pyth/Switchboard); non-zero = $1-pegged stablecoin
+   * (chain matches `!= 0`). Stored as the first byte of the legacy
+   * `_reserved` block.
+   */
+  peggedToUsd: number;
   bump: number;
 }
 
@@ -645,7 +651,9 @@ const allowedTokenCodec = reprC<AllowedTokenAccount>([
   ['confidenceThresholdBps', u16],
   ['discountBps', u16],
   pad(2), // _padding
-  pad(15), // _reserved
+  /* pegged_to_usd: u8 carved from the head of _reserved; 14 remain. */
+  ['peggedToUsd', u8],
+  pad(14), // _reserved
   ['bump', u8],
 ], ALLOWED_TOKEN_ACCOUNT_SIZE);
 

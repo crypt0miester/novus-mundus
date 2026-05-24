@@ -74,8 +74,11 @@ export interface WorldClock {
  */
 export function useWorldClock(): WorldClock {
   const { data: playerData } = usePlayer();
-  // `currentLong` is stored ×10000; longitude is the player's timezone offset.
-  const longitude = (playerData?.account?.currentLong ?? 0) / 10000;
+  // `PlayerCore.currentLong` is an f64 in degrees (`state/player.rs:104`),
+  // NOT the ×10000 grid form. Longitude IS the player's timezone offset —
+  // pass it straight through. The ×10000 scaling belongs to
+  // `LocationAccount.grid_long`, a separate i32 field.
+  const longitude = playerData?.account?.currentLong ?? 0;
 
   // Chain-anchored seconds; phases last hours, so the default 30s tick keeps
   // the arc and countdown fresh enough.

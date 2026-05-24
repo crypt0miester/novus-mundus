@@ -34,18 +34,58 @@ function isPersistedJump(v: unknown): v is PersistedJump {
     return false;
   }
   const city = j.city as Record<string, unknown> | null | undefined;
-  return !!city && typeof city.cityId === "number";
+  if (!city || typeof city.cityId !== "number") return false;
+  // Spawn coords are picked at city-choose time; any persisted jump missing
+  // them is from a build before the picker existed and is no longer valid.
+  if (typeof city.spawnLat !== "number") return false;
+  if (typeof city.spawnLong !== "number") return false;
+  return true;
 }
 
+const STALE_FLAG_KEY = "nm.jump-ahead-stale";
+
+/**
+ * Load the journalled jump if it parses against the current schema. If the
+ * storage holds an entry from a previous build (missing required fields like
+ * spawnLat/spawnLong), clear it and raise the stale-flag so Arrival can show
+ * a one-time notice on mount instead of silently restarting from the world
+ * view. Returns null for both "no entry" and "stale, dropped".
+ */
 export function loadJump(): PersistedJump | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    return isPersistedJump(parsed) ? parsed : null;
+    if (isPersistedJump(parsed)) return parsed;
+    /*
+     * Parseable but schema-mismatched — definitely a stale build. Wipe the
+     * entry so it doesn't keep being rejected every mount, and flag the
+     * drop for UI surface.
+     */
+    window.localStorage.removeItem(KEY);
+    window.sessionStorage.setItem(STALE_FLAG_KEY, "1");
+    return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * One-shot read: was a stale persisted-jump dropped on this page load?
+ * Consuming clears the flag so the toast doesn't fire twice on re-renders.
+ */
+export function consumeStaleJumpDropFlag(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const flag = window.sessionStorage.getItem(STALE_FLAG_KEY);
+    if (flag) {
+      window.sessionStorage.removeItem(STALE_FLAG_KEY);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 

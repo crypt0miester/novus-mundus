@@ -681,6 +681,9 @@ export interface AllowedTokenAccount {
   maxStalenessSlots: number;
   confidenceThresholdBps: number;
   discountBps: number;
+  /** 0 = oracle path (Pyth/Switchboard); 1 = $1-pegged stablecoin (skips
+   *  oracle and computes token amount directly from cost_usd_cents). */
+  peggedToUsd: boolean;
   bump: number;
 }
 
@@ -859,7 +862,10 @@ export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedToken
   const confidenceThresholdBps = reader.readU16();
   const discountBps = reader.readU16();
   reader.skip(2); // _padding
-  reader.skip(15); // _reserved
+  // pegged_to_usd took 1 byte from the head of _reserved. Existing accounts
+  // pre-dating this field deserialize as `false` (the byte was zero-init).
+  const peggedToUsd = reader.readU8() === 1;
+  reader.skip(14); // _reserved
   const bump = reader.readU8();
 
   return {
@@ -869,6 +875,7 @@ export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedToken
     maxStalenessSlots,
     confidenceThresholdBps,
     discountBps,
+    peggedToUsd,
     bump,
   };
 }

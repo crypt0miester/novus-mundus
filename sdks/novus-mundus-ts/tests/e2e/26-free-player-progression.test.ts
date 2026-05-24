@@ -47,7 +47,7 @@ setDefaultTimeout(60_000);
 const GRID_PRECISION = 10000;
 
 /** STARTER_LOCKED_NOVI — `programs/.../constants.rs:36` (raw units, 1 decimal). */
-const STARTER_LOCKED_NOVI = 1_000_000;
+const STARTER_LOCKED_NOVI = 10_000_000;
 /** max_encounter_level_diff — `game_engine.rs:414` (widened 10 → 30). */
 const EXPECTED_LEVEL_DIFF = 30;
 /** The old, pre-fix targeting window — used to show the band genuinely widened. */

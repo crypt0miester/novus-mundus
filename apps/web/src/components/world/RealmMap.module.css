@@ -61,6 +61,20 @@
   letter-spacing: 0.08em;
   color: var(--ink-soft);
 }
+/* Mobile: trim header chrome so the sheet has more vertical real estate. */
+@media (max-width: 960px) {
+  .cartouche {
+    padding: 0 0 0.55rem;
+  }
+  .kingdom {
+    font-size: 1.05rem;
+    letter-spacing: 0.22em;
+  }
+  .tagline {
+    margin-top: 0.25rem;
+    font-size: 0.66rem;
+  }
+}
 .tagline .rule {
   display: inline-block;
   width: 36px;
@@ -80,7 +94,10 @@
   align-items: start;
 }
 @media (max-width: 960px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
 }
 
 /* Map sheet */
@@ -88,8 +105,12 @@
 .sheet {
   position: relative;
   aspect-ratio: 7 / 5;
-  background:
-    radial-gradient(120% 80% at 50% 25%, var(--parchment) 0%, var(--parchment-warm) 55%, var(--parchment-deep) 100%);
+  background: radial-gradient(
+    120% 80% at 50% 25%,
+    var(--parchment) 0%,
+    var(--parchment-warm) 55%,
+    var(--parchment-deep) 100%
+  );
   border: 1px solid var(--parchment-edge);
   /* deckled, slightly varied edge feel via layered shadows */
   box-shadow:
@@ -98,7 +119,23 @@
     0 18px 40px -22px rgba(40, 24, 8, 0.4),
     0 4px 10px -4px rgba(40, 24, 8, 0.25);
   overflow: hidden;
-  cursor: crosshair;
+  /* `grab` cues that the map is draggable — switches to `grabbing` while a
+   * drag-pan is active via the .panning modifier the React tree sets. */
+  cursor: grab;
+}
+.sheet:active {
+  cursor: grabbing;
+}
+
+/* On mobile, ditch the 7:5 letterbox — the map IS the primary surface, so it
+ * should take the available viewport height. Cap at ~85vw so very tall
+ * screens don't stretch the parchment to a sliver. */
+@media (max-width: 960px) {
+  .sheet {
+    aspect-ratio: auto;
+    height: min(72vh, 92vw);
+    min-height: 380px;
+  }
 }
 
 .svg {
@@ -107,6 +144,68 @@
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* When a drill-in view (e.g. CityTerrainMap) takes the sheet, the SVG is
+ * pulled from layout — it stays mounted so React can re-show it instantly
+ * on dismiss. The cityGroup entrance animations (`ink` etc.) run once on
+ * initial mount and don't replay on display-toggle; that's fine, the dots
+ * simply re-appear at their final state when the override is closed. */
+.svgHidden {
+  display: none;
+}
+
+/* Drill-in container — replaces the SVG. The padding gives breathing room
+ * for the corner ornaments; the inner CityTerrainMap is centred and lets
+ * its disc fill whichever dimension is smaller (sheet is 7:5 so height
+ * usually binds). */
+.sheetOverride {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 56px;
+  z-index: 2;
+}
+@media (max-width: 960px) {
+  /* Mobile: shrink padding so the terrain disc takes the full mobile sheet
+   * (no corner ornaments to dodge — they're hidden under the override too). */
+  .sheetOverride {
+    padding: 20px 20px 28px;
+  }
+}
+
+.sheetBackBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--ink-faint, #b89a72);
+  background: var(--parchment, #efe2c4);
+  color: var(--ink, #2e1f10);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    color 0.15s ease;
+  box-shadow: 0 2px 6px -2px rgba(40, 24, 8, 0.35);
+}
+.sheetBackBtn:hover {
+  background: var(--parchment-warm, #e9d7b0);
+  transform: scale(1.06);
+}
+.sheetBackBtn:focus-visible {
+  outline: 2px solid var(--seal, #b45309);
+  outline-offset: 2px;
 }
 
 /* paper grain — a tiled SVG noise overlay */
@@ -142,11 +241,30 @@
   pointer-events: none;
   z-index: 4;
 }
-.ornament svg { width: 100%; height: 100%; display: block; }
-.tl { top: 12px; left: 12px; }
-.tr { top: 12px; right: 12px; transform: scaleX(-1); }
-.bl { bottom: 12px; left: 12px; transform: scaleY(-1); }
-.br { bottom: 12px; right: 12px; transform: scale(-1, -1); }
+.ornament svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tl {
+  top: 12px;
+  left: 12px;
+}
+.tr {
+  top: 12px;
+  right: 12px;
+  transform: scaleX(-1);
+}
+.bl {
+  bottom: 12px;
+  left: 12px;
+  transform: scaleY(-1);
+}
+.br {
+  bottom: 12px;
+  right: 12px;
+  transform: scale(-1, -1);
+}
 
 /* SVG element styling */
 
@@ -156,6 +274,91 @@
   stroke-width: 0.6;
 }
 
+/* Day/night terminator — atmospheric layer. The wash darkens the night side
+ * of the sheet; the band is a separate gradient strip rendered just inside
+ * the day side of the terminator to soften the boundary. Pointer-events off
+ * so the underlying click-to-deselect target still works. */
+.nightWash {
+  fill: rgba(40, 25, 8, 0.18);
+  pointer-events: none;
+}
+.twilightBand {
+  pointer-events: none;
+  /* `fill` is set inline to the linearGradient — only the mix-blend matters. */
+  mix-blend-mode: multiply;
+}
+:global(body[data-theme="dark"]) .nightWash {
+  /* On dark mode the parchment is already brown; the night wash needs to be
+   * lighter (a moonlight pallor) instead of more sepia. */
+  fill: rgba(210, 220, 235, 0.06);
+}
+:global(body[data-theme="dark"]) .twilightBand {
+  mix-blend-mode: screen;
+}
+
+/* Terrain — pen-ink glyphs scattered through the kingdom hull. Each glyph is
+ * positioned in world space but its content is counter-scaled in JS, so the
+ * marks stay the same pixel size as the user zooms.
+ * The whole layer fades in slightly delayed so the kingdom shape and roads
+ * read first. */
+.terrainLayer {
+  pointer-events: none;
+  opacity: 0;
+  animation: terrainIn 1.2s ease 0.6s forwards;
+}
+@keyframes terrainIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.terrainGlyph {
+  color: var(--ink-soft);
+}
+
+.terrainMountain {
+  fill: var(--parchment);
+  stroke: var(--ink);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+  opacity: 0.78;
+}
+.terrainMountainBack {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+.terrainMountainRidge {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.5;
+  stroke-linecap: round;
+  opacity: 0.45;
+}
+.terrainForest {
+  fill: var(--ink);
+  stroke: var(--ink);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+.terrainHill {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+.terrainWater {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.6;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
 .road {
   stroke: var(--ink-soft);
   stroke-width: 0.32;
@@ -163,6 +366,51 @@
   fill: none;
   opacity: 0;
   animation: roadIn 1.4s ease forwards;
+}
+
+/* Intercity travel — the player's journey from origin to destination.
+ * Seal-orange dashed line with a soft drifting cadence so it reads as
+ * "active" rather than as map chrome. vector-effect keeps the stroke
+ * width + dash sizes in screen pixels regardless of zoom; the marker
+ * uses a separate counter-scale group on the inline transform. */
+.travelGroup {
+  pointer-events: none;
+}
+.travelLine {
+  fill: none;
+  stroke: var(--seal);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+  filter: drop-shadow(0 0 4px var(--seal-glow));
+  animation: travelDash 1.2s linear infinite;
+}
+.travelMarker {
+  fill: var(--seal);
+}
+.travelMarkerHalo {
+  fill: var(--seal);
+  opacity: 0.35;
+  animation: travelMarkerPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes travelDash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+@keyframes travelMarkerPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.35);
+  }
 }
 
 .cityDot {
@@ -206,7 +454,7 @@
   pointer-events: none;
   paint-order: stroke fill;
   stroke: var(--halo-soft);
-  stroke-width: 1.0;
+  stroke-width: 1;
 }
 
 /* Hovered / selected / capital / home — emphasise by darkening to full ink
@@ -222,6 +470,35 @@
   fill: var(--seal);
   filter: drop-shadow(0 0 1.2px var(--seal-glow));
   pointer-events: none;
+}
+
+/* recommended city — slow, soft pulse. Calmer accent than the seal so the
+ * eye is drawn to it without screaming. */
+.recommendedPulse {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.5;
+  opacity: 0.35;
+  animation: recommendedPulse 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes recommendedPulse {
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .recommendedPulse {
+    animation: none;
+    opacity: 0.45;
+  }
 }
 
 /* selected city — double ring drawn on */
@@ -250,17 +527,27 @@
   animation: ink 0.7s ease-out forwards;
   cursor: pointer;
 }
-.cityGroup:hover .cityDot { transform: scale(1.18); }
+.cityGroup:hover .cityDot {
+  transform: scale(1.18);
+}
 
 @keyframes ink {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes ringDraw {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 @keyframes roadIn {
-  to { opacity: 0.55; }
+  to {
+    opacity: 0.55;
+  }
 }
 
 /* compass rose container — placed absolutely in the corner */
@@ -295,7 +582,10 @@
   justify-content: center;
   z-index: 6;
   opacity: 0.8;
-  transition: opacity 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
   animation: fadeIn 0.2s ease;
 }
 .resetBtn:hover {
@@ -305,10 +595,20 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 0.8; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 0.8;
+    transform: scale(1);
+  }
 }
-.compass svg { width: 100%; height: 100%; display: block; }
+.compass svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
 /* scale bar — bottom-left */
 .scale {
@@ -329,8 +629,8 @@
   width: 80px;
   height: 6px;
   background:
-    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) top/16px 2px repeat-x,
-    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) bottom/16px 2px repeat-x;
+    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) top / 16px 2px repeat-x,
+    linear-gradient(to right, var(--ink-soft) 50%, transparent 50%) bottom / 16px 2px repeat-x;
   border-left: 1px solid var(--ink-soft);
   border-right: 1px solid var(--ink-soft);
 }
@@ -339,8 +639,12 @@
 
 .scroll {
   position: relative;
-  background:
-    radial-gradient(120% 60% at 50% 0%, var(--parchment) 0%, var(--parchment-warm) 70%, var(--parchment-deep) 100%);
+  background: radial-gradient(
+    120% 60% at 50% 0%,
+    var(--parchment) 0%,
+    var(--parchment-warm) 70%,
+    var(--parchment-deep) 100%
+  );
   border: 1px solid var(--parchment-edge);
   box-shadow:
     inset 0 0 50px rgba(110, 70, 30, 0.16),
@@ -378,8 +682,14 @@
   color: var(--ink);
   background: var(--panel-tint);
 }
-.detailType .glyph { font-size: 0.95rem; line-height: 1; }
-.detailType.home { color: var(--seal); border-color: var(--seal); }
+.detailType .glyph {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.detailType.home {
+  color: var(--seal);
+  border-color: var(--seal);
+}
 
 .lineMeta {
   margin-top: 0.9rem;
@@ -414,7 +724,9 @@
   text-transform: uppercase;
   text-decoration: none;
   font-weight: 700;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
 }
 .seal:hover {
   background: var(--seal);
@@ -433,7 +745,9 @@
   color: var(--ink);
   border-bottom: 1px dotted var(--legend-divider);
 }
-.legendRow:last-of-type { border-bottom: 0; }
+.legendRow:last-of-type {
+  border-bottom: 0;
+}
 .legendGlyph {
   font-size: 0.95rem;
   color: var(--ink);
@@ -488,6 +802,12 @@
   justify-content: center;
   margin-bottom: 0.9rem;
 }
+@media (max-width: 960px) {
+  .readouts {
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+  }
+}
 .readout {
   display: inline-flex;
   align-items: baseline;
@@ -499,6 +819,14 @@
   color: var(--ink-soft);
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+@media (max-width: 960px) {
+  .readout {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    gap: 0.3rem;
+  }
 }
 .readoutVal {
   font-family: var(--font-jetbrains), ui-monospace, monospace;
@@ -547,8 +875,8 @@
 
   --halo: rgba(28, 19, 10, 0.85);
   --halo-soft: rgba(28, 19, 10, 0.65);
-  --kingdom-fill: rgba(218, 178, 110, 0.10);
-  --kingdom-stroke: rgba(218, 178, 110, 0.30);
+  --kingdom-fill: rgba(218, 178, 110, 0.1);
+  --kingdom-stroke: rgba(218, 178, 110, 0.3);
   --panel-tint: rgba(255, 240, 200, 0.05);
   --readout-tint: rgba(35, 24, 12, 0.55);
   --legend-divider: rgba(218, 178, 110, 0.18);
@@ -571,9 +899,9 @@
   mix-blend-mode: screen;
   background:
     radial-gradient(circle at 18% 78%, rgba(210, 160, 80, 0.35) 0%, transparent 9%),
-    radial-gradient(circle at 88% 22%, rgba(210, 160, 80, 0.30) 0%, transparent 7%),
+    radial-gradient(circle at 88% 22%, rgba(210, 160, 80, 0.3) 0%, transparent 7%),
     radial-gradient(circle at 76% 86%, rgba(210, 160, 80, 0.25) 0%, transparent 8%),
-    radial-gradient(circle at 8% 12%, rgba(210, 160, 80, 0.30) 0%, transparent 6%);
+    radial-gradient(circle at 8% 12%, rgba(210, 160, 80, 0.3) 0%, transparent 6%);
 }
 
 /* Grain is darker dust on dark, lighter dust on light — invert the noise
@@ -598,4 +926,23 @@
 :global(body[data-theme="dark"]) .cityDot {
   stroke: rgba(28, 19, 10, 0.55);
   stroke-width: 0.5;
+}
+
+/* Terrain on dark: mountain bodies fill with the dark parchment so they
+ * silhouette against it; strokes shift to the cream ink. */
+:global(body[data-theme="dark"]) .terrainMountain {
+  fill: var(--parchment-warm);
+  stroke: var(--ink);
+  opacity: 0.85;
+}
+:global(body[data-theme="dark"]) .terrainMountainBack,
+:global(body[data-theme="dark"]) .terrainMountainRidge,
+:global(body[data-theme="dark"]) .terrainHill,
+:global(body[data-theme="dark"]) .terrainWater {
+  stroke: var(--ink-soft);
+}
+:global(body[data-theme="dark"]) .terrainForest {
+  fill: var(--ink);
+  stroke: var(--ink);
+  opacity: 0.7;
 }

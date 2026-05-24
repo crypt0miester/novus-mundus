@@ -204,15 +204,7 @@ pub fn process(
     let dest_grid_long = LocationAccount::to_grid(destination_long);
 
     // 10b. Terrain Passability Check
-    {
-        let (ox, oy) = crate::logic::terrain::city_offset(
-            dest_grid_lat, dest_grid_long,
-            city_data.latitude, city_data.longitude,
-        );
-        if !city_data.is_terrain_passable(current_city_account, ox, oy) {
-            return Err(GameError::TerrainImpassable.into());
-        }
-    }
+    city_data.require_passable_at(current_city_account, destination_lat, destination_long)?;
 
     let city_bytes = player_data.current_city.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();
@@ -258,6 +250,7 @@ pub fn process(
         let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
 
         dest_location.account_key = crate::state::AccountKey::Location as u8;
+        dest_location.game_engine = *game_engine_account.address();
         dest_location.grid_lat = dest_grid_lat;
         dest_location.grid_long = dest_grid_long;
         dest_location.city_id = player_data.current_city;
@@ -333,6 +326,10 @@ pub fn process(
         }
 
         // Reserve the destination (either was empty, ours, or we just stole it)
+        // Heal: re-stamp discriminator + game_engine in case the cell came from
+        // an older build that omitted them.
+        dest_location.account_key = crate::state::AccountKey::Location as u8;
+        dest_location.game_engine = *game_engine_account.address();
         dest_location.occupant_type = OCCUPANT_PLAYER;
         dest_location.occupant = *player_account.address();
         dest_location.occupied_since = now;

@@ -221,15 +221,7 @@ pub fn process(
     let cell_center_long = LocationAccount::from_grid(dest_grid_long);
 
     // 14a. Terrain Passability Check (city center should always pass, but validate)
-    {
-        let (ox, oy) = crate::logic::terrain::city_offset(
-            dest_grid_lat, dest_grid_long,
-            destination_city_data.latitude, destination_city_data.longitude,
-        );
-        if !destination_city_data.is_terrain_passable(destination_city_account, ox, oy) {
-            return Err(crate::error::GameError::TerrainImpassable.into());
-        }
-    }
+    destination_city_data.require_passable_at(destination_city_account, cell_center_lat, cell_center_long)?;
 
     // 15. Validate Destination Location PDA
 
@@ -279,6 +271,7 @@ pub fn process(
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
         location.account_key = crate::state::AccountKey::Location as u8;
+        location.game_engine = *game_engine_account.address();
         location.grid_lat = dest_grid_lat;
         location.grid_long = dest_grid_long;
         location.city_id = destination_city_id;
@@ -300,6 +293,10 @@ pub fn process(
             return Err(GameError::CellOccupied.into());
         }
 
+        // Heal: re-stamp discriminator + game_engine in case the cell came from
+        // an older build that omitted them.
+        location.account_key = crate::state::AccountKey::Location as u8;
+        location.game_engine = *game_engine_account.address();
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
         location.occupant = *player_account.address();
         location.occupied_since = now;

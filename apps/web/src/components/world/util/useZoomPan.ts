@@ -1,22 +1,22 @@
 "use client";
 
 /**
- * useZoomPan — native touch + wheel zoom/pan for the realm-map SVG.
+ * useZoomPan — native input zoom/pan for the realm-map SVG.
  *
- * No third-party dep. The hook returns a `containerRef` to bind to the sheet
- * div and an SVG `transform` string to apply to the inner <g>. All math is
- * in viewBox units so the transform composes cleanly with the SVG's own
- * scaling.
+ * No third-party dep. Returns a `containerRef` to bind to the sheet div, an
+ * SVG `transform` string for the inner <g>, and the current scale (so the
+ * caller can counter-scale screen-space layers).
  *
  * Gestures:
- *  - 1-finger drag (after a 6px threshold) to pan
- *  - 2-finger pinch to zoom around the pinch midpoint
- *  - wheel (desktop) to zoom around the cursor
- *  - double-tap to reset to 1× / centred
+ *  - Mouse drag (after a 4 px threshold) to pan; trackpad two-finger drag too
+ *  - Wheel / pinch-zoom-gesture (desktop) to zoom around the cursor
+ *  - 1-finger touch drag (after a 6 px threshold) to pan
+ *  - 2-finger touch pinch to zoom around the pinch midpoint
+ *  - Double-tap (touch) or double-click (mouse) to reset 1× / centred
  *
  * Pan is clamped so the viewport always stays inside the (scaled) content.
- * Tap-without-drag does not preventDefault, so city `onClick` handlers still
- * fire normally.
+ * After a drag-pan we swallow the trailing click so the container's onClick
+ * (e.g. "deselect city") doesn't fire.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -35,12 +35,7 @@ interface State {
 
 const IDENTITY: State = { scale: 1, tx: 0, ty: 0 };
 
-export function useZoomPan({
-  vbWidth,
-  vbHeight,
-  minScale = 1,
-  maxScale = 3.5,
-}: Options) {
+export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Options) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<State>(IDENTITY);
 
@@ -49,6 +44,13 @@ export function useZoomPan({
   const pinchDist = useRef<number | null>(null);
   const tapAt = useRef<number>(0);
   const panning = useRef(false);
+  // Mouse-drag state. dragging=mouse is down; didPan=we crossed the threshold
+  // and should swallow the trailing click so the sheet's deselect-onClick
+  // doesn't fire after the drag.
+  const mouseDragStart = useRef<{ x: number; y: number } | null>(null);
+  const mouseLast = useRef<{ x: number; y: number } | null>(null);
+  const mouseDidPan = useRef(false);
+  const suppressClick = useRef(false);
 
   const clamp = useCallback(
     (s: State): State => {
@@ -71,10 +73,7 @@ export function useZoomPan({
   const zoomAt = useCallback(
     (vbX: number, vbY: number, factor: number) => {
       setState((prev) => {
-        const newScale = Math.max(
-          minScale,
-          Math.min(maxScale, prev.scale * factor),
-        );
+        const newScale = Math.max(minScale, Math.min(maxScale, prev.scale * factor));
         const f = newScale / prev.scale;
         return clamp({
           scale: newScale,
@@ -102,9 +101,67 @@ export function useZoomPan({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const { x, y } = toVB(e.clientX, e.clientY);
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      // Ctrl + wheel = pinch-zoom on a trackpad; raw wheel deltas there are
+      // huge, so dampen them so each notch isn't an extreme zoom step.
+      const delta = e.ctrlKey ? e.deltaY * 0.35 : e.deltaY;
+      const factor = delta < 0 ? 1.12 : 1 / 1.12;
       zoomAt(x, y, factor);
     };
+
+    // ── Mouse ──────────────────────────────────────────────────────────────
+    // Desktop pan: missing before this change. mousemove + mouseup live on
+    // window so the drag survives leaving the sheet.
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      mouseDragStart.current = { x: e.clientX, y: e.clientY };
+      mouseLast.current = { x: e.clientX, y: e.clientY };
+      mouseDidPan.current = false;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      const start = mouseDragStart.current;
+      const last = mouseLast.current;
+      if (!start || !last) return;
+      if (!mouseDidPan.current) {
+        const tdx = e.clientX - start.x;
+        const tdy = e.clientY - start.y;
+        if (Math.hypot(tdx, tdy) < 4) return;
+        mouseDidPan.current = true;
+      }
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      const r = rect();
+      const vbdx = (dx / r.width) * vbWidth;
+      const vbdy = (dy / r.height) * vbHeight;
+      setState((prev) => clamp({ scale: prev.scale, tx: prev.tx + vbdx, ty: prev.ty + vbdy }));
+      mouseLast.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const onMouseUp = () => {
+      if (mouseDidPan.current) suppressClick.current = true;
+      mouseDragStart.current = null;
+      mouseLast.current = null;
+      mouseDidPan.current = false;
+    };
+
+    // Swallow the click that browsers fire after a drag — without this, a
+    // drag-pan that ends over the sheet triggers the deselect-onClick.
+    const onClickCapture = (e: MouseEvent) => {
+      if (suppressClick.current) {
+        suppressClick.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    // Double-click anywhere on the sheet resets zoom (mirrors touch double-tap).
+    const onDblClick = (e: MouseEvent) => {
+      e.preventDefault();
+      reset();
+    };
+
+    // ── Touch ──────────────────────────────────────────────────────────────
 
     const onTouchStart = (e: TouchEvent) => {
       const ts = e.touches;
@@ -143,9 +200,7 @@ export function useZoomPan({
           const r = rect();
           const vbdx = (dx / r.width) * vbWidth;
           const vbdy = (dy / r.height) * vbHeight;
-          setState((prev) =>
-            clamp({ scale: prev.scale, tx: prev.tx + vbdx, ty: prev.ty + vbdy }),
-          );
+          setState((prev) => clamp({ scale: prev.scale, tx: prev.tx + vbdx, ty: prev.ty + vbdy }));
           lastTouch.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
         }
       } else if (ts.length === 2 && pinchDist.current != null) {
@@ -165,6 +220,15 @@ export function useZoomPan({
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinchDist.current = null;
       if (e.touches.length === 0) {
+        // If the finger crossed the pan threshold, swallow the synthetic
+        // click that mobile browsers sometimes still emit.
+        if (panning.current) {
+          suppressClick.current = true;
+          // Self-clear after a tick — some browsers never emit the click.
+          window.setTimeout(() => {
+            suppressClick.current = false;
+          }, 350);
+        }
         lastTouch.current = null;
         panning.current = false;
       }
@@ -172,12 +236,22 @@ export function useZoomPan({
 
     // touchmove + wheel need passive: false so preventDefault works.
     el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    el.addEventListener("click", onClickCapture, { capture: true });
+    el.addEventListener("dblclick", onDblClick);
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
     el.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      el.removeEventListener("click", onClickCapture, { capture: true } as EventListenerOptions);
+      el.removeEventListener("dblclick", onDblClick);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);

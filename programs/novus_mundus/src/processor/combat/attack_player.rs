@@ -295,27 +295,26 @@ pub fn process(
     // 9b. Compute terrain elevation advantage (high ground bonus)
     // Attacker at higher elevation → bonus to attack, penalty to defense
     // Max ±1000 BPS (±10%) from net elevation difference
-    let terrain_elevation_net_bps: i32 = {
-        let t = unsafe { CityAccount::terrain_from_account(attacker_city) };
-        if t.anchors.is_empty() {
-            0
-        } else {
-            let (att_ox, att_oy) = terrain::city_offset(
-                terrain::to_grid(attacker_data.current_lat),
-                terrain::to_grid(attacker_data.current_long),
-                attacker_city_data.latitude,
-                attacker_city_data.longitude,
-            );
-            let (def_ox, def_oy) = terrain::city_offset(
-                terrain::to_grid(defender_data.current_lat),
-                terrain::to_grid(defender_data.current_long),
-                defender_city_data.latitude,
-                defender_city_data.longitude,
-            );
-            let att_aff = terrain::terrain_affinity(&t, att_ox, att_oy);
-            let def_aff = terrain::terrain_affinity(&t, def_ox, def_oy);
+    let terrain_elevation_net_bps: i32 = if attacker_city_data.anchor_count > 0 {
+        let (att_ox, att_oy) = terrain::city_offset(
+            terrain::to_grid(attacker_data.current_lat),
+            terrain::to_grid(attacker_data.current_long),
+            attacker_city_data.latitude,
+            attacker_city_data.longitude,
+        );
+        let (def_ox, def_oy) = terrain::city_offset(
+            terrain::to_grid(defender_data.current_lat),
+            terrain::to_grid(defender_data.current_long),
+            defender_city_data.latitude,
+            defender_city_data.longitude,
+        );
+        attacker_city_data.with_terrain(attacker_city, |t| {
+            let att_aff = terrain::terrain_affinity(t, att_ox, att_oy);
+            let def_aff = terrain::terrain_affinity(t, def_ox, def_oy);
             att_aff.elevation_bps as i32 - def_aff.elevation_bps as i32
-        }
+        })?
+    } else {
+        0
     };
 
     // Apply terrain to attacker damage (positive net = high ground bonus)

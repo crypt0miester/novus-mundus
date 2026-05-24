@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
@@ -13,8 +13,58 @@ import {
 } from "@/lib/hooks/world";
 import { convexHull, inflate, smoothClosedPath, type Pt } from "./util/hull";
 import { useZoomPan } from "./util/useZoomPan";
+import { useNow } from "@/lib/hooks/useNow";
 import styles from "./RealmMap.module.css";
 import { getCityLore } from "@/lib/cityLore";
+
+/**
+ * Solar position helpers — used by the day/night terminator overlay.
+ * Low-accuracy formulas (ignores equation of time, eccentricity, etc.); the
+ * terminator just needs to look right to a few minutes of arc, not run a
+ * navy's chronometer.
+ *
+ * Subsolar point = the lat/long where the sun is directly overhead.
+ *   - Latitude  = solar declination (≈ tilt × sin of orbital phase).
+ *   - Longitude = -15°/hr × (UTC hours − 12).  Each hour rotates the meridian
+ *                 of solar noon 15° westward.
+ *
+ * Terminator at longitude L:
+ *   The great-circle line where the sun is exactly on the horizon. Solving
+ *   `cos(c) = sin(decl)·sin(lat) + cos(decl)·cos(lat)·cos(L − Λ) = 0`
+ *   for latitude gives `tan(lat) = -cos(L − Λ) / tan(decl)`.
+ *
+ * Day/night side:
+ *   For declination > 0 (N summer), everywhere SOUTH of the terminator curve
+ *   is in night — so we close the night polygon along the BOTTOM of the
+ *   viewBox. For declination < 0 (N winter), night is to the north — close
+ *   along the TOP. At equinox tan(decl) → 0 so the curve becomes near-
+ *   vertical at Δλ = ±90°; we clamp to a small ε to keep atan finite.
+ */
+interface SubsolarPoint {
+  latDeg: number;
+  longDeg: number;
+}
+
+function subsolarPoint(date: Date): SubsolarPoint {
+  /* Day-of-year approximation. Mar 21 (vernal equinox) ≈ day 81. */
+  const start = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const dayOfYear = (date.getTime() - start) / 86_400_000;
+  const declDeg = 23.44 * Math.sin((2 * Math.PI * (dayOfYear - 81)) / 365.25);
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  const subsolarLong = -(utcHours - 12) * 15;
+  /* Wrap to [-180, 180]. */
+  const wrapped = ((((subsolarLong + 180) % 360) + 360) % 360) - 180;
+  return { latDeg: declDeg, longDeg: wrapped };
+}
+
+function terminatorLat(longDeg: number, declDeg: number, subsolarLongDeg: number): number {
+  const decl = (declDeg * Math.PI) / 180;
+  const dLong = ((longDeg - subsolarLongDeg) * Math.PI) / 180;
+  const tanDecl = Math.tan(decl);
+  /* Clamp away from zero so the equinox doesn't blow up to ±∞. */
+  const denom = Math.abs(tanDecl) < 1e-4 ? Math.sign(tanDecl || 1) * 1e-4 : tanDecl;
+  return (Math.atan(-Math.cos(dLong) / denom) * 180) / Math.PI;
+}
 
 export { styles as realmMapStyles };
 
@@ -108,6 +158,26 @@ export interface RealmMapProps {
   onSelectChange?: (id: number | null) => void;
   /** Override the small all-caps header above the scroll panel. */
   scrollHead?: string;
+  /** When provided AND a city is selected AND the callback returns non-null,
+   *  the SVG city map is replaced with this content inside the sheet. The
+   *  scroll panel beside it is untouched. Used by the travel flow to "drill
+   *  into" a destination city and show its terrain disc full-size. A back
+   *  button (and Esc) clears the selection and restores the SVG. */
+  renderSheetOverride?: (selected: RealmCityNode) => ReactNode;
+  /** City to soft-highlight with a slow pulsing ring. Used by the arrival
+   *  flow to mark the recommended starting city — visible enough to guide
+   *  newcomers, quiet enough that a deliberate selection (the seal-orange
+   *  selection ring) reads as primary. */
+  recommendedId?: number | null;
+  /** Suppress the "THE KINGDOM" cartouche header. Use when the parent page
+   *  already provides a heading (e.g. the arrival's `ChoiceBeat`) so the two
+   *  don't stack and fight each other. Readouts and the rest of the chrome
+   *  stay visible. */
+  hideCartouche?: boolean;
+  /** Intercity travel in flight — draws a dashed line from origin to
+   *  destination and a marker at the current progress. Omit (or pass null)
+   *  for no line. `pct` is 0–100. */
+  travel?: { fromCityId: number; toCityId: number; pct: number } | null;
 }
 
 export function RealmMap({
@@ -116,6 +186,10 @@ export function RealmMap({
   selectedId: controlledId,
   onSelectChange,
   scrollHead,
+  renderSheetOverride,
+  recommendedId,
+  hideCartouche,
+  travel,
 }: RealmMapProps = {}) {
   const { data: cities, isLoading: citiesLoading } = useWorldCities();
   const { data: players } = useWorldPlayers();
@@ -144,6 +218,8 @@ export function RealmMap({
         totalPlayers?: unknown;
       }
     | undefined;
+  const kingdomName = eng?.kingdomName || "The Kingdom";
+  const theme = THEMES[eng?.kingdomTheme ?? 0] ?? "Unknown";
 
   const homeCity = citizen.isCitizen ? citizen.player?.currentCity : undefined;
 
@@ -221,23 +297,116 @@ export function RealmMap({
     return map;
   }, [nodes]);
 
-  const kingdomPath = useMemo(() => {
-    if (nodes.length < 3) return "";
+  // Keep both the inflated hull (polygon) and its smoothed SVG path. The
+  // polygon is reused for point-in-shape terrain placement; the path is the
+  // ink-wash kingdom outline.
+  const { kingdomHull, kingdomPath } = useMemo(() => {
+    if (nodes.length < 3) return { kingdomHull: [] as Pt[], kingdomPath: "" };
     const pts: Pt[] = nodes.map((n) => ({ x: n.x, y: n.y }));
-    const hull = convexHull(pts);
-    const fat = inflate(hull, 56);
-    return smoothClosedPath(fat, 0.55);
+    const fat = inflate(convexHull(pts), 56);
+    return { kingdomHull: fat, kingdomPath: smoothClosedPath(fat, 0.55) };
   }, [nodes]);
 
-  const roads = useMemo(() => {
-    const cap = nodes.find((n) => typeIdx(n.city.cityType) === 0);
-    if (!cap) return [];
-    return nodes
-      .filter((n) => n !== cap)
-      .map((n) => ({ x1: cap.x, y1: cap.y, x2: n.x, y2: n.y, key: n.key }));
-  }, [nodes]);
+  /* Day/night terminator overlay. Re-runs once a minute — the terminator
+     moves ~15° / hour, so a 60 s tick is well under the perceptual threshold. */
+  const nowSeconds = useNow();
+  const terminator = useMemo(() => {
+    if (!cities || cities.length < 2) return null;
+    const { lat0, lon0, latR, lonR } = project(cities);
+    /* Quantize to 1-minute resolution so the path string stays stable
+       between frames within a minute (lets React skip <path d=...> reflows). */
+    const minute = Math.floor(nowSeconds / 60);
+    const now = new Date(minute * 60 * 1000);
+    const sub = subsolarPoint(now);
+
+    /* Sample longitudes spanning the kingdom + a generous margin so the
+       terminator runs off the visible sheet rather than being clipped to
+       the kingdom's own extent. */
+    const margin = 40;
+    const samples = 96;
+    const minLong = lon0 - margin;
+    const maxLong = lon0 + lonR + margin;
+    type Pt2 = { x: number; y: number };
+    const toVB = (lat: number, lon: number): Pt2 => ({
+      x: PAD + ((lon - lon0) / lonR) * (VB_W - 2 * PAD),
+      y: PAD + (1 - (lat - lat0) / latR) * (VB_H - 2 * PAD),
+    });
+
+    const curve: Pt2[] = [];
+    for (let i = 0; i <= samples; i++) {
+      const lon = minLong + ((maxLong - minLong) * i) / samples;
+      const lat = terminatorLat(lon, sub.latDeg, sub.longDeg);
+      curve.push(toVB(lat, lon));
+    }
+    /* Twilight band — same shape, offset poleward by ~6° (civil twilight)
+       on the day side of the terminator. */
+    const twilightOffset = sub.latDeg >= 0 ? 6 : -6;
+    const twilight: Pt2[] = [];
+    for (let i = 0; i <= samples; i++) {
+      const lon = minLong + ((maxLong - minLong) * i) / samples;
+      const lat = terminatorLat(lon, sub.latDeg, sub.longDeg) + twilightOffset;
+      twilight.push(toVB(lat, lon));
+    }
+
+    /* Night side: decl > 0 → south of terminator (close along BOTTOM of vb).
+                   decl < 0 → north of terminator (close along TOP of vb). */
+    const closeBottom = sub.latDeg >= 0;
+    const farY = closeBottom ? VB_H + 100 : -100;
+    const ptStr = (p: Pt2) => `${p.x} ${p.y}`;
+    const nightPath =
+      `M ${ptStr(curve[0]!)} ` +
+      curve
+        .slice(1)
+        .map((p) => `L ${ptStr(p)}`)
+        .join(" ") +
+      ` L ${curve[curve.length - 1]!.x} ${farY}` +
+      ` L ${curve[0]!.x} ${farY} Z`;
+    /* Twilight band: the curve and the twilight-offset curve sandwich the
+       dawn/dusk gradient strip. */
+    const bandPath =
+      `M ${ptStr(curve[0]!)} ` +
+      curve
+        .slice(1)
+        .map((p) => `L ${ptStr(p)}`)
+        .join(" ") +
+      ` L ${ptStr(twilight[twilight.length - 1]!)} ` +
+      twilight
+        .slice(0, -1)
+        .reverse()
+        .map((p) => `L ${ptStr(p)}`)
+        .join(" ") +
+      " Z";
+
+    /* Twilight gradient direction (orthogonal-ish to the terminator). On a
+       flat lat/lon projection the terminator runs roughly east-west, so the
+       gradient is north-south. Reverse direction for southern declination. */
+    const gradY1 = closeBottom ? "0%" : "100%";
+    const gradY2 = closeBottom ? "100%" : "0%";
+
+    return { nightPath, bandPath, gradY1, gradY2 };
+  }, [cities, nowSeconds]);
 
   const selected = nodes.find((n) => n.city.cityId === selectedId) ?? null;
+
+  const sheetOverride = selected && renderSheetOverride ? renderSheetOverride(selected) : null;
+  // Boolean flag so the Esc effect only re-runs when the override toggles
+  // on/off — `sheetOverride` itself is a fresh ReactNode every render.
+  const overrideActive = sheetOverride != null;
+
+  const backBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!overrideActive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    // Drop focus on the back button so Esc/Enter both have an obvious
+    // dismiss path and keyboard users aren't stranded on document.body
+    // after the SVG city dots are pulled out of the a11y tree.
+    backBtnRef.current?.focus();
+    return () => window.removeEventListener("keydown", onKey);
+  }, [overrideActive]);
 
   const typeCounts = useMemo(() => {
     const counts = [0, 0, 0, 0];
@@ -246,8 +415,6 @@ export function RealmMap({
   }, [nodes]);
 
   const totalPlayers = toNum(eng?.totalPlayers) || players?.length || 0;
-  const kingdomName = eng?.kingdomName || "The Kingdom";
-  const theme = THEMES[eng?.kingdomTheme ?? 0] ?? "Unknown";
 
   if (citiesLoading) {
     return (
@@ -259,70 +426,144 @@ export function RealmMap({
 
   return (
     <div className={styles.root}>
-      <header className={styles.cartouche}>
-        <h1 className={styles.kingdom}>{kingdomName}</h1>
-        <div className={styles.tagline}>
-          <span className={styles.rule} />a chart of {nodes.length} cities, drawn in the{" "}
-          {theme.toLowerCase()} hand
-          <span className={styles.rule} />
-        </div>
-      </header>
-
-      <div className={styles.readouts}>
-        <span className={styles.readout}>
-          Citizens <span className={styles.readoutVal}>{totalPlayers.toLocaleString()}</span>
-        </span>
-        <span className={styles.readout}>
-          Houses <span className={styles.readoutVal}>{(teams?.length ?? 0).toLocaleString()}</span>
-        </span>
-        <span className={styles.readout}>
-          Cities <span className={styles.readoutVal}>{nodes.length.toLocaleString()}</span>
-        </span>
-      </div>
+      {!hideCartouche && (
+        <header className={styles.cartouche}>
+          <h1 className={styles.kingdom}>{kingdomName}</h1>
+        </header>
+      )}
 
       <div className={styles.shell}>
         <div
           ref={zoom.containerRef}
           className={styles.sheet}
-          onClick={() => setSelectedId(null)}
+          onClick={sheetOverride ? undefined : () => setSelectedId(null)}
           style={{ touchAction: "none" }}
         >
           <div className={styles.grain} aria-hidden />
           <div className={styles.foxing} aria-hidden />
 
-          <CornerOrnaments />
+          {/* Hide the parchment corner flourishes under the drill-in view —
+              they sit at a higher z-index than the override and clutter the
+              terrain disc's edge. */}
+          {!sheetOverride && <CornerOrnaments />}
+
+          {sheetOverride && (
+            <>
+              <div className={styles.sheetOverride}>{sheetOverride}</div>
+              <button
+                ref={backBtnRef}
+                type="button"
+                className={styles.sheetBackBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedId(null);
+                }}
+                aria-label="Back to the realm map"
+                title="Back to the realm map (Esc)"
+              >
+                ✕
+              </button>
+            </>
+          )}
 
           <svg
-            className={styles.svg}
+            className={`${styles.svg} ${sheetOverride ? styles.svgHidden : ""}`}
             viewBox={`0 0 ${VB_W} ${VB_H}`}
             preserveAspectRatio="xMidYMid meet"
             aria-label={`Map of ${kingdomName}`}
+            aria-hidden={sheetOverride ? true : undefined}
           >
             <g transform={zoom.transform}>
+              {/* Kingdom shape + roads stay in world space — they're the
+                  geography, they should grow with zoom. */}
               {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
 
-              <g>
-                {roads.map((l, i) => (
-                  <line
-                    key={l.key}
-                    className={styles.road}
-                    x1={l.x1}
-                    y1={l.y1}
-                    x2={l.x2}
-                    y2={l.y2}
-                    style={{ animationDelay: `${0.25 + i * 0.035}s` }}
+              {/* Day/night terminator — sits above the kingdom wash, below
+                  terrain glyphs, roads and cities so it reads as atmosphere,
+                  not chrome. */}
+              {terminator && (
+                <>
+                  <defs>
+                    <linearGradient
+                      id="rm-twilight"
+                      x1="0%"
+                      y1={terminator.gradY1}
+                      x2="0%"
+                      y2={terminator.gradY2}
+                    >
+                      <stop offset="0%" stopColor="rgba(40, 25, 8, 0.18)" />
+                      <stop offset="100%" stopColor="rgba(40, 25, 8, 0)" />
+                    </linearGradient>
+                  </defs>
+                  <path className={styles.nightWash} d={terminator.nightPath} />
+                  <path
+                    className={styles.twilightBand}
+                    d={terminator.bandPath}
+                    fill="url(#rm-twilight)"
                   />
-                ))}
-              </g>
+                </>
+              )}
+
+              {/* Travel path — origin → destination, dashed, with a marker at
+                  the current progress. Drawn above the kingdom wash but below
+                  the city groups so the dots and labels stay legible on top.
+                  `vector-effect: non-scaling-stroke` (via the CSS class) keeps
+                  the dash widths constant regardless of zoom; the marker uses
+                  a counter-scale group for the same reason. */}
+              {travel && (() => {
+                const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
+                const to = nodes.find((n) => n.city.cityId === travel.toCityId);
+                if (!from || !to || from === to) return null;
+                const t = Math.min(1, Math.max(0, travel.pct / 100));
+                const mx = from.x + (to.x - from.x) * t;
+                const my = from.y + (to.y - from.y) * t;
+                // While intercity-flying, the player's "home" is in motion —
+                // detach the home flag from the origin city (handled in the
+                // city-dot loop below) and pin it to the travel marker so the
+                // visual matches "I have left this city".
+                const markerCarriesFlag = travel.fromCityId === homeCity;
+                return (
+                  <g className={styles.travelGroup} aria-hidden>
+                    <line
+                      className={styles.travelLine}
+                      x1={from.x}
+                      y1={from.y}
+                      x2={to.x}
+                      y2={to.y}
+                      // Belt-and-suspenders: the CSS class also sets
+                      // vector-effect, but some browsers honour the attribute
+                      // form more reliably under heavy SVG transforms.
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <g transform={`translate(${mx} ${my}) scale(${1 / zoom.scale})`}>
+                      <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
+                      <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
+                      {markerCarriesFlag && (
+                        // Same flag shape as the city-side homeFlag, offset
+                        // above the marker. Offsets are tuned to the marker's
+                        // r=3.5 rather than a city's variable n.size.
+                        <polygon
+                          className={styles.homeFlag}
+                          points="-1,-7 -1,-19 7,-15 -1,-11"
+                        />
+                      )}
+                    </g>
+                  </g>
+                );
+              })()}
 
               <g>
                 {renderOrder.map((n, i) => {
                   const meta = TYPE_META[typeIdx(n.city.cityType)];
                   const isSel = n.city.cityId === selectedId;
                   const isHome = n.city.cityId === homeCity;
+                  const isRec = recommendedId != null && n.city.cityId === recommendedId;
                   const isCapital = typeIdx(n.city.cityType) === 0;
                   const always = isCapital || isHome || isSel;
-                  const hitR = Math.max(n.size + 3, 10);
+                  // Hit target is generous — inside the counter-scaled group
+                  // these units render at constant screen size regardless of
+                  // zoom (composite scale = zoom × 1/zoom = 1).
+                  const hitR = Math.max(n.size + 6, 14);
                   const groupClass = [
                     styles.cityGroup,
                     always ? styles.alwaysLabel : "",
@@ -330,6 +571,15 @@ export function RealmMap({
                   ]
                     .filter(Boolean)
                     .join(" ");
+                  const side = labelSide.get(n.key) ?? "above";
+                  const nameAbove = side === "above";
+                  const nameY = nameAbove ? -(n.size + (isHome ? 22 : 9)) : n.size + 14;
+                  const countY = nameAbove ? n.size + 12 : -(n.size + 7);
+                  // Counter-scale composes with the outer zoom to give the
+                  // city's content a constant screen size. The translate(n.x,
+                  // n.y) inside the counter-scale puts the dot back at the
+                  // city's world position; offsets inside this group are in
+                  // pre-zoom (≈ screen-pixel) units.
                   return (
                     <g
                       key={n.key}
@@ -341,66 +591,53 @@ export function RealmMap({
                       }}
                       role="button"
                       aria-label={`${n.city.name}, ${meta.label} city`}
+                      transform={`translate(${n.x} ${n.y}) scale(${1 / zoom.scale})`}
                     >
                       {isSel && (
                         <>
-                          <circle
-                            className={styles.selectedOuter}
-                            cx={n.x}
-                            cy={n.y}
-                            r={n.size + 9}
-                          />
-                          <circle
-                            className={styles.selectedInner}
-                            cx={n.x}
-                            cy={n.y}
-                            r={n.size + 4}
-                          />
+                          <circle className={styles.selectedOuter} cx={0} cy={0} r={n.size + 9} />
+                          <circle className={styles.selectedInner} cx={0} cy={0} r={n.size + 4} />
                         </>
                       )}
 
-                      <circle className={styles.cityRing} cx={n.x} cy={n.y} r={n.size + 2.5} />
+                      {/* Recommended-city pulse — quieter than the selection
+                          ring (no orange, slower beat) so it guides without
+                          competing with the player's deliberate pick. Hidden
+                          when isSel so the two cues don't stack. */}
+                      {isRec && !isSel && (
+                        <circle className={styles.recommendedPulse} cx={0} cy={0} r={n.size + 7} />
+                      )}
 
-                      {/* Transparent hit target — pointer-events catches the
-                        +3 unit margin around the visible dot. */}
-                      <circle cx={n.x} cy={n.y} r={hitR} fill="transparent" />
+                      <circle className={styles.cityRing} cx={0} cy={0} r={n.size + 2.5} />
 
-                      <circle className={styles.cityDot} cx={n.x} cy={n.y} r={n.size} />
+                      {/* Transparent hit target — bigger than the dot so
+                          touch users have a generous target. */}
+                      <circle cx={0} cy={0} r={hitR} fill="transparent" />
+
+                      <circle className={styles.cityDot} cx={0} cy={0} r={n.size} />
 
                       <text
                         className={styles.cityGlyph}
-                        x={n.x + n.size + 8}
-                        y={n.y + 4}
+                        x={n.size + 8}
+                        y={4}
                         fontSize={n.size * 1.2}
                       >
                         {meta.glyph}
                       </text>
 
-                      {isHome && (
+                      {isHome && !(travel && travel.fromCityId === homeCity) && (
                         <polygon
                           className={styles.homeFlag}
-                          points={`${n.x - 1},${n.y - n.size - 4} ${n.x - 1},${n.y - n.size - 16} ${n.x + 7},${n.y - n.size - 12} ${n.x - 1},${n.y - n.size - 8}`}
+                          points={`${-1},${-n.size - 4} ${-1},${-n.size - 16} 7,${-n.size - 12} ${-1},${-n.size - 8}`}
                         />
                       )}
 
-                      {(() => {
-                        const side = labelSide.get(n.key) ?? "above";
-                        const nameAbove = side === "above";
-                        const nameY = nameAbove
-                          ? n.y - n.size - (isHome ? 22 : 9)
-                          : n.y + n.size + 14;
-                        const countY = nameAbove ? n.y + n.size + 12 : n.y - n.size - 7;
-                        return (
-                          <>
-                            <text className={styles.cityName} x={n.x} y={nameY} fontSize={9.5}>
-                              {n.city.name}
-                            </text>
-                            <text className={styles.cityCount} x={n.x} y={countY} fontSize={8}>
-                              {n.city.playersPresent.toLocaleString()}
-                            </text>
-                          </>
-                        );
-                      })()}
+                      <text className={styles.cityName} x={0} y={nameY} fontSize={9.5}>
+                        {n.city.name}
+                      </text>
+                      <text className={styles.cityCount} x={0} y={countY} fontSize={8}>
+                        {n.city.playersPresent.toLocaleString()}
+                      </text>
                     </g>
                   );
                 })}
@@ -408,27 +645,31 @@ export function RealmMap({
             </g>
           </svg>
 
-          <div className={styles.compass} aria-hidden>
-            <CompassRose />
-          </div>
+          {!sheetOverride && (
+            <>
+              <div className={styles.compass} aria-hidden>
+                <CompassRose />
+              </div>
 
-          <div className={styles.scale}>
-            <span className={styles.scaleBar} /> 100 leagues
-          </div>
+              <div className={styles.scale}>
+                <span className={styles.scaleBar} /> 100 leagues
+              </div>
 
-          {zoom.scale > 1.001 && (
-            <button
-              type="button"
-              className={styles.resetBtn}
-              onClick={(e) => {
-                e.stopPropagation();
-                zoom.reset();
-              }}
-              aria-label="Reset zoom"
-              title="Reset zoom (or double-tap)"
-            >
-              ↻
-            </button>
+              {zoom.scale > 1.001 && (
+                <button
+                  type="button"
+                  className={styles.resetBtn}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    zoom.reset();
+                  }}
+                  aria-label="Reset zoom"
+                  title="Reset zoom (or double-tap)"
+                >
+                  ↻
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -461,6 +702,18 @@ export function RealmMap({
             />
           )}
         </aside>
+        <div className={styles.readouts}>
+          <span className={styles.readout}>
+            Citizens <span className={styles.readoutVal}>{totalPlayers.toLocaleString()}</span>
+          </span>
+          <span className={styles.readout}>
+            Houses{" "}
+            <span className={styles.readoutVal}>{(teams?.length ?? 0).toLocaleString()}</span>
+          </span>
+          <span className={styles.readout}>
+            Cities <span className={styles.readoutVal}>{nodes.length.toLocaleString()}</span>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -498,7 +751,9 @@ export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) 
 
       <Link href={`/world/cities/${c.cityId}`} className={styles.seal}>
         <span>Walk its gates</span>
-        <span><ChevronRight className="h-3.5 w-3.5" /></span>
+        <span>
+          <ChevronRight className="h-3.5 w-3.5" />
+        </span>
       </Link>
     </>
   );
@@ -534,7 +789,7 @@ export function DefaultRealmPanel({ typeCounts, kingdom, theme, start }: RealmMa
 
       <p className={styles.hint}>
         Touch a city to learn its name and its wilds. The roads run from the King&apos;s seat
-        outward; the larger the ink, the more souls walk within.
+        outward; the larger the ink, the more players walk within.
       </p>
     </>
   );

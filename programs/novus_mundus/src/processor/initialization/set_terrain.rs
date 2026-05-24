@@ -31,9 +31,7 @@ use pinocchio::{
 };
 
 use crate::{
-    error::GameError,
-    logic::terrain::{self, ANCHOR_SIZE, TERRAIN_HEADER_SIZE},
-    state::{CityAccount, GameEngine},
+    emit, error::GameError, events, logic::terrain::{self, ANCHOR_SIZE, TERRAIN_HEADER_SIZE}, state::{CityAccount, GameEngine}
 };
 
 /// Maximum anchors per city to stay within transaction limits
@@ -210,7 +208,7 @@ pub fn process(
     }
 
     // ── Emit event ─────────────────────────────────────────────
-    crate::emit!(crate::events::TerrainSet {
+    emit!(events::TerrainSet {
         city: *city_account.address(),
         city_id,
         anchor_count,

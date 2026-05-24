@@ -143,7 +143,9 @@ export function DungeonTab() {
   const now = useChainNow();
   const timeOfDayInfo = useMemo(() => {
     if (!player) return null;
-    const longitude = (player.currentLong ?? 0) / 10000;
+    // `PlayerCore.currentLong` is f64 degrees (`state/player.rs:104`), NOT
+    // the ×10000 grid form. Pass straight through.
+    const longitude = player.currentLong ?? 0;
     const tod = getCurrentTimeOfDay(now, longitude);
     const mult = getActivityMultiplier("loot_drop" as any, tod);
     return { name: getTimeOfDayName(tod), mult };

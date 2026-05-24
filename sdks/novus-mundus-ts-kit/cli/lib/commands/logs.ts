@@ -11,7 +11,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import type { CLIContext, ParsedArgs } from '../context';
 import { log } from '../helpers';
 
-const NOVUS_MUNDUS_PROGRAM_ID = new PublicKey('J4DxMg1RfwRzjpZ3N6D1ULNjuwLHuhe6qLNeX9rYNz3V');
+const NOVUS_MUNDUS_PROGRAM_ID = new PublicKey('6kFKaG8DEMC5mVMi4VbD3AYxxmz2gQc3o2fuW4q4rYNk');
 
 export async function handleLogs(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const allFlag = args.flags.includes('--all');

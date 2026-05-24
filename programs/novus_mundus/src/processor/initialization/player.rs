@@ -193,18 +193,8 @@ pub fn process(
         }
     }
 
-    // Validate spawn location is passable terrain (not water or mountain)
-    {
-        let spawn_grid_lat = crate::state::LocationAccount::to_grid(spawn_lat);
-        let spawn_grid_long = crate::state::LocationAccount::to_grid(spawn_long);
-        let (ox, oy) = crate::logic::terrain::city_offset(
-            spawn_grid_lat, spawn_grid_long,
-            city_data.latitude, city_data.longitude,
-        );
-        if !city_data.is_terrain_passable(starting_city, ox, oy) {
-            return Err(GameError::TerrainImpassable.into());
-        }
-    }
+    // Validate spawn location is passable terrain (not water or mountain).
+    city_data.require_passable_at(starting_city, spawn_lat, spawn_long)?;
 
     // Verify novi_mint matches the program-binary singleton. NOVI is one
     // mint across all kingdoms, derived at compile time.
@@ -234,6 +224,15 @@ pub fn process(
         let configured = game_engine_data.economic_config.starter_locked_novi;
         if configured == 0 { STARTER_LOCKED_NOVI } else { configured }
     };
+
+    // Save every GameEngine value needed downstream and drop the borrow
+    // before any CPI. Solana's CPI pre-flight reads parent-instruction
+    // account states; a live mutable borrow on `game_engine` conflicts with
+    // that read and surfaces as the misleading `InvalidRealloc` error.
+    let kingdom_id = game_engine_data.kingdom_id;
+    let ge_bump = game_engine_data.bump;
+    let economic_config = game_engine_data.economic_config;
+    drop(game_engine_data_ref);
 
     // 7. Calculate Rent and Create Account
 
@@ -286,7 +285,7 @@ pub fn process(
 
         // Calculate initial networth from starter assets
         player_data.networth = crate::logic::calculate_networth(
-            player_data, &game_engine_data.economic_config
+            player_data, &economic_config
         )?;
     }
     // player_data_ref dropped here — required before CPIs that touch player account
@@ -316,15 +315,9 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    // Save game_engine values needed after dropping the borrow
-    let kingdom_id = game_engine_data.kingdom_id;
-    let ge_bump = game_engine_data.bump;
-
-    // Drop game_engine borrow before CPIs that touch game_engine account
-    drop(game_engine_data_ref);
-
     // Create or occupy spawn location
     let spawn_location_len = spawn_location.data_len();
+
 
     if spawn_location_len == 0 {
         // Create new location account
@@ -352,6 +345,7 @@ pub fn process(
         let mut location_data = spawn_location.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
 
+        location.account_key = crate::state::AccountKey::Location as u8;
         location.game_engine = *game_engine.address();
         location.grid_lat = spawn_grid_lat;
         location.grid_long = spawn_grid_long;
@@ -363,6 +357,13 @@ pub fn process(
         location.location_creator = *owner.address();
         location.reserved_arrival_time = 0;
     } else {
+        // Location exists from a prior occupant — must already be owned by
+        // this program. Without this check, an account owned by some other
+        // program (or in an unexpected state) reaches `try_borrow_mut` and
+        // surfaces as the misleading `InvalidRealloc` runtime error instead
+        // of a clean owner mismatch.
+        require_owner(spawn_location, program_id)?;
+
         // Location exists, check if occupied
         let mut location_data = spawn_location.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
@@ -376,6 +377,14 @@ pub fn process(
             return Err(GameError::CellOccupied.into());
         }
 
+        /*
+         * Heal the discriminator on cells written by older builds that
+         * didn't stamp it on creation. The fresh-create branch above sets
+         * this on line 348; reuse-occupy must match or downstream tooling
+         * that discriminates Location accounts by their first byte sees
+         * stale data.
+         */
+        location.account_key = crate::state::AccountKey::Location as u8;
         location.occupant_type = crate::state::OCCUPANT_PLAYER;
         location.occupant = *player.address();
         location.occupied_since = created_at;

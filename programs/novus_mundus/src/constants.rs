@@ -40,7 +40,10 @@ pub const TIER_ROOKIE: u8 = 0;
 pub const MAX_TEAM_MEMBERS_BY_TIER: [u8; 4] = [5, 10, 25, 50];
 
 // Starter Resources (New Player Onboarding)
-pub const STARTER_LOCKED_NOVI: u64 = 1_000_000; // 1M NOVI for immediate gameplay + buildings
+// NOVI mint has 1 decimal, so 10_000_000 raw = 1,000,000 display NOVI.
+// Sized to cover plots 2+3 (1M+2.62M raw = 362k display) plus a healthy
+// runway of Tier 1/2 buildings (~10-30k raw each).
+pub const STARTER_LOCKED_NOVI: u64 = 10_000_000; // 1M display NOVI for immediate gameplay + buildings
 
 // Golden Ratio Constants (Deterministic Progression System)
 // The golden ratio family provides mathematically elegant multipliers

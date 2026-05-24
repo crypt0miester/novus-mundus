@@ -157,6 +157,8 @@ Commands:
                             bundled crank+purchase txs — prints the env value)
   oracle allow-token        Whitelist a payment token (--mint, --pyth-feed,
                             --switchboard-feed, --staleness, --confidence, --discount)
+                            For USDC/USDT/PYUSD: add --pegged to skip the oracle
+                            (computes token amount directly from cost_usd_cents).
   oracle buy                Token-payment purchase (--buyer, --item, --mint,
                             --payment <pyth|switchboard>, --quantity,
                             --sol-feed, --token-feed for the Pyth path)

@@ -223,8 +223,15 @@ async function handleAllowToken(ctx: CLIContext, flags: string[]): Promise<void>
   const tokenMint = new PublicKey(requireFlag(flags, '--mint'));
   const pythFlag = getFlag(flags, '--pyth-feed');
   const sbFeedFlag = getFlag(flags, '--switchboard-feed');
-  if (pythFlag === undefined && sbFeedFlag === undefined) {
-    log.error('oracle allow-token: pass --pyth-feed and/or --switchboard-feed');
+  // `--pegged` marks USDC/USDT/PYUSD-style $1 stablecoins. When set, the
+  // chain skips the oracle and computes the token amount directly from
+  // `cost_usd_cents` — no Pyth/Switchboard feeds required (or used).
+  const pegged = flags.includes('--pegged');
+
+  if (!pegged && pythFlag === undefined && sbFeedFlag === undefined) {
+    log.error(
+      'oracle allow-token: pass --pyth-feed and/or --switchboard-feed (or --pegged for a $1 stablecoin)',
+    );
     return;
   }
 
@@ -235,6 +242,7 @@ async function handleAllowToken(ctx: CLIContext, flags: string[]): Promise<void>
   const [allowedToken] = deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
   log.info(`  mint          ${tokenMint.toBase58()}`);
   log.info(`  allowed-token ${allowedToken.toBase58()}`);
+  if (pegged) log.info(`  pricing       ${green('$1-pegged stablecoin')} (no oracle)`);
   if (pythFlag) log.info(`  Pyth feed     ${resolvePythFeed(pythFlag)}`);
   if (sbFeedFlag) log.info(`  Switchboard   ${feedHashToPubkey(sbFeedFlag).toBase58()}`);
 
@@ -261,6 +269,7 @@ async function handleAllowToken(ctx: CLIContext, flags: string[]): Promise<void>
       maxStalenessSlots,
       confidenceThresholdBps,
       discountBps,
+      peggedToUsd: pegged,
     },
   );
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
@@ -359,10 +368,12 @@ async function handleStatus(ctx: CLIContext): Promise<void> {
   for (const { account } of accounts) {
     const tok = parseAllowedToken(account);
     if (!tok) continue;
-    const feed = isZeroKey(tok.pythFeed)
-      ? `switchboard ${tok.switchboardFeed.toBase58()}`
-      : `pyth ${tok.pythFeed.toBuffer().toString('hex')}`;
-    console.log(`    ${cyan(tok.mint.toBase58())}  ${dim(feed)}  discount ${tok.discountBps}bps`);
+    const pricing = tok.peggedToUsd
+      ? green('$1-pegged')
+      : isZeroKey(tok.pythFeed)
+        ? `switchboard ${tok.switchboardFeed.toBase58()}`
+        : `pyth ${tok.pythFeed.toBuffer().toString('hex')}`;
+    console.log(`    ${cyan(tok.mint.toBase58())}  ${dim(pricing)}  discount ${tok.discountBps}bps`);
   }
   console.log();
 }
