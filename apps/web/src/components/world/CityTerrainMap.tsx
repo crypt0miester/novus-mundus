@@ -101,6 +101,24 @@ interface Props {
    * the (stale-cached) account refetches.
    */
   otherWalks?: WalkLine[];
+  /**
+   * Base58 pubkey of the local player's PlayerCore PDA. When supplied, the
+   * cell whose `occupant` matches this pubkey renders in a deep-ink color
+   * instead of the muted-amber used for other players, so the viewer can
+   * find themselves at a glance. Omit (or pass undefined) in surfaces where
+   * the viewer doesn't have a player yet — e.g. the arrival flow.
+   */
+  myPlayerPubkey?: string;
+  /**
+   * Auto-focus on first mount of the city — the disc animates to centre on
+   * this cell at MAX_VIEW_SCALE (200×) so the grid-line overlay and tile-
+   * rendered occupants are visible immediately ("you are here" in the most
+   * legible mode the disc offers). Fires ONCE per cityId change; subsequent
+   * pans/zooms by the user aren't disturbed. Parent passes null (or omits)
+   * when the drill-in is a destination / scouting view rather than the
+   * player's home city.
+   */
+  autoFocusCell?: { gridLat: number; gridLong: number } | null;
 }
 
 /**
@@ -189,6 +207,8 @@ export function CityTerrainMap({
   onEntitySelect,
   travel,
   otherWalks,
+  myPlayerPubkey,
+  autoFocusCell,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -234,9 +254,8 @@ export function CityTerrainMap({
     };
   }, []);
 
-  // ── View state (grid-unit viewport) ─────────────────────────────────────
-  // panOx, panOy: grid offset of the canvas centre from city centre.
-  // scale: zoom factor (1 = full disc, higher = closer).
+  // View state — panOx/panOy: grid offset of the canvas centre from the
+  // city centre. scale: zoom factor (1 = full disc, higher = closer).
   const [view, setView] = useState({ scale: 1, panOx: 0, panOy: 0 });
   // (Drag previously used a CSS-translate preview; that left the canvas's
   // transparent corners exposed at the wrap edge. We now re-render the
@@ -348,7 +367,41 @@ export function CityTerrainMap({
 
   const resetView = () => animateView({ scale: 1, panOx: 0, panOy: 0 });
 
-  // ── Terrain layer (re-renders on view change) ───────────────────────────
+  /* Soft auto-focus on the player's cell when this is their home city.
+   * Fires once per cityId (tracked via ref) — subsequent renders, pans, or
+   * zooms by the user are not disturbed. Targets MAX_VIEW_SCALE so the
+   * grid-line overlay + tile-rendered occupants are visible on landing —
+   * "you are here" in the most legible mode the disc offers. The cubic
+   * ease-out + slightly longer duration (520 ms vs the wheel/click default
+   * of 220 ms) keeps the 1×→200× zoom from feeling violent. Pan is
+   * clamp-respected so an edge-of-disc player stays in-frame. */
+  const autoFocusedForCityRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!autoFocusCell) return;
+    if (autoFocusedForCityRef.current === cityAccount.cityId) return;
+    autoFocusedForCityRef.current = cityAccount.cityId;
+    const ox = autoFocusCell.gridLong - cityLongGrid;
+    const oy = autoFocusCell.gridLat - cityLatGrid;
+    const target = clampPan(ox, oy, MAX_VIEW_SCALE);
+    animateView(
+      { scale: MAX_VIEW_SCALE, panOx: target.panOx, panOy: target.panOy },
+      520,
+    );
+    return () => {
+      autoFocusedForCityRef.current = null;
+    };
+    /* clampPan/animateView are stable closures; only the city + focus
+     * coords matter as triggers. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    autoFocusCell?.gridLat,
+    autoFocusCell?.gridLong,
+    cityAccount.cityId,
+    cityLatGrid,
+    cityLongGrid,
+  ]);
+
+  // Terrain layer — re-renders on view change.
   useEffect(() => {
     const canvas = terrainCanvasRef.current;
     if (!canvas) return;
@@ -415,7 +468,7 @@ export function CityTerrainMap({
     };
   };
 
-  // ── Overlay layer ───────────────────────────────────────────────────────
+  // Overlay layer — grid, occupants, walk-lines, selection cross.
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
@@ -441,19 +494,25 @@ export function CityTerrainMap({
      * without screaming geometry. Only visible when the edge is in view. */
     const cityCenterPx = gridToDevPx(0, 0, dpr);
     const cityRadiusDevPx = (radiusGridUnits / viewportRadius) * (sizeDevMin / 2);
-    ctx.save();
-    ctx.strokeStyle = "rgba(46, 31, 16, 0.35)";
-    ctx.lineWidth = 0.75 * dpr;
-    ctx.setLineDash([3 * dpr, 3 * dpr]);
-    ctx.beginPath();
-    ctx.arc(cityCenterPx.px, cityCenterPx.py, cityRadiusDevPx, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    // Defensive: during a fast view tween or a transient bad state the
+    // radius can compute as NaN or briefly negative. canvas.arc() rejects
+    // either with IndexSizeError and breaks the whole frame, so we skip
+    // the ring instead — terrain layer alpha already feathers the disc
+    // edge, the dashed ring is just precision chrome.
+    if (Number.isFinite(cityRadiusDevPx) && cityRadiusDevPx > 0) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(46, 31, 16, 0.35)";
+      ctx.lineWidth = 0.75 * dpr;
+      ctx.setLineDash([3 * dpr, 3 * dpr]);
+      ctx.beginPath();
+      ctx.arc(cityCenterPx.px, cityCenterPx.py, cityRadiusDevPx, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    // ── Proximity grid (graph paper) ──────────────────────────────────────
-    // Lines drawn with `lineWidth = 1` device px and positions rounded to
-    // half-device-pixel offsets — anything else gives a smeared/double look
-    // on Retina-class displays (Mobile Safari is the worst offender).
+    // Proximity grid (graph paper) — lineWidth = 1 device px, positions
+    // rounded to half-device-pixel offsets. Anything else gives a smeared
+    // or doubled look on Retina (Mobile Safari is the worst offender).
     if (cssPxPerCell >= GRID_OVERLAY_MIN_CSS_PX_PER_CELL) {
       // Stride keeps the line count bounded — render every N-th gridline so
       // the wash doesn't blacken at extreme zooms.
@@ -496,11 +555,10 @@ export function CityTerrainMap({
       ctx.stroke();
     }
 
-    // ── Other players' walks (muted) ──────────────────────────────────────
-    // Drawn first so the local player's bright walk layers on top. Same
-    // seal-orange family but lower opacity, thinner stroke, no halo on the
-    // marker — visually present but not competing with the local player's
-    // own line. `pct` is interpolated upstream against chainNow.
+    // Other players' walks (muted) — drawn first so the local player's
+    // bright walk layers on top. Same seal-orange family but lower
+    // opacity, thinner stroke, no marker halo — present but not
+    // competing. `pct` is interpolated upstream against chainNow.
     if (otherWalks && otherWalks.length > 0) {
       for (const w of otherWalks) {
         const oxF = w.fromGridLong - cityLongGrid;
@@ -534,10 +592,10 @@ export function CityTerrainMap({
       }
     }
 
-    // ── In-flight walk line + marker (intracity travel) ───────────────────
-    // Drawn ABOVE the proximity grid and city ring but BELOW the centre
-    // marker and occupants so dots and tile fills stay legible on top.
-    // Uses the same seal-orange palette as the realm-map intercity line.
+    // In-flight walk line + marker (intracity travel) — drawn above the
+    // proximity grid and city ring but below the centre marker and
+    // occupants so dots and tile fills stay legible on top. Same
+    // seal-orange palette as the realm-map intercity line.
     if (travel) {
       const oxFrom = travel.fromGridLong - cityLongGrid;
       const oyFrom = travel.fromGridLat - cityLatGrid;
@@ -626,6 +684,10 @@ export function CityTerrainMap({
      * obvious — the shape only takes over in dot mode. */
     const renderAsTiles = cssPxPerCell >= GRID_OVERLAY_MIN_CSS_PX_PER_CELL;
     const PLAYER_FILL = "rgba(160, 100, 45, 1)";
+    /* Local player gets a deep-ink fill so the viewer can pick themselves
+     * out at a glance against the warm-amber other-players. Stays in the
+     * antique palette but reads near-black against the parchment. */
+    const MY_PLAYER_FILL = "rgba(20, 14, 8, 1)";
     const WILD_FILL = "rgba(115, 55, 30, 1)";
     const SELECTED_STROKE = "rgba(220, 175, 60, 1)";
     const CREAM_STROKE = "rgba(252, 244, 220, 0.95)";
@@ -641,8 +703,10 @@ export function CityTerrainMap({
         selectedEntity != null &&
         selectedEntity.gridLat === cell.gridLat &&
         selectedEntity.gridLong === cell.gridLong;
+      const isMyPlayer =
+        isPlayer && myPlayerPubkey != null && cell.occupant === myPlayerPubkey;
 
-      const fill = isPlayer ? PLAYER_FILL : WILD_FILL;
+      const fill = isMyPlayer ? MY_PLAYER_FILL : isPlayer ? PLAYER_FILL : WILD_FILL;
       const stroke = isSelectedEntity ? SELECTED_STROKE : CREAM_STROKE;
 
       if (renderAsTiles) {
@@ -684,7 +748,7 @@ export function CityTerrainMap({
       }
     }
 
-    // ── Selected landing cell (intercity picker) ──────────────────────────
+    // Selected landing cell (intercity picker).
     if (selected) {
       const ox = selected.gridLong - cityLongGrid;
       const oy = selected.gridLat - cityLatGrid;
@@ -735,9 +799,10 @@ export function CityTerrainMap({
     // this naturally re-fires the effect each chainNow tick (which is the
     // tick driving the markers anyway).
     otherWalks,
+    myPlayerPubkey,
   ]);
 
-  // ── Gestures ────────────────────────────────────────────────────────────
+  // Gestures — mouse, touch, pinch-zoom, double-click.
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragLastRef = useRef<{ x: number; y: number } | null>(null);
   const draggedRef = useRef(false);
@@ -955,7 +1020,7 @@ export function CityTerrainMap({
     };
   }, [radiusGridUnits]);
 
-  // ── Click handler: select occupied cell as entity, else as landing cell ──
+  // Click handler — select occupied cell as entity, else as landing cell.
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const wrap = e.currentTarget.getBoundingClientRect();
     const { px, py } = clientToCanvasPx(e.clientX, e.clientY, wrap);
@@ -1124,6 +1189,11 @@ export function CityTerrainMap({
         <span>
           <span className={`${styles.swatch} ${styles.swCtr}`} /> centre
         </span>
+        {myPlayerPubkey && (
+          <span>
+            <span className={`${styles.swatch} ${styles.swMe}`} /> you
+          </span>
+        )}
         <span>
           <span className={`${styles.swatch} ${styles.swPlayer}`} /> player
         </span>

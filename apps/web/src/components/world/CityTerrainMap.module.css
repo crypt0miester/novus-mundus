@@ -167,6 +167,10 @@
   background: rgba(70, 50, 28, 0.95);
   box-shadow: 0 0 0 1px rgba(252, 244, 220, 0.9);
 }
+.swMe {
+  background: rgba(20, 14, 8, 1);
+  box-shadow: 0 0 0 1px rgba(252, 244, 220, 0.9);
+}
 .swPlayer {
   background: rgba(160, 100, 45, 1);
 }

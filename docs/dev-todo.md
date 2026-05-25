@@ -91,16 +91,16 @@ the leaderboard was a hand-rolled table. Each browser reimplemented layout.
 
 ----
 
-16. rally, player attack, reinforce need to be rethought of. it is completely unusable. hero selection needs to be 3 slots rather than a drop down. 
-10. user opens city terrain map in the beginning (no user/player in kingdom) to choose where to start (location)
 13. reinforce should be in team page
-14. team page needs more player data
+14. team page needs more player data (reinforce, user stats, etc.)
 11. expedition, castle untested.
 15. players have no idea if there is another rally going on in the team that they may want to join.
+16. rally, player attack, reinforce view need to be rethought of. it is completely unusable. hero selection needs to be 3 slots rather than a drop down. 
 17. its not clear how to open up more slots. in heroes tab
 18. mini activities are so bland. needs a UX overramps. best one right now is morning drill. others are very bad UX.
 xx. map should have all the encounters, other players, my position. I'm thinking of dropping it from combat tab. arena should open on arena building click. dungeon too. not sure where to put the heroes. so I'm thinking of replacing combat tab with arena. everything should be wired properly.
 xx. workshop is heavily broken.
 xx. market needs to be smart about how much weapons are needed and vehicles
+xx. increase meditation xp rate to 100xp/hr
 12. chat
 13. fix kit

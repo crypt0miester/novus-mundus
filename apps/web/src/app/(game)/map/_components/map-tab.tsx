@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -100,6 +100,20 @@ export function MapTab() {
   const ge = geData?.account;
 
   const [destinationCity, setDestinationCity] = useState<number | null>(null);
+  /* Default the /map view to the home-city terrain disc once the player's
+   * currentCity is known. Tracked with a ref so the user can dismiss the
+   * drill-in (bottom-right back button → setDestinationCity(null)) and stay
+   * on the realm-map view — we don't re-promote them back to the disc on
+   * subsequent renders. If they navigate away and return, /map remounts
+   * fresh and the ref starts null again, which is the right behaviour
+   * (open the tab → land in your city). */
+  const hasInitDestinationRef = useRef(false);
+  useEffect(() => {
+    if (hasInitDestinationRef.current) return;
+    if (player?.currentCity == null) return;
+    hasInitDestinationRef.current = true;
+    setDestinationCity(player.currentCity);
+  }, [player?.currentCity]);
   // Encounters for the currently-viewed city — used to enrich the entity
   // panel when the user clicks an encounter dot. Declared AFTER
   // `destinationCity` because the hook reads it.
@@ -1351,6 +1365,20 @@ export function MapTab() {
         onEntitySelect={setSelectedEntity}
         travel={walkLine}
         otherWalks={otherWalks}
+        myPlayerPubkey={playerData?.pubkey?.toBase58?.()}
+        /* Auto-focus only on the home-city drill-in — destination views
+         * are for scouting and shouldn't snap-yank the viewer to a cell
+         * that isn't theirs yet. `isHome` already gates the targetCity
+         * selection above, so we forward the player's chain coords when
+         * (and only when) the disc is showing their seat. */
+        autoFocusCell={
+          isHome && player
+            ? {
+                gridLat: toGrid(player.currentLat),
+                gridLong: toGrid(player.currentLong),
+              }
+            : null
+        }
       />
     );
   };

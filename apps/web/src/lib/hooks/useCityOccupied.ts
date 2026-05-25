@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toGrid } from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 
@@ -42,6 +43,15 @@ export function useCityOccupied(cityId: number | null | undefined) {
    * so the location lingers in this map forever otherwise. Reading the
    * live encounter health gives us sub-second cleanup at render time. */
   const encounters = useAccountStore((s) => s.encounters);
+  /* Same problem in reverse for players: when a player completes a walk
+   * (intracity_complete) or arrives via intercity travel, the origin
+   * location PDA is closed but the WS close-notification is dropped at
+   * the same data.length===0 bail. Without cross-referencing, every cell
+   * a player has ever stood on lingers as a black dot. Live chain truth
+   * for player positions lives in `player.account.currentLat/Long` (self)
+   * and `otherPlayers[pubkey].account.currentLat/Long` (everyone else). */
+  const localPlayer = useAccountStore((s) => s.player);
+  const otherPlayers = useAccountStore((s) => s.otherPlayers);
   const client = useNovusMundusClient();
   const ge = client.gameEngine;
 
@@ -78,6 +88,26 @@ export function useCityOccupied(cityId: number | null | undefined) {
 
   const data = useMemo<OccupiedCell[]>(() => {
     if (cityId == null) return [];
+    /* Build a "live position" map keyed by player PDA. Any player location
+     * whose grid coords don't match the player's chain `currentLat/Long`
+     * is either (a) a stale entry from a closed PDA that the WS swallowed
+     * or (b) an in-flight intracity reservation — both should be hidden
+     * because the walk-line / travel marker covers the reservation case
+     * and the player's actual position is the one we want to render. */
+    const liveByPlayer = new Map<string, { gridLat: number; gridLong: number }>();
+    if (localPlayer) {
+      liveByPlayer.set(localPlayer.pubkey.toBase58(), {
+        gridLat: toGrid(localPlayer.account.currentLat),
+        gridLong: toGrid(localPlayer.account.currentLong),
+      });
+    }
+    for (const [key, entry] of otherPlayers) {
+      liveByPlayer.set(key, {
+        gridLat: toGrid(entry.account.currentLat),
+        gridLong: toGrid(entry.account.currentLong),
+      });
+    }
+
     const out: OccupiedCell[] = [];
     for (const { account } of locations.values()) {
       if (account.cityId !== cityId) continue;
@@ -92,6 +122,16 @@ export function useCityOccupied(cityId: number | null | undefined) {
         const encEntry = encounters.get(account.occupant.toBase58());
         if (encEntry && encEntry.account.health.isZero()) continue;
       }
+      /* Player occupant (type=1) — only keep the cell that matches the
+       * player's chain-state `currentLat/Long`. Other cells with the
+       * same occupant pubkey are stale ghosts from old walks. Players
+       * not in the store (no liveByPlayer entry) fall through unchanged. */
+      if (account.occupantType === 1) {
+        const live = liveByPlayer.get(account.occupant.toBase58());
+        if (live && (live.gridLat !== account.gridLat || live.gridLong !== account.gridLong)) {
+          continue;
+        }
+      }
       out.push({
         gridLat: account.gridLat,
         gridLong: account.gridLong,
@@ -100,7 +140,7 @@ export function useCityOccupied(cityId: number | null | undefined) {
       });
     }
     return out;
-  }, [locations, cityId, ge, encounters]);
+  }, [locations, cityId, ge, encounters, localPlayer, otherPlayers]);
 
   return {
     data,
